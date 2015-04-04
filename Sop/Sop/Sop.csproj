@@ -1,0 +1,376 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <ProjectType>Local</ProjectType>
+    <ProductVersion>9.0.30729</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{ECEF3651-C42C-4D7F-89CF-A2466F364600}</ProjectGuid>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ApplicationIcon>
+    </ApplicationIcon>
+    <AssemblyKeyContainerName>
+    </AssemblyKeyContainerName>
+    <AssemblyName>Sop</AssemblyName>
+    <AssemblyOriginatorKeyFile>Sop.snk</AssemblyOriginatorKeyFile>
+    <DefaultClientScript>JScript</DefaultClientScript>
+    <DefaultHTMLPageLayout>Grid</DefaultHTMLPageLayout>
+    <DefaultTargetSchema>IE50</DefaultTargetSchema>
+    <DelaySign>false</DelaySign>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Sop</RootNamespace>
+    <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
+    <StartupObject>
+    </StartupObject>
+    <FileUpgradeFlags>
+    </FileUpgradeFlags>
+    <UpgradeBackupLocation>
+    </UpgradeBackupLocation>
+    <SignAssembly>true</SignAssembly>
+    <OldToolsVersion>3.5</OldToolsVersion>
+    <SccProjectName>
+    </SccProjectName>
+    <SccLocalPath>
+    </SccLocalPath>
+    <SccAuxPath>
+    </SccAuxPath>
+    <SccProvider>
+    </SccProvider>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <PublishUrl>publish\</PublishUrl>
+    <Install>true</Install>
+    <InstallFrom>Disk</InstallFrom>
+    <UpdateEnabled>false</UpdateEnabled>
+    <UpdateMode>Foreground</UpdateMode>
+    <UpdateInterval>7</UpdateInterval>
+    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
+    <UpdatePeriodically>false</UpdatePeriodically>
+    <UpdateRequired>false</UpdateRequired>
+    <MapFileExtensions>true</MapFileExtensions>
+    <ApplicationRevision>0</ApplicationRevision>
+    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+    <IsWebBootstrapper>false</IsWebBootstrapper>
+    <UseApplicationTrust>false</UseApplicationTrust>
+    <BootstrapperEnabled>true</BootstrapperEnabled>
+    <TargetFrameworkProfile>Client</TargetFrameworkProfile>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <OutputPath>bin\Debug\</OutputPath>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <BaseAddress>285212672</BaseAddress>
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+    <ConfigurationOverrideFile>
+    </ConfigurationOverrideFile>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DocumentationFile>
+    </DocumentationFile>
+    <DebugSymbols>true</DebugSymbols>
+    <FileAlignment>4096</FileAlignment>
+    <NoStdLib>false</NoStdLib>
+    <NoWarn>
+    </NoWarn>
+    <Optimize>false</Optimize>
+    <RegisterForComInterop>false</RegisterForComInterop>
+    <RemoveIntegerChecks>false</RemoveIntegerChecks>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningLevel>4</WarningLevel>
+    <DebugType>full</DebugType>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <OutputPath>bin\Release\</OutputPath>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <BaseAddress>285212672</BaseAddress>
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+    <ConfigurationOverrideFile>
+    </ConfigurationOverrideFile>
+    <DefineConstants>TRACE</DefineConstants>
+    <DocumentationFile>bin\Release\Sop.XML</DocumentationFile>
+    <DebugSymbols>false</DebugSymbols>
+    <FileAlignment>4096</FileAlignment>
+    <NoStdLib>false</NoStdLib>
+    <NoWarn>
+    </NoWarn>
+    <Optimize>true</Optimize>
+    <RegisterForComInterop>true</RegisterForComInterop>
+    <RemoveIntegerChecks>false</RemoveIntegerChecks>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningLevel>4</WarningLevel>
+    <DebugType>none</DebugType>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>..\..\..\..\SopBin\Sop\</OutputPath>
+    <DefineConstants>TRACE;DEBUG;CODE_TRACING</DefineConstants>
+    <BaseAddress>285212672</BaseAddress>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <DocumentationFile>
+    </DocumentationFile>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <BaseAddress>285212672</BaseAddress>
+    <Optimize>true</Optimize>
+    <DebugType>
+    </DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <DocumentationFile>bin\Release\Sop.XML</DocumentationFile>
+    <GenerateSerializationAssemblies>Off</GenerateSerializationAssemblies>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Client\IItemNavigation.cs" />
+    <Compile Include="Client\IFile.cs" />
+    <Compile Include="Client\IFileSet.cs" />
+    <Compile Include="Client\IObjectServer.cs" />
+    <Compile Include="Client\ISortedDictionary.cs" />
+    <Compile Include="Collections\BTree\Collection.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\BTree\Common\BTreeEnums.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\BTree\Common\IBTree.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\BTree\Common\ISynchronizer.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\BTree\Common\LegacySynchronizer.cs" />
+    <Compile Include="Collections\BTree\Common\SingleThreadAccess.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\BTree\Common\Synchronizer.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\BTree\IDictionary.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\BTree\SystemDefaultComparer.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\Generic\BTree.BTreeAlgorithm.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\Generic\BTree.BTreeKeys.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\Generic\BTree.BTreeValues.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\Generic\BTree.SlotComparer.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\Generic\BTree.TreeNode.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\Generic\BTreeItem.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\Generic\ConcurrentSortedDictionary.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\Generic\IBaseCollection.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\Generic\ICollection.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\Generic\ISortedDictionary.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Collections\Generic\SortedDictionary.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Log\ILogger.cs" />
+    <Compile Include="Log\LogException.cs" />
+    <Compile Include="Log\LogLevels.cs" />
+    <Compile Include="Log\TextLogger.cs" />
+    <Compile Include="Mru\Generic\ConcurrentMruManager.cs" />
+    <Compile Include="Mru\Generic\IMruManager.cs" />
+    <Compile Include="Mru\Generic\InternalMruManager.cs" />
+    <Compile Include="Mru\Generic\MruItem.cs" />
+    <Compile Include="Mru\Generic\MruManager.cs" />
+    <Compile Include="Mru\Generic\Node.cs" />
+    <Compile Include="Mru\IMruClient.cs" />
+    <Compile Include="Mru\IMruManager.cs" />
+    <Compile Include="Mru\InternalMruManager.cs" />
+    <Compile Include="Mru\MruItem.cs" />
+    <Compile Include="Mru\MruManager.cs" />
+    <Compile Include="Mru\Node.cs" />
+    <Compile Include="Mru\SaveTypes.cs" />
+    <Compile Include="OnDisk\Algorithm\BTree\BTreeAlgorithm.cs" />
+    <Compile Include="OnDisk\Algorithm\BTree\IBTreeAlgorithm.cs" />
+    <Compile Include="OnDisk\CachePoolManager.cs" />
+    <Compile Include="OnDisk\ConcurrentWrappers\ConcurrentBTreeAlgorithm.cs" />
+    <Compile Include="OnDisk\ConcurrentWrappers\ConcurrentCollectionOnDisk.cs" />
+    <Compile Include="OnDisk\DataBlock\DataBlockReadBufferLogic.cs" />
+    <Compile Include="OnDisk\File\FileStream.cs" />
+    <Compile Include="OnDisk\File\IEntity.cs" />
+    <Compile Include="OnDisk\File\IInternalFileEntity.cs" />
+    <Compile Include="OnDisk\IO\AccessMode.cs" />
+    <Compile Include="OnDisk\IO\BulkWriter.cs" />
+    <Compile Include="OnDisk\IO\ConcurrentIOData.cs" />
+    <Compile Include="OnDisk\IO\ConcurrentIOPoolManager.cs" />
+    <Compile Include="OnDisk\IO\OnDiskBinaryReader.cs" />
+    <Compile Include="OnDisk\IO\OnDiskBinaryWriter.cs" />
+    <Compile Include="Log\Logger.cs" />
+    <Compile Include="Transaction\NoTransactionLogger.cs" />
+    <Compile Include="Utility\Utility.cs" />
+    <Compile Include="OnDisk\UpdateCountType.cs" />
+    <Compile Include="OnDisk\Algorithm\Collection\ICollectionCache.cs" />
+    <Compile Include="OnDisk\File\IFileRecycler.cs" />
+    <Compile Include="DataBlock.cs" />
+    <Compile Include="DataBlockSize.cs" />
+    <Compile Include="Delegates.cs" />
+    <Compile Include="IBasicIO.cs" />
+    <Compile Include="IBTreeBase.cs" />
+    <Compile Include="ICollectionOnDisk.cs" />
+    <Compile Include="IDeleteable.cs" />
+    <Compile Include="IStoreFactory.cs" />
+    <Compile Include="IFile.cs" />
+    <Compile Include="IFileSet.cs" />
+    <Compile Include="Persistence\IInternalPersistent.cs" />
+    <Compile Include="ObjectServer\IObjectServer.cs" />
+    <Compile Include="Persistence\IPersistent.cs" />
+    <Compile Include="IProxyObject.cs" />
+    <Compile Include="ISortedDictionary.cs" />
+    <Compile Include="ITransaction.cs" />
+    <Compile Include="IWithHintBatchAction.cs" />
+    <Compile Include="IWithHintSize.cs" />
+    <Compile Include="OperationType.cs" />
+    <Compile Include="Persistence\Persistent.cs" />
+    <Compile Include="Preferences.cs" />
+    <Compile Include="Profile.cs" />
+    <Compile Include="Recycling\DataBlockRecycler.cs" />
+    <Compile Include="Recycling\IRecyclable.cs" />
+    <Compile Include="Recycling\IRecycler.cs" />
+    <Compile Include="Recycling\Recycler.cs" />
+    <Compile Include="Transaction\ActionType.cs" />
+    <Compile Include="Transaction\CommitPhase.cs" />
+    <Compile Include="TrashBinType.cs" />
+    <Compile Include="Query\QueryExpression.cs" />
+    <Compile Include="Query\QueryFilterFunc.cs" />
+    <Compile Include="Query\QueryResult.cs" />
+    <Compile Include="SopException.cs" />
+    <Compile Include="SortOrderType.cs" />
+    <Compile Include="Persistence\InternalPersistent.cs" />
+    <Compile Include="Transaction\TransactionRootFailTypes.cs" />
+    <Compile Include="Utility\Crypto.cs" />
+    <Compile Include="Persistence\IPersistentVersioned.cs" />
+    <Compile Include="ISortedDictionaryOnDisk.cs" />
+    <Compile Include="ItemOnDisk.cs" />
+    <Compile Include="OnDisk\Algorithm\BTree\BTreeAlgorithm2.cs" />
+    <Compile Include="OnDisk\Algorithm\BTree\BTreeNodeOnDisk.cs" />
+    <Compile Include="OnDisk\Algorithm\BTree\BTreeNodeOnDisk2.cs" />
+    <Compile Include="OnDisk\Algorithm\Recycler\IndexBlockRecycler.cs" />
+    <Compile Include="OnDisk\Algorithm\BTree\IBTreeItemOnDisk.cs" />
+    <Compile Include="OnDisk\Algorithm\BTree\IBTreeNodeOnDisk.cs" />
+    <Compile Include="OnDisk\Geometry\RegionLogic.cs" />
+    <Compile Include="OnDisk\Algorithm\Collection\CollectionOnDisk.Serialization.cs" />
+    <Compile Include="OnDisk\Algorithm\Collection\CollectionOnDisk.2.cs" />
+    <Compile Include="OnDisk\File\IFile.cs" />
+    <Compile Include="OnDisk\File\IFileEntity.cs" />
+    <Compile Include="OnDisk\File\IFileSet.cs" />
+    <Compile Include="OnDisk\IObjectServer.cs" />
+    <Compile Include="OnDisk\Algorithm\SortedDictionary\ISortedDictionaryOnDisk.cs" />
+    <Compile Include="OnDisk\PersistenceType.cs" />
+    <Compile Include="OnDisk\DataBlock\DataBlockDriver2.cs" />
+    <Compile Include="OnDisk\IInternalPersistent.cs" />
+    <Compile Include="OnDisk\Algorithm\Recycler\FileRecycler.cs" />
+    <Compile Include="OnDisk\DataBlock\IDataBlockRecycler.cs" />
+    <Compile Include="OnDisk\ISession.cs" />
+    <Compile Include="OnDisk\Algorithm\SortedDictionary\SortedDictionaryOnDisk2.cs" />
+    <Compile Include="OnDisk\DataBlock\IDataBlockDriver.cs" />
+    <Compile Include="OnDisk\Algorithm\LinkedList\IListOnDisk.cs" />
+    <Compile Include="OnDisk\Algorithm\BTree\BTreeComparer.cs" />
+    <Compile Include="OnDisk\Algorithm\BTree\BTreeItemOnDisk.cs" />
+    <Compile Include="OnDisk\Algorithm\SortedDictionary\SortedDictionaryOnDisk.cs" />
+    <Compile Include="OnDisk\BuiltinTypes.cs" />
+    <Compile Include="OnDisk\Algorithm\Collection\CollectionOnDisk.1.cs" />
+    <Compile Include="OnDisk\DataBlock\DataBlockDriver.cs" />
+    <Compile Include="OnDisk\DataReference.cs" />
+    <Compile Include="OnDisk\DataBlock\DeletedBlockInfo.cs" />
+    <Compile Include="OnDisk\HeaderData.cs" />
+    <Compile Include="OnDisk\Algorithm\LinkedList\SharedBlockOnDiskList.cs" />
+    <Compile Include="OnDisk\Geometry\Region.cs" />
+    <Compile Include="OnDisk\File\File.cs" />
+    <Compile Include="OnDisk\File\FileSet.cs" />
+    <Compile Include="OnDisk\Algorithm\Collection\ICollectionOnDisk.cs" />
+    <Compile Include="OnDisk\Algorithm\SortedDictionary\SdodWrapper.cs" />
+    <Compile Include="ObjectFactory.cs" />
+    <Compile Include="ObjectServer\ObjectServer.cs" />
+    <Compile Include="ObjectServer\ObjectServer.Static.cs" />
+    <Compile Include="ObjectServer\ObjectServerWithTransaction.cs" />
+    <Compile Include="SpecializedDataStore\GeneralPurpose.cs" />
+    <Compile Include="SpecializedDataStore\SpecializedStoreBase.cs" />
+    <Compile Include="Transaction\ITransactionLogger.cs" />
+    <Compile Include="Transaction\ITransactionRoot.cs" />
+    <Compile Include="Transaction\Transaction.Backup.cs" />
+    <Compile Include="Transaction\Transaction.LogCollection.cs" />
+    <Compile Include="Transaction\Transaction.ProcessedLines.cs" />
+    <Compile Include="Transaction\Transaction2.cs" />
+    <Compile Include="Transaction\TransactionRolledbackException.cs" />
+    <Compile Include="StoreFactory.cs" />
+    <Compile Include="Utility\Extensions.cs" />
+    <Compile Include="Utility\Win32.cs" />
+    <Compile Include="SpecializedDataStore\PersistentTypeKeyValue.cs" />
+    <Compile Include="SpecializedDataStore\SimpleKeyValue.cs" />
+    <Compile Include="SpecializedDataStore\Simple.GenericCollection.cs" />
+    <Compile Include="GenericComparer.cs" />
+    <Compile Include="SpecializedDataStore\Simple.GenericEnumerator.cs" />
+    <Compile Include="SpecializedDataStore\SimpleKey.cs" />
+    <Compile Include="SpecializedDataStore\SimpleValue.cs" />
+    <Compile Include="OnDisk\Algorithm\LinkedList\LinkedListOnDisk.cs" />
+    <Compile Include="Utility\GenericLogger.cs" />
+    <Compile Include="OnDisk\ObjectServer.cs" />
+    <Compile Include="OnDisk\TypeStore.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Transaction\TransactionRoot.cs" />
+    <Compile Include="Transaction\Transaction1.cs" />
+    <Compile Include="Transaction\Transaction.Privates.cs" />
+    <Compile Include="Transaction\Transaction.Record.cs" />
+    <Compile Include="Transaction\TransactionBase.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Sop.snk" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.XML" />
+  </ItemGroup>
+  <ItemGroup>
+    <BootstrapperPackage Include="Microsoft.Net.Client.3.5">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1 Client Profile</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Windows.Installer.3.1">
+      <Visible>False</Visible>
+      <ProductName>Windows Installer 3.1</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PreBuildEvent>
+    </PreBuildEvent>
+    <PostBuildEvent>
+    </PostBuildEvent>
+  </PropertyGroup>
+</Project>

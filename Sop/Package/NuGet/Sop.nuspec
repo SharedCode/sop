@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>SOP</id>
+    <version>4.5</version>
+    <authors>Gerardo Recinto</authors>
+    <licenseUrl>http://sop.codeplex.com/license</licenseUrl>
+    <projectUrl>http://sop.codeplex.com</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Scalable Object Persistence (SOP) framework. A lightweight, high performance modern embedded db engine.</description>
+    <tags>Sop Scale Persistence dbengine engine scaledb scaledata object db objectengine dataengine scaling scaleable persist datapersist dbpersist</tags>
+    <frameworkAssemblies>
+      <frameworkAssembly assemblyName="System.Xml" targetFramework="net40-client, net40"/>
+    </frameworkAssemblies>
+  </metadata>
+  <files>
+    <file src="..\..\Sop\bin\release\Sop.dll" target="lib" />
+    <file src="..\..\Sop\bin\release\Sop.xml" target="lib" />
+  </files>
+</package>
