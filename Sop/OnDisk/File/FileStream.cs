@@ -1,5 +1,5 @@
 ﻿// Scalable Object Persistence (SOP) Framework, main contact - Gerardo Recinto (email: gerardorecinto@Yahoo.com for questions/comments)
-// Open Source License: LGPL v2.1
+// Open Source License: MIT
 // Have fun Coding! ;)
 
 using System;
@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 
 namespace Sop.OnDisk.File
 {
-    internal class FileStream : IDisposable
+    public class FileStream : IDisposable, IFileStream
     {
         #region Constructors
         public FileStream(string path, FileMode mode, FileAccess acc,
@@ -33,7 +33,7 @@ namespace Sop.OnDisk.File
             // assign Id for this instance...
             Id = Interlocked.Increment(ref _instanceCount);
             InUse = true;
-            _fileStream = Open();
+            _fileStream = ((IFileStream)this).Open();
             MaintainOpenedFileCount();
         }
         public FileStream(string path, FileMode mode, FileAccess access, FileShare share)
@@ -47,10 +47,10 @@ namespace Sop.OnDisk.File
         #endregion
 
         #region Open/Close
-        private System.IO.FileStream Open()
+        System.IO.FileStream IFileStream.Open()
         {
             MruManager.Add(Id, this);
-            return SystemAdaptor.SystemInterface.UnbufferedOpen(_path, _mode, _access, _share,
+            return SystemAdaptor.Instance.SystemInterface.UnbufferedOpen(_path, _mode, _access, _share,
                                         _sequential, _async, _blockSize);
         }
 
@@ -99,7 +99,7 @@ namespace Sop.OnDisk.File
             }
         }
 
-        internal BinaryReader CreateBinaryReader(Encoding encoding)
+        public System.IO.BinaryReader CreateBinaryReader(Encoding encoding)
         {
             return new BinaryReader(RealStream, encoding)
             {
@@ -249,7 +249,7 @@ namespace Sop.OnDisk.File
                     InUse = true;
                     if (_fileStream == null || _isDisposed)
                     {
-                        _fileStream = Open();
+                        _fileStream = ((IFileStream)this).Open();
                         //_fileStream.Seek(_streamPosition, SeekOrigin.Begin);
                     }
                     return _fileStream;
@@ -285,16 +285,16 @@ namespace Sop.OnDisk.File
                     int maxIO;
                     try
                     {
-                        maxIO = SystemAdaptor.SystemInterface.SetMaxStdio(2048);
+                        maxIO = SystemAdaptor.Instance.SystemInterface.SetMaxStdio(2048);
                         if (maxIO < 1024)
-                            maxIO = SystemAdaptor.SystemInterface.SetMaxStdio(1024);
+                            maxIO = SystemAdaptor.Instance.SystemInterface.SetMaxStdio(1024);
                     }
                     catch
                     {
-                        maxIO = SystemAdaptor.SystemInterface.SetMaxStdio(1024);
+                        maxIO = SystemAdaptor.Instance.SystemInterface.SetMaxStdio(1024);
                     }
                     if (maxIO < 512)
-                        maxIO = SystemAdaptor.SystemInterface.GetMaxStdio();
+                        maxIO = SystemAdaptor.Instance.SystemInterface.GetMaxStdio();
                     _maxInstanceCount = maxIO - ConcurrentIOPoolManager.MaxConcurrentIO;
                 }
                 return _maxInstanceCount;

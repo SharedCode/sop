@@ -48,8 +48,8 @@ namespace Sop
         /// <summary>
         /// Set the Store to AutoFlush so inserted Blob data will get mapped to disk right away 
         /// and not buffered in Store's MRU cache (a.k.a. - streaming).
-        /// Currently, only applicable if data Value is stored in Data Segment (IsDataInKeySegment = false).
-        /// Default is false.
+        /// Currently, only applicable if Store's data Value is stored in the Data Segment,
+        /// i.e. - IsDataInKeySegment is set to false. Default is false.
         /// </summary>
         public bool AutoFlush;
     }

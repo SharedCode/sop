@@ -1,5 +1,5 @@
 // Scalable Object Persistence (SOP) Framework, main contact - Gerardo Recinto (email: gerardorecinto@Yahoo.com for questions/comments)
-// Open Source License: LGPL v2.1
+// Open Source License: MIT
 // Have fun Coding! ;)
 
 using System;
@@ -341,7 +341,7 @@ namespace Sop.OnDisk.File
             if (string.IsNullOrEmpty(filename))
                 throw new ArgumentNullException("filename");
             if (SectorSize == 0)
-                SectorSize = SystemAdaptor.SystemInterface.GetDriveSectorSize(filename);
+                SectorSize = SystemAdaptor.Instance.SystemInterface.GetDriveSectorSize(filename);
             if (SectorSize > bufferSize)
                 bufferSize = SectorSize;
             double d = (double)bufferSize / SectorSize;
@@ -375,7 +375,7 @@ namespace Sop.OnDisk.File
 
             if (_blockSize <= 0)
             {
-                systemBlockSize = SystemAdaptor.SystemInterface.GetDriveSectorSize(fname);
+                systemBlockSize = SystemAdaptor.Instance.SystemInterface.GetDriveSectorSize(fname);
                 this._systemDetectedBlockSize = systemBlockSize;
 
                 if (systemBlockSize > _fileBlockSize)

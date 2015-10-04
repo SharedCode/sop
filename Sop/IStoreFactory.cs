@@ -1,5 +1,5 @@
 ﻿// Scalable Object Persistence (SOP) Framework, main contact - Gerardo Recinto (email: gerardorecinto@Yahoo.com for questions/comments)
-// Open Source License: LGPL v2.1
+// Open Source License: MIT
 // Have fun Coding! ;)
 
 using System;
@@ -12,8 +12,8 @@ namespace Sop
     /// 
     /// Supported Serialization techniques are:
     /// * Basic (simple) type Serialization
-    /// * Object Xml Serialization
     /// * Object SOP.IPersistent implements
+    /// * Object Xml Serialization
     /// </summary>
     public interface IStoreFactory
     {
@@ -24,9 +24,10 @@ namespace Sop
 
         /// <summary>
         /// Create/Get a general purpose Data Store. Key and/or Value types can be any of the following data types:
-        ///     - simple type, e.g. - int, short, string, char, float, etc...
+        ///     - simple type: e.g. - int, short, string, char, float, etc...
+        ///     - IPersistent interface implementation.
         ///     - Xml Serializable object.
-        /// NOTE: simple type data are stored in non-Xml format for space optimization reasons.
+        /// Simple & IPersistent typed data are stored in non-Xml format for space optimization reasons.
         /// </summary>
         /// <typeparam name="TKey"></typeparam>
         /// <typeparam name="TValue"></typeparam>

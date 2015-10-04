@@ -12,7 +12,7 @@ namespace Sop.Samples
     /// Virtual Cache(VC) in Memory Extender mode simulating multiple clients 
     /// running on different threads of execution storing cached data on a single VirtualCache.
     /// </summary>
-    public class AcureVirtualStore
+    public class AzureVirtualStore
     {
         private Log.Logger _logger;
         private VirtualStore _cache = new VirtualStore("AzureStore");

@@ -74,7 +74,7 @@ namespace SopClientTests
         [TestMethod]
         public void GetMemSizeTest()
         {
-            var ramSize = SystemAdaptor.SystemInterface.GetMemorySize();
+            var ramSize = SystemAdaptor.Instance.SystemInterface.GetMemorySize();
         }
         [TestMethod]
         public void LoggerDirTest()

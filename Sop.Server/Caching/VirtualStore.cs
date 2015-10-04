@@ -11,7 +11,9 @@ using Sop.Caching;
 namespace Sop.Server.Caching
 {
     /// <summary>
-    /// Virtual Store is a general purpose caching entity for any backend data Storage.
+    /// Virtual Store is a general purpose caching entity (container) that stores 
+    /// frequently utilized data in an in-memory cache, data sourced from an 
+    /// external data source such as SQL DB, for example.
     /// </summary>
     public class VirtualStore : ObjectCache, IMruClient
     {

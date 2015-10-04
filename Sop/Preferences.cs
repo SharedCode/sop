@@ -1,5 +1,5 @@
 ﻿// Scalable Object Persistence (SOP) Framework, main contact - Gerardo Recinto (email: gerardorecinto@Yahoo.com for questions/comments)
-// Open Source License: LGPL v2.1
+// Open Source License: MIT
 // Have fun Coding! ;)
 
 using Sop.Persistence;
@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Sop.SystemInterface;
 
 namespace Sop
 {
@@ -109,7 +110,7 @@ namespace Sop
             get { return _encoding; }
             set { _encoding = value; }
         }
-        private Encoding _encoding = Sop.SystemInterface.SystemAdaptor.SystemInterface.DefaultEncoding;
+        private Encoding _encoding = SystemAdaptor.Instance.SystemInterface.DefaultEncoding;
 
         /// <summary>
         /// BTree Slot Length. Defaults to 100.

@@ -199,6 +199,7 @@
     <Compile Include="OnDisk\DataBlock\DataBlockReadBufferLogic.cs" />
     <Compile Include="OnDisk\File\FileStream.cs" />
     <Compile Include="OnDisk\File\IEntity.cs" />
+    <Compile Include="OnDisk\File\IFileStream.cs" />
     <Compile Include="OnDisk\File\IInternalFileEntity.cs" />
     <Compile Include="OnDisk\IO\AccessMode.cs" />
     <Compile Include="OnDisk\IO\BulkWriter.cs" />
@@ -210,6 +211,7 @@
     <Compile Include="Log\Logger.cs" />
     <Compile Include="StoreNavigator.cs" />
     <Compile Include="StoreParameters.cs" />
+    <Compile Include="SystemInterface\ISystemAdaptor.cs" />
     <Compile Include="SystemInterface\Linux.cs" />
     <Compile Include="SystemInterface\SystemAdaptor.cs" />
     <Compile Include="SystemInterface\Win32.cs" />

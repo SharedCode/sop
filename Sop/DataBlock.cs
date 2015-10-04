@@ -1,6 +1,6 @@
 ﻿
 // Scalable Object Persistence (SOP) Framework, main contact - Gerardo Recinto (email: gerardorecinto@Yahoo.com for questions/comments)
-// Open Source License: LGPL v2.1
+// Open Source License: MIT
 // Have fun Coding! ;)
 
 

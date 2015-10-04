@@ -1,5 +1,5 @@
 // Scalable Object Persistence (SOP) Framework, main contact - Gerardo Recinto (email: gerardorecinto@Yahoo.com for questions/comments)
-// Open Source License: LGPL v2.1
+// Open Source License: MIT
 // Have fun Coding! ;)
 
 using System;
@@ -42,7 +42,7 @@ namespace Sop
         {
             StoreSegmentSize = StoreSegmentSizeInKb * 1024;
             // compute MaxInMemoryBlockCount based on allocatable RAM as set by user...
-            ulong memSize = (ulong)SystemAdaptor.SystemInterface.GetMemorySize();
+            ulong memSize = (ulong)SystemAdaptor.Instance.SystemInterface.GetMemorySize();
             float ml = MemoryLimitInPercent;
             if (ml > 75) ml = 75;   // max is 75% of RAM
             if (ml < 10) ml = 10;   // min is 10% of RAM
