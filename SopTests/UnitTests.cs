@@ -10,13 +10,25 @@ using Sop.SystemInterface;
 
 namespace SopClientTests
 {
-
     // todo: HintSize on BTreeAlgorithm should be consistently set.
-
-
     [TestClass]
     public class UnitTests
     {
+
+        [TestMethod]
+        public void TestEnumeratorDispose()
+        {
+            using (var Server = new ObjectServer("SopBin\\OServer.dta", true))
+            {
+                IStoreFactory sf = new StoreFactory();
+                var store = sf.Get<long, int>(Server, "People");
+                store.Add(123, 123);
+                foreach(var kv in store)
+                {
+                }
+            }
+        }
+
         [TestMethod]
         public void LambdaCallperfTest()
         {

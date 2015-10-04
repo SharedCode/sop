@@ -119,7 +119,7 @@ namespace Sop.SystemInterface
         [DllImport("msvcrt.dll")]
         internal static extern int _getmaxstdio();
 
-        [DllImport("msvcrt.dll")]
+        [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl)]
         internal static extern int _setmaxstdio(int newmax);
 
         //[SecuritySafeCritical]

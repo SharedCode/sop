@@ -1324,7 +1324,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
         {
             get
             {
-                if (_syncRoot == null)
+                if (_syncRoot == null && BTreeAlgorithm != null)
                     _syncRoot = BTreeAlgorithm.SyncRoot;
                 return _syncRoot;
             }

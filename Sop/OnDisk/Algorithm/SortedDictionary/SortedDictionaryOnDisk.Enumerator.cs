@@ -29,8 +29,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// <param name="bTree">BTree instance items will be enumerated</param>
             public DictionaryEnumerator(SortedDictionaryOnDisk bTree)
             {
-                this.BTree = bTree;
-                this.Reset();
+                this.BTree = (SortedDictionaryOnDisk)bTree.Clone();
             }
 
             /// <summary>

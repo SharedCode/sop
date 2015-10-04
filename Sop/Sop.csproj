@@ -218,7 +218,6 @@
     <Compile Include="Transaction\NoTransactionLogger.cs" />
     <Compile Include="SystemInterface\ISystemInterface.cs" />
     <Compile Include="Transaction\Transaction.AddMerge.cs" />
-    <Compile Include="Utility\BitUtility.cs" />
     <Compile Include="Utility\Utility.cs" />
     <Compile Include="OnDisk\UpdateCountType.cs" />
     <Compile Include="OnDisk\Algorithm\Collection\ICollectionCache.cs" />

@@ -70,22 +70,20 @@ namespace Sop
             // assign the current default Value Unpack delegate
             BTreeAlgorithm.CurrentOnValueUnpack =
                 SpecializedStoreBase.Collection_XmlSerOnUnpack;
-            var r2 = CreateDictionary<GeneralPurpose<TKey, TValue>, TKey, TValue>(createIfNotExist, container,
+            var resolvedContainer = GetContainer(container);
+            var r2 = CreateDictionary<GeneralPurpose<TKey, TValue>, TKey, TValue>(createIfNotExist, resolvedContainer,
                                                                                   name,
                                                                                   containerDod =>
                                                                                   {
-                                                                                      var r
-                                                                                          =
+                                                                                      var r =
                                                                                           new GeneralPurpose
                                                                                               <TKey,
                                                                                                   TValue
                                                                                                   >(
-                                                                                              container,
+                                                                                              resolvedContainer,
                                                                                               comparer,
                                                                                               name,
-                                                                                              DataStoreType
-                                                                                                  .
-                                                                                                  SopOndisk,
+                                                                                              DataStoreType.SopOndisk,
                                                                                               null,
                                                                                               isDataInKeySegment);
                                                                                       containerDod.
@@ -178,31 +176,24 @@ namespace Sop
 
             //BTreeAlgorithm.CurrentOnValueUnpack =
             //    PersistentTypeKeyValue<TKey, TValue>.Collection_OnKeyUnpack;
-
-            var r2 = CreateDictionary<PersistentTypeKeyValue<TKey, TValue>, TKey, TValue>(createIfNotExist, container,
+            var resolvedContainer = GetContainer(container);
+            var r2 = CreateDictionary<PersistentTypeKeyValue<TKey, TValue>, TKey, TValue>(createIfNotExist, resolvedContainer,
                                                                                         name,
                                                                                         containerDod =>
                                                                                         {
-                                                                                            var r
-                                                                                                =
+                                                                                            var r =
                                                                                                 new PersistentTypeKeyValue
-                                                                                                    <TKey,
-                                                                                                        TValue
-                                                                                                        >(
-                                                                                                    container,
+                                                                                                    <TKey, TValue>(
+                                                                                                    resolvedContainer,
                                                                                                     comparer,
                                                                                                     name,
-                                                                                                    DataStoreType
-                                                                                                        .
-                                                                                                        SopOndisk,
+                                                                                                    DataStoreType.SopOndisk,
                                                                                                     null,
                                                                                                     isDataInKeySegment);
-                                                                                            containerDod.
-                                                                                                SetCurrentValueInMemoryData
+                                                                                            containerDod.SetCurrentValueInMemoryData
                                                                                                 (r);
                                                                                             return r;
                                                                                         }, mruManaged);
-
             BTreeAlgorithm.CurrentOnValueUnpack = null;
             if (r2 != null)
                 ((SortedDictionaryOnDisk)((SpecializedStoreBase)(object)r2).Collection).IsUnique = isUnique;
@@ -235,9 +226,9 @@ namespace Sop
 
             BTreeAlgorithm.CurrentOnValueUnpack =
                 PersistentTypeKeySimpleValue<TKey, TValue>.Collection_OnKeyUnpack;
-
+            var resolvedContainer = GetContainer(container);
             var r2=  CreateDictionary<PersistentTypeKeySimpleValue<TKey, TValue>, TKey, TValue>(createIfNotExist,
-                                                                                              container, name,
+                                                                                              resolvedContainer, name,
                                                                                               containerDod =>
                                                                                               {
                                                                                                   var
@@ -246,7 +237,7 @@ namespace Sop
                                                                                                               <TKey,
                                                                                                                   TValue
                                                                                                                   >(
-                                                                                                              container,
+                                                                                                              resolvedContainer,
                                                                                                               comparer,
                                                                                                               name,
                                                                                                               DataStoreType
@@ -285,9 +276,9 @@ namespace Sop
         {
             BTreeAlgorithm.CurrentOnValueUnpack =
                 PersistentTypeValueSimpleKey<TKey, TValue>.Collection_OnValueUnpack;
-
+            var resolvedContainer = GetContainer(container);
             var r2 = CreateDictionary<PersistentTypeValueSimpleKey<TKey, TValue>, TKey, TValue>(createIfNotExist,
-                                                                                              container, name,
+                                                                                              resolvedContainer, name,
                                                                                               containerDod =>
                                                                                               {
                                                                                                   var
@@ -296,7 +287,7 @@ namespace Sop
                                                                                                               <TKey,
                                                                                                                   TValue
                                                                                                                   >(
-                                                                                                              container,
+                                                                                                              resolvedContainer,
                                                                                                               comparer,
                                                                                                               name,
                                                                                                               DataStoreType

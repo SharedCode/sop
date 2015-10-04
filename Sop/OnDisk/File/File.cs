@@ -422,7 +422,7 @@ namespace Sop.OnDisk.File
             {
                 foreach (Algorithm.Collection.ICollectionOnDisk coll in CollectionsPool.Values)
                 {
-                    if (coll != _store)
+                    if (coll != _store && coll.SyncRoot != null)
                         ((Sop.Collections.ISynchronizer)coll.SyncRoot).Invoke(() => { coll.Flush(); });
                 }
             }
