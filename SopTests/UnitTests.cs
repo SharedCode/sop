@@ -18,14 +18,32 @@ namespace SopClientTests
         [TestMethod]
         public void TestEnumeratorDispose()
         {
-            using (var Server = new ObjectServer("SopBin\\OServer.dta", true))
+            using (var Server = new ObjectServer("SopBin\\OServer.dta"))
             {
                 IStoreFactory sf = new StoreFactory();
                 var store = sf.Get<long, int>(Server, "People");
                 store.Add(123, 123);
-                foreach(var kv in store)
+                int ctr = 0;
+                foreach (var kv in store)
                 {
+                    ctr++;
                 }
+                Assert.IsTrue(ctr == store.Count);
+                ctr = 0;
+                foreach (var kv in store)
+                {
+                    ctr++;
+                }
+                Assert.IsTrue(ctr == store.Count);
+                store.MoveFirst();
+                ctr = 0;
+                for(int i = 0; i < store.Count; i++)
+                {
+                    var ky = store.CurrentKey;
+                    ctr++;
+                    store.MoveNext();
+                }
+                Assert.IsTrue(ctr == store.Count);
             }
         }
 
