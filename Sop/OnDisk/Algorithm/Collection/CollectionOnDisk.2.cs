@@ -803,7 +803,7 @@ namespace Sop.OnDisk.Algorithm.Collection
         protected internal virtual int SaveBlocks(ICollectionOnDisk parent, int maxBlocks, bool clear)
         {
             int r = 0;
-            if (parent != null)
+            if (parent != null && parent.FileStream != null)
             {
                 if (!_inSaveBlocks && !DelaySaveBlocks)
                 {

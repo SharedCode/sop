@@ -842,7 +842,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
         /// <returns></returns>
         public IDictionaryEnumerator GetEnumerator()
         {
-            return new DictionaryEnumerator((SortedDictionaryOnDisk) this.Clone());
+            return new DictionaryEnumerator(this);
         }
 
         /// <summary>
@@ -1338,7 +1338,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
 
         IEnumerator IEnumerable.GetEnumerator()
         {
-            var r = new DictionaryEnumerator((SortedDictionaryOnDisk) this.Clone());
+            var r = new DictionaryEnumerator(this);
             return r;
         }
 

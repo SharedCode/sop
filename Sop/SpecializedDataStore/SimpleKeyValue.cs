@@ -71,19 +71,7 @@ namespace Sop.SpecializedDataStore
         /// <summary>
         /// Store's URI path. This gets populated if Store was retrieved using the StoreNavigator.
         /// </summary>
-        public string Path
-        {
-            get
-            {
-                return _path;
-            }
-            internal set
-            {
-                _path = value;
-            }
-        }
-        private string _path;
-
+        public string Path { get; internal set; }
 
         /// <summary>
         /// Is Object one of basic types of .net such as the Int family, and the float/double family.

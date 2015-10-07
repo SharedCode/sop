@@ -46,7 +46,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// </summary>
             object IEnumerator.Current
             {
-                get { return (DictionaryEntry)BTree.CurrentEntry; }
+                get { return BTree.CurrentEntry; }
             }
 
             /// <summary>
@@ -98,7 +98,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// <param name="bTree">BTree instance items will be enumerated</param>
             public DictionaryEnumerator(SortedDictionaryOnDisk bTree)
             {
-                this.BTree = bTree;
+                this.BTree = (SortedDictionaryOnDisk)bTree.Clone();
                 this.Reset();
             }
 

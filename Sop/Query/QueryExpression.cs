@@ -63,24 +63,6 @@ namespace Sop
             }
             return r;
         }
-        #region for removal
-        //public static QueryExpression<TKey>[] Package(IEnumerable<TKey> keys, QueryFilterFunc<object> filterFunction = null)
-        //{
-        //    if (keys == null)
-        //        throw new ArgumentNullException("keys");
-
-        //    var r = new List<QueryExpression<TKey>>();
-        //    foreach(var k in keys)
-        //    {
-        //        var q = new QueryExpression<TKey>()
-        //        {
-        //            Key = k,
-        //            ValueFilterFunc = filterFunction
-        //        };
-        //    }
-        //    return r.ToArray();
-        //}
-        #endregion
 
         /// <summary>
         /// Convert to non-generic QueryExpression.

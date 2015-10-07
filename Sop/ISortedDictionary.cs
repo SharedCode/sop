@@ -40,7 +40,8 @@ namespace Sop
     /// <typeparam name="TKey"></typeparam>
     /// <typeparam name="TValue"></typeparam>
     public interface ISortedDictionary<TKey, TValue> : Client.ISortedDictionary<TKey, TValue>, ISortedDictionary, 
-        IEnumerable<KeyValuePair<TKey, TValue>>     // explicitly declare IEnumerable as one of interface to implement to enable LINQ !
+        IEnumerable<KeyValuePair<TKey, TValue>>
+        // explicitly declare IEnumerable as one of interface to implement to enable LINQ !
     {
         /// <summary>
         /// Transaction this Sorted Dictionary belongs to.

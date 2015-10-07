@@ -2,6 +2,8 @@
 // Open Source License: MIT
 // Have fun Coding! ;)
 
+using System.Collections.Generic;
+
 namespace Sop
 {
     /// <summary>
@@ -16,7 +18,7 @@ namespace Sop
     /// that contains user defined logic for further refining comparisons
     /// done by the Bulk Query/Remove.
     /// </summary>
-    /// <typeparam name="T"></typeparam>
+    /// <typeparam name="T">type of the Value.</typeparam>
     /// <returns>true will signal SOP the record matches, false otherwise.</returns>
     public delegate bool QueryFilterFunc<in T>(T value);
 }
