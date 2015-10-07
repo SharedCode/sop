@@ -15,6 +15,7 @@ namespace Sop.Linq
             private ISortedDictionaryOnDisk _store;
             private TKey[] _keys;
             private int _keyIndex = -1;
+
             public FilteredEnumerator(ISortedDictionary<TKey, TValue> store, TKey[] keys)
             {
                 if (keys == null || keys.Length == 0)
@@ -38,31 +39,43 @@ namespace Sop.Linq
             }
             public bool MoveNext()
             {
-                if (_keyIndex >= _keys.Length - 1)
+                // if index points to pre-1st element...
+                if (_keyIndex < 0)
+                {
+                    _keyIndex++;
+                    if (_store.Search(_keys[_keyIndex], true))
+                        return true;
+                    while (++_keyIndex <= _keys.Length - 1)
+                    {
+                        if (_store.Search(_keys[_keyIndex], true))
+                            return true;
+                    }
                     return false;
-                _keyIndex++;
-                return true;
+                }
+                // move store pointer to next element and if it has same key as current one in keys array,
+                // just return true so Store can return this element.
+                if (_store.MoveNext() && _store.Comparer.Compare(_store.CurrentKey, _keys[_keyIndex]) == 0)
+                    return true;
+                while (++_keyIndex <= _keys.Length - 1)
+                {
+                    if (_store.Search(_keys[_keyIndex], true))
+                        return true;
+                }
+                return false;
             }
-
 
             public KeyValuePair<TKey, TValue> Current
             {
                 get
                 {
-                    if (_store.Search(_keys[_keyIndex]))
-                        return new KeyValuePair<TKey, TValue>((TKey)_store.CurrentEntry.Key, 
+                    return new KeyValuePair<TKey, TValue>((TKey)_store.CurrentEntry.Key,
                             (TValue)_store.CurrentEntry.Value);
-                    return default(KeyValuePair<TKey, TValue>);
                 }
             }
 
             object IEnumerator.Current
             {
-                get
-                {
-                    KeyValuePair<TKey, TValue> c = Current;
-                    return c;
-                }
+                get { return _store.CurrentEntry; }
             }
         }
         class FilteredEnumerable<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>

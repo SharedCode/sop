@@ -34,8 +34,11 @@ namespace SopClientTests
                 store.Add(2, "2");
                 var storeB = sf.Get<int, string>(Server, "People2");
                 storeB.Add(1, "11");
-                storeB.Add(2, "22");
-                storeB.Add(3, "33");
+                storeB.Add(2, "221");
+                storeB.Add(2, "222");
+                storeB.Add(3, "331");
+                storeB.Add(3, "332");
+                storeB.Add(4, "44");
 
                 //var q =
                 //    from c in store
@@ -52,9 +55,10 @@ namespace SopClientTests
                 //    var ooo = itm;
                 //}
 
-                var qry = from a in store.Query(new int[] { 1 })
-                        //where store.ContainsKey(new int[] { 1, 2 })
-                          select a;
+                var qry = from a in storeB.Query(new int[] { 3, 2, 4 })
+                          from b in storeB.Query(new int[] { 1, 2, 4 })
+                              //where store.ContainsKey(new int[] { 1, 2 })
+                          select new { a, b };
 
                 foreach (var itm in qry)
                 {
