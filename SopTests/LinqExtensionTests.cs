@@ -11,6 +11,27 @@ namespace SopClientTests
     public class LinqExtensionTests
     {
         [TestMethod]
+        public void SimpleLinqTest()
+        {
+            using (var Server = new ObjectServer("SopBin\\OServer.dta"))
+            {
+                IStoreFactory sf = new StoreFactory();
+                var store = sf.Get<int, string>(Server, "People2");
+                store.Add(3, "331");
+                store.Add(2, "221");
+                store.Add(1, "11");
+                store.Add(4, "44");
+
+                var qry = from a in store select a;
+                int i = 1;
+                foreach (var itm in qry)
+                {
+                    Assert.IsTrue(itm.Key == i++);
+                }
+            }
+        }
+
+        [TestMethod]
         public void QueryUniqueRecordsTest()
         {
             using (var Server = new ObjectServer("SopBin\\OServer.dta"))
