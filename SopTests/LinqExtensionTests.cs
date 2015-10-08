@@ -11,27 +11,32 @@ namespace SopClientTests
     public class LinqExtensionTests
     {
         [TestMethod]
-        public void ExploreLinqToObjectTest()
-        {
-            var ints = new int[2] { 1, 2 };
-            var qry = from a in ints
-                      where a == 1
-                      select a;
-            foreach(var item in qry)
-            {
-                var o = item;
-            }
-        }
-
-        [TestMethod]
-        public void TestMethod1()
+        public void QueryUniqueRecordsTest()
         {
             using (var Server = new ObjectServer("SopBin\\OServer.dta"))
             {
                 IStoreFactory sf = new StoreFactory();
-                var store = sf.Get<int, string>(Server, "People");
-                store.Add(1, "1");
-                store.Add(2, "2");
+                var storeB = sf.Get<int, string>(Server, "People2");
+                storeB.Add(1, "11");
+                storeB.Add(2, "221");
+                storeB.Add(3, "331");
+                storeB.Add(4, "44");
+
+                var qry = from a in storeB.Query(new int[] { 1, 2, 3, 4, 5 })
+                          select a;
+                foreach (var itm in qry)
+                {
+                    Assert.IsTrue(itm.Key == 1 || itm.Key == 2 || itm.Key == 3 || itm.Key == 4);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void QueryNoRecordMatchTest()
+        {
+            using (var Server = new ObjectServer("SopBin\\OServer.dta"))
+            {
+                IStoreFactory sf = new StoreFactory();
                 var storeB = sf.Get<int, string>(Server, "People2");
                 storeB.Add(1, "11");
                 storeB.Add(2, "221");
@@ -40,41 +45,85 @@ namespace SopClientTests
                 storeB.Add(3, "332");
                 storeB.Add(4, "44");
 
-                //var q =
-                //    from c in store
-                //    join p in storeB on c.Key equals p.Key into ps
-                //    from p in ps.DefaultIfEmpty()
-                //    select new
-                //    {
-                //        f = c.Key,
-                //        e = p.Key
-                //    };
+                var qry = from a in storeB.Query(new int[] { 5 })
+                          select a;
+                foreach (var itm in qry)
+                {
+                    Assert.Fail();
+                }
+            }
+        }
+        [TestMethod]
+        public void QueryBasicTest()
+        {
+            using (var Server = new ObjectServer("SopBin\\OServer.dta"))
+            {
+                IStoreFactory sf = new StoreFactory();
+                var storeB = sf.Get<int, string>(Server, "People2");
+                storeB.Add(1, "11");
+                storeB.Add(2, "221");
+                storeB.Add(2, "222");
+                storeB.Add(3, "331");
+                storeB.Add(3, "332");
+                storeB.Add(4, "44");
+                var qry = from a in storeB.Query(new int[] { 2, 3, 4 })
+                          select a;
+                foreach (var itm in qry)
+                {
+                    Assert.IsTrue(itm.Key == 2 || itm.Key == 3 || itm.Key == 4);
+                }
+            }
+        }
+        [TestMethod]
+        public void MultipleQueryOnSameLinqBlockTest()
+        {
+            using (var Server = new ObjectServer("SopBin\\OServer.dta"))
+            {
+                IStoreFactory sf = new StoreFactory();
+                var storeB = sf.Get<int, string>(Server, "People2");
+                storeB.Add(1, "11");
+                storeB.Add(2, "221");
+                storeB.Add(2, "222");
+                storeB.Add(3, "331");
+                storeB.Add(3, "332");
+                storeB.Add(4, "44");
 
-                //foreach(var itm in q)
-                //{
-                //    var ooo = itm;
-                //}
-
-                var qry = from a in storeB.Query(new int[] { 3, 2, 4 })
-                          from b in storeB.Query(new int[] { 1, 2, 4 })
-                              //where store.ContainsKey(new int[] { 1, 2 })
-                          select new { a, b };
+                var qry = from a in storeB.Query(new int[] { 2, 3, 4 })
+                          from b in storeB.Query(new int[] { 1, 2 })
+                          group a by new { a.Key } into g
+                          select g.FirstOrDefault();
 
                 foreach (var itm in qry)
                 {
                     var o = itm;
                 }
+            }
+        }
+        [TestMethod]
+        public void StressTest()
+        {
+            using (var Server = new ObjectServer("SopBin\\OServer.dta"))
+            {
+                IStoreFactory sf = new StoreFactory();
+                var store = sf.Get<int, string>(Server, "People2");
 
-
-                //var qry2 = from a in store
-                //          where ().ContainsKey(1)
-                //          select a;
-
-                //foreach (var itm in qry)
-                //{
-                //    var o = itm;
-                //}
-
+                // insert 10,000 records, query all of it in an ascending order, 
+                // then verify whether Query result contains each of the records in the set,
+                // and is in ascending order.
+                const int IterationCount = 10000;
+                int[] array = new int[IterationCount];
+                for (int i = 0; i < IterationCount; i++)
+                {
+                    store.Add(i, string.Format("Value {0}.", i));
+                    array[i] = i;
+                }
+                var qry = from a in store.Query(array)
+                          select a;
+                int index = 0;
+                foreach (var itm in qry)
+                {
+                    Assert.IsTrue(itm.Key == index++);
+                }
             }
         }
     }

@@ -8,8 +8,12 @@ using Sop.SpecializedDataStore;
 
 namespace Sop.Linq
 {
+    /// <summary>
+    /// SOP LINQ to Objects extensions.
+    /// </summary>
     public static class Extension
     {
+        #region Store's filtered set IEnumerable & IEnumerator
         class FilteredEnumerator<TKey, TValue> : IEnumerator<KeyValuePair<TKey, TValue>>
         {
             private ISortedDictionaryOnDisk _store;
@@ -101,11 +105,29 @@ namespace Sop.Linq
                 return new FilteredEnumerator<TKey, TValue>(_store, _keys);
             }
         }
+        #endregion
 
+        /// <summary>
+        /// Efficiently select into a list(IEnumerable) those records of a given Store
+        /// whose keys match with the submitted keys. Marked "Efficiently" because each 
+        /// returned IEnumerable is a "thin" wrapper for the Store that allows 
+        /// record navigation, record filtration based on keys utilizing minimal resources.
+        /// Each instance shares the same MRU cache, thus, occupying the least 
+        /// amount of memory possible, for querying and filtering records of a Store.
+        /// 
+        /// NOTE: code can execute Query multiple times for the same Store within the same
+        /// LINQ query block. Each returned IEnumerable doesn't conflict with one another
+        /// nor with the Store.
+        /// </summary>
+        /// <typeparam name="TKey"></typeparam>
+        /// <typeparam name="TValue"></typeparam>
+        /// <param name="source"></param>
+        /// <param name="keys"></param>
+        /// <returns>IEnumerable that iterates through matching records for the submitted keys.</returns>
         public static IEnumerable<KeyValuePair<TKey, TValue>> Query<TKey, TValue>(
-            this IEnumerable<KeyValuePair<TKey, TValue>> source, TKey[] keys)
+            this IEnumerable<KeyValuePair<TKey, TValue>> store, TKey[] keys)
         {
-            return new FilteredEnumerable<TKey, TValue>((ISortedDictionary<TKey, TValue>)source, keys);
+            return new FilteredEnumerable<TKey, TValue>((ISortedDictionary<TKey, TValue>)store, keys);
         }
     }
 }
