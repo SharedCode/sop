@@ -138,8 +138,10 @@ namespace SopClientTests
                     store.Add(i, string.Format("Value {0}.", i));
                     array[i] = i;
                 }
-                var qry = from a in store.Query(array)
-                          select a;
+                // NOTE: in reality, "Query" is not needed because anyways the array specifies
+                // all records, so, might as well just Ling it directly from the "store".
+                // But this is a good stress test for the Query IEnumerator.
+                var qry = from a in store.Query(array) select a;
                 int index = 0;
                 foreach (var itm in qry)
                 {
