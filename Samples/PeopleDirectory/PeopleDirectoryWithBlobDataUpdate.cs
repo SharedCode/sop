@@ -4,7 +4,7 @@ using Sop.Persistence;
 
 namespace Sop.Samples
 {
-    public class PeopleDirectoryWithBlobDataUpdate
+    public class PeopleDirectoryWithBlobDataUpdate : Sample
     {
         #region Record definitions & key comparers
         public class Person : IPersistent
@@ -75,7 +75,7 @@ namespace Sop.Samples
 		}
 
 		//** change MaxCount to your desired count of items to save to see for yourself how fast SOP performs.
-		const int MaxCount = 250000;
+		public int MaxCount = 250000;
 
 		/// <summary>
 		/// Manage 250K records with Blobs (7,000 byte sized array).
@@ -101,6 +101,8 @@ namespace Sop.Samples
             }
             if (PeopleStore.Transaction != null)
                 PeopleStore.Transaction.Commit();
+            Server.Dispose();
+            server = null;
             Console.WriteLine("{0}: PeopleDirectoryUsingIPersistent demo ended...", DateTime.Now);
         }
         void Populate()
@@ -185,7 +187,6 @@ namespace Sop.Samples
         {
             get
             {
-                string ServerFilename = "SopBin\\OServer.dta";
                 if (server == null)
                 {
                     server = Sop.ObjectServer.OpenWithTransaction(ServerFilename);
@@ -196,6 +197,7 @@ namespace Sop.Samples
             }
         }
 
+        public const string ServerFilename = "SopBin\\OServer.dta";
         Sop.IObjectServer server;
         ISortedDictionary<Person, PersonBlob> PeopleStore;
     }
