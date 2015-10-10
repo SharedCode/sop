@@ -39,6 +39,26 @@ namespace Sop.Samples
 
             using (var Server = new ObjectServer(ServerFilename))
             {
+                // Create empty stores to pre-allocate data segments.
+                // Doing segments' pre-allocation proved to cause faster Transaction commits.
+                bool newlyCreatedStores = false;
+                for (int i = 0; i < CollCount; i++)
+                {
+                    string CollectionName = string.Format("SystemFile/People{0}", i);
+                    var store = Server.StoreNavigator.GetStore<long, Person>(CollectionName);
+                    if (store.Count == 0)
+                    {
+                        newlyCreatedStores = true;
+                    }
+                }
+                if (newlyCreatedStores)
+                {
+                    if (Server.Transaction != null)
+                        Server.Commit();
+                    Server.BeginTransaction();
+                }
+                // end of Store create.
+
                 for (int i = 0; i < CollCount; i++)
                 {
                     string CollectionName = string.Format("SystemFile/People{0}", i);

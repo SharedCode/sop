@@ -309,7 +309,7 @@
     <Compile Include="Transaction\ITransactionRoot.cs" />
     <Compile Include="Transaction\Transaction.Backup.cs" />
     <Compile Include="Transaction\Transaction.LogCollection.cs" />
-    <Compile Include="Transaction\Transaction.ProcessedLines.cs" />
+    <Compile Include="Transaction\ProcessedLinesHandler.cs" />
     <Compile Include="Transaction\Transaction2.cs" />
     <Compile Include="Transaction\TransactionRolledbackException.cs" />
     <Compile Include="StoreFactory.cs" />
