@@ -46,9 +46,12 @@ namespace Sop.Samples
                     if (store.Count == 0)
                     {
                         Populate(store);
-                        if (Server.Transaction != null)
-                            Server.Commit();
-                        Server.BeginTransaction();
+                        if (i > 0 && i % 10 == 0)
+                        {
+                            if (Server.Transaction != null)
+                                Server.Commit();
+                            Server.BeginTransaction();
+                        }
                     }
                 }
                 for (int i = 0; i < CollCount; i++)
@@ -80,7 +83,7 @@ namespace Sop.Samples
                     PhoneNumber = "510-555-9999"
                 };
                 PeopleStore.Add(p.PersonID, p);
-                if (i % 10000 == 0)
+                if (i > 0 && i % 10000 == 0)
                 {
                     PeopleStore.File.Server.Commit();
                     PeopleStore.File.Server.BeginTransaction();

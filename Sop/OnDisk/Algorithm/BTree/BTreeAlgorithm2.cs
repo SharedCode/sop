@@ -1464,17 +1464,17 @@ namespace Sop.OnDisk.Algorithm.BTree
 
         internal void ReloadRoot()
         {
+            if (RootNode == null) return;
             long rootNodeAddress = RootNode.GetAddress(this);
             if (rootNodeAddress < 0)
                 return;
             RemoveFromCache(RootNode);
             PromoteLookup.Remove(RootNode.GetAddress(this));
-
             RootNode.Dispose();
             RootNode = null;
             object rt = BTreeNodeOnDisk.ReadNodeFromDisk(this, rootNodeAddress);
             if (rt != null)
-                RootNode = (BTreeNodeOnDisk) rt;
+                RootNode = (BTreeNodeOnDisk)rt;
         }
 
         /// <summary>

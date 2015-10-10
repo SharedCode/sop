@@ -50,9 +50,7 @@ namespace SopClientTests
         public void Store400ScenarioTest()
         {
             var pd = new Store400();
-            // Populate will Insert, Update, Delete people directory records.
-            pd.Run();
-            // Read All records.
+            // Store 400 is a mixture of battery tests stressing SOP Store mgmt & Transaction cycling.
             pd.Run();
             // Delete SOP data folder now that we're done.
             pd.DeleteDataFolder(Store400.ServerFilename);
