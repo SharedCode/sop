@@ -34,5 +34,28 @@ namespace SopClientTests
             // Delete SOP data folder now that we're done.
             pd.DeleteDataFolder(PeopleDirectoryXmlSerializableObject.ServerFilename);
         }
+        [TestMethod]
+        public void ManageMultipleFilesScenarioTest()
+        {
+            var pd = new ManageMultipleFiles();
+            // Populate will Insert, Update, Delete people directory records.
+            pd.Run();
+            // Read All records.
+            pd.Run();
+            // Delete SOP data folder now that we're done.
+            pd.DeleteDataFolder(ManageMultipleFiles.ServerFilename);
+        }
+
+        [TestMethod]
+        public void Store400ScenarioTest()
+        {
+            var pd = new Store400();
+            // Populate will Insert, Update, Delete people directory records.
+            pd.Run();
+            // Read All records.
+            pd.Run();
+            // Delete SOP data folder now that we're done.
+            pd.DeleteDataFolder(Store400.ServerFilename);
+        }
     }
 }

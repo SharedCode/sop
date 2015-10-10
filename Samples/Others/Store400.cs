@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Sop.Samples
 {
-    public class Store400
+    public class Store400 : Sample
     {
         #region Record definitions & key comparers
         public class PersonKey
@@ -37,7 +37,7 @@ namespace Sop.Samples
             Console.WriteLine("{0}: Store400 demo started...", DateTime.Now);
             const int CollCount = 50;
 
-            using (var Server = new ObjectServer("SopBin\\OServer.dta"))
+            using (var Server = new ObjectServer(ServerFilename))
             {
                 for (int i = 0; i < CollCount; i++)
                 {
@@ -104,6 +104,7 @@ namespace Sop.Samples
                     Console.WriteLine("Read {0} items.", Ctr);
             }
         }
+        public const string ServerFilename = "SopBin\\OServer.dta";
         const int MaxCount = 5000;
     }
 }

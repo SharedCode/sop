@@ -272,10 +272,12 @@ namespace Sop.OnDisk.File
                     object f = ((BTreeNodeOnDisk)o.Value).Slots[i].Value.Data;
                     if (f is File)
                     {
-                         var r = ((File)f).ManageLock(lockFiles);
-                         if (result == null)
-                             result = r;
-                         result.AddRange(r);
+                        var r = ((File)f).ManageLock(lockFiles);
+                        if (r == null)
+                            continue;
+                        if (result == null)
+                            result = r;
+                        result.AddRange(r);
                     }
                 }
             }
@@ -286,6 +288,8 @@ namespace Sop.OnDisk.File
                 if (Btree.RootNode.Slots[i].Value.Data is File)
                 {
                     var r = ((File)Btree.RootNode.Slots[i].Value.Data).ManageLock(lockFiles);
+                    if (r == null)
+                        continue;
                     if (result == null)
                         result = r;
                     result.AddRange(r);

@@ -505,6 +505,8 @@ namespace Sop.OnDisk.File
         /// <returns></returns>
         public List<ISynchronizer> ManageLock(bool lockStores = true)
         {
+            if (!IsOpen)
+                return null;
             LockSystemStores(lockStores);
             List<ISynchronizer> result = new List<ISynchronizer>();
             if (CollectionsPool != null && CollectionsPool.Count > 0)
