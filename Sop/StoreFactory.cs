@@ -15,6 +15,7 @@ using BTreeAlgorithm = Sop.OnDisk.Algorithm.BTree.BTreeAlgorithm;
 
 namespace Sop
 {
+    using Synchronization;
     using SpecializedDataStore;
 
     /// <summary>

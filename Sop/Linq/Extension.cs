@@ -47,22 +47,31 @@ namespace Sop.Linq
                 if (_keyIndex < 0)
                 {
                     _keyIndex++;
-                    if (_store.Search(_keys[_keyIndex], true))
+                    if (_store.Locker.Invoke(_store.Search, (object)_keys[_keyIndex], true))
                         return true;
                     while (++_keyIndex <= _keys.Length - 1)
                     {
-                        if (_store.Search(_keys[_keyIndex], true))
+                        if (_store.Locker.Invoke(_store.Search, (object)_keys[_keyIndex], true))
                             return true;
                     }
                     return false;
                 }
                 // move store pointer to next element and if it has same key as current one in keys array,
                 // just return true so Store can return this element.
-                if (_store.MoveNext() && _store.Comparer.Compare(_store.CurrentKey, _keys[_keyIndex]) == 0)
-                    return true;
+                _store.Locker.Lock();
+                try
+                {
+                    if (_store.MoveNext() &&
+                        _store.Comparer.Compare(_store.CurrentKey, _keys[_keyIndex]) == 0)
+                        return true;
+                }
+                finally
+                {
+                    _store.Locker.Unlock();
+                }
                 while (++_keyIndex <= _keys.Length - 1)
                 {
-                    if (_store.Search(_keys[_keyIndex], true))
+                    if (_store.Locker.Invoke(_store.Search, (object)_keys[_keyIndex], true))
                         return true;
                 }
                 return false;
@@ -72,14 +81,22 @@ namespace Sop.Linq
             {
                 get
                 {
-                    return new KeyValuePair<TKey, TValue>((TKey)_store.CurrentEntry.Key,
-                            (TValue)_store.CurrentEntry.Value);
+                    _store.Locker.Lock();
+                    var ce = _store.CurrentEntry;
+                    _store.Locker.Unlock();
+                    return new KeyValuePair<TKey, TValue>((TKey)ce.Key, (TValue)ce.Value);
                 }
             }
 
             object IEnumerator.Current
             {
-                get { return _store.CurrentEntry; }
+                get
+                {
+                    _store.Locker.Lock();
+                    var ce = _store.CurrentEntry;
+                    _store.Locker.Unlock();
+                    return ce;
+                }
             }
         }
         class FilteredEnumerable<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>

@@ -6,6 +6,7 @@ namespace Sop.Collections.Generic
 {
     using System;
     using System.Collections;
+    using Synchronization;
 
     /// <summary>
     /// In-Memory, duplicates allowed Concurrent (thread safe) Sorted Dictionary.

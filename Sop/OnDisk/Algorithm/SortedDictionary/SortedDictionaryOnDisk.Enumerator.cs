@@ -38,7 +38,10 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// </summary>
             public KeyValuePair<TKey, TValue> Current
             {
-                get { return new KeyValuePair<TKey, TValue>((TKey)BTree.CurrentKey, (TValue)BTree.CurrentValue); }
+                get
+                {
+                    return new KeyValuePair<TKey, TValue>((TKey)BTree.CurrentKey, (TValue)BTree.CurrentValue);
+                }
             }
 
             /// <summary>

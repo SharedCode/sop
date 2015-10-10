@@ -812,7 +812,8 @@ namespace Sop.SpecializedDataStore
 
         #endregion
 
-        #region IEnumerable<KeyValuePair<TKey,TValue>> Members
+        #region enumerators
+        // todo: GetEnumerators need to be synchronized...
 
         /// <summary>
         /// Get Enumerator returns an enumerator for this Store.
@@ -844,13 +845,6 @@ namespace Sop.SpecializedDataStore
                 throw;
             }
         }
-
-        #endregion
-
-        #region IEnumerable Members
-
-        // todo: GetEnumerators need to be synchronized...
-
         IEnumerator IEnumerable.GetEnumerator()
         {
             if (Collection == null)
@@ -896,7 +890,6 @@ namespace Sop.SpecializedDataStore
                 throw;
             }
         }
-
         #endregion
 
         #region IDictionary Members

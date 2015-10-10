@@ -61,6 +61,7 @@
     <Compile Include="ScenarioTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="AzureTests.cs" />
+    <Compile Include="AcceptanceTests.cs" />
     <Compile Include="VirtualCacheTests.cs" />
     <Compile Include="UnitTests.cs" />
   </ItemGroup>

@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Sop.Synchronization;
 
 namespace Sop.OnDisk.ConcurrentWrappers
 {
@@ -22,11 +23,11 @@ namespace Sop.OnDisk.ConcurrentWrappers
             Collection = new Algorithm.BTree.BTreeAlgorithm(file, comparer, name, dataBlockDriver, isDataInKeySegment);
         }
 
-        new public Sop.Collections.ISynchronizer Locker
+        new public ISynchronizer Locker
         {
             get
             {
-                return (Sop.Collections.ISynchronizer)SyncRoot;
+                return (ISynchronizer)SyncRoot;
             }
         }
 

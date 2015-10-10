@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Sop.Synchronization;
 
 namespace Sop.OnDisk.ConcurrentWrappers
 {
@@ -528,12 +529,12 @@ namespace Sop.OnDisk.ConcurrentWrappers
             }
         }
 
-        protected Collections.ISynchronizer Locker
+        protected ISynchronizer Locker
         {
             get
             {
                 if (Collection == null) return null;
-                return (Collections.ISynchronizer)Collection.SyncRoot;
+                return (ISynchronizer)Collection.SyncRoot;
             }
         }
         internal protected T Collection;

@@ -4,6 +4,7 @@
 
 using System;
 using Sop.Persistence;
+using Sop.Synchronization;
 
 namespace Sop
 {
@@ -111,6 +112,6 @@ namespace Sop
         /// Synchronizer (Locker) object provides methods for locking, unlocking
         /// and lock wrapped method invocation.
         /// </summary>
-        Sop.Collections.ISynchronizer Locker { get; }
+        ISynchronizer Locker { get; }
     }
 }

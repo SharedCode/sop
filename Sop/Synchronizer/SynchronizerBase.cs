@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Threading;
 
-namespace Sop.Collections
+namespace Sop.Synchronization
 {
     /// <summary>
     /// Synchronizer wraps thread synchronization on Store code.
@@ -80,6 +80,19 @@ namespace Sop.Collections
                 Unlock();
             }
         }
+        public TResult Invoke<T1, T2, TResult>(Func<T1, T2, TResult> function, T1 arg, T2 arg2)
+        {
+            Lock();
+            try
+            {
+                return function(arg, arg2);
+            }
+            finally
+            {
+                Unlock();
+            }
+        }
+
         public TResult Invoke<TResult>(Func<TResult> function)
         {
             Lock();

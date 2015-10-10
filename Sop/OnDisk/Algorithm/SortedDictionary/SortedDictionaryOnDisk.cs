@@ -13,6 +13,7 @@ using Sop.Collections.BTree;
 using Sop.OnDisk.IO;
 using Sop.Persistence;
 using System.Threading;
+using Sop.Synchronization;
 
 //using System.Xml.Serialization;
 
@@ -112,7 +113,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             this.File = File;
             this.SortOrder = bTree.SortOrder;
             this.ItemType = itemType;
-            SyncRoot = (Collections.ISynchronizer) bTree.SyncRoot;
+            SyncRoot = (ISynchronizer) bTree.SyncRoot;
         }
 
         private void dispose()
@@ -1312,11 +1313,11 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             }
         }
 
-        public Sop.Collections.ISynchronizer Locker
+        public ISynchronizer Locker
         {
             get
             {
-                return ((Sop.Collections.ISynchronizer)SyncRoot);
+                return ((ISynchronizer)SyncRoot);
             }
         }
 

@@ -17,6 +17,8 @@ using Sop.OnDisk.IO;
 using Sop.Persistence;
 using Sop.Transaction;
 using Sop.Utility;
+using Sop.Synchronization;
+using System.Runtime.CompilerServices;
 
 // set to new .Net 4 security rules...
 [assembly: SecurityRules(SecurityRuleSet.Level2)]
@@ -348,7 +350,7 @@ namespace Sop.OnDisk
 
         /// <summary>
         /// Server root path.
-        /// NOTE: set is for SOP used internally
+        /// NOTE: set is for internal SOP use.
         /// </summary>
         public string Path { get; set; }
 
@@ -741,7 +743,7 @@ namespace Sop.OnDisk
         /// or unlock them.
         /// </summary>
         /// <param name="lockFiles">true will lock Files, false otherwise.</param>
-        public List<Collections.ISynchronizer> ManageLock(bool lockFiles = true)
+        public List<ISynchronizer> ManageLock(bool lockFiles = true)
         {
             if (SystemFile == null)
                 return null;

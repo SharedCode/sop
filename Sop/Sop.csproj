@@ -127,12 +127,11 @@
     <Compile Include="Collections\BTree\Common\IBTree.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Collections\Synchronizer\ISynchronizer.cs">
+    <Compile Include="Synchronizer\ISynchronizer.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Collections\Synchronizer\NoLocking.cs" />
-    <Compile Include="Collections\Synchronizer\SynchronizerBase.cs" />
-    <Compile Include="Collections\Synchronizer\Synchronizer.cs" />
+    <Compile Include="Synchronizer\SynchronizerBase.cs" />
+    <Compile Include="Synchronizer\Synchronizer.cs" />
     <Compile Include="Collections\BTree\IDictionary.cs">
       <SubType>Code</SubType>
     </Compile>

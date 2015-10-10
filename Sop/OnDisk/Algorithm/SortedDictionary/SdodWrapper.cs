@@ -14,6 +14,7 @@ using Sop.OnDisk.IO;
 using Sop.Persistence;
 using ICollection = System.Collections.ICollection;
 using IDictionary = System.Collections.IDictionary;
+using Sop.Synchronization;
 
 namespace Sop.OnDisk.Algorithm.SortedDictionary
 {
@@ -37,11 +38,11 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
         }
 
 
-        public Sop.Collections.ISynchronizer Locker
+        public ISynchronizer Locker
         {
             get
             {
-                return ((Sop.Collections.ISynchronizer)SyncRoot);
+                return ((ISynchronizer)SyncRoot);
             }
         }
 

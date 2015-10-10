@@ -8,7 +8,7 @@ namespace Sop
     public delegate void VoidFunc<in T1, in T2>(T1 arg1, T2 arg2);
     public delegate void VoidFunc<in T1, in T2, in T3>(T1 arg1, T2 arg2, T3 arg3);
 
-    namespace Collections
+    namespace Synchronization
     {
         /// <summary>
         /// Thread Synchronization interface.
@@ -76,6 +76,19 @@ namespace Sop
             /// <param name="arg"></param>
             /// <returns></returns>
             TResult Invoke<T1, TResult>(Func<T1, TResult> function, T1 arg);
+            /// <summary>
+            /// Thread-safe call a lambda expression. Call will be wrapped inside
+            /// Lock/Unlock calls.
+            /// </summary>
+            /// <typeparam name="T1"></typeparam>
+            /// <typeparam name="T2"></typeparam>
+            /// <typeparam name="TResult"></typeparam>
+            /// <param name="function"></param>
+            /// <param name="arg"></param>
+            /// <param name="arg2"></param>
+            /// <returns></returns>
+            TResult Invoke<T1, T2, TResult>(Func<T1, T2, TResult> function, T1 arg, T2 arg2);
+
             /// <summary>
             /// true signifies current transaction was rolled back.
             /// </summary>

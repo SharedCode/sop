@@ -8,6 +8,7 @@ using Sop.Collections.BTree;
 using Sop.OnDisk.Algorithm.SortedDictionary;
 using Sop.OnDisk.File;
 using Sop.OnDisk.IO;
+using Sop.Synchronization;
 
 namespace Sop.SpecializedDataStore
 {
@@ -66,16 +67,16 @@ namespace Sop.SpecializedDataStore
         /// <summary>
         /// Locker object provides monitor type(enter/exit) of access locking to the Store.
         /// </summary>
-        public Collections.ISynchronizer Locker
+        public ISynchronizer Locker
         {
             get 
             {
                 if (_locker == null)
-                    _locker = (Collections.ISynchronizer)Collection.SyncRoot; ;
+                    _locker = (ISynchronizer)Collection.SyncRoot;
                 return _locker;
             }
         }
-        private Collections.ISynchronizer _locker;
+        private ISynchronizer _locker;
 
         internal bool InvokeFromMru { get; set; }
 

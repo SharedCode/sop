@@ -38,6 +38,7 @@
 #endregion
 
 using System.Collections.Generic;
+using Sop.Synchronization;
 
 namespace Sop.Collections.Generic
 {

@@ -3,6 +3,7 @@ using System.Collections;
 using System.ComponentModel;
 using System.Collections.Generic;
 using Sop.Collections.BTree;
+using Sop.Synchronization;
 
 namespace Sop.Collections.Generic.BTree
 {

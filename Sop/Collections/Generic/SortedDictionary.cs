@@ -6,6 +6,7 @@ namespace Sop.Collections.Generic
     using System;
     using System.Collections;
     using System.ComponentModel;
+    using Synchronization;
 
     /// <summary>
     /// In-Memory, duplicates allowed Sorted Dictionary.

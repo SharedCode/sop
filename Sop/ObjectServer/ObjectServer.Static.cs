@@ -50,6 +50,11 @@ namespace Sop
             set { FileStream.MaxInstanceCount = value; }
         }
 
+        public static string GetFullFolderPath(string serverSystemFilename)
+        {
+            return System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(serverSystemFilename));
+        }
+
         /// <summary>
         /// Rollback all pending transactions left open by previous Application run.
         /// </summary>

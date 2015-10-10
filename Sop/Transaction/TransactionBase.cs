@@ -13,6 +13,7 @@ using File = Sop.OnDisk.File.File;
 namespace Sop.Transaction
 {
     using OnDisk;
+    using Synchronization;
 
     /// <summary>
     /// Transaction Base
@@ -128,7 +129,7 @@ namespace Sop.Transaction
         /// <summary>
         /// Lock all the data Stores modified in this transaction.
         /// </summary>
-        virtual protected List<Collections.ISynchronizer> LockStores()
+        virtual protected List<ISynchronizer> LockStores()
         {
             return null;
         }

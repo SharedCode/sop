@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Collections;
-using Sop.Collections.BTree;
 using Sop.Persistence;
+using Sop.Synchronization;
 
 namespace Sop.Client
 {
@@ -48,7 +46,7 @@ namespace Sop.Client
         /// <summary>
         /// Locker object provides monitor type(enter/exit) of access locking to the Store.
         /// </summary>
-        Collections.ISynchronizer Locker { get; }
+        ISynchronizer Locker { get; }
     }
 
     /// <summary>

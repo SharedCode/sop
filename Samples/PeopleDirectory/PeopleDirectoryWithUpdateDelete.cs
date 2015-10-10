@@ -3,8 +3,8 @@ using System.Collections.Generic;
 
 namespace Sop.Samples
 {
-	public class PeopleDirectoryWithUpdateDelete
-	{
+	public class PeopleDirectoryWithUpdateDelete : Sample
+    {
 		#region Record definitions & key comparers
 		public class PersonKey
 		{
@@ -54,6 +54,8 @@ namespace Sop.Samples
 				ReadAll();
 			}
 			Server.Commit();
+            Server.Dispose();
+            server = null;
             Console.WriteLine("{0}: PeopleDirectoryWithUpdateDelete demo ended...", DateTime.Now);
 		}
 		//** insert 5 million records on two containers
@@ -211,13 +213,13 @@ namespace Sop.Samples
 		{
 			get
 			{
-				string ServerFilename = "SopBin\\OServer.dta";
 				if (server == null)
 					server = Sop.ObjectServer.OpenWithTransaction(ServerFilename);
 				return server;
 			}
 		}
 
+        public const string ServerFilename = "SopBin\\OServer.dta";
         Sop.IObjectServer server;
 		ISortedDictionary<long, Person> PeopleStore;
 		ISortedDictionary<PersonKey, long> PeopleStoreByName;

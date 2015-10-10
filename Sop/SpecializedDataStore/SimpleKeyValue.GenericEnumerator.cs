@@ -12,7 +12,7 @@ namespace Sop.SpecializedDataStore
 {
     public partial class SimpleKeyValue<TKey, TValue>
     {
-        public class GenericEnumerator<T> : IEnumerator<T>
+        internal class GenericEnumerator<T> : IEnumerator<T>
         {
             void IDisposable.Dispose()
             {

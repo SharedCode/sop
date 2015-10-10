@@ -1,9 +1,8 @@
-#if (!SINGLE_THREADED)
 using System;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace Sop.Collections
+namespace Sop.Synchronization
 {
     /// <summary>
     /// Synchronizer with a secondary signaling mechanism mostly adept for
@@ -102,4 +101,3 @@ namespace Sop.Collections
         private CommitLockEvent _commitLockEvent = new CommitLockEvent();
     }
 }
-#endif

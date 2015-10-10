@@ -38,6 +38,7 @@ namespace Sop.Transaction
 {
     using OnDisk;
     using System.Text;
+    using Synchronization;
 
     /// <summary>
     /// Transaction management class.
@@ -262,8 +263,8 @@ namespace Sop.Transaction
                 // signal to raise transaction rollback event on other threads requesting a Store Lock.
                 foreach (var s in synchs)
                 {
-                    ((Collections.Synchronizer)s).TransactionRollback = true;
-                    ((Collections.Synchronizer)s).CommitLockRequest(false);
+                    ((Synchronizer)s).TransactionRollback = true;
+                    ((Synchronizer)s).CommitLockRequest(false);
                     //((Collections.Synchronizer)s).Unlock();
                 }
                 return Server.SystemFile.Store.Transaction;
@@ -348,7 +349,7 @@ namespace Sop.Transaction
         /// <summary>
         /// Lock all the transaction modified Stores.
         /// </summary>
-        protected override List<Collections.ISynchronizer> LockStores()
+        protected override List<ISynchronizer> LockStores()
         {
             if (InCycleTransaction)
                 return null;

@@ -10,6 +10,7 @@ using Sop.OnDisk.Algorithm.BTree;
 using Sop.OnDisk.Algorithm.Collection;
 using Sop.OnDisk.Algorithm.SortedDictionary;
 using Sop.Persistence;
+using Sop.Synchronization;
 
 namespace Sop.OnDisk.File
 {
@@ -72,16 +73,16 @@ namespace Sop.OnDisk.File
             Btree = null;
         }
 
-        public Collections.ISynchronizer Locker
+        public ISynchronizer Locker
         {
             get
             {
                 if (_locker == null)
-                    _locker = (Collections.ISynchronizer)Btree.SyncRoot;
+                    _locker = (ISynchronizer)Btree.SyncRoot;
                 return _locker;
             }
         }
-        private Collections.ISynchronizer _locker;
+        private ISynchronizer _locker;
 
         public void MarkNotDirty()
         {
@@ -253,7 +254,7 @@ namespace Sop.OnDisk.File
                 });
         }
 
-        public List<Collections.ISynchronizer> ManageLock(bool lockFiles = true)
+        public List<ISynchronizer> ManageLock(bool lockFiles = true)
         {
             if (lockFiles)
                 Btree.Locker.Lock();
@@ -263,7 +264,7 @@ namespace Sop.OnDisk.File
                     return null;
                 Btree.Locker.Unlock();
             }
-            List<Collections.ISynchronizer> result = null;
+            List<ISynchronizer> result = null;
             foreach (MruItem o in Btree.MruManager.Values)
             {
                 for (int i = 0; i < ((BTreeNodeOnDisk)o.Value).Count; i++)

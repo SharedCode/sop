@@ -11,6 +11,7 @@ using Sop.OnDisk.IO;
 using Sop.Persistence;
 using Sop.SystemInterface;
 using System.Threading;
+using Sop.Synchronization;
 
 namespace Sop.OnDisk.File
 {
@@ -423,7 +424,7 @@ namespace Sop.OnDisk.File
                 foreach (Algorithm.Collection.ICollectionOnDisk coll in CollectionsPool.Values)
                 {
                     if (coll != _store && coll.SyncRoot != null)
-                        ((Sop.Collections.ISynchronizer)coll.SyncRoot).Invoke(() => { coll.Flush(); });
+                        ((ISynchronizer)coll.SyncRoot).Invoke(() => { coll.Flush(); });
                 }
             }
             if (_store != null)
@@ -444,7 +445,7 @@ namespace Sop.OnDisk.File
                 CollectionsPool.Values.CopyTo(colls, 0);
                 for (int i = 0; i < colls.Length; i++)
                 {
-                    ((Sop.Collections.ISynchronizer)colls[i].SyncRoot).Invoke(() => { colls[i].IsUnloading = true; });
+                    ((ISynchronizer)colls[i].SyncRoot).Invoke(() => { colls[i].IsUnloading = true; });
                 }
             }
             if (_store != null)
@@ -476,7 +477,7 @@ namespace Sop.OnDisk.File
                 CollectionsPool.Values.CopyTo(colls, 0);
                 for (int i = 0; i < colls.Length; i++)
                 {
-                    ((Collections.ISynchronizer)colls[i].SyncRoot).Invoke(() =>
+                    ((ISynchronizer)colls[i].SyncRoot).Invoke(() =>
                     {
                         if (open)
                             ((IInternalFileEntity)colls[i]).OpenStream();
@@ -502,10 +503,10 @@ namespace Sop.OnDisk.File
         /// </summary>
         /// <param name="lockStores"></param>
         /// <returns></returns>
-        public List<Collections.ISynchronizer> ManageLock(bool lockStores = true)
+        public List<ISynchronizer> ManageLock(bool lockStores = true)
         {
             LockSystemStores(lockStores);
-            List<Collections.ISynchronizer> result = new List<Collections.ISynchronizer>();
+            List<ISynchronizer> result = new List<ISynchronizer>();
             if (CollectionsPool != null && CollectionsPool.Count > 0)
             {
                 Algorithm.Collection.ICollectionOnDisk[] colls = null;
@@ -523,7 +524,7 @@ namespace Sop.OnDisk.File
                     CollectionsPool.Locker.Unlock();
                 }
                 #endregion
-                var systemStoreLockers = new List<Collections.ISynchronizer>(2);
+                var systemStoreLockers = new List<ISynchronizer>(2);
                 // Get collection of System & client Store Lockers, request client Stores to get locked for commit...
                 for (int i = 0; i < colls.Length; i++)
                 {
@@ -533,11 +534,11 @@ namespace Sop.OnDisk.File
                         continue;
                     if (SystemManagedStore(colls[i]))
                     {
-                        systemStoreLockers.Add((Collections.ISynchronizer)colls[i].SyncRoot);
+                        systemStoreLockers.Add((ISynchronizer)colls[i].SyncRoot);
                         continue;
                     }
-                    result.Add((Collections.ISynchronizer)colls[i].SyncRoot);
-                    ((Collections.ISynchronizer)colls[i].SyncRoot).CommitLockRequest(lockStores);
+                    result.Add((ISynchronizer)colls[i].SyncRoot);
+                    ((ISynchronizer)colls[i].SyncRoot).CommitLockRequest(lockStores);
                 }
 
                 // wait until each Store grants the commit lock/unlock request...

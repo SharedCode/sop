@@ -14,6 +14,7 @@ using Sop.OnDisk.IO;
 using Sop.Persistence;
 using Sop.Recycling;
 using System.Threading;
+using Sop.Synchronization;
 
 namespace Sop.OnDisk.Algorithm.Collection
 {
@@ -475,7 +476,7 @@ namespace Sop.OnDisk.Algorithm.Collection
             get
             {
                 if (_syncRoot == null)
-                    _syncRoot = new Sop.Collections.Synchronizer();
+                    _syncRoot = new Synchronizer();
                 return _syncRoot;
             }
             set { _syncRoot = value; }

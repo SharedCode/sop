@@ -5,7 +5,7 @@ using Sop.Transaction;
 
 namespace Sop.Samples
 {
-    public class PeopleDirectoryXmlSerializableObject
+    public class PeopleDirectoryXmlSerializableObject : Sample
     {
         #region Record definitions & key comparers
         public class Person
@@ -44,15 +44,17 @@ namespace Sop.Samples
 		//** change MaxCount to your desired count of items to save to see for yourself how fast SOP performs.
 		const int MaxCount = 6000;
 
-		/// <summary>
-		/// Manage 250K records with Blobs (7,000 byte sized array).
-		/// </summary>
-		public void Run()
+        public const string ServerFilename = "SopBin\\OServer.dta";
+
+        /// <summary>
+        /// Manage 250K records with Blobs (7,000 byte sized array).
+        /// </summary>
+        public void Run()
         {
             Console.WriteLine("{0}: PeopleDirectoryXmlSer demo started...", DateTime.Now);
 
             // create Server (open the data file) and begin a transaction...
-            using (var Server = new ObjectServer("SopBin\\OServer.dta"))
+            using (var Server = new ObjectServer(ServerFilename))
             {
                 var PeopleStore = Server.StoreNavigator.GetStore<object, object>("SystemFile/People",
                                         new StoreParameters<object>
