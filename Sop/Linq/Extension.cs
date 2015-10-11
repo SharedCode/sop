@@ -141,7 +141,7 @@ namespace Sop.Linq
         /// </summary>
         /// <typeparam name="TKey"></typeparam>
         /// <typeparam name="TValue"></typeparam>
-        /// <param name="source"></param>
+        /// <param name="store"></param>
         /// <param name="keys"></param>
         /// <returns>IEnumerable that iterates through matching records for the submitted keys.</returns>
         public static IEnumerable<KeyValuePair<TKey, TValue>> Query<TKey, TValue>(

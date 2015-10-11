@@ -53,7 +53,6 @@ namespace Sop.Samples
                     }
                 }
             }
-
             Console.WriteLine("{0}: Store400 demo ended...", DateTime.Now);
             DeleteDataFolder(ServerFilename);
         }

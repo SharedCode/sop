@@ -445,7 +445,10 @@ namespace Sop.SpecializedDataStore
                     });
             }
         }
-
+        /// <summary>
+        /// Change the name of this Collection.
+        /// </summary>
+        /// <param name="newName"></param>
         public void Rename(string newName)
         {
             if (File.Server.ReadOnly)

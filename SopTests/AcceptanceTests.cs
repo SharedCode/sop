@@ -75,6 +75,7 @@ namespace SopClientTests
         {
             // another sanity & stress tests combined, showcasing Blob updates.
             var pd = new ManyClientSimulator();
+            pd.Threaded = true;
             pd.Run();
             // Delete SOP data folder now that we're done.
             pd.DeleteDataFolder(ManyClientSimulator.ServerFilename);
