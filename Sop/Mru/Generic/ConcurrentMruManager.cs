@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using Sop.OnDisk;
+using Sop.Synchronization;
 
 namespace Sop.Mru.Generic
 {
@@ -11,7 +12,7 @@ namespace Sop.Mru.Generic
     /// </summary>
     public class ConcurrentMruManager<TKey, TValue> : IMruManager<TKey, TValue>
     {
-        public ConcurrentMruManager(int mruMinCapacity, int mruMaxCapacity) : this(mruMinCapacity, mruMaxCapacity, null){}
+        public ConcurrentMruManager(int mruMinCapacity, int mruMaxCapacity) : this(mruMinCapacity, mruMaxCapacity, null) { }
 
         public ConcurrentMruManager(int mruMinCapacity, int mruMaxCapacity, IComparer<TKey> comparer)
         {
@@ -19,36 +20,36 @@ namespace Sop.Mru.Generic
         }
         public void Add(TKey key, TValue value)
         {
-            lock (Locker)
+            Locker.Invoke(() =>
             {
                 MruManager.Add(key, value);
-            }
+            });
         }
 
         public void Clear()
         {
-            lock(Locker)
+            Locker.Invoke(() =>
             {
                 MruManager.Clear();
-            }
+            });
         }
 
         public bool Contains(TKey key)
         {
-            lock(Locker)
+            return Locker.Invoke(() =>
             {
                 return MruManager.Contains(key);
-            }
+            });
         }
 
         public int Count
         {
-            get 
+            get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return MruManager.Count;
-                }
+                });
             }
         }
 
@@ -56,17 +57,17 @@ namespace Sop.Mru.Generic
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return MruManager.MaxCapacity;
-                }
+                });
             }
             set
             {
-                lock (Locker)
+                Locker.Invoke(() =>
                 {
                     MruManager.MaxCapacity = value;
-                }
+                });
             }
         }
 
@@ -74,49 +75,49 @@ namespace Sop.Mru.Generic
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return MruManager.MinCapacity;
-                }
+                });
             }
             set
             {
-                lock (Locker)
+                Locker.Invoke(() =>
                 {
                     MruManager.MinCapacity = value;
-                }
+                });
             }
         }
         public object Remove(TKey key)
         {
-            lock(Locker)
+            return Locker.Invoke(() =>
             {
                 return MruManager.Remove(key);
-            }
+            });
         }
 
         public void Remove(ICollection<TKey> keys)
         {
-            lock (Locker)
+            Locker.Invoke(() =>
             {
                 MruManager.Remove(keys);
-            }
+            });
         }
 
         public void Dispose()
         {
-            lock(Locker)
+            Locker.Invoke(() =>
             {
                 MruManager.Dispose();
-            }
+            });
         }
 
         public void Flush()
         {
-            lock (Locker)
+            Locker.Invoke(() =>
             {
                 MruManager.Flush();
-            }
+            });
         }
 
         /// <summary>
@@ -126,10 +127,10 @@ namespace Sop.Mru.Generic
         /// <param name="parent"></param>
         public void SetDataStores(IMruClient parent)
         {
-            lock (Locker)
+            Locker.Invoke(() =>
             {
                 MruManager.SetDataStores(parent);
-            }
+            });
         }
 
         /// <summary>
@@ -138,20 +139,20 @@ namespace Sop.Mru.Generic
         /// <returns></returns>
         public MruItem<TKey, TValue> PeekInTail()
         {
-            lock(Locker)
+            return Locker.Invoke(() =>
             {
                 return MruManager.PeekInTail();
-            }
+            });
         }
 
         public bool IsFull
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return MruManager.IsFull;
-                }
+                });
             }
         }
 
@@ -161,27 +162,27 @@ namespace Sop.Mru.Generic
         /// <returns></returns>
         public MruItem<TKey, TValue> RemoveInTail()
         {
-            lock (Locker)
+            return Locker.Invoke(() =>
             {
                 return MruManager.RemoveInTail();
-            }
+            });
         }
 
         public TValue this[TKey key]
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return MruManager[key];
-                }
+                });
             }
             set
             {
-                lock (Locker)
+                Locker.Invoke(() =>
                 {
                     MruManager[key] = value;
-                }
+                });
             }
         }
 
@@ -189,10 +190,10 @@ namespace Sop.Mru.Generic
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return MruManager.Keys;
-                }
+                });
             }
         }
 
@@ -212,10 +213,10 @@ namespace Sop.Mru.Generic
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return MruManager.Values;
-                }
+                });
             }
         }
 
@@ -223,17 +224,17 @@ namespace Sop.Mru.Generic
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return MruManager.SaveState;
-                }
+                });
             }
             set
             {
-                lock (Locker)
+                Locker.Invoke(() =>
                 {
                     MruManager.SaveState = value;
-                }
+                });
             }
         }
 
@@ -241,21 +242,21 @@ namespace Sop.Mru.Generic
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return MruManager.GeneratePruneEvent;
-                }
+                });
             }
             set
             {
-                lock (Locker)
+                Locker.Invoke(() =>
                 {
                     MruManager.GeneratePruneEvent = value;
-                }
+                });
             }
         }
 
-        internal readonly object Locker = new object();
+        internal readonly ISynchronizer Locker = new Synchronizer();
         internal readonly MruManager<TKey, TValue> MruManager;
 
 

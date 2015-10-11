@@ -2,7 +2,7 @@
 // Open Source License: MIT
 // Have fun Coding! ;)
 
-﻿using System;
+using System;
 using System.IO;
 using System.Collections.Generic;
 using Sop.OnDisk.Algorithm.Collection;
@@ -11,6 +11,7 @@ using Sop.OnDisk.IO;
 using FileStream = Sop.OnDisk.File.FileStream;
 using System.Threading.Tasks;
 using System.Threading;
+using Sop.Synchronization;
 
 namespace Sop.OnDisk.DataBlock
 {
@@ -214,11 +215,16 @@ namespace Sop.OnDisk.DataBlock
             #region resize data file before appending to it...
             if (readPool == null || writePool == null)
             {
-                if (((Collections.Generic.SortedDictionary<long, Sop.DataBlock>)blocks).MoveLast())
+                long currentAddress = ((Collections.Generic.ISortedDictionary<long, Sop.DataBlock>)blocks).Locker.Invoke(() =>
+                {
+                    if (((Collections.Generic.ISortedDictionary<long, Sop.DataBlock>)blocks).MoveLast())
+                        return ((Collections.Generic.ISortedDictionary<long, Sop.DataBlock>)blocks).CurrentKey;
+                    return -1;
+                });
+                if (currentAddress > -1)
                 {
                     // thread safe increase File Size to accomodate data to be appended...
-                    var FileSize = ((Collections.Generic.SortedDictionary<long, Sop.DataBlock>)blocks).CurrentKey +
-                        (int)parent.DataBlockSize;
+                    var FileSize = currentAddress + (int)parent.DataBlockSize;
                     if (parent.FileStream.Length < FileSize)
                     {
                         if (parent.Transaction != null)
@@ -235,115 +241,120 @@ namespace Sop.OnDisk.DataBlock
                 }
             }
             #endregion
-            foreach (Sop.DataBlock block in blocks.Values)
+            ((Collections.Generic.ISortedDictionary<long, Sop.DataBlock>)blocks).Locker.Invoke(() =>
             {
-                SetIsDirty(block, false);
-                if (block.DataAddress >= 0)
+                //Sop.DataBlock[] blocksCopy = new Sop.DataBlock[blocks.Count];
+                //blocks.Values.CopyTo(blocksCopy, 0);
+                foreach (Sop.DataBlock block in blocks.Values)
                 {
-                    #region Process special states, e.g. - buffer is full, current block Address is fragmented from previous block's
-                    if (startBlockAddress == -1)
-                        startBlockAddress = runningAddress = block.DataAddress;
-                    else
+                    SetIsDirty(block, false);
+                    if (block.DataAddress >= 0)
                     {
-                        bool bufferIsFull = bufferIndex + sizeOfNumerics + block.Data.Length +
-                                            currentTargetBufferIndex > writeBuffer.Length - block.Length;
-                        if (block.DataAddress != runningAddress || bufferIsFull)
+                        #region Process special states, e.g. - buffer is full, current block Address is fragmented from previous block's
+                        if (startBlockAddress == -1)
+                            startBlockAddress = runningAddress = block.DataAddress;
+                        else
                         {
-                            dataChunks.Add(new BulkWriter.DataChunk
+                            bool bufferIsFull = bufferIndex + sizeOfNumerics + block.Data.Length +
+                                                currentTargetBufferIndex > writeBuffer.Length - block.Length;
+                            if (block.DataAddress != runningAddress || bufferIsFull)
                             {
-                                TargetDataAddress = startBlockAddress,
-                                Index = currentTargetBufferIndex,   // Index in the buffer of 1st byte of this segment
-                                Size = bufferIndex                  // size of the segment
-                            });
-                            if (bufferIsFull)
-                            {
-                                //** write to disk
-                                if (readPool != null && writePool != null)
+                                dataChunks.Add(new BulkWriter.DataChunk
                                 {
-                                    bulkWriter.Backup(readPool, writePool, parent, writeBuffer, dataChunks);
-                                    if (writePool.AsyncThreadException != null)
-                                        throw writePool.AsyncThreadException;
-                                    else if (readPool.AsyncThreadException != null)
-                                        throw readPool.AsyncThreadException;
-                                }
-                                else if (writePool != null)
+                                    TargetDataAddress = startBlockAddress,
+                                    Index = currentTargetBufferIndex,   // Index in the buffer of 1st byte of this segment
+                                    Size = bufferIndex                  // size of the segment
+                                });
+                                if (bufferIsFull)
                                 {
-                                    bulkWriter.Write(writePool, parent, writeBuffer, dataChunks);
-                                    if (writePool.AsyncThreadException != null)
-                                        throw writePool.AsyncThreadException;
+                                    //** write to disk
+                                    if (readPool != null && writePool != null)
+                                    {
+                                        bulkWriter.Backup(readPool, writePool, parent, writeBuffer, dataChunks);
+                                        if (writePool.AsyncThreadException != null)
+                                            throw writePool.AsyncThreadException;
+                                        else if (readPool.AsyncThreadException != null)
+                                            throw readPool.AsyncThreadException;
+                                    }
+                                    else if (writePool != null)
+                                    {
+                                        bulkWriter.Write(writePool, parent, writeBuffer, dataChunks);
+                                        if (writePool.AsyncThreadException != null)
+                                            throw writePool.AsyncThreadException;
+                                    }
+                                    else
+                                        throw new SopException("WriteBlocksToDisk has a bug!");
+
+                                    // create new buffer for succeeding chunks...
+                                    dataChunks = new List<BulkWriter.DataChunk>(4);
+                                    writeBuffer = new byte[writeBuffer.Length];
+                                    currentTargetBufferIndex = 0;
                                 }
                                 else
-                                    throw new SopException("WriteBlocksToDisk has a bug!");
-
-                                // create new buffer for succeeding chunks...
-                                dataChunks = new List<BulkWriter.DataChunk>(4);
-                                writeBuffer = new byte[writeBuffer.Length];
-                                currentTargetBufferIndex = 0;
+                                {
+                                    currentTargetBufferIndex += bufferIndex;
+                                }
+                                bufferIndex = 0;
+                                runningAddress = startBlockAddress = block.DataAddress;
                             }
-                            else
-                            {
-                                currentTargetBufferIndex += bufferIndex;
-                            }
-                            bufferIndex = 0;
-                            runningAddress = startBlockAddress = block.DataAddress;
                         }
+                        #endregion
                     }
-                    #endregion
+                    else
+                        throw new InvalidOperationException("Invalid (-) Block.DataAddress detected.");
+
+                    //**** write Block Header and Data to disk
+                    BinaryWriter.Seek(0, SeekOrigin.Begin);
+                    // Byte 0 to 7: Next Item Address (64 bit long int) = 0 (no next item)
+                    BinaryWriter.Write(block.NextItemAddress);
+                    // Byte 8 to 11: Size Occupied
+                    BinaryWriter.Write(block.SizeOccupied);
+                    // Byte 12 to 19: Low-level next datablock address
+                    BinaryWriter.Write(block.InternalNextBlockAddress);
+                    // Byte 20: count of member blocks, max is 65535.
+                    ushort memberCount = 0;
+                    if (block.IsHead)
+                    {
+                        int cm = block.CountMembers(true);
+                        memberCount = cm > Sop.DataBlock.MaxChainMemberCount ? Sop.DataBlock.MaxChainMemberCount : (ushort)cm;
+                    }
+                    BinaryWriter.Write(memberCount);
+
+                    byte[] b2 = BufferStream.GetBuffer();
+                    Array.Copy(b2, 0, writeBuffer, currentTargetBufferIndex + bufferIndex, sizeOfNumerics);
+                    bufferIndex += sizeOfNumerics;
+
+                    //** Byte 20 to 20 + Data Length: USER DATA
+                    int cs = block.Data.Length;
+                    //if (currentTargetBufferIndex + cs + bufferIndex > writeBuffer.Length - block.Length)
+                    //    cs = writeBuffer.Length - (currentTargetBufferIndex + bufferIndex);
+                    Array.Copy(block.Data, 0, writeBuffer, currentTargetBufferIndex + bufferIndex, cs);
+
+                    bufferIndex += block.Data.Length;
+                    runningAddress += block.Length;
                 }
-                else
-                    throw new InvalidOperationException("Invalid (-) Block.DataAddress detected.");
 
-                //**** write Block Header and Data to disk
-                BinaryWriter.Seek(0, SeekOrigin.Begin);
-                // Byte 0 to 7: Next Item Address (64 bit long int) = 0 (no next item)
-                BinaryWriter.Write(block.NextItemAddress);
-                // Byte 8 to 11: Size Occupied
-                BinaryWriter.Write(block.SizeOccupied);
-                // Byte 12 to 19: Low-level next datablock address
-                BinaryWriter.Write(block.InternalNextBlockAddress);
-                // Byte 20: count of member blocks, max is 65535.
-                ushort memberCount = 0;
-                if (block.IsHead)
+                // write the last chunk set to disk...
+                if (startBlockAddress != -1)
                 {
-                    int cm = block.CountMembers(true);
-                    memberCount = cm > Sop.DataBlock.MaxChainMemberCount ? Sop.DataBlock.MaxChainMemberCount : (ushort)cm;
+                    //** write to disk
+                    dataChunks.Add(new BulkWriter.DataChunk
+                    {
+                        TargetDataAddress = startBlockAddress,
+                        Index = currentTargetBufferIndex,
+                        Size = bufferIndex
+                    });
                 }
-                BinaryWriter.Write(memberCount);
-
-                byte[] b2 = BufferStream.GetBuffer();
-                Array.Copy(b2, 0, writeBuffer, currentTargetBufferIndex + bufferIndex, sizeOfNumerics);
-                bufferIndex += sizeOfNumerics;
-
-                //** Byte 20 to 20 + Data Length: USER DATA
-                int cs = block.Data.Length;
-                //if (currentTargetBufferIndex + cs + bufferIndex > writeBuffer.Length - block.Length)
-                //    cs = writeBuffer.Length - (currentTargetBufferIndex + bufferIndex);
-                Array.Copy(block.Data, 0, writeBuffer, currentTargetBufferIndex + bufferIndex, cs);
-
-                bufferIndex += block.Data.Length;
-                runningAddress += block.Length;
-            }
-
-            // write the last chunk set to disk...
-            if (startBlockAddress != -1)
-            {
-                //** write to disk
-                dataChunks.Add(new BulkWriter.DataChunk
+                if (dataChunks.Count > 0)
                 {
-                    TargetDataAddress = startBlockAddress,
-                    Index = currentTargetBufferIndex,
-                    Size = bufferIndex
-                });
-            }
-            if (dataChunks.Count > 0)
-            {
-                if (readPool != null && writePool != null)
-                    bulkWriter.Backup(readPool, writePool, parent, writeBuffer, dataChunks);
-                else if (writePool != null)
-                    bulkWriter.Write(writePool, parent, writeBuffer, dataChunks);
-                else
-                    throw new SopException("WriteBlocksToDisk has a bug!");
-            }
+                    if (readPool != null && writePool != null)
+                        bulkWriter.Backup(readPool, writePool, parent, writeBuffer, dataChunks);
+                    else if (writePool != null)
+                        bulkWriter.Write(writePool, parent, writeBuffer, dataChunks);
+                    else
+                        throw new SopException("WriteBlocksToDisk has a bug!");
+                }
+            });
         }
 
         public Sop.DataBlock ReadBlockFromDisk(Algorithm.Collection.ICollectionOnDisk parent, bool getForRemoval)

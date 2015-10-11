@@ -33,7 +33,10 @@ namespace Sop.Linq
             public void Dispose()
             {
                 if (_store == null) return;
-                _store.Dispose();
+                _store.Locker.Invoke(() =>
+                {
+                    _store.Dispose();
+                });
                 _store = null;
             }
 

@@ -29,6 +29,21 @@ namespace Sop.Synchronization
         {
             if (TransactionRollback)
                 RaiseRollbackException();
+
+            if (requestedOperation == OperationType.Read)
+            {
+                var lockCount = Interlocked.Increment(ref readerLockCount);
+                if (lockCount < 1)
+                    throw new SopException(
+                        string.Format("Lock for read detected invalid reader lock count {0}.", lockCount));
+                if (lockCount == 1)
+                    _lock();
+                return lockCount;
+            }
+            return _lock();
+        }
+        private int _lock()
+        {
             Monitor.Enter(locker);
             lockCount++;
             if (TransactionRollback)
@@ -49,11 +64,26 @@ namespace Sop.Synchronization
         /// </summary>
         virtual public int Unlock(OperationType requestedOperation = OperationType.Write)
         {
+            if (requestedOperation == OperationType.Read)
+            {
+                var lockCount = Interlocked.Decrement(ref readerLockCount);
+                if (lockCount < 0)
+                    throw new SopException(
+                        string.Format("Unlock for read detected invalid reader lock count {0}.", lockCount));
+                if (lockCount == 0)
+                    _unlock();
+                return lockCount;
+            }
+            return _unlock();
+        }
+        private int _unlock()
+        {
             lockCount--;
             var l = lockCount;
             Monitor.Exit(locker);
             return l;
         }
+
         private void RaiseRollbackException()
         {
             throw new Transaction.TransactionRolledbackException("Transaction was rolled back while attempting to get a Lock.");
@@ -67,65 +97,65 @@ namespace Sop.Synchronization
         /// <param name="function"></param>
         /// <param name="arg"></param>
         /// <returns></returns>
-        public TResult Invoke<T1, TResult>(Func<T1, TResult> function, T1 arg)
+        public TResult Invoke<T1, TResult>(Func<T1, TResult> function, T1 arg, OperationType requestedOperation = OperationType.Write)
         {
-            Lock();
+            Lock(requestedOperation);
             try
             {
                 return function(arg);
             }
             finally
             {
-                Unlock();
+                Unlock(requestedOperation);
             }
         }
-        public TResult Invoke<T1, T2, TResult>(Func<T1, T2, TResult> function, T1 arg, T2 arg2)
+        public TResult Invoke<T1, T2, TResult>(Func<T1, T2, TResult> function, T1 arg, T2 arg2, OperationType requestedOperation = OperationType.Write)
         {
-            Lock();
+            Lock(requestedOperation);
             try
             {
                 return function(arg, arg2);
             }
             finally
             {
-                Unlock();
+                Unlock(requestedOperation);
             }
         }
 
-        public TResult Invoke<TResult>(Func<TResult> function)
+        public TResult Invoke<TResult>(Func<TResult> function, OperationType requestedOperation = OperationType.Write)
         {
-            Lock();
+            Lock(requestedOperation);
             try
             {
                 return function();
             }
             finally
             {
-                Unlock();
+                Unlock(requestedOperation);
             }
         }
-        public void Invoke(VoidFunc function)
+        public void Invoke(VoidFunc function, OperationType requestedOperation = OperationType.Write)
         {
-            Lock();
+            Lock(requestedOperation);
             try
             {
                 function();
             }
             finally
             {
-                Unlock();
+                Unlock(requestedOperation);
             }
         }
-        public void Invoke<T1, T2>(VoidFunc<T1, T2> function, T1 arg1, T2 arg2)
+        public void Invoke<T1, T2>(VoidFunc<T1, T2> function, T1 arg1, T2 arg2, OperationType requestedOperation = OperationType.Write)
         {
-            Lock();
+            Lock(requestedOperation);
             try
             {
                 function(arg1, arg2);
             }
             finally
             {
-                Unlock();
+                Unlock(requestedOperation);
             }
         }
         #endregion
@@ -147,5 +177,6 @@ namespace Sop.Synchronization
         public bool TransactionRollback { get; internal set; }
         protected object locker = new object();
         internal protected int lockCount;
+        private int readerLockCount;
     }
 }

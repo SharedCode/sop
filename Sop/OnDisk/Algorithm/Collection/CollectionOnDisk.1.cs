@@ -409,13 +409,13 @@ namespace Sop.OnDisk.Algorithm.Collection
                     var collectionOnDisk = Parent as CollectionOnDisk;
                     if (collectionOnDisk != null)
                         return (collectionOnDisk).Blocks;
-                    _blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>();
+                    //_blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>();
+                    _blocks = new Collections.Generic.ConcurrentSortedDictionary<long, Sop.DataBlock>();
                 }
                 return _blocks;
             }
             set { _blocks = value; }
         }
-
         private Collections.Generic.ISortedDictionary<long, Sop.DataBlock> _blocks;
 
         Collections.Generic.ISortedDictionary<long, Sop.DataBlock> ICollectionCache.Blocks

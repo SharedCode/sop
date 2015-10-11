@@ -650,7 +650,7 @@ namespace Sop.Caching
         protected override IEnumerator<KeyValuePair<string, object>> GetEnumerator()
         {
             // todo: prevent Dispose of _store, NOTE: not critical as this method is a debugging tool only.
-            return new ThreadSafeEnumerator(_store);
+            return new ThreadSafeEnumerator(_store.GetEnumerator());
         }
 
         private CacheItemPolicy DefaultPolicy

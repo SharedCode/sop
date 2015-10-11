@@ -6,7 +6,7 @@ namespace Sop.Synchronization
 {
     /// <summary>
     /// Synchronizer with a secondary signaling mechanism mostly adept for
-    /// Transaction Commit usage of managing Store locks.
+    /// (global) Transaction Commit that orchestrate locks of all Stores in the App.
     /// </summary>
     public class Synchronizer : SynchronizerBase
     {

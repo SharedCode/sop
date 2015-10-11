@@ -94,6 +94,7 @@
     <Compile Include="Others\NestedSortedDictionary.cs" />
     <Compile Include="PeopleDirectory\PeopleDirectory.cs" />
     <Compile Include="Others\ObjectDirectory.cs" />
+    <Compile Include="PeopleDirectory\ManyClientSimulator.cs" />
     <Compile Include="PeopleDirectory\PeopleDirectoryXmlSerializableObject.cs" />
     <Compile Include="PeopleDirectory\PeopleDirectoryWithBlobDataAddUniqueCheck.cs" />
     <Compile Include="PeopleDirectory\PeopleDirectoryWithBlobDataNull.cs" />

@@ -780,7 +780,9 @@ namespace Sop.OnDisk.Algorithm.BTree
         
         internal bool InMaintenanceMode = false;
         internal Collections.Generic.ISortedDictionary<long, BTreeNodeOnDisk> PromoteLookup =
-            new Collections.Generic.SortedDictionary<long, BTreeNodeOnDisk>();
+            new Collections.Generic.ConcurrentSortedDictionary<long, BTreeNodeOnDisk>();
+        //internal Collections.Generic.ISortedDictionary<long, BTreeNodeOnDisk> PromoteLookup =
+        //    new Collections.Generic.SortedDictionary<long, BTreeNodeOnDisk>();
 
         /// <summary>
         /// Address on disk/virtual store of this B-Tree

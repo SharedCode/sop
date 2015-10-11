@@ -20,6 +20,23 @@ namespace SopClientTests
         }
 
         [TestMethod]
+        public void CacheEnumeratorTest()
+        {
+            var cache = CreateVirtualCache("MyCacheStore");
+
+            cache.Add("foo", "bar", new CacheItemPolicy());
+            cache.Add("hello", "world", new CacheItemPolicy());
+            foreach(var item in cache)
+            {
+                var k = item.Key;
+                var v = item.Value;
+            }
+
+            // don't forget to dispose virtual cache when done!
+            cache.Dispose();
+        }
+
+        [TestMethod]
         public void ExpirationTest1()
         {
             var cache = CreateVirtualCache("MyCacheStore");

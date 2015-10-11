@@ -5,6 +5,7 @@ using ICollection = System.Collections.ICollection;
 namespace Sop.Mru
 {
     using Collections.Generic;
+    using Synchronization;
 
     /// <summary>
     /// MRU algorithm. Services MRU objects management in Collections on disk.
@@ -42,29 +43,29 @@ namespace Sop.Mru
         public void Dispose()
         {
             if (realMruManager == null) return;
-            lock (Locker)
+            Locker.Invoke(() =>
             {
                 if (realMruManager == null) return;
                 realMruManager.Dispose();
                 realMruManager = null;
-            }
+            });
         }
 
         public object this[object key]
         {
             get
             {
-                lock(Locker)
+                return Locker.Invoke(() =>
                 {
                     return realMruManager[key];
-                }
+                });
             }
             set
             {
-                lock(Locker)
+                Locker.Invoke(() =>
                 {
                     realMruManager[key] = value;
-                }
+                });
             }
         }
 
@@ -72,10 +73,10 @@ namespace Sop.Mru
         {
             get
             {
-                lock(Locker)
+                return Locker.Invoke(() =>
                 {
                     return realMruManager.Count;
-                }
+                });
             }
         }
 
@@ -83,18 +84,18 @@ namespace Sop.Mru
         {
             get
             {
-                lock(Locker)
+                return Locker.Invoke(() =>
                 {
                     return realMruManager.GeneratePruneEvent;
-                }
+                });
             }
 
             set
             {
-                lock(Locker)
+                Locker.Invoke(() =>
                 {
                     realMruManager.GeneratePruneEvent = value;
-                }
+                });
             }
         }
 
@@ -102,10 +103,10 @@ namespace Sop.Mru
         {
             get
             {
-                lock(Locker)
+                return Locker.Invoke(() =>
                 {
                     return realMruManager.IsDirty;
-                }
+                });
             }
         }
 
@@ -113,10 +114,10 @@ namespace Sop.Mru
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return realMruManager.Keys;
-                }
+                });
             }
         }
 
@@ -124,18 +125,18 @@ namespace Sop.Mru
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return realMruManager.MaxCapacity;
-                }
+                });
             }
 
             set
             {
-                lock (Locker)
+                Locker.Invoke(() =>
                 {
                     realMruManager.MaxCapacity = value;
-                }
+                });
             }
         }
 
@@ -143,18 +144,18 @@ namespace Sop.Mru
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return realMruManager.MinCapacity;
-                }
+                });
             }
 
             set
             {
-                lock (Locker)
+                Locker.Invoke(() =>
                 {
                     realMruManager.MinCapacity = value;
-                }
+                });
             }
         }
 
@@ -162,10 +163,10 @@ namespace Sop.Mru
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return realMruManager.RemovedObjects;
-                }
+                });
             }
         }
 
@@ -173,18 +174,18 @@ namespace Sop.Mru
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return realMruManager.SaveState;
-                }
+                });
             }
 
             set
             {
-                lock (Locker)
+                Locker.Invoke(() =>
                 {
                     realMruManager.SaveState = value;
-                }
+                });
             }
         }
 
@@ -192,110 +193,110 @@ namespace Sop.Mru
         {
             get
             {
-                lock (Locker)
+                return Locker.Invoke(() =>
                 {
                     return realMruManager.Values;
-                }
+                });
             }
         }
 
         public void Add(object key, object value)
         {
-            lock (Locker)
+            Locker.Invoke(() =>
             {
                 realMruManager.Add(key, value);
-            }
+            });
         }
 
         public void Clear()
         {
-            lock (Locker)
+            Locker.Invoke(() =>
             {
                 realMruManager.Clear();
-            }
+            });
         }
 
         public bool Contains(object key)
         {
-            lock (Locker)
+            return Locker.Invoke(() =>
             {
                 return realMruManager.Contains(key);
-            }
+            });
         }
 
         public void Flush()
         {
-            lock (Locker)
+            Locker.Invoke(() =>
             {
                 realMruManager.Flush();
-            }
+            });
         }
 
         public IMruClient GetParent()
         {
-            lock (Locker)
+            return Locker.Invoke(() =>
             {
                 return realMruManager.GetParent();
-            }
+            });
         }
 
         public IInternalPersistent GetRecycledObject()
         {
-            lock (Locker)
+            return Locker.Invoke(() =>
             {
                 return realMruManager.GetRecycledObject();
-            }
+            });
         }
 
         public void Recycle(IInternalPersistent recycledObject)
         {
-            lock (Locker)
+            Locker.Invoke(() =>
             {
                 realMruManager.Recycle(recycledObject);
-            }
+            });
         }
 
         public object Remove(object key)
         {
-            lock (Locker)
+            return Locker.Invoke(() =>
             {
                 return realMruManager.Remove(key);
-            }
+            });
         }
 
         public object Remove(object key, bool removeFromCache)
         {
-            lock (Locker)
+            return Locker.Invoke(() =>
             {
                 return realMruManager.Remove(key, removeFromCache);
-            }
+            });
         }
 
         public void Remove(ICollection keys, bool removeFromCache)
         {
-            lock (Locker)
+            Locker.Invoke(() =>
             {
                 realMruManager.Remove(keys, removeFromCache);
-            }
+            });
         }
 
         public MruItem RemoveInTail(bool moveToRemoveList)
         {
-            lock (Locker)
+            return Locker.Invoke(() =>
             {
                 return realMruManager.RemoveInTail(moveToRemoveList);
-            }
+            });
         }
 
         public void SetDataStores(IMruClient parent, object dataDriver)
         {
-            lock (Locker)
+            Locker.Invoke(() =>
             {
                 realMruManager.SetDataStores(parent, dataDriver);
-            }
+            });
         }
 
         private MruManager realMruManager;
-        private object Locker = new object();
+        private readonly ISynchronizer Locker = new Synchronizer();
     }
 }

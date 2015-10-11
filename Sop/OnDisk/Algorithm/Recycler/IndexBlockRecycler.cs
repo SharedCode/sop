@@ -54,13 +54,13 @@ namespace Sop.OnDisk.Algorithm.BTree
         }
         #endregion
 
-        private bool DetectAndMerge(Collections.Generic.SortedDictionary<long, long> store,
+        private bool DetectAndMerge(Collections.Generic.ISortedDictionary<long, long> store,
                                            long dataAddress, long dataSize, int segmentSize)
         {
             return DetectAndMerge(store, dataAddress, dataSize, segmentSize, _region);
         }
 
-        internal static bool DetectAndMerge(Collections.Generic.SortedDictionary<long, long> store,
+        internal static bool DetectAndMerge(Collections.Generic.ISortedDictionary<long, long> store,
                     long dataAddress, long dataSize, int segmentSize = DataBlock.DataBlockDriver.MaxSegmentSize, RegionLogic region = null)
         {
             if (store.Count == 0)
@@ -129,7 +129,7 @@ namespace Sop.OnDisk.Algorithm.BTree
         }
 
         #region Add Available Block
-        private void AddToTransCache(Collections.Generic.SortedDictionary<long, long> store,
+        private void AddToTransCache(Collections.Generic.ISortedDictionary<long, long> store,
                                             long dataAddress, long dataSize, int segmentSize)
         {
             if (store.Count == 0)

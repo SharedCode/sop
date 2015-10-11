@@ -56,9 +56,22 @@ namespace SopClientTests
             pd.DeleteDataFolder(Store400.ServerFilename);
         }
 
-
         [TestMethod]
         public void PeopleDirectoryWithBlobDataUpdateScenarioTest()
+        {
+            // another sanity & stress tests combined, showcasing Blob updates.
+            var pd = new PeopleDirectoryWithBlobDataUpdate();
+            // reduce iterations to 50K as this is a build acceptance test.
+            pd.MaxCount = 50000;
+            // populate
+            pd.Run();
+            // read all
+            pd.Run();
+            // Delete SOP data folder now that we're done.
+            pd.DeleteDataFolder(PeopleDirectoryWithBlobDataUpdate.ServerFilename);
+        }
+        [TestMethod]
+        public void MultiThreadedScenarioTest()
         {
             // another sanity & stress tests combined, showcasing Blob updates.
             var pd = new PeopleDirectoryWithBlobDataUpdate();

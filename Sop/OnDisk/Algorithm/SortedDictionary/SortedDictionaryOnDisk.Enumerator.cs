@@ -19,7 +19,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             public void Dispose()
             {
                 if (BTree == null) return;
-                this.BTree.Dispose();
+                BTree.Locker.Invoke(() => { BTree.Dispose(); });
                 BTree = null;
             }
 
@@ -40,7 +40,10 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             {
                 get
                 {
-                    return new KeyValuePair<TKey, TValue>((TKey)BTree.CurrentKey, (TValue)BTree.CurrentValue);
+                    return BTree.Locker.Invoke(() =>
+                    {
+                        return new KeyValuePair<TKey, TValue>((TKey)BTree.CurrentKey, (TValue)BTree.CurrentValue);
+                    });
                 }
             }
 
@@ -49,7 +52,10 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// </summary>
             object IEnumerator.Current
             {
-                get { return BTree.CurrentEntry; }
+                get
+                {
+                    return BTree.Locker.Invoke(() => { return BTree.CurrentEntry; });
+                }
             }
 
             /// <summary>
@@ -59,10 +65,10 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             public bool MoveNext()
             {
                 if (!_bWasReset)
-                    return BTree.MoveNext();
+                    return BTree.Locker.Invoke(() => { return BTree.MoveNext(); });
                 else
                 {
-                    if (BTree.Count == 0)
+                    if (BTree.Locker.Invoke(() => { return BTree.Count == 0; }))
                         return false;
                     _bWasReset = false;
                     return true;
@@ -74,10 +80,13 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// </summary>
             public void Reset()
             {
-                if (BTree.Count > 0)
-                    BTree.MoveFirst();
+                BTree.Locker.Invoke(() =>
+                {
+                    if (BTree.Count > 0)
+                        BTree.MoveFirst();
+                    BTree.HintSequentialRead = true;
+                });
                 _bWasReset = true;
-                BTree.HintSequentialRead = true;
             }
 
             internal SortedDictionaryOnDisk BTree;
@@ -91,7 +100,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             public void Dispose()
             {
                 if (BTree == null) return;
-                this.BTree.Dispose();
+                BTree.Locker.Invoke(() => { BTree.Dispose(); });
                 BTree = null;
             }
 
@@ -110,7 +119,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// </summary>
             public DictionaryEntry Entry
             {
-                get { return (DictionaryEntry) BTree.CurrentEntry; }
+                get { return BTree.Locker.Invoke(() => { return (DictionaryEntry)BTree.CurrentEntry; }); }
             }
 
             /// <summary>
@@ -118,7 +127,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// </summary>
             public object Key
             {
-                get { return BTree.CurrentKey; }
+                get { return BTree.Locker.Invoke(() => { return BTree.CurrentKey; }); }
             }
 
             /// <summary>
@@ -126,7 +135,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// </summary>
             public object Value
             {
-                get { return BTree.CurrentValue; }
+                get { return BTree.Locker.Invoke(() => { return BTree.CurrentValue; }); }
             }
 
             /// <summary>
@@ -136,10 +145,10 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             public bool MoveNext()
             {
                 if (!_bWasReset)
-                    return BTree.MoveNext();
+                    return BTree.Locker.Invoke(() => { return BTree.MoveNext(); });
                 else
                 {
-                    if (BTree.Count == 0)
+                    if (BTree.Locker.Invoke(() => { return BTree.Count == 0; }))
                         return false;
                     _bWasReset = false;
                     return true;
@@ -151,10 +160,13 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// </summary>
             public void Reset()
             {
-                if (BTree.Count > 0)
-                    BTree.MoveFirst();
+                BTree.Locker.Invoke(() =>
+                {
+                    if (BTree.Count > 0)
+                        BTree.MoveFirst();
+                    BTree.HintSequentialRead = true;
+                });
                 _bWasReset = true;
-                BTree.HintSequentialRead = true;
             }
 
             /// <summary>
@@ -167,15 +179,19 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
                 {
                     if (!_bWasReset)
                     {
-                        switch (BTree.ItemType)
+                        return BTree.Locker.Invoke(() =>
                         {
-                            case ItemType.Default:
-                                return BTree.CurrentEntry;
-                            case ItemType.Key:
-                                return BTree.CurrentKey;
-                            case ItemType.Value:
-                                return BTree.CurrentValue;
-                        }
+                            switch (BTree.ItemType)
+                            {
+                                case ItemType.Default:
+                                    return BTree.CurrentEntry;
+                                case ItemType.Key:
+                                    return BTree.CurrentKey;
+                                case ItemType.Value:
+                                default:
+                                    return BTree.CurrentValue;
+                            };
+                        });
                     }
                     throw new InvalidOperationException(
                         "SortedDictionaryOnDisk.Enumerator got Reset. Call one of Move functions before getting 'Current' object.");

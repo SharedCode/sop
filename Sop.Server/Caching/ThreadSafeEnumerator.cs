@@ -15,19 +15,19 @@ namespace Sop.Caching
     {
         void IDisposable.Dispose()
         {
-            if (Store == null)
-                return;
-            Store.Dispose();
-            Store = null;
+            var disposable = enumerator as IDisposable;
+            if (disposable != null)
+            {
+                disposable.Dispose();
+            }
+            enumerator = null;
         }
 
-        internal Sop.ISortedDictionary<CacheKey, CacheEntry> Store;
+        internal IEnumerator<KeyValuePair<CacheKey, CacheEntry>> enumerator;
 
-        public ThreadSafeEnumerator(Sop.ISortedDictionary<CacheKey, CacheEntry> store)
+        public ThreadSafeEnumerator(IEnumerator<KeyValuePair<CacheKey, CacheEntry>> enumerator)
         {
-            if (store == null)
-                throw new ArgumentNullException("store");
-            Store = store;
+            this.enumerator = enumerator;
         }
 
         #region IEnumerator<T> Members
@@ -36,12 +36,8 @@ namespace Sop.Caching
         {
             get
             {
-                return Store.Locker.Invoke(() =>
-                    {
-                        if (Store.CurrentKey == null)
-                            return default(KeyValuePair<string, object>);
-                        return new KeyValuePair<string, object>(Store.CurrentKey.Key, Store.CurrentValue.Value);
-                    });
+                return new KeyValuePair<string, object>(enumerator.Current.Key.Key, 
+                    enumerator.Current.Value.Value);
             }
         }
 
@@ -59,26 +55,13 @@ namespace Sop.Caching
 
         public bool MoveNext()
         {
-            if (_wasReset)
-            {
-                _wasReset = false;
-                return true;
-            }
-            return Store.Locker.Invoke(() =>
-                {
-                    return Store.MoveNext();
-                });
+            return enumerator.MoveNext();
         }
 
         public void Reset()
         {
-            Store.Locker.Invoke(() =>
-                {
-                    Store.MoveFirst();
-                    _wasReset = true;
-                });
+            enumerator.Reset();
         }
-        private bool _wasReset;
         #endregion
     }
 }

@@ -47,7 +47,7 @@ namespace Sop
             /// Lock/Unlock calls.
             /// </summary>
             /// <param name="function"></param>
-            void Invoke(VoidFunc function);
+            void Invoke(VoidFunc function, OperationType requestedOperation = OperationType.Write);
             /// <summary>
             /// Thread-safe call a lambda expression. Call will be wrapped inside
             /// Lock/Unlock calls.
@@ -57,7 +57,7 @@ namespace Sop
             /// <param name="function"></param>
             /// <param name="arg1"></param>
             /// <param name="arg2"></param>
-            void Invoke<T1, T2>(VoidFunc<T1, T2> function, T1 arg1, T2 arg2);
+            void Invoke<T1, T2>(VoidFunc<T1, T2> function, T1 arg1, T2 arg2, OperationType requestedOperation = OperationType.Write);
             /// <summary>
             /// Thread-safe call a lambda expression. Call will be wrapped inside
             /// Lock/Unlock calls.
@@ -65,7 +65,7 @@ namespace Sop
             /// <typeparam name="TResult"></typeparam>
             /// <param name="function"></param>
             /// <returns></returns>
-            TResult Invoke<TResult>(Func<TResult> function);
+            TResult Invoke<TResult>(Func<TResult> function, OperationType requestedOperation = OperationType.Write);
             /// <summary>
             /// Thread-safe call a lambda expression. Call will be wrapped inside
             /// Lock/Unlock calls.
@@ -75,7 +75,7 @@ namespace Sop
             /// <param name="function"></param>
             /// <param name="arg"></param>
             /// <returns></returns>
-            TResult Invoke<T1, TResult>(Func<T1, TResult> function, T1 arg);
+            TResult Invoke<T1, TResult>(Func<T1, TResult> function, T1 arg, OperationType requestedOperation = OperationType.Write);
             /// <summary>
             /// Thread-safe call a lambda expression. Call will be wrapped inside
             /// Lock/Unlock calls.
@@ -87,7 +87,7 @@ namespace Sop
             /// <param name="arg"></param>
             /// <param name="arg2"></param>
             /// <returns></returns>
-            TResult Invoke<T1, T2, TResult>(Func<T1, T2, TResult> function, T1 arg, T2 arg2);
+            TResult Invoke<T1, T2, TResult>(Func<T1, T2, TResult> function, T1 arg, T2 arg2, OperationType requestedOperation = OperationType.Write);
 
             /// <summary>
             /// true signifies current transaction was rolled back.
