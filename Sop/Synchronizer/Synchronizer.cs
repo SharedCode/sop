@@ -54,7 +54,7 @@ namespace Sop.Synchronization
         {
             if (lockFlag)
             {
-                while (_lockCount > 0)
+                while (lockCount > 0)
                 {
                     Thread.Sleep(50);
                 }
@@ -74,7 +74,7 @@ namespace Sop.Synchronization
                 if (_trapForCommitLock)
                     _commitLockEvent.Wait();
                 var r = base.Lock(requestedOperation);
-                if (_trapForCommitLock || (_commitLocked && _lockCount == 1))
+                if (_trapForCommitLock || (_commitLocked && lockCount == 1))
                 {
                     _trapForCommitLock = true;
                     // allow Commit to proceed...
@@ -89,7 +89,7 @@ namespace Sop.Synchronization
 
         public override int Unlock(OperationType requestedOperation = OperationType.Write)
         {
-            if (!_trapForCommitLock && _commitLocked && _lockCount == 1)
+            if (!_trapForCommitLock && _commitLocked && lockCount == 1)
             {
                 _trapForCommitLock = true;
             }

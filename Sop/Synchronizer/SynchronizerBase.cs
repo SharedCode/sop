@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Threading;
 
 namespace Sop.Synchronization
@@ -30,8 +29,8 @@ namespace Sop.Synchronization
         {
             if (TransactionRollback)
                 RaiseRollbackException();
-            Monitor.Enter(_locker);
-            _lockCount++;
+            Monitor.Enter(locker);
+            lockCount++;
             if (TransactionRollback)
             {
                 try
@@ -43,16 +42,16 @@ namespace Sop.Synchronization
                     Unlock();
                 }
             }
-            return _lockCount;
+            return lockCount;
         }
         /// <summary>
         /// Unlock Synchronizer.
         /// </summary>
         virtual public int Unlock(OperationType requestedOperation = OperationType.Write)
         {
-            _lockCount--;
-            var l = _lockCount;
-            Monitor.Exit(_locker);
+            lockCount--;
+            var l = lockCount;
+            Monitor.Exit(locker);
             return l;
         }
         private void RaiseRollbackException()
@@ -138,7 +137,7 @@ namespace Sop.Synchronization
         {
             get
             {
-                return _lockCount > 0;
+                return lockCount > 0;
             }
         }
         /// <summary>
@@ -146,7 +145,7 @@ namespace Sop.Synchronization
         /// false otherwise.
         /// </summary>
         public bool TransactionRollback { get; internal set; }
-        protected object _locker = new object();
-        internal protected volatile int _lockCount;
+        protected object locker = new object();
+        internal protected int lockCount;
     }
 }

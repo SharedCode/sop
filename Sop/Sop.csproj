@@ -127,6 +127,8 @@
     <Compile Include="Collections\BTree\Common\IBTree.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Mru\IMruManager.cs" />
+    <Compile Include="Mru\ConcurrentMruManager.cs" />
     <Compile Include="Synchronizer\ISynchronizer.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -185,7 +187,6 @@
     <Compile Include="Mru\Generic\MruManager.cs" />
     <Compile Include="Mru\Generic\Node.cs" />
     <Compile Include="Mru\IMruClient.cs" />
-    <Compile Include="Mru\IMruManager.cs" />
     <Compile Include="Mru\InternalMruManager.cs" />
     <Compile Include="Mru\MruItem.cs" />
     <Compile Include="Mru\MruManager.cs" />

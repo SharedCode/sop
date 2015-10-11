@@ -33,6 +33,7 @@ using Sop.OnDisk.Algorithm.BTree;
 using Sop.OnDisk.DataBlock;
 using Sop.OnDisk.File;
 using Sop.Persistence;
+using Sop.Mru.Generic;
 
 namespace Sop.OnDisk.Algorithm.Collection
 {
@@ -566,13 +567,12 @@ namespace Sop.OnDisk.Algorithm.Collection
             {
                 int min = MruMinCapacity;
                 int max = MruMaxCapacity;
-                MruManager = new MruManager(min, max);
+
+                MruManager = new ConcurrentMruManager(min, max);
+                //MruManager = new MruManager(min, max);
+
                 MruManager.SetDataStores(this, DataBlockDriver);
             }
-            // todo: check whether MRU clear call is needed.
-            //else
-            //    MruManager.Clear();
-
             if (_diskBuffer == null)
                 _diskBuffer = CreateBlock(); //new Sop.DataBlock(DataBlockSize);
         }

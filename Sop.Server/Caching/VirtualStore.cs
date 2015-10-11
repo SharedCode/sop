@@ -31,7 +31,10 @@ namespace Sop.Server.Caching
             if (mruMaxCapacity < 10) mruMaxCapacity = 10;
             if (mruMinCapacity >= mruMaxCapacity)
                 mruMinCapacity = (int)(mruMaxCapacity * .75);
+
+            // todo: change to use ConcurrentMruManager ? for concurrency.
             MruManager = new MruManager(mruMinCapacity, mruMaxCapacity, new CacheKeyComparer());
+
             MruManager.SetDataStores(this, null);
             _name = name;
         }
