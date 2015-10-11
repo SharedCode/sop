@@ -1,35 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 
 namespace Sop.Samples
 {
     public class Store400 : Sample
     {
-        public class Person : Sop.Persistence.Persistent
+        public class Person
         {
-            public int PersonId;
             public string FirstName;
             public string LastName;
+            public int PersonID;
             public string PhoneNumber;
-
-            #region Pack/Unpack
-            public override void Pack(BinaryWriter writer)
-            {
-                writer.Write(PersonId);
-                writer.Write(FirstName);
-                writer.Write(LastName);
-                writer.Write(PhoneNumber);
-            }
-
-            public override void Unpack(BinaryReader reader)
-            {
-                PersonId = reader.ReadInt32();
-                FirstName = reader.ReadString();
-                LastName = reader.ReadString();
-                PhoneNumber = reader.ReadString();
-            }
-            #endregion
         }
         /// <summary>
         /// Sample code that tests creation and population of 400 tables with 5000 records each.
@@ -38,20 +19,19 @@ namespace Sop.Samples
         {
             Console.WriteLine("{0}: Store400 demo started...", DateTime.Now);
             const int CollCount = 50;
-            const string NameTemplate = "SystemFile/People{0}";
 
             using (var Server = new ObjectServer(ServerFilename))
             {
                 for (int i = 0; i < CollCount; i++)
                 {
-                    string CollectionName = string.Format(NameTemplate, i);
-                    var store = Server.StoreNavigator.GetStorePersistentValue<long, Person>(CollectionName);
+                    string CollectionName = string.Format("SystemFile/People{0}", i);
+                    var store = Server.StoreNavigator.GetStore<long, Person>(CollectionName);
                 }
                 Server.CycleTransaction();
                 for (int i = 0; i < CollCount; i++)
                 {
-                    string CollectionName = string.Format(NameTemplate, i);
-                    var store = Server.StoreNavigator.GetStorePersistentValue<long, Person>(CollectionName);
+                    string CollectionName = string.Format("SystemFile/People{0}", i);
+                    var store = Server.StoreNavigator.GetStore<long, Person>(CollectionName);
                     if (store.Count == 0)
                     {
                         Populate(store);
@@ -65,16 +45,17 @@ namespace Sop.Samples
                 }
                 for (int i = 0; i < CollCount; i++)
                 {
-                    string CollectionName = string.Format(NameTemplate, i);
+                    string CollectionName = string.Format("SystemFile/People{0}", i);
                     if (Server.StoreNavigator.Contains(CollectionName))
                     {
-                        var store = Server.StoreNavigator.GetStorePersistentValue<long, Person>(CollectionName);
+                        var store = Server.StoreNavigator.GetStore<long, Person>(CollectionName);
                         ReadAll(store);
                     }
                 }
             }
 
             Console.WriteLine("{0}: Store400 demo ended...", DateTime.Now);
+            DeleteDataFolder(ServerFilename);
         }
         void Populate(ISortedDictionary<long, Person> PeopleStore, int count = MaxCount, int seed = 0)
         {
@@ -83,12 +64,12 @@ namespace Sop.Samples
                 int pid = (int)PeopleStore.GetNextSequence();
                 Person p = new Person()
                 {
-                    PersonId = pid,
+                    PersonID = pid,
                     FirstName = string.Format("Joe{0}", pid),
                     LastName = string.Format("Peter{0}", pid),
                     PhoneNumber = "510-555-9999"
                 };
-                PeopleStore.Add(p.PersonId, p);
+                PeopleStore.Add(p.PersonID, p);
                 if (i > 0 && i % 10000 == 0)
                 {
                     PeopleStore.File.Server.CycleTransaction();
