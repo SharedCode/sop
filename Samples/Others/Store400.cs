@@ -7,9 +7,9 @@ namespace Sop.Samples
     {
         public class Person
         {
+            public int PersonId;
             public string FirstName;
             public string LastName;
-            public int PersonID;
             public string PhoneNumber;
         }
         /// <summary>
@@ -64,12 +64,12 @@ namespace Sop.Samples
                 int pid = (int)PeopleStore.GetNextSequence();
                 Person p = new Person()
                 {
-                    PersonID = pid,
+                    PersonId = pid,
                     FirstName = string.Format("Joe{0}", pid),
                     LastName = string.Format("Peter{0}", pid),
                     PhoneNumber = "510-555-9999"
                 };
-                PeopleStore.Add(p.PersonID, p);
+                PeopleStore.Add(p.PersonId, p);
                 if (i > 0 && i % 10000 == 0)
                 {
                     PeopleStore.File.Server.CycleTransaction();

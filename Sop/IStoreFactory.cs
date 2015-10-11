@@ -14,6 +14,7 @@ namespace Sop
     /// * Basic (simple) type Serialization
     /// * Object SOP.IPersistent implements
     /// * Object Xml Serialization
+    /// * [easy to extend, custom define your own serialization!]
     /// </summary>
     public interface IStoreFactory
     {
@@ -21,6 +22,17 @@ namespace Sop
         /// Auto Dispose Store when it gets removed from Cache.
         /// </summary>
         bool AutoDisposeItem { get; set; }
+
+        #region under investigation
+        ///// <summary>
+        ///// true will cause succeeding 'Getxxx' method call(s) to return read only
+        ///// Stores, i.e. - updates (add, remove, update) will not be allowed (will throw exception).
+        ///// These read only stores will be optimized for reading. In the future releases of SOP,
+        ///// read only Stores will allow highly concurrent reading of items. Locking mechanism
+        ///// will use/allow multiple readers.
+        ///// </summary>
+        //bool ReturnReadOnlyStore { get; set; }
+        #endregion
 
         /// <summary>
         /// Create/Get a general purpose Data Store. Key and/or Value types can be any of the following data types:

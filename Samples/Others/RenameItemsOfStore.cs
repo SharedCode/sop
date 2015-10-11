@@ -50,9 +50,7 @@ namespace Sop.Samples
                 if (store.Count == 0)
                 {
                     Populate(store);
-                    if (Server.Transaction != null)
-                        Server.Commit();
-                    Server.BeginTransaction();
+                    Server.CycleTransaction();
                 }
                 else
                     readStore = true;
@@ -66,8 +64,7 @@ namespace Sop.Samples
                     store.Add(i + 10000, p);
                 }
 
-                Server.Commit();
-                Server.BeginTransaction();
+                Server.CycleTransaction();
                 if (readStore)
                 {
                     ReadAll(store);

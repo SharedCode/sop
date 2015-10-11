@@ -126,8 +126,7 @@ namespace Sop.Samples
 						NewPeopleIndex = 0;
 					}
 					ZipCodeCtr++;
-					server.Commit();
-                    server.BeginTransaction();
+                    server.CycleTransaction();
 				}
 			}
 			if (NewPeopleIndex > 0)
@@ -140,8 +139,7 @@ namespace Sop.Samples
 			}
 
 			ZipCodeCtr++;
-            server.Commit();
-			server.BeginTransaction();
+            server.CycleTransaction();
 		}
 		//** read all the 5 million records
 		void ReadAll()

@@ -166,8 +166,7 @@ namespace Sop.Samples
                 };
                 PeopleStore[p] = null;
             }
-            PeopleStore.Transaction.Commit();
-            Server.BeginTransaction();
+            Server.CycleTransaction();
             // update nullified people's blobs...
             for (int i = 100; i < 5000; i++)
             {

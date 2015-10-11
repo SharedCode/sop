@@ -61,7 +61,8 @@ namespace Sop.Samples
         };
 		public static void Main()
 		{
-            var demo = DemoType.VirtualCacheMemoryExtenderMultipleClients;    //VirtualCacheMemoryExtenderReCreate;
+            var demo = DemoType.Store400;
+                //.VirtualCacheMemoryExtenderMultipleClients;    //VirtualCacheMemoryExtenderReCreate;
             dynamic pd = null;
             switch(demo)
             {

@@ -53,9 +53,7 @@ namespace Sop.Samples
                     if (store.Count == 0)
                     {
                         Populate(store);
-                        if (Server.Transaction != null)
-                            Server.Commit();
-                        Server.BeginTransaction();
+                        Server.CycleTransaction();
                     }
                     else
                         readStore = true;
@@ -70,8 +68,7 @@ namespace Sop.Samples
                         var fooStore = Server.StoreNavigator.GetStore<long, Person>("SystemFile/foo");
                         //store.Delete();
                     }
-                    Server.Commit();
-                    Server.BeginTransaction();
+                    Server.CycleTransaction();
                 }
                 if (readStore)
                 {

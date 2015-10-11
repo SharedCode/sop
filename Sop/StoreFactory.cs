@@ -20,7 +20,8 @@ namespace Sop
 
     /// <summary>
     /// Store Factory is the hub for creation or retrieval
-    /// of an object Store (sorted dictionary on disk).
+    /// of an object Store (sorted dictionary on disk) from a 
+    /// given SOP ObjectServer.
     /// 
     /// Currently supported Serialization techniques are:
     /// * Basic (simple) type Serialization.
@@ -45,6 +46,20 @@ namespace Sop
         /// used.
         /// </summary>
         public bool AutoDisposeItem { get; set; }
+
+        #region under investigation
+        ///// <summary>
+        ///// true will cause Store Getters to return read only stores.
+        ///// SOP can optimize reading records for read only stores as readers are allowed
+        ///// to do parallel I/O, where as ordinary stores (read/write) are only allowed
+        ///// one at a time I/O for ensuring data integrity.
+        ///// 
+        ///// NOTE: Store enumerators are implicit read only stores, thus, a read/write store
+        ///// can be used for I/O optimized reading mode, 
+        ///// e.g. - in foreach loops or via store's Linq to Objects usage.
+        ///// </summary>
+        //public bool ReturnReadOnlyStore { get; set; }
+        #endregion
 
         /// <summary>
         /// Create/Get a general purpose Data Store. Key and/or Value types can be any of the following:
