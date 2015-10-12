@@ -149,5 +149,35 @@ namespace SopClientTests
                 }
             }
         }
+
+        [TestMethod]
+        public void QueryTargetFromQuerySourceTest()
+        {
+            using (var Server = new ObjectServer("SopBin\\OServer.dta"))
+            {
+                IStoreFactory sf = new StoreFactory();
+                var store = sf.Get<int, string>(Server, "People1");
+                var nameStore = sf.Get<string, int>(Server, "People2");
+
+                const int IterationCount = 100;
+                int[] array = new int[IterationCount];
+                for (int i = 0; i < IterationCount; i++)
+                {
+                    store.Add(i, string.Format("Value {0}.", i));
+                    nameStore.Add(string.Format("Joe {0}.", i), i);
+                    array[i] = i;
+                }
+                store.Add(9, string.Format("Value {0}.", 9));
+                var names = nameStore.Query(new string[] { "Joe 9.", "Joe 21." });
+                var qry = from a in store.Query(names) select a;
+                int ctr = 0;
+                foreach (var itm in qry)
+                {
+                    Assert.IsTrue(itm.Key == 9 || itm.Key == 21);
+                    ctr++;
+                }
+                Assert.IsTrue(ctr == 3);
+            }
+        }
     }
 }

@@ -9,6 +9,16 @@ using Sop.SpecializedDataStore;
 namespace Sop.Linq
 {
     /// <summary>
+    /// Extract a key from source item Key/Value pair.
+    /// </summary>
+    /// <typeparam name="TSourceKey"></typeparam>
+    /// <typeparam name="TSourceValue"></typeparam>
+    /// <typeparam name="TKey"></typeparam>
+    /// <param name="sourceKey"></param>
+    /// <param name="sourceValue"></param>
+    /// <returns></returns>
+    public delegate TKey ExtractKey<TSourceKey, TSourceValue, out TKey>(KeyValuePair<TSourceKey, TSourceValue> item);
+    /// <summary>
     /// SOP LINQ to Objects extensions.
     /// </summary>
     public static class Extension
@@ -126,14 +136,16 @@ namespace Sop.Linq
             }
         }
 
-        class EnumeratorEnumeratorFilter<TKey, TValue> : IEnumerator<KeyValuePair<TKey, TValue>>
+        class EnumeratorEnumeratorFilter<TKey, TValue, TSourceKey, TSourceValue> : IEnumerator<KeyValuePair<TKey, TValue>>
         {
             private ISortedDictionaryOnDisk _target;
-            private IEnumerator<KeyValuePair<TKey, TValue>> _source;
+            private IEnumerator<KeyValuePair<TSourceKey, TSourceValue>> _source;
+            private ExtractKey<TSourceKey, TSourceValue, TKey> _sourceKeyExtractor;
             private bool _wasReset = true;
 
             public EnumeratorEnumeratorFilter(ISortedDictionary<TKey, TValue> target,
-                IEnumerable<KeyValuePair<TKey, TValue>> source)
+                IEnumerable<KeyValuePair<TSourceKey, TSourceValue>> source,
+                ExtractKey<TSourceKey, TSourceValue, TKey> sourceKeyExtractor = null)
             {
                 if (target == null)
                     throw new ArgumentNullException("target");
@@ -142,6 +154,9 @@ namespace Sop.Linq
 
                 _target = (ISortedDictionaryOnDisk)((SpecializedStoreBase)target).Collection.Clone();
                 _source = source.GetEnumerator();
+                _sourceKeyExtractor = sourceKeyExtractor;
+                if (_sourceKeyExtractor == null)
+                    _sourceKeyExtractor = DefaultKeyExtractor<TSourceKey, TSourceValue, TKey>;
             }
 
             public void Dispose()
@@ -152,6 +167,8 @@ namespace Sop.Linq
                     _target.Dispose();
                 });
                 _target = null;
+                _source.Dispose();
+                _source = null;
             }
 
             public void Reset()
@@ -165,7 +182,16 @@ namespace Sop.Linq
                 if (_wasReset)
                 {
                     _wasReset = false;
-                    return _source.MoveNext();
+                    if (!_source.MoveNext())
+                        return false;
+                    if (_target.Locker.Invoke(_target.Search, (object)_sourceKeyExtractor(_source.Current), true))
+                        return true;
+                    while (_source.MoveNext())
+                    {
+                        if (_target.Locker.Invoke(_target.Search, (object)_sourceKeyExtractor(_source.Current), true))
+                            return true;
+                    }
+                    return false;
                 }
                 // move store pointer to next element and if it has same key as current one in keys array,
                 // just return true so Store can return this element.
@@ -173,7 +199,7 @@ namespace Sop.Linq
                 try
                 {
                     if (_target.MoveNext() &&
-                        _target.Comparer.Compare(_target.CurrentKey, _source.Current.Key) == 0)
+                        _target.Comparer.Compare(_target.CurrentKey, _sourceKeyExtractor(_source.Current)) == 0)
                         return true;
                 }
                 finally
@@ -182,7 +208,7 @@ namespace Sop.Linq
                 }
                 while (SourceMoveNextUniqueKey())
                 {
-                    if (_target.Locker.Invoke(_target.Search, (object)_source.Current.Key, true))
+                    if (_target.Locker.Invoke(_target.Search, (object)_sourceKeyExtractor(_source.Current), true))
                     {
                         return true;
                     }
@@ -191,10 +217,10 @@ namespace Sop.Linq
             }
             private bool SourceMoveNextUniqueKey()
             {
-                var k = _source.Current.Key;
+                var k = _sourceKeyExtractor(_source.Current);
                 while (_source.MoveNext())
                 {
-                    if (_target.Comparer.Compare(_source.Current.Key, k) == 0)
+                    if (_target.Comparer.Compare(_sourceKeyExtractor(_source.Current), k) == 0)
                         continue;
                     return true;
                 }
@@ -223,12 +249,14 @@ namespace Sop.Linq
                 }
             }
         }
-        class EnumerableEnumeratorFilter<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>
+        class EnumerableEnumeratorFilter<TKey, TValue, TSourceKey, TSourceValue> : IEnumerable<KeyValuePair<TKey, TValue>>
         {
             private ISortedDictionary<TKey, TValue> _target;
-            private IEnumerable<KeyValuePair<TKey, TValue>> _source;
+            private IEnumerable<KeyValuePair<TSourceKey, TSourceValue>> _source;
+            private ExtractKey<TSourceKey, TSourceValue, TKey> _sourceKeyExtractor;
             public EnumerableEnumeratorFilter(ISortedDictionary<TKey, TValue> target, 
-                IEnumerable<KeyValuePair<TKey, TValue>> source)
+                IEnumerable<KeyValuePair<TSourceKey, TSourceValue>> source,
+                ExtractKey<TSourceKey, TSourceValue, TKey> sourceKeyExtractor = null)
             {
                 if (target == null)
                     throw new ArgumentNullException("target");
@@ -236,15 +264,16 @@ namespace Sop.Linq
                     throw new ArgumentNullException("source");
                 _target = target;
                 _source = source;
+                _sourceKeyExtractor = sourceKeyExtractor;
             }
             public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
             {
-                return new EnumeratorEnumeratorFilter<TKey, TValue>(_target, _source);
+                return new EnumeratorEnumeratorFilter<TKey, TValue, TSourceKey, TSourceValue>(_target, _source, _sourceKeyExtractor);
             }
 
             IEnumerator IEnumerable.GetEnumerator()
             {
-                return new EnumeratorEnumeratorFilter<TKey, TValue>(_target, _source);
+                return new EnumeratorEnumeratorFilter<TKey, TValue, TSourceKey, TSourceValue>(_target, _source, _sourceKeyExtractor);
             }
         }
 
@@ -273,11 +302,23 @@ namespace Sop.Linq
             return new EnumerableKeysFilter<TKey, TValue>((ISortedDictionary<TKey, TValue>)store, keys);
         }
 
-        public static IEnumerable<KeyValuePair<TKey, TValue>> Query<TKey, TValue>(
-            this IEnumerable<KeyValuePair<TKey, TValue>> target, IEnumerable<KeyValuePair<TKey, TValue>> source)
+        public static IEnumerable<KeyValuePair<TKey, TValue>> Query<TKey, TValue, TSourceKey, TSourceValue>(
+            this IEnumerable<KeyValuePair<TKey, TValue>> target, 
+            IEnumerable<KeyValuePair<TSourceKey, TSourceValue>> source,
+            ExtractKey<TSourceKey, TSourceValue, TKey>  sourceKeyExtractor = null
+            )
         {
-            return new EnumerableEnumeratorFilter<TKey, TValue>((ISortedDictionary<TKey, TValue>)target, source);
+            return new EnumerableEnumeratorFilter<TKey, TValue, TSourceKey, TSourceValue>(
+                (ISortedDictionary<TKey, TValue>)target, source, sourceKeyExtractor);
         }
 
+        private static TKey DefaultKeyExtractor<TSourceKey, TSourceValue, TKey>(KeyValuePair<TSourceKey, TSourceValue> item)
+        {
+            if (typeof(TKey) == typeof(TSourceValue))
+                return (TKey)(object)item.Value;
+            if (typeof(TKey) == typeof(TSourceKey))
+                return (TKey)(object)item.Key;
+            throw new SopException("DefaultKeyExtractor can only extract from Source Value or Key that has the same type as result type TKey.");
+        }
     }
 }
