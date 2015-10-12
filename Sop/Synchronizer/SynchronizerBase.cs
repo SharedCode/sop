@@ -37,11 +37,24 @@ namespace Sop.Synchronization
                     throw new SopException(
                         string.Format("Lock for read detected invalid reader lock count {0}.", lockCount));
                 if (lockCount == 1)
+                {
+                    readerLockTime = DateTime.Now;
                     _lock();
+                    return lockCount;
+                }
+                // enforce a time limit of 5 seconds for multiple readers to maintain 
+                // Store overall performance. Readers can potentially block Store "Updates" 
+                // for a long time, if there are no "reader lock" time limit.
+                if (lockCount > 1 && DateTime.Now.Subtract(readerLockTime).TotalSeconds > 5)
+                {
+                    lockCount = Interlocked.Decrement(ref readerLockCount);
+                    return _lock();
+                }
                 return lockCount;
             }
             return _lock();
         }
+        private DateTime readerLockTime = DateTime.Now;
         private int _lock()
         {
             Monitor.Enter(locker);
