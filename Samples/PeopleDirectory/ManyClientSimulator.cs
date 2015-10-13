@@ -19,6 +19,7 @@ namespace Sop.Samples
         public void Run()
         {
             Console.WriteLine("Start of Many Client Simulator demo.");
+            var time1 = DateTime.Now;
             using (var Server = new ObjectServer(ServerFilename, true))
             {
                 // Pre-populate store to simulate production store with existing items.
@@ -60,7 +61,8 @@ namespace Sop.Samples
                     Task.WaitAll(tasks.ToArray());
                 //IStoreFactory sf = new StoreFactory();
                 //var PeopleStore = sf.Get<long, Person>(Server.SystemFile.Store, "People");
-                Console.WriteLine("Processed, inserted & queried/enumerated multiple times, a total of {0} records.", PeopleStore.Count);
+                Console.WriteLine("Processed, inserted & queried/enumerated multiple times,");
+                Console.WriteLine("a total of {0} records in {1} mins.", PeopleStore.Count, DateTime.Now.Subtract(time1).TotalMinutes);
                 Console.WriteLine("End of Many Client Simulator demo.");
             }
         }
@@ -81,16 +83,25 @@ namespace Sop.Samples
         {
             //IStoreFactory sf = new StoreFactory();
             //var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
-            for (int i = 0; i < ItemCount; i++)
+            for (int i = 0; i < ItemCount;)
             {
-                var id = PeopleStore.GetNextSequence();
-                PeopleStore.Add(new KeyValuePair<long, Person>(id, 
-                    new Person {
-                        PersonId = id,
-                        FirstName = string.Format("Joe{0}", id),
-                        LastName = string.Format("Petit{0}", id),
-                        PhoneNumber = "555-999-4444"
-                    }));
+                PeopleStore.Locker.Invoke(() =>
+                {
+                    for (int ii = 0; ii < 5; ii++, i++)
+                    {
+                        var id = PeopleStore.GetNextSequence();
+                        PeopleStore.Add(new KeyValuePair<long, Person>(id,
+                            new Person
+                            {
+                                PersonId = id,
+                                FirstName = string.Format("Joe{0}", id),
+                                LastName = string.Format("Petit{0}", id),
+                                PhoneNumber = "555-999-4444"
+                            }));
+                    }
+                });
+                if (i > 0 && i % 50 == 0)
+                    System.Threading.Thread.Sleep(1);
             }
         }
         private void ReadItems(IObjectServer server, ISortedDictionary<long, Person> PeopleStore)
@@ -103,31 +114,74 @@ namespace Sop.Samples
                 maxValue = 1;
             maxValue *= 10;
             var i = r.Next(maxValue) * 1000;
-            var keys = new long[1000];
-            int c;
-            for (c = 0; c < keys.Length; c++)
+            var keys = new long[50];
+
+            int logicalIndex = 0;
+            for (int i2 = 0; i2 < 20; i2++)
             {
-                keys[c] = i + c + 1;
-            }
-            // just use Store and do Linq to Objects. Store & enumerators are thread safe.
-            var qry = from a in PeopleStore.Query<long, Person>(keys)
-                      select a;
-            c = 0;
-            foreach (var p in qry)
-            {
-                if (p.Value == null)
+                int c;
+                for (c = 0; c < keys.Length; c++)
                 {
-                    Console.WriteLine("Person with no Value found from DB.");
-                    continue;
+                    keys[c] = ++logicalIndex + i + 1;
                 }
-                var personName = string.Format("{0} {1}", p.Value.FirstName, p.Value.LastName);
-                if (p.Key % 100 == 0)
-                    Console.WriteLine("Person found {0} from DB.", personName);
-                if (keys[c] != p.Key)
-                    Console.WriteLine(string.Format("Failed, didn't find person with key {0}, found {1} instead.", keys[c], p.Key));
-                c++;
+                // just use Store and do Linq to Objects. Store & enumerators are thread safe.
+                var qry = from a in PeopleStore.Query(keys, true) select a;
+                c = 0;
+                foreach (var p in qry)
+                {
+                    if (p.Value == null)
+                    {
+                        Console.WriteLine("Person with no Value found from DB.");
+                        continue;
+                    }
+                    var personName = string.Format("{0} {1}", p.Value.FirstName, p.Value.LastName);
+                    if (p.Key % 100 == 0)
+                        Console.WriteLine("Person found {0} from DB.", personName);
+                    if (keys[c] != p.Key)
+                        Console.WriteLine(string.Format("Failed, didn't find person with key {0}, found {1} instead.", keys[c], p.Key));
+                    c++;
+                }
+                // don't be a resource hog. :)
+                System.Threading.Thread.Sleep(4);
             }
         }
+        #region for removal
+        //private void ReadItems2(IObjectServer server, ISortedDictionary<long, Person> PeopleStore)
+        //{
+        //    //IStoreFactory sf = new StoreFactory();
+        //    //var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
+        //    var r = new Random();
+        //    var maxValue = (int)(PeopleStore.CurrentSequence / ItemCount);
+        //    if (maxValue <= 0)
+        //        maxValue = 1;
+        //    maxValue *= 10;
+        //    var i = r.Next(maxValue) * 1000;
+        //    var keys = new long[1000];
+        //    int c;
+        //    for (c = 0; c < keys.Length; c++)
+        //    {
+        //        keys[c] = i + c + 1;
+        //    }
+        //    // just use Store and do Linq to Objects. Store & enumerators are thread safe.
+        //    var qry = from a in PeopleStore.Query<long, Person>(keys)
+        //              select a;
+        //    c = 0;
+        //    foreach (var p in qry)
+        //    {
+        //        if (p.Value == null)
+        //        {
+        //            Console.WriteLine("Person with no Value found from DB.");
+        //            continue;
+        //        }
+        //        var personName = string.Format("{0} {1}", p.Value.FirstName, p.Value.LastName);
+        //        if (p.Key % 100 == 0)
+        //            Console.WriteLine("Person found {0} from DB.", personName);
+        //        if (keys[c] != p.Key)
+        //            Console.WriteLine(string.Format("Failed, didn't find person with key {0}, found {1} instead.", keys[c], p.Key));
+        //        c++;
+        //    }
+        //}
+        #endregion
 
         public int DataInsertionThreadCount = 5;
         public int ThreadCount = 20;

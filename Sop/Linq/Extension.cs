@@ -29,13 +29,17 @@ namespace Sop.Linq
             private ISortedDictionaryOnDisk _store;
             private TKey[] _keys;
             private int _keyIndex = -1;
+            private bool _lockWrap;
 
-            public EnumeratorKeysFilter(ISortedDictionary<TKey, TValue> store, TKey[] keys)
+            public EnumeratorKeysFilter(ISortedDictionary<TKey, TValue> store, TKey[] keys, bool lockWrap = false)
             {
                 if (keys == null || keys.Length == 0)
                     throw new ArgumentNullException("keys");
                 if (store == null)
                     throw new ArgumentNullException("store");
+                _lockWrap = lockWrap;
+                if (lockWrap)
+                    store.Locker.Lock(OperationType.Read);
                 _store = (ISortedDictionaryOnDisk)((SpecializedStoreBase)store).Collection.Clone();
                 _keys = keys;
             }
@@ -43,10 +47,18 @@ namespace Sop.Linq
             public void Dispose()
             {
                 if (_store == null) return;
-                _store.Locker.Invoke(() =>
+                if (_lockWrap)
                 {
                     _store.Dispose();
-                }, OperationType.Read);
+                    _store.Locker.Unlock(OperationType.Read);
+                }
+                else
+                {
+                    _store.Locker.Invoke(() =>
+                    {
+                        _store.Dispose();
+                    }, OperationType.Read);
+                }
                 _store = null;
             }
 
@@ -151,7 +163,8 @@ namespace Sop.Linq
         {
             private ISortedDictionary<TKey, TValue> _store;
             private TKey[] _keys;
-            public EnumerableKeysFilter(ISortedDictionary<TKey, TValue> store, TKey[] keys)
+            private bool _lockWrap;
+            public EnumerableKeysFilter(ISortedDictionary<TKey, TValue> store, TKey[] keys, bool lockWrap = false)
             {
                 if (keys == null)
                     throw new ArgumentNullException("keys");
@@ -159,15 +172,16 @@ namespace Sop.Linq
                     throw new ArgumentNullException("store");
                 _store = store;
                 _keys = keys;
+                _lockWrap = lockWrap;
             }
             public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
             {
-                return new EnumeratorKeysFilter<TKey, TValue>(_store, _keys);
+                return new EnumeratorKeysFilter<TKey, TValue>(_store, _keys, _lockWrap);
             }
 
             IEnumerator IEnumerable.GetEnumerator()
             {
-                return new EnumeratorKeysFilter<TKey, TValue>(_store, _keys);
+                return new EnumeratorKeysFilter<TKey, TValue>(_store, _keys, _lockWrap);
             }
         }
 
@@ -176,20 +190,25 @@ namespace Sop.Linq
             private ISortedDictionaryOnDisk _target;
             private IEnumerator<KeyValuePair<TSourceKey, TSourceValue>> _source;
             private ExtractKey<TSourceKey, TSourceValue, TKey> _sourceKeyExtractor;
+            private bool _lockWrap = false;
             private bool _wasReset = true;
 
             public EnumeratorEnumeratorFilter(ISortedDictionary<TKey, TValue> target,
                 IEnumerable<KeyValuePair<TSourceKey, TSourceValue>> source,
-                ExtractKey<TSourceKey, TSourceValue, TKey> sourceKeyExtractor = null)
+                ExtractKey<TSourceKey, TSourceValue, TKey> sourceKeyExtractor = null,
+                bool lockWrap = false)
             {
                 if (target == null)
                     throw new ArgumentNullException("target");
                 if (source == null)
                     throw new ArgumentNullException("source");
 
+                if (lockWrap)
+                    target.Locker.Lock(OperationType.Read);
                 _target = (ISortedDictionaryOnDisk)((SpecializedStoreBase)target).Collection.Clone();
                 _source = source.GetEnumerator();
                 _sourceKeyExtractor = sourceKeyExtractor;
+                _lockWrap = lockWrap;
                 if (_sourceKeyExtractor == null)
                     _sourceKeyExtractor = DefaultKeyExtractor<TSourceKey, TSourceValue, TKey>;
             }
@@ -197,10 +216,18 @@ namespace Sop.Linq
             public void Dispose()
             {
                 if (_target == null) return;
-                _target.Locker.Invoke(() =>
+                if (_lockWrap)
                 {
                     _target.Dispose();
-                }, OperationType.Read);
+                    _target.Locker.Unlock(OperationType.Read);
+                }
+                else
+                {
+                    _target.Locker.Invoke(() =>
+                    {
+                        _target.Dispose();
+                    }, OperationType.Read);
+                }
                 _target = null;
                 _source.Dispose();
                 _source = null;
@@ -321,9 +348,11 @@ namespace Sop.Linq
             private ISortedDictionary<TKey, TValue> _target;
             private IEnumerable<KeyValuePair<TSourceKey, TSourceValue>> _source;
             private ExtractKey<TSourceKey, TSourceValue, TKey> _sourceKeyExtractor;
+            private bool _lockWrap = false;
             public EnumerableEnumeratorFilter(ISortedDictionary<TKey, TValue> target, 
                 IEnumerable<KeyValuePair<TSourceKey, TSourceValue>> source,
-                ExtractKey<TSourceKey, TSourceValue, TKey> sourceKeyExtractor = null)
+                ExtractKey<TSourceKey, TSourceValue, TKey> sourceKeyExtractor = null,
+                bool lockWrap = false)
             {
                 if (target == null)
                     throw new ArgumentNullException("target");
@@ -332,15 +361,16 @@ namespace Sop.Linq
                 _target = target;
                 _source = source;
                 _sourceKeyExtractor = sourceKeyExtractor;
+                _lockWrap = lockWrap;
             }
             public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
             {
-                return new EnumeratorEnumeratorFilter<TKey, TValue, TSourceKey, TSourceValue>(_target, _source, _sourceKeyExtractor);
+                return new EnumeratorEnumeratorFilter<TKey, TValue, TSourceKey, TSourceValue>(_target, _source, _sourceKeyExtractor, _lockWrap);
             }
 
             IEnumerator IEnumerable.GetEnumerator()
             {
-                return new EnumeratorEnumeratorFilter<TKey, TValue, TSourceKey, TSourceValue>(_target, _source, _sourceKeyExtractor);
+                return new EnumeratorEnumeratorFilter<TKey, TValue, TSourceKey, TSourceValue>(_target, _source, _sourceKeyExtractor, _lockWrap);
             }
         }
 
@@ -362,21 +392,23 @@ namespace Sop.Linq
         /// <typeparam name="TValue"></typeparam>
         /// <param name="store"></param>
         /// <param name="keys"></param>
+        /// <param name="lockWrap">true will wrap returned IEnumerator in lock (on ctor) - unlock (on dispose) calls.</param>
         /// <returns>IEnumerable that iterates through matching records for the submitted keys.</returns>
         public static IEnumerable<KeyValuePair<TKey, TValue>> Query<TKey, TValue>(
-            this IEnumerable<KeyValuePair<TKey, TValue>> store, TKey[] keys)
+            this IEnumerable<KeyValuePair<TKey, TValue>> store, TKey[] keys, bool lockWrap = false)
         {
-            return new EnumerableKeysFilter<TKey, TValue>((ISortedDictionary<TKey, TValue>)store, keys);
+            return new EnumerableKeysFilter<TKey, TValue>((ISortedDictionary<TKey, TValue>)store, keys, lockWrap);
         }
 
         public static IEnumerable<KeyValuePair<TKey, TValue>> Query<TKey, TValue, TSourceKey, TSourceValue>(
             this IEnumerable<KeyValuePair<TKey, TValue>> target, 
             IEnumerable<KeyValuePair<TSourceKey, TSourceValue>> source,
-            ExtractKey<TSourceKey, TSourceValue, TKey>  sourceKeyExtractor = null
+            ExtractKey<TSourceKey, TSourceValue, TKey>  sourceKeyExtractor = null,
+            bool lockWrap = false
             )
         {
             return new EnumerableEnumeratorFilter<TKey, TValue, TSourceKey, TSourceValue>(
-                (ISortedDictionary<TKey, TValue>)target, source, sourceKeyExtractor);
+                (ISortedDictionary<TKey, TValue>)target, source, sourceKeyExtractor, lockWrap);
         }
 
         private static TKey DefaultKeyExtractor<TSourceKey, TSourceValue, TKey>(KeyValuePair<TSourceKey, TSourceValue> item)

@@ -9,7 +9,7 @@
 //    /// 
 //    /// NOTE: this implementation forces lock requests to the Write operation type.
 //    /// </summary>
-//    public class SynchronizerBase : ISynchronizer
+//    public class SynchronizerMultiReaderBase : ISynchronizer
 //    {
 //        /// <summary>
 //        /// CommitLockRequest is not implemened in this Synchronizer.
@@ -27,101 +27,60 @@
 //        /// <param name="requestedOperation">Lock resource for Read, Write or Search</param>
 //        virtual public int Lock(OperationType requestedOperation = OperationType.Write)
 //        {
-//            if (TransactionRollback)
+//            if (transactionRollback)
 //                RaiseRollbackException();
 
+//            int result = 0;
 //            if (requestedOperation == OperationType.Read)
 //            {
-//                if (readerEvent.IsSet)
-//                    return Interlocked.Increment(ref lockCount);
-//                if (IsLocked)
-//                {
-//                    readerEvent.Wait();
-//                    return Interlocked.Increment(ref lockCount);
-//                }
-//                #region for remove
-//                //var lockCount = Interlocked.Increment(ref readerLockCount);
-//                //if (lockCount < 1)
-//                //    throw new SopException(
-//                //        string.Format("Lock for read detected invalid reader lock count {0}.", lockCount));
-//                //if (lockCount == 1)
-//                //{
-//                //    var result = _lock();
-//                //    readerEvent.Set();
-//                //    return result;
-//                //}
-//                //readerEvent.Wait();
-
-//                //// enforce a time limit for multiple readers to maintain 
-//                //// Store overall performance. Readers can potentially block Store "Updates" 
-//                //// for a long time, if there are no "reader lock" time limit.
-//                //if (lockCount > 1 && DateTime.Now.Subtract(readerLockTime).TotalSeconds > 20)
-//                //{
-//                //    lockCount = Interlocked.Decrement(ref readerLockCount);
-//                //    return _lock();
-//                //}
-//                //return lockCount;
-//                #endregion
-//            }
-
-//            Func<int> block = () =>
-//            {
-//                Monitor.Enter(locker);
-//                var result = ++lockCount;
-//                if (TransactionRollback)
-//                {
-//                    try
-//                    {
-//                        RaiseRollbackException();
-//                    }
-//                    finally
-//                    {
-//                        Unlock();
-//                    }
-//                }
-//                return result;
-//            };
-
-//            int r = block();
-//            if (r == 1)
-//            {
-//                if (requestedOperation == OperationType.Read)
-//                    readerEvent.Set();
+//                if (lockCount == 0)
+//                    result = ExclusiveLock();
 //                else
-//                    readerEvent.Reset();
+//                {
+//                    readerWriter.EnterReadLock();
+//                    result = ++lockCount;
+//                }
 //            }
+//            else
+//            {
+//                result = ExclusiveLock();
+//                //readerWriter.EnterWriteLock();
+//            }
+//            if (transactionRollback)
+//            {
+//                try
+//                {
+//                    RaiseRollbackException();
+//                }
+//                finally
+//                {
+//                    Unlock(requestedOperation);
+//                }
+//            }
+//            return result;
+//        }
+//        private int ExclusiveLock()
+//        {
+//            Monitor.Enter(locker);
+//            return ++lockCount;
+//        }
+//        private int ExclusiveUnlock()
+//        {
+//            var r = --lockCount;
+//            Monitor.Exit(locker);
 //            return r;
 //        }
-//        private ManualResetEventSlim readerEvent = new ManualResetEventSlim();
-//        private DateTime readerLockTime = DateTime.Now;
 //        /// <summary>
 //        /// Unlock Synchronizer.
 //        /// </summary>
 //        virtual public int Unlock(OperationType requestedOperation = OperationType.Write)
 //        {
+//            var result = --lockCount;
 //            if (requestedOperation == OperationType.Read)
-//            {
-//                if (readerEvent.IsSet)
-//                {
-//                    var r = Interlocked.Decrement(ref lockCount);
-//                    if (r <= 0)
-//                    {
-//                        if (Monitor.IsEntered(locker))
-//                            Monitor.Exit(locker);
-//                    }
-//                    return r;
-//                }
-//            }
-//            // unlock
-//            Func<int> block = () =>
-//                {
-//                    lockCount--;
-//                    var l = lockCount;
-//                    if (Monitor.IsEntered(locker))
-//                        Monitor.Exit(locker);
-//                    return l;
-//                };
-//            return block();
+//                readerWriter.ExitReadLock();
+//            else
+//                readerWriter.ExitWriteLock();
+//            return result;
 //        }
 
 //        private void RaiseRollbackException()
@@ -214,8 +173,25 @@
 //        /// Returns true if Locker detected a Transaction Rollback event,
 //        /// false otherwise.
 //        /// </summary>
-//        public bool TransactionRollback { get; internal set; }
-//        protected object locker = new object();
-//        internal protected int lockCount;
+//        public bool TransactionRollback
+//        {
+//            get
+//            {
+//                return transactionRollback;
+//            }
+//            internal set
+//            {
+//                transactionRollback = value;
+//            }
+//        }
+//        private volatile bool transactionRollback;
+//        internal protected int LockCount
+//        {
+//            get { return lockCount; }
+//            set { lockCount = value; }
+//        }
+//        private object locker = new object();
+//        private volatile int lockCount;
+//        private ReaderWriterLockSlim readerWriter = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
 //    }
 //}

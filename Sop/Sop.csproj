@@ -133,8 +133,9 @@
     <Compile Include="Synchronizer\ISynchronizer.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Synchronizer\SynchronizerMultiReaderBase - Copy.cs" />
+    <Compile Include="Synchronizer\SynchronizerSingleReaderWriterBase.cs" />
     <Compile Include="Synchronizer\SynchronizerMultiReaderBase.cs" />
-    <Compile Include="Synchronizer\SynchronizerBase.cs" />
     <Compile Include="Synchronizer\Synchronizer.cs" />
     <Compile Include="Collections\BTree\IDictionary.cs">
       <SubType>Code</SubType>

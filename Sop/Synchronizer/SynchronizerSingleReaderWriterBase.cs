@@ -9,7 +9,7 @@ namespace Sop.Synchronization
     /// 
     /// NOTE: this implementation forces lock requests to the Write operation type.
     /// </summary>
-    public class SynchronizerMultiReaderBase : ISynchronizer
+    public class SynchronizerSingleReaderWriterBase : ISynchronizer
     {
         /// <summary>
         /// CommitLockRequest is not implemened in this Synchronizer.
@@ -30,31 +30,8 @@ namespace Sop.Synchronization
             if (TransactionRollback)
                 RaiseRollbackException();
 
-            var result = lockCount;
-            var isNotLocked = result == 0;
-            var isFirstWriter = writeLockCount == 0;
-            if (requestedOperation == OperationType.Read)
-            {
-                //readerWriter.EnterReadLock();
-                if (!isFirstWriter || isNotLocked)
-                {
-                    if (isNotLocked)
-                        lockCount++;
-                    Monitor.Enter(locker);
-                }
-            }
-            else
-            {
-                //readerWriter.EnterWriteLock();
-                if (isFirstWriter)
-                    writeLockCount++;
-                Monitor.Enter(locker);
-                if (!isFirstWriter)
-                    writeLockCount++;
-            }
-            result++;
-            if (!isNotLocked)
-                lockCount++;
+            Monitor.Enter(locker);
+            var result = ++lockCount;
             if (TransactionRollback)
             {
                 try
@@ -73,22 +50,11 @@ namespace Sop.Synchronization
         /// </summary>
         virtual public int Unlock(OperationType requestedOperation = OperationType.Write)
         {
-            var result = --lockCount;
-            if (requestedOperation == OperationType.Read)
-            {
-                //readerWriter.ExitReadLock();
-                if (result > 0)
-                    return result;
-            }
-            else
-                writeLockCount--;
-            //else
-            //    readerWriter.ExitWriteLock();
+            var l = --lockCount;
             if (Monitor.IsEntered(locker))
                 Monitor.Exit(locker);
-            return result;
+            return l;
         }
-
         private void RaiseRollbackException()
         {
             throw new Transaction.TransactionRolledbackException("Transaction was rolled back while attempting to get a Lock.");
@@ -179,10 +145,30 @@ namespace Sop.Synchronization
         /// Returns true if Locker detected a Transaction Rollback event,
         /// false otherwise.
         /// </summary>
-        public bool TransactionRollback { get; internal set; }
+        public bool TransactionRollback
+        {
+            get
+            {
+                return transactionRollback;
+            }
+            internal set
+            {
+                transactionRollback = value;
+            }
+        }
+        private volatile bool transactionRollback;
         private object locker = new object();
-        private volatile int writeLockCount;
-        protected volatile int lockCount;
-        //private ReaderWriterLockSlim readerWriter = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
+        internal protected int LockCount
+        {
+            get
+            {
+                return lockCount;
+            }
+            set
+            {
+                lockCount = value;
+            }
+        }
+        private volatile int lockCount;
     }
 }

@@ -76,6 +76,7 @@ namespace SopClientTests
             //Sop.Log.Logger.Instance.LogLevel = Sop.Log.LogLevels.Verbose;
             // Multiple SOP client simulator.
             var pd = new ManyClientSimulator();
+            pd.DeleteDataFolder(ManyClientSimulator.ServerFilename);
             // simulate numerous concurrent clients.
             pd.ThreadCount = 150;
             pd.DataInsertionThreadCount = 40;
