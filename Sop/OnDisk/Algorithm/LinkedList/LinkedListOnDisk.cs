@@ -402,8 +402,8 @@ namespace Sop.OnDisk.Algorithm.LinkedList
                               MruManager = MruManager,
                               MruMinCapacity = MruMinCapacity,
                               MruMaxCapacity = MruMaxCapacity,
-                              SyncRoot = this.SyncRoot,
-                              DataBlockDriver = this.DataBlockDriver,
+                              SyncRoot = SyncRoot,
+                              DataBlockDriver = (DataBlock.DataBlockDriver)DataBlockDriver.Clone(),
                               FirstItem = new LinkedItemOnDisk(File.DataBlockSize)
                           };
             lid.CurrentItem = lid.FirstItem;

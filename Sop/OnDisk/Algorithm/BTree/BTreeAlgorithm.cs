@@ -875,8 +875,8 @@ namespace Sop.OnDisk.Algorithm.BTree
                 try
                 {
                     BTreeNodeOnDisk o = CurrentItem.GetNode(this);
-                    if (
-                        !(CurrentItem.NodeAddress == -1 || o.Slots == null || o.Slots[CurrentItem.NodeItemIndex] == null))
+                    if (o != null &&
+                        (!(CurrentItem.NodeAddress == -1 || o.Slots == null || o.Slots[CurrentItem.NodeItemIndex] == null)))
                         return o.MoveNext(this);
                 }
                 finally

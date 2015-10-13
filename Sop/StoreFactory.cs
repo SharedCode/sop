@@ -106,11 +106,9 @@ namespace Sop
                                                                                           SetCurrentValueInMemoryData
                                                                                           (r);
                                                                                       return r;
-                                                                                  }, mruManaged);
+                                                                                  }, mruManaged, isUnique);
             // assign the current default Value Unpack delegate
             BTreeAlgorithm.CurrentOnValueUnpack = null;
-            if (r2 != null)
-                ((SortedDictionaryOnDisk)((SpecializedStoreBase)(object)r2).Collection).IsUnique = isUnique;
             return r2;
         }
         /// <summary>
@@ -209,10 +207,8 @@ namespace Sop
                                                                                             containerDod.SetCurrentValueInMemoryData
                                                                                                 (r);
                                                                                             return r;
-                                                                                        }, mruManaged);
+                                                                                        }, mruManaged, isUnique);
             BTreeAlgorithm.CurrentOnValueUnpack = null;
-            if (r2 != null)
-                ((SortedDictionaryOnDisk)((SpecializedStoreBase)(object)r2).Collection).IsUnique = isUnique;
             return r2;
         }
 
@@ -236,10 +232,6 @@ namespace Sop
                                                                                       bool mruManaged = true, bool isUnique = false)
             where TKey : IPersistent, new()
         {
-            //if (!CollectionOnDisk.IsSimpleType(typeof(TValue)))
-            //    throw new ArgumentException(string.Format("Type of TValue ({0}) isn't an SOP simple type.",
-            //                                              typeof(TValue)));
-
             BTreeAlgorithm.CurrentOnValueUnpack =
                 PersistentTypeKeySimpleValue<TKey, TValue>.Collection_OnKeyUnpack;
             var resolvedContainer = GetContainer(container);
@@ -265,9 +257,8 @@ namespace Sop
                                                                                                       SetCurrentValueInMemoryData
                                                                                                       (r);
                                                                                                   return r;
-                                                                                              }, mruManaged);
-            if (r2 != null)
-                ((SortedDictionaryOnDisk)((SpecializedStoreBase)(object)r2).Collection).IsUnique = isUnique;
+                                                                                              }, mruManaged, isUnique);
+            BTreeAlgorithm.CurrentOnValueUnpack = null;
             return r2;
         }
 
@@ -315,10 +306,8 @@ namespace Sop
                                                                                                       SetCurrentValueInMemoryData
                                                                                                       (r);
                                                                                                   return r;
-                                                                                              }, mruManaged);
+                                                                                              }, mruManaged, isUnique);
             BTreeAlgorithm.CurrentOnValueUnpack = null;
-            if (r2 != null)
-                ((SortedDictionaryOnDisk)((SpecializedStoreBase)(object)r2).Collection).IsUnique = isUnique;
             return r2;
         }
 
@@ -343,7 +332,8 @@ namespace Sop
         }
 
         private T CreateDictionary<T, TKey, TValue>(bool createIfNotExist, object container, string name,
-                                                    CreateDictionaryDelegate<T> createDelegate, bool mruManaged = true)
+                                                    CreateDictionaryDelegate<T> createDelegate, bool mruManaged = true,
+                                                    bool IsUnique = false)
             where T : class, ISortedDictionary<TKey, TValue>
         {
             var containerDod = (SortedDictionaryOnDisk)GetContainer(container);
@@ -359,9 +349,9 @@ namespace Sop
             // check whether Data Store is in MRU cache of opened stores...
             string storeName = SpecializedStoreBase.FormatStoreName(containerDod.ToString(), name);
             object store = OpenedStores[storeName];
-            // let casting throw an exception, 'don't handle it & let caller code to manage it... (todo: revisit if there is benefit to handle such exception??)
-            if (store != null && !((T)store).IsDisposed) return (T)store;
 
+            if (store != null && !((T)store).IsDisposed)
+                return (T)store;
             // Data Store is NOT in MRU cache, try to get it from the container OR create it if it doesn't exist...
             ((ISynchronizer)containerDod.SyncRoot).Lock();
             bool found = containerDod.Contains(name);
@@ -395,6 +385,7 @@ namespace Sop
                 }
             }
             r.AutoDispose = AutoDisposeItem;
+            ((SortedDictionaryOnDisk)((SpecializedStoreBase)(object)r).Collection).IsUnique = IsUnique;
             ((SortedDictionaryOnDisk)((SpecializedStoreBase)(object)r).Collection).UniqueStoreName = storeName;
             ((ISynchronizer)containerDod.SyncRoot).Unlock();
             if (mruManaged)

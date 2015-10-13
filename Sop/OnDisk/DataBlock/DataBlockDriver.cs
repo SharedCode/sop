@@ -55,6 +55,15 @@ namespace Sop.OnDisk.DataBlock
             };
         }
 
+        public object Clone()
+        {
+            return new DataBlockDriver
+            {
+                HeaderData = (HeaderData)HeaderData.Clone(),
+                _readAheadBuffer = (DataBlockReadBufferLogic)_readAheadBuffer.Clone(),
+            };
+        }
+
         /// <summary>
         /// Create a block of Data
         /// </summary>

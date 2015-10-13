@@ -15,7 +15,7 @@ namespace Sop.OnDisk
     /// such as start, end blocks, next allocatable block, count
     /// of items...
     /// </summary>
-    internal class HeaderData : InternalPersistent
+    internal class HeaderData : InternalPersistent, ICloneable
     {
         /// <summary>
         /// Default Constructor
@@ -31,6 +31,30 @@ namespace Sop.OnDisk
         public HeaderData(DataBlockSize dataBlockSize)
         {
             this.diskBuffer = new Sop.DataBlock(dataBlockSize);
+        }
+
+        public object Clone()
+        {
+            var r = new HeaderData
+            {
+                _count = _count,
+                _isDirty = _isDirty,
+                DataBlockSize = DataBlockSize,
+                DiskBuffer = (Sop.DataBlock)DiskBuffer.Clone(),
+                EndAllocatableAddress = EndAllocatableAddress,
+                HintSizeOnDisk = HintSizeOnDisk,
+                IsModifiedInTransaction = IsModifiedInTransaction,
+                NextAllocatableAddress = NextAllocatableAddress,
+                OccupiedBlocksHead = (Sop.DataBlock)OccupiedBlocksHead.Clone(),
+                OccupiedBlocksTail = (Sop.DataBlock)OccupiedBlocksTail.Clone(),
+                OnDiskLeftoverSegmentSize = OnDiskLeftoverSegmentSize,
+                StartAllocatableAddress = StartAllocatableAddress
+            };
+            if (RecycledSegment != null)
+                r.RecycledSegment = (DeletedBlockInfo)RecycledSegment.Clone();
+            if (RecycledSegmentBeforeTransaction != null)
+                r.RecycledSegmentBeforeTransaction = (DeletedBlockInfo)RecycledSegmentBeforeTransaction.Clone();
+            return r;
         }
 
         /// <summary>

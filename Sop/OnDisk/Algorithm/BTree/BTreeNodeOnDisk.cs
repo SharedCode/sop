@@ -13,8 +13,28 @@ namespace Sop.OnDisk.Algorithm.BTree
     /// <summary>
     /// B-Tree Node On Disk
     /// </summary>
-    internal partial class BTreeNodeOnDisk : IInternalPersistent, Recycling.IRecyclable, IBTreeNodeOnDisk, IDisposable
+    internal partial class BTreeNodeOnDisk : IInternalPersistent, Recycling.IRecyclable, IBTreeNodeOnDisk, IDisposable, ICloneable
     {
+        public object Clone()
+        {
+            var r = new BTreeNodeOnDisk
+            {
+                Count = Count,
+                DiskBuffer = (Sop.DataBlock)DiskBuffer.Clone(),
+                HintSizeOnDisk = HintSizeOnDisk,
+                IsDirty = IsDirty,
+                ParentAddress = ParentAddress,
+                _indexOfNode = _indexOfNode
+            };
+            r.Slots = new BTreeItemOnDisk[Slots.Length];
+            Slots.CopyTo(r.Slots, 0);
+            if (ChildrenAddresses == null)
+                return r;
+            r.ChildrenAddresses = new long[ChildrenAddresses.Length];
+            ChildrenAddresses.CopyTo(r.ChildrenAddresses, 0);
+            return r;
+        }
+
         private short GetIndex(BTree.BTreeAlgorithm bTree, BTreeItemOnDisk item, out bool dupeDetected)
         {
             dupeDetected = false;
@@ -1128,6 +1148,11 @@ namespace Sop.OnDisk.Algorithm.BTree
             {
                 while (true)
                 {
+                    if (currentNode == null)
+                    {
+                        bTree.SetCurrentItemAddress(-1, 0);
+                        return false;
+                    }
                     if (currentNode.ChildrenAddresses != null)
                     {
                         currentNode = currentNode.GetChild(bTree, slotIndex);
@@ -1143,6 +1168,11 @@ namespace Sop.OnDisk.Algorithm.BTree
             }
             while (true)
             {
+                if (currentNode == null)
+                {
+                    bTree.SetCurrentItemAddress(-1, 0);
+                    return false;
+                }
                 // check if SlotIndex is within the maximum slot items and if it is, will index an occupied slot.
                 if (slotIndex < currentNode.Count)
                 {

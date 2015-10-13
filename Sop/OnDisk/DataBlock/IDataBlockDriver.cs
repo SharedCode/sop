@@ -14,7 +14,7 @@ namespace Sop.OnDisk.DataBlock
     /// and adds data block management functions within a collection
     /// of a File.
     /// </summary>
-    internal interface IDataBlockDriver : IDisposable
+    internal interface IDataBlockDriver : IDisposable, ICloneable
     {
         /// <summary>
         /// Instantiate a new Data block of a given size

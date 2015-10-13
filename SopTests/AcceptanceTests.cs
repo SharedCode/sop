@@ -73,8 +73,12 @@ namespace SopClientTests
         [TestMethod]
         public void ManyClientScenarioTest()
         {
-            // another sanity & stress tests combined, showcasing Blob updates.
+            //Sop.Log.Logger.Instance.LogLevel = Sop.Log.LogLevels.Verbose;
+            // Multiple SOP client simulator.
             var pd = new ManyClientSimulator();
+            // simulate numerous concurrent clients.
+            pd.ThreadCount = 150;
+            pd.DataInsertionThreadCount = 40;
             pd.Threaded = true;
             pd.Run();
             // Delete SOP data folder now that we're done.

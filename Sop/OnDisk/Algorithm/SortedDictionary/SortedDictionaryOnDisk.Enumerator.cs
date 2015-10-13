@@ -19,7 +19,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             public void Dispose()
             {
                 if (BTree == null) return;
-                BTree.Locker.Invoke(() => { BTree.Dispose(); });
+                BTree.Locker.Invoke(() => { BTree.Dispose(); }, OperationType.Read);
                 BTree = null;
             }
 
@@ -43,7 +43,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
                     return BTree.Locker.Invoke(() =>
                     {
                         return new KeyValuePair<TKey, TValue>((TKey)BTree.CurrentKey, (TValue)BTree.CurrentValue);
-                    });
+                    }, OperationType.Read);
                 }
             }
 
@@ -54,7 +54,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             {
                 get
                 {
-                    return BTree.Locker.Invoke(() => { return BTree.CurrentEntry; });
+                    return BTree.Locker.Invoke(() => { return BTree.CurrentEntry; }, OperationType.Read);
                 }
             }
 
@@ -65,10 +65,10 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             public bool MoveNext()
             {
                 if (!_bWasReset)
-                    return BTree.Locker.Invoke(() => { return BTree.MoveNext(); });
+                    return BTree.Locker.Invoke(() => { return BTree.MoveNext(); }, OperationType.Read);
                 else
                 {
-                    if (BTree.Locker.Invoke(() => { return BTree.Count == 0; }))
+                    if (BTree.Locker.Invoke(() => { return BTree.Count == 0; }, OperationType.Read))
                         return false;
                     _bWasReset = false;
                     return true;
@@ -85,7 +85,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
                     if (BTree.Count > 0)
                         BTree.MoveFirst();
                     BTree.HintSequentialRead = true;
-                });
+                }, OperationType.Read);
                 _bWasReset = true;
             }
 
@@ -100,7 +100,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             public void Dispose()
             {
                 if (BTree == null) return;
-                BTree.Locker.Invoke(() => { BTree.Dispose(); });
+                BTree.Locker.Invoke(() => { BTree.Dispose(); }, OperationType.Read);
                 BTree = null;
             }
 
@@ -119,7 +119,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// </summary>
             public DictionaryEntry Entry
             {
-                get { return BTree.Locker.Invoke(() => { return (DictionaryEntry)BTree.CurrentEntry; }); }
+                get { return BTree.Locker.Invoke(() => { return (DictionaryEntry)BTree.CurrentEntry; }, OperationType.Read); }
             }
 
             /// <summary>
@@ -127,7 +127,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// </summary>
             public object Key
             {
-                get { return BTree.Locker.Invoke(() => { return BTree.CurrentKey; }); }
+                get { return BTree.Locker.Invoke(() => { return BTree.CurrentKey; }, OperationType.Read); }
             }
 
             /// <summary>
@@ -135,7 +135,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             /// </summary>
             public object Value
             {
-                get { return BTree.Locker.Invoke(() => { return BTree.CurrentValue; }); }
+                get { return BTree.Locker.Invoke(() => { return BTree.CurrentValue; }, OperationType.Read); }
             }
 
             /// <summary>
@@ -145,10 +145,10 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             public bool MoveNext()
             {
                 if (!_bWasReset)
-                    return BTree.Locker.Invoke(() => { return BTree.MoveNext(); });
+                    return BTree.Locker.Invoke(() => { return BTree.MoveNext(); }, OperationType.Read);
                 else
                 {
-                    if (BTree.Locker.Invoke(() => { return BTree.Count == 0; }))
+                    if (BTree.Locker.Invoke(() => { return BTree.Count == 0; }, OperationType.Read))
                         return false;
                     _bWasReset = false;
                     return true;
@@ -165,7 +165,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
                     if (BTree.Count > 0)
                         BTree.MoveFirst();
                     BTree.HintSequentialRead = true;
-                });
+                }, OperationType.Read);
                 _bWasReset = true;
             }
 
@@ -191,7 +191,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
                                 default:
                                     return BTree.CurrentValue;
                             };
-                        });
+                        }, OperationType.Read);
                     }
                     throw new InvalidOperationException(
                         "SortedDictionaryOnDisk.Enumerator got Reset. Call one of Move functions before getting 'Current' object.");

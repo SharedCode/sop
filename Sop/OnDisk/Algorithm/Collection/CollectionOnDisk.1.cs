@@ -178,8 +178,8 @@ namespace Sop.OnDisk.Algorithm.Collection
             Parent = null;
             if (DataBlockDriver != null)
             {
-                if (!IsCloned)
-                    DataBlockDriver.Dispose();
+                //if (!IsCloned)
+                DataBlockDriver.Dispose();
                 DataBlockDriver = null;
             }
             if (OnDiskBinaryReader != null)

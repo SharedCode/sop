@@ -108,12 +108,16 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
 
         internal SortedDictionaryOnDisk(SortedDictionaryOnDisk bTree, Collections.BTree.ItemType itemType)
         {
-            BTreeAlgorithm = (Algorithm.BTree.BTreeAlgorithm) bTree.BTreeAlgorithm.Clone();
-            BTreeAlgorithm.Container = this;
-            this.File = File;
-            this.SortOrder = bTree.SortOrder;
-            this.ItemType = itemType;
-            SyncRoot = (ISynchronizer) bTree.SyncRoot;
+            // todo: specify reader lock request
+            bTree.Locker.Invoke(() =>
+            {
+                BTreeAlgorithm = (Algorithm.BTree.BTreeAlgorithm)bTree.BTreeAlgorithm.Clone();
+                SyncRoot = (ISynchronizer)bTree.SyncRoot;
+                BTreeAlgorithm.Container = this;
+                this.File = File;
+                this.SortOrder = bTree.SortOrder;
+                this.ItemType = itemType;
+            });
         }
 
         private void dispose()
@@ -122,7 +126,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             if (Container != null)
             {
                 if (!IsCloned)
-                    ((SortedDictionaryOnDisk) Container).RemoveInMemory(this.DataAddress);
+                    ((SortedDictionaryOnDisk) Container).RemoveInMemory(DataAddress);
                 Container = null;
             }
             if (_keys != null)
@@ -1332,7 +1336,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             private
             set
             {
-                _syncRoot = BTreeAlgorithm.SyncRoot = value;
+                _syncRoot = value;
             }
         }
         private object _syncRoot;

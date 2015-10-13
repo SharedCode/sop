@@ -46,7 +46,7 @@ namespace Sop.Linq
                 _store.Locker.Invoke(() =>
                 {
                     _store.Dispose();
-                });
+                }, OperationType.Read);
                 _store = null;
             }
 
@@ -56,47 +56,85 @@ namespace Sop.Linq
             }
             public bool MoveNext()
             {
+                currentEntry = default(DictionaryEntry);
                 // if index points to pre-1st element...
                 if (_keyIndex < 0)
                 {
                     _keyIndex++;
-                    if (_store.Locker.Invoke(_store.Search, (object)_keys[_keyIndex], true))
-                        return true;
+                    _store.Locker.Lock(OperationType.Read);
+                    try
+                    {
+                        if (_store.Search(_keys[_keyIndex], true))
+                        {
+                            currentEntry = _store.CurrentEntry;
+                            return true;
+                        }
+                    }
+                    finally
+                    {
+                        _store.Locker.Unlock(OperationType.Read);
+                    }
+
                     while (++_keyIndex <= _keys.Length - 1)
                     {
-                        if (_store.Locker.Invoke(_store.Search, (object)_keys[_keyIndex], true))
-                            return true;
+                        _store.Locker.Lock(OperationType.Read);
+                        try
+                        {
+                            if (_store.Search(_keys[_keyIndex], true))
+                            {
+                                currentEntry = _store.CurrentEntry;
+                                return true;
+                            }
+                        }
+                        finally
+                        {
+                            _store.Locker.Unlock(OperationType.Read);
+                        }
                     }
                     return false;
                 }
                 // move store pointer to next element and if it has same key as current one in keys array,
                 // just return true so Store can return this element.
-                _store.Locker.Lock();
+                _store.Locker.Lock(OperationType.Read);
                 try
                 {
+
                     if (_store.MoveNext() &&
                         _store.Comparer.Compare(_store.CurrentKey, _keys[_keyIndex]) == 0)
+                    {
+                        currentEntry = _store.CurrentEntry;
                         return true;
+                    }
                 }
                 finally
                 {
-                    _store.Locker.Unlock();
+                    _store.Locker.Unlock(OperationType.Read);
                 }
                 while (++_keyIndex <= _keys.Length - 1)
                 {
-                    if (_store.Locker.Invoke(_store.Search, (object)_keys[_keyIndex], true))
-                        return true;
+                    _store.Locker.Lock(OperationType.Read);
+                    try {
+                        if (_store.Search(_keys[_keyIndex], true))
+                        {
+                            currentEntry = _store.CurrentEntry;
+                            return true;
+                        }
+                    }
+                    finally
+                    {
+                        _store.Locker.Unlock(OperationType.Read);
+                    }
                 }
                 return false;
             }
-
+            private DictionaryEntry currentEntry;
             public KeyValuePair<TKey, TValue> Current
             {
                 get
                 {
-                    _store.Locker.Lock();
-                    var ce = _store.CurrentEntry;
-                    _store.Locker.Unlock();
+                    var ce = currentEntry;
+                    if (ce.Key == null)
+                        return new KeyValuePair<TKey, TValue>(default(TKey), default(TValue));
                     return new KeyValuePair<TKey, TValue>((TKey)ce.Key, (TValue)ce.Value);
                 }
             }
@@ -105,10 +143,7 @@ namespace Sop.Linq
             {
                 get
                 {
-                    _store.Locker.Lock();
-                    var ce = _store.CurrentEntry;
-                    _store.Locker.Unlock();
-                    return ce;
+                    return currentEntry;
                 }
             }
         }
@@ -165,7 +200,7 @@ namespace Sop.Linq
                 _target.Locker.Invoke(() =>
                 {
                     _target.Dispose();
-                });
+                }, OperationType.Read);
                 _target = null;
                 _source.Dispose();
                 _source = null;
@@ -178,39 +213,74 @@ namespace Sop.Linq
             }
             public bool MoveNext()
             {
+                currentEntry = default(DictionaryEntry);
                 // if index points to pre-1st element...
                 if (_wasReset)
                 {
                     _wasReset = false;
                     if (!_source.MoveNext())
                         return false;
-                    if (_target.Locker.Invoke(_target.Search, (object)_sourceKeyExtractor(_source.Current), true))
-                        return true;
+                    _target.Locker.Lock(OperationType.Read);
+                    try
+                    {
+                        if (_target.Search(_sourceKeyExtractor(_source.Current), true))
+                        {
+                            currentEntry = _target.CurrentEntry;
+                            return true;
+                        }
+                    }
+                    finally
+                    {
+                        _target.Locker.Unlock(OperationType.Read);
+                    }
                     while (_source.MoveNext())
                     {
-                        if (_target.Locker.Invoke(_target.Search, (object)_sourceKeyExtractor(_source.Current), true))
-                            return true;
+                        _target.Locker.Lock(OperationType.Read);
+                        try
+                        {
+                            if (_target.Search(_sourceKeyExtractor(_source.Current), true))
+                            {
+                                currentEntry = _target.CurrentEntry;
+                                return true;
+                            }
+                        }
+                        finally
+                        {
+                            _target.Locker.Unlock(OperationType.Read);
+                        }
                     }
                     return false;
                 }
                 // move store pointer to next element and if it has same key as current one in keys array,
                 // just return true so Store can return this element.
-                _target.Locker.Lock();
+                _target.Locker.Lock(OperationType.Read);
                 try
                 {
                     if (_target.MoveNext() &&
                         _target.Comparer.Compare(_target.CurrentKey, _sourceKeyExtractor(_source.Current)) == 0)
+                    {
+                        currentEntry = _target.CurrentEntry;
                         return true;
+                    }
                 }
                 finally
                 {
-                    _target.Locker.Unlock();
+                    _target.Locker.Unlock(OperationType.Read);
                 }
                 while (SourceMoveNextUniqueKey())
                 {
-                    if (_target.Locker.Invoke(_target.Search, (object)_sourceKeyExtractor(_source.Current), true))
+                    _target.Locker.Lock(OperationType.Read);
+                    try
                     {
-                        return true;
+                        if (_target.Search(_sourceKeyExtractor(_source.Current), true))
+                        {
+                            currentEntry = _target.CurrentEntry;
+                            return true;
+                        }
+                    }
+                    finally
+                    {
+                        _target.Locker.Unlock(OperationType.Read);
                     }
                 }
                 return false;
@@ -226,14 +296,11 @@ namespace Sop.Linq
                 }
                 return false;
             }
-
             public KeyValuePair<TKey, TValue> Current
             {
                 get
                 {
-                    _target.Locker.Lock();
-                    var ce = _target.CurrentEntry;
-                    _target.Locker.Unlock();
+                    var ce = currentEntry;
                     return new KeyValuePair<TKey, TValue>((TKey)ce.Key, (TValue)ce.Value);
                 }
             }
@@ -242,13 +309,13 @@ namespace Sop.Linq
             {
                 get
                 {
-                    _target.Locker.Lock();
-                    var ce = _target.CurrentEntry;
-                    _target.Locker.Unlock();
-                    return ce;
+                    return currentEntry;
                 }
             }
+
+            private DictionaryEntry currentEntry;
         }
+
         class EnumerableEnumeratorFilter<TKey, TValue, TSourceKey, TSourceValue> : IEnumerable<KeyValuePair<TKey, TValue>>
         {
             private ISortedDictionary<TKey, TValue> _target;

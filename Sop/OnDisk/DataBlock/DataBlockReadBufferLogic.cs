@@ -12,7 +12,7 @@ namespace Sop.OnDisk.DataBlock
     /// <summary>
     /// Data Block Read ahead buffer logic.
     /// </summary>
-    internal class DataBlockReadBufferLogic
+    internal class DataBlockReadBufferLogic : ICloneable
     {
         public DataBlockReadBufferLogic() { }
         public DataBlockReadBufferLogic(DataBlockReadBufferLogic source)
@@ -27,6 +27,20 @@ namespace Sop.OnDisk.DataBlock
             buffer.CopyTo(_readBuffer, 0);
             this._readBufferDataAddress = dataAddress;
             this._readBufferSize = dataSize;
+        }
+
+        public object Clone()
+        {
+            var r = new DataBlockReadBufferLogic
+            {
+                _readBufferSize = _readBufferSize,
+                _readBufferDataAddress = _readBufferDataAddress
+            };
+            if (_readBuffer == null)
+                return r;
+            r._readBuffer = new byte[_readBuffer.Length];
+            _readBuffer.CopyTo(r._readBuffer, 0);
+            return r;
         }
 
         public void Read(FileStream fileStream, long dataAddress, int dataSize)

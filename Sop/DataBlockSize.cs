@@ -2,7 +2,6 @@
 // Open Source License: MIT. Free to use, reuse, extend, royalty free redistribution.
 // Have fun Coding! ;)
 
-
 namespace Sop
 {
     /// <summary>
@@ -38,6 +37,7 @@ namespace Sop
         //</summary>
         FiveTwelve = 512,
 
+        #region could be useful when WIN32/.Net unbuffered I/O supports this w/o causing data alignment issue per SOP expectation.
         //TenTwentyFour = 1024,
 
         /// <summary>
@@ -84,6 +84,7 @@ namespace Sop
         ///// 524288 bytes.
         ///// </summary>
         //FiveTwentyFourTwoEightyEight = 524288,
+        #endregion
 
         /// <summary>
         /// Maximum is 524288 bytes.

@@ -129,9 +129,11 @@
     </Compile>
     <Compile Include="Mru\IMruManager.cs" />
     <Compile Include="Mru\ConcurrentMruManager.cs" />
+    <Compile Include="OnDisk\Algorithm\SharedData.cs" />
     <Compile Include="Synchronizer\ISynchronizer.cs">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Synchronizer\SynchronizerMultiReaderBase.cs" />
     <Compile Include="Synchronizer\SynchronizerBase.cs" />
     <Compile Include="Synchronizer\Synchronizer.cs" />
     <Compile Include="Collections\BTree\IDictionary.cs">

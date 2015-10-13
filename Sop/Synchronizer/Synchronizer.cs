@@ -8,7 +8,7 @@ namespace Sop.Synchronization
     /// Synchronizer with a secondary signaling mechanism mostly adept for
     /// (global) Transaction Commit that orchestrate locks of all Stores in the App.
     /// </summary>
-    public class Synchronizer : SynchronizerBase
+    public class Synchronizer : SynchronizerMultiReaderBase
     {
         class CommitLockEvent
         {
@@ -25,7 +25,7 @@ namespace Sop.Synchronization
             {
                 _commitLocker.Lock();
             }
-            private SynchronizerBase _commitLocker = new SynchronizerBase();
+            private SynchronizerMultiReaderBase _commitLocker = new SynchronizerMultiReaderBase();
         }
         /// <summary>
         /// During Commit, the Server will call this method to signal that a Commit

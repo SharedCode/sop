@@ -265,19 +265,22 @@ namespace Sop.OnDisk.File
                 Btree.Locker.Unlock();
             }
             List<ISynchronizer> result = null;
-            foreach (MruItem o in Btree.MruManager.Values)
+            if (Btree.MruManager.Count > 0)
             {
-                for (int i = 0; i < ((BTreeNodeOnDisk)o.Value).Count; i++)
+                foreach (MruItem o in Btree.MruManager.Values)
                 {
-                    object f = ((BTreeNodeOnDisk)o.Value).Slots[i].Value.Data;
-                    if (f is File)
+                    for (int i = 0; i < ((BTreeNodeOnDisk)o.Value).Count; i++)
                     {
-                        var r = ((File)f).ManageLock(lockFiles);
-                        if (r == null)
-                            continue;
-                        if (result == null)
-                            result = r;
-                        result.AddRange(r);
+                        object f = ((BTreeNodeOnDisk)o.Value).Slots[i].Value.Data;
+                        if (f is File)
+                        {
+                            var r = ((File)f).ManageLock(lockFiles);
+                            if (r == null)
+                                continue;
+                            if (result == null)
+                                result = r;
+                            result.AddRange(r);
+                        }
                     }
                 }
             }

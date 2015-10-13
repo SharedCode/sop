@@ -813,13 +813,13 @@ namespace Sop.OnDisk.Algorithm.Collection
                     if (Blocks.Count >= maxBlocks)
                     {
                         WriteBlocksToDisk(parent, Blocks, clear);
-                        if (DataBlockDriver.BlockRecycler == null)
-                        {
-                            ((DataBlockDriver)DataBlockDriver).BlockRecycler =
-                                new DataBlockRecycler(File.Profile.MaxInMemoryBlockCount);
-                            ((DataBlockRecycler)((DataBlockDriver)DataBlockDriver).BlockRecycler).PreAllocateBlocks(DataBlockSize);
-                        }
-                        DataBlockDriver.BlockRecycler.Recycle(Blocks.Values);
+                        //if (DataBlockDriver.BlockRecycler == null)
+                        //{
+                        //    ((DataBlockDriver)DataBlockDriver).BlockRecycler =
+                        //        new DataBlockRecycler(File.Profile.MaxInMemoryBlockCount);
+                        //    ((DataBlockRecycler)((DataBlockDriver)DataBlockDriver).BlockRecycler).PreAllocateBlocks(DataBlockSize);
+                        //}
+                        //DataBlockDriver.BlockRecycler.Recycle(Blocks.Values);
                         Blocks.Clear();
                     }
                     _inSaveBlocks = false;

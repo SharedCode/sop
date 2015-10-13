@@ -18,37 +18,31 @@ namespace Sop.Samples
 
         public void Run()
         {
-            const int ThreadCount = 20;
             Console.WriteLine("Start of Many Client Simulator demo.");
             using (var Server = new ObjectServer(ServerFilename, true))
             {
                 // Pre-populate store to simulate production store with existing items.
-                AddItems(Server);
+                IStoreFactory sf = new StoreFactory();
+                var PeopleStore = sf.Get<long, Person>(Server.SystemFile.Store, "People");
+                AddItems(Server, PeopleStore);
 
                 List<Action> actions = new List<Action>();
                 // create threads that will populate Virtual Cache and retrieve the items.
                 for (int i = 0; i < ThreadCount; i++)
                 {
-                    // function to execute by the thread.
-                    if (i < 4)
+                    // specify Insertion delegate
+                    if (i < DataInsertionThreadCount)
                     {
                         actions.Add(() =>
                         {
-                            AddItems(Server);
+                            AddItems(Server, PeopleStore);
                         });
                         continue;
                     }
+                    // specify Reader delegate
                     actions.Add(() =>
                     {
-                        ReadItems(Server);
-                    });
-                }
-                for (int i = 0; i < ThreadCount; i++)
-                {
-                    // function to execute by the thread.
-                    actions.Add(() =>
-                    {
-                        ReadItems(Server);
+                        ReadItems(Server, PeopleStore);
                     });
                 }
 
@@ -64,8 +58,8 @@ namespace Sop.Samples
                 // wait until all threads are finished.
                 if (Threaded)
                     Task.WaitAll(tasks.ToArray());
-                IStoreFactory sf = new StoreFactory();
-                var PeopleStore = sf.Get<long, Person>(Server.SystemFile.Store, "People");
+                //IStoreFactory sf = new StoreFactory();
+                //var PeopleStore = sf.Get<long, Person>(Server.SystemFile.Store, "People");
                 Console.WriteLine("Processed, inserted & queried/enumerated multiple times, a total of {0} records.", PeopleStore.Count);
                 Console.WriteLine("End of Many Client Simulator demo.");
             }
@@ -83,10 +77,10 @@ namespace Sop.Samples
         }
 
         const int ItemCount = 10000;
-        private void AddItems(IObjectServer server)
+        private void AddItems(IObjectServer server, ISortedDictionary<long, Person> PeopleStore)
         {
-            IStoreFactory sf = new StoreFactory();
-            var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
+            //IStoreFactory sf = new StoreFactory();
+            //var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
             for (int i = 0; i < ItemCount; i++)
             {
                 var id = PeopleStore.GetNextSequence();
@@ -99,10 +93,10 @@ namespace Sop.Samples
                     }));
             }
         }
-        private void ReadItems(IObjectServer server)
+        private void ReadItems(IObjectServer server, ISortedDictionary<long, Person> PeopleStore)
         {
-            IStoreFactory sf = new StoreFactory();
-            var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
+            //IStoreFactory sf = new StoreFactory();
+            //var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
             var r = new Random();
             var maxValue = (int)(PeopleStore.CurrentSequence / ItemCount);
             if (maxValue <= 0)
@@ -121,16 +115,22 @@ namespace Sop.Samples
             c = 0;
             foreach (var p in qry)
             {
+                if (p.Value == null)
+                {
+                    Console.WriteLine("Person with no Value found from DB.");
+                    continue;
+                }
                 var personName = string.Format("{0} {1}", p.Value.FirstName, p.Value.LastName);
                 if (p.Key % 100 == 0)
                     Console.WriteLine("Person found {0} from DB.", personName);
                 if (keys[c] != p.Key)
-                    throw new Exception(string.Format("Failed, didn't find person with key {0}, found {1} instead.",
-                        keys[c], p.Key));
+                    Console.WriteLine(string.Format("Failed, didn't find person with key {0}, found {1} instead.", keys[c], p.Key));
                 c++;
             }
         }
 
+        public int DataInsertionThreadCount = 5;
+        public int ThreadCount = 20;
         public const string ServerFilename = "SopBin\\OServer.dta";
     }
 }
