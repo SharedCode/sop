@@ -100,8 +100,8 @@ namespace Sop.Samples
                             }));
                     }
                 });
-                if (i > 0 && i % 50 == 0)
-                    System.Threading.Thread.Sleep(1);
+                //if (i > 0 && i % 10 == 0)
+                System.Threading.Thread.Sleep(3);
             }
         }
         private void ReadItems(IObjectServer server, ISortedDictionary<long, Person> PeopleStore)

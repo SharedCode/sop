@@ -1597,10 +1597,12 @@ namespace Sop.OnDisk.Algorithm.BTree
             BTreeNodeOnDisk[] children = null;
             if (this.ChildrenAddresses != null)
             {
+                var childrenAddresses = new long[ChildrenAddresses.Length];
+                ChildrenAddresses.CopyTo(childrenAddresses, 0);
                 short slotLength = (short) this.Slots.Length;
                 children = new BTreeNodeOnDisk[slotLength + 1];
-                for (int i = 0; i < this.ChildrenAddresses.Length && ChildrenAddresses[i] > 0; i++)
-                    children[i] = GetNode(bTree, ChildrenAddresses[i]);
+                for (int i = 0; i < childrenAddresses.Length && childrenAddresses[i] > 0; i++)
+                    children[i] = GetNode(bTree, childrenAddresses[i]);
             }
             return children;
         }

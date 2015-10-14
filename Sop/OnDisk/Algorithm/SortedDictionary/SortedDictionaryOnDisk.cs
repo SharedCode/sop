@@ -106,9 +106,9 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             this.File = file;
         }
 
-        internal SortedDictionaryOnDisk(SortedDictionaryOnDisk bTree, Collections.BTree.ItemType itemType)
+        internal SortedDictionaryOnDisk(SortedDictionaryOnDisk bTree, Collections.BTree.ItemType itemType,
+            OperationType requestOperation = OperationType.Read)
         {
-            // todo: specify reader lock request
             bTree.Locker.Invoke(() =>
             {
                 BTreeAlgorithm = (Algorithm.BTree.BTreeAlgorithm)bTree.BTreeAlgorithm.Clone();
@@ -117,7 +117,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
                 this.File = File;
                 this.SortOrder = bTree.SortOrder;
                 this.ItemType = itemType;
-            });
+            }, requestOperation);
         }
 
         private void dispose()

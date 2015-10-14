@@ -30,35 +30,16 @@ namespace Sop.Synchronization
             if (TransactionRollback)
                 RaiseRollbackException();
 
-            var result = lockCount;
-            var isNotLocked = result == 0;
-            var isFirstWriter = writeLockCount == 0;
             if (requestedOperation == OperationType.Read)
-            {
-                //readerWriter.EnterReadLock();
-                if (!isFirstWriter || isNotLocked)
-                {
-                    if (isNotLocked)
-                        lockCount++;
-                    Monitor.Enter(locker);
-                }
-            }
+                readerWriter.EnterReadLock();
             else
-            {
-                //readerWriter.EnterWriteLock();
-                if (isFirstWriter)
-                    writeLockCount++;
-                Monitor.Enter(locker);
-                if (!isFirstWriter)
-                    writeLockCount++;
-            }
-            result++;
-            if (!isNotLocked)
-                lockCount++;
+                readerWriter.EnterWriteLock();
+
             if (TransactionRollback)
             {
                 try
                 {
+                    Interlocked.Increment(ref lockCount);
                     RaiseRollbackException();
                 }
                 finally
@@ -66,26 +47,18 @@ namespace Sop.Synchronization
                     Unlock(requestedOperation);
                 }
             }
-            return result;
+            return Interlocked.Increment(ref lockCount);
         }
         /// <summary>
         /// Unlock Synchronizer.
         /// </summary>
         virtual public int Unlock(OperationType requestedOperation = OperationType.Write)
         {
-            var result = --lockCount;
+            var result = Interlocked.Decrement(ref lockCount);
             if (requestedOperation == OperationType.Read)
-            {
-                //readerWriter.ExitReadLock();
-                if (result > 0)
-                    return result;
-            }
+                readerWriter.ExitReadLock();
             else
-                writeLockCount--;
-            //else
-            //    readerWriter.ExitWriteLock();
-            if (Monitor.IsEntered(locker))
-                Monitor.Exit(locker);
+                readerWriter.ExitWriteLock();
             return result;
         }
 
@@ -180,9 +153,14 @@ namespace Sop.Synchronization
         /// false otherwise.
         /// </summary>
         public bool TransactionRollback { get; internal set; }
-        private object locker = new object();
-        private volatile int writeLockCount;
-        protected volatile int lockCount;
-        //private ReaderWriterLockSlim readerWriter = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
+        protected int LockCount
+        {
+            get
+            {
+                return lockCount;
+            }
+        }
+        private volatile int lockCount;
+        private ReaderWriterLockSlim readerWriter = new ReaderWriterLockSlim(LockRecursionPolicy.SupportsRecursion);
     }
 }

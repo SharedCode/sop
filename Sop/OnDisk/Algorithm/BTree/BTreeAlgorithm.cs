@@ -715,7 +715,8 @@ namespace Sop.OnDisk.Algorithm.BTree
             base.Close();
             if (DataSet != null)
                 DataSet.Close();
-            KeySet.Close();
+            if (KeySet != null)
+                KeySet.Close();
             SetCurrentItemAddress(-1, 0);
 
             if (!IsCloned && RootNode != null)

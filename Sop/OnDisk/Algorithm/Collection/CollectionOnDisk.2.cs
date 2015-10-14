@@ -256,7 +256,7 @@ namespace Sop.OnDisk.Algorithm.Collection
                     OnCommit();
                 if (IsDirty && !IsCloned && DataAddress >= 0 && Count > 0)
                     Flush();
-                if (deletedBlocks != null)
+                if (!IsCloned && deletedBlocks != null)
                     deletedBlocks.Close();
                 miscCollsClosed = true;
                 if (DataBlockDriver != null)
@@ -295,7 +295,7 @@ namespace Sop.OnDisk.Algorithm.Collection
             }
             if (!miscCollsClosed)
             {
-                if (deletedBlocks != null)
+                if (!IsCloned && deletedBlocks != null)
                     deletedBlocks.Close();
             }
             if (_isUnloading)
@@ -676,6 +676,7 @@ namespace Sop.OnDisk.Algorithm.Collection
                 }
 
                 if (_instanceTransaction == null &&
+                    File != null && File.Server != null &&
                     File.Server.Transaction != null &&
                     ((Sop.Transaction.TransactionBase)File.Server.Transaction).Children != null &&
                     ((Sop.Transaction.TransactionBase)File.Server.Transaction).Children.Count > 0)
