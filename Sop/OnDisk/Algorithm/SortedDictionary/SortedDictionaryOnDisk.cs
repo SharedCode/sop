@@ -111,6 +111,14 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
         {
             bTree.Locker.Invoke(() =>
             {
+                if (bTree.IsDirty)
+                {
+                    lock (bTree)
+                    {
+                        if (bTree.IsDirty)
+                            bTree.Flush();
+                    }
+                }
                 BTreeAlgorithm = (Algorithm.BTree.BTreeAlgorithm)bTree.BTreeAlgorithm.Clone();
                 SyncRoot = (ISynchronizer)bTree.SyncRoot;
                 BTreeAlgorithm.Container = this;

@@ -31,9 +31,13 @@ namespace Sop.Synchronization
                 RaiseRollbackException();
 
             if (requestedOperation == OperationType.Read)
+            {
                 readerWriter.EnterReadLock();
+            }
             else
+            {
                 readerWriter.EnterWriteLock();
+            }
 
             if (TransactionRollback)
             {
@@ -56,7 +60,9 @@ namespace Sop.Synchronization
         {
             var result = Interlocked.Decrement(ref lockCount);
             if (requestedOperation == OperationType.Read)
+            {
                 readerWriter.ExitReadLock();
+            }
             else
                 readerWriter.ExitWriteLock();
             return result;

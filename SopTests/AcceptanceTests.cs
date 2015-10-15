@@ -73,19 +73,20 @@ namespace SopClientTests
         [TestMethod]
         public void ManyClientScenarioTest()
         {
-            //Sop.Log.Logger.Instance.LogLevel = Sop.Log.LogLevels.Error;
             // Multiple SOP client simulator.
             var pd = new ManyClientSimulator();
             pd.DeleteDataFolder(ManyClientSimulator.ServerFilename);
-            // simulate numerous concurrent clients.
-            pd.ThreadCount = 250;   //100
-            pd.DataInsertionThreadCount = 75;   //35
+            // simulate numerous parallel clients.
+            pd.ThreadCount = 250;
+            pd.DataInsertionThreadCount = 75;
             pd.Threaded = true;
             pd.Run();
+
+            // now, read them all. :)
             pd.DataInsertionThreadCount = 0;
             Console.WriteLine();
             Console.WriteLine();
-            Console.WriteLine("Starting with all reader threads.");
+            Console.WriteLine("Starting with 250 reader threads.");
             pd.Run();
             // Delete SOP data folder now that we're done.
             pd.DeleteDataFolder(ManyClientSimulator.ServerFilename);
