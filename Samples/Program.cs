@@ -61,6 +61,22 @@ namespace Sop.Samples
         };
 		public static void Main()
 		{
+
+            // Multiple SOP client simulator.
+            var pd2 = new ManyClientSimulator();
+            pd2.DeleteDataFolder(ManyClientSimulator.ServerFilename);
+            // simulate numerous parallel clients.
+            //pd2.ThreadCount = 250;
+            //pd2.DataInsertionThreadCount = 75;
+
+            pd2.ThreadCount = 250;
+            pd2.DataInsertionThreadCount = 75;
+
+            pd2.Threaded = true;
+            pd2.Run();
+            return;
+
+
             var demo = DemoType.Store400;
                 //.VirtualCacheMemoryExtenderMultipleClients;    //VirtualCacheMemoryExtenderReCreate;
             dynamic pd = null;

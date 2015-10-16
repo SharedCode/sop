@@ -43,7 +43,7 @@ namespace Sop.Synchronization
             {
                 try
                 {
-                    Interlocked.Increment(ref lockCount);
+                    ++lockCount;
                     RaiseRollbackException();
                 }
                 finally
@@ -51,14 +51,14 @@ namespace Sop.Synchronization
                     Unlock(requestedOperation);
                 }
             }
-            return Interlocked.Increment(ref lockCount);
+            return ++lockCount;
         }
         /// <summary>
         /// Unlock Synchronizer.
         /// </summary>
         virtual public int Unlock(OperationType requestedOperation = OperationType.Write)
         {
-            var result = Interlocked.Decrement(ref lockCount);
+            var result = --lockCount;
             if (requestedOperation == OperationType.Read)
             {
                 readerWriter.ExitReadLock();

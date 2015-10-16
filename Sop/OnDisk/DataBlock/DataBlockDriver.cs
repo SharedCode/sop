@@ -57,10 +57,12 @@ namespace Sop.OnDisk.DataBlock
 
         public object Clone()
         {
+            var hd = (HeaderData)HeaderData.Clone();
+            var rab = (DataBlockReadBufferLogic)_readAheadBuffer.Clone();
             return new DataBlockDriver
             {
-                HeaderData = (HeaderData)HeaderData.Clone(),
-                _readAheadBuffer = (DataBlockReadBufferLogic)_readAheadBuffer.Clone(),
+                HeaderData = hd,
+                _readAheadBuffer = rab
             };
         }
 

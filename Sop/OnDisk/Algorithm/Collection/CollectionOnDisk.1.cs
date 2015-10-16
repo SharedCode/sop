@@ -168,6 +168,13 @@ namespace Sop.OnDisk.Algorithm.Collection
         /// </summary>
         protected internal virtual void InternalDispose()
         {
+            // note: SOP's Dispose pattern is created to provide way to do early
+            // garbage collection of the "graph" objects, simply. Not for freeing up unmanaged
+            // resources, thus, no finalizer/SafeHandle "patterns". All members are "virtualized"
+            // objects and they have custom Dispose for the same.
+            if (isDisposed) return;
+            isDisposed = true;
+            // FileStream is a wrapper, not the .Net FileStream.
             if (FileStream != null)
                 Close();
             if (deletedBlocks != null)
@@ -195,6 +202,15 @@ namespace Sop.OnDisk.Algorithm.Collection
             _instanceTransaction = null;
             _parentTransactionLogger = null;
             File = null;
+            Blocks = null;
+        }
+        private bool isDisposed;
+        protected bool IsDisposed
+        {
+            get
+            {
+                return isDisposed;
+            }
         }
 
         /// <summary>

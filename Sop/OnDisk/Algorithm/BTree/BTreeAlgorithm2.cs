@@ -27,7 +27,7 @@ namespace Sop.OnDisk.Algorithm.BTree
 
         protected internal override void InternalDispose()
         {
-            if (Comparer == null) return;
+            if (IsDisposed) return;
             Container = null;
             HintSequentialRead = false;
             //compareNode = null;
@@ -966,10 +966,11 @@ namespace Sop.OnDisk.Algorithm.BTree
             r.MruMaxCapacity = MruMaxCapacity;
 
             //r.MruManager = MruManager;
+            //r.Blocks = Blocks;
+            //r.PromoteLookup = PromoteLookup;
+
             //r.MruManager = new MruManager(((ConcurrentMruManager)MruManager).realMruManager);
             r.MruManager = new MruManager(MruMinCapacity, MruMaxCapacity);
-
-            //r.Blocks = Blocks;
             r.Blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>(
                 ((Collections.Generic.ConcurrentSortedDictionary<long, Sop.DataBlock>)Blocks).Btree
                 );
