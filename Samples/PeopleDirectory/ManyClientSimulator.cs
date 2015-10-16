@@ -119,11 +119,12 @@ namespace Sop.Samples
             if (maxValue <= 0)
                 maxValue = 1;
             maxValue *= 10;
-            var i = r.Next(maxValue) * 1000;
-            var keys = new long[100];
+            var ItemsToRead = 1000;
+            var i = r.Next(maxValue) * ItemsToRead;
+            var keys = new long[200];
 
             int logicalIndex = 0;
-            for (int i2 = 0; i2 < 10; i2++)
+            for (int i2 = 0; i2 < ItemsToRead / keys.Length; i2++)
             {
                 int c;
                 for (c = 0; c < keys.Length; c++)
@@ -131,6 +132,7 @@ namespace Sop.Samples
                     keys[c] = ++logicalIndex + i + 1;
                 }
                 // just use Store and do Linq to Objects. Store & enumerators are thread safe.
+                // todo: use batch query.
                 var qry = from a in PeopleStore.Query(keys, true) select a;
                 c = 0;
                 foreach (var p in qry)

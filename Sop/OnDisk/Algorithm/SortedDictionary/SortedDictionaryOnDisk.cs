@@ -119,8 +119,8 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
                             bTree.Flush();
                     }
                 }
-                BTreeAlgorithm = (Algorithm.BTree.BTreeAlgorithm)bTree.BTreeAlgorithm.Clone();
                 SyncRoot = (ISynchronizer)bTree.SyncRoot;
+                BTreeAlgorithm = (Algorithm.BTree.BTreeAlgorithm)bTree.BTreeAlgorithm.Clone();
                 BTreeAlgorithm.Container = this;
                 this.File = File;
                 BTreeAlgorithm.CurrentSortOrder = bTree.SortOrder;

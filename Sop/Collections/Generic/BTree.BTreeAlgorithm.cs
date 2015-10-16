@@ -329,15 +329,17 @@ namespace Sop.Collections.Generic.BTree
         private void Initialize(BTreeAlgorithm<TKey, TValue> bTree)
         {
             this.SlotLength = bTree.SlotLength;
-            this.Root = bTree.Root;
-
+            this.Comparer = bTree.Comparer;
+            this.Root = new TreeRootNode(this);
+            //this.Root = bTree.Root;
             //Copy CurrentItem. "Copy" as CurrentItem is value type.
             this.CurrentItem = bTree.CurrentItem;
-
-            this.Comparer = bTree.Comparer;
             // create another set of temporary slots for thread safe 'Search' operation support
             _tempSlots = new BTreeItem<TKey, TValue>[SlotLength + 1];
             _tempChildren = new TreeNode[SlotLength + 2];
+
+            // copy the tree graph.
+            bTree.Locker.Invoke(() => { Copy(bTree); });
         }
 
         /// <summary>

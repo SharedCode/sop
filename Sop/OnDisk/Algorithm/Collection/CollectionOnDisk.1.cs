@@ -425,8 +425,8 @@ namespace Sop.OnDisk.Algorithm.Collection
                     var collectionOnDisk = Parent as CollectionOnDisk;
                     if (collectionOnDisk != null)
                         return (collectionOnDisk).Blocks;
-                    //_blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>();
-                    _blocks = new Collections.Generic.ConcurrentSortedDictionary<long, Sop.DataBlock>();
+                    //_blocks = new Collections.Generic.ConcurrentSortedDictionary<long, Sop.DataBlock>();
+                    _blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>();
                 }
                 return _blocks;
             }

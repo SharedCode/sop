@@ -783,9 +783,8 @@ namespace Sop.OnDisk.Algorithm.BTree
         
         internal bool InMaintenanceMode = false;
         internal Collections.Generic.ISortedDictionary<long, BTreeNodeOnDisk> PromoteLookup =
-            new Collections.Generic.ConcurrentSortedDictionary<long, BTreeNodeOnDisk>();
-        //internal Collections.Generic.ISortedDictionary<long, BTreeNodeOnDisk> PromoteLookup =
-        //    new Collections.Generic.SortedDictionary<long, BTreeNodeOnDisk>();
+            //new Collections.Generic.ConcurrentSortedDictionary<long, BTreeNodeOnDisk>();
+            new Collections.Generic.SortedDictionary<long, BTreeNodeOnDisk>();
 
         /// <summary>
         /// Address on disk/virtual store of this B-Tree
@@ -923,6 +922,7 @@ namespace Sop.OnDisk.Algorithm.BTree
         public object Clone()
         {
             var r = new BTreeAlgorithm();
+            r.SyncRoot = SyncRoot;
             r.Name = Name;
             r.DataBlockDriver = (DataBlockDriver)DataBlockDriver.Clone();
             r.DataBlockSize = DataBlockSize;
@@ -935,7 +935,6 @@ namespace Sop.OnDisk.Algorithm.BTree
             r.onKeyUnpack = onKeyUnpack;
             r.onValuePack = onValuePack;
             r.onValueUnpack = onValueUnpack;
-            r.SyncRoot = SyncRoot;
             r.DataBlockSize = DataBlockSize;
             r.HintKeySizeOnDisk = HintKeySizeOnDisk;
             r.HintSizeOnDisk = HintSizeOnDisk;
@@ -972,7 +971,7 @@ namespace Sop.OnDisk.Algorithm.BTree
             //r.MruManager = new MruManager(((ConcurrentMruManager)MruManager).realMruManager);
             r.MruManager = new MruManager(MruMinCapacity, MruMaxCapacity);
             r.Blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>(
-                ((Collections.Generic.ConcurrentSortedDictionary<long, Sop.DataBlock>)Blocks).Btree
+                ((Collections.Generic.SortedDictionary<long, Sop.DataBlock>)Blocks).Btree
                 );
             // we need a single threaded version of sorted dict. as Clones are designed for single thread use.
             r.PromoteLookup = new Collections.Generic.SortedDictionary<long, BTreeNodeOnDisk>();
