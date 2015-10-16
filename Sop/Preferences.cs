@@ -19,8 +19,8 @@ namespace Sop
     {
         public Preferences()
         {
-            // defaults to 5 MB store segment size.
-            StoreSegmentSizeInKb = 1024 * 5;
+            // defaults xMB store segment size.
+            StoreSegmentSizeInKb = 1024;
             DataBlockSize = Sop.DataBlockSize.Minimum;
             // default mem use limit
             MemoryLimitInPercent = 40;

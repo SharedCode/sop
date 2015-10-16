@@ -20,7 +20,10 @@ namespace Sop.Samples
         {
             Console.WriteLine("Start of Many Client Simulator demo.");
             var time1 = DateTime.Now;
-            using (var Server = new ObjectServer(ServerFilename, true))
+            using (var Server = new ObjectServer(ServerFilename, true, 
+                new Preferences {  StoreSegmentSizeInKb = 1024  * 5}))
+                // set store segment size to 5MB, more intensive 
+                // data I/O could use lesser Segment resize. Default is 1MB.
             {
                 // Pre-populate store to simulate production store with existing items.
                 IStoreFactory sf = new StoreFactory();
@@ -64,7 +67,8 @@ namespace Sop.Samples
                     Task.WaitAll(tasks.ToArray());
                 //IStoreFactory sf = new StoreFactory();
                 //var PeopleStore = sf.Get<long, Person>(Server.SystemFile.Store, "People");
-                Console.WriteLine("Processed, inserted & queried/enumerated multiple times,");
+                Console.WriteLine("Processed, inserted ({0} threads) & queried/enumerated multiple times ({1} threads),", 
+                    ThreadCount, DataInsertionThreadCount);
                 Console.WriteLine("a total of {0} records in {1} mins.", PeopleStore.Count, DateTime.Now.Subtract(time1).TotalMinutes);
                 Console.WriteLine("End of Many Client Simulator demo.");
             }
@@ -86,7 +90,7 @@ namespace Sop.Samples
         {
             //IStoreFactory sf = new StoreFactory();
             //var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
-            const int batchSize = 500;
+            const int batchSize = 1000;
             KeyValuePair<long, Person>[] batch = new KeyValuePair<long, Person>[batchSize];
             for (int i = 0; i < ItemCount;)
             {
@@ -121,7 +125,7 @@ namespace Sop.Samples
             maxValue *= 10;
             var ItemsToRead = 1000;
             var i = r.Next(maxValue) * ItemsToRead;
-            var keys = new long[200];
+            var keys = new long[1000];
 
             int logicalIndex = 0;
             for (int i2 = 0; i2 < ItemsToRead / keys.Length; i2++)
