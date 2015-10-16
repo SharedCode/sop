@@ -952,7 +952,6 @@ namespace Sop.OnDisk.Algorithm.BTree
             r.deletedBlocks = deletedBlocks;
             r.DiskBuffer = (Sop.DataBlock)DiskBuffer.Clone();
             r.DataAddress = DataAddress;
-            r.MruManager = MruManager;
             r.File = File;
             r.IsCloned = true;
             r.RootNode = (BTreeNodeOnDisk)RootNode.Clone();
@@ -969,8 +968,22 @@ namespace Sop.OnDisk.Algorithm.BTree
             r.MruMaxCapacity = MruMaxCapacity;
             //r.TempSlots = TempSlots;
             //r.TempChildren = TempChildren;
-            r.Blocks = Blocks;
-            r.PromoteLookup = PromoteLookup;
+
+            r.MruManager = MruManager;
+            //r.MruManager = new 
+
+            //r.Blocks = Blocks;
+
+            //r.Blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>(
+            //    ((Collections.Generic.ConcurrentSortedDictionary<long, Sop.DataBlock>)Blocks).SlotLength,
+            //    ((Collections.Generic.ConcurrentSortedDictionary<long, Sop.DataBlock>)Blocks).Comparer
+            //    );
+
+            r.Blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>(
+                ((Collections.Generic.ConcurrentSortedDictionary<long, Sop.DataBlock>)Blocks).Btree
+                );
+            r.PromoteLookup = new Collections.Generic.SortedDictionary<long, BTreeNodeOnDisk>();
+
             return r;
         }
 

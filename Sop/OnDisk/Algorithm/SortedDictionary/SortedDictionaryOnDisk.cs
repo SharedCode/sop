@@ -123,7 +123,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
                 SyncRoot = (ISynchronizer)bTree.SyncRoot;
                 BTreeAlgorithm.Container = this;
                 this.File = File;
-                this.SortOrder = bTree.SortOrder;
+                BTreeAlgorithm.CurrentSortOrder = bTree.SortOrder;
                 this.ItemType = itemType;
             }, requestOperation);
         }

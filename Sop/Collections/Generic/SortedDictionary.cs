@@ -179,6 +179,14 @@ namespace Sop.Collections.Generic
         {
             Btree = new Sop.Collections.Generic.BTree.BTreeAlgorithm<TKey, TValue>(slotLen, comparer);
         }
+        internal SortedDictionary(SortedDictionary<TKey, TValue> source)
+        {
+            Btree = (BTree.BTreeAlgorithm<TKey, TValue>)source.Btree.Clone();
+        }
+        internal SortedDictionary(BTree.BTreeAlgorithm<TKey, TValue> source)
+        {
+            Btree = (BTree.BTreeAlgorithm<TKey, TValue>)source.Clone();
+        }
 
         /// <summary>
         /// Copy all items from source onto this instance.

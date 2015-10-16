@@ -32,13 +32,16 @@ namespace Sop.Samples
                 for (int i = 0; i < ThreadCount; i++)
                 {
                     // specify Insertion delegate
-                    if (i < DataInsertionThreadCount)
+                    if (i % 2 == 0)
                     {
-                        actions.Add(() =>
+                        if (i < DataInsertionThreadCount * 2)
                         {
-                            AddItems(Server, PeopleStore);
-                        });
-                        continue;
+                            actions.Add(() =>
+                            {
+                                AddItems(Server, PeopleStore);
+                            });
+                            continue;
+                        }
                     }
                     // specify Reader delegate
                     actions.Add(() =>
@@ -100,7 +103,7 @@ namespace Sop.Samples
                             }));
                     }
                 });
-                System.Threading.Thread.Sleep(4);
+                System.Threading.Thread.Sleep(1);
             }
         }
         private void ReadItems(IObjectServer server, ISortedDictionary<long, Person> PeopleStore)
@@ -141,7 +144,8 @@ namespace Sop.Samples
                     c++;
                 }
                 // don't be a resource hog. :)
-                System.Threading.Thread.Sleep(4);
+                if (i2 % 2 == 0)
+                    System.Threading.Thread.Sleep(1);
             }
         }
         public int DataInsertionThreadCount = 5;

@@ -34,6 +34,12 @@ namespace Sop.Collections.Generic
             _currentItem = new BTreeAlgorithm<TKey, TValue>.TreeNode.ItemAddress();
             _sortOrder = sortOrder;
         }
+        internal ConcurrentSortedDictionary(ConcurrentSortedDictionary<TKey, TValue> source)
+        {
+            _btree = (BTreeAlgorithm<TKey, TValue>)source.Btree.Clone();
+            _currentItem = source._currentItem;
+            _sortOrder = source.SortOrder;
+        }
         /// <summary>
         /// Returns an enumerator that iterates through the collection.
         /// </summary>
@@ -359,7 +365,7 @@ namespace Sop.Collections.Generic
         public object Clone()
         {
             Locker.Lock();
-            var r = Btree.Clone();
+            var r = new ConcurrentSortedDictionary<TKey, TValue>(this);
             Locker.Unlock();
             return r;
         }
@@ -573,7 +579,7 @@ namespace Sop.Collections.Generic
         }
 
 
-        private BTreeAlgorithm<TKey, TValue> Btree
+        internal BTreeAlgorithm<TKey, TValue> Btree
         {
             get
             {
