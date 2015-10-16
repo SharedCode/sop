@@ -23,51 +23,6 @@ namespace Sop.Mru
     /// </summary>
     internal class MruManager : IMruManager
     {
-        #region CacheManager
-
-        ///// <summary>
-        ///// Cache Manager Collection is used across different threads and thus,
-        ///// members are inherently thread safe.
-        ///// </summary>
-        //internal class CacheManagerCollection
-        //{
-        //    /// <summary>
-        //    /// CacheManagers keep track of all MRU cache managers in the SOP system
-        //    /// </summary>
-        //    internal Dictionary<IMruManager, IMruManager> Managers = new Dictionary<IMruManager, IMruManager>();
-        //    public void Add(IMruManager MruManager)
-        //    {
-        //        lock (Managers)
-        //        {
-        //            if (!Managers.ContainsKey(MruManager ))
-        //                Managers.Add(MruManager, null);
-        //        }
-        //    }
-        //    public void Remove(IMruManager MruManager)
-        //    {
-        //        lock (Managers)
-        //        {
-        //            Managers.Remove(MruManager);
-        //        }
-        //    }
-        //    public ICollection<IMruManager>  Get()
-        //    {
-        //        lock (Managers)
-        //        {
-        //            return Managers.Keys;
-        //        }
-        //    }
-        //    public IEnumerator<IMruManager> GetEnumerator()
-        //    {
-        //        lock (Managers)
-        //        {
-        //            return Managers.Keys.GetEnumerator();
-        //        }
-        //    }
-        //}
-
-        #endregion
-
         /// <summary>
         /// Default Constructor
         /// </summary>
@@ -91,14 +46,22 @@ namespace Sop.Mru
         {
             mruManager = new InternalMruManager(minCapacity, maxCapacity);
             CacheCollection = new Collections.Generic.SortedDictionary<object, object>(comparer);
-            //CacheManagers.Add(this);
-
-            //RecycledObjects = new List<IInternalPersistent>(maxCapacity);
         }
+        internal MruManager(MruManager source)
+        {
+            mruManager = new InternalMruManager(source.mruManager);
+            CacheCollection = new Collections.Generic.SortedDictionary<object, object>(source.CacheCollection.Comparer);
+            foreach(var item in source.CacheCollection)
+            {
+                addInTail(((MruItem)item.Value).Key, ((MruItem)item.Value).Value, ((MruItem)item.Value).Transaction);
+            }
+        }
+
 
         internal bool? AutoDisposeItem { get; set; }
         public void Dispose()
         {
+            if (CacheCollection == null) return;
             foreach(var entry in CacheCollection)
             {
                 DisposeItem(entry.Key);
@@ -121,6 +84,11 @@ namespace Sop.Mru
                     ((SpecializedDataStore.SpecializedStoreBase) item).Collection = null;
                 }
             }
+        }
+
+        public object Clone()
+        {
+            return new MruManager(this);
         }
 
         /// <summary>
@@ -472,9 +440,9 @@ namespace Sop.Mru
             return mruManager.PeekInTail();
         }
 
-        public void AddInTail(object key, object value)
+        private void addInTail(object key, object value, Sop.Transaction.ITransactionLogger trans)
         {
-            var itm = (MruItem) CacheCollection[key];
+            var itm = (MruItem)CacheCollection[key];
             if (itm == null)
                 itm = new MruItem(key, value, Transaction);
             else
@@ -486,6 +454,11 @@ namespace Sop.Mru
             }
             itm.IndexToMruList = mruManager.AddInTail(itm);
             CacheCollection[key] = itm;
+        }
+
+        public void AddInTail(object key, object value)
+        {
+            addInTail(key, value, Transaction);
         }
 
         public MruItem RemoveInTail(bool moveToRemoveList)

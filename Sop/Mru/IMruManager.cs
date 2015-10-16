@@ -12,7 +12,7 @@ namespace Sop.Mru
     /// <summary>
     /// MRU cache Manager interface
     /// </summary>
-    internal interface IMruManager : IDisposable
+    internal interface IMruManager : IDisposable, ICloneable
     {
         /// <summary>
         /// Add a Key/Value pair to the MRU cache

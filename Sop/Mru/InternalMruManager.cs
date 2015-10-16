@@ -12,7 +12,7 @@ namespace Sop.Mru
     /// <summary>
     /// For MruManager's internal use only.
     /// </summary>
-    internal class InternalMruManager : System.Collections.Generic.IEnumerable<Node>
+    internal class InternalMruManager : System.Collections.Generic.IEnumerable<Node>, ICloneable
     {
         #region Enumerator
 
@@ -52,6 +52,31 @@ namespace Sop.Mru
                     string.Format("Minimum Capacity '{0}' can't be >= MaxCapacity '{1}'",
                                   minCapacity, maxCapacity)
                     );
+        }
+        internal InternalMruManager(InternalMruManager source)
+        {
+            Collection = source.Collection;
+            this.DataDriver = source.DataDriver;
+            this.GeneratePruneEvent = source.GeneratePruneEvent;
+            this.MaxCapacity = source.MaxCapacity;
+            this.MinCapacity = source.MinCapacity;
+
+            RemovedObjects = new Collections.Generic.SortedDictionary<object, object>();
+            // note: no need to copy removed objects for now.
+            //this.RemovedObjects = (Collections.Generic.SortedDictionary<object, object>)source.RemovedObjects.Clone();
+
+            this.SaveState = source.SaveState;
+
+            //this.Count = source.Count;
+            //if (source._head != null)
+            //    this._head = (Node)source._head.Clone();
+            //if (source._tail != null)
+            //    this._tail = (Node)source._tail.Clone();
+        }
+
+        public object Clone()
+        {
+            return new InternalMruManager(this);
         }
 
         /// <summary>

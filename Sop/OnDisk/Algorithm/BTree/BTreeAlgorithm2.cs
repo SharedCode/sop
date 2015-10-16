@@ -961,27 +961,19 @@ namespace Sop.OnDisk.Algorithm.BTree
             int systemDetectedBlockSize;
             r.FileStream = File.UnbufferedOpen(out systemDetectedBlockSize);
             r.isOpen = IsOpen;
-            //if (DataSet != null)
-            //    r.DataSet.HeaderData = DataSet.HeaderData;
             r.KeySet.HeaderData = (HeaderData)HeaderData.Clone();
             r.MruMinCapacity = MruMinCapacity;
             r.MruMaxCapacity = MruMaxCapacity;
-            //r.TempSlots = TempSlots;
-            //r.TempChildren = TempChildren;
 
-            r.MruManager = MruManager;
-            //r.MruManager = new 
+            //r.MruManager = MruManager;
+            //r.MruManager = new MruManager(((ConcurrentMruManager)MruManager).realMruManager);
+            r.MruManager = new MruManager(MruMinCapacity, MruMaxCapacity);
 
             //r.Blocks = Blocks;
-
-            //r.Blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>(
-            //    ((Collections.Generic.ConcurrentSortedDictionary<long, Sop.DataBlock>)Blocks).SlotLength,
-            //    ((Collections.Generic.ConcurrentSortedDictionary<long, Sop.DataBlock>)Blocks).Comparer
-            //    );
-
             r.Blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>(
                 ((Collections.Generic.ConcurrentSortedDictionary<long, Sop.DataBlock>)Blocks).Btree
                 );
+            // we need a single threaded version of sorted dict. as Clones are designed for single thread use.
             r.PromoteLookup = new Collections.Generic.SortedDictionary<long, BTreeNodeOnDisk>();
 
             return r;

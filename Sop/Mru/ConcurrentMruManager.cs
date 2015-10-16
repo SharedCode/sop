@@ -39,6 +39,10 @@ namespace Sop.Mru
         {
             realMruManager = new MruManager(minCapacity, maxCapacity, comparer);
         }
+        private ConcurrentMruManager(ConcurrentMruManager source)
+        {
+            realMruManager = new MruManager(source.realMruManager);
+        }
 
         public void Dispose()
         {
@@ -48,6 +52,14 @@ namespace Sop.Mru
                 if (realMruManager == null) return;
                 realMruManager.Dispose();
                 realMruManager = null;
+            });
+        }
+
+        public object Clone()
+        {
+            return Locker.Invoke(() =>
+            {
+                return new ConcurrentMruManager(this);
             });
         }
 
@@ -296,7 +308,7 @@ namespace Sop.Mru
             });
         }
 
-        private MruManager realMruManager;
+        internal MruManager realMruManager;
         private readonly ISynchronizer Locker = new Synchronizer();
     }
 }
