@@ -16,6 +16,10 @@ namespace Sop
         public interface ISynchronizer
         {
             /// <summary>
+            /// Returns lock count.
+            /// </summary>
+            int LockCount { get; }
+            /// <summary>
             ///  Returns true if this resource is locked, false otherwise.
             /// </summary>
             bool IsLocked { get; }
@@ -92,7 +96,7 @@ namespace Sop
             /// <summary>
             /// true signifies current transaction was rolled back.
             /// </summary>
-            bool TransactionRollback { get; }
+            bool TransactionRollback { get; set; }
         }
     }
 }

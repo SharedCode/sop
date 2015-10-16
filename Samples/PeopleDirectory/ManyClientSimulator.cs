@@ -86,24 +86,28 @@ namespace Sop.Samples
         {
             //IStoreFactory sf = new StoreFactory();
             //var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
+            const int batchSize = 500;
+            KeyValuePair<long, Person>[] batch = new KeyValuePair<long, Person>[batchSize];
             for (int i = 0; i < ItemCount;)
             {
-                PeopleStore.Locker.Invoke(() =>
+                for (int ii = 0; ii < batchSize; ii++, i++)
                 {
-                    for (int ii = 0; ii < 100; ii++, i++)
-                    {
-                        var id = PeopleStore.GetNextSequence();
-                        PeopleStore.Add(new KeyValuePair<long, Person>(id,
-                            new Person
-                            {
-                                PersonId = id,
-                                FirstName = string.Format("Joe{0}", id),
-                                LastName = string.Format("Petit{0}", id),
-                                PhoneNumber = "555-999-4444"
-                            }));
-                    }
-                });
-                System.Threading.Thread.Sleep(1);
+                    var id = PeopleStore.GetNextSequence();
+                    batch[ii] = new KeyValuePair<long, Person>(id,
+                        new Person
+                        {
+                            PersonId = id,
+                            FirstName = string.Format("Joe{0}", id),
+                            LastName = string.Format("Petit{0}", id),
+                            PhoneNumber = "555-999-4444"
+                        });
+                }
+                PeopleStore.Locker.Invoke(() => { PeopleStore.Add(batch); });
+                //if (i % batchSize == 0)
+                //{
+                    Console.WriteLine("{0}: Wrote a batch of {1} items.", DateTime.Now, batchSize);
+                    System.Threading.Thread.Sleep(1);
+                //}
             }
         }
         private void ReadItems(IObjectServer server, ISortedDictionary<long, Person> PeopleStore)
@@ -137,7 +141,7 @@ namespace Sop.Samples
                         continue;
                     }
                     var personName = string.Format("{0} {1}", p.Value.FirstName, p.Value.LastName);
-                    if (p.Key % 100 == 0)
+                    if (p.Key % 25 == 0)
                         Console.WriteLine("Person found {0} from DB.", personName);
                     if (keys[c] != p.Key)
                         Console.WriteLine(string.Format("Failed, didn't find person with key {0}, found {1} instead.", keys[c], p.Key));

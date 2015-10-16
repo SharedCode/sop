@@ -256,7 +256,7 @@ namespace Sop.Mru.Generic
             }
         }
 
-        internal readonly ISynchronizer Locker = new Synchronizer();
+        internal readonly ISynchronizer Locker = new Synchronizer<SynchronizerSingleReaderWriterBase>();
         internal readonly MruManager<TKey, TValue> MruManager;
 
 

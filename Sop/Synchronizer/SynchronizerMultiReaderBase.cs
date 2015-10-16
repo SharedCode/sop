@@ -158,8 +158,8 @@ namespace Sop.Synchronization
         /// Returns true if Locker detected a Transaction Rollback event,
         /// false otherwise.
         /// </summary>
-        public bool TransactionRollback { get; internal set; }
-        protected int LockCount
+        public bool TransactionRollback { get; set; }
+        public int LockCount
         {
             get
             {

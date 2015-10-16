@@ -21,7 +21,9 @@ namespace Sop.OnDisk.IO
             FileStream.Dispose();
             FileStream = null;
             Event.Dispose();
+            Event = null;
             Buffer = null;
+            PoolManager = null;
         }
         /// <summary>
         /// Filename

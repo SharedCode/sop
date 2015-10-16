@@ -19,7 +19,8 @@ namespace Sop
     {
         public Preferences()
         {
-            StoreSegmentSizeInKb = 512;
+            // defaults to 5 MB store segment size.
+            StoreSegmentSizeInKb = 1024 * 5;
             DataBlockSize = Sop.DataBlockSize.Minimum;
             // default mem use limit
             MemoryLimitInPercent = 40;
@@ -59,7 +60,7 @@ namespace Sop
         /// <summary>
         /// Data segment size on disk. Multiple POCOs can be stored
         /// in one segment, depending on POCO's serialized data size.
-        /// This defaults to 
+        /// This defaults to 5MB.
         /// </summary>
         public long StoreSegmentSizeInKb { get; set; }
 

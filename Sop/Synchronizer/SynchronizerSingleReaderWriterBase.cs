@@ -51,8 +51,7 @@ namespace Sop.Synchronization
         virtual public int Unlock(OperationType requestedOperation = OperationType.Write)
         {
             var l = --lockCount;
-            if (Monitor.IsEntered(locker))
-                Monitor.Exit(locker);
+            Monitor.Exit(locker);
             return l;
         }
         private void RaiseRollbackException()
@@ -151,14 +150,14 @@ namespace Sop.Synchronization
             {
                 return transactionRollback;
             }
-            internal set
+            set
             {
                 transactionRollback = value;
             }
         }
         private volatile bool transactionRollback;
         private object locker = new object();
-        internal protected int LockCount
+        public int LockCount
         {
             get
             {

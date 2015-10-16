@@ -49,6 +49,7 @@ namespace Sop.Samples
             PeopleDirectoryWithBlobDataNull,
             PeopleDirectoryWithBlobDataAddUniqueCheck,
             PeopleDirectoryWithBlobDataQueryFunc,
+            PeopleDirectoryLargeDB,
             //RenameStore,
             RenameItemKeysOfStore,
             VirtualCacheMemoryCacheCompare,
@@ -77,7 +78,8 @@ namespace Sop.Samples
             return;
 
 
-            var demo = DemoType.Store400;
+            var demo = DemoType.PeopleDirectoryLargeDB;
+                //.Store400;
                 //.VirtualCacheMemoryExtenderMultipleClients;    //VirtualCacheMemoryExtenderReCreate;
             dynamic pd = null;
             switch(demo)
@@ -175,6 +177,9 @@ namespace Sop.Samples
                     break;
                 case DemoType.PeopleDirectoryWithBlobDataDelete:
                     pd = new PeopleDirectoryWithBlobDataDelete();
+                    break;
+                case DemoType.PeopleDirectoryLargeDB:
+                    pd = new PeopleDirectoryLargeDB();
                     break;
             }
             pd.Run();

@@ -14,14 +14,6 @@ namespace Sop.OnDisk.IO
     /// </summary>
     internal class ConcurrentIOPoolManager : IDisposable
     {
-        private int Count
-        {
-            get
-            {
-                if (_pool == null) return 0;
-                return _pool.Count;
-            }
-        }
         public void Dispose()
         {
             if (_pool == null) return;
@@ -180,6 +172,14 @@ namespace Sop.OnDisk.IO
                 }
             }
             AsyncThreadException.OtherThreadExceptions.Add(exc);
+        }
+        private int Count
+        {
+            get
+            {
+                if (_pool == null) return 0;
+                return _pool.Count;
+            }
         }
         /// <summary>
         /// Asynchronous (I/O) thread encountered exceptions.

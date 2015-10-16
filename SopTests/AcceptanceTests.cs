@@ -77,7 +77,7 @@ namespace SopClientTests
             var pd = new ManyClientSimulator();
             pd.DeleteDataFolder(ManyClientSimulator.ServerFilename);
             // simulate numerous parallel clients.
-            pd.ThreadCount = 250;
+            pd.ThreadCount = 75;    // 250;
             pd.DataInsertionThreadCount = 75;
             pd.Threaded = true;
             pd.Run();

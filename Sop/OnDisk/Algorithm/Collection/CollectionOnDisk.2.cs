@@ -476,7 +476,7 @@ namespace Sop.OnDisk.Algorithm.Collection
             get
             {
                 if (_syncRoot == null)
-                    _syncRoot = new Synchronizer();
+                    _syncRoot = new Synchronizer<SynchronizerMultiReaderBase>();
                 return _syncRoot;
             }
             set { _syncRoot = value; }

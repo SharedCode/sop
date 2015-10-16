@@ -263,8 +263,8 @@ namespace Sop.Transaction
                 // signal to raise transaction rollback event on other threads requesting a Store Lock.
                 foreach (var s in synchs)
                 {
-                    ((Synchronizer)s).TransactionRollback = true;
-                    ((Synchronizer)s).CommitLockRequest(false);
+                    ((ISynchronizer)s).TransactionRollback = true;
+                    ((ISynchronizer)s).CommitLockRequest(false);
                     //((Collections.Synchronizer)s).Unlock();
                 }
                 return Server.SystemFile.Store.Transaction;

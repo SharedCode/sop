@@ -447,7 +447,7 @@ namespace Sop.Collections.Generic.BTree
                 return _syncRoot; 
             }
         }
-        private readonly ISynchronizer _syncRoot = new Synchronizer();
+        private readonly ISynchronizer _syncRoot = new Synchronizer<SynchronizerSingleReaderWriterBase>();
 
         public IComparer<BTreeItem<TKey, TValue>> SlotsComparer { get; private set; }
 
