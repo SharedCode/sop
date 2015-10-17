@@ -31,7 +31,9 @@ namespace Sop.Synchronization
         /// </summary>
         protected bool Disposed { get; set; }
 
-        // Public implementation of Dispose pattern callable by consumers.
+        /// <summary>
+        /// Dispose callable by consumer code.
+        /// </summary>
         public void Dispose()
         {
             Dispose(true);

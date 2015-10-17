@@ -214,7 +214,7 @@
     <Compile Include="Log\Logger.cs" />
     <Compile Include="StoreNavigator.cs" />
     <Compile Include="StoreParameters.cs" />
-    <Compile Include="Synchronizer\SynchronizerSingleReaderWriterBase.cs" />
+    <Compile Include="Synchronization\SynchronizerSingleReaderWriterBase.cs" />
     <Compile Include="SystemInterface\ISystemAdaptor.cs" />
     <Compile Include="SystemInterface\Linux.cs" />
     <Compile Include="SystemInterface\SystemAdaptor.cs" />
