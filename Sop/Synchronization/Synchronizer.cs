@@ -8,7 +8,7 @@ namespace Sop.Synchronization
     /// Synchronizer with a secondary signaling mechanism mostly adept for
     /// (global) Transaction Commit that orchestrate locks of all Stores in the App.
     /// </summary>
-    public class Synchronizer<T> : ISynchronizer where T : ISynchronizer, new()
+    public class Synchronizer : SynchronizerMultiReaderBase
     {
         class CommitLockEvent
         {
@@ -32,7 +32,7 @@ namespace Sop.Synchronization
         /// will be done. The signal will cause any succeeding granted Lock request
         /// to relinquish the Lock so Commit can proceed.
         /// </summary>
-        public void CommitLockRequest(bool lockFlag = true)
+        public override void CommitLockRequest(bool lockFlag = true)
         {
             if (lockFlag)
             {
@@ -44,21 +44,21 @@ namespace Sop.Synchronization
                 _commitLocked = false;
                 _trapForCommitLock = false;
                 _commitLockEvent.Set();
-                Locker.Unlock();
+                base.Unlock();
             }
         }
         /// <summary>
         /// Does a spin wait until a commit lock/unlock is detected.
         /// </summary>
-        public void WaitForCommitLock(bool lockFlag = true)
+        public override void WaitForCommitLock(bool lockFlag = true)
         {
             if (lockFlag)
             {
-                while (Locker.LockCount > 0)
+                while (LockCount > 0)
                 {
                     Thread.Sleep(50);
                 }
-                Locker.Lock();
+                base.Lock();
                 _commitLocked = false;
                 _trapForCommitLock = false;
             }
@@ -67,18 +67,18 @@ namespace Sop.Synchronization
         /// Lock Synchronizer.
         /// </summary>
         /// <param name="requestedOperation">Lock resource for Read, Write or Search</param>
-        public int Lock(OperationType requestedOperation = OperationType.Write)
+        public override int Lock(OperationType requestedOperation = OperationType.Write)
         {
             while (true)
             {
                 if (_trapForCommitLock)
                     _commitLockEvent.Wait();
-                var r = Locker.Lock(requestedOperation);
-                if (_trapForCommitLock || (_commitLocked && Locker.LockCount == 1))
+                var r = base.Lock(requestedOperation);
+                if (_trapForCommitLock || (_commitLocked && LockCount == 1))
                 {
                     _trapForCommitLock = true;
                     // allow Commit to proceed...
-                    r = Locker.Unlock(requestedOperation);
+                    r = base.Unlock(requestedOperation);
                     // detect when commit is done...
                     _commitLockEvent.Wait();
                     continue;
@@ -87,71 +87,16 @@ namespace Sop.Synchronization
             }
         }
 
-        public int Unlock(OperationType requestedOperation = OperationType.Write)
+        public override int Unlock(OperationType requestedOperation = OperationType.Write)
         {
-            if (!_trapForCommitLock && _commitLocked && Locker.LockCount == 1)
+            if (!_trapForCommitLock && _commitLocked && LockCount == 1)
             {
                 _trapForCommitLock = true;
             }
-            return Locker.Unlock(requestedOperation);
+            return base.Unlock(requestedOperation);
         }
-
-        public void Invoke(VoidFunc function, OperationType requestedOperation = OperationType.Write)
-        {
-            Locker.Invoke(function, requestedOperation);
-        }
-
-        public void Invoke<T1, T2>(VoidFunc<T1, T2> function, T1 arg1, T2 arg2, OperationType requestedOperation = OperationType.Write)
-        {
-            Locker.Invoke(function, arg1, arg2, requestedOperation);
-        }
-
-        public TResult Invoke<TResult>(Func<TResult> function, OperationType requestedOperation = OperationType.Write)
-        {
-            return Locker.Invoke(function, requestedOperation);
-        }
-
-        public TResult Invoke<T1, TResult>(Func<T1, TResult> function, T1 arg, OperationType requestedOperation = OperationType.Write)
-        {
-            return Locker.Invoke(function, arg, requestedOperation);
-        }
-
-        public TResult Invoke<T1, T2, TResult>(Func<T1, T2, TResult> function, T1 arg, T2 arg2, OperationType requestedOperation = OperationType.Write)
-        {
-            return Locker.Invoke(function, arg, arg2, requestedOperation);
-        }
-
-        public int LockCount
-        {
-            get
-            {
-                return Locker.LockCount;
-            }
-        }
-
-        public bool IsLocked
-        {
-            get
-            {
-                return Locker.IsLocked;
-            }
-        }
-
-        public bool TransactionRollback
-        {
-            get
-            {
-                return Locker.TransactionRollback;
-            }
-            set
-            {
-                Locker.TransactionRollback = value;
-            }
-        }
-
         private volatile bool _trapForCommitLock;
         private volatile bool _commitLocked;
         private CommitLockEvent _commitLockEvent = new CommitLockEvent();
-        private T Locker = new T();
     }
 }

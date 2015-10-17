@@ -149,6 +149,9 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
             }
             BTreeAlgorithm.InternalDispose();
             BTreeAlgorithm = null;
+            var locker = _syncRoot as IDisposable;
+            if (locker != null)
+                locker.Dispose();
         }
 
         public bool IsDisposed

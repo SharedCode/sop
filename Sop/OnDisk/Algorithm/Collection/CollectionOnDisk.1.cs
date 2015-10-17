@@ -34,6 +34,7 @@ using Sop.OnDisk.DataBlock;
 using Sop.OnDisk.File;
 using Sop.Persistence;
 using Sop.Mru.Generic;
+using Sop.Synchronization;
 
 namespace Sop.OnDisk.Algorithm.Collection
 {
@@ -203,6 +204,9 @@ namespace Sop.OnDisk.Algorithm.Collection
             _parentTransactionLogger = null;
             File = null;
             Blocks = null;
+            var locker = _syncRoot as IDisposable;
+            if (locker != null)
+                locker.Dispose();
         }
         private bool isDisposed;
         protected bool IsDisposed
@@ -584,8 +588,8 @@ namespace Sop.OnDisk.Algorithm.Collection
                 int min = MruMinCapacity;
                 int max = MruMaxCapacity;
 
-                MruManager = new ConcurrentMruManager(min, max);
-                //MruManager = new MruManager(min, max);
+                //MruManager = new ConcurrentMruManager(min, max);
+                MruManager = new MruManager(min, max);
 
                 MruManager.SetDataStores(this, DataBlockDriver);
             }

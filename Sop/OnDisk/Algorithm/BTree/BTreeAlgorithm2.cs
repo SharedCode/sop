@@ -927,7 +927,12 @@ namespace Sop.OnDisk.Algorithm.BTree
             r.DataBlockDriver = (DataBlockDriver)DataBlockDriver.Clone();
             r.DataBlockSize = DataBlockSize;
             r.IndexBlockSize = IndexBlockSize;
-            r.IsDirty = IsDirty;
+            // note: store is not dirty during clone.
+            //// ensure IsDirty method is thread-safe, it "may" inspect MRU cache.
+            //((MruManager)MruManager).CacheCollection.Locker.Invoke(() =>
+            //{
+            //    r.IsDirty = IsDirty;
+            //});
             r.IsDataLongInt = IsDataLongInt;
             r.PersistenceType = PersistenceType;
             r._IsDataInKeySegment = IsDataInKeySegment;
@@ -961,23 +966,46 @@ namespace Sop.OnDisk.Algorithm.BTree
             r.FileStream = File.UnbufferedOpen(out systemDetectedBlockSize);
             r.isOpen = IsOpen;
             r.KeySet.HeaderData = (HeaderData)HeaderData.Clone();
-            r.MruMinCapacity = MruMinCapacity;
-            r.MruMaxCapacity = MruMaxCapacity;
 
-            //r.MruManager = MruManager;
-            //r.Blocks = Blocks;
-            //r.PromoteLookup = PromoteLookup;
+            r.MruMinCapacity = MruMinCapacity / 2;
+            if (r.MruMinCapacity < 10)
+                r.MruMinCapacity = 10;
+            r.MruMaxCapacity = MruMaxCapacity / 2;
+            if (r.MruMaxCapacity < r.MruMinCapacity + 5)
+                r.MruMaxCapacity = r.MruMinCapacity + 5;
+            r.MruManager = new MruManager(r.MruMinCapacity, r.MruMaxCapacity);
+            //ReuseCachedItems(r.MruManager);
 
-            //r.MruManager = new MruManager(((ConcurrentMruManager)MruManager).realMruManager);
-            r.MruManager = new MruManager(MruMinCapacity, MruMaxCapacity);
-            r.Blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>(
-                ((Collections.Generic.SortedDictionary<long, Sop.DataBlock>)Blocks).Btree
-                );
+            //r.Blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>(
+            //((Collections.Generic.SortedDictionary<long, Sop.DataBlock>)Blocks).Btree
             // we need a single threaded version of sorted dict. as Clones are designed for single thread use.
-            r.PromoteLookup = new Collections.Generic.SortedDictionary<long, BTreeNodeOnDisk>();
+            //r.PromoteLookup = new Collections.Generic.SortedDictionary<long, BTreeNodeOnDisk>();
 
             return r;
         }
+        #region under study for cache reuse
+        //private void ReuseCachedItems(IMruManager target)
+        //{
+        //    var reuseCount = target.MaxCapacity;
+        //    var source = MruManager as MruManager;
+        //    source.CacheCollection.Locker.Invoke(() =>
+        //    {
+        //        List<MruItem> items = new List<MruItem>(reuseCount);
+        //        for (int i = 0; i < reuseCount; i++)
+        //        {
+        //            var item = source.RemoveInTail(false);
+        //            if (item == null)
+        //                break;
+        //            items.Add(item);
+        //            target.Add(item.Key, (BTreeNodeOnDisk)((BTreeNodeOnDisk)item.Value).Clone());
+        //        }
+        //        foreach (var item in items)
+        //        {
+        //            source.AddInTail(item.Key, item.Value);
+        //        }
+        //    });
+        //}
+        #endregion
 
         /// <summary>
         /// RemoveItem deletes the item's storage blocks on disk.

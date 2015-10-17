@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace Sop.Synchronization
@@ -9,8 +10,26 @@ namespace Sop.Synchronization
     /// 
     /// NOTE: this implementation forces lock requests to the Write operation type.
     /// </summary>
-    public class SynchronizerMultiReaderBase : ISynchronizer
+    public class SynchronizerMultiReaderBase : DisposableBase, ISynchronizer
     {
+        protected internal override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing)
+            {
+                if (!IsLocked)
+                    InternalDispose();
+            }
+        }
+        protected internal override bool InternalDispose()
+        {
+            if (readerWriter == null || 
+                !base.InternalDispose())
+                return false;
+            readerWriter.Dispose();
+            readerWriter = null;
+            return true;
+        }
         /// <summary>
         /// CommitLockRequest is not implemened in this Synchronizer.
         /// It does nothing, 'simply returns.
@@ -65,6 +84,8 @@ namespace Sop.Synchronization
             }
             else
                 readerWriter.ExitWriteLock();
+            if (result <= 0 && DisposeSignalled)
+                InternalDispose();
             return result;
         }
 

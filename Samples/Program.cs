@@ -58,27 +58,13 @@ namespace Sop.Samples
             VirtualCacheThreaded,
             //VirtualCacheWithBackgroundRefreshDemo,
             VirtualCacheMemoryExtenderReCreate,
-            VirtualCacheMemoryExtenderMultipleClients
+            VirtualCacheMemoryExtenderMultipleClients,
+            ManyClientSimulator
         };
 		public static void Main()
 		{
-
-            // Multiple SOP client simulator.
-            var pd2 = new ManyClientSimulator();
-            pd2.DeleteDataFolder(ManyClientSimulator.ServerFilename);
-            // simulate numerous parallel clients.
-            //pd2.ThreadCount = 250;
-            //pd2.DataInsertionThreadCount = 75;
-
-            pd2.ThreadCount = 250;
-            pd2.DataInsertionThreadCount = 75;
-
-            pd2.Threaded = true;
-            pd2.Run();
-            return;
-
-
-            var demo = DemoType.PeopleDirectoryLargeDB;
+            var demo = DemoType.ManyClientSimulator;
+                //.PeopleDirectoryLargeDB;
                 //.Store400;
                 //.VirtualCacheMemoryExtenderMultipleClients;    //VirtualCacheMemoryExtenderReCreate;
             dynamic pd = null;
@@ -180,6 +166,17 @@ namespace Sop.Samples
                     break;
                 case DemoType.PeopleDirectoryLargeDB:
                     pd = new PeopleDirectoryLargeDB();
+                    break;
+                case DemoType.ManyClientSimulator:
+                    pd = new ManyClientSimulator();
+                    pd.DeleteDataFolder(ManyClientSimulator.ServerFilename);
+                    // simulate numerous parallel clients accessing the same Store.
+                    // this demonstrates multi-reader, single writer SOP Store feature.
+                    pd.ThreadCount = 500;
+                    pd.DataInsertionThreadCount = 150;
+                    //pd.ThreadCount = 5;
+                    //pd.DataInsertionThreadCount = 2;
+                    pd.Threaded = true;
                     break;
             }
             pd.Run();

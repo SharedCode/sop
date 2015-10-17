@@ -309,6 +309,6 @@ namespace Sop.Mru
         }
 
         internal MruManager realMruManager;
-        private readonly ISynchronizer Locker = new Synchronizer<SynchronizerSingleReaderWriterBase>();
+        private readonly ISynchronizer Locker = new SynchronizerSingleReaderWriterBase();
     }
 }

@@ -26,9 +26,7 @@ namespace Sop.Samples
                 // data I/O could use lesser Segment resize. Default is 1MB.
             {
                 // Pre-populate store to simulate production store with existing items.
-                IStoreFactory sf = new StoreFactory();
-                var PeopleStore = sf.Get<long, Person>(Server.SystemFile.Store, "People");
-                AddItems(Server, PeopleStore);
+                AddItems(Server);
 
                 List<Action> actions = new List<Action>();
                 // create threads that will populate Virtual Cache and retrieve the items.
@@ -41,7 +39,7 @@ namespace Sop.Samples
                         {
                             actions.Add(() =>
                             {
-                                AddItems(Server, PeopleStore);
+                                AddItems(Server);
                             });
                             continue;
                         }
@@ -49,7 +47,7 @@ namespace Sop.Samples
                     // specify Reader delegate
                     actions.Add(() =>
                     {
-                        ReadItems(Server, PeopleStore);
+                        ReadItems(Server);
                     });
                 }
 
@@ -68,8 +66,16 @@ namespace Sop.Samples
                 //IStoreFactory sf = new StoreFactory();
                 //var PeopleStore = sf.Get<long, Person>(Server.SystemFile.Store, "People");
                 Console.WriteLine("Processed, inserted ({0} threads) & queried/enumerated multiple times ({1} threads),", 
-                    ThreadCount, DataInsertionThreadCount);
-                Console.WriteLine("a total of {0} records in {1} mins.", PeopleStore.Count, DateTime.Now.Subtract(time1).TotalMinutes);
+                    DataInsertionThreadCount, ThreadCount - DataInsertionThreadCount);
+
+                // just to "exercise" the API a bit more, get Store via Factory. :)
+                IStoreFactory sf = new StoreFactory();
+                using (var PeopleStore = sf.Get<long, Person>(Server.SystemFile.Store, "People"))
+                {
+                    var totalIO = (ThreadCount - DataInsertionThreadCount) * 1000 + DataInsertionThreadCount * ItemCount;
+                    Console.WriteLine("a total of {0} records & total of {1} I/Os in {2} mins.",
+                        PeopleStore.Count, totalIO, DateTime.Now.Subtract(time1).TotalMinutes);
+                }
                 Console.WriteLine("End of Many Client Simulator demo.");
             }
         }
@@ -86,10 +92,10 @@ namespace Sop.Samples
         }
 
         const int ItemCount = 10000;
-        private void AddItems(IObjectServer server, ISortedDictionary<long, Person> PeopleStore)
+        private void AddItems(IObjectServer server)
         {
-            //IStoreFactory sf = new StoreFactory();
-            //var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
+            IStoreFactory sf = new StoreFactory();
+            var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
             const int batchSize = 1000;
             KeyValuePair<long, Person>[] batch = new KeyValuePair<long, Person>[batchSize];
             for (int i = 0; i < ItemCount;)
@@ -107,17 +113,15 @@ namespace Sop.Samples
                         });
                 }
                 PeopleStore.Locker.Invoke(() => { PeopleStore.Add(batch); });
-                //if (i % batchSize == 0)
-                //{
-                    Console.WriteLine("{0}: Wrote a batch of {1} items.", DateTime.Now, batchSize);
-                    System.Threading.Thread.Sleep(1);
-                //}
+                Console.WriteLine("{0}: Wrote a batch of {1} items.", DateTime.Now, batchSize);
+                System.Threading.Thread.Sleep(1);
             }
+            PeopleStore = null;
         }
-        private void ReadItems(IObjectServer server, ISortedDictionary<long, Person> PeopleStore)
+        private void ReadItems(IObjectServer server)
         {
-            //IStoreFactory sf = new StoreFactory();
-            //var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
+            IStoreFactory sf = new StoreFactory();
+            var PeopleStore = sf.Get<long, Person>(server.SystemFile.Store, "People");
             var r = new Random();
             var maxValue = (int)(PeopleStore.CurrentSequence / ItemCount);
             if (maxValue <= 0)
@@ -157,6 +161,7 @@ namespace Sop.Samples
                 if (i2 % 2 == 0)
                     System.Threading.Thread.Sleep(1);
             }
+            PeopleStore = null;
         }
         public int DataInsertionThreadCount = 5;
         public int ThreadCount = 20;
