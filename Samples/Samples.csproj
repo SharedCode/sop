@@ -80,6 +80,7 @@
     <Compile Include="BayWind.cs" />
     <Compile Include="ISample.cs" />
     <Compile Include="Others\ObjectDirectoryLINQ.cs" />
+    <Compile Include="PeopleDirectory\OneHundredMillionInserts.cs" />
     <Compile Include="PeopleDirectory\PeopleDirectoryWithUpdate.cs" />
     <Compile Include="Others\RenameItemsOfStore.cs" />
     <Compile Include="Others\RenameStores.cs" />

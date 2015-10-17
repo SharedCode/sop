@@ -59,11 +59,12 @@ namespace Sop.Samples
             //VirtualCacheWithBackgroundRefreshDemo,
             VirtualCacheMemoryExtenderReCreate,
             VirtualCacheMemoryExtenderMultipleClients,
-            ManyClientSimulator
+            ManyClientSimulator,
+            OneHundredMillionInserts
         };
 		public static void Main()
 		{
-            var demo = DemoType.ManyClientSimulator;
+            var demo = DemoType.OneHundredMillionInserts;
                 //.PeopleDirectoryLargeDB;
                 //.Store400;
                 //.VirtualCacheMemoryExtenderMultipleClients;    //VirtualCacheMemoryExtenderReCreate;
@@ -177,6 +178,13 @@ namespace Sop.Samples
                     //pd.ThreadCount = 5;
                     //pd.DataInsertionThreadCount = 2;
                     pd.Threaded = true;
+                    break;
+                case DemoType.OneHundredMillionInserts:
+                    pd = new OneHundredMillionInserts();
+                    pd.DeleteDataFolder(OneHundredMillionInserts.ServerFilename);
+                    pd.Insert = true;
+                    pd.Run();
+                    pd.Insert = false;
                     break;
             }
             pd.Run();
