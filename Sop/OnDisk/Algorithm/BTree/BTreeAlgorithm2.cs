@@ -921,18 +921,13 @@ namespace Sop.OnDisk.Algorithm.BTree
         /// <returns></returns>
         public object Clone()
         {
+            // store is expected not to be dirty during clone.
             var r = new BTreeAlgorithm();
             r.SyncRoot = SyncRoot;
             r.Name = Name;
             r.DataBlockDriver = (DataBlockDriver)DataBlockDriver.Clone();
             r.DataBlockSize = DataBlockSize;
             r.IndexBlockSize = IndexBlockSize;
-            // note: store is not dirty during clone.
-            //// ensure IsDirty method is thread-safe, it "may" inspect MRU cache.
-            //((MruManager)MruManager).CacheCollection.Locker.Invoke(() =>
-            //{
-            //    r.IsDirty = IsDirty;
-            //});
             r.IsDataLongInt = IsDataLongInt;
             r.PersistenceType = PersistenceType;
             r._IsDataInKeySegment = IsDataInKeySegment;
@@ -974,12 +969,15 @@ namespace Sop.OnDisk.Algorithm.BTree
             if (r.MruMaxCapacity < r.MruMinCapacity + 5)
                 r.MruMaxCapacity = r.MruMinCapacity + 5;
             r.MruManager = new MruManager(r.MruMinCapacity, r.MruMaxCapacity);
+
             //ReuseCachedItems(r.MruManager);
 
+            #region candidate for removal
             //r.Blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>(
             //((Collections.Generic.SortedDictionary<long, Sop.DataBlock>)Blocks).Btree
             // we need a single threaded version of sorted dict. as Clones are designed for single thread use.
             //r.PromoteLookup = new Collections.Generic.SortedDictionary<long, BTreeNodeOnDisk>();
+            #endregion
 
             return r;
         }
