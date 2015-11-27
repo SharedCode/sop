@@ -46,7 +46,7 @@ namespace Sop.Samples
             Console.WriteLine("{0}: ObjectDirectoryLINQ demo started...", DateTime.Now);
 
             // create Server (open the data file) and begin a transaction...
-            using (var Server = new ObjectServer("SopBin\\OServer.dta"))
+            using (var Server = new ObjectServer("SopBin\\OServer.dta", commitOnDispose: true))
             {
                 // get a Store with string as key and object as value, for saving these object types: 
                 //  Person, Address, Department, PersonBlob.
@@ -57,8 +57,6 @@ namespace Sop.Samples
                 {
                     Console.WriteLine("Processing {0} records", Store.Count);
 
-                    // NOTE: since SOP has no LINQ provider (yet), this code block will do sequential scan of the Store's data.
-                    //  This sample was just provided to check this default behavior.
                     var result2 = from a in Store
                                   where (a.Key.StartsWith("Person"))
                                   select new { key = a.Key };
@@ -69,11 +67,10 @@ namespace Sop.Samples
                     //ReadAll(ref Store);
                 }
 
-                // Commit the transaction explicitly. NOTE: pls. see the ObjectServer ctor "commitOnDispose" parameter. 
-                // Transaction finalization can be automatically handled as needed. Default is to rollback on ObjectServer dispose.
-                Server.Commit();
-
+                // no need to commit as "commitOnDispose" is set to true.
+                //Server.Commit();
             }   // when Server goes out of scope, it will auto commit or rollback (default) a pending transaction.
+
             Console.WriteLine("{0}: ObjectDirectoryLINQ demo ended...", DateTime.Now);
         }
         void Populate(ISortedDictionary<string, object> Store)

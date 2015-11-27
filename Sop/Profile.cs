@@ -46,8 +46,8 @@ namespace Sop
             float ml = MemoryLimitInPercent;
             // max is 99% of RAM
             const int MaxMemoryLimitInPercent = 99;
-            // min is 10% of RAM
-            const int MinMemoryLimitInPercent = 10;
+            // min is 7% of RAM
+            const int MinMemoryLimitInPercent = 7;
             if (ml > MaxMemoryLimitInPercent)
                 ml = MaxMemoryLimitInPercent;
             if (ml < MinMemoryLimitInPercent)

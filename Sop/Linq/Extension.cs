@@ -373,15 +373,15 @@ namespace Sop.Linq
 
         #endregion
 
+
+        // todo: support bulk Query mode, i.e. - one that will use BTree Query for bulk reads.
+        // todo: support IEnumerator extension to allow bulk reads of Values given an enumerated set of Keys.
+        // Take advantage of async await feature on this.
+
         /// <summary>
         /// Select into a list(IEnumerable) those records of the source Store
-        /// whose keys match with the submitted keys. Returned Enumerator internally is a 
-        /// standalone version of the Store that is fully optimized for performance.
-        /// It is a read-only wrapper for a copy of the source Store and thus, very efficient 
-        /// in handling large amount of records bringing a set of records to memory when needed,
-        /// and removing out a set that are rarely used to keep memory utilization at bay/good level, 
-        /// Handling very large amounts of records in the millions, hundreds
-        /// of millions and beyond, limited only by your hardware resources.
+        /// whose keys match with the submitted keys. Returned Enumerator is a wrapper to a 
+        /// read-only Store instance.
         /// 
         /// NOTE: code can execute Query multiple times for the same Store within the same
         /// LINQ query block. Each returned IEnumerable doesn't conflict with one another

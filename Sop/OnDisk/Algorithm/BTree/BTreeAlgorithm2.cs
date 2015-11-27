@@ -39,7 +39,7 @@ namespace Sop.OnDisk.Algorithm.BTree
             _comparerWrapper = null;
             currentDataBlock = null;
             currentEntry = null;
-            CurrentItem = null;
+            CurrentItemReference = null;
             if (DataSet != null)
             {
                 DataSet.Dispose();
@@ -395,12 +395,12 @@ namespace Sop.OnDisk.Algorithm.BTree
             BTreeItemOnDisk temp = null;
             BTreeNodeOnDisk node = null;
             bool needEnd = false;
-            if (CurrentItem.NodeAddress != -1)
+            if (CurrentItemReference.NodeAddress != -1)
             {
                 BeginTreeMaintenance();
                 needEnd = true;
-                node = CurrentItem.GetNode(this);
-                temp = node.Slots[CurrentItem.NodeItemIndex];
+                node = CurrentItemReference.GetNode(this);
+                temp = node.Slots[CurrentItemReference.NodeItemIndex];
             }
             if (temp != null)
             {
@@ -438,7 +438,7 @@ namespace Sop.OnDisk.Algorithm.BTree
                 while (FixVacatedSlot)
                 {
                     FixVacatedSlot = false;
-                    var r = CurrentItem.GetNode(this);
+                    var r = CurrentItemReference.GetNode(this);
                     r.FixTheVacatedSlot(this);
                 }
                 pull = false;
@@ -906,6 +906,29 @@ namespace Sop.OnDisk.Algorithm.BTree
             return r;
         }
 
+        // todo: support .Net async keyword.
+        /// <summary>
+        /// Bulk read data Values of a list of items from disk.
+        /// </summary>
+        /// <param name="items">list of items whose data Values will be read from disk.</param>
+        /// <returns>Array of DictionaryEntry with each Value member populated with data read from disk.
+        /// Or null if items is null or empty list.
+        /// </returns>
+        public DictionaryEntry[] GetValues(List<BTreeItemOnDisk> items)
+        {
+            if (items == null || items.Count == 0)
+                return null;
+            DictionaryEntry[] r = new DictionaryEntry[items.Count];
+            System.Func<int, bool> readCallback = (index) =>
+            {
+                var o = GetValue(items[index]);
+                r[index].Key = items[index].Key;
+                r[index].Value = o;
+                return true;
+            };
+            DataBlockDriver.ReadBlockFromDisk(DataSet, items, readCallback);
+            return r;
+        }
 
         /// <summary>
         /// Returns the Root Node of this B-Tree
@@ -940,8 +963,8 @@ namespace Sop.OnDisk.Algorithm.BTree
             r.HintSizeOnDisk = HintSizeOnDisk;
             r.HintValueSizeOnDisk = HintValueSizeOnDisk;
             r.CustomBlockAddress = CustomBlockAddress;
-            r.CurrentItem.NodeAddress = CurrentItem.NodeAddress;
-            r.CurrentItem.NodeItemIndex = CurrentItem.NodeItemIndex;
+            r.CurrentItemReference.NodeAddress = CurrentItemReference.NodeAddress;
+            r.CurrentItemReference.NodeItemIndex = CurrentItemReference.NodeItemIndex;
             r._slotLength = SlotLength;
             r.Comparer = Comparer;
             r._comparerWrapper = _comparerWrapper;
@@ -962,16 +985,14 @@ namespace Sop.OnDisk.Algorithm.BTree
             r.isOpen = IsOpen;
             r.KeySet.HeaderData = (HeaderData)HeaderData.Clone();
 
-            r.MruMinCapacity = MruMinCapacity / 2;
-            if (r.MruMinCapacity < 10)
-                r.MruMinCapacity = 10;
-            r.MruMaxCapacity = MruMaxCapacity / 2;
-            if (r.MruMaxCapacity < r.MruMinCapacity + 5)
-                r.MruMaxCapacity = r.MruMinCapacity + 5;
+            r.MruMinCapacity = MruMinCapacity;  // / 2;
+            //if (r.MruMinCapacity < 10)
+            //    r.MruMinCapacity = 10;
+            r.MruMaxCapacity = MruMaxCapacity;  // / 2;
+            //if (r.MruMaxCapacity < r.MruMinCapacity + 5)
+            //    r.MruMaxCapacity = r.MruMinCapacity + 5;
             r.MruManager = new MruManager(r.MruMinCapacity, r.MruMaxCapacity);
-
             //ReuseCachedItems(r.MruManager);
-
             #region candidate for removal
             //r.Blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>(
             //((Collections.Generic.SortedDictionary<long, Sop.DataBlock>)Blocks).Btree
@@ -1338,8 +1359,8 @@ namespace Sop.OnDisk.Algorithm.BTree
         {
             if (Count > 0)
             {
-                CurrentItem.NodeAddress = RootNode.GetAddress(this);
-                CurrentItem.NodeItemIndex = 0;
+                CurrentItemReference.NodeAddress = RootNode.GetAddress(this);
+                CurrentItemReference.NodeItemIndex = 0;
                 return true;
             }
             return false;
@@ -1402,10 +1423,10 @@ namespace Sop.OnDisk.Algorithm.BTree
         {
             get
             {
-                if (CurrentItem != null && CurrentItem.NodeAddress != -1)
+                if (CurrentItemReference != null && CurrentItemReference.NodeAddress != -1)
                 {
                     BeginTreeMaintenance();
-                    BTreeNodeOnDisk r = this.CurrentItem.GetNode(this);
+                    BTreeNodeOnDisk r = this.CurrentItemReference.GetNode(this);
                     EndTreeMaintenance();
                     return r;
                 }
@@ -1523,13 +1544,13 @@ namespace Sop.OnDisk.Algorithm.BTree
                     if (_sequentialReadIndex < _sequentialReadBatchedIDs.Count)
                         return _sequentialReadBatchedIDs[_sequentialReadIndex];
                 }
-                if (CurrentItem != null && CurrentItem.NodeAddress > -1 && CurrentItem.NodeItemIndex > -1)
+                if (CurrentItemReference != null && CurrentItemReference.NodeAddress > -1 && CurrentItemReference.NodeItemIndex > -1)
                 {
                     BeginTreeMaintenance();
-                    var n = this.CurrentItem.GetNode(this);
+                    var n = this.CurrentItemReference.GetNode(this);
                     object r = null;
                     if (n != null)
-                        r = n.Slots[this.CurrentItem.NodeItemIndex];
+                        r = n.Slots[this.CurrentItemReference.NodeItemIndex];
                     EndTreeMaintenance();
                     return r;
                 }
@@ -1730,7 +1751,7 @@ namespace Sop.OnDisk.Algorithm.BTree
         internal bool UpdateCurrentItem(Sop.DataBlock source)
         {
             BTreeNodeOnDisk n = CurrentNode;
-            BTreeItemOnDisk itm = n.Slots[CurrentItem.NodeItemIndex];
+            BTreeItemOnDisk itm = n.Slots[CurrentItemReference.NodeItemIndex];
 
             if (itm == null) return false;
             if (!itm.ValueLoaded)
@@ -1758,7 +1779,7 @@ namespace Sop.OnDisk.Algorithm.BTree
             itm.IsDirty = true;
             itm.Value.IsDirty = true;
             n.IsDirty = true;
-            MruManager.Add(CurrentItem.NodeAddress, n);
+            MruManager.Add(CurrentItemReference.NodeAddress, n);
             return true;
         }
 
@@ -1786,9 +1807,9 @@ namespace Sop.OnDisk.Algorithm.BTree
         /// <param name="itemIndex">slot index of the new item</param>
         protected internal void SetCurrentItemAddress(long itemNodeAddress, short itemIndex)
         {
-            if (CurrentItem == null) return;
-            CurrentItem.NodeAddress = itemNodeAddress;
-            CurrentItem.NodeItemIndex = itemIndex;
+            if (CurrentItemReference == null) return;
+            CurrentItemReference.NodeAddress = itemNodeAddress;
+            CurrentItemReference.NodeItemIndex = itemIndex;
         }
 
         /// <summary>
@@ -1826,7 +1847,7 @@ namespace Sop.OnDisk.Algorithm.BTree
         /// <summary>
         /// This holds the Current Item Address (Current Node and Current Slot index)
         /// </summary>
-        public BTreeNodeOnDisk.ItemAddress CurrentItem = new BTreeNodeOnDisk.ItemAddress();
+        public BTreeNodeOnDisk.ItemAddress CurrentItemReference = new BTreeNodeOnDisk.ItemAddress();
 
         /// <summary>
         /// true will save long int data with Key, thus, is a lot more optimized.

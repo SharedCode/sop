@@ -140,7 +140,7 @@ namespace Sop.Samples
                     keys[c] = ++logicalIndex + i + 1;
                 }
                 // just use Store and do Linq to Objects. Store & enumerators are thread safe.
-                // todo: use batch query.
+                // do batch query.
                 var qry = from a in PeopleStore.Query(keys, true) select a;
                 c = 0;
                 foreach (var p in qry)

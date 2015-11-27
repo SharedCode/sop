@@ -1484,7 +1484,7 @@ namespace Sop.OnDisk.Algorithm.SortedDictionary
                 else
                     throw new SopException(string.Format("Can't update Current Value in memory, SOP can't extract key from value of type {0}, your code needs to Search for the item with your known key.", value.GetType().ToString()));
             }
-            BTreeAlgorithm.CurrentNode.Slots[BTreeAlgorithm.CurrentItem.NodeItemIndex].Value.Data = value;
+            BTreeAlgorithm.CurrentNode.Slots[BTreeAlgorithm.CurrentItemReference.NodeItemIndex].Value.Data = value;
         }
 
         /// <summary>

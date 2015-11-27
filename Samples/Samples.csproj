@@ -79,7 +79,7 @@
   <ItemGroup>
     <Compile Include="BayWind.cs" />
     <Compile Include="ISample.cs" />
-    <Compile Include="Others\ObjectDirectoryLINQ.cs" />
+    <Compile Include="LINQ\ObjectDirectoryLINQ.cs" />
     <Compile Include="PeopleDirectory\OneHundredMillionInserts.cs" />
     <Compile Include="PeopleDirectory\PeopleDirectoryWithUpdate.cs" />
     <Compile Include="Others\RenameItemsOfStore.cs" />
@@ -95,7 +95,7 @@
     <Compile Include="Others\NestedSortedDictionary.cs" />
     <Compile Include="PeopleDirectory\PeopleDirectory.cs" />
     <Compile Include="Others\ObjectDirectory.cs" />
-    <Compile Include="PeopleDirectory\ManyClientSimulator.cs" />
+    <Compile Include="LINQ\ManyClientSimulator.cs" />
     <Compile Include="PeopleDirectory\PeopleDirectoryXmlSerializableObject.cs" />
     <Compile Include="PeopleDirectory\PeopleDirectoryWithBlobDataAddUniqueCheck.cs" />
     <Compile Include="PeopleDirectory\PeopleDirectoryWithBlobDataNull.cs" />
