@@ -39,7 +39,7 @@ namespace Sop.OnDisk.Algorithm.BTree
             _comparerWrapper = null;
             currentDataBlock = null;
             currentEntry = null;
-            CurrentItemReference = null;
+            CurrentItem = null;
             if (DataSet != null)
             {
                 DataSet.Dispose();
@@ -395,12 +395,12 @@ namespace Sop.OnDisk.Algorithm.BTree
             BTreeItemOnDisk temp = null;
             BTreeNodeOnDisk node = null;
             bool needEnd = false;
-            if (CurrentItemReference.NodeAddress != -1)
+            if (CurrentItem.NodeAddress != -1)
             {
                 BeginTreeMaintenance();
                 needEnd = true;
-                node = CurrentItemReference.GetNode(this);
-                temp = node.Slots[CurrentItemReference.NodeItemIndex];
+                node = CurrentItem.GetNode(this);
+                temp = node.Slots[CurrentItem.NodeItemIndex];
             }
             if (temp != null)
             {
@@ -438,7 +438,7 @@ namespace Sop.OnDisk.Algorithm.BTree
                 while (FixVacatedSlot)
                 {
                     FixVacatedSlot = false;
-                    var r = CurrentItemReference.GetNode(this);
+                    var r = CurrentItem.GetNode(this);
                     r.FixTheVacatedSlot(this);
                 }
                 pull = false;
@@ -906,29 +906,6 @@ namespace Sop.OnDisk.Algorithm.BTree
             return r;
         }
 
-        // todo: support .Net async keyword.
-        /// <summary>
-        /// Bulk read data Values of a list of items from disk.
-        /// </summary>
-        /// <param name="items">list of items whose data Values will be read from disk.</param>
-        /// <returns>Array of DictionaryEntry with each Value member populated with data read from disk.
-        /// Or null if items is null or empty list.
-        /// </returns>
-        public DictionaryEntry[] GetValues(List<BTreeItemOnDisk> items)
-        {
-            if (items == null || items.Count == 0)
-                return null;
-            DictionaryEntry[] r = new DictionaryEntry[items.Count];
-            System.Func<int, bool> readCallback = (index) =>
-            {
-                var o = GetValue(items[index]);
-                r[index].Key = items[index].Key;
-                r[index].Value = o;
-                return true;
-            };
-            DataBlockDriver.ReadBlockFromDisk(DataSet, items, readCallback);
-            return r;
-        }
 
         /// <summary>
         /// Returns the Root Node of this B-Tree
@@ -944,13 +921,18 @@ namespace Sop.OnDisk.Algorithm.BTree
         /// <returns></returns>
         public object Clone()
         {
-            // store is expected not to be dirty during clone.
             var r = new BTreeAlgorithm();
             r.SyncRoot = SyncRoot;
             r.Name = Name;
             r.DataBlockDriver = (DataBlockDriver)DataBlockDriver.Clone();
             r.DataBlockSize = DataBlockSize;
             r.IndexBlockSize = IndexBlockSize;
+            // note: store is not dirty during clone.
+            //// ensure IsDirty method is thread-safe, it "may" inspect MRU cache.
+            //((MruManager)MruManager).CacheCollection.Locker.Invoke(() =>
+            //{
+            //    r.IsDirty = IsDirty;
+            //});
             r.IsDataLongInt = IsDataLongInt;
             r.PersistenceType = PersistenceType;
             r._IsDataInKeySegment = IsDataInKeySegment;
@@ -963,8 +945,8 @@ namespace Sop.OnDisk.Algorithm.BTree
             r.HintSizeOnDisk = HintSizeOnDisk;
             r.HintValueSizeOnDisk = HintValueSizeOnDisk;
             r.CustomBlockAddress = CustomBlockAddress;
-            r.CurrentItemReference.NodeAddress = CurrentItemReference.NodeAddress;
-            r.CurrentItemReference.NodeItemIndex = CurrentItemReference.NodeItemIndex;
+            r.CurrentItem.NodeAddress = CurrentItem.NodeAddress;
+            r.CurrentItem.NodeItemIndex = CurrentItem.NodeItemIndex;
             r._slotLength = SlotLength;
             r.Comparer = Comparer;
             r._comparerWrapper = _comparerWrapper;
@@ -985,20 +967,19 @@ namespace Sop.OnDisk.Algorithm.BTree
             r.isOpen = IsOpen;
             r.KeySet.HeaderData = (HeaderData)HeaderData.Clone();
 
-            r.MruMinCapacity = MruMinCapacity;  // / 2;
-            //if (r.MruMinCapacity < 10)
-            //    r.MruMinCapacity = 10;
-            r.MruMaxCapacity = MruMaxCapacity;  // / 2;
-            //if (r.MruMaxCapacity < r.MruMinCapacity + 5)
-            //    r.MruMaxCapacity = r.MruMinCapacity + 5;
+            r.MruMinCapacity = MruMinCapacity / 2;
+            if (r.MruMinCapacity < 10)
+                r.MruMinCapacity = 10;
+            r.MruMaxCapacity = MruMaxCapacity / 2;
+            if (r.MruMaxCapacity < r.MruMinCapacity + 5)
+                r.MruMaxCapacity = r.MruMinCapacity + 5;
             r.MruManager = new MruManager(r.MruMinCapacity, r.MruMaxCapacity);
             //ReuseCachedItems(r.MruManager);
-            #region candidate for removal
+
             //r.Blocks = new Collections.Generic.SortedDictionary<long, Sop.DataBlock>(
             //((Collections.Generic.SortedDictionary<long, Sop.DataBlock>)Blocks).Btree
             // we need a single threaded version of sorted dict. as Clones are designed for single thread use.
             //r.PromoteLookup = new Collections.Generic.SortedDictionary<long, BTreeNodeOnDisk>();
-            #endregion
 
             return r;
         }
@@ -1359,8 +1340,8 @@ namespace Sop.OnDisk.Algorithm.BTree
         {
             if (Count > 0)
             {
-                CurrentItemReference.NodeAddress = RootNode.GetAddress(this);
-                CurrentItemReference.NodeItemIndex = 0;
+                CurrentItem.NodeAddress = RootNode.GetAddress(this);
+                CurrentItem.NodeItemIndex = 0;
                 return true;
             }
             return false;
@@ -1423,10 +1404,10 @@ namespace Sop.OnDisk.Algorithm.BTree
         {
             get
             {
-                if (CurrentItemReference != null && CurrentItemReference.NodeAddress != -1)
+                if (CurrentItem != null && CurrentItem.NodeAddress != -1)
                 {
                     BeginTreeMaintenance();
-                    BTreeNodeOnDisk r = this.CurrentItemReference.GetNode(this);
+                    BTreeNodeOnDisk r = this.CurrentItem.GetNode(this);
                     EndTreeMaintenance();
                     return r;
                 }
@@ -1544,13 +1525,13 @@ namespace Sop.OnDisk.Algorithm.BTree
                     if (_sequentialReadIndex < _sequentialReadBatchedIDs.Count)
                         return _sequentialReadBatchedIDs[_sequentialReadIndex];
                 }
-                if (CurrentItemReference != null && CurrentItemReference.NodeAddress > -1 && CurrentItemReference.NodeItemIndex > -1)
+                if (CurrentItem != null && CurrentItem.NodeAddress > -1 && CurrentItem.NodeItemIndex > -1)
                 {
                     BeginTreeMaintenance();
-                    var n = this.CurrentItemReference.GetNode(this);
+                    var n = this.CurrentItem.GetNode(this);
                     object r = null;
                     if (n != null)
-                        r = n.Slots[this.CurrentItemReference.NodeItemIndex];
+                        r = n.Slots[this.CurrentItem.NodeItemIndex];
                     EndTreeMaintenance();
                     return r;
                 }
@@ -1751,7 +1732,7 @@ namespace Sop.OnDisk.Algorithm.BTree
         internal bool UpdateCurrentItem(Sop.DataBlock source)
         {
             BTreeNodeOnDisk n = CurrentNode;
-            BTreeItemOnDisk itm = n.Slots[CurrentItemReference.NodeItemIndex];
+            BTreeItemOnDisk itm = n.Slots[CurrentItem.NodeItemIndex];
 
             if (itm == null) return false;
             if (!itm.ValueLoaded)
@@ -1779,7 +1760,7 @@ namespace Sop.OnDisk.Algorithm.BTree
             itm.IsDirty = true;
             itm.Value.IsDirty = true;
             n.IsDirty = true;
-            MruManager.Add(CurrentItemReference.NodeAddress, n);
+            MruManager.Add(CurrentItem.NodeAddress, n);
             return true;
         }
 
@@ -1807,9 +1788,9 @@ namespace Sop.OnDisk.Algorithm.BTree
         /// <param name="itemIndex">slot index of the new item</param>
         protected internal void SetCurrentItemAddress(long itemNodeAddress, short itemIndex)
         {
-            if (CurrentItemReference == null) return;
-            CurrentItemReference.NodeAddress = itemNodeAddress;
-            CurrentItemReference.NodeItemIndex = itemIndex;
+            if (CurrentItem == null) return;
+            CurrentItem.NodeAddress = itemNodeAddress;
+            CurrentItem.NodeItemIndex = itemIndex;
         }
 
         /// <summary>
@@ -1847,7 +1828,7 @@ namespace Sop.OnDisk.Algorithm.BTree
         /// <summary>
         /// This holds the Current Item Address (Current Node and Current Slot index)
         /// </summary>
-        public BTreeNodeOnDisk.ItemAddress CurrentItemReference = new BTreeNodeOnDisk.ItemAddress();
+        public BTreeNodeOnDisk.ItemAddress CurrentItem = new BTreeNodeOnDisk.ItemAddress();
 
         /// <summary>
         /// true will save long int data with Key, thus, is a lot more optimized.

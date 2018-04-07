@@ -44,14 +44,8 @@ namespace Sop
             // compute MaxInMemoryBlockCount based on allocatable RAM as set by user...
             ulong memSize = (ulong)SystemAdaptor.Instance.SystemInterface.GetMemorySize();
             float ml = MemoryLimitInPercent;
-            // max is 99% of RAM
-            const int MaxMemoryLimitInPercent = 99;
-            // min is 7% of RAM
-            const int MinMemoryLimitInPercent = 7;
-            if (ml > MaxMemoryLimitInPercent)
-                ml = MaxMemoryLimitInPercent;
-            if (ml < MinMemoryLimitInPercent)
-                ml = MinMemoryLimitInPercent;
+            if (ml > 75) ml = 75;   // max is 75% of RAM
+            if (ml < 10) ml = 10;   // min is 10% of RAM
             var allocatableMemSize = (ulong)(memSize * (ml / 100));
             if (allocatableMemSize == 0)
                 allocatableMemSize = (ulong)(memSize * .45);

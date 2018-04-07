@@ -296,7 +296,7 @@ namespace Sop.OnDisk
         {
             return
                 (Algorithm.SortedDictionary.ISortedDictionaryOnDisk)
-                ObjectFactory.Instance.GetDictionaryOnDisk(file, comparer, name, isDataInKeySegment);
+                ObjectFactory.Instance.CreateDictionaryOnDisk(file, comparer, name, isDataInKeySegment);
         }
 
         /// <summary>

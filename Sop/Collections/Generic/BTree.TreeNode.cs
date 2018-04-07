@@ -522,19 +522,19 @@ namespace Sop.Collections.Generic
                 protected internal void Clear(bool recycle)
                 {
                     Parent = null;
-                    //byte i;
-                    //for (i = 0; i < _count; i++)
-                    //    Slots[i] = null;
+                    byte i;
+                    for (i = 0; i < _count; i++)
+                        Slots[i] = null;
                     if (!recycle)
                         Slots = null;
                     if (this.Children != null)
                     {
-                        //for (i = 0; i <= _count; i++)
-                        //{
-                        //    if (!recycle)
-                        //        Children[i].Clear();
-                        //    Children[i] = null;
-                        //}
+                        for (i = 0; i <= _count; i++)
+                        {
+                            if (!recycle)
+                                Children[i].Clear();
+                            Children[i] = null;
+                        }
                         Children = null;
                     }
                     _count = 0;
@@ -1330,12 +1330,12 @@ namespace Sop.Collections.Generic
                 /// </summary>
                 protected internal new void Clear()
                 {
-                    //if (this.Children != null)
-                    //{
-                    //    for (byte i = 0; i <= _count; i++)
-                    //        // Clear children nodes.
-                    //        Children[i].Clear();
-                    //}
+                    if (this.Children != null)
+                    {
+                        for (byte i = 0; i <= _count; i++)
+                            // Clear children nodes.
+                            Children[i].Clear();
+                    }
                     Children = null;
                     ResetArray(Slots, null);
                     // reset to 0 the treenode count...

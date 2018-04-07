@@ -58,7 +58,7 @@ namespace Sop
         /// <param name="name"></param>
         /// <param name="isDataInKeySegment"> </param>
         /// <returns></returns>
-        public virtual ISortedDictionaryOnDisk GetDictionaryOnDisk(IFile file, IComparer comparer, string name,
+        public virtual ISortedDictionaryOnDisk CreateDictionaryOnDisk(IFile file, IComparer comparer, string name,
                                                                       bool isDataInKeySegment)
         {
             return new SortedDictionaryOnDisk((OnDisk.File.IFile) file, comparer, name, isDataInKeySegment);

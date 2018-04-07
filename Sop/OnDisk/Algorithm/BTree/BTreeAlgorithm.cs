@@ -220,9 +220,9 @@ namespace Sop.OnDisk.Algorithm.BTree
             {
                 BeginTreeMaintenance();
                 BTreeNodeOnDisk currNode = CurrentNode;
-                if (currNode != null && CurrentItemReference.NodeItemIndex >= 0)
+                if (currNode != null && CurrentItem.NodeItemIndex >= 0)
                 {
-                    BTreeItemOnDisk itm = currNode.Slots[CurrentItemReference.NodeItemIndex];
+                    BTreeItemOnDisk itm = currNode.Slots[CurrentItem.NodeItemIndex];
                     if (CompareSimpleType(itm.Value.Data, value))
                     {
                         EndTreeMaintenance();
@@ -278,9 +278,9 @@ namespace Sop.OnDisk.Algorithm.BTree
         public bool Detach()
         {
             BTreeNodeOnDisk currNode = CurrentNode;
-            if (currNode == null || CurrentItemReference.NodeItemIndex < 0)
+            if (currNode == null || CurrentItem.NodeItemIndex < 0)
                 return false;
-            BTreeItemOnDisk itm = currNode.Slots[CurrentItemReference.NodeItemIndex];
+            BTreeItemOnDisk itm = currNode.Slots[CurrentItem.NodeItemIndex];
             itm.Value.Data = null;
             if (IsDataInKeySegment)
             {
@@ -834,14 +834,14 @@ namespace Sop.OnDisk.Algorithm.BTree
                     LoadSequentialReadBatchedIDs();
                 return _sequentialReadBatchedIDs.Count > 0;
             }
-            if (CurrentItemReference != null)
+            if (CurrentItem != null)
             {
                 BeginTreeMaintenance();
                 try
                 {
-                    BTreeNodeOnDisk o = CurrentItemReference.GetNode(this);
+                    BTreeNodeOnDisk o = CurrentItem.GetNode(this);
                     if (
-                        !(CurrentItemReference.NodeAddress == -1 || o.Slots == null || o.Slots[CurrentItemReference.NodeItemIndex] == null))
+                        !(CurrentItem.NodeAddress == -1 || o.Slots == null || o.Slots[CurrentItem.NodeItemIndex] == null))
                         return o.MovePrevious(this);
                 }
                 finally
@@ -870,14 +870,14 @@ namespace Sop.OnDisk.Algorithm.BTree
                     LoadSequentialReadBatchedIDs();
                 return _sequentialReadBatchedIDs.Count > 0;
             }
-            if (CurrentItemReference != null)
+            if (CurrentItem != null)
             {
                 BeginTreeMaintenance();
                 try
                 {
-                    BTreeNodeOnDisk o = CurrentItemReference.GetNode(this);
+                    BTreeNodeOnDisk o = CurrentItem.GetNode(this);
                     if (o != null &&
-                        (!(CurrentItemReference.NodeAddress == -1 || o.Slots == null || o.Slots[CurrentItemReference.NodeItemIndex] == null)))
+                        (!(CurrentItem.NodeAddress == -1 || o.Slots == null || o.Slots[CurrentItem.NodeItemIndex] == null)))
                         return o.MoveNext(this);
                 }
                 finally

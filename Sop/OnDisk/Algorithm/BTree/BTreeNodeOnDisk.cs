@@ -554,7 +554,7 @@ namespace Sop.OnDisk.Algorithm.BTree
             // check if there are children nodes.
             BTreeItemOnDisk deletedItem = null;
             BTreeNodeOnDisk nod = this;
-            short index = bTree.CurrentItemReference.NodeItemIndex;
+            short index = bTree.CurrentItem.NodeItemIndex;
             if (ChildrenAddresses != null)
             {
                 if (!bTree.IsDataInKeySegment)
@@ -564,8 +564,8 @@ namespace Sop.OnDisk.Algorithm.BTree
                 MoveNext(bTree);
                 // sure to succeed since Children nodes are always in pairs(left & right).
                 // Make the new current item the occupant of the slot occupied by the deleted item.
-                nod = bTree.CurrentItemReference.GetNode(bTree);
-                Slots[index] = nod.Slots[bTree.CurrentItemReference.NodeItemIndex];
+                nod = bTree.CurrentItem.GetNode(bTree);
+                Slots[index] = nod.Slots[bTree.CurrentItem.NodeItemIndex];
                 SaveNodeToDisk(bTree);
                 // Thus, the above code has the effect that the current item's slot is the deleted slot, 
                 // so, the succeeding code that will remove the current slot will be fine..
@@ -629,12 +629,12 @@ namespace Sop.OnDisk.Algorithm.BTree
                 IsDirty = true;
                 //this.SaveNodeToDisk(bTree);
                 bTree.SetCurrentItemAddress(parent.GetAddress(bTree), i);
-                BTreeNodeOnDisk node = bTree.CurrentItemReference.GetNode(bTree);
+                BTreeNodeOnDisk node = bTree.CurrentItem.GetNode(bTree);
                 node.MovePrevious(bTree);
-                node = bTree.CurrentItemReference.GetNode(bTree);
+                node = bTree.CurrentItem.GetNode(bTree);
                 node.IsDirty = true;
                 //parent = GetParent(bTree);
-                parent.Slots[i] = node.Slots[bTree.CurrentItemReference.NodeItemIndex];
+                parent.Slots[i] = node.Slots[bTree.CurrentItem.NodeItemIndex];
                 parent.IsDirty = true;
                 //parent.SaveNodeToDisk(bTree);
 
@@ -732,10 +732,10 @@ namespace Sop.OnDisk.Algorithm.BTree
                     IsDirty = true;
                     //SaveNodeToDisk(bTree);
                     bTree.SetCurrentItemAddress(parent.GetAddress(bTree), i);
-                    BTreeNodeOnDisk node = bTree.CurrentItemReference.GetNode(bTree);
+                    BTreeNodeOnDisk node = bTree.CurrentItem.GetNode(bTree);
                     node.MoveNext(bTree);
-                    node = bTree.CurrentItemReference.GetNode(bTree);
-                    parent.Slots[i] = node.Slots[bTree.CurrentItemReference.NodeItemIndex];
+                    node = bTree.CurrentItem.GetNode(bTree);
+                    parent.Slots[i] = node.Slots[bTree.CurrentItem.NodeItemIndex];
                     parent.IsDirty = true;
                     //parent.SaveNodeToDisk(bTree);
 
@@ -801,11 +801,11 @@ namespace Sop.OnDisk.Algorithm.BTree
             if (c > 1) // if there are more than 1 items in slot then..
             {
                 //***** We don't fix the children since there are no children at this scenario.
-                if (bTree.CurrentItemReference.NodeItemIndex < c - 1)
+                if (bTree.CurrentItem.NodeItemIndex < c - 1)
                     MoveArrayElements(Slots,
-                                      (int) (bTree.CurrentItemReference.NodeItemIndex + 1),
-                                      bTree.CurrentItemReference.NodeItemIndex,
-                                      (short) (c - 1 - bTree.CurrentItemReference.NodeItemIndex));
+                                      (int) (bTree.CurrentItem.NodeItemIndex + 1),
+                                      bTree.CurrentItem.NodeItemIndex,
+                                      (short) (c - 1 - bTree.CurrentItem.NodeItemIndex));
 
                 #region recycling block not used, may be removed later...
                 //if (Slots[c - 2].Key != Slots[c - 1].Key)
@@ -1130,7 +1130,7 @@ namespace Sop.OnDisk.Algorithm.BTree
                 node = GetNode(bTree, da);
             }
             bTree.SetCurrentItemAddress(node.GetAddress(bTree), (short) (node.Count - 1));
-            return bTree.CurrentItemReference.NodeAddress != -1;
+            return bTree.CurrentItem.NodeAddress != -1;
         }
 
         /// <summary>
@@ -1141,7 +1141,7 @@ namespace Sop.OnDisk.Algorithm.BTree
         protected internal bool MoveNext(BTree.BTreeAlgorithm bTree)
         {
             BTreeNodeOnDisk currentNode = this;
-            short slotIndex = bTree.CurrentItemReference.NodeItemIndex;
+            short slotIndex = bTree.CurrentItem.NodeItemIndex;
             slotIndex++;
             bool goRightDown = ChildrenAddresses != null;
             if (goRightDown)
@@ -1195,7 +1195,7 @@ namespace Sop.OnDisk.Algorithm.BTree
 
         protected internal bool MovePrevious(BTree.BTreeAlgorithm bTree)
         {
-            short slotIndex = bTree.CurrentItemReference.NodeItemIndex;
+            short slotIndex = bTree.CurrentItem.NodeItemIndex;
             bool goLeftDown = ChildrenAddresses != null;
             BTreeNodeOnDisk currentNode = this;
             if (goLeftDown)

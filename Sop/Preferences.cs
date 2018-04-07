@@ -114,7 +114,7 @@ namespace Sop
         private Encoding _encoding = SystemAdaptor.Instance.SystemInterface.DefaultEncoding;
 
         /// <summary>
-        /// BTree Slot Length. Defaults to 100.
+        /// BTree Slot Length. Defaults to 150.
         /// </summary>
         public short BTreeSlotLength { get; set; }
 

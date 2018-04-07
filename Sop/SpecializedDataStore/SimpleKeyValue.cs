@@ -274,7 +274,7 @@ namespace Sop.SpecializedDataStore
                 d();
                 return;
             }
-            Locker.Invoke(d, getLockType());
+            Locker.Invoke(d);
         }
         private void Close()
         {
@@ -329,7 +329,7 @@ namespace Sop.SpecializedDataStore
                 throw new InvalidOperationException("Collection is null, can't save.");
             try
             {
-                Locker.Invoke(() => { Collection.Flush(); }, getLockType());
+                Locker.Invoke(() => { Collection.Flush(); });
             }
             catch (Exception exc)
             {
@@ -396,6 +396,21 @@ namespace Sop.SpecializedDataStore
             return Locker.Invoke(() => { return AddIfNotExist((object)key, (object)value); });
         }
 
+        public bool AddIfNotExist(KeyValuePair<TKey, TValue>[] items)
+        {
+            if (items == null)
+                throw new ArgumentNullException("items");
+            bool result = false;
+            foreach (KeyValuePair<TKey, TValue> item in items)
+                Locker.Invoke(() =>
+                {
+                    var f = AddIfNotExist(item.Key, item.Value);
+                    if (f && !result)
+                        result = true;
+                });
+            return result;
+        }
+
         /// <summary>
         /// Checks whether an item with key exists in the Dictionary
         /// </summary>
@@ -442,7 +457,7 @@ namespace Sop.SpecializedDataStore
                             }
                         }
                         return _keys;
-                    }, getLockType());
+                    });
             }
         }
         /// <summary>
@@ -596,8 +611,7 @@ namespace Sop.SpecializedDataStore
         public bool TryGetValue(TKey key, out TValue value)
         {
             value = default(TValue);
-            var lockType = getLockType();
-            Locker.Lock(lockType);
+            Locker.Lock();
             try
             {
                 if (Contains(key))
@@ -609,7 +623,7 @@ namespace Sop.SpecializedDataStore
             }
             finally
             {
-                Locker.Unlock(lockType);
+                Locker.Unlock();
             }
         }
 
@@ -735,7 +749,7 @@ namespace Sop.SpecializedDataStore
         /// <param name="arrayIndex"></param>
         public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
         {
-            Locker.Invoke(() => { CopyTo((Array)array, arrayIndex); }, getLockType());
+            Locker.Invoke(() => { CopyTo((Array)array, arrayIndex); });
         }
 
         public IComparer<TKey> Comparer
@@ -959,7 +973,7 @@ namespace Sop.SpecializedDataStore
                 throw new InvalidOperationException("Collection is null, can't check for Key existence.");
             try
             {
-                return Locker.Invoke(() => { return Collection.Contains(key); }, getLockType());
+                return Locker.Invoke(() => { return Collection.Contains(key); });
             }
             catch (Exception exc)
             {
@@ -981,7 +995,7 @@ namespace Sop.SpecializedDataStore
             {
                 try
                 {
-                    return Locker.Invoke(() => { return Collection[key]; }, getLockType());
+                    return Locker.Invoke(() => { return Collection[key]; });
                 }
                 catch (Exception exc)
                 {
@@ -1123,7 +1137,7 @@ namespace Sop.SpecializedDataStore
                 {
                     Collection.Flush();
                     ((OnDisk.Algorithm.SortedDictionary.ISortedDictionaryOnDisk)Collection).Pack(writer);
-                }, getLockType());
+                });
             }
             catch (Exception exc)
             {
@@ -1145,7 +1159,7 @@ namespace Sop.SpecializedDataStore
             {
                 try
                 {
-                    Locker.Invoke(() => { ((OnDisk.Algorithm.SortedDictionary.ISortedDictionaryOnDisk)Collection).Unpack(reader); }, getLockType());
+                    Locker.Invoke(() => { ((OnDisk.Algorithm.SortedDictionary.ISortedDictionaryOnDisk)Collection).Unpack(reader); });
                 }
                 catch (Exception exc)
                 {
@@ -1168,13 +1182,13 @@ namespace Sop.SpecializedDataStore
             {
                 if (Collection == null)
                     throw new InvalidOperationException("Collection is null, can't get HintSequentialRead.");
-                return Locker.Invoke(() => { return Collection.HintSequentialRead; }, getLockType());
+                return Locker.Invoke(() => { return Collection.HintSequentialRead; });
             }
             set
             {
                 if (Collection == null)
                     throw new InvalidOperationException("Collection is null, can't set HintSequentialRead.");
-                Locker.Invoke(() => { this.Collection.HintSequentialRead = value; }, getLockType());
+                Locker.Invoke(() => { this.Collection.HintSequentialRead = value; });
             }
         }
 
@@ -1184,13 +1198,13 @@ namespace Sop.SpecializedDataStore
             {
                 if (Collection == null)
                     throw new InvalidOperationException("Collection is null, can't get HintBatchCount.");
-                return Locker.Invoke(() => { return Collection.HintBatchCount; }, getLockType());
+                return Locker.Invoke(() => { return Collection.HintBatchCount; });
             }
             set
             {
                 if (Collection == null)
                     throw new InvalidOperationException("Collection is null, can't set HintBatchCount.");
-                Locker.Invoke(() => { Collection.HintBatchCount = value; }, getLockType());
+                Locker.Invoke(() => { Collection.HintBatchCount = value; });
             }
         }
 
@@ -1214,7 +1228,7 @@ namespace Sop.SpecializedDataStore
                         if (Collection.CurrentKey != null)
                             return (TKey)Collection.CurrentKey;
                         return default(TKey);
-                    }, getLockType());
+                    });
                 }
                 catch (Exception exc)
                 {
@@ -1246,7 +1260,7 @@ namespace Sop.SpecializedDataStore
                     if (Collection.CurrentValue != null)
                         return (TValue)Collection.CurrentValue;
                     return default(TValue);
-                }, getLockType());
+                });
             }
             set
             {
@@ -1268,7 +1282,7 @@ namespace Sop.SpecializedDataStore
                 throw new InvalidOperationException("Collection is null, can't MoveNext.");
             try
             {
-                return Locker.Invoke(() => { return Collection.MoveNext(); }, getLockType());
+                return Locker.Invoke(() => { return Collection.MoveNext(); });
             }
             catch (Exception exc)
             {
@@ -1294,7 +1308,7 @@ namespace Sop.SpecializedDataStore
                 throw new InvalidOperationException("Collection is null, can't MovePrevious.");
             try
             {
-                return Locker.Invoke(() => { return Collection.MovePrevious(); }, getLockType());
+                return Locker.Invoke(() => { return Collection.MovePrevious(); });
             }
             catch (Exception exc)
             {
@@ -1320,7 +1334,7 @@ namespace Sop.SpecializedDataStore
                 throw new InvalidOperationException("Collection is null, can't MoveFirst.");
             try
             {
-                return Locker.Invoke(() => { return Collection.MoveFirst(); }, getLockType());
+                return Locker.Invoke(() => { return Collection.MoveFirst(); });
             }
             catch (Exception exc)
             {
@@ -1346,7 +1360,7 @@ namespace Sop.SpecializedDataStore
                 throw new InvalidOperationException("Collection is null, can't MoveLast.");
             try
             {
-                return Locker.Invoke(() => { return Collection.MoveLast(); }, getLockType());
+                return Locker.Invoke(() => { return Collection.MoveLast(); });
             }
             catch (Exception exc)
             {
@@ -1372,7 +1386,7 @@ namespace Sop.SpecializedDataStore
                 throw new InvalidOperationException("Collection is null, can't check if it's on EndOfTree.");
             try
             {
-                return Locker.Invoke(() => { return Collection.EndOfTree(); }, getLockType());
+                return Locker.Invoke(() => { return Collection.EndOfTree(); });
             }
             catch (Exception exc)
             {
@@ -1427,7 +1441,7 @@ namespace Sop.SpecializedDataStore
                         }
                         _values = null;
                         return false;
-                    }, getLockType());
+                    });
                 values = _values;
                 return f;
             }
@@ -1456,7 +1470,7 @@ namespace Sop.SpecializedDataStore
                 throw new InvalidOperationException("Collection is null, can't do Search.");
             try
             {
-                return Locker.Invoke(() => { return Collection.Search(key, false); }, getLockType());
+                return Locker.Invoke(() => { return Collection.Search(key, false); });
             }
             catch (Exception exc)
             {
@@ -1484,7 +1498,7 @@ namespace Sop.SpecializedDataStore
                 throw new InvalidOperationException("Collection is null, can't fo Search.");
             try
             {
-                return Locker.Invoke(() => { return Collection.Search(key, goToFirstInstance); }, getLockType());
+                return Locker.Invoke(() => { return Collection.Search(key, goToFirstInstance); });
             }
             catch (Exception exc)
             {
@@ -1559,19 +1573,5 @@ namespace Sop.SpecializedDataStore
                 Collection.AutoDispose = value;
             }
         }
-        private OperationType getLockType()
-        {
-            if (HintReadOnly)
-                return OperationType.Read;
-            return OperationType.Write;
-        }
-
-        /// <summary>
-        /// true means Store is hinted to be used for read-only access.
-        /// If true, succeeding reader method calls will issue a reader lock.
-        /// Management methods (add, remove, update) will actually ignore this hint
-        /// to protect the Store's data integrity.
-        /// </summary>
-        public bool HintReadOnly { get; set; }
     }
 }

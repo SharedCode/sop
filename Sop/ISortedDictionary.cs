@@ -65,16 +65,5 @@ namespace Sop
         /// of the data.
         /// </summary>
         bool AutoFlush { get; set; }
-
-        /// <summary>
-        /// true means Dictionary is hinted to be used for read-only access.
-        /// If true, succeeding reader method calls will issue a reader lock.
-        /// Ensure there are no in-memory cached objects by calling 'Flush' before
-        /// setting this Store hint to readOnly.
-        /// 
-        /// Management methods (add, remove, update) will ignore this hint
-        /// and issue a writer lock to protect the Store's data integrity.
-        /// </summary>
-        bool HintReadOnly { get; set; }
     }
 }
