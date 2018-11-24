@@ -27,4 +27,12 @@ SOP written in Go will be a full re-implementation. A lot of key technical featu
 * Cassandra, AWS S3 (future next), etc... as backend Stores.
 Support for additional backends other than Cassandra & AWS S3 will be done on per request basis.
 
-Cassandra integration will sport recommended "time series" solution to scale storage and access on Cassandra. Tomb Stones will also be minimally used. SOP has deleted data (block) recycling technology, thus, making usage of Storage engines like Cassandra, optimal.
+Cassandra integration will sport recommended "time series" solution to scale storage and access on Cassandra. Tomb Stones will also be minimally used. SOP has deleted data (block) recycling technology, thus, making usage of Storage engines like Cassandra where deletes are expensive & large blobs, can be made optimal or efficiency unaffected.
+
+## Very Large Blob Layout
+Large data including vlblobs are optionally storable as a set of data blocks. Being able to use decently many small to medium sized data blocks to store a huge data is considered optimal. Example, a 2GB data can be stored using four 512KB data blocks. Each block having its own partition and thus, all four can be read "served" up from the Cluster by four different cluster node. Similarly, during write, Cassandra cluster can perform optimally storing these four blocks.
+
+This storage structure together with SOP's "data block" recycling feature, solves the issue of Cassandra (and any backend store for this matter) not being suited for storing large data sets. Operating without requirement to use "streaming" feature also simplifies the API and the Application trying to access/use this kind of large data.
+This solution is so much better than streaming because, other than it doesn't require special "streaming" feature in Cassandra engine, it utilizes the backend's optimal IO method. i.e. - parallel access using multiple cluster nodes on multi-partitioned data sets.
+
+Data blocks' uniform size also removes any Cassandra "hot spots" when the data is being served. Even after data is recycled, multiple times, its IO performance when it comes to being served by Cassandra doesn't degrade at all.
