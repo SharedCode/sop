@@ -35,4 +35,4 @@ Large data including vlblobs are optionally storable as a set of data blocks. Be
 This storage structure together with SOP's "data block" recycling feature, solves the issue of Cassandra (and any backend store for this matter) not being suited for storing large data sets. Operating without requirement to use "streaming" feature also simplifies the API and the Application trying to access/use this kind of large data.
 This solution is so much better than streaming because, other than it doesn't require special "streaming" feature in Cassandra engine, it utilizes the backend's optimal IO method. i.e. - parallel access using multiple cluster nodes on multi-partitioned data sets.
 
-Data blocks' uniform size also removes any Cassandra "hot spots" when the data is being served. Even after data is recycle multiple times, its IO performance when it comes to being served by Cassandra doesn't degrade at all.
+Data blocks' uniform size also removes any Cassandra "hot spots" when the data is being served. Even after data is recycled multiple times, its IO performance when it comes to being stored/served by Cassandra doesn't degrade at all.
