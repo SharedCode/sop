@@ -21,7 +21,7 @@ Via usage of SOP API, your application will experience low latency, very high pe
 # Technical Details
 SOP written in Go will be a full re-implementation. A lot of key technical features of SOP will be carried over and few more will be added in order to support a master-less implementation. That is, backend Stores such as Cassandra, AWS S3 bucket will be utilized and SOP library will be master-less in order to offer a complete, 100% horizontal scaling with no hot-spotting or any application instance bottlenecks.
 
-## Component Layout:
+## Component Layout
 * SOP code library for managing key/value pair of any data type (interface{}/interface{}).
 * redis for clustered, out of process data caching.
 * Cassandra, AWS S3 (future next), etc... as backend Stores.
