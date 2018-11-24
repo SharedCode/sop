@@ -17,10 +17,26 @@ create table node (
     s_tid frozen <set<tuple<text, int, timeUUID>>>,
     s_bid frozen <set<tuple<blob, int, timeUUID>>>,
 
+    // children logical IDs
     c_id frozen <set<timeUUID>>,
     is_del boolean,
 );
 
+// node datablocks can be used for storing very large BLOBs (vlblobs).
+// SOP's datablock technology solves managing vlblobs without "streaming" req't.
+create table node_datablocks (
+    id timeUUID PRIMARY KEY,
+    // if set, contains all other "block physical IDs" (timeUUID) (a.k.a. map) storing the vlblob data.
+    // otherwise, data fit into a single blob (s_block).
+    s_b_map frozen <set<timeUUID>>,
+    s_block blob,
+    // children logical IDs
+    c_id frozen <set<timeUUID>>,
+    is_del boolean,
+);
+
+// Logical to Physical ID table will allow seamless transaction commit processing.
+// Only when the record here got updated that succeeding SOP Btree IO will reflect newly commited Node data changes.
 create table virtual_id(
     l_id timeUUID PRIMARY KEY,
     is_idb boolean,
