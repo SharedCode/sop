@@ -16,3 +16,12 @@ The above listed enhancements together with the data structure and algorithms em
 SOP addresses data management scale-ability internally, at the data driver level, so when you use SOP code library, all you have to do is focus on authoring your application data solution. Nifty algorithms such as use of MRU data cache to keep frequently accessed data in memory, bulk I/O operations, B-Tree index usability optimizations, data bucketing for large data scenarios, etc... are already pre-baked, done at the driver level, so you don't have to.
 
 Via usage of SOP API, your application will experience low latency, very high performance scalability.
+
+# Technical Details
+SOP written in Go will be a full re-implementation. A lot of key technical features of SOP will be carried over and few more will be added in order to support a master-less implementation. That is, backend Stores such as Cassandra, AWS S3 bucket will be utilized and SOP library will be master-less in order to offer a complete, 100% horizontal scaling with no hot-spotting or any applicaiton instance bottlenecks.
+
+## Component Layout:
+* SOP code library for managing key/value pair of any data type (interface{}/interface{}).
+* redis for clustered, out of process data caching.
+* Cassandra, AWS S3 (future next) as backend Stores.
+
