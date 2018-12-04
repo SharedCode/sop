@@ -1,50 +1,99 @@
 
 package btree
 
+import "time"
+
 // persistence constructs & interfaces
 
 type UUID [16]byte
+
+type baseItem struct{
+	IsDeleted bool
+}
+type versionedItem struct{
+	Version int
+	baseItem
+}
 
 type Store struct {
     Name string
     RootNodeID UUID
 	NodeSlotCount int
+	Count int64
 	IsUnique bool
-	IsDeleted bool
+	ItemSerializer *ItemSerializer
+	versionedItem
 }
 
-func NewStore(name string, nodeSlotCount int, isUnique bool) *Store{
+func NewStoreDefaultSerializer(name string, nodeSlotCount int, isUnique bool) *Store{
+	return NewStore(name, nodeSlotCount, isUnique, nil)
+}
+
+func NewStore(name string, nodeSlotCount int, isUnique bool, itemSerializer *ItemSerializer) *Store{
 	return &Store{
 		Name: name,
 		NodeSlotCount: nodeSlotCount,
 		IsUnique: isUnique,
+		ItemSerializer: itemSerializer,
 	}
 }
 
 type Item struct{
 	Key interface{}
-	Version int
 	Value interface{}	
+	Version int
+}
+type ItemSerializer struct{
+	SerializeKey func(k interface{}) ([]byte, error)
+	DeSerializeKey func(kData []byte) (interface{}, error)
+	CompareKey func(k1 interface{}, k2 interface{}) (int, error)
+	SerializeValue func(v interface{}) ([]byte, error)
+	DeSerializeValue func(vData []byte) (interface{}, error)
+}
+
+func (itemSer *ItemSerializer) IsEmpty() bool {
+	return itemSer == nil ||
+		(itemSer.SerializeKey == nil &&
+		itemSer.DeSerializeKey == nil &&
+		itemSer.CompareKey == nil &&
+		itemSer.SerializeValue == nil &&
+		itemSer.DeSerializeValue == nil)
 }
 
 type Node struct {
-    ID UUID
+	ID UUID
     Slots []Item
 	Children []UUID
-	IsDeleted bool
 	count int
+	versionedItem
+}
+
+type NodeBlocks struct {
+	ID UUID
+    SlotBlock []byte
+	SlotBlockMap []UUID
+	Children []UUID
+	count int
+	versionedItem
 }
 
 type SlotValue struct{
     ID UUID
-    Value []byte
-	IsDeleted bool
+	Value []byte
+	baseItem
 } 
+type SlotValueBlocks struct{
+    ID UUID
+	Value []byte
+	ValueBlockMap []UUID
+	baseItem
+}
 
 type Recyclable struct{
 	ObjectType int
 	ObjectID UUID
-	IsDeleted bool
+	LockDate time.Time
+	baseItem
 }
 
 type VirtualID struct {
@@ -52,34 +101,5 @@ type VirtualID struct {
 	IsPhysicalIDB bool
 	PhysicalIDA UUID
 	PhysicalIDB UUID
-	IsDeleted bool
-}
-
-// interfaces
-
-type StoreRepository interface{
-	Get(name string) *Store
-	Add(*Store) error
-	Remove(name string) error
-}
-
-type NodeRepository interface{
-	Get(nodeID UUID) *Node
-	Add(*Node) error
-	Update(*Node) error
-	Remove(nodeID UUID) error
-}
-
-type VirtualIDRepository interface{
-	Get(logicalID UUID) *VirtualID
-	Add(*VirtualID) error
-	Update(*VirtualID) error
-	Remove(logicalID UUID) error
-}
-
-type Recycler interface{
-	Get(batch int, objectType int) []*Recyclable
-	Add([]*Recyclable) error
-	//Update([]*Recyclable) error
-	Remove([]*Recyclable) error
+	baseItem
 }

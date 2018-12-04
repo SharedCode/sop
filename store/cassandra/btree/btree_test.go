@@ -26,6 +26,8 @@ func TestBtreeInterfaces(t *testing.T){
 	var recycler = NewRecycler();
 	recycler.Add(nil);
 
+	var nodeRepo = NewNodeRepository();
+
 	// if err := 
 	// 	Session.Query("INSERT INTO store(name,root_id,slot_count,is_del) VALUES(?, ?, ?, ?)",
 	// 		emp.id, emp.firstName, emp.lastName, emp.age).Exec(); err != nil {

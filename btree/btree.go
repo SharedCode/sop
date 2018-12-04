@@ -5,7 +5,7 @@ type Btree struct{
 	nodeRepository NodeRepository
 }
 
-func (btree *Btree) rootNode() *Node {
+func (btree *Btree) rootNode() (*Node, error) {
 	return btree.nodeRepository.Get(btree.store.RootNodeID)
 }
 
@@ -38,6 +38,8 @@ func (btree *Btree) Add(key interface{}, value interface{}) (bool, error) {
 	var itm = Item{
 		Key:key,
 		Value:value,
-	};
-	return btree.rootNode().add(btree, itm);
+	}
+	node, err := btree.rootNode()
+	if err != nil {return false, err}
+	return node.add(btree, itm);
 }
