@@ -1,5 +1,12 @@
 package btree
 
+//import "../transaction"
+
+// Btree interface defines publicly callable methods of Btree.
+type BtreeInterface interface{
+	Add(key interface{}, value interface{}) (bool, error)
+}
+
 // backend store persistence interfaces
 
 type StoreRepository interface{
@@ -27,4 +34,12 @@ type Recycler interface{
 	Add([]*Recyclable) error
 	//Update([]*Recyclable) error
 	Remove([]*Recyclable) error
+}
+
+type TransactionRepository interface{
+	Get(transactionID UUID) ([]*TransactionEntry, error)
+	GetByStore(transactionID UUID, storeName string) ([]*TransactionEntry, error)
+	Add([]*TransactionEntry) error
+	//Update([]*TransactionEntry) error
+	MarkDone([]*TransactionEntryKeys) error
 }

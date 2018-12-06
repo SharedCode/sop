@@ -16,17 +16,18 @@ func init() {
 	}
 }
 
-func TestBtreeInterfaces(t *testing.T){
-	var store = NewStoreRepository();
+func TestInterfaces(t *testing.T){
+	var store = NewStoreRepository()
 
-	store.Add(nil);
-	store.Get("");
-	store.Remove("");
+	store.Add(nil)
+	store.Get("")
+	store.Remove("")
 
-	var recycler = NewRecycler();
-	recycler.Add(nil);
+	var recycler = NewRecycler()
+	recycler.Add(nil)
 
-	var nodeRepo = NewNodeRepository();
+	var nodeRepo = NewNodeRepository()
+	nodeRepo.Add(nil)
 
 	// if err := 
 	// 	Session.Query("INSERT INTO store(name,root_id,slot_count,is_del) VALUES(?, ?, ?, ?)",

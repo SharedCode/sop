@@ -1,11 +1,25 @@
-
 package btree
 
 import "time"
 
-// persistence constructs & interfaces
+// persistence constructs
 
 type UUID [16]byte
+
+type KVType uint
+const (
+	// Key is string, Value is string data types. Supported first.
+	KeyStringValueString = iota
+	// Key is string, Value is binary. Supported next.
+	KeyStringValueBinary
+
+	// Key is string, Value is custom (serialized)
+	KeyStringValueCustom
+	// Key is custom, Value is string
+	KeyCustomValueString
+	// Key is custom, Value is custom
+	KeyCustomValueCustom
+)
 
 type baseItem struct{
 	IsDeleted bool
@@ -21,15 +35,21 @@ type Store struct {
 	NodeSlotCount int
 	Count int64
 	IsUnique bool
-	ItemSerializer *ItemSerializer
+	KVType KVType
+	KeyInfo string
+	ValueInfo string
+	IsCustomKeyStoredAsString bool
+	IsCustomValueStoredAsString bool
+	ItemSerializer ItemSerializer
 	versionedItem
 }
 
 func NewStoreDefaultSerializer(name string, nodeSlotCount int, isUnique bool) *Store{
-	return NewStore(name, nodeSlotCount, isUnique, nil)
+	var itemSer ItemSerializer
+	return NewStore(name, nodeSlotCount, isUnique, itemSer)
 }
 
-func NewStore(name string, nodeSlotCount int, isUnique bool, itemSerializer *ItemSerializer) *Store{
+func NewStore(name string, nodeSlotCount int, isUnique bool, itemSerializer ItemSerializer) *Store{
 	return &Store{
 		Name: name,
 		NodeSlotCount: nodeSlotCount,
@@ -42,22 +62,6 @@ type Item struct{
 	Key interface{}
 	Value interface{}	
 	Version int
-}
-type ItemSerializer struct{
-	SerializeKey func(k interface{}) ([]byte, error)
-	DeSerializeKey func(kData []byte) (interface{}, error)
-	CompareKey func(k1 interface{}, k2 interface{}) (int, error)
-	SerializeValue func(v interface{}) ([]byte, error)
-	DeSerializeValue func(vData []byte) (interface{}, error)
-}
-
-func (itemSer *ItemSerializer) IsEmpty() bool {
-	return itemSer == nil ||
-		(itemSer.SerializeKey == nil &&
-		itemSer.DeSerializeKey == nil &&
-		itemSer.CompareKey == nil &&
-		itemSer.SerializeValue == nil &&
-		itemSer.DeSerializeValue == nil)
 }
 
 type Node struct {
@@ -102,4 +106,25 @@ type VirtualID struct {
 	PhysicalIDA UUID
 	PhysicalIDB UUID
 	baseItem
+}
+
+type TransactionActionType uint
+const(
+	Get = iota
+	Add
+	Update
+	Remove
+)
+
+type TransactionEntryKeys struct{
+	ID UUID
+	StoreName string
+	Sequence UUID
+}
+type TransactionEntry struct{
+	TransactionEntryKeys
+	Action TransactionActionType
+	CurrentItem Item
+	NewItem Item
+	versionedItem
 }

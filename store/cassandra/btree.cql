@@ -7,6 +7,11 @@ create table store (
     slot_count int,
     count bigint,
     unique boolean,
+    kvt int,
+    ki text,
+    vi text,
+    ckas boolean,
+    cvas boolean,
     vrsn int,
     is_del boolean);
 
@@ -18,6 +23,7 @@ create table node (
     s frozen <set<tuple<text, int, blob>>>,
     s_tt frozen <set<tuple<text, int, text>>>,
     s_bb frozen <set<tuple<blob, int, blob>>>,
+    s_bt frozen <set<tuple<blob, int, text>>>,
     s_tid frozen <set<tuple<text, int, timeUUID>>>,
     s_bid frozen <set<tuple<blob, int, timeUUID>>>,
 
@@ -77,14 +83,16 @@ create table recycle_bin (
 );
 
 create table transaction_sandbox(
-    id timeUUID,
+    tid timeUUID,   // Transaction ID (tid)
     store text,
     seq timeUUID,
     // read lock on kvp, add, update, delete
     act int,
     vrsn int,      // current value version, should be same if act=update,delete
-    c_kv blob,     // current kvp
-    n_kv blob,     // new kvp
+    c_kt text,     // current Key
+    c_kb blob,
+    n_vt text,      // new Value
+    n_vb blob,
     is_del boolean,
-    Primary Key((id, store, seq))
+    Primary Key(tid, store, seq)
 );

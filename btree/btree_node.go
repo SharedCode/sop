@@ -1,5 +1,7 @@
 package btree
 
+//import "sort"
+
 func (node *Node) add(btree *Btree, item Item) (bool, error) {
 	var currentNode = node;
 	var index int
@@ -75,6 +77,52 @@ func compare(btree *Btree, a Item, b Item) int {
 
 func (node *Node) getIndex(btree *Btree, item Item) (int, bool, error) {
 	return -1, false, nil
+	// var dupeDetected = false
+	// var index int
+	// if (node.count > 1) {
+	// 	if (bTree.Comparer != null){
+	// 		index = sort.Search(node.count, )
+	// 	} else {
+	// 		try
+	// 		{
+	// 			index = (short) Array.BinarySearch(Slots, 0, Count, item);
+	// 		}
+	// 		catch
+	// 		{
+	// 			try
+	// 			{
+	// 				index = (short) Array.BinarySearch(Slots, item);
+	// 			}
+	// 			catch //(Exception innerE)
+	// 			{
+	// 				throw new InvalidOperationException("No Comparer Error.");
+	// 			}
+	// 		}
+	// 	}
+	// 	if (index < 0)
+	// 		index = (short)~index;
+	// 	if (bTree.IsUnique && index >= 0)
+	// 	{
+	// 		short i = index;
+	// 		if (i >= Slots.Length)
+	// 			i--;
+	// 		var result = Compare(bTree, Slots[i], item);
+	// 		if (result == 0)
+	// 		{
+	// 			dupeDetected = true;
+	// 			return i;
+	// 		}
+	// 	}
+	// } else if (Count == 1){
+	// 	var result = Compare(bTree, Slots[0], item);
+	// 	if (result < 0){
+	// 		index = 1;
+	// 	} else if (bTree.IsUnique && result == 0) {
+	// 		dupeDetected = true;
+	// 		return 0;
+	// 	}
+	// }
+	// return index;
 }
 
 func (node *Node) getChild(btree *Btree, index int) (*Node, error) {

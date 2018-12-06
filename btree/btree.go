@@ -1,5 +1,7 @@
 package btree
 
+import "../transaction"
+
 type Btree struct{
 	store *Store
 	nodeRepository NodeRepository
@@ -23,7 +25,7 @@ func (btree *Btree) isUnique() bool{
 	return btree.store.IsUnique
 }
 
-func NewBtree(store *Store, nodeRepo NodeRepository) *Btree{
+func NewBtree(store *Store, nodeRepo NodeRepository, trans transaction.Transaction) BtreeInterface{
 	var r = Btree{
 		store:store,
 		nodeRepository:nodeRepo,
