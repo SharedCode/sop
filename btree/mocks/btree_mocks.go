@@ -12,6 +12,6 @@ func NewNodeRepository() btree.NodeRepository{
 	return cb3.NewNodeRepository()
 }
 
-func NewTransaction() transaction.Transaction{
+func NewTransaction() *transaction.TransactionSession{
 	return &transaction.TransactionSession{}
 }
