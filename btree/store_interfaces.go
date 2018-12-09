@@ -9,6 +9,15 @@ type BtreeInterface interface{
 
 // backend store persistence interfaces
 
+type StoreInterface struct{
+	StoreType uint
+	StoreRepository StoreRepository
+	NodeRepository NodeRepository
+	VirtualIDRepository VirtualIDRepository
+	Recycler Recycler
+	TransactionRepository TransactionRepository
+}
+
 type StoreRepository interface{
 	Get(name string) *Store
 	Add(*Store) error

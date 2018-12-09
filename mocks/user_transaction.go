@@ -18,7 +18,18 @@ func (trans *UserTransaction) Begin() error {
 	return nil
 }
 
-func (trans *UserTransaction) Commit() error{
+func (trans *UserTransaction) CommitPhase1() error{
+	if !trans.Started{
+		return errors.New("Transaction not started.")
+	}
+	trans.Started = false
+
+	// call your DB CommitTrans here...
+
+	return nil
+}
+
+func (trans *UserTransaction) CommitPhase2() error{
 	if !trans.Started{
 		return errors.New("Transaction not started.")
 	}

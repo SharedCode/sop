@@ -1,5 +1,7 @@
 
-package btree;
+package cassandra;
+
+import "./btree"
 
 import "testing";
 import "github.com/gocql/gocql"
@@ -17,16 +19,16 @@ func init() {
 }
 
 func TestInterfaces(t *testing.T){
-	var store = NewStoreRepository()
+	var store = btree.NewStoreRepository()
 
 	store.Add(nil)
 	store.Get("")
 	store.Remove("")
 
-	var recycler = NewRecycler()
+	var recycler = btree.NewRecycler()
 	recycler.Add(nil)
 
-	var nodeRepo = NewNodeRepository()
+	var nodeRepo = btree.NewNodeRepository()
 	nodeRepo.Add(nil)
 
 	// if err := 

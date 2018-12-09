@@ -1,14 +1,12 @@
 package btree
 
-import "../../Sop"
-
 type Btree struct{
-	store *Store
-	nodeRepository NodeRepository
+	Store *Store
+	StoreInterface *StoreInterface
 }
 
 func (btree *Btree) rootNode() (*Node, error) {
-	return btree.nodeRepository.Get(btree.store.RootNodeID)
+	return btree.StoreInterface.NodeRepository.Get(btree.Store.RootNodeID)
 }
 
 func (btree *Btree) setCurrentItem(){
@@ -22,15 +20,7 @@ func (btree *Btree) setCurrentItemAddress(nodeAddress UUID, itemIndex int){
 }
 
 func (btree *Btree) isUnique() bool{
-	return btree.store.IsUnique
-}
-
-func NewBtree(store *Store, nodeRepo NodeRepository, trans Sop.Transaction) BtreeInterface{
-	var r = Btree{
-		store:store,
-		nodeRepository:nodeRepo,
-	}
-	return &r;
+	return btree.Store.IsUnique
 }
 
 func (btree *Btree) Add(key interface{}, value interface{}) (bool, error) {

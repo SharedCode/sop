@@ -29,11 +29,10 @@ type versionedItem struct{
 	baseItem
 }
 
+
 type Store struct {
     Name string
-    RootNodeID UUID
 	NodeSlotCount int
-	Count int64
 	IsUnique bool
 	KVType KVType
 	KeyInfo string
@@ -41,6 +40,8 @@ type Store struct {
 	IsCustomKeyStoredAsString bool
 	IsCustomValueStoredAsString bool
 	ItemSerializer ItemSerializer
+	RootNodeID UUID
+	Count int64
 	versionedItem
 }
 
