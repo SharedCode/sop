@@ -2,7 +2,7 @@ This is a great time to join and contribute to SOP's development. The new versio
 There is no perfect time than it is today, right now. So come and join. :)
 
 The new features together with the ones from legacy SOP (in c#) combined is very exciting. Example, true ACID transactions, usage
-of Cassandra as backend data store and support for BLOBs with performance degradation.
+of Cassandra as backend data store and support for BLOBs with NO performance degradation.
 
 Also, SOP authors are well adept on Agile style of dev't. Thus, we can all work on different modules & functionalities without
 much hazzle and find easy time to integrate our code.
