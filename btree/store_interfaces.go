@@ -32,7 +32,7 @@ type NodeRepository interface{
 }
 
 type VirtualIDRepository interface{
-	Get(logicalID UUID) *VirtualID
+	Get(logicalID UUID) (*VirtualID, error)
 	Add(*VirtualID) error
 	Update(*VirtualID) error
 	Remove(logicalID UUID) error
