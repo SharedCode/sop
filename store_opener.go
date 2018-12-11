@@ -58,6 +58,7 @@ func newStoreInterface(storeType uint) *btree.StoreInterface{
 func NewTransaction(storeType uint) *TransactionSession{
 	var t = TransactionSession{
 		storeType: storeType,
+		StoreMap: make(map[string]*btree.Btree,5),
 	}
 	var bt = cass.TransactionSession{
 		TransactionID: &t.TransactionID,

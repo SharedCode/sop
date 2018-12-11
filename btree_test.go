@@ -3,7 +3,6 @@ package sop
 import "testing"
 import "./btree"
 import "./mocks"
-//import "../../transaction"
 
 func TestBtreeBasic(t *testing.T){
 	var store = btree.NewStoreDefaultSerializer("fooBar", 10, false)

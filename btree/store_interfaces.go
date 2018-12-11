@@ -1,8 +1,6 @@
 package btree
 
-//import "../transaction"
-
-// Btree interface defines publicly callable methods of Btree.
+// BtreeInterface defines publicly callable methods of Btree.
 type BtreeInterface interface{
 	Add(key interface{}, value interface{}) (bool, error)
 }
