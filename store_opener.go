@@ -1,8 +1,8 @@
 package sop
 
 import "./btree"
-import cass "./store/cassandra"
-import cassB3 "./store/cassandra/btree"
+import "./cache"
+import "./store"
 
 type StoreType uint
 const (
@@ -12,13 +12,14 @@ const (
 
 // For now, below code only caters for Cassandra Store.
 
-func OpenBtreeNoTrans(storeName string, itemSerializer btree.ItemSerializer, storeType uint) btree.BtreeInterface{
+func OpenBtreeNoTrans(storeName string, itemSerializer btree.ItemSerializer, storeType uint) (btree.BtreeInterface, error){
 	return OpenBtree(storeName, itemSerializer, storeType, nil)
 }
 
 func OpenBtree(storeName string, itemSerializer btree.ItemSerializer, 
-	storeType uint, trans *TransactionSession) btree.BtreeInterface{
-	var si = newStoreInterface(storeType)
+	storeType uint, trans *TransactionSession) (btree.BtreeInterface, error){
+	var si, err = newStoreInterface(storeType)
+	if err != nil {return nil, err}
 	var store = si.StoreRepository.Get(storeName)
 	store.ItemSerializer = itemSerializer
 	var r = btree.Btree{
@@ -28,11 +29,12 @@ func OpenBtree(storeName string, itemSerializer btree.ItemSerializer,
 	if trans != nil {
 		trans.StoreMap[storeName] = &r
 	}
-	return &r;
+	return &r, nil
 }
 
-func NewBtree(store *btree.Store, trans *TransactionSession) btree.BtreeInterface{
-	var si = newStoreInterface(trans.storeType)
+func NewBtree(store *btree.Store, trans *TransactionSession) (btree.BtreeInterface, error){
+	var si, err = newStoreInterface(trans.storeType)
+	if err != nil{ return nil, err}
 	var r = btree.Btree{
 		Store:store,
 		StoreInterface:si,
@@ -40,19 +42,24 @@ func NewBtree(store *btree.Store, trans *TransactionSession) btree.BtreeInterfac
 	if trans != nil {
 		trans.StoreMap[store.Name] = &r
 	}
-	return &r;
+	return &r, nil
 }
 
-func newStoreInterface(storeType uint) *btree.StoreInterface{
+func newStoreInterface(storeType uint) (*btree.StoreInterface, error){
+	var opt cache.Options
+	conn, err := store.NewConnection(storeType, opt)
+	if err != nil{
+		return nil, err
+	}
 	var si = btree.StoreInterface{
 		StoreType: storeType,
-		StoreRepository: cassB3.NewStoreRepository(),
-		NodeRepository: cassB3.NewNodeRepository(),
-		VirtualIDRepository: cassB3.NewVirtualIDRepository(),
-		Recycler: cassB3.NewRecycler(),
+		// StoreRepository: conn.GetNewStoreRepository(),
+		// NodeRepository: NewNodeRepository(),
+		VirtualIDRepository: conn.GetVirtualIDRepository(),
+		// Recycler: cassB3.NewRecycler(),
 		//TransactionRepository: cassB3.NewTransactionRepository(),
 	}
-	return &si
+	return &si, nil
 }
 
 func NewTransaction(storeType uint) *TransactionSession{
@@ -60,7 +67,7 @@ func NewTransaction(storeType uint) *TransactionSession{
 		storeType: storeType,
 		StoreMap: make(map[string]*btree.Btree,5),
 	}
-	var bt = cass.TransactionSession{
+	var bt = store.TransactionSession{
 		TransactionID: &t.TransactionID,
 		Started: &t.Started,
 		StoreMap: &t.StoreMap,

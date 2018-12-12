@@ -46,6 +46,10 @@ func (node *Node) add(btree *Btree, item Item) (bool, error) {
 
 // todo:
 
+func (node *Node) saveNodeToDisk(){
+	
+}
+
 func (node *Node) addOnLeaf(btree *Btree, item Item, index int, parent *Node) (bool, error) {
 	return false, nil
 }

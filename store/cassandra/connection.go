@@ -6,7 +6,7 @@ import "github.com/gocql/gocql"
 
 type Connection struct{
 	Session *gocql.Session
-	ClusterHosts string
+	ClusterHosts []string
 }
 
 // CassandraKeyspace is the keyspace to be used when doing I/O to cassandra.
@@ -17,7 +17,7 @@ var mux sync.Mutex
 
 // GetConnection will create(& return) a new Connection to Cassandra if there is not one yet,
 // otherwise, will just return existing singleton connection.
-func GetConnection(clusterHosts string) (*Connection, error){
+func GetConnection(clusterHosts ...string) (*Connection, error){
 	if connection != nil {
 		return connection, nil
 	}
@@ -27,14 +27,14 @@ func GetConnection(clusterHosts string) (*Connection, error){
 	if connection != nil {
 		return connection, nil
 	}
-	cluster := gocql.NewCluster(clusterHosts)
+	cluster := gocql.NewCluster(clusterHosts...)
 	cluster.Keyspace = CassandraKeyspace
 	var c = Connection{
 		ClusterHosts: clusterHosts,
 	}
 	s, err := cluster.CreateSession()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	c.Session = s
 	connection = &c
