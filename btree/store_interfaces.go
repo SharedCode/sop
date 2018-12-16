@@ -12,7 +12,7 @@ type StoreInterface struct{
 	StoreRepository StoreRepository
 	NodeRepository NodeRepository
 	VirtualIDRepository VirtualIDRepository
-	Recycler Recycler
+	RecyclerRepository RecyclerRepository
 	TransactionRepository TransactionRepository
 }
 
@@ -36,11 +36,10 @@ type VirtualIDRepository interface{
 	Remove(logicalID UUID) error
 }
 
-type Recycler interface{
+type RecyclerRepository interface{
 	Get(batch int, objectType int) []*Recyclable
-	Add([]*Recyclable) error
-	//Update([]*Recyclable) error
-	Remove([]*Recyclable) error
+	Add(recyclables []*Recyclable) error
+	Remove(items []*Recyclable) error
 }
 
 type TransactionRepository interface{

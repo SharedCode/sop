@@ -2,20 +2,16 @@ package store;
 
 import "../btree"
 
-type Store btree.Store;
+type sc Connection
 
-func NewStoreRepository() btree.StoreRepository{
-	return Store{};
-}
-
-func (Store) Get(name string) *btree.Store{
+func (conn *sc) Get(name string) *btree.Store{
 	return nil;
 }
 
-func  (Store) Add(source *btree.Store) error{
+func  (conn *sc) Add(source *btree.Store) error{
 	return nil;
 }
 
-func  (Store) Remove(name string) error{
+func  (conn *sc) Remove(name string) error{
 	return nil;
 }

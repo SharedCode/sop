@@ -2,23 +2,19 @@ package store;
 
 import "../btree"
 
-type Node btree.Node;
+type nc Connection
 
-func NewNodeRepository() btree.NodeRepository{
-	return Node{};
-}
-
-func (Node) Add(n *btree.Node) error {
+func (conn *nc) Add(n *btree.Node) error {
 	return nil;
 }
 
-func (Node) Update(n *btree.Node) error {
+func (conn *nc) Update(n *btree.Node) error {
 	return nil;
 }
-func (Node) Get(nodeID btree.UUID) (*btree.Node, error) {
+func (conn *nc) Get(nodeID btree.UUID) (*btree.Node, error) {
 	return &btree.Node{}, nil;
 }
-func (Node) Remove(nodeID btree.UUID) error {
+func (conn *nc) Remove(nodeID btree.UUID) error {
 	return nil;
 }
 

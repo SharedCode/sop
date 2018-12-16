@@ -4,12 +4,6 @@ import "./btree"
 import "./cache"
 import "./store"
 
-type StoreType uint
-const (
-	Cassandra = iota
-	//AwsS3
-)
-
 // For now, below code only caters for Cassandra Store.
 
 func OpenBtreeNoTrans(storeName string, itemSerializer btree.ItemSerializer, storeType uint) (btree.BtreeInterface, error){
@@ -51,15 +45,7 @@ func newStoreInterface(storeType uint) (*btree.StoreInterface, error){
 	if err != nil{
 		return nil, err
 	}
-	var si = btree.StoreInterface{
-		StoreType: storeType,
-		// StoreRepository: conn.GetNewStoreRepository(),
-		// NodeRepository: NewNodeRepository(),
-		VirtualIDRepository: conn.GetVirtualIDRepository(),
-		// Recycler: cassB3.NewRecycler(),
-		//TransactionRepository: cassB3.NewTransactionRepository(),
-	}
-	return &si, nil
+	return conn.GetStoreInterface(), nil
 }
 
 func NewTransaction(storeType uint) *TransactionSession{

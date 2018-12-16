@@ -1,30 +1,15 @@
-package store;
+package store
 
 import "../btree"
 
-type Recyclable struct{
-	Year int
-	Month int
-	Day int
-	Hour int
-	btree.Recyclable
-}
+type rc Connection
 
-func NewRecycler() btree.Recycler{
-	return Recyclable{};
+func (conn *rc) Get(batch int, objectType int) []*btree.Recyclable{
+	return nil
 }
-
-func (Recyclable) Get(batch int, objectType int) []*btree.Recyclable{
-	return nil;
+func (conn *rc) Add(recyclables []*btree.Recyclable) error{
+	return nil
 }
-func (Recyclable) Add(recyclable []*btree.Recyclable) error{
-	//var iface interface{} = recyclable
-	//item := iface.(Recyclable)
-	return nil;
-}
-// func (Recyclable) Update(*btree.Recyclable) error{
-// 	return nil;
-// }
-func (Recyclable) Remove(items []*btree.Recyclable) error{
-	return nil;
+func (conn *rc) Remove(items []*btree.Recyclable) error{
+	return nil
 }

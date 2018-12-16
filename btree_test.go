@@ -2,6 +2,7 @@ package sop
 
 import "testing"
 import "./btree"
+import "./store"
 import "./mocks"
 
 func TestBtreeBasic(t *testing.T){
@@ -11,7 +12,7 @@ func TestBtreeBasic(t *testing.T){
 }
 
 func TestBtreeTransaction(t *testing.T){
-	var trans = NewTransaction(Cassandra)
+	var trans = NewTransaction(store.Cassandra)
 	
 	// assign the User or Application custom transaction.
 	trans.UserTransaction = &mocks.UserTransaction{}
