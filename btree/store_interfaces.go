@@ -1,5 +1,15 @@
 package btree
 
+func (id UUID) ToString() string{
+	return string(id[:])
+}
+func ToUUID(id string) UUID{
+	var bid = []byte(id)
+	var nid UUID
+	copy(nid[:], bid)
+	return nid
+}
+
 // BtreeInterface defines publicly callable methods of Btree.
 type BtreeInterface interface{
 	Add(key interface{}, value interface{}) (bool, error)

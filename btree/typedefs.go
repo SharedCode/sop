@@ -69,7 +69,7 @@ type Node struct {
 	ID UUID
     Slots []Item
 	Children []UUID
-	count int
+	Count int
 	versionedItem
 }
 

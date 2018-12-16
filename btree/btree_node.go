@@ -29,9 +29,9 @@ func (node *Node) add(btree *Btree, item Item) (bool, error) {
 			break
 		}
 	}
-	if (btree.isUnique() && currentNode.count > 0) {
+	if (btree.isUnique() && currentNode.Count > 0) {
 		var currItemIndex = index;
-		if index > 0 && index >= currentNode.count{
+		if index > 0 && index >= currentNode.Count{
 			currItemIndex--
 		}
 		if (compare(btree, currentNode.Slots[currItemIndex], item) == 0) {

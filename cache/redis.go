@@ -13,6 +13,7 @@ type Options struct{
 	Address string
 	Password string	
 	DB int
+	DefaultDuration time.Duration
 }
 
 type Connection struct{
@@ -20,11 +21,13 @@ type Connection struct{
 	Options Options
 }
 
+
 func DefaultOptions() Options {
 	return Options{
 		Address:     "localhost:6379",
 		Password: "", // no password set
 		DB:       0,  // use default DB
+		DefaultDuration: 24 * time.Hour,
 	}	
 }
 
@@ -85,6 +88,12 @@ func (connection *Connection) GetStruct(key string, target interface{}) (interfa
 		err = json.Unmarshal([]byte(s), target)
 	}
 	return target, err
+}
+
+// DeleteStruct executes the redis Del command
+func (connection *Connection) DeleteStruct(key string) error {
+	var r = connection.Client.Del(key)
+	return r.Err()
 }
 
 // todo: potentially useful
