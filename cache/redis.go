@@ -13,7 +13,10 @@ type Options struct{
 	Address string
 	Password string	
 	DB int
-	DefaultDuration time.Duration
+	DefaultDurationInSeconds int
+}
+func (opt *Options) GetDefaultDuration() time.Duration{
+	return time.Duration(opt.DefaultDurationInSeconds)*time.Second
 }
 
 type Connection struct{
@@ -27,8 +30,8 @@ func DefaultOptions() Options {
 		Address:     "localhost:6379",
 		Password: "", // no password set
 		DB:       0,  // use default DB
-		DefaultDuration: 24 * time.Hour,
-	}	
+		DefaultDurationInSeconds: 24*60*60,
+	}
 }
 
 func NewClient(options Options) *Connection {

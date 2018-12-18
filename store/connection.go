@@ -32,6 +32,9 @@ func NewConnection(storeType uint, options cache.Options, cassandraClusterHosts 
 	if storeType != Cassandra {
 		return nil, fmt.Errorf("'storeType' of int value %d(Cassandra) is the only one supported currently", Cassandra)
 	}
+	if cassandraClusterHosts == nil || len(cassandraClusterHosts) == 0{
+		return nil, fmt.Errorf("'cassandraClusterHosts' can't be null or empty")
+	}
 	var cc, err = cass.GetConnection(cassandraClusterHosts...)
 	if err != nil {
 		return nil, err

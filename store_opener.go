@@ -1,18 +1,21 @@
 package sop
 
-import "./btree"
-import "./cache"
-import "./store"
+import (
+	"./btree"
+	"./store"
+)
 
 // For now, below code only caters for Cassandra Store.
 
-func OpenBtreeNoTrans(storeName string, itemSerializer btree.ItemSerializer, storeType uint) (btree.BtreeInterface, error){
-	return OpenBtree(storeName, itemSerializer, storeType, nil)
+func OpenBtreeNoTrans(storeName string, itemSerializer btree.ItemSerializer, storeType uint,
+	config Configuration) (btree.BtreeInterface, error){
+	return OpenBtree(storeName, itemSerializer, storeType, nil, config)
 }
 
 func OpenBtree(storeName string, itemSerializer btree.ItemSerializer, 
-	storeType uint, trans *TransactionSession) (btree.BtreeInterface, error){
-	var si, err = newStoreInterface(storeType)
+	storeType uint, trans *TransactionSession,
+	config Configuration) (btree.BtreeInterface, error){
+	var si, err = newStoreInterface(storeType, config)
 	if err != nil {return nil, err}
 	var store = si.StoreRepository.Get(storeName)
 	store.ItemSerializer = itemSerializer
@@ -26,8 +29,8 @@ func OpenBtree(storeName string, itemSerializer btree.ItemSerializer,
 	return &r, nil
 }
 
-func NewBtree(store *btree.Store, trans *TransactionSession) (btree.BtreeInterface, error){
-	var si, err = newStoreInterface(trans.storeType)
+func NewBtree(store *btree.Store, trans *TransactionSession, config Configuration) (btree.BtreeInterface, error){
+	var si, err = newStoreInterface(trans.storeType, config)
 	if err != nil{ return nil, err}
 	var r = btree.Btree{
 		Store:store,
@@ -39,9 +42,8 @@ func NewBtree(store *btree.Store, trans *TransactionSession) (btree.BtreeInterfa
 	return &r, nil
 }
 
-func newStoreInterface(storeType uint) (*btree.StoreInterface, error){
-	var opt cache.Options
-	conn, err := store.NewConnection(storeType, opt)
+func newStoreInterface(storeType uint, config Configuration) (*btree.StoreInterface, error){
+	conn, err := store.NewConnection(storeType, config.RedisOptions, config.CassandraHosts...)
 	if err != nil{
 		return nil, err
 	}

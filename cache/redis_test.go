@@ -28,7 +28,21 @@ func TestBasicUse(t *testing.T) {
 	}
 
 	c.SetStruct("fooBar", usr, 0)
-	usr2, _ := c.GetStruct("fooBar", &user{})
-
+	usr2, err := c.GetStruct("fooBar", &user{})
+	if err != nil{
+		t.Error("Struct foo NOT exists.")
+	}
 	fmt.Println(usr2)
+
+	err = c.DeleteStruct("fooBar")
+
+	if err != nil{
+		t.Errorf(err.Error())
+	}
+
+	usr2, err = c.GetStruct("fooBar", &user{})
+	if err == nil{
+		t.Error("Struct foo still exists after delete.")
+	}
+
 }

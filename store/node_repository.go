@@ -5,13 +5,13 @@ import "../btree"
 type nc Connection
 
 func (conn *nc) Add(n *btree.Node) error {
-	conn.CacheConnection.SetStruct(n.ID.ToString(), n, conn.CacheConnection.Options.DefaultDuration)
+	conn.CacheConnection.SetStruct(n.ID.ToString(), n, conn.CacheConnection.Options.GetDefaultDuration())
 	// todo: Backend Store Add
 	return nil;
 }
 
 func (conn *nc) Update(n *btree.Node) error {
-	conn.CacheConnection.SetStruct(n.ID.ToString(), n, conn.CacheConnection.Options.DefaultDuration)
+	conn.CacheConnection.SetStruct(n.ID.ToString(), n, conn.CacheConnection.Options.GetDefaultDuration())
 	// todo: Backend Store Update
 	return nil;
 }
