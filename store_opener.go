@@ -43,7 +43,7 @@ func NewBtree(store *btree.Store, trans *TransactionSession, config Configuratio
 }
 
 func newStoreInterface(storeType uint, config Configuration) (*btree.StoreInterface, error){
-	conn, err := store.NewConnection(storeType, config.RedisOptions, config.CassandraHosts...)
+	conn, err := store.NewConnection(storeType, config.RedisConfig, config.CassandraConfig)
 	if err != nil{
 		return nil, err
 	}

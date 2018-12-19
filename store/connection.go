@@ -28,14 +28,14 @@ type Connection struct{
 }
 
 // NewConnection initializes connections to underlying caching and backend stores like Redis and Cassandra.
-func NewConnection(storeType uint, options cache.Options, cassandraClusterHosts ...string) (*Connection, error){
+func NewConnection(storeType uint, options cache.Options, cassandraConfig cass.Config) (*Connection, error){
 	if storeType != Cassandra {
 		return nil, fmt.Errorf("'storeType' of int value %d(Cassandra) is the only one supported currently", Cassandra)
 	}
-	if cassandraClusterHosts == nil || len(cassandraClusterHosts) == 0{
+	if cassandraConfig.ClusterHosts == nil || len(cassandraConfig.ClusterHosts) == 0{
 		return nil, fmt.Errorf("'cassandraClusterHosts' can't be null or empty")
 	}
-	var cc, err = cass.GetConnection(cassandraClusterHosts...)
+	var cc, err = cass.GetConnection(cassandraConfig)
 	if err != nil {
 		return nil, err
 	}

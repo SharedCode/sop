@@ -1,10 +1,13 @@
 
 {
-    "RedisOptions":{
+    "RedisConfig":{
         "Address":"localhost:6379",
         "Password":"",
         "DB":0,
         "DefaultDurationInSeconds": 86400
     },
-    "CassandraHosts":["localhost"]
+    "CassandraConfig":{
+        "ClusterHosts":["localhost"],
+        "Keyspace": "btree"
+    }
 }
