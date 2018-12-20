@@ -1,26 +1,29 @@
 package btree;
 
-import "../../../btree"
+import (
+	"time"
+	"github.com/gocql/gocql"
+	cass ".."
+	"../../../btree"
+)
 
-// todo: change to some useful struct!
-type VirtualID btree.VirtualID;
+type CC cass.Connection
 
-func NewVirtualIDRepository() btree.VirtualIDRepository{
-	return VirtualID{};
+// NewUUID generates a new globally unique and time based UUID.
+func (conn *CC) NewUUID() btree.UUID{
+	return btree.UUID(gocql.UUIDFromTime(time.Now()))
 }
 
-func (VirtualID) Add(vid *btree.VirtualID) error {
+func (conn *CC) Add(vid *btree.VirtualID) error {
 	return nil;
 }
 
-func (VirtualID) Update(vid *btree.VirtualID) error {
+func (conn *CC) Update(vid *btree.VirtualID) error {
 	return nil;
 }
-func (VirtualID) Get(logicalID btree.UUID) (*btree.VirtualID, error) {
+func (conn *CC) Get(logicalID btree.UUID) (*btree.VirtualID, error) {
 	return &btree.VirtualID{}, nil;
 }
-func (VirtualID) Remove(logicalID btree.UUID) error {
+func (conn *CC) Remove(logicalID btree.UUID) error {
 	return nil;
 }
-
-// todo: node serialization functions here.

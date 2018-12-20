@@ -16,6 +16,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+	gocql.UUIDFromTime(time.Now)
 }
 
 func TestInterfaces(t *testing.T){

@@ -32,14 +32,11 @@ func OpenBtree(storeName string, itemSerializer btree.ItemSerializer,
 func NewBtree(store *btree.Store, trans *TransactionSession, config Configuration) (btree.BtreeInterface, error){
 	var si, err = newStoreInterface(trans.storeType, config)
 	if err != nil{ return nil, err}
-	var r = btree.Btree{
-		Store:store,
-		StoreInterface:si,
-	}
+	var r = btree.NewBtree(store,si)
 	if trans != nil {
-		trans.StoreMap[store.Name] = &r
+		trans.StoreMap[store.Name] = r
 	}
-	return &r, nil
+	return r, nil
 }
 
 func newStoreInterface(storeType uint, config Configuration) (*btree.StoreInterface, error){

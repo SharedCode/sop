@@ -10,7 +10,7 @@ type Recyclable struct{
 	btree.Recyclable
 }
 
-func NewRecycler() btree.Recycler{
+func NewRecycler() btree.RecyclerRepository{
 	return Recyclable{};
 }
 

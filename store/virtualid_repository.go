@@ -1,8 +1,16 @@
 package store;
 
 import "../btree"
+import cassB3 "./cassandra/btree"
 
 type vc Connection
+
+// NewUUID generates a new globally unique and 
+// time based UUID by delegating call to respective Cassandra implementation.
+func (conn *vc) NewUUID() btree.UUID{
+	var cc = cassB3.CC(*conn.CassandraConnection)
+	return cc.NewUUID()
+}
 
 func (conn *vc) Add(vid *btree.VirtualID) error {
 	return nil;

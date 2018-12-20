@@ -3,6 +3,17 @@ package btree
 type Btree struct{
 	Store *Store
 	StoreInterface *StoreInterface
+	TempSlots []Item
+	TempChildren []UUID
+}
+
+func NewBtree(store *Store, si *StoreInterface) *Btree{
+	return &Btree{
+		Store: store,
+		StoreInterface: si,
+		TempSlots: make([]Item, store.NodeSlotCount+1),
+		TempChildren: make([]UUID, store.NodeSlotCount+2),
+	}
 }
 
 func (btree *Btree) rootNode() (*Node, error) {

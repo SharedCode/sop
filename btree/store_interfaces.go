@@ -1,6 +1,6 @@
 package btree
 
-func (id UUID) ToString() string{
+func (id UUID) String() string{
 	return string(id[:])
 }
 func ToUUID(id string) UUID{
@@ -44,6 +44,8 @@ type VirtualIDRepository interface{
 	Add(*VirtualID) error
 	Update(*VirtualID) error
 	Remove(logicalID UUID) error
+	// NewUUID will generate new UUID that is unique globally.
+	NewUUID() UUID
 }
 
 type RecyclerRepository interface{
