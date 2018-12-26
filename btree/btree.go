@@ -5,6 +5,12 @@ type Btree struct{
 	StoreInterface *StoreInterface
 	TempSlots []Item
 	TempChildren []UUID
+	CurrentItem CurrentItemRef
+}
+
+type CurrentItemRef struct{
+	NodeAddress *Handle
+	NodeItemIndex int
 }
 
 func NewBtree(store *Store, si *StoreInterface) *Btree{
@@ -17,17 +23,20 @@ func NewBtree(store *Store, si *StoreInterface) *Btree{
 }
 
 func (btree *Btree) rootNode() (*Node, error) {
+	if btree.Store.RootNodeID == nil {
+		// create new Root Node, if nil (implied new btree).
+		btree.Store.RootNodeID = NewHandle(btree.StoreInterface.VirtualIDRepository.NewUUID())
+		return &Node{ID: btree.Store.RootNodeID}, nil
+	}
 	return btree.StoreInterface.NodeRepository.Get(btree.Store.RootNodeID)
 }
 
-func (btree *Btree) setCurrentItem(){
+// func (btree *Btree) setCurrentItem(){
+// }
 
-}
-
-func (btree *Btree) setCurrentItemAddress(nodeAddress UUID, itemIndex int){
-	// if (CurrentItem == null) {return}
-	// CurrentItem.NodeAddress = itemNodeAddress;
-	// CurrentItem.NodeItemIndex = itemIndex;
+func (btree *Btree) setCurrentItemAddress(nodeAddress *Handle, itemIndex int){
+	btree.CurrentItem.NodeAddress = nodeAddress;
+	btree.CurrentItem.NodeItemIndex = itemIndex;
 }
 
 func (btree *Btree) isUnique() bool{

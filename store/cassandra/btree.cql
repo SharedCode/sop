@@ -18,6 +18,7 @@ create table store (
 create table node (
     id timeUUID PRIMARY KEY,
     vrsn int,      // current value version
+    l_id timeUUID PRIMARY KEY,
 
     // set of items: key, version no., value
     s frozen <set<tuple<text, int, blob>>>,

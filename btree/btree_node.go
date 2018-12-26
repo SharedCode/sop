@@ -1,6 +1,7 @@
 package btree
 
-//import "sort"
+import "errors"
+import "sort"
 
 func (node *Node) add(btree *Btree, item Item) (bool, error) {
 	var currentNode = node;
@@ -254,29 +255,34 @@ func compare(btree *Btree, a Item, b Item) int {
 }
 
 func (node *Node) getIndex(btree *Btree, item Item) (int, bool, error) {
-	return -1, false, nil
+	if node.Count == 0 {
+		// empty node.
+		return 0, false, nil
+	}
 	// var dupeDetected = false
-	// var index int
-	// if (node.count > 1) {
-	// 	if (bTree.Comparer != null){
-	// 		index = sort.Search(node.count, )
-	// 	} else {
-	// 		try
-	// 		{
-	// 			index = (short) Array.BinarySearch(Slots, 0, Count, item);
-	// 		}
-	// 		catch
-	// 		{
-	// 			try
-	// 			{
-	// 				index = (short) Array.BinarySearch(Slots, item);
-	// 			}
-	// 			catch //(Exception innerE)
-	// 			{
-	// 				throw new InvalidOperationException("No Comparer Error.");
-	// 			}
-	// 		}
-	// 	}
+	var index int
+	if node.Count > 1 {
+		if (btree.Store.ItemSerializer.CompareKey == nil){
+			return 0, false, errors.New("ItemSerializer.CompareKey function is nil")
+		}
+		var err error
+		index = sort.Search(node.Count, func(index int) bool{
+			var r int
+			r,err = btree.Store.ItemSerializer.CompareKey(node.Slots[index], item)
+			if err != nil{
+				return true
+			}
+			return r >= 0
+		})
+		if err != nil{
+			return 0, false, err
+		}
+	}
+
+	// dummy return
+	return index, false, nil
+
+
 	// 	if (index < 0)
 	// 		index = (short)~index;
 	// 	if (bTree.IsUnique && index >= 0)
@@ -308,7 +314,6 @@ func (node *Node) getChild(btree *Btree, index int) (*Node, error) {
 	return n, nil
 }
 
-func (node *Node) getAddress(btree *Btree) UUID {
-	var r UUID
-	return r
+func (node *Node) getAddress(btree *Btree) *Handle {
+	return node.ID
 }

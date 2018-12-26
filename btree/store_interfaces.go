@@ -1,15 +1,5 @@
 package btree
 
-func (id UUID) String() string{
-	return string(id[:])
-}
-func ToUUID(id string) UUID{
-	var bid = []byte(id)
-	var nid UUID
-	copy(nid[:], bid)
-	return nid
-}
-
 // BtreeInterface defines publicly callable methods of Btree.
 type BtreeInterface interface{
 	Add(key interface{}, value interface{}) (bool, error)
@@ -33,10 +23,10 @@ type StoreRepository interface{
 }
 
 type NodeRepository interface{
-	Get(nodeID UUID) (*Node, error)
+	Get(nodeID *Handle) (*Node, error)
 	Add(*Node) error
 	Update(*Node) error
-	Remove(nodeID UUID) error
+	Remove(nodeID *Handle) error
 }
 
 type VirtualIDRepository interface{

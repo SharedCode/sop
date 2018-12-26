@@ -19,14 +19,11 @@ func OpenBtree(storeName string, itemSerializer btree.ItemSerializer,
 	if err != nil {return nil, err}
 	var store = si.StoreRepository.Get(storeName)
 	store.ItemSerializer = itemSerializer
-	var r = btree.Btree{
-		Store:store,
-		StoreInterface:si,
-	}
+	var r = btree.NewBtree(store,si)
 	if trans != nil {
-		trans.StoreMap[storeName] = &r
+		trans.StoreMap[storeName] = r
 	}
-	return &r, nil
+	return r, nil
 }
 
 func NewBtree(store *btree.Store, trans *TransactionSession, config Configuration) (btree.BtreeInterface, error){

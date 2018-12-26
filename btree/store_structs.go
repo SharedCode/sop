@@ -29,7 +29,6 @@ type versionedItem struct{
 	baseItem
 }
 
-
 type Store struct {
     Name string
 	NodeSlotCount int
@@ -40,7 +39,8 @@ type Store struct {
 	IsCustomKeyStoredAsString bool
 	IsCustomValueStoredAsString bool
 	ItemSerializer ItemSerializer
-	RootNodeID UUID
+	// RootNodeID is the root node's handle.
+	RootNodeID *Handle
 	Count int64
 	versionedItem
 }
@@ -66,7 +66,8 @@ type Item struct{
 }
 
 type Node struct {
-	ID UUID
+	ID *Handle
+
     Slots []Item
 	Children []UUID
 	Count int
@@ -74,7 +75,8 @@ type Node struct {
 }
 
 type NodeBlocks struct {
-	ID UUID
+	ID *Handle
+
     SlotBlock []byte
 	SlotBlockMap []UUID
 	Children []UUID
@@ -83,12 +85,12 @@ type NodeBlocks struct {
 }
 
 type SlotValue struct{
-    ID UUID
+	ID *Handle
 	Value []byte
 	baseItem
 } 
 type SlotValueBlocks struct{
-    ID UUID
+	ID *Handle
 	Value []byte
 	ValueBlockMap []UUID
 	baseItem
@@ -101,11 +103,10 @@ type Recyclable struct{
 	baseItem
 }
 
+// VirtualID is a structure that holds Logical ID and the underlying current Physical ID it maps to.
+// It also has other members used for Transaction processing.
 type VirtualID struct {
-	LogicalID UUID
-	IsPhysicalIDB bool
-	PhysicalIDA UUID
-	PhysicalIDB UUID
+	Handle
 	baseItem
 }
 
@@ -117,11 +118,16 @@ const(
 	Remove
 )
 
+// TransactionEntryKeys contain info about each Store Item modified within a Transaction.
+// NOTE: newly created Stores themselves don't get tracked within the Transaction Entry table.
+// Their items do. New Stores are cached in-memory and get saved (conflict resolved) 
+// during Transaction Commit.
 type TransactionEntryKeys struct{
-	ID UUID
+	ID *Handle
 	StoreName string
 	Sequence UUID
 }
+
 type TransactionEntry struct{
 	TransactionEntryKeys
 	Action TransactionActionType

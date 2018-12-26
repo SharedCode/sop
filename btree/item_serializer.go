@@ -9,6 +9,8 @@ type ItemSerializer struct {
 	StringSerializeKey   	func(k interface{}) (string, error)
 	StringDeSerializeKey 	func(kData string) (interface{}, error)
 
+	// CompareKey is a function that knows how to compare two key instances.
+	// Comparers dictate the ordering or sorting of items based on their keys.
 	CompareKey 				func(k1 interface{}, k2 interface{}) (int, error)
 
 	ValueInfo              	string
