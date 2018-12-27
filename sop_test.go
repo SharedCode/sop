@@ -43,6 +43,8 @@ func TestBtreeTransaction(t *testing.T){
 	}
 	tree.Add("foo", "bar")
 
+	//tree.Search("foo")
+
 	var store2 = btree.NewStoreDefaultSerializer("fooBar2", 11, false)
 	tree2, _ := NewBtree(store2, trans, config)
 	tree2.Add("foo", "bar")

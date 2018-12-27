@@ -1,5 +1,9 @@
 package btree
 
+import (
+	"fmt"
+)
+
 type Btree struct{
 	Store *Store
 	StoreInterface *StoreInterface
@@ -14,21 +18,31 @@ type CurrentItemRef struct{
 }
 
 func NewBtree(store *Store, si *StoreInterface) *Btree{
-	return &Btree{
+	if !store.ItemSerializer.IsValid(){
+		// provide string key/value type handlers if not provided (invalid).
+		store.ItemSerializer.CreateDefaultKVTypeHandlers()
+	}
+	var b3 = Btree{
 		Store: store,
 		StoreInterface: si,
 		TempSlots: make([]Item, store.NodeSlotCount+1),
 		TempChildren: make([]UUID, store.NodeSlotCount+2),
-	}
+	}	
+	return &b3
 }
 
 func (btree *Btree) rootNode() (*Node, error) {
 	if btree.Store.RootNodeID == nil {
 		// create new Root Node, if nil (implied new btree).
 		btree.Store.RootNodeID = NewHandle(btree.StoreInterface.VirtualIDRepository.NewUUID())
-		return &Node{ID: btree.Store.RootNodeID}, nil
+		return NewNode(btree.Store.NodeSlotCount), nil
 	}
-	return btree.StoreInterface.NodeRepository.Get(btree.Store.RootNodeID)
+	root, e := btree.StoreInterface.NodeRepository.Get(btree.Store.RootNodeID)
+	if e != nil {return nil, e}
+	if root == nil{
+		return nil, fmt.Errorf("Can't retrieve Root Node w/ ID '%s'", btree.Store.RootNodeID.String())
+	}
+	return root, nil
 }
 
 // func (btree *Btree) setCurrentItem(){
@@ -54,4 +68,15 @@ func (btree *Btree) Add(key interface{}, value interface{}) (bool, error) {
 	node, err := btree.rootNode()
 	if err != nil {return false, err}
 	return node.add(btree, itm);
+}
+
+// Search will find the Item with the specified key, position the Btree record
+// pointer to the found Item and return true if found, otherwise false.
+// 'gotoFirstOccurrence' parameter is useful when Btree allows duplicate keyed items 
+// (Unique = false). This is a hint which will cause Btree to position the record pointer 
+// to the first Item that has the specified key.
+// Typical case is, to traverse the tree examining each Item with this same key.
+func (btree *Btree) Search(key interface{}, gotoFirstOccurrence bool) bool {
+	
+	return false
 }

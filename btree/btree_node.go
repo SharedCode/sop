@@ -1,6 +1,5 @@
 package btree
 
-import "errors"
 import "sort"
 
 func (node *Node) add(btree *Btree, item Item) (bool, error) {
@@ -35,7 +34,9 @@ func (node *Node) add(btree *Btree, item Item) (bool, error) {
 		if index > 0 && index >= currentNode.Count{
 			currItemIndex--
 		}
-		if (compare(btree, currentNode.Slots[currItemIndex], item) == 0) {
+		i,e := compare(btree, currentNode.Slots[currItemIndex], item)
+		if e != nil {return false, e}
+		if (i == 0) {
 			// set the Current item pointer to the discovered existing item.
 			btree.setCurrentItemAddress(currentNode.getAddress(btree), currItemIndex);
 			return false, nil;
@@ -229,29 +230,11 @@ func (node *Node) addOnLeaf(btree *Btree, item Item, index int, parent *Node) (b
 	return false, nil
 }
 
-func compare(btree *Btree, a Item, b Item) int {
-	return 0
-	// if (a == null && b == null) return 0;
-	// if (a == null) return -1;
-	// if (b == null) return 1;
-
-	// if (btree.Comparer != null)
-	// {
-	// 	return btree.ComparerWrapper.Compare(a, b);
-	// }
-	// else
-	// {
-	// 	btree.Comparer = new SystemDefaultComparer();
-	// 	try
-	// 	{
-	// 		return btree.ComparerWrapper.Compare(a, b);
-	// 	}
-	// 	catch (Exception)
-	// 	{
-	// 		btree.Comparer = new BTree.BTreeDefaultComparer();
-	// 		return btree.ComparerWrapper.Compare(a, b);
-	// 	}
-	// }
+func compare(btree *Btree, a Item, b Item) (int, error) {
+	if (a.IsEmpty() && b.IsEmpty()) {return 0, nil}
+	if (a.IsEmpty()) {return -1, nil}
+	if (b.IsEmpty()) {return 1, nil}
+	return btree.Store.ItemSerializer.CompareKey(a.Key, b.Key)
 }
 
 func (node *Node) getIndex(btree *Btree, item Item) (int, bool, error) {
@@ -259,54 +242,35 @@ func (node *Node) getIndex(btree *Btree, item Item) (int, bool, error) {
 		// empty node.
 		return 0, false, nil
 	}
-	// var dupeDetected = false
+	var itemFound = false
 	var index int
 	if node.Count > 1 {
-		if (btree.Store.ItemSerializer.CompareKey == nil){
-			return 0, false, errors.New("ItemSerializer.CompareKey function is nil")
-		}
 		var err error
 		index = sort.Search(node.Count, func(index int) bool{
 			var r int
-			r,err = btree.Store.ItemSerializer.CompareKey(node.Slots[index], item)
+			r,err = btree.Store.ItemSerializer.CompareKey(node.Slots[index].Key, item.Key)
 			if err != nil{
 				return true
 			}
+			if r == 0{itemFound = true}
 			return r >= 0
 		})
 		if err != nil{
 			return 0, false, err
 		}
+		return index, itemFound, nil
 	}
-
-	// dummy return
+	// node count == 1
+	result,err := btree.Store.ItemSerializer.CompareKey(node.Slots[0].Key, item.Key)
+	if err != nil {
+		return 0, false, err
+	}
+	if (result < 0){
+		index = 1;
+	} else if (btree.isUnique() && result == 0) {
+		return 0, true, nil
+	}
 	return index, false, nil
-
-
-	// 	if (index < 0)
-	// 		index = (short)~index;
-	// 	if (bTree.IsUnique && index >= 0)
-	// 	{
-	// 		short i = index;
-	// 		if (i >= Slots.Length)
-	// 			i--;
-	// 		var result = Compare(bTree, Slots[i], item);
-	// 		if (result == 0)
-	// 		{
-	// 			dupeDetected = true;
-	// 			return i;
-	// 		}
-	// 	}
-	// } else if (Count == 1){
-	// 	var result = Compare(bTree, Slots[0], item);
-	// 	if (result < 0){
-	// 		index = 1;
-	// 	} else if (bTree.IsUnique && result == 0) {
-	// 		dupeDetected = true;
-	// 		return 0;
-	// 	}
-	// }
-	// return index;
 }
 
 func (node *Node) getChild(btree *Btree, index int) (*Node, error) {

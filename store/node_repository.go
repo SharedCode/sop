@@ -21,8 +21,9 @@ func (conn *nc) Update(n *btree.Node) error {
 }
 func (conn *nc) Get(nodeID *btree.Handle) (*btree.Node, error) {
 	n := btree.Node{}
-	_,e := conn.CacheConnection.GetStruct(nodeID.String(), &n)
+	n2,e := conn.CacheConnection.GetStruct(nodeID.String(), &n)
 	// todo: Backend Store Get if not found in Cache
+	if n2 == nil{return nil, nil}	// not found.
 	return &n, e;
 }
 func (conn *nc) Remove(nodeID *btree.Handle) error {

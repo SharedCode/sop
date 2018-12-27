@@ -64,6 +64,9 @@ type Item struct{
 	Value interface{}	
 	Version int
 }
+func (item *Item) IsEmpty() bool{
+	return item.Key == nil && item.Value == nil
+}
 
 type Node struct {
 	ID *Handle
@@ -72,6 +75,11 @@ type Node struct {
 	Children []UUID
 	Count int
 	versionedItem
+}
+func NewNode(slotCount int) *Node{
+	return &Node{
+		Slots: make([]Item, slotCount),
+	}
 }
 
 type NodeBlocks struct {

@@ -90,6 +90,7 @@ func (connection *Connection) GetStruct(key string, target interface{}) (interfa
 	if err == nil{
 		err = json.Unmarshal([]byte(s), target)
 	}
+	if err == redis.Nil {return nil, err}
 	return target, err
 }
 
