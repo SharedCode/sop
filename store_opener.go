@@ -1,8 +1,9 @@
 package sop
 
 import (
-	"./btree"
-	"./store"
+	"fmt"
+	"sop/btree"
+	"sop/store"
 )
 
 // For now, below code only caters for Cassandra Store.
@@ -30,9 +31,14 @@ func NewBtree(store *btree.Store, trans *TransactionSession, config Configuratio
 	var si, err = newStoreInterface(trans.storeType, config)
 	if err != nil{ return nil, err}
 	var r = btree.NewBtree(store,si)
-	if trans != nil {
-		trans.StoreMap[store.Name] = r
+	if trans == nil {
+		return nil, fmt.Errorf("Transaction session is req'd when creating a new Btree")
 	}
+	trans.ActionRepository = si.TransactionRepository
+	trans.StoreMap[store.Name] = r
+	// record the "Create new Btree action".
+	// todo
+
 	return r, nil
 }
 

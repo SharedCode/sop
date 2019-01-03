@@ -37,12 +37,18 @@ func (btree *Btree) rootNode() (*Node, error) {
 		btree.Store.RootNodeID = NewHandle(btree.StoreInterface.VirtualIDRepository.NewUUID())
 		return NewNode(btree.Store.NodeSlotCount), nil
 	}
-	root, e := btree.StoreInterface.NodeRepository.Get(btree.Store.RootNodeID)
+	root, e := btree.getNode(btree.Store.RootNodeID)
 	if e != nil {return nil, e}
 	if root == nil{
-		return nil, fmt.Errorf("Can't retrieve Root Node w/ ID '%s'", btree.Store.RootNodeID.String())
+		return nil, fmt.Errorf("Can't retrieve Root Node w/ ID '%s'", btree.Store.RootNodeID.ToString())
 	}
 	return root, nil
+}
+
+func (btree *Btree) getNode(id *Handle) (*Node, error){
+	n, e := btree.StoreInterface.NodeRepository.Get(id)
+	if e != nil {return nil, e}
+	return n, nil
 }
 
 // func (btree *Btree) setCurrentItem(){
@@ -77,6 +83,6 @@ func (btree *Btree) Add(key interface{}, value interface{}) (bool, error) {
 // to the first Item that has the specified key.
 // Typical case is, to traverse the tree examining each Item with this same key.
 func (btree *Btree) Search(key interface{}, gotoFirstOccurrence bool) bool {
-	
+
 	return false
 }

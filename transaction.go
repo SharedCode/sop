@@ -1,7 +1,7 @@
 package sop
 
 import "errors"
-import "./btree"
+import "sop/btree"
 
 type PhasedTransaction interface{
 	Begin() error
@@ -24,6 +24,9 @@ type TransactionSession struct{
 	Started bool
 	StoreMap map[string]*btree.Btree
 	UserTransaction PhasedTransaction
+	// ActionRepository is used to record each transaction session CRUD activity
+	// that can be finalized or undone when session is committed or rolledback respectively.
+	ActionRepository btree.TransactionRepository
 	btreeTransaction PhasedTransaction
 	storeType uint
 }

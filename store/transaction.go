@@ -1,6 +1,6 @@
 package store
 
-import "../btree"
+import "sop/btree"
 
 type TransactionSession struct{
 	TransactionID *btree.UUID

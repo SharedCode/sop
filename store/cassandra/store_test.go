@@ -1,7 +1,7 @@
 
 package cassandra;
 
-import "./btree"
+import "sop/store/cassandra/btree"
 
 import "testing";
 import "github.com/gocql/gocql"

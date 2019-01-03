@@ -231,9 +231,9 @@ func (node *Node) addOnLeaf(btree *Btree, item Item, index int, parent *Node) (b
 }
 
 func compare(btree *Btree, a Item, b Item) (int, error) {
-	if (a.IsEmpty() && b.IsEmpty()) {return 0, nil}
-	if (a.IsEmpty()) {return -1, nil}
-	if (b.IsEmpty()) {return 1, nil}
+	if a.IsEmpty() && b.IsEmpty() {return 0, nil}
+	if a.IsEmpty() {return -1, nil}
+	if b.IsEmpty() {return 1, nil}
 	return btree.Store.ItemSerializer.CompareKey(a.Key, b.Key)
 }
 
@@ -273,9 +273,8 @@ func (node *Node) getIndex(btree *Btree, item Item) (int, bool, error) {
 	return index, false, nil
 }
 
-func (node *Node) getChild(btree *Btree, index int) (*Node, error) {
-	var n *Node
-	return n, nil
+func (node *Node) getChild(btree *Btree, childSlotIndex int) (*Node, error) {
+	return btree.getNode(node.Children[childSlotIndex].ToHandle())
 }
 
 func (node *Node) getAddress(btree *Btree) *Handle {

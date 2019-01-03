@@ -2,9 +2,9 @@ package sop
 
 import "testing"
 import "os"
-import "./btree"
-import "./store"
-import "./mocks"
+import "sop/btree"
+import "sop/store"
+import "sop/mocks"
 
 import log "github.com/sirupsen/logrus"
 

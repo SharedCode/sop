@@ -46,7 +46,6 @@ func (itemSer *ItemSerializer) IsValid() bool{
 // CreateDefaultKVTypeHandlers create Key/Value type converters to/from string.
 // Later, we can define more exhaustive built-in type handlers, like for int, float, double, date, etc...
 func (ItemSerializer *ItemSerializer) CreateDefaultKVTypeHandlers(){
-
 	// provide default key/value type handlers (string)
 	ItemSerializer.StringSerializeKey = func(k interface{}) (string, error){
 		return fmt.Sprintf("%s", k), nil

@@ -1,6 +1,6 @@
 package btree;
 
-import "../../../btree"
+import "sop/btree"
 
 type Store btree.Store;
 

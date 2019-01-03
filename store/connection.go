@@ -5,9 +5,9 @@ package store
 
 import (
 	"fmt"
-	"../btree"
-	"../cache"
-	cass "./cassandra"
+	"sop/btree"
+	"sop/cache"
+	cass "sop/store/cassandra"
 )
 
 // Type is unsigned int for enumerating supported backend stores.
@@ -58,6 +58,18 @@ func (conn *Connection) GetStoreInterface() *btree.StoreInterface {
 		RecyclerRepository: conn.getRecyclerRepository(),
 		TransactionRepository: conn.getTransactionRepository(),
 	}
+}
+
+const (
+	storeRepositoryPrefix = "StoreRepo"
+	nodeRepositoryPrefix = "NodeRepo"
+	virtualIDRepositoryPrefix = "VirtualIDRepo"
+	transactionRepositoryPrefix = "TransRepo"
+	recyclerRepositoryPrefix = "RecyclerRepo"
+)
+
+func format(repoPrefix string, repoID string) string{
+	return fmt.Sprintf("sop.%s.%s", repoPrefix, repoID)
 }
 
 func (conn *Connection) getStoreRepository() btree.StoreRepository{
