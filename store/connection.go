@@ -49,8 +49,8 @@ func NewConnection(storeType uint, options cache.Options, cassandraConfig cass.C
 
 // GetStoreInterface instantiates a Store Interface object with Repositories
 // required to manage Btree backend storage.
-func (conn *Connection) GetStoreInterface() *btree.StoreInterface {
-	return &btree.StoreInterface{
+func (conn *Connection) GetStoreInterface() btree.StoreInterface {
+	return btree.StoreInterface{
 		StoreType: conn.StoreType,
 		StoreRepository: conn.getStoreRepository(),
 		NodeRepository: conn.getNodeRepository(),

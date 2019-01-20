@@ -4,22 +4,24 @@ import (
 	"fmt"
 )
 
+// Btree manages items using B-tree data structure and algorithm. It is stateful, thus, members
+// need to receive a Btree ref (pointer).
 type Btree struct{
-	Store *Store
-	StoreInterface *StoreInterface
+	Store Store
+	StoreInterface StoreInterface
 	TempSlots []Item
 	TempChildren []UUID
 	CurrentItem CurrentItemRef
 }
 
 type CurrentItemRef struct{
-	NodeAddress *Handle
+	NodeAddress Handle
 	NodeItemIndex int
 }
 
-func NewBtree(store *Store, si *StoreInterface) *Btree{
+func NewBtree(store Store, si StoreInterface) *Btree{
 	if !store.ItemSerializer.IsValid(){
-		// provide string key/value type handlers if not provided (invalid).
+		// provide string key/value type handlers if not provided or invalid.
 		store.ItemSerializer.CreateDefaultKVTypeHandlers()
 	}
 	var b3 = Btree{
@@ -32,7 +34,7 @@ func NewBtree(store *Store, si *StoreInterface) *Btree{
 }
 
 func (btree *Btree) rootNode() (*Node, error) {
-	if btree.Store.RootNodeID == nil {
+	if btree.Store.RootNodeID.IsEmpty() {
 		// create new Root Node, if nil (implied new btree).
 		btree.Store.RootNodeID = NewHandle(btree.StoreInterface.VirtualIDRepository.NewUUID())
 		return NewNode(btree.Store.NodeSlotCount), nil
@@ -45,16 +47,13 @@ func (btree *Btree) rootNode() (*Node, error) {
 	return root, nil
 }
 
-func (btree *Btree) getNode(id *Handle) (*Node, error){
+func (btree *Btree) getNode(id Handle) (*Node, error){
 	n, e := btree.StoreInterface.NodeRepository.Get(id)
 	if e != nil {return nil, e}
 	return n, nil
 }
 
-// func (btree *Btree) setCurrentItem(){
-// }
-
-func (btree *Btree) setCurrentItemAddress(nodeAddress *Handle, itemIndex int){
+func (btree *Btree) setCurrentItemAddress(nodeAddress Handle, itemIndex int){
 	btree.CurrentItem.NodeAddress = nodeAddress;
 	btree.CurrentItem.NodeItemIndex = itemIndex;
 }
@@ -76,13 +75,37 @@ func (btree *Btree) Add(key interface{}, value interface{}) (bool, error) {
 	return node.add(btree, itm);
 }
 
-// Search will find the Item with the specified key, position the Btree record
-// pointer to the found Item and return true if found, otherwise false.
-// 'gotoFirstOccurrence' parameter is useful when Btree allows duplicate keyed items 
-// (Unique = false). This is a hint which will cause Btree to position the record pointer 
-// to the first Item that has the specified key.
-// Typical case is, to traverse the tree examining each Item with this same key.
-func (btree *Btree) Search(key interface{}, gotoFirstOccurrence bool) bool {
+func (btree *Btree) Update(key interface{}, value interface{}) (bool, error){
+	return false, nil
+}
+func (btree *Btree) UpdateCurrentItem(newValue interface{}) (bool, error){
+	return false, nil
+}
+func (btree *Btree) Remove(key interface{}) (bool, error){
+	return false, nil
+}
+func (btree *Btree) RemoveCurrentItem() (bool, error){
+	return false, nil
+}
 
-	return false
+func (btree *Btree) MoveTo(key interface{}, firstItemWithKey bool) (bool, error) {
+
+	m := make(map[string]int)
+	v,_ := m["foo"]
+	return v == 0, nil
+
+//	return false
+}
+
+func (btree *Btree) MoveToFirst() (bool, error){
+	return false, nil
+}
+func (btree *Btree) MoveToLast() (bool, error){
+	return false, nil
+}
+func (btree *Btree) MoveToNext() (bool, error){
+	return false, nil
+}
+func (btree *Btree) MoveToPrevious()( bool, error){
+	return false, nil
 }

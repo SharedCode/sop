@@ -14,15 +14,15 @@ func (conn *CC) NewUUID() btree.UUID{
 	return btree.UUID(gocql.UUIDFromTime(time.Now()))
 }
 
-func (conn *CC) Add(vid *btree.VirtualID) error {
+func (conn *CC) Add(vid btree.VirtualID) error {
 	return nil;
 }
 
-func (conn *CC) Update(vid *btree.VirtualID) error {
+func (conn *CC) Update(vid btree.VirtualID) error {
 	return nil;
 }
-func (conn *CC) Get(logicalID btree.UUID) (*btree.VirtualID, error) {
-	return &btree.VirtualID{}, nil;
+func (conn *CC) Get(logicalID btree.UUID) (btree.VirtualID, error) {
+	return btree.VirtualID{}, nil;
 }
 func (conn *CC) Remove(logicalID btree.UUID) error {
 	return nil;
@@ -45,8 +45,8 @@ to Node Update described above.
 
 NOTE: Based on above story, Logical ID handling will be the default ID known to Btree. There is a
 special override action, that is:
-- Updated Nodes will "know" it is "new" and has Logical ID entry
-persisted. AND during phase 2 commit, handler will use this Logical ID to make it the "active" Node.
+- Updated Nodes will "know" it is "new" and has Logical ID entry persisted for use during phase 2 commit. 
+During phase 2 commit, handler will use this Logical ID to make it the "active" Node.
 - Other objects like Value stored in separate table, will be handled similar to updated Node.
 
 */

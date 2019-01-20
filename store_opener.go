@@ -27,7 +27,7 @@ func OpenBtree(storeName string, itemSerializer btree.ItemSerializer,
 	return r, nil
 }
 
-func NewBtree(store *btree.Store, trans *TransactionSession, config Configuration) (btree.BtreeInterface, error){
+func NewBtree(store btree.Store, trans *TransactionSession, config Configuration) (btree.BtreeInterface, error){
 	var si, err = newStoreInterface(trans.storeType, config)
 	if err != nil{ return nil, err}
 	var r = btree.NewBtree(store,si)
@@ -42,10 +42,10 @@ func NewBtree(store *btree.Store, trans *TransactionSession, config Configuratio
 	return r, nil
 }
 
-func newStoreInterface(storeType uint, config Configuration) (*btree.StoreInterface, error){
+func newStoreInterface(storeType uint, config Configuration) (btree.StoreInterface, error){
 	conn, err := store.NewConnection(storeType, config.RedisConfig, config.CassandraConfig)
 	if err != nil{
-		return nil, err
+		return btree.StoreInterface{}, err
 	}
 	return conn.GetStoreInterface(), nil
 }

@@ -14,10 +14,10 @@ func NewRecycler() btree.RecyclerRepository{
 	return Recyclable{};
 }
 
-func (Recyclable) Get(batch int, objectType int) []*btree.Recyclable{
+func (Recyclable) Get(batch int, objectType int) []btree.Recyclable{
 	return nil;
 }
-func (Recyclable) Add(recyclable []*btree.Recyclable) error{
+func (Recyclable) Add(recyclable []btree.Recyclable) error{
 	//var iface interface{} = recyclable
 	//item := iface.(Recyclable)
 	return nil;
@@ -25,6 +25,6 @@ func (Recyclable) Add(recyclable []*btree.Recyclable) error{
 // func (Recyclable) Update(*btree.Recyclable) error{
 // 	return nil;
 // }
-func (Recyclable) Remove(items []*btree.Recyclable) error{
+func (Recyclable) Remove(items []btree.Recyclable) error{
 	return nil;
 }

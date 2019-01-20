@@ -1,7 +1,5 @@
 package btree
 
-import "time"
-
 // persistence constructs
 
 type UUID [16]byte
@@ -40,18 +38,18 @@ type Store struct {
 	IsCustomValueStoredAsString bool
 	ItemSerializer ItemSerializer
 	// RootNodeID is the root node's handle.
-	RootNodeID *Handle
+	RootNodeID Handle
 	Count int64
 	versionedItem
 }
 
-func NewStoreDefaultSerializer(name string, nodeSlotCount int, isUnique bool) *Store{
+func NewStoreDefaultSerializer(name string, nodeSlotCount int, isUnique bool) Store{
 	var itemSer ItemSerializer
 	return NewStore(name, nodeSlotCount, isUnique, itemSer)
 }
 
-func NewStore(name string, nodeSlotCount int, isUnique bool, itemSerializer ItemSerializer) *Store{
-	return &Store{
+func NewStore(name string, nodeSlotCount int, isUnique bool, itemSerializer ItemSerializer) Store{
+	return Store{
 		Name: name,
 		NodeSlotCount: nodeSlotCount,
 		IsUnique: isUnique,
@@ -64,12 +62,12 @@ type Item struct{
 	Value interface{}	
 	Version int
 }
-func (item *Item) IsEmpty() bool{
+func (item Item) IsEmpty() bool{
 	return item.Key == nil && item.Value == nil
 }
 
 type Node struct {
-	ID *Handle
+	ID Handle
 
     Slots []Item
 	Children []UUID
@@ -83,7 +81,7 @@ func NewNode(slotCount int) *Node{
 }
 
 type NodeBlocks struct {
-	ID *Handle
+	ID Handle
 
     SlotBlock []byte
 	SlotBlockMap []UUID
@@ -93,12 +91,12 @@ type NodeBlocks struct {
 }
 
 type SlotValue struct{
-	ID *Handle
+	ID Handle
 	Value []byte
 	baseItem
 } 
 type SlotValueBlocks struct{
-	ID *Handle
+	ID Handle
 	Value []byte
 	ValueBlockMap []UUID
 	baseItem
@@ -107,7 +105,7 @@ type SlotValueBlocks struct{
 type Recyclable struct{
 	ObjectType int
 	ObjectID UUID
-	LockDate time.Time
+	LockDate int64
 	baseItem
 }
 
@@ -131,7 +129,7 @@ const(
 // Their items do. New Stores are cached in-memory and get saved (conflict resolved) 
 // during Transaction Commit.
 type TransactionEntryKeys struct{
-	ID *Handle
+	ID Handle
 	StoreName string
 	Sequence UUID
 }

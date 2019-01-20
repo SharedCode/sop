@@ -15,8 +15,12 @@ func TestBtreeBasic(t *testing.T){
 	  log.Fatal(err)
 	}
 	var config, _ = LoadConfiguration(dir + "/config.json")
+	var trans = NewTransaction(store.Cassandra)
 	var store = btree.NewStoreDefaultSerializer("fooBar", 10, false)
-	var tree, _ = NewBtree(store, nil, config)
+	// assign the User or Application custom transaction.
+	trans.UserTransaction = &mocks.UserTransaction{}
+	trans.Begin()
+	var tree, _ = NewBtree(store, trans, config)
 
 	tree.Add("foo", "bar")
 }
@@ -42,8 +46,7 @@ func TestBtreeTransaction(t *testing.T){
 		t.Error("Can't get Btree instance.")
 	}
 	tree.Add("foo", "bar")
-
-	//tree.Search("foo")
+	tree.MoveTo("foo", false)
 
 	var store2 = btree.NewStoreDefaultSerializer("fooBar2", 11, false)
 	tree2, _ := NewBtree(store2, trans, config)

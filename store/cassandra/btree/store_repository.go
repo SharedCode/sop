@@ -8,11 +8,12 @@ func NewStoreRepository() btree.StoreRepository{
 	return Store{};
 }
 
-func (Store) Get(name string) *btree.Store{
-	return nil;
+func (Store) Get(name string) btree.Store{
+	// todo
+	return btree.Store{};
 }
 
-func  (Store) Add(source *btree.Store) error{
+func  (Store) Add(source btree.Store) error{
 	return nil;
 }
 

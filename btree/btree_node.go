@@ -46,10 +46,12 @@ func (node *Node) add(btree *Btree, item Item) (bool, error) {
 	return true, nil;
 }
 
-// todo:
-
-func (node *Node) saveNodeToDisk(btree *Btree){
-	//btree.StoreInterface.NodeRepository.Add(node)
+func (node *Node) saveNode(btree *Btree) error{
+	if node.ID.IsEmpty() {
+		node.ID = btree.StoreInterface.VirtualIDRepository.NewUUID().ToHandle()
+		return btree.StoreInterface.NodeRepository.Add(node)
+	}
+	return btree.StoreInterface.NodeRepository.Update(node)
 }
 
 func (node *Node) addOnLeaf(btree *Btree, item Item, index int, parent *Node) (bool, error) {
@@ -60,9 +62,8 @@ func (node *Node) addOnLeaf(btree *Btree, item Item, index int, parent *Node) (b
 	if (node.Count < btree.Store.NodeSlotCount){
 		// insert the Item to target position & "skud" over the items to the right
 		node.insertSlotItem(item, index)
-		node.Count++;
-		// save this TreeNode and HeaderData
-		node.saveNodeToDisk(btree);
+		// save this TreeNode
+		node.saveNode(btree);
 		return true, nil;
 	}
 
@@ -230,6 +231,12 @@ func (node *Node) addOnLeaf(btree *Btree, item Item, index int, parent *Node) (b
 	return false, nil
 }
 
+func (node *Node) insertSlotItem(item Item, position int){
+	copy(node.Slots[position+1:], node.Slots[position:])
+	node.Slots[position] = item
+	node.Count++
+}
+
 func compare(btree *Btree, a Item, b Item) (int, error) {
 	if a.IsEmpty() && b.IsEmpty() {return 0, nil}
 	if a.IsEmpty() {return -1, nil}
@@ -277,6 +284,6 @@ func (node *Node) getChild(btree *Btree, childSlotIndex int) (*Node, error) {
 	return btree.getNode(node.Children[childSlotIndex].ToHandle())
 }
 
-func (node *Node) getAddress(btree *Btree) *Handle {
+func (node *Node) getAddress(btree *Btree) Handle {
 	return node.ID
 }

@@ -15,10 +15,10 @@ func (Node) Add(n *btree.Node) error {
 func (Node) Update(n *btree.Node) error {
 	return nil;
 }
-func (Node) Get(nodeID *btree.Handle) (*btree.Node, error) {
+func (Node) Get(nodeID btree.Handle) (*btree.Node, error) {
 	return &btree.Node{}, nil;
 }
-func (Node) Remove(nodeID *btree.Handle) error {
+func (Node) Remove(nodeID btree.Handle) error {
 	return nil;
 }
 

@@ -78,7 +78,7 @@ create table recycle_bin (
     h int,
     t int,          //(option) default to node type
     id timeUUID,
-    lock_dt date,
+    lock_dt bigint,
     is_del boolean,
     Primary Key((t, is_del, y, m, d, h))
 );

@@ -20,14 +20,14 @@ func (conn *nc) Update(n *btree.Node) error {
 	// todo: Backend Store Update
 	return e;
 }
-func (conn *nc) Get(nodeID *btree.Handle) (*btree.Node, error) {
+func (conn *nc) Get(nodeID btree.Handle) (*btree.Node, error) {
 	n := btree.Node{}
 	n2,e := conn.CacheConnection.GetStruct(format(nodeRepositoryPrefix, nodeID.ToString()), &n)
 	// todo: Backend Store Get if not found in Cache
 	if n2 == nil{return nil, nil}	// not found.
 	return &n, e;
 }
-func (conn *nc) Remove(nodeID *btree.Handle) error {
+func (conn *nc) Remove(nodeID btree.Handle) error {
 	// todo: Backend Store Remove after remove from Cache
 	return conn.CacheConnection.DeleteStruct(format(nodeRepositoryPrefix, nodeID.ToString()))
 }
