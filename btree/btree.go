@@ -37,7 +37,9 @@ func (btree *Btree) rootNode() (*Node, error) {
 	if btree.Store.RootNodeID.IsEmpty() {
 		// create new Root Node, if nil (implied new btree).
 		btree.Store.RootNodeID = NewHandle(btree.StoreInterface.VirtualIDRepository.NewUUID())
-		return NewNode(btree.Store.NodeSlotCount), nil
+		var root = NewNode(btree.Store.NodeSlotCount)
+		root.ID = btree.Store.RootNodeID
+		return root, nil
 	}
 	root, e := btree.getNode(btree.Store.RootNodeID)
 	if e != nil {return nil, e}

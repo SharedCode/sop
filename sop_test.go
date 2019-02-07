@@ -20,9 +20,11 @@ func TestBtreeBasic(t *testing.T){
 	// assign the User or Application custom transaction.
 	trans.UserTransaction = &mocks.UserTransaction{}
 	trans.Begin()
-	var tree, _ = NewBtree(store, trans, config)
+	tree, err := NewBtree(store, trans, config)
 
+	// works now!!! :)
 	tree.Add("foo", "bar")
+	tree.Add("foo2", "bar2")
 }
 
 func TestBtreeTransaction(t *testing.T){
