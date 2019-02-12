@@ -38,9 +38,13 @@ func NewHandle(id UUID) Handle{
 // NillUUID is an empty UUID.
 var NilUUID UUID
 
+func (id UUID) IsNil() bool{
+	return bytes.Compare(id[:], NilUUID[:]) == 0
+}
+
 // IsEmpty checkds id whether it is empty or has a value.
 func (id Handle) IsEmpty() bool{
-	return bytes.Compare(id.LogicalID[:], NilUUID[:]) == 0
+	return id.LogicalID.IsNil()
 }
 
 // GetPhysicalID returns the currently active (if there is) UUID of a given Handle.

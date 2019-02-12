@@ -70,13 +70,18 @@ type Node struct {
 	ID Handle
 
     Slots []Item
-	Children []UUID
+	ChildrenAddresses []UUID
+	// Count of Items stored in Slots array.
 	Count int
 	versionedItem
+	parentAddress Handle
+	indexOfNode int
 }
+
 func NewNode(slotCount int) *Node{
 	return &Node{
 		Slots: make([]Item, slotCount),
+		indexOfNode:-1,
 	}
 }
 
