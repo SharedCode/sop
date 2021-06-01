@@ -1,6 +1,6 @@
 package btree;
 
-import "sop/btree"
+import "github.com/SharedCode/sop/btree"
 
 type Recyclable struct{
 	Year int

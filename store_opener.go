@@ -2,8 +2,8 @@ package sop
 
 import (
 	"fmt"
-	"sop/btree"
-	"sop/store"
+	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/store"
 )
 
 // For now, below code only caters for Cassandra Store.

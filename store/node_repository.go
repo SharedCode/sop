@@ -1,6 +1,6 @@
 package store;
 
-import "sop/btree"
+import "github.com/SharedCode/sop/btree"
 
 type nc Connection
 

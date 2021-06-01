@@ -1,7 +1,7 @@
 package store;
 
-import "sop/btree"
-import cassB3 "sop/store/cassandra/btree"
+import "github.com/SharedCode/sop/btree"
+import cassB3 "github.com/SharedCode/sop/store/cassandra/btree"
 
 type vc Connection
 

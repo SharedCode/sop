@@ -5,9 +5,9 @@ package store
 
 import (
 	"fmt"
-	"sop/btree"
-	"sop/cache"
-	cass "sop/store/cassandra"
+	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/cache"
+	cass "github.com/SharedCode/sop/store/cassandra"
 )
 
 // Type is unsigned int for enumerating supported backend stores.

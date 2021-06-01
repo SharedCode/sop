@@ -4,8 +4,8 @@ package sop
 import (
 	"encoding/json"
 	"io/ioutil"
-    "sop/cache"
-    cass "sop/store/cassandra"
+    "github.com/SharedCode/sop/cache"
+    cass "github.com/SharedCode/sop/store/cassandra"
 )
 
 // Configuration contains caching (redis) and backend store (e.g. Cassandra) host parameters.

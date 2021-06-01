@@ -1,7 +1,7 @@
 package sop
 
 import "errors"
-import "sop/btree"
+import "github.com/SharedCode/sop/btree"
 
 type PhasedTransaction interface{
 	Begin() error

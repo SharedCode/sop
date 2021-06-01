@@ -1,6 +1,6 @@
 package cassandra
 
-import "sop/btree"
+import "github.com/SharedCode/sop/btree"
 
 type TransactionSession struct{
 	TransactionID *btree.UUID

@@ -3,8 +3,8 @@ package btree;
 import (
 	"time"
 	"github.com/gocql/gocql"
-	cass "sop/store/cassandra"
-	"sop/btree"
+	cass "github.com/SharedCode/sop/store/cassandra"
+	"github.com/SharedCode/sop/btree"
 )
 
 type CC cass.Connection
