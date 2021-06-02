@@ -19,6 +19,12 @@ SOP addresses data management scale-ability internally, at the data driver level
 Via usage of SOP API, your application will experience low latency, very high performance scalability.
 
 # Build Instructions
+## Prerequisite
+Here are the prerequisites for doing a local run:
+* Redis running locally
+* Cassandra running locally
+
+## How to Build & Run
 Nothing special here, just issue a "go build" in the folder where you have the go.mod file and it will build the code libraries. Issue a "go test" to run the unit test on test files, to see they pass. You can debug, step-through the test files to learn how to use the code library.
 
 # Technical Details
