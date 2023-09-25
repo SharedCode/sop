@@ -2,9 +2,9 @@ package sop
 
 import "testing"
 import "os"
-import "github.com/SharedCode/sop.git/btree"
-import "github.com/SharedCode/sop.git/store"
-import "github.com/SharedCode/sop.git/mocks"
+import "github.com/SharedCode/sop/btree"
+import "github.com/SharedCode/sop/store"
+import "github.com/SharedCode/sop/mocks"
 
 import log "github.com/sirupsen/logrus"
 
@@ -22,6 +22,9 @@ func TestBtreeBasic(t *testing.T){
 	trans.Begin()
 	tree, err := NewBtree(store, trans, config)
 
+	if err != nil {
+		t.Errorf(err.Error())
+	}
 	// works now!!! :)
 	tree.Add("foo", "bar")
 	tree.Add("foo2", "bar2")

@@ -4,8 +4,7 @@ import (
 	"fmt"
 )
 
-// Btree manages items using B-tree data structure and algorithm. It is stateful, thus, members
-// need to receive a Btree ref (pointer).
+// Btree manages items using B-tree data structure and algorithm.
 type Btree struct{
 	Store Store
 	StoreInterface StoreInterface
