@@ -4,7 +4,8 @@ import (
 	"fmt"
 )
 
-// TODO: refactor to use protocol buffer, for struct definition & serialization.
+// TODO: refactor to use generics and protocol buffer, for struct definition & serialization
+// where appropriate to simplify.
 
 // Item Serializer should be provided if needing to control Key, Value pair serialization.
 // Otherwise, SOP will assume and use a built-in data type support. E.g. - String Key and String Value.
