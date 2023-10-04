@@ -23,7 +23,7 @@ type Connection struct{
 	// StoreType specifies which backend store this connection is to interface with.
 	StoreType uint
 	// CacheConnection is for Redis I/O
-	CacheConnection *cache.Connection
+	CacheConnection cache.Cache
 	CassandraConnection *cass.Connection
 }
 

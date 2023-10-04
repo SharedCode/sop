@@ -1,0 +1,7 @@
+
+On Persistence
+* Will standardize on protocol buffers for performant "item" or "key/value" serialization,
+* Will use MessagePack for large objects serialization, e.g. - Node
+* Caching, we will cache the B-Tree Nodes which is keyed off of UUID(string) & value is the Node data
+  serialized by MessagePack.
+* 

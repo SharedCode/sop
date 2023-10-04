@@ -21,26 +21,3 @@ func TestSearch(t *testing.T){
 		t.Fail()
 	}
 }
-
-func TestInterfaceCasts(t *testing.T){
-
-	var a interface{}
-	var b interface{}
-
-	a = 12
-	b = 12
-	if a != b{
-		t.Fail()
-	}
-
-	b = 13
-	if a == b{
-		t.Fail()
-	}
-	a = "13"
-	if a == b{
-		t.Fail()
-	}
-	fmt.Println(a)
-	fmt.Println(b)
-}

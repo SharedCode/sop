@@ -34,7 +34,7 @@ func TestBasicUse(t *testing.T) {
 	}
 	fmt.Println(usr2)
 
-	err = c.DeleteStruct("fooBar")
+	err = c.Delete("fooBar")
 
 	if err != nil{
 		t.Errorf(err.Error())
