@@ -1,5 +1,19 @@
+Welcome to SOP!
+
+This is a port from c#, thus, our coding style is very modular because the goal here is to also expand to support
+an Enterprise layout. Meaning, create B-Tree constructs that can optionally use out of process Caching(e.g. Redis)
+& a backend Store like Cassandra or AWS S3.
+Thus, an onboarding/guest engineer may find the coding style somewhat different. Yes, porting projects are not the
+same as typical application development. Because the code had been written already and is just getting translated
+to the new target language, and in this case, getting expanded to support a different "scheme or client/server topology"
+as mentioned.
 
 On Persistence
+* Will use go generics for type system. The c# implementation uses a very rich type system. Public interfaces
+  standardizes on "generics" and internal SOP constructs use a custom serializer for efficient data storage.
+  In golang port, standardizing on generics in both internal & external constructs will simplify the Key/Value
+  type support and resulting serialization can standardize on go's object Marshalling functions.
+  go's marshaller(& protobuff) has decent object serialization, thus, no need to get overboard.
 * Will standardize on protocol buffers for performant "item" or "key/value" serialization,
 * Will use MessagePack for large objects serialization, e.g. - Node
 * Caching, we will cache the B-Tree Nodes which is keyed off of UUID(string) & value is the Node data

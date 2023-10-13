@@ -1,4 +1,4 @@
-package store;
+package with_cache
 
 import "github.com/SharedCode/sop/btree"
 import cassB3 "github.com/SharedCode/sop/store/cassandra/btree"

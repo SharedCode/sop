@@ -1,7 +1,7 @@
 // Package store contains implementations of Btree interfaces for backend storage I/O.
 // This layer adds out of process caching (e.g. via redis) on top of the underlying physical 
 // Store implementations such as for Cassandra, etc...
-package store
+package with_cache
 
 import (
 	"fmt"

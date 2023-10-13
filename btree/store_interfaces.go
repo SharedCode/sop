@@ -1,18 +1,18 @@
 package btree
 
 // BtreeInterface defines publicly callable methods of Btree.
-type BtreeInterface interface{
-	Add(key interface{}, value interface{}) (bool, error)
-	Update(key interface{}, value interface{}) (bool, error)
-	UpdateCurrentItem(newValue interface{}) (bool, error)
-	Remove(key interface{}) (bool, error)
+type BtreeInterface[TKey comparable, TValue any] interface{
+	Add(key TKey, value TValue) (bool, error)
+	Update(key TKey, value TValue) (bool, error)
+	UpdateCurrentItem(newValue TValue) (bool, error)
+	Remove(key TKey) (bool, error)
 	RemoveCurrentItem() (bool, error)
 
 	// MoveTo will search Btree for an item with a given key. Return true if found, 
 	// otherwise false. firstItemWithKey is useful when there are items with same key. 
 	// true will position pointer to the first item, according to key ordering sequence, 
 	// with the given key.
-	MoveTo(key interface{}, firstItemWithKey bool) (bool, error)
+	MoveTo(key TKey, firstItemWithKey bool) (bool, error)
 	MoveToFirst() (bool, error)
 	MoveToLast() (bool, error)
 	MoveToNext() (bool, error)

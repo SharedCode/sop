@@ -1,51 +1,26 @@
 package btree
 
+import "github.com/google/uuid"
+
 // persistence constructs
 
-type UUID [16]byte
+type UUID uuid.UUID
 
-type KVType uint
-const (
-	// Key is string, Value is string data types. Supported first.
-	KeyStringValueString = iota
-	// Key is string, Value is binary. Supported next.
-	KeyStringValueBinary
-
-	// Key is string, Value is custom (serialized)
-	KeyStringValueCustom
-	// Key is custom, Value is string
-	KeyCustomValueString
-	// Key is custom, Value is custom
-	KeyCustomValueCustom
-)
-
-type baseItem struct{
-	IsDeleted bool
-}
 type versionedItem struct{
 	Version int
-	baseItem
+	IsDeleted bool
 }
 
 type Store struct {
     Name string
 	NodeSlotCount int
 	IsUnique bool
-	KVType KVType
 	KeyInfo string
 	ValueInfo string
-	IsCustomKeyStoredAsString bool
-	IsCustomValueStoredAsString bool
-	ItemSerializer ItemSerializer
 	// RootNodeID is the root node's handle.
 	RootNodeID Handle
 	Count int64
 	versionedItem
-}
-
-func NewStoreDefaultSerializer(name string, nodeSlotCount int, isUnique bool) Store{
-	var itemSer ItemSerializer
-	return NewStore(name, nodeSlotCount, isUnique, itemSer)
 }
 
 func NewStore(name string, nodeSlotCount int, isUnique bool, itemSerializer ItemSerializer) Store{
@@ -98,27 +73,27 @@ type NodeBlocks struct {
 type SlotValue struct{
 	ID Handle
 	Value []byte
-	baseItem
+	IsDeleted bool
 } 
 type SlotValueBlocks struct{
 	ID Handle
 	Value []byte
 	ValueBlockMap []UUID
-	baseItem
+	IsDeleted bool
 }
 
 type Recyclable struct{
 	ObjectType int
 	ObjectID UUID
 	LockDate int64
-	baseItem
+	IsDeleted bool
 }
 
 // VirtualID is a structure that holds Logical ID and the underlying current Physical ID it maps to.
 // It also has other members used for Transaction processing.
 type VirtualID struct {
 	Handle
-	baseItem
+	IsDeleted bool
 }
 
 type TransactionActionType uint
