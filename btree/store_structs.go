@@ -1,15 +1,9 @@
+// persistence constructs
 package btree
 
 import "github.com/google/uuid"
 
-// persistence constructs
-
 type UUID uuid.UUID
-
-type versionedItem struct{
-	Version int
-	IsDeleted bool
-}
 
 type Store struct {
     Name string
@@ -17,66 +11,46 @@ type Store struct {
 	IsUnique bool
 	KeyInfo string
 	ValueInfo string
-	// RootNodeID is the root node's handle.
-	RootNodeID Handle
+	// RootNodeId is the root node's handle.
+	RootNodeId Handle
 	Count int64
-	versionedItem
+	Version int
+	IsDeleted bool
 }
 
-func NewStore(name string, nodeSlotCount int, isUnique bool, itemSerializer ItemSerializer) Store{
+type StoreInterface[TKey Comparable, TValue any] struct{
+	StoreRepository StoreRepository
+	NodeRepository NodeRepository[TKey, TValue]
+	VirtualIdRepository VirtualIdRepository
+	RecyclerRepository RecyclerRepository
+	TransactionRepository TransactionRepository
+}
+
+func NewStore(name string, nodeSlotCount int, isUnique bool) Store{
 	return Store{
 		Name: name,
 		NodeSlotCount: nodeSlotCount,
 		IsUnique: isUnique,
-		ItemSerializer: itemSerializer,
-	}
-}
-
-type Item struct{
-	Key interface{}
-	Value interface{}	
-	Version int
-}
-func (item Item) IsEmpty() bool{
-	return item.Key == nil && item.Value == nil
-}
-
-type Node struct {
-	ID Handle
-
-    Slots []Item
-	ChildrenAddresses []UUID
-	// Count of Items stored in Slots array.
-	Count int
-	versionedItem
-	parentAddress Handle
-	indexOfNode int
-}
-
-func NewNode(slotCount int) *Node{
-	return &Node{
-		Slots: make([]Item, slotCount),
-		indexOfNode:-1,
 	}
 }
 
 type NodeBlocks struct {
-	ID Handle
-
+	Id Handle
     SlotBlock []byte
 	SlotBlockMap []UUID
 	Children []UUID
 	count int
-	versionedItem
+	Version int
+	IsDeleted bool
 }
 
 type SlotValue struct{
-	ID Handle
+	Id Handle
 	Value []byte
 	IsDeleted bool
 } 
 type SlotValueBlocks struct{
-	ID Handle
+	Id Handle
 	Value []byte
 	ValueBlockMap []UUID
 	IsDeleted bool
@@ -84,14 +58,14 @@ type SlotValueBlocks struct{
 
 type Recyclable struct{
 	ObjectType int
-	ObjectID UUID
+	ObjectId UUID
 	LockDate int64
 	IsDeleted bool
 }
 
-// VirtualID is a structure that holds Logical ID and the underlying current Physical ID it maps to.
+// VirtualId is a structure that holds Logical Id and the underlying current Physical Id it maps to.
 // It also has other members used for Transaction processing.
-type VirtualID struct {
+type VirtualId struct {
 	Handle
 	IsDeleted bool
 }
@@ -104,20 +78,13 @@ const(
 	Remove
 )
 
-// TransactionEntryKeys contain info about each Store Item modified within a Transaction.
+// TransactionEntry contain info about each Store Item modified within a Transaction.
 // NOTE: newly created Stores themselves don't get tracked within the Transaction Entry table.
 // Their items do. New Stores are cached in-memory and get saved (conflict resolved) 
 // during Transaction Commit.
-type TransactionEntryKeys struct{
-	ID Handle
-	StoreName string
-	Sequence UUID
-}
-
 type TransactionEntry struct{
-	TransactionEntryKeys
+	Id Handle
+	Sequence UUID
 	Action TransactionActionType
-	CurrentItem Item
-	NewItem Item
-	versionedItem
+	IsDeleted bool
 }

@@ -14,8 +14,13 @@ On Persistence
   In golang port, standardizing on generics in both internal & external constructs will simplify the Key/Value
   type support and resulting serialization can standardize on go's object Marshalling functions.
   go's marshaller(& protobuff) has decent object serialization, thus, no need to get overboard.
-* Will standardize on protocol buffers for performant "item" or "key/value" serialization,
-* Will use MessagePack for large objects serialization, e.g. - Node
-* Caching, we will cache the B-Tree Nodes which is keyed off of UUID(string) & value is the Node data
-  serialized by MessagePack.
-* 
+* Will standardize on protocol buffers for performant "item" or "key/value" serialization, like in the c# version,
+  items are serialized to a target linked list of DataBlocks, which, in turn is what is stored in the storage system.
+* Caching, we will cache the DataBlocks which is keyed off of its Id (e.g. - UUID). DataBlock(s) contain the
+  serialized data of a B-Tree Node or a large object(Value).
+
+Implementation Schedule
+* V1 - B-tree in-memory with interfaces for easy plugin to a backend data storage, e.g. - S3 or Cassandra.
+* V2 - Backend storage, e.g. - local file system, Cassandra or S3 bucket. NOTE: still not finalized which backend
+  will be supported, thought Cassandra seems "it".
+* V3 - Support for streaming persistence, e.g. - persisting a Very Large Object(VLobs) like a 2-200+GB movie.

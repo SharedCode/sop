@@ -1,7 +1,10 @@
 package btree
 
+// store_interfaces contains interface definitions of different repository that are
+// required by Btree. It is needed so we can support different backend storage.
+
 // BtreeInterface defines publicly callable methods of Btree.
-type BtreeInterface[TKey comparable, TValue any] interface{
+type BtreeInterface[TKey Comparable, TValue any] interface{
 	Add(key TKey, value TValue) (bool, error)
 	Update(key TKey, value TValue) (bool, error)
 	UpdateCurrentItem(newValue TValue) (bool, error)
@@ -21,34 +24,25 @@ type BtreeInterface[TKey comparable, TValue any] interface{
 
 // backend store persistence interfaces
 
-type StoreInterface struct{
-	StoreType uint
-	StoreRepository StoreRepository
-	NodeRepository NodeRepository
-	VirtualIDRepository VirtualIDRepository
-	RecyclerRepository RecyclerRepository
-	TransactionRepository TransactionRepository
-}
-
 type StoreRepository interface{
 	Get(name string) Store
 	Add(Store) error
 	Remove(name string) error
 }
 
-type NodeRepository interface{
-	Get(nodeID Handle) (*Node, error)
-	Add(*Node) error
-	Update(*Node) error
-	Remove(nodeID Handle) error
+type NodeRepository[TKey Comparable, TValue any] interface{
+	Get(nodeId Handle) (*Node[TKey, TValue], error)
+	Add(*Node[TKey, TValue]) error
+	Update(*Node[TKey, TValue]) error
+	Remove(nodeId Handle) error
 }
 
-type VirtualIDRepository interface{
-	Get(logicalID UUID) (VirtualID, error)
-	Add(VirtualID) error
-	Update(VirtualID) error
-	Remove(logicalID UUID) error
-	// NewUUID will generate new UUID that is unique globally.
+type VirtualIdRepository interface{
+	Get(logicalId UUID) (VirtualId, error)
+	Add(VirtualId) error
+	Update(VirtualId) error
+	Remove(logicalId UUID) error
+	// NewUUId will generate new UUId that is unique globally.
 	NewUUID() UUID
 }
 
@@ -59,9 +53,9 @@ type RecyclerRepository interface{
 }
 
 type TransactionRepository interface{
-	Get(transactionID UUID) ([]TransactionEntry, error)
-	GetByStore(transactionID UUID, storeName string) ([]TransactionEntry, error)
+	Get(transactionId UUID) ([]TransactionEntry, error)
+	GetByStore(transactionId UUID, storeName string) ([]TransactionEntry, error)
 	Add([]TransactionEntry) error
 	//Update([]TransactionEntry) error
-	MarkDone([]TransactionEntryKeys) error
+	MarkDone([]TransactionEntry) error
 }

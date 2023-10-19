@@ -5,10 +5,11 @@ import (
 )
 
 // Btree manages items using B-tree data structure and algorithm.
-type Btree struct{
+// Store contains the  
+type Btree[TKey Comparable, TValue any] struct{
 	Store Store
-	StoreInterface StoreInterface
-	TempSlots []Item
+	StoreInterface StoreInterface[TKey, TValue]
+	TempSlots []*Item[TKey, TValue]
 	TempChildren []UUID
 	CurrentItem CurrentItemRef
 }
@@ -18,78 +19,71 @@ type CurrentItemRef struct{
 	NodeItemIndex int
 }
 
-func NewBtree(store Store, si StoreInterface) *Btree{
-	if !store.ItemSerializer.IsValid(){
-		// provide string key/value type handlers if not provided or invalid.
-		store.ItemSerializer.CreateDefaultKVTypeHandlers()
-	}
-	var b3 = Btree{
+func NewBtree[TKey Comparable, TValue any](store Store, si StoreInterface[TKey, TValue]) *Btree[TKey, TValue]{
+	var b3 = Btree[TKey, TValue]{
 		Store: store,
 		StoreInterface: si,
-		TempSlots: make([]Item, store.NodeSlotCount+1),
+		TempSlots: make([]*Item[TKey, TValue], store.NodeSlotCount+1),
 		TempChildren: make([]UUID, store.NodeSlotCount+2),
-	}	
+	}
 	return &b3
 }
 
-func (btree *Btree) rootNode() (*Node, error) {
-	if btree.Store.RootNodeID.IsEmpty() {
+func (btree *Btree[TKey, TValue]) rootNode() (*Node[TKey, TValue], error) {
+	if btree.Store.RootNodeId.IsEmpty() {
 		// create new Root Node, if nil (implied new btree).
-		btree.Store.RootNodeID = NewHandle(btree.StoreInterface.VirtualIDRepository.NewUUID())
-		var root = NewNode(btree.Store.NodeSlotCount)
-		root.ID = btree.Store.RootNodeID
+		btree.Store.RootNodeId = NewHandle(btree.StoreInterface.VirtualIdRepository.NewUUID())
+		var root = NewNode[TKey, TValue](btree.Store.NodeSlotCount)
+		root.Id = btree.Store.RootNodeId
 		return root, nil
 	}
-	root, e := btree.getNode(btree.Store.RootNodeID)
+	root, e := btree.getNode(btree.Store.RootNodeId)
 	if e != nil {return nil, e}
 	if root == nil{
-		return nil, fmt.Errorf("Can't retrieve Root Node w/ ID '%s'", btree.Store.RootNodeID.ToString())
+		return nil, fmt.Errorf("Can't retrieve Root Node w/ Id '%s'", btree.Store.RootNodeId.ToString())
 	}
 	return root, nil
 }
 
-func (btree *Btree) getNode(id Handle) (*Node, error){
+func (btree *Btree[TKey, TValue]) getNode(id Handle) (*Node[TKey, TValue], error){
 	n, e := btree.StoreInterface.NodeRepository.Get(id)
 	if e != nil {return nil, e}
 	return n, nil
 }
 
-func (btree *Btree) setCurrentItemAddress(nodeAddress Handle, itemIndex int){
+func (btree *Btree[TKey, TValue]) setCurrentItemAddress(nodeAddress Handle, itemIndex int){
 	btree.CurrentItem.NodeAddress = nodeAddress;
 	btree.CurrentItem.NodeItemIndex = itemIndex;
 }
 
-func (btree *Btree) isUnique() bool{
+func (btree *Btree[TKey, TValue]) isUnique() bool{
 	return btree.Store.IsUnique
 }
 
-func (btree *Btree) Add(key interface{}, value interface{}) (bool, error) {
-	if key == nil{
-		panic("key can't be nil.")
-	}
-	var itm = Item{
+func (btree *Btree[TKey, TValue]) Add(key TKey, value TValue) (bool, error) {
+	var itm = Item[TKey, TValue]{
 		Key:key,
 		Value:value,
 	}
 	node, err := btree.rootNode()
 	if err != nil {return false, err}
-	return node.add(btree, itm);
+	return node.add(btree, &itm);
 }
 
-func (btree *Btree) Update(key interface{}, value interface{}) (bool, error){
+func (btree *Btree[TKey, TValue]) Update(key TKey, value TValue) (bool, error){
 	return false, nil
 }
-func (btree *Btree) UpdateCurrentItem(newValue interface{}) (bool, error){
+func (btree *Btree[TKey, TValue]) UpdateCurrentItem(newValue TValue) (bool, error){
 	return false, nil
 }
-func (btree *Btree) Remove(key interface{}) (bool, error){
+func (btree *Btree[TKey, TValue]) Remove(key TKey) (bool, error){
 	return false, nil
 }
-func (btree *Btree) RemoveCurrentItem() (bool, error){
+func (btree *Btree[TKey, TValue]) RemoveCurrentItem() (bool, error){
 	return false, nil
 }
 
-func (btree *Btree) MoveTo(key interface{}, firstItemWithKey bool) (bool, error) {
+func (btree *Btree[TKey, TValue]) MoveTo(key TKey, firstItemWithKey bool) (bool, error) {
 
 	m := make(map[string]int)
 	v,_ := m["foo"]
@@ -98,15 +92,15 @@ func (btree *Btree) MoveTo(key interface{}, firstItemWithKey bool) (bool, error)
 //	return false
 }
 
-func (btree *Btree) MoveToFirst() (bool, error){
+func (btree *Btree[TKey, TValue]) MoveToFirst() (bool, error){
 	return false, nil
 }
-func (btree *Btree) MoveToLast() (bool, error){
+func (btree *Btree[TKey, TValue]) MoveToLast() (bool, error){
 	return false, nil
 }
-func (btree *Btree) MoveToNext() (bool, error){
+func (btree *Btree[TKey, TValue]) MoveToNext() (bool, error){
 	return false, nil
 }
-func (btree *Btree) MoveToPrevious()( bool, error){
+func (btree *Btree[TKey, TValue]) MoveToPrevious()( bool, error){
 	return false, nil
 }

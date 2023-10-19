@@ -6,10 +6,10 @@ import (
 
 // Handle to SOP data, e.g. - Node, Slot Value, etc...
 type Handle struct{
-	LogicalID UUID
-	IsPhysicalIDB bool
-	PhysicalIDA UUID
-	PhysicalIDB UUID
+	LogicalId UUID
+	IsPhysicalIdB bool
+	PhysicalIdA UUID
+	PhysicalIdB UUID
 	Version int
 }
 
@@ -27,10 +27,10 @@ func (id UUID) ToHandle() Handle{
 	return NewHandle(id)
 }
 
-// NewHandle creates a new Handle with Logical ID set to the 'id' parameter.
+// NewHandle creates a new Handle with Logical Id set to the 'id' parameter.
 func NewHandle(id UUID) Handle{
 	var h = Handle{
-		LogicalID: id,
+		LogicalId: id,
 	}
 	return h
 }
@@ -44,16 +44,16 @@ func (id UUID) IsNil() bool{
 
 // IsEmpty checkds id whether it is empty or has a value.
 func (id Handle) IsEmpty() bool{
-	return id.LogicalID.IsNil()
+	return id.LogicalId.IsNil()
 }
 
-// GetPhysicalID returns the currently active (if there is) UUID of a given Handle.
-func (id Handle) GetPhysicalID() UUID{
-	if id.IsPhysicalIDB {return id.PhysicalIDB}
-	return id.PhysicalIDA
+// GetPhysicalId returns the currently active (if there is) UUID of a given Handle.
+func (id Handle) GetPhysicalId() UUID{
+	if id.IsPhysicalIdB {return id.PhysicalIdB}
+	return id.PhysicalIdA
 }
 
-// ToString method of Handle returns the Handle's Logical ID's string value.
+// ToString method of Handle returns the Handle's Logical Id's string value.
 func (id Handle) ToString() string{
-	return id.LogicalID.ToString()
+	return id.LogicalId.ToString()
 }
