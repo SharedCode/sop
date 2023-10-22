@@ -40,7 +40,7 @@ create table virtual_id(
 -- By doing this batch and delayed "deletion" of items, we are allowing a more optimal operation
 -- for the Cassandra cluster.
 create table deleted_items (
-    -- t values can be: virtual_id, store
+    -- t values can be: virtual_id, store, b-tree node data files in S3
     t int,
     y int,
     m int,
