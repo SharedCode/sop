@@ -5,15 +5,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// UUID type
+// UUID type.
 type UUID uuid.UUID
 
-// Handle to SOP data, e.g. - Node, Slot Value, etc...
+// Handle contains Id to SOP data, e.g. - Node, Slot Value, etc...
+// It is called Handle
 type Handle struct{
 	LogicalId UUID
-	IsPhysicalIdB bool
 	PhysicalIdA UUID
 	PhysicalIdB UUID
+	IsActiveIdB bool
 	Version int
 }
 
@@ -27,16 +28,18 @@ func ToUUID(id string) UUID{
 	return nid
 }
 
-func (id UUID) ToHandle() Handle{
-	return NewHandle(id)
-}
-
-// NewHandle creates a new Handle with Logical Id set to the 'id' parameter.
-func NewHandle(id UUID) Handle{
+// NewHandle creates a new Handle.
+func NewHandle() Handle{
 	var h = Handle{
-		LogicalId: id,
+		LogicalId: NewUUID(),
+		PhysicalIdA: NewUUID(),
 	}
 	return h
+}
+
+// NewUUID returns a new UUID.
+func NewUUID() UUID {
+	return UUID(uuid.New())
 }
 
 // NillUUID is an empty UUID.
@@ -46,18 +49,17 @@ func (id UUID) IsNil() bool{
 	return bytes.Compare(id[:], NilUUID[:]) == 0
 }
 
-// IsEmpty checkds id whether it is empty or has a value.
 func (id Handle) IsEmpty() bool{
-	return id.LogicalId.IsNil()
+	return id.GetActiveId().IsNil()
 }
 
-// GetPhysicalId returns the currently active (if there is) UUID of a given Handle.
-func (id Handle) GetPhysicalId() UUID{
-	if id.IsPhysicalIdB {return id.PhysicalIdB}
+// GetActiveId returns the currently active (if there is) UUID of a given Handle.
+func (id Handle) GetActiveId() UUID{
+	if id.IsActiveIdB {return id.PhysicalIdB}
 	return id.PhysicalIdA
 }
 
-// ToString method of Handle returns the Handle's Logical Id's string value.
+// ToString method of Handle returns the Handle's currently Active Id's string value.
 func (id Handle) ToString() string{
-	return id.LogicalId.ToString()
+	return id.GetActiveId().ToString()
 }

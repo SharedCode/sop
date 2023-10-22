@@ -4,26 +4,27 @@ import (
 	"sort"
 )
 
-
 // Item contains key & value pair, plus the version number.
 type Item[TKey Comparable, TValue any] struct {
-	Key     TKey
-	Value   TValue
-	Version int
+	Key             TKey
+	Value           TValue
+	ValueId         UUID
+	Version         int
+	valueNeedsFetch bool
 }
 
 // Node contains a B-Tree node's data.
 type Node[TKey Comparable, TValue any] struct {
-	Id Handle
-
-	Slots             []*Item[TKey, TValue]
-	ChildrenAddresses []UUID
+	Id                 UUID
+	ParentId           UUID
+	ChildrenLogicalIds []UUID
+	Slots              []*Item[TKey, TValue]
 	// Count of Items stored in Slots array.
-	Count         int
-	Version       int
-	IsDeleted     bool
-	parentAddress Handle
-	indexOfNode   int
+	Count       int
+	Version     int
+	IsDeleted   bool
+	indexOfNode int
+	lid         UUID
 }
 
 func NewNode[TKey Comparable, TValue any](slotCount int) *Node[TKey, TValue] {
@@ -42,10 +43,10 @@ func (node *Node[TKey, TValue]) add(btree *Btree[TKey, TValue], item *Item[TKey,
 		index, itemExists = currentNode.getIndexToInsertTo(btree, item)
 		if itemExists {
 			// set the Current item pointer to the duplicate item.
-			btree.setCurrentItemAddress(currentNode.getAddress(btree), index)
+			btree.setCurrentItemAddress(currentNode.Id, index)
 			return false, nil
 		}
-		if currentNode.ChildrenAddresses != nil {
+		if currentNode.ChildrenLogicalIds != nil {
 			parent = nil
 			// if not an outermost node let next lower level node do the 'Add'.
 			currentNode, err := currentNode.getChild(btree, index)
@@ -73,8 +74,8 @@ func (node *Node[TKey, TValue]) add(btree *Btree[TKey, TValue], item *Item[TKey,
 }
 
 func (node *Node[TKey, TValue]) saveNode(btree *Btree[TKey, TValue]) error {
-	if node.Id.IsEmpty() {
-		node.Id = btree.StoreInterface.VirtualIdRepository.NewUUID().ToHandle()
+	if node.Id.IsNil() {
+		node.Id = NewUUID()
 		return btree.StoreInterface.NodeRepository.Add(node)
 	}
 	return btree.StoreInterface.NodeRepository.Update(node)
@@ -105,7 +106,7 @@ func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item
 	// var slotsHalf = btree.Store.NodeSlotCount >> 1
 	// var rightNode, leftNode Node
 
-	if !node.parentAddress.IsEmpty() {
+	if !node.ParentId.IsNil() {
 		var isUnBalanced bool
 		isVacantSlotInLeft, err := node.isThereVacantSlotInLeft(btree, &isUnBalanced)
 		if err != nil {
@@ -265,7 +266,7 @@ func (node *Node[TKey, TValue]) isThereVacantSlotInLeft(btree *Btree[TKey, TValu
 	// start from this node.
 	temp := node
 	for temp != nil {
-		if temp.ChildrenAddresses != nil {
+		if temp.ChildrenLogicalIds != nil {
 			*isUnBalanced = true
 			return false, nil
 		}
@@ -333,12 +334,12 @@ func (node *Node[TKey, TValue]) getIndexOfNode(btree *Btree[TKey, TValue]) (int,
 		return -1, err
 	}
 	if parent != nil {
-		thisId := node.getAddress(btree)
+		thisId := node.getId(btree)
 		// Make sure we don't access an invalid memory address
-		if parent.ChildrenAddresses != nil &&
+		if parent.ChildrenLogicalIds != nil &&
 			(node.indexOfNode == -1 || thisId.LogicalId != parent.ChildrenAddresses[node.indexOfNode]) {
 			for node.indexOfNode = 0; node.indexOfNode <= btree.Store.NodeSlotCount && !parent.ChildrenAddresses[node.indexOfNode].IsNil(); node.indexOfNode++ {
-				if parent.ChildrenAddresses[node.indexOfNode] == thisId.LogicalId {
+				if parent.ChildrenLogicalIds[node.indexOfNode] == thisId.LogicalId {
 					break
 				}
 			}
@@ -351,10 +352,10 @@ func (node *Node[TKey, TValue]) getIndexOfNode(btree *Btree[TKey, TValue]) (int,
 }
 
 func (node *Node[TKey, TValue]) getParent(btree *Btree[TKey, TValue]) (*Node[TKey, TValue], error) {
-	if node.parentAddress.IsEmpty() {
+	if node.ParentId.IsEmpty() {
 		return nil, nil
 	}
-	return btree.getNode(node.parentAddress)
+	return btree.getNode(node.ParentId)
 }
 
 func (node *Node[TKey, TValue]) isFull(slotCount int) bool {
@@ -378,7 +379,7 @@ func (node *Node[TKey, TValue]) getIndexToInsertTo(btree *Btree[TKey, TValue], i
 	if btree.isUnique() {
 		i := index
 		if i >= btree.Store.NodeSlotCount {
-			i--;
+			i--
 		}
 		// Returns index in slot that is available for insert to.
 		// Also returns true if an existing item with such key is found.
@@ -388,10 +389,13 @@ func (node *Node[TKey, TValue]) getIndexToInsertTo(btree *Btree[TKey, TValue], i
 	return index, false
 }
 
+// TODO: Resolve story of fetching Nodes via logical Id vs. physical Id. Example, in a transaction,
+// like when adding an item, newly created nodes need to be using UUID that then becomes logical Id
+// during commit. When working with Children logical Ids(saved in backend!), we need to convert logical to physical Id.
 func (node *Node[TKey, TValue]) getChild(btree *Btree[TKey, TValue], childSlotIndex int) (*Node[TKey, TValue], error) {
-	return btree.getNode(node.ChildrenAddresses[childSlotIndex].ToHandle())
-}
-
-func (node *Node[TKey, TValue]) getAddress(btree *Btree[TKey, TValue]) Handle {
-	return node.Id
+	h, err := btree.StoreInterface.VirtualIdRepository.Get(node.ChildrenLogicalIds[childSlotIndex])
+	if err != nil {
+		return nil, err
+	}
+	return btree.getNode(h.GetActiveId())
 }

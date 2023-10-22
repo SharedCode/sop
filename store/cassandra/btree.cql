@@ -1,99 +1,52 @@
 
 create keyspace btree with replication = {'class':'SimpleStrategy', 'replication_factor':1};
 
+-- Following are tables used as "index" of blob objects(e.g. b-tree node datablocks) in AWS S3.
+
 create table store (
-    name text PRIMARY KEY, 
-    root_id timeUUID,
+    -- name of the store.
+    name text PRIMARY KEY,
+    -- Logical Id of root node.
+    root_lid UUID,
+    -- slot count contains the number of items(key/value pairs) that can be stored in a node.
     slot_count int,
+    -- total count of items that the store (or b-tree) contains.
     count bigint,
+    -- unique specifies whether the store is unique(no item can have same key) or not.
     unique boolean,
-    kvt int,
+    -- key info (optional).
     ki text,
+    -- value info (optional).
     vi text,
-    ckas boolean,
-    cvas boolean,
+    -- version number of the store.
     vrsn int,
+    -- is_del true specifies this store had been marked logically deleted.
     is_del boolean);
 
-create table node (
-    id timeUUID PRIMARY KEY,
-    vrsn int,      // current value version
-    l_id timeUUID PRIMARY KEY,
-
-    // set of items: key, version no., value
-    s frozen <set<tuple<text, int, blob>>>,
-    s_tt frozen <set<tuple<text, int, text>>>,
-    s_bb frozen <set<tuple<blob, int, blob>>>,
-    s_bt frozen <set<tuple<blob, int, text>>>,
-    s_tid frozen <set<tuple<text, int, timeUUID>>>,
-    s_bid frozen <set<tuple<blob, int, timeUUID>>>,
-
-    // children logical IDs
-    c_id frozen <set<timeUUID>>,
-    is_del boolean,
-);
-
-// node datablocks can be used for storing very large BLOBs (vlblobs).
-// SOP's datablock technology solves managing vlblobs without "streaming" req't.
-create table node_blocks (
-    id timeUUID PRIMARY KEY,
-    vrsn int,      // current value version
-
-    // if set, contains all other "block physical IDs" (timeUUID) (a.k.a. map) storing the rest of vlblob data.
-    // otherwise, data fit into a single blob (stored in s_block).
-    s_b_map frozen <set<timeUUID>>,
-    s_block blob,
-
-    // children logical IDs
-    c_id frozen <set<timeUUID>>,
-    is_del boolean,
-);
-
-// Logical to Physical ID table will allow seamless transaction commit processing.
-// Only when the record here got updated that succeeding SOP Btree IO will reflect newly commited Node data changes.
+-- Logical to Physical ID table will allow seamless transaction commit processing.
+-- Only when the record here got updated that succeeding SOP Btree IO will reflect newly commited Node data changes.
 create table virtual_id(
-    l_id timeUUID PRIMARY KEY,
+    lid UUID PRIMARY KEY,
     is_idb boolean,
-    p_ida timeUUID,
-    p_idb timeUUID,
+    p_ida UUID,
+    p_idb UUID,
     is_del boolean
 );
 
-create table slot_value(
-    id timeUUID Primary Key,
-    v blob,
-    is_del boolean,
-);
-create table slot_value_blocks(
-    id timeUUID Primary Key,
-    v_b_map frozen <set<timeUUID>>,
-    v_block blob,
-    is_del boolean,
-);
-
-create table recycle_bin (
+-- deleted_items table contains items that are marked logically deleted.
+-- These items get processed on schedule, like once a month or so, depends on your needs.
+-- Delete SQL action are issued on these items so Cassandra can mark them with "tombstone"
+-- and thus, gets deleted on next compaction schedule(e.g. - 10 days).
+-- By doing this batch and delayed "deletion" of items, we are allowing a more optimal operation
+-- for the Cassandra cluster.
+create table deleted_items (
+    -- t values can be: virtual_id, store
+    t int,
     y int,
     m int,
     d int,
     h int,
-    t int,          //(option) default to node type
-    id timeUUID,
-    lock_dt bigint,
-    is_del boolean,
-    Primary Key((t, is_del, y, m, d, h))
-);
-
-create table transaction_sandbox(
-    tid timeUUID,   // Transaction ID (tid)
-    store text,
-    seq timeUUID,
-    // read lock on kvp, add, update, delete
-    act int,
-    vrsn int,      // current value version, should be same if act=update,delete
-    c_kt text,     // current Key
-    c_kb blob,
-    n_vt text,      // new Value
-    n_vb blob,
-    is_del boolean,
-    Primary Key(tid, store, seq)
+    -- object id.
+    oid UUID,
+    Primary Key((t, y, m, d, h))
 );

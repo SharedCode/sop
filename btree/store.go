@@ -10,8 +10,8 @@ type Store struct {
 	IsUnique bool
 	KeyInfo string
 	ValueInfo string
-	// RootNodeId is the root node's handle.
-	RootNodeId Handle
+	// RootNodeLogicalId is the root node's logical Id.
+	RootNodeLogicalId UUID
 	// Total count of items stored.
 	Count int64
 	// Version number.
@@ -20,15 +20,21 @@ type Store struct {
 	IsDeleted bool
 }
 
-// StoreInterface 
+// StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.
 type StoreInterface[TKey Comparable, TValue any] struct{
+	// StoreRepository is used to manage/access stores.
 	StoreRepository StoreRepository
+	// NodeRepository is used to manage/access B-Tree nodes.
 	NodeRepository NodeRepository[TKey, TValue]
+	// VirtualIdRepository is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
 	VirtualIdRepository VirtualIdRepository
+	// RecyclerRepository is used to manage/access all deleted objects' "data blocks".
 	RecyclerRepository RecyclerRepository
+	// TransactionRepository is used to manage a transaction.
 	TransactionRepository TransactionRepository
 }
 
+// NewStore instantiates a new Store.
 func NewStore(name string, nodeSlotCount int, isUnique bool) Store{
 	return Store{
 		Name: name,

@@ -1,0 +1,137 @@
+-- NOTE: Experimental Cassandra table definitions. Deemed not good because we want to support
+-- very large data blobs.
+
+create keyspace btree with replication = {'class':'SimpleStrategy', 'replication_factor':1};
+
+create table store (
+    -- name of the store.
+    name text PRIMARY KEY,
+    -- Logical Id of root node.
+    root_lid UUID,
+    -- slot count contains the number of items(key/value pairs) that can be stored in a node.
+    slot_count int,
+    -- total count of items that the store (or b-tree) contains.
+    count bigint,
+    -- unique specifies whether the store is unique(no item can have same key) or not.
+    unique boolean,
+    -- key info (optional).
+    ki text,
+    -- value info (optional).
+    vi text,
+    -- version number of the store.
+    vrsn int,
+    -- is_del true specifies this store had been marked logically deleted.
+    is_del boolean);
+
+
+create table node (
+    -- Id
+    id UUID,
+    -- parent Id.
+    p_id UUID,
+    -- datablock Ids.
+    db_id int,
+    -- children logical Ids.
+    c_lids frozen <list<UUID>>,
+    -- current value version.
+    vrsn int,
+    is_del boolean,
+    Primary Key(id)
+);
+
+create table data_blocks (
+    n_id UUID,
+    db_id int,
+    data blob
+)
+
+
+
+
+
+
+
+
+create table node (
+    -- Id
+    id UUID PRIMARY KEY,
+    -- parent Id.
+    p_id UUID,
+    -- current value version.
+    vrsn int,
+    -- set of items: key, value, version #
+    k_v <list<tuple<blob, blob, int>>>,
+    -- set of items: key, value Id(actual data stored in item_value table), version #
+    k_vid frozen <list<tuple<blob, UUID, int>>>,
+    -- children logical IDs.
+    c_lids frozen <list<UUID>>,
+    is_del boolean,
+);
+
+create table item_value(
+    id UUID Primary Key,
+    -- value datablocks(chunks)
+    chunks <list<blob>>,
+    -- if set, contains all other "block physical IDs" (UUID) storing the rest of data.
+    -- otherwise, data fit into a single blob (stored in v_block).
+    v_b_ids frozen <set<UUID>>,
+    is_del boolean,
+);
+
+-- Logical to Physical ID table will allow seamless transaction commit processing.
+-- Only when the record here got updated that succeeding SOP Btree IO will reflect newly commited Node data changes.
+create table virtual_id(
+    lid UUID PRIMARY KEY,
+    is_idb boolean,
+    p_ida UUID,
+    p_idb UUID,
+    is_del boolean
+);
+
+-- deleted_items table contains items that are marked logically deleted.
+-- These items get processed on schedule, like once a month or so, depends on your needs.
+-- Delete SQL action are issued on these items so Cassandra can mark them with "tombstone"
+-- and thus, gets deleted on next compaction schedule(e.g. - 10 days).
+-- By doing this batch and delayed "deletion" of items, we are allowing a more optimal operation
+-- for the Cassandra cluster.
+create table recycler_bin (
+    -- t values can be: node type(default), virtual_id, item_value, store
+    t int,
+    y int,
+    m int,
+    d int,
+    h int,
+    -- object id.
+    oid UUID,
+    Primary Key((t, y, m, d, h))
+);
+
+-- TODO: this is for the long-teram, v3+ implementation. See Redis based transaction for the V2 timeline.
+-- transaction_sandbox contains transaction specific management actions on store's items.
+-- This is used for long lived transactions that span days. Redis is used for the real 
+-- transaction "activities".
+create table transaction_sandbox(
+    -- Transaction ID (tid)
+    tid UUID,
+    store text,
+    timestamp TIMESTAMP,
+
+    -- read lock on kvp, add, update, delete
+    act int,
+    -- current value version, should be same if act=update,delete
+    vrsn int,
+
+    -- current item node's logical Id(c_lid) & slot index(c_si). Useful for non-unique B-Tree
+    -- to aid in navigating & finding the current item to be updated.
+    -- Only used in update & delete action. Also used in inter-transaction "rule"
+    -- enforcement, e.g. - update on same item across transactions is not allowed.
+    c_lid UUID,
+    c_si int,
+
+    -- current key/value pair
+    c_kv tuple<blob,blob>,
+    -- new key/value pair
+    n_kv tuple<blob,blob>,
+    is_del boolean,
+    Primary Key((store, tid), seq)
+);

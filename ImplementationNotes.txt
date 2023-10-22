@@ -19,8 +19,18 @@ On Persistence
 * Caching, we will cache the DataBlocks which is keyed off of its Id (e.g. - UUID). DataBlock(s) contain the
   serialized data of a B-Tree Node or a large object(Value).
 
+On Transaction
+* Store changes to transaction table
+* During Commit:
+*   - maps to destination table(s) the changes
+*   - if same Node record is modified by another transaction.. implement a "undo" of any changes in the B-Tree 
+*     then re-issue the "action" mapping.
+*   - rollback any changes if retry is maxed out and/or timeout is reached
+*   - if an item being managed was modified(different version) then rollback as well
+*   - finalize commit if successfully mapped
+
 Implementation Schedule
-* V1 - B-tree in-memory with interfaces for easy plugin to a backend data storage, e.g. - S3 or Cassandra.
+* V1 - B-tree in-memory with interfaces for easy plugin to a backend data storage, e.g. - S3 & Cassandra.
 * V2 - Backend storage, e.g. - local file system, Cassandra or S3 bucket. NOTE: still not finalized which backend
   will be supported, thought Cassandra seems "it".
 * V3 - Support for streaming persistence, e.g. - persisting a Very Large Object(VLobs) like a 2-200+GB movie.
