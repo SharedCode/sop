@@ -1,23 +1,26 @@
-// persistence constructs
 package btree
 
-import "github.com/google/uuid"
-
-type UUID uuid.UUID
-
+// Store contains a given (B-Tree) store details.
 type Store struct {
+	// Name of this (B-Tree store).
     Name string
+	// Count of items that can be stored on a given node.
 	NodeSlotCount int
+	// IsUnique tells whether key/value pair (items) of this tree should be unique on key.
 	IsUnique bool
 	KeyInfo string
 	ValueInfo string
 	// RootNodeId is the root node's handle.
 	RootNodeId Handle
+	// Total count of items stored.
 	Count int64
+	// Version number.
 	Version int
+	// Is marked deleted or not.
 	IsDeleted bool
 }
 
+// StoreInterface 
 type StoreInterface[TKey Comparable, TValue any] struct{
 	StoreRepository StoreRepository
 	NodeRepository NodeRepository[TKey, TValue]
@@ -34,10 +37,10 @@ func NewStore(name string, nodeSlotCount int, isUnique bool) Store{
 	}
 }
 
-type NodeBlocks struct {
+type NodeDataBlocks struct {
 	Id Handle
-    SlotBlock []byte
-	SlotBlockMap []UUID
+    SlotDataBlock []byte
+	SlotDataBlockIds []UUID
 	Children []UUID
 	count int
 	Version int
@@ -48,11 +51,12 @@ type SlotValue struct{
 	Id Handle
 	Value []byte
 	IsDeleted bool
-} 
-type SlotValueBlocks struct{
+}
+
+type SlotValueDataBlocks struct{
 	Id Handle
 	Value []byte
-	ValueBlockMap []UUID
+	ValueDataBlockIds []UUID
 	IsDeleted bool
 }
 

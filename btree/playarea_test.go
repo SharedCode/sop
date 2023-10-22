@@ -1,7 +1,6 @@
 package btree
 
 import (
-	"fmt"
 	"sort"
 	"testing"
 )

@@ -2,6 +2,7 @@ package btree
 
 // store_interfaces contains interface definitions of different repository that are
 // required by Btree. It is needed so we can support different backend storage.
+// NOTE: may be moved to directly under sop.
 
 // BtreeInterface defines publicly callable methods of Btree.
 type BtreeInterface[TKey Comparable, TValue any] interface{

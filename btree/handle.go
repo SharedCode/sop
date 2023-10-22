@@ -2,7 +2,11 @@ package btree;
 
 import (
 	"bytes"
+	"github.com/google/uuid"
 )
+
+// UUID type
+type UUID uuid.UUID
 
 // Handle to SOP data, e.g. - Node, Slot Value, etc...
 type Handle struct{

@@ -11,6 +11,7 @@ type Comparer interface {
 	Compare(other interface{}) int
 }
 
+// Comparable interface is used as a B-Tree store (generics) constraint for Key types.
 type Comparable interface {
 	cmp.Ordered | *Comparer
 }
