@@ -32,16 +32,16 @@ func NewBtree[TKey Comparable, TValue any](store Store, si StoreInterface[TKey, 
 func (btree *Btree[TKey, TValue]) rootNode() (*Node[TKey, TValue], error) {
 	if btree.Store.RootNodeLogicalId.IsNil() {
 		// create new Root Node, if nil (implied new btree).
-		btree.Store.RootNodeLogicalId = NewHandle()
+		btree.Store.RootNodeLogicalId = NewUUID()
 		var root = NewNode[TKey, TValue](btree.Store.NodeSlotCount)
-		root.Id = btree.Store.RootNodeLogicalId.GetActiveId()
+		root.logicalId = btree.Store.RootNodeLogicalId
 		return root, nil
 	}
 	h,err := btree.StoreInterface.VirtualIdRepository.Get(btree.Store.RootNodeLogicalId)
 	if err != nil {
 		return nil, err
 	}
-	root, err = btree.getNode(h.GetActiveId())
+	root, err := btree.getNode(h.GetActiveId())
 	if err != nil {return nil, err}
 	if root == nil{
 		return nil, fmt.Errorf("Can't retrieve Root Node w/ logical Id '%s'", btree.Store.RootNodeLogicalId.ToString())

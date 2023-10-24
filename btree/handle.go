@@ -30,11 +30,10 @@ func ToUUID(id string) UUID{
 
 // NewHandle creates a new Handle.
 func NewHandle() Handle{
-	var h = Handle{
+	return Handle{
 		LogicalId: NewUUID(),
 		PhysicalIdA: NewUUID(),
 	}
-	return h
 }
 
 // NewUUID returns a new UUID.
@@ -47,6 +46,14 @@ var NilUUID UUID
 
 func (id UUID) IsNil() bool{
 	return bytes.Compare(id[:], NilUUID[:]) == 0
+}
+
+// ToHandle converts logical & physical UUIDs to a handle, a.k.a. - virtual Id.
+func ToHandle(lid UUID, physIdA UUID) Handle {
+	return Handle{
+		LogicalId: lid,
+		PhysicalIdA: physIdA,
+	}
 }
 
 func (id Handle) IsEmpty() bool{

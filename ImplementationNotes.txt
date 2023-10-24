@@ -14,13 +14,59 @@ On Persistence
   In golang port, standardizing on generics in both internal & external constructs will simplify the Key/Value
   type support and resulting serialization can standardize on go's object Marshalling functions.
   go's marshaller(& protobuff) has decent object serialization, thus, no need to get overboard.
-* Will standardize on protocol buffers for performant "item" or "key/value" serialization, like in the c# version,
+* Will standardize on protocol buffers for performant node (including "item" or "key/value") serialization, like in the c# version,
   items are serialized to a target linked list of DataBlocks, which, in turn is what is stored in the storage system.
 * Caching, we will cache the DataBlocks which is keyed off of its Id (e.g. - UUID). DataBlock(s) contain the
   serialized data of a B-Tree Node or a large object(Value).
 
-On Transaction
-* Store changes to transaction table
+On Transactions
+* Use Redis/C* for storing Transaction changes
+* Early conflict resolution, If current item being "managed" is already modified by another transaction, trigger a rollback
+
+On Persistence & Transaction(V2)
+Scenario: transaction for writing
+* Node(s) when initially created or when modified only resides in the host server's memory
+  - Node(s) & their "items" w/ version # are cached
+* During Commit, transaction will...
+  - use Redis/C* for conflict detection, rollback if needed
+    if any of the "item" is already modified(version # changed) by another transaction, rollback
+  - (Phase 1) if there is no conflict & transaction survived
+    upsert to Cassandra registry(target are non-active physical UUIDs so reader clients will not pick up the changes!)
+      to reflect the "in-flight" items' changes, sync up Redis
+    persist new/modified nodes to the backend store
+  - (Phase 2) when everything is successfully persisted,
+    update C*/Redis to switch the non-active UUIDs as the active UUIDs & increase the "item(s)" & node(s) version #s by 1
+  - Rollback (or undo changes in the) transaction if any of the operation failed, from phase 1 to 2
+Scenario: transaction for reading
+* When fetching, check the Item if already fetched from this transaction and if it is & version is different 
+  then fail the (fetch/) transaction.
+  Each Item "fetched" from B-Tree will track the item's version # (cache the item in memory)
+* On transaction Commit(completion)...
+  - check if there was any "fetch" error of type transaction
+    fail commit if there is
+  - check each of Item(s) version #(compare with Redis'/C*' copy) if not modified, if any were modified,
+    fail commit
+  - if there is no item version # conflict then commit succeeded
+Scenario: no transaction reader, cache nodes with TTL(defaults to 30 seconds)
+* Will do an L1/L2 caching where local memory is L1 & Redis is L2
+  Will read Nodes and/or Items from L1/L2/C* & AWS S3 as appropriate
+* Return error when fetching node or item that is missing
+Scenario: no transaction
+* Read: always read from Redis/C* & AWS S3 as appropriate
+* Write: wrap the action in a transaction to protect the system from corruption
+  - issue a begin transaction
+  - do the mgmt action(add, update or delete)
+  - commit the transaction
+  - return pass or failure(error)
+
+Implementation Schedule
+* V1 - B-tree in-memory with interfaces for easy plugin to a backend data storage, e.g. - S3 & Cassandra.
+* V2 - Backend storage, e.g. - Cassandra for registry & S3 bucket for node blobs.
+* V3 - Support for streaming persistence, e.g. - persisting a Very Large Object(VLobs) like a 2-200+GB movie.
+* V4 - Local file system as backend storage.
+
+Long Lived Transactions(TODO in far future)
+* Store changes to transaction table (i.e. - transaction sandbox)
 * During Commit:
 *   - maps to destination table(s) the changes
 *   - if same Node record is modified by another transaction.. implement a "undo" of any changes in the B-Tree 
@@ -28,9 +74,3 @@ On Transaction
 *   - rollback any changes if retry is maxed out and/or timeout is reached
 *   - if an item being managed was modified(different version) then rollback as well
 *   - finalize commit if successfully mapped
-
-Implementation Schedule
-* V1 - B-tree in-memory with interfaces for easy plugin to a backend data storage, e.g. - S3 & Cassandra.
-* V2 - Backend storage, e.g. - local file system, Cassandra or S3 bucket. NOTE: still not finalized which backend
-  will be supported, thought Cassandra seems "it".
-* V3 - Support for streaming persistence, e.g. - persisting a Very Large Object(VLobs) like a 2-200+GB movie.

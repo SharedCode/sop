@@ -20,11 +20,13 @@ type Node[TKey Comparable, TValue any] struct {
 	ChildrenLogicalIds []UUID
 	Slots              []*Item[TKey, TValue]
 	// Count of Items stored in Slots array.
-	Count       int
-	Version     int
-	IsDeleted   bool
-	indexOfNode int
-	lid         UUID
+	Count           int
+	Version         int
+	IsDeleted       bool
+	indexOfNode     int
+	logicalId       UUID
+	parentLogicalId UUID
+	childrenIds     []UUID
 }
 
 func NewNode[TKey Comparable, TValue any](slotCount int) *Node[TKey, TValue] {
@@ -43,10 +45,10 @@ func (node *Node[TKey, TValue]) add(btree *Btree[TKey, TValue], item *Item[TKey,
 		index, itemExists = currentNode.getIndexToInsertTo(btree, item)
 		if itemExists {
 			// set the Current item pointer to the duplicate item.
-			btree.setCurrentItemAddress(currentNode.Id, index)
+			btree.setCurrentItemId(currentNode.Id, index)
 			return false, nil
 		}
-		if currentNode.ChildrenLogicalIds != nil {
+		if currentNode.childrenIds != nil {
 			parent = nil
 			// if not an outermost node let next lower level node do the 'Add'.
 			currentNode, err := currentNode.getChild(btree, index)
@@ -65,7 +67,7 @@ func (node *Node[TKey, TValue]) add(btree *Btree[TKey, TValue], item *Item[TKey,
 		i := compare(currentNode.Slots[currItemIndex].Key, item.Key)
 		if i == 0 {
 			// set the Current item pointer to the discovered existing item.
-			btree.setCurrentItemAddress(currentNode.getAddress(btree), currItemIndex)
+			btree.setCurrentItemId(currentNode.Id, currItemIndex)
 			return false, nil
 		}
 	}
@@ -266,7 +268,7 @@ func (node *Node[TKey, TValue]) isThereVacantSlotInLeft(btree *Btree[TKey, TValu
 	// start from this node.
 	temp := node
 	for temp != nil {
-		if temp.ChildrenLogicalIds != nil {
+		if temp.childrenIds != nil {
 			*isUnBalanced = true
 			return false, nil
 		}
@@ -334,12 +336,12 @@ func (node *Node[TKey, TValue]) getIndexOfNode(btree *Btree[TKey, TValue]) (int,
 		return -1, err
 	}
 	if parent != nil {
-		thisId := node.getId(btree)
-		// Make sure we don't access an invalid memory address
-		if parent.ChildrenLogicalIds != nil &&
-			(node.indexOfNode == -1 || thisId.LogicalId != parent.ChildrenAddresses[node.indexOfNode]) {
-			for node.indexOfNode = 0; node.indexOfNode <= btree.Store.NodeSlotCount && !parent.ChildrenAddresses[node.indexOfNode].IsNil(); node.indexOfNode++ {
-				if parent.ChildrenLogicalIds[node.indexOfNode] == thisId.LogicalId {
+		// Make sure we don't access an invalid node item.
+		if parent.childrenIds != nil &&
+			(node.indexOfNode == -1 || node.Id != parent.childrenIds[node.indexOfNode]) {
+			for node.indexOfNode = 0; node.indexOfNode <= btree.Store.NodeSlotCount &&
+				!parent.childrenIds[node.indexOfNode].IsNil(); node.indexOfNode++ {
+				if parent.childrenIds[node.indexOfNode] == node.Id {
 					break
 				}
 			}
@@ -352,7 +354,7 @@ func (node *Node[TKey, TValue]) getIndexOfNode(btree *Btree[TKey, TValue]) (int,
 }
 
 func (node *Node[TKey, TValue]) getParent(btree *Btree[TKey, TValue]) (*Node[TKey, TValue], error) {
-	if node.ParentId.IsEmpty() {
+	if node.ParentId.IsNil() {
 		return nil, nil
 	}
 	return btree.getNode(node.ParentId)
