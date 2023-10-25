@@ -2,7 +2,6 @@ package btree
 
 // store_interfaces contains interface definitions of different repository that are
 // required by Btree. It is needed so we can support different backend storage.
-// NOTE: may be moved to directly under sop.
 
 // BtreeInterface defines publicly callable methods of Btree.
 type BtreeInterface[TKey Comparable, TValue any] interface {
@@ -62,4 +61,20 @@ type TransactionRepository interface {
 	Add([]TransactionEntry) error
 	//Update([]TransactionEntry) error
 	MarkDone([]TransactionEntry) error
+}
+
+// PhasedTransaction defines the "SOP internal" transaction methods.
+type PhasedTransaction interface{
+	Begin() error
+	CommitPhase1() error
+	CommitPhase2() error
+	Rollback() error
+}
+
+// Transaction interface defines the "enduser facing" transaction methods.
+type Transaction interface{
+	Begin() error
+	Commit() error
+	Rollback() error
+	HasBegun() bool
 }

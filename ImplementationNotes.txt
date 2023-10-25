@@ -59,6 +59,10 @@ Scenario: no transaction
   - commit the transaction
   - return pass or failure(error)
 
+Transaction & B-Tree Stores
+* There will be a global Transaction object which will track all managed items done across all B-Tree Stores
+* A B-Tree instance may create its own Transaction if there is no global Transaction ongoing
+
 Implementation Schedule
 * V1 - B-tree in-memory with interfaces for easy plugin to a backend data storage, e.g. - S3 & Cassandra.
 * V2 - Backend storage, e.g. - Cassandra for registry & S3 bucket for node blobs.

@@ -5,7 +5,7 @@ import "github.com/SharedCode/sop/btree"
 type TransactionSession struct{
 	TransactionID *btree.UUID
 	Started *bool
-	StoreMap *map[string]*btree.Btree
+	// StoreMap *map[string]*btree.Btree
 }
 
 func (trans *TransactionSession) Begin() error{

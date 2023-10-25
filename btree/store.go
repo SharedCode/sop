@@ -32,6 +32,8 @@ type StoreInterface[TKey Comparable, TValue any] struct{
 	RecyclerRepository RecyclerRepository
 	// TransactionRepository is used to manage a transaction.
 	TransactionRepository TransactionRepository
+	// Transaction object if there is one.
+	Transaction Transaction
 }
 
 // NewStore instantiates a new Store.
