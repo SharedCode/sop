@@ -1,16 +1,15 @@
-
-package cassandra;
+package cassandra
 
 import "sync"
 import "github.com/gocql/gocql"
 
-type Config struct{
+type Config struct {
 	ClusterHosts []string
 	// Keyspace to be used when doing I/O to cassandra.
-    Keyspace string
+	Keyspace string
 }
 
-type Connection struct{
+type Connection struct {
 	Session *gocql.Session
 	Config
 }
@@ -20,7 +19,7 @@ var mux sync.Mutex
 
 // GetConnection will create(& return) a new Connection to Cassandra if there is not one yet,
 // otherwise, will just return existing singleton connection.
-func GetConnection(config Config) (*Connection, error){
+func GetConnection(config Config) (*Connection, error) {
 	if connection != nil {
 		return connection, nil
 	}

@@ -2,26 +2,27 @@ package cassandra
 
 import "github.com/SharedCode/sop/btree"
 
-type TransactionSession struct{
+type TransactionSession struct {
 	TransactionID *btree.UUID
-	Started *bool
+	Started       *bool
 	//StoreMap *map[string]*btree.Btree
 }
 
-func (trans *TransactionSession) Begin() error{
+func (trans *TransactionSession) Begin() error {
 	return nil
 }
 
 // CommitPhase1 commits all changes to each Btree modified during transaction.
-func (trans *TransactionSession) CommitPhase1() error{
+func (trans *TransactionSession) CommitPhase1() error {
 	return nil
 }
+
 // CommitPhase2 finalize commits of each Btree modified during transaction.
-func (trans *TransactionSession) CommitPhase2() error{
+func (trans *TransactionSession) CommitPhase2() error {
 	return nil
 }
 
 // Rollback undoes any changes done to each Btree modified during transaction.
-func (trans *TransactionSession) Rollback() error{
+func (trans *TransactionSession) Rollback() error {
 	return nil
 }

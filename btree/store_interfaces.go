@@ -6,6 +6,10 @@ package btree
 // BtreeInterface defines publicly callable methods of Btree.
 type BtreeInterface[TKey Comparable, TValue any] interface {
 	Add(key TKey, value TValue) (bool, error)
+	Get(key TKey) (TValue, error)
+	Find(key TKey) (bool, error)
+	CurrentKey() TKey
+	CurrentValue() TValue
 	Update(key TKey, value TValue) (bool, error)
 	UpdateCurrentItem(newValue TValue) (bool, error)
 	Remove(key TKey) (bool, error)
@@ -64,7 +68,7 @@ type TransactionRepository interface {
 }
 
 // PhasedTransaction defines the "SOP internal" transaction methods.
-type PhasedTransaction interface{
+type PhasedTransaction interface {
 	Begin() error
 	CommitPhase1() error
 	CommitPhase2() error
@@ -72,7 +76,7 @@ type PhasedTransaction interface{
 }
 
 // Transaction interface defines the "enduser facing" transaction methods.
-type Transaction interface{
+type Transaction interface {
 	Begin() error
 	Commit() error
 	Rollback() error

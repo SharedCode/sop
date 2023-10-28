@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"time"
 	"github.com/redis/go-redis/v9"
+	"time"
 )
 
 type Options struct {

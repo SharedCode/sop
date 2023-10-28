@@ -5,7 +5,7 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
-type TransactionSession struct{
+type TransactionSession struct {
 	hasBegun bool
 }
 

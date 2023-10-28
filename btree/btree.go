@@ -50,9 +50,11 @@ func (btree *Btree[TKey, TValue]) rootNode() (*Node[TKey, TValue], error) {
 	return root, nil
 }
 
-func (btree *Btree[TKey, TValue]) getNode(id UUID) (*Node[TKey, TValue], error){
+func (btree *Btree[TKey, TValue]) getNode(id UUID) (*Node[TKey, TValue], error) {
 	n, e := btree.StoreInterface.NodeRepository.Get(id)
-	if e != nil {return nil, e}
+	if e != nil {
+		return nil, e
+	}
 	return n, nil
 }
 
@@ -101,6 +103,22 @@ func (btree *Btree[TKey, TValue]) Add(key TKey, value TValue) (bool, error) {
 		}
 	}
 	return r, nil
+}
+
+func (btree *Btree[TKey, TValue]) Get(key TKey) (TValue, error) {
+	var d TValue
+	return d, nil
+}
+func (btree *Btree[TKey, TValue]) Find(key TKey) (bool, error) {
+	return false, nil
+}
+func (btree *Btree[TKey, TValue]) CurrentKey() TKey {
+	var d TKey
+	return d
+}
+func (btree *Btree[TKey, TValue]) CurrentValue() TValue {
+	var d TValue
+	return d
 }
 
 func (btree *Btree[TKey, TValue]) Update(key TKey, value TValue) (bool, error) {

@@ -12,8 +12,7 @@ type store struct {
 }
 
 func NewInMemory() Cache {
-	return &store{
-	}
+	return &store{}
 }
 
 // Set executes the redis Set command
@@ -36,7 +35,7 @@ func (s *store) SetStruct(ctx context.Context, key string, value interface{}, ex
 
 // GetStruct executes the redis Get command
 func (s *store) GetStruct(ctx context.Context, key string, target interface{}) (interface{}, error) {
-	if target == nil{
+	if target == nil {
 		panic("target can't be nil.")
 	}
 	// s, err := connection.Client.Get(key).Result()

@@ -2,13 +2,13 @@ package mocks
 
 import "errors"
 
-type UserTransaction struct{
+type UserTransaction struct {
 	// add your members...
 	Started bool
 }
 
 func (trans *UserTransaction) Begin() error {
-	if trans.Started{
+	if trans.Started {
 		return errors.New("Transaction is already started.")
 	}
 	trans.Started = true
@@ -18,8 +18,8 @@ func (trans *UserTransaction) Begin() error {
 	return nil
 }
 
-func (trans *UserTransaction) CommitPhase1() error{
-	if !trans.Started{
+func (trans *UserTransaction) CommitPhase1() error {
+	if !trans.Started {
 		return errors.New("Transaction not started.")
 	}
 	trans.Started = false
@@ -29,8 +29,8 @@ func (trans *UserTransaction) CommitPhase1() error{
 	return nil
 }
 
-func (trans *UserTransaction) CommitPhase2() error{
-	if !trans.Started{
+func (trans *UserTransaction) CommitPhase2() error {
+	if !trans.Started {
 		return errors.New("Transaction not started.")
 	}
 	trans.Started = false
@@ -40,8 +40,8 @@ func (trans *UserTransaction) CommitPhase2() error{
 	return nil
 }
 
-func (trans *UserTransaction) Rollback() error{
-	if !trans.Started{
+func (trans *UserTransaction) Rollback() error {
+	if !trans.Started {
 		return errors.New("Transaction not started.")
 	}
 	trans.Started = false
@@ -50,4 +50,3 @@ func (trans *UserTransaction) Rollback() error{
 
 	return nil
 }
-
