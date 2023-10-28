@@ -1,27 +1,45 @@
 package in_memory
 
-import "github.com/SharedCode/sop/btree"
+import (
+	"fmt"
+	"github.com/SharedCode/sop/btree"
+)
 
 type TransactionSession struct{
-	TransactionID *btree.UUID
-	Started *bool
-	// StoreMap *map[string]*btree.Btree
+	hasBegun bool
 }
 
-func (trans *TransactionSession) Begin() error{
+func NewTransaction() btree.Transaction {
+	return &TransactionSession{}
+}
+
+func (trans *TransactionSession) Begin() error {
+	if trans.hasBegun {
+		return fmt.Errorf("Transaction already begun.")
+	}
+	trans.hasBegun = true
 	return nil
 }
 
 // CommitPhase1 commits all changes to each Btree modified during transaction.
-func (trans *TransactionSession) CommitPhase1() error{
-	return nil
-}
-// CommitPhase2 finalize commits of each Btree modified during transaction.
-func (trans *TransactionSession) CommitPhase2() error{
+func (trans *TransactionSession) Commit() error {
+	if !trans.hasBegun {
+		return fmt.Errorf("Transaction has not began, nothing to commit.")
+	}
+	trans.hasBegun = false
 	return nil
 }
 
 // Rollback undoes any changes done to each Btree modified during transaction.
-func (trans *TransactionSession) Rollback() error{
+func (trans *TransactionSession) Rollback() error {
+	if !trans.hasBegun {
+		return fmt.Errorf("Transaction has not began, nothing to rollback.")
+	}
+	trans.hasBegun = false
 	return nil
+}
+
+// HasBegun returns true if this tranaction is "open", false otherwise.
+func (trans *TransactionSession) HasBegun() bool {
+	return trans.hasBegun
 }

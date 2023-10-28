@@ -137,3 +137,7 @@ func (btree *Btree[TKey, TValue]) MoveToNext() (bool, error) {
 func (btree *Btree[TKey, TValue]) MoveToPrevious() (bool, error) {
 	return false, nil
 }
+
+func (btree *Btree[TKey, TValue]) IsValueDataInNodeSegment() bool {
+	return btree.Store.IsValueDataInNodeSegment
+}

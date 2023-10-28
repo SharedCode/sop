@@ -18,6 +18,9 @@ type Store struct {
 	Version int
 	// Is marked deleted or not.
 	IsDeleted bool
+	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's data segment.
+	// Otherwise is false.
+	IsValueDataInNodeSegment bool
 }
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.

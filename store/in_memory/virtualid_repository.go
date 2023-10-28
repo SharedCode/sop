@@ -1,27 +1,24 @@
-package btree;
+package in_memory
 
 import (
-	"time"
 	"github.com/SharedCode/sop/btree"
-	"github.com/google/uuid"
 )
 
 type in_memory struct {}
 
-// NewUUID generates a new globally unique and time based UUID.
-func (conn *in_memory) NewUUID() btree.UUID{
-	return btree.UUID(uuid.New())
+func NewVirtualIdRepository() btree.VirtualIdRepository {
+	return &in_memory{}
 }
 
-func (conn *in_memory) Add(vid btree.VirtualID) error {
+func (conn *in_memory) Add(h btree.Handle) error {
 	return nil;
 }
 
-func (conn *in_memory) Update(vid btree.VirtualID) error {
+func (conn *in_memory) Update(h btree.Handle) error {
 	return nil;
 }
-func (conn *in_memory) Get(logicalID btree.UUID) (btree.VirtualID, error) {
-	return btree.VirtualID{}, nil;
+func (conn *in_memory) Get(logicalID btree.UUID) (btree.Handle, error) {
+	return btree.Handle{}, nil;
 }
 func (conn *in_memory) Remove(logicalID btree.UUID) error {
 	return nil;

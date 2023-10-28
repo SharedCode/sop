@@ -1,4 +1,4 @@
-package btree;
+package in_memory
 
 import "github.com/SharedCode/sop/btree"
 
