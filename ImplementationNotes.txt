@@ -13,9 +13,10 @@ On Persistence
   standardizes on "generics" and internal SOP constructs use a custom serializer for efficient data storage.
   In golang port, standardizing on generics in both internal & external constructs will simplify the Key/Value
   type support and resulting serialization can standardize on go's object Marshalling functions.
-  go's marshaller(& protobuff) has decent object serialization, thus, no need to get overboard.
+  go's marshaller(json &/or protobuff) has decent object serialization, thus, no need to get overboard.
 * Will standardize on protocol buffers for performant node (including "item" or "key/value") serialization, like in the c# version,
   items are serialized to a target linked list of DataBlocks, which, in turn is what is stored in the storage system.
+  NOTE: json supports streaming, protobuff seems not, so, json wins: https://stackoverflow.com/questions/31794355/decode-large-stream-json
 * Caching, we will cache the DataBlocks which is keyed off of its Id (e.g. - UUID). DataBlock(s) contain the
   serialized data of a B-Tree Node or a large object(Value).
 

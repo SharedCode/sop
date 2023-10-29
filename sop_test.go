@@ -9,9 +9,7 @@ import (
 func TestBtreeBasic(t *testing.T) {
 	btree, _ := in_memory.NewStore[string, string]()
 	btree.Add("foo", "bar")
-
-	c, _ := btree.Find("foo", )
-	if c != "bar" {
+	if ok, _ := btree.Find("foo", true); !ok || btree.CurrentValue() != "bar" {
 		t.Errorf("Did not find foo's bar.")
 	}
 }

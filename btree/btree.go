@@ -8,9 +8,9 @@ import (
 type Btree[TKey Comparable, TValue any] struct {
 	Store          Store
 	StoreInterface StoreInterface[TKey, TValue]
-	TempSlots      []*Item[TKey, TValue]
-	TempChildren   []UUID
-	CurrentItem    CurrentItemRef
+	TempSlots      []*Item[TKey, TValue] `json:"-"`
+	TempChildren   []UUID                `json:"-"`
+	CurrentItem    CurrentItemRef        `json:"-"`
 }
 
 type CurrentItemRef struct {
