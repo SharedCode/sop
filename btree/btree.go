@@ -106,18 +106,6 @@ func (btree *Btree[TKey, TValue]) Add(key TKey, value TValue) (bool, error) {
 }
 
 // done
-func (btree *Btree[TKey, TValue]) Get(key TKey) (TValue, error) {
-	var zero TValue
-	ok,err := btree.Find(key, false)
-	if err != nil {
-		return zero, err
-	}
-	if ok {
-		return btree.CurrentValue(), nil
-	}
-	return zero, nil
-}
-// done
 func (btree *Btree[TKey, TValue]) Find(key TKey, firstItemWithKey bool) (bool, error) {
 	// return default value & no error if B-Tree is empty.
 	if btree.Store.Count == 0 {

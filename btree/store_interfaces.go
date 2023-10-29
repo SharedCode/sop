@@ -6,11 +6,10 @@ package btree
 // BtreeInterface defines publicly callable methods of Btree.
 type BtreeInterface[TKey Comparable, TValue any] interface {
 	Add(key TKey, value TValue) (bool, error)
-	Get(key TKey) (TValue, error)
 	// Find will search Btree for an item with a given key. Return true if found,
 	// otherwise false. firstItemWithKey is useful when there are items with same key.
-	// true will position pointer to the first item, according to key ordering sequence,
-	// with the given key.
+	// true will position pointer to the first item with the given key,
+	// according to key ordering sequence.
 	Find(key TKey, firstItemWithKey bool) (bool, error)
 	CurrentKey() TKey
 	CurrentValue() TValue
