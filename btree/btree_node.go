@@ -83,6 +83,82 @@ func (node *Node[TKey, TValue]) saveNode(btree *Btree[TKey, TValue]) error {
 	return btree.StoreInterface.NodeRepository.Update(node)
 }
 
+func (node *Node[TKey, TValue]) find(btree *Btree[TKey, TValue], key TKey, firstItemWithKey bool) (bool, error) {
+	n := node
+	foundItemIndex := 0
+	foundNodeId := NilUUID
+	var err error
+	index := 0
+	for {
+		index = 0
+		if n.Count > 0 {
+			index = sort.Search(n.Count, func(index int) bool {
+				return compare(n.Slots[index].Key, key) >= 0
+			})
+			// If key is found in node n.
+			if index < btree.Store.NodeSlotCount {
+				// Make the found node & item index the "current item" of btree.
+				foundNodeId = n.Id
+				foundItemIndex = index
+				if !firstItemWithKey {
+					break
+				}
+				if n.childrenIds != nil {
+					// Try to navigate to the 1st item with key, in case there are duplicate keys.
+					n, err = n.getChild(btree, index)
+					if err != nil {
+						return false, err
+					}
+					continue
+				}
+			} else {
+				index--
+			}
+		}
+		// Check children if there are.
+		if n.childrenIds != nil {
+			n, err = n.getChild(btree, index)
+			if err != nil {
+				return false, err
+			}
+			if n == nil {
+				return false, nil
+			}
+		} else {
+			break
+		}
+	}
+	if !foundNodeId.IsNil() {
+		btree.setCurrentItemId(foundNodeId, foundItemIndex)
+		return true, nil
+	}
+	// This must be the outermost node
+	// This block will make this item the current one to give chance to the Btree
+	// caller the chance to check the items having the nearest key to the one it is interested at.
+	if index == btree.Store.NodeSlotCount {
+		// make sure i points to valid item
+		index--
+	}
+	if n.Slots[index] != nil {
+		btree.setCurrentItemId(n.Id, index)
+	} else {
+		index--
+		// Update Current Item of this Node and nearest to the Key in sought Slot index
+		btree.setCurrentItemId(n.Id, index)
+		// Make the next item the current item. This has the effect of positioning making the next greater item the current item.
+		_, err = n.moveToNext(btree)
+		if err != nil {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
+// TODO
+func (node *Node[TKey, TValue]) moveToNext(btree *Btree[TKey, TValue]) (bool, error) {
+	return false, nil
+}
+
 func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item[TKey, TValue], index int, parent *Node[TKey, TValue]) (bool, error) {
 	// outermost(a.k.a. leaf) node, the end of the recursive traversing
 	// thru all inner nodes of the Btree..

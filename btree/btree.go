@@ -105,13 +105,35 @@ func (btree *Btree[TKey, TValue]) Add(key TKey, value TValue) (bool, error) {
 	return r, nil
 }
 
+// done
 func (btree *Btree[TKey, TValue]) Get(key TKey) (TValue, error) {
-	var d TValue
-	return d, nil
+	var zero TValue
+	ok,err := btree.Find(key, false)
+	if err != nil {
+		return zero, err
+	}
+	if ok {
+		return btree.CurrentValue(), nil
+	}
+	return zero, nil
 }
-func (btree *Btree[TKey, TValue]) Find(key TKey) (bool, error) {
-	return false, nil
+// done
+func (btree *Btree[TKey, TValue]) Find(key TKey, firstItemWithKey bool) (bool, error) {
+	// return default value & no error if B-Tree is empty.
+	if btree.Store.Count == 0 {
+		return false, nil
+	}
+	// Return current Value if key is same as current Key.
+	if !firstItemWithKey && compare[TKey](btree.CurrentKey(), key) == 0 {
+		return true, nil
+	}
+	node, err := btree.rootNode()
+	if err != nil {
+		return false, err
+	}
+	return node.find(btree, key, firstItemWithKey)
 }
+
 func (btree *Btree[TKey, TValue]) CurrentKey() TKey {
 	var d TKey
 	return d
@@ -132,15 +154,6 @@ func (btree *Btree[TKey, TValue]) Remove(key TKey) (bool, error) {
 }
 func (btree *Btree[TKey, TValue]) RemoveCurrentItem() (bool, error) {
 	return false, nil
-}
-
-func (btree *Btree[TKey, TValue]) MoveTo(key TKey, firstItemWithKey bool) (bool, error) {
-
-	m := make(map[string]int)
-	v, _ := m["foo"]
-	return v == 0, nil
-
-	// return false
 }
 
 func (btree *Btree[TKey, TValue]) MoveToFirst() (bool, error) {

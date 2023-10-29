@@ -7,7 +7,11 @@ package btree
 type BtreeInterface[TKey Comparable, TValue any] interface {
 	Add(key TKey, value TValue) (bool, error)
 	Get(key TKey) (TValue, error)
-	Find(key TKey) (bool, error)
+	// Find will search Btree for an item with a given key. Return true if found,
+	// otherwise false. firstItemWithKey is useful when there are items with same key.
+	// true will position pointer to the first item, according to key ordering sequence,
+	// with the given key.
+	Find(key TKey, firstItemWithKey bool) (bool, error)
 	CurrentKey() TKey
 	CurrentValue() TValue
 	Update(key TKey, value TValue) (bool, error)
@@ -15,11 +19,6 @@ type BtreeInterface[TKey Comparable, TValue any] interface {
 	Remove(key TKey) (bool, error)
 	RemoveCurrentItem() (bool, error)
 
-	// MoveTo will search Btree for an item with a given key. Return true if found,
-	// otherwise false. firstItemWithKey is useful when there are items with same key.
-	// true will position pointer to the first item, according to key ordering sequence,
-	// with the given key.
-	MoveTo(key TKey, firstItemWithKey bool) (bool, error)
 	MoveToFirst() (bool, error)
 	MoveToLast() (bool, error)
 	MoveToNext() (bool, error)
