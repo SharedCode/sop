@@ -19,14 +19,13 @@ type Node[TKey Comparable, TValue any] struct {
 	ParentId           UUID
 	ChildrenLogicalIds []UUID
 	Slots              []*Item[TKey, TValue]
-	// Count of Items stored in Slots array.
-	Count           int
-	Version         int
-	IsDeleted       bool
-	indexOfNode     int
-	logicalId       UUID
-	parentLogicalId UUID
-	childrenIds     []UUID
+	Count			   int
+	Version            int
+	IsDeleted          bool
+	indexOfNode        int
+	logicalId          UUID
+	parentLogicalId    UUID
+	childrenIds        []UUID
 }
 
 func NewNode[TKey Comparable, TValue any](slotCount int) *Node[TKey, TValue] {
@@ -48,7 +47,7 @@ func (node *Node[TKey, TValue]) add(btree *Btree[TKey, TValue], item *Item[TKey,
 			btree.setCurrentItemId(currentNode.Id, index)
 			return false, nil
 		}
-		if currentNode.childrenIds != nil {
+		if currentNode.hasChildren() {
 			parent = nil
 			// if not an outermost node let next lower level node do the 'Add'.
 			currentNode, err := currentNode.getChild(btree, index)
@@ -59,9 +58,9 @@ func (node *Node[TKey, TValue]) add(btree *Btree[TKey, TValue], item *Item[TKey,
 			break
 		}
 	}
-	if btree.isUnique() && currentNode.Count > 0 {
+	if btree.isUnique() && currentNode.itemCount() > 0 {
 		var currItemIndex = index
-		if index > 0 && index >= currentNode.Count {
+		if index > 0 && index >= currentNode.itemCount() {
 			currItemIndex--
 		}
 		i := compare(currentNode.Slots[currItemIndex].Key, item.Key)
@@ -91,8 +90,8 @@ func (node *Node[TKey, TValue]) find(btree *Btree[TKey, TValue], key TKey, first
 	index := 0
 	for {
 		index = 0
-		if n.Count > 0 {
-			index = sort.Search(n.Count, func(index int) bool {
+		if n.itemCount() > 0 {
+			index = sort.Search(n.itemCount(), func(index int) bool {
 				return compare(n.Slots[index].Key, key) >= 0
 			})
 			// If key is found in node n.
@@ -103,7 +102,7 @@ func (node *Node[TKey, TValue]) find(btree *Btree[TKey, TValue], key TKey, first
 				if !firstItemWithKey {
 					break
 				}
-				if n.childrenIds != nil {
+				if n.hasChildren() {
 					// Try to navigate to the 1st item with key, in case there are duplicate keys.
 					n, err = n.getChild(btree, index)
 					if err != nil {
@@ -116,7 +115,7 @@ func (node *Node[TKey, TValue]) find(btree *Btree[TKey, TValue], key TKey, first
 			}
 		}
 		// Check children if there are.
-		if n.childrenIds != nil {
+		if n.hasChildren() {
 			n, err = n.getChild(btree, index)
 			if err != nil {
 				return false, err
@@ -154,9 +153,56 @@ func (node *Node[TKey, TValue]) find(btree *Btree[TKey, TValue], key TKey, first
 	return false, nil
 }
 
-// TODO
 func (node *Node[TKey, TValue]) moveToNext(btree *Btree[TKey, TValue]) (bool, error) {
-	return false, nil
+	n := node
+	slotIndex := btree.CurrentItem.NodeItemIndex
+	slotIndex++
+	goRightDown := n.hasChildren()
+	var err error
+	if goRightDown {
+		for {
+			if n == nil {
+				btree.setCurrentItemId(NilUUID, 0)
+				return false, nil
+			}
+			if n.hasChildren() {
+				n, err = n.getChild(btree, slotIndex)
+				if err != nil {
+					return false, err
+				}
+				slotIndex = 0
+			} else {
+				btree.setCurrentItemId(n.Id, 0)
+				return true, nil
+			}
+		}
+	}
+	for {
+		if n == nil {
+			btree.setCurrentItemId(NilUUID, 0)
+			return false, nil
+		}
+		// check if SlotIndex is within the maximum slot items and if it is, will index an occupied slot.
+		if slotIndex < n.itemCount() {
+			btree.setCurrentItemId(n.Id, slotIndex)
+			return true, nil
+		}
+		// check if this is not the root node. (Root nodes don't have parent node.)
+		if n.ParentId != NilUUID {
+			slotIndex, err = n.getIndexOfNode(btree)
+			if err != nil {
+				return false, err
+			}
+			n, err = n.getParent(btree)
+			if err != nil {
+				return false, err
+			}
+		} else {
+			// this is root node. set to null the current item(End of Btree is reached)
+			btree.setCurrentItemId(NilUUID, 0)
+			return false, nil
+		}
+	}
 }
 
 func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item[TKey, TValue], index int, parent *Node[TKey, TValue]) (bool, error) {
@@ -164,7 +210,7 @@ func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item
 	// thru all inner nodes of the Btree..
 	// Correct Node is reached at this point!
 	// if node is not yet full..
-	if node.Count < btree.Store.NodeSlotCount {
+	if node.itemCount() < btree.Store.NodeSlotCount {
 		// insert the Item to target position & "skud" over the items to the right
 		node.insertSlotItem(item, index)
 		// save this TreeNode
@@ -247,9 +293,9 @@ func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item
 				rightNode = CreateNode(bTree, this.GetAddress(bTree));
 				leftNode = CreateNode(bTree, this.GetAddress(bTree));
 				CopyArrayElements(bTree.TempSlots, 0, leftNode.Slots, 0, slotsHalf);
-				leftNode.Count = slotsHalf;
+				leftNode.itemCount() = slotsHalf;
 				CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
-				rightNode.Count = slotsHalf;
+				rightNode.itemCount() = slotsHalf;
 				ResetArray(Slots, null);
 				Slots[0] = bTree.TempSlots[slotsHalf];
 				ChildrenAddresses = new long[bTree.SlotLength + 1];
@@ -280,7 +326,7 @@ func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item
 			Count = slotsHalf;
 			// copy the right half of the slots to right sibling
 			CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
-			rightNode.Count = slotsHalf;
+			rightNode.itemCount() = slotsHalf;
 
 			// copy the middle slot to temp parent slot.
 			bTree.TempParent = bTree.TempSlots[slotsHalf];
@@ -312,9 +358,9 @@ func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item
 		rightNode = CreateNode(bTree, GetAddress(bTree));
 		leftNode = CreateNode(bTree, GetAddress(bTree));
 		CopyArrayElements(bTree.TempSlots, 0, leftNode.Slots, 0, slotsHalf);
-		leftNode.Count = slotsHalf;
+		leftNode.itemCount() = slotsHalf;
 		CopyArrayElements(bTree.TempSlots, (short)(slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
-		rightNode.Count = slotsHalf;
+		rightNode.itemCount() = slotsHalf;
 		ResetArray(Slots, null);
 		Slots[0] = bTree.TempSlots[slotsHalf];
 		RemoveFromBTreeBlocksCache(bTree, this);
@@ -398,7 +444,7 @@ func (node *Node[TKey, TValue]) getLeftSibling(btree *Btree[TKey, TValue]) (*Nod
 		return nil, err
 	}
 	// if we are not at the leftmost sibling yet..
-	if index > 0 && p != nil && index <= p.Count {
+	if index > 0 && p != nil && index <= p.itemCount() {
 		return p.getChild(btree, index-1)
 	}
 	// leftmost was already reached..
@@ -437,7 +483,7 @@ func (node *Node[TKey, TValue]) getParent(btree *Btree[TKey, TValue]) (*Node[TKe
 }
 
 func (node *Node[TKey, TValue]) isFull(slotCount int) bool {
-	return node.Count >= slotCount
+	return node.itemCount() >= slotCount
 }
 
 func (node *Node[TKey, TValue]) insertSlotItem(item *Item[TKey, TValue], position int) {
@@ -447,11 +493,11 @@ func (node *Node[TKey, TValue]) insertSlotItem(item *Item[TKey, TValue], positio
 }
 
 func (node *Node[TKey, TValue]) getIndexToInsertTo(btree *Btree[TKey, TValue], item *Item[TKey, TValue]) (int, bool) {
-	if node.Count == 0 {
+	if node.itemCount() == 0 {
 		// empty node.
 		return 0, false
 	}
-	index := sort.Search(node.Count, func(index int) bool {
+	index := sort.Search(node.itemCount(), func(index int) bool {
 		return compare(node.Slots[index].Key, item.Key) >= 0
 	})
 	if btree.isUnique() {
@@ -476,4 +522,13 @@ func (node *Node[TKey, TValue]) getChild(btree *Btree[TKey, TValue], childSlotIn
 		return nil, err
 	}
 	return btree.getNode(h.GetActiveId())
+}
+
+// hasChildren returns true if node has children or not.
+func (node *Node[TKey, TValue]) hasChildren() bool {
+	return node.childrenIds != nil || node.ChildrenLogicalIds != nil
+}
+
+func (node *Node[TKey, TValue]) itemCount() int {
+	return node.Count
 }
