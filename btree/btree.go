@@ -7,10 +7,10 @@ import (
 // Btree manages items using B-tree data structure and algorithm.
 type Btree[TKey Comparable, TValue any] struct {
 	Store          Store
-	StoreInterface StoreInterface[TKey, TValue]
-	TempSlots      []*Item[TKey, TValue] `json:"-"`
-	TempChildren   []UUID                `json:"-"`
-	CurrentItem    CurrentItemRef        `json:"-"`
+	StoreInterface *StoreInterface[TKey, TValue] `json:"-"`
+	TempSlots      []*Item[TKey, TValue]         `json:"-"`
+	TempChildren   []UUID                        `json:"-"`
+	CurrentItemRef    CurrentItemRef                `json:"-"`
 }
 
 type CurrentItemRef struct {
@@ -18,7 +18,7 @@ type CurrentItemRef struct {
 	NodeItemIndex int
 }
 
-func NewBtree[TKey Comparable, TValue any](store Store, si StoreInterface[TKey, TValue]) *Btree[TKey, TValue] {
+func NewBtree[TKey Comparable, TValue any](store Store, si *StoreInterface[TKey, TValue]) *Btree[TKey, TValue] {
 	var b3 = Btree[TKey, TValue]{
 		Store:          store,
 		StoreInterface: si,
@@ -29,11 +29,15 @@ func NewBtree[TKey Comparable, TValue any](store Store, si StoreInterface[TKey, 
 }
 
 func (btree *Btree[TKey, TValue]) rootNode() (*Node[TKey, TValue], error) {
+	// TODO: register root node to nodeRepository or the Transaction.
 	if btree.Store.RootNodeLogicalId.IsNil() {
 		// create new Root Node, if nil (implied new btree).
 		btree.Store.RootNodeLogicalId = NewUUID()
 		var root = NewNode[TKey, TValue](btree.Store.NodeSlotCount)
+		// Set both logical Id & physical Id to the same UUID to begin with.
+		// Transaction commit should handle resolving them.
 		root.logicalId = btree.Store.RootNodeLogicalId
+		root.Id = btree.Store.RootNodeLogicalId
 		return root, nil
 	}
 	h, err := btree.StoreInterface.VirtualIdRepository.Get(btree.Store.RootNodeLogicalId)
@@ -59,8 +63,8 @@ func (btree *Btree[TKey, TValue]) getNode(id UUID) (*Node[TKey, TValue], error) 
 }
 
 func (btree *Btree[TKey, TValue]) setCurrentItemId(nodeId UUID, itemIndex int) {
-	btree.CurrentItem.NodeId = nodeId
-	btree.CurrentItem.NodeItemIndex = itemIndex
+	btree.CurrentItemRef.NodeId = nodeId
+	btree.CurrentItemRef.NodeItemIndex = itemIndex
 }
 
 func (btree *Btree[TKey, TValue]) isUnique() bool {
@@ -73,19 +77,19 @@ func (btree *Btree[TKey, TValue]) Add(key TKey, value TValue) (bool, error) {
 		Key:   key,
 		Value: value,
 	}
-	node, err := btree.rootNode()
-	if err != nil {
-		return false, err
-	}
 	localTrans := false
 	if !btree.StoreInterface.Transaction.HasBegun() {
-		err = btree.StoreInterface.Transaction.Begin()
+		err := btree.StoreInterface.Transaction.Begin()
 		if err != nil {
 			return false, err
 		}
 		localTrans = true
 	}
-	r, err := node.add(btree, &itm)
+	node,err := btree.rootNode()
+	if err != nil {
+		return false, err
+	}
+	result, err := node.add(btree, &itm)
 	if err != nil {
 		if localTrans {
 			// Rollback should rarely fail, but if it does, return it.
@@ -96,13 +100,15 @@ func (btree *Btree[TKey, TValue]) Add(key TKey, value TValue) (bool, error) {
 		}
 		return false, err
 	}
+	// Inrement store's item count.
+	btree.Store.Count++
 	if localTrans {
 		err = btree.StoreInterface.Transaction.Commit()
 		if err != nil {
 			return false, err
 		}
 	}
-	return r, nil
+	return result, nil
 }
 
 // done
@@ -112,7 +118,8 @@ func (btree *Btree[TKey, TValue]) Find(key TKey, firstItemWithKey bool) (bool, e
 		return false, nil
 	}
 	// Return current Value if key is same as current Key.
-	if !firstItemWithKey && compare[TKey](btree.CurrentKey(), key) == 0 {
+	ci := btree.CurrentItem()
+	if !firstItemWithKey && compare[TKey](ci.Key, key) == 0 {
 		return true, nil
 	}
 	node, err := btree.rootNode()
@@ -122,13 +129,16 @@ func (btree *Btree[TKey, TValue]) Find(key TKey, firstItemWithKey bool) (bool, e
 	return node.find(btree, key, firstItemWithKey)
 }
 
-func (btree *Btree[TKey, TValue]) CurrentKey() TKey {
-	var d TKey
-	return d
-}
-func (btree *Btree[TKey, TValue]) CurrentValue() TValue {
-	var d TValue
-	return d
+func (btree *Btree[TKey, TValue]) CurrentItem() Item[TKey, TValue] {
+	var zero Item[TKey, TValue]
+	if btree.CurrentItemRef.NodeId.IsNil() {
+		return zero
+	}
+	n, err := btree.StoreInterface.NodeRepository.Get(btree.CurrentItemRef.NodeId)
+	if err != nil {
+		return zero
+	}
+	return *n.Slots[btree.CurrentItemRef.NodeItemIndex]
 }
 
 func (btree *Btree[TKey, TValue]) Update(key TKey, value TValue) (bool, error) {

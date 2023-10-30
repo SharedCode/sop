@@ -11,11 +11,12 @@ type BtreeInterface[TKey Comparable, TValue any] interface {
 	// true will position pointer to the first item with the given key,
 	// according to key ordering sequence.
 	Find(key TKey, firstItemWithKey bool) (bool, error)
-	CurrentKey() TKey
-	CurrentValue() TValue
+	CurrentItem() Item[TKey, TValue]
 	Update(key TKey, value TValue) (bool, error)
+	// UpdateCurrentItem will update the Value of the current item.
 	UpdateCurrentItem(newValue TValue) (bool, error)
 	Remove(key TKey) (bool, error)
+	// RemoveCurrentItem will remove the current key/value pair from the store.
 	RemoveCurrentItem() (bool, error)
 
 	MoveToFirst() (bool, error)

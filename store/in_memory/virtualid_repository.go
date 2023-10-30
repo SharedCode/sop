@@ -18,7 +18,10 @@ func (conn *in_memory) Update(h btree.Handle) error {
 	return nil
 }
 func (conn *in_memory) Get(logicalID btree.UUID) (btree.Handle, error) {
-	return btree.Handle{}, nil
+	return btree.Handle{
+		LogicalId: logicalID,
+		PhysicalIdA: logicalID,
+	}, nil
 }
 func (conn *in_memory) Remove(logicalID btree.UUID) error {
 	return nil

@@ -19,7 +19,7 @@ type Node[TKey Comparable, TValue any] struct {
 	ParentId           UUID
 	ChildrenLogicalIds []UUID
 	Slots              []*Item[TKey, TValue]
-	Count			   int
+	Count              int
 	Version            int
 	IsDeleted          bool
 	indexOfNode        int
@@ -91,7 +91,7 @@ func (node *Node[TKey, TValue]) find(btree *Btree[TKey, TValue], key TKey, first
 	for {
 		index = 0
 		if n.itemCount() > 0 {
-			index = sort.Search(n.itemCount(), func(index int) bool {
+			index = sort.Search(n.itemCount()-1, func(index int) bool {
 				return compare(n.Slots[index].Key, key) >= 0
 			})
 			// If key is found in node n.
@@ -155,7 +155,7 @@ func (node *Node[TKey, TValue]) find(btree *Btree[TKey, TValue], key TKey, first
 
 func (node *Node[TKey, TValue]) moveToNext(btree *Btree[TKey, TValue]) (bool, error) {
 	n := node
-	slotIndex := btree.CurrentItem.NodeItemIndex
+	slotIndex := btree.CurrentItemRef.NodeItemIndex
 	slotIndex++
 	goRightDown := n.hasChildren()
 	var err error

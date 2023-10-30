@@ -2,6 +2,7 @@ package in_memory
 
 import "github.com/SharedCode/sop/btree"
 
+// Recycler is not used in in-memory store, 'below are just stubs.
 type Recyclable struct {
 	Year  int
 	Month int
@@ -18,14 +19,9 @@ func (Recyclable) Get(batch int, objectType int) []btree.Recyclable {
 	return nil
 }
 func (Recyclable) Add(recyclable []btree.Recyclable) error {
-	//var iface interface{} = recyclable
-	//item := iface.(Recyclable)
 	return nil
 }
 
-//	func (Recyclable) Update(*btree.Recyclable) error{
-//		return nil;
-//	}
 func (Recyclable) Remove(items []btree.Recyclable) error {
 	return nil
 }

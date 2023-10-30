@@ -16,5 +16,5 @@ func NewStore[TKey btree.Comparable, TValue any]() (btree.BtreeInterface[TKey, T
 		VirtualIdRepository: NewVirtualIdRepository(),
 		Transaction:         NewTransaction(),
 	}
-	return btree.NewBtree[TKey, TValue](s, si), nil
+	return btree.NewBtree[TKey, TValue](s, &si), nil
 }
