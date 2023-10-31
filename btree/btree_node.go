@@ -7,7 +7,10 @@ import (
 // Item contains key & value pair, plus the version number.
 type Item[TKey Comparable, TValue any] struct {
 	Key             TKey
-	Value           TValue
+	// Value is saved nil if data is to be persisted in the "data segment"(& ValudId set to a valid UUID),
+	// otherwise it should point to the actual data and persisted in B-Tree Node segment together with the Key.
+	Value           *TValue
+	// ValueId should be a valid reference to the Id of the data if it is saved in the "data segment".
 	ValueId         UUID
 	Version         int
 	valueNeedsFetch bool

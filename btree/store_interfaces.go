@@ -6,15 +6,21 @@ package btree
 // BtreeInterface defines publicly callable methods of Btree.
 type BtreeInterface[TKey Comparable, TValue any] interface {
 	Add(key TKey, value TValue) (bool, error)
-	// Find will search Btree for an item with a given key. Return true if found,
+	// FindOne will search Btree for an item with a given key. Return true if found,
 	// otherwise false. firstItemWithKey is useful when there are items with same key.
 	// true will position pointer to the first item with the given key,
 	// according to key ordering sequence.
-	Find(key TKey, firstItemWithKey bool) (bool, error)
-	CurrentItem() Item[TKey, TValue]
+	FindOne(key TKey, firstItemWithKey bool) (bool, error)
+	// GetCurrentKey returns the current item's key.
+	GetCurrentKey() TKey
+	// GetCurrentValue returns the current item's value.
+	GetCurrentValue() TValue
+	// Update finds the item with key and update its value to the value argument.
 	Update(key TKey, value TValue) (bool, error)
 	// UpdateCurrentItem will update the Value of the current item.
+	// Key is read-only, thus, no argument for the key.
 	UpdateCurrentItem(newValue TValue) (bool, error)
+	// Remove will find the item with a given key then remove that item.
 	Remove(key TKey) (bool, error)
 	// RemoveCurrentItem will remove the current key/value pair from the store.
 	RemoveCurrentItem() (bool, error)
