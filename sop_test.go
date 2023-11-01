@@ -9,29 +9,28 @@ import (
 )
 
 func TestBtreeBasic(t *testing.T) {
-	btree, _ := in_memory.NewStore[string, string]()
-	btree.Add("foo", "bar")
-	ba, _ := json.Marshal(btree)
-	if ok, _ := btree.FindOne("foo", true); ok && btree.GetCurrentValue() == "bar" {
-		fmt.Printf("btree: %s", string(ba))
-	} else {
-		t.Errorf("btree: %s", string(ba))
-		t.Errorf("Did not find foo's bar.")
-	}
+	// testBtreeAddLoop(t, 1)
+	// testBtreeAddLoop(t, 2)
+	// testBtreeAddLoop(t, 3)
+	// testBtreeAddLoop(t, 4)
+	testBtreeAddLoop(t, 5)
 }
 
 // TODO: support node breakup! this test fails until such feature is implemented.
-func TestBtreeAddLoop(t *testing.T) {
+func testBtreeAddLoop(t *testing.T, n int) {
+	fmt.Printf("btree %d loop test\n\n", n)
 	btree, _ := in_memory.NewStore[string, string]()
-	const n = 5
 	for i := 0; i < n; i++ {
-		btree.Add(fmt.Sprintf("foo%d", i), fmt.Sprintf("bar%d", i))
+		k := fmt.Sprintf("foo%d", i)
+		v := fmt.Sprintf("bar%d", i)
+		btree.Add(k, v)
+		ba, _ := json.Marshal(btree)
+		if ok, _ := btree.FindOne(k, true); ok && btree.GetCurrentValue() == v {
+			fmt.Printf("btree: %s\n", string(ba))
+		} else {
+			t.Errorf("btree: %s\n", string(ba))
+			t.Errorf("Did not find %s's %s.\n", k, v)
+		}
 	}
-	ba, _ := json.Marshal(btree)
-	if ok, _ := btree.FindOne("foo1", true); ok && btree.GetCurrentValue() == "bar1" {
-		fmt.Printf("btree: %s", string(ba))
-	} else {
-		t.Errorf("btree: %s", string(ba))
-		t.Errorf("Did not find foo's bar.")
-	}
+	fmt.Printf("btree %d loop test end.\n\n", n)
 }

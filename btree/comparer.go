@@ -72,6 +72,10 @@ func compare[T Comparable](x, y T) int {
 		x1, _ := anyX.(float64)
 		y1, _ := anyY.(float64)
 		return cmp.Compare(x1, y1)
+	case string:
+		x1, _ := anyX.(string)
+		y1, _ := anyY.(string)
+		return cmp.Compare(x1, y1)
 	default:
 		if anyX == nil && anyY == nil {
 			return 0

@@ -6,6 +6,7 @@ package btree
 // BtreeInterface defines publicly callable methods of Btree.
 type BtreeInterface[TKey Comparable, TValue any] interface {
 	Add(key TKey, value TValue) (bool, error)
+	AddIfNotExist(key TKey, value TValue) (bool, error)
 	// FindOne will search Btree for an item with a given key. Return true if found,
 	// otherwise false. firstItemWithKey is useful when there are items with same key.
 	// true will position pointer to the first item with the given key,

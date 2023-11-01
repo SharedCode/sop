@@ -208,78 +208,80 @@ func (node *Node[TKey, TValue]) moveToNext(btree *Btree[TKey, TValue]) (bool, er
 	}
 }
 
+// Outermost(a.k.a. leaf) node, the end of the recursive traversing thru all inner nodes of the Btree.
+// Correct Node is reached at this point!
 func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item[TKey, TValue], index int, parent *Node[TKey, TValue]) (bool, error) {
-	// outermost(a.k.a. leaf) node, the end of the recursive traversing
-	// thru all inner nodes of the Btree..
-	// Correct Node is reached at this point!
-	// if node is not yet full..
+	// If node is not yet full.
 	if node.itemCount() < btree.Store.NodeSlotCount {
-		// insert the Item to target position & "skud" over the items to the right
+		// Insert the Item to target position & "skud" over the items to the right.
 		node.insertSlotItem(item, index)
-		// save this TreeNode
+		// Save this TreeNode
 		node.saveNode(btree)
 		return true, nil
 	}
 
-	// node is full, distribute or breakup the node (use temp slots in the process)...
+	// Node is full, distribute or breakup the node (use temp slots in the process).
 	copy(btree.TempSlots, node.Slots)
 
 	// Index now contains the correct array element number to insert item into.
+	// Skud over then assign the item to the vacatad slot.
 	copy(btree.TempSlots[index+1:], btree.TempSlots[index:])
+	// Set the item to the newly vacated slot.
 	btree.TempSlots[index] = item
 
-	// work in progress marker...
-
-	// var slotsHalf = btree.Store.NodeSlotCount >> 1
-	// var rightNode, leftNode Node
+	var slotsHalf = btree.Store.NodeSlotCount >> 1
+	var rightNode, leftNode *Node[TKey, TValue]
+	var isVacantSlotInLeft, isVacantSlotInRight bool
+	var err error
 
 	if !node.ParentId.IsNil() {
 		var isUnBalanced bool
-		isVacantSlotInLeft, err := node.isThereVacantSlotInLeft(btree, &isUnBalanced)
+		isVacantSlotInLeft, err = node.isThereVacantSlotInLeft(btree, &isUnBalanced)
 		if err != nil {
 			return isVacantSlotInLeft, err
 		}
-		//isVacantSlotInRight = node.isThereVacantSlotInRight(btree, &isUnBalanced)
-
+		isVacantSlotInRight, err = node.isThereVacantSlotInRight(btree, &isUnBalanced)
+		if err != nil {
+			return isVacantSlotInRight, err
+		}
 	}
-	/*
-			if (iIsThereVacantSlot > 0)
-			{
-				//** distribute to either left or right sibling the overflowed item...
-				// copy temp buffer contents to the actual slots.
-				short b = (short) (iIsThereVacantSlot == 1 ? 0 : 1);
-				CopyArrayElements(bTree.TempSlots, b, Slots, 0, bTree.SlotLength);
 
-				//*** save this TreeNode
-				SaveNodeToDisk(bTree);
+	if isVacantSlotInLeft || isVacantSlotInRight {
+		// Distribute to either left or right sibling the overflowed item.
+		// Copy temp buffer contents to the actual slots.
+		var b short = 1
+		if isVacantSlotInLeft {
+			b = 0
+		}
+		copy(btree.TempSlots[b:], node.Slots)
+		// Save this node.
+		btree.SaveNode(node)
 
-				BTreeItemOnDisk biod;
-				if (iIsThereVacantSlot == 1)
-				{
-					biod = bTree.TempSlots[bTree.SlotLength];
-					ResetArray(bTree.TempSlots, null, bTree.TempSlots.Length);
+		btree.DistributeAction.Source = node
+		if (isVacantSlotInLeft){
+			btree.DistributeAction.Item = bTree.TempSlots[bTree.SlotLength]
+			clear(btree.TempSlots)
 
-					// Vacant in left, "skud over" the leftmost node's item to parent and the item
-					// on parent to left sibling node (recursively).
-					bTree.DistributeSibling = this;
-					bTree.DistributeItem = biod;
-					bTree.DistributeLeftDirection = true;
-					//DistributeToLeft(bTree, biod);
+			// Vacant in left, create a distribution action request to B-Tree.
+			// Logic is: "skud over" the leftmost node's item to parent and the item
+			// on parent to left sibling node (recursively).
+			btree.DistributeAction.DistributeToLeft = true
+			return
+		}
+		btree.DistributeAction.Item = bTree.TempSlots[0]
+		clear(btree.TempSlots)
+		// Vacant in right, move the rightmost node item into the vacant slot in right.
+		btree.DistributeAction.DistributeToLeft = false
+		return
+	}
 
-				}
-				else if (iIsThereVacantSlot == 2)
-				{
-					biod = bTree.TempSlots[0];
-					ResetArray(bTree.TempSlots, null);
-					// Vacant in right, move the rightmost node item into the vacant slot in right.
 
-					bTree.DistributeSibling = this;
-					bTree.DistributeItem = biod;
-					bTree.DistributeLeftDirection = false;
-					//DistributeToRight(bTree, biod);
-				}
-				return;
-			}
+
+
+
+
+
+
 			if (bIsUnBalanced)
 			{
 				// if this branch is unbalanced..
@@ -305,12 +307,12 @@ func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item
 				ResetArray(ChildrenAddresses, -1);
 
 				//** save this TreeNode, Left & Right Nodes
-				leftNode.SaveNodeToDisk(bTree);
-				rightNode.SaveNodeToDisk(bTree);
+				leftNode.btree.SaveNode()
+				rightNode.btree.SaveNode()
 
 				ChildrenAddresses[(int) ChildNodes.LeftChild] = leftNode.GetAddress(bTree);
 				ChildrenAddresses[(int) ChildNodes.RightChild] = rightNode.GetAddress(bTree);
-				SaveNodeToDisk(bTree);
+				btree.SaveNode()
 				//**
 
 				ResetArray(bTree.TempSlots, null);
@@ -335,8 +337,8 @@ func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item
 			bTree.TempParent = bTree.TempSlots[slotsHalf];
 
 			//*** save this and Right Node
-			SaveNodeToDisk(bTree);
-			rightNode.SaveNodeToDisk(bTree);
+			btree.SaveNode()
+			rightNode.btree.SaveNode()
 
 			// assign the new children nodes.
 			bTree.TempParentChildren[(int) ChildNodes.LeftChild] = this.GetAddress(bTree);
@@ -371,8 +373,8 @@ func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item
 		Count = 1;
 
 		// save Left and Right Nodes
-		leftNode.SaveNodeToDisk(bTree);
-		rightNode.SaveNodeToDisk(bTree);
+		leftNode.btree.SaveNode()
+		rightNode.btree.SaveNode()
 
 		ChildrenAddresses = new long[bTree.SlotLength + 1];
 		ResetArray(ChildrenAddresses, -1);
@@ -380,9 +382,8 @@ func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item
 		ChildrenAddresses[(int)ChildNodes.RightChild] = rightNode.GetAddress(bTree);
 
 		//*** save this TreeNode
-		SaveNodeToDisk(bTree);
+		btree.SaveNode()
 		ResetArray(bTree.TempSlots, null);
-	*/
 
 	return false, nil
 }
@@ -409,34 +410,34 @@ func (node *Node[TKey, TValue]) isThereVacantSlotInLeft(btree *Btree[TKey, TValu
 	return false, nil
 }
 
-/*
-   /// <summary>
-   /// Returns true if a slot is available in right side siblings of this node modified to suit possible unbalanced branch.
-   /// </summary>
-   /// <param name="bTree">Parent BTree</param>
-   /// <param name="isUnBalanced">Will be updated to true if this branch is detected to be "unbalanced", else false</param>
-   /// <returns>true if there is a vacant slot, else false</returns>
-   private bool IsThereVacantSlotInRight(BTree.BTreeAlgorithm bTree, ref bool isUnBalanced)
-   {
-       isUnBalanced = false;
-       // start from this node.
-       BTreeNodeOnDisk temp = this;
-       while ((temp = temp.GetRightSibling(bTree)) != null)
-       {
-           if (temp.ChildrenAddresses != null)
-           {
-               isUnBalanced = true;
-               return false;
-           }
-           if (!temp.IsFull(bTree.SlotLength))
-               return true;
-       }
-       return false;
-   }
-*/
+/// <summary>
+/// Returns true if a slot is available in right side siblings of this node modified to suit possible unbalanced branch.
+/// </summary>
+/// <param name="bTree">Parent BTree</param>
+/// <param name="isUnBalanced">Will be updated to true if this branch is detected to be "unbalanced", else false</param>
+/// <returns>true if there is a vacant slot, else false</returns>
+func (node *Node[TKey, TValue]) isThereVacantSlotInRight(btree *Btree[TKey, TValue], isUnBalanced *bool) (bool, error) {
+	*isUnBalanced = false
+	// start from this node.
+	temp := node
+	for temp != nil {
+		if temp.childrenIds != nil {
+			*isUnBalanced = true
+			return false, nil
+		}
+		if !temp.isFull(btree.Store.NodeSlotCount) {
+			return true, nil
+		}
+		var err error
+		temp, err = temp.getRightSibling(btree)
+		if err != nil {
+			return false, err
+		}
+	}
+	return false, nil
+}
 
-// todo:
-// Returns left sibling or nil if finished traversing left nodes.
+// Returns left sibling or nil if finished traversing left side nodes.
 func (node *Node[TKey, TValue]) getLeftSibling(btree *Btree[TKey, TValue]) (*Node[TKey, TValue], error) {
 	index, err := node.getIndexOfNode(btree)
 	if err != nil {
@@ -446,11 +447,33 @@ func (node *Node[TKey, TValue]) getLeftSibling(btree *Btree[TKey, TValue]) (*Nod
 	if err != nil {
 		return nil, err
 	}
-	// if we are not at the leftmost sibling yet..
-	if index > 0 && p != nil && index <= p.itemCount() {
-		return p.getChild(btree, index-1)
+	if p != nil {
+		// If we are not at the leftmost sibling yet..
+		if index > 0 && index <= p.itemCount() {
+			return p.getChild(btree, index-1)
+		}
 	}
-	// leftmost was already reached..
+	// Leftmost was already reached..
+	return nil, nil
+}
+
+// Returns right sibling or nil if finished traversing right side nodes.
+func (node *Node[TKey, TValue]) getRightSibling(btree *Btree[TKey, TValue]) (*Node[TKey, TValue], error) {
+	index, err := node.getIndexOfNode(btree)
+	if err != nil {
+		return nil, err
+	}
+	p, err := node.getParent(btree)
+	if err != nil {
+		return nil, err
+	}
+	if p != nil {
+		// If we are not at the rightmost sibling yet..
+		if index < p.itemCount() {
+			return p.getChild(btree, index+1)
+		}
+	}
+	// Rightmost was already reached..
 	return nil, nil
 }
 
@@ -534,4 +557,12 @@ func (node *Node[TKey, TValue]) hasChildren() bool {
 
 func (node *Node[TKey, TValue]) itemCount() int {
 	return node.Count
+}
+
+func (node *Node[TKey, TValue]) DistributeToLeft(btree *Btree[TKey, TValue], item *Item[TKey, TValue]) error {
+	return nil
+}
+
+func (node *Node[TKey, TValue]) DistributeToRight(btree *Btree[TKey, TValue], item *Item[TKey, TValue]) error {
+	return nil
 }

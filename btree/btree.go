@@ -2,6 +2,7 @@ package btree
 
 import (
 	"fmt"
+	log "log/slog"
 )
 
 // Btree manages items using B-tree data structure and algorithm.
@@ -12,11 +13,20 @@ type Btree[TKey Comparable, TValue any] struct {
 	TempChildren   []UUID                        `json:"-"`
 	CurrentItemRef    CurrentItemRef             `json:"-"`
 	currentItem       *Item[TKey, TValue]
+	DistributeAction DistributeAction[TKey, TValue]
 }
 
 type CurrentItemRef struct {
 	NodeId        UUID
 	NodeItemIndex int
+}
+
+type DistributeAction[TKey Comparable, TValue any] struct {
+	Source *Node[TKey, TValue]
+	Item *Item[TKey, TValue]
+	// DistributeToLeft is true if item needs to be distributed to the left side,
+	// otherwise to the right side.
+	DistributeToLeft bool
 }
 
 func NewBtree[TKey Comparable, TValue any](store Store, si *StoreInterface[TKey, TValue]) *Btree[TKey, TValue] {
@@ -27,53 +37,6 @@ func NewBtree[TKey Comparable, TValue any](store Store, si *StoreInterface[TKey,
 		TempChildren:   make([]UUID, store.NodeSlotCount+2),
 	}
 	return &b3
-}
-
-func (btree *Btree[TKey, TValue]) rootNode() (*Node[TKey, TValue], error) {
-	// TODO: register root node to nodeRepository or the Transaction.
-	if btree.Store.RootNodeLogicalId.IsNil() {
-		// create new Root Node, if nil (implied new btree).
-		btree.Store.RootNodeLogicalId = NewUUID()
-		var root = NewNode[TKey, TValue](btree.Store.NodeSlotCount)
-		// Set both logical Id & physical Id to the same UUID to begin with.
-		// Transaction commit should handle resolving them.
-		root.logicalId = btree.Store.RootNodeLogicalId
-		root.Id = btree.Store.RootNodeLogicalId
-		return root, nil
-	}
-	h, err := btree.StoreInterface.VirtualIdRepository.Get(btree.Store.RootNodeLogicalId)
-	if err != nil {
-		return nil, err
-	}
-	root, err := btree.getNode(h.GetActiveId())
-	if err != nil {
-		return nil, err
-	}
-	if root == nil {
-		return nil, fmt.Errorf("Can't retrieve Root Node w/ logical Id '%s'", btree.Store.RootNodeLogicalId.ToString())
-	}
-	return root, nil
-}
-
-func (btree *Btree[TKey, TValue]) getNode(id UUID) (*Node[TKey, TValue], error) {
-	n, e := btree.StoreInterface.NodeRepository.Get(id)
-	if e != nil {
-		return nil, e
-	}
-	return n, nil
-}
-
-func (btree *Btree[TKey, TValue]) setCurrentItemId(nodeId UUID, itemIndex int) {
-	if btree.CurrentItemRef.NodeId == nodeId && btree.CurrentItemRef.NodeItemIndex == itemIndex {
-		return
-	}
-	btree.currentItem = nil
-	btree.CurrentItemRef.NodeId = nodeId
-	btree.CurrentItemRef.NodeItemIndex = itemIndex
-}
-
-func (btree *Btree[TKey, TValue]) isUnique() bool {
-	return btree.Store.IsUnique
 }
 
 // done
@@ -105,7 +68,8 @@ func (btree *Btree[TKey, TValue]) Add(key TKey, value TValue) (bool, error) {
 		}
 		return false, err
 	}
-	// Inrement store's item count.
+	distribute()
+	// Increment store's item count.
 	btree.Store.Count++
 	if localTrans {
 		err = btree.StoreInterface.Transaction.Commit()
@@ -159,32 +123,126 @@ func (btree *Btree[TKey, TValue]) GetCurrentItem() Item[TKey, TValue] {
 	return *btree.currentItem
 }
 
+// TODO
+func (btree *Btree[TKey, TValue]) AddIfNotExist(key TKey, value TValue) (bool, error) {
+	return false, nil
+}
+
+// TODO
 func (btree *Btree[TKey, TValue]) Update(key TKey, value TValue) (bool, error) {
 	return false, nil
 }
+
+// TODO
 func (btree *Btree[TKey, TValue]) UpdateCurrentItem(newValue TValue) (bool, error) {
 	return false, nil
 }
+
+// TODO
 func (btree *Btree[TKey, TValue]) Remove(key TKey) (bool, error) {
 	return false, nil
 }
+
+// TODO
 func (btree *Btree[TKey, TValue]) RemoveCurrentItem() (bool, error) {
 	return false, nil
 }
 
+// TODO
 func (btree *Btree[TKey, TValue]) MoveToFirst() (bool, error) {
 	return false, nil
 }
+
+// TODO
 func (btree *Btree[TKey, TValue]) MoveToLast() (bool, error) {
 	return false, nil
 }
+
+// TODO
 func (btree *Btree[TKey, TValue]) MoveToNext() (bool, error) {
 	return false, nil
 }
+
+// TODO
 func (btree *Btree[TKey, TValue]) MoveToPrevious() (bool, error) {
 	return false, nil
 }
 
+// TODO
 func (btree *Btree[TKey, TValue]) IsValueDataInNodeSegment() bool {
 	return btree.Store.IsValueDataInNodeSegment
+}
+
+// TODO
+// SaveNode will prepare & persist (if needed) the Node to the backend
+// via NodeRepository call.
+func (btree *Btree[TKey, TValue]) SaveNode(node *Node[TKey, TValue]) error {
+	return nil
+}
+
+
+func (btree *Btree[TKey, TValue]) rootNode() (*Node[TKey, TValue], error) {
+	// TODO: register root node to nodeRepository or the Transaction.
+	if btree.Store.RootNodeLogicalId.IsNil() {
+		// create new Root Node, if nil (implied new btree).
+		btree.Store.RootNodeLogicalId = NewUUID()
+		var root = NewNode[TKey, TValue](btree.Store.NodeSlotCount)
+		// Set both logical Id & physical Id to the same UUID to begin with.
+		// Transaction commit should handle resolving them.
+		root.logicalId = btree.Store.RootNodeLogicalId
+		root.Id = btree.Store.RootNodeLogicalId
+		return root, nil
+	}
+	h, err := btree.StoreInterface.VirtualIdRepository.Get(btree.Store.RootNodeLogicalId)
+	if err != nil {
+		return nil, err
+	}
+	root, err := btree.getNode(h.GetActiveId())
+	if err != nil {
+		return nil, err
+	}
+	if root == nil {
+		return nil, fmt.Errorf("Can't retrieve Root Node w/ logical Id '%s'", btree.Store.RootNodeLogicalId.ToString())
+	}
+	return root, nil
+}
+
+func (btree *Btree[TKey, TValue]) getNode(id UUID) (*Node[TKey, TValue], error) {
+	n, e := btree.StoreInterface.NodeRepository.Get(id)
+	if e != nil {
+		return nil, e
+	}
+	return n, nil
+}
+
+func (btree *Btree[TKey, TValue]) setCurrentItemId(nodeId UUID, itemIndex int) {
+	if btree.CurrentItemRef.NodeId == nodeId && btree.CurrentItemRef.NodeItemIndex == itemIndex {
+		return
+	}
+	btree.currentItem = nil
+	btree.CurrentItemRef.NodeId = nodeId
+	btree.CurrentItemRef.NodeItemIndex = itemIndex
+}
+
+func (btree *Btree[TKey, TValue]) isUnique() bool {
+	return btree.Store.IsUnique
+}
+
+func (btree *Btree[TKey, TValue])distribute() {
+	if btree.DistributeAction.Source != nil {
+		log.Debug("Distribute item with key(%v) of node Id(%v) to left(%v).",
+			btree.DistributeAction.Item.Key, btree.DistributeAction.Source.Id, btree.DistributeAction.DistributeToLeft)
+	}
+	for btree.DistributeAction.Source != nil {
+		n := btree.DistributeAction.Source
+		btree.DistributeAction.Source = nil
+		item := btree.DistributeAction.Item
+		btree.DistributeAction.Item = nil
+
+		if btree.DistributeAction.DistributeToLeft {
+			n.DistributeToLeft(btree, item)
+		} else {
+			n.DistributeToRight(btree, item)
+		}
+	}
 }
