@@ -14,15 +14,15 @@ func (conn *CC) NewUUID() btree.UUID {
 	return btree.UUID(gocql.UUIDFromTime(time.Now()))
 }
 
-func (conn *CC) Add(vid btree.VirtualID) error {
+func (conn *CC) Add(vid btree.VirtualId) error {
 	return nil
 }
 
-func (conn *CC) Update(vid btree.VirtualID) error {
+func (conn *CC) Update(vid btree.VirtualId) error {
 	return nil
 }
-func (conn *CC) Get(logicalID btree.UUID) (btree.VirtualID, error) {
-	return btree.VirtualID{}, nil
+func (conn *CC) Get(logicalID btree.UUID) (btree.VirtualId, error) {
+	return btree.VirtualId{}, nil
 }
 func (conn *CC) Remove(logicalID btree.UUID) error {
 	return nil

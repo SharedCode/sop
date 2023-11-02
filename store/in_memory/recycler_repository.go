@@ -11,7 +11,7 @@ type Recyclable struct {
 	btree.Recyclable
 }
 
-func NewRecycler() btree.RecyclerRepository {
+func newRecycler() btree.RecyclerRepository {
 	return Recyclable{}
 }
 

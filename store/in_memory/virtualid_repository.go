@@ -6,7 +6,7 @@ import (
 
 type in_memory struct{}
 
-func NewVirtualIdRepository() btree.VirtualIdRepository {
+func newVirtualIdRepository() btree.VirtualIdRepository {
 	return &in_memory{}
 }
 

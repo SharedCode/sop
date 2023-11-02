@@ -4,28 +4,34 @@ package btree
 // required by Btree. It is needed so we can support different backend storage.
 
 // BtreeInterface defines publicly callable methods of Btree.
-type BtreeInterface[TKey Comparable, TValue any] interface {
-	Add(key TKey, value TValue) (bool, error)
-	AddIfNotExist(key TKey, value TValue) (bool, error)
+type BtreeInterface[TK Comparable, TV any] interface {
+	// Add adds an item to the b-tree and does not check for duplicates.
+	Add(key TK, value TV) (bool, error)
+	// AddIfNotExist adds an item if there is no item matching the key yet.
+	// Otherwise, it will do nothing and return false, for not adding the item.
+	// This is useful for cases one wants to add an item without creating a duplicate entry.
+	AddIfNotExist(key TK, value TV) (bool, error)
 	// FindOne will search Btree for an item with a given key. Return true if found,
 	// otherwise false. firstItemWithKey is useful when there are items with same key.
 	// true will position pointer to the first item with the given key,
 	// according to key ordering sequence.
-	FindOne(key TKey, firstItemWithKey bool) (bool, error)
+	FindOne(key TK, firstItemWithKey bool) (bool, error)
 	// GetCurrentKey returns the current item's key.
-	GetCurrentKey() TKey
+	GetCurrentKey() TK
 	// GetCurrentValue returns the current item's value.
-	GetCurrentValue() TValue
+	GetCurrentValue() TV
 	// Update finds the item with key and update its value to the value argument.
-	Update(key TKey, value TValue) (bool, error)
+	Update(key TK, value TV) (bool, error)
 	// UpdateCurrentItem will update the Value of the current item.
 	// Key is read-only, thus, no argument for the key.
-	UpdateCurrentItem(newValue TValue) (bool, error)
+	UpdateCurrentItem(newValue TV) (bool, error)
 	// Remove will find the item with a given key then remove that item.
-	Remove(key TKey) (bool, error)
+	Remove(key TK) (bool, error)
 	// RemoveCurrentItem will remove the current key/value pair from the store.
 	RemoveCurrentItem() (bool, error)
 
+	// Cursor like "move" functions. Use the CurrentKey/CurrentValue to retrieve the
+	// "current item" details(key &/or value).
 	MoveToFirst() (bool, error)
 	MoveToLast() (bool, error)
 	MoveToNext() (bool, error)
@@ -37,19 +43,20 @@ type BtreeInterface[TKey Comparable, TValue any] interface {
 
 // StoreRepository interface specifies the store repository.
 type StoreRepository interface {
-	Get(name string) Store
+	Get(name string) (Store, error)
 	Add(Store) error
 	Remove(name string) error
 }
 
 // NodeRepository interface specifies the node repository.
-type NodeRepository[TKey Comparable, TValue any] interface {
-	Get(nodeId UUID) (*Node[TKey, TValue], error)
-	Add(*Node[TKey, TValue]) error
-	Update(*Node[TKey, TValue]) error
+type NodeRepository[TK Comparable, TV any] interface {
+	Get(nodeId UUID) (*Node[TK, TV], error)
+	Add(*Node[TK, TV]) error
+	Update(*Node[TK, TV]) error
 	Remove(nodeId UUID) error
 }
 
+// VirtualIdRepository interface specifies the "virtualized Id" repository, a.k.a. Id registry.
 type VirtualIdRepository interface {
 	Get(lid UUID) (Handle, error)
 	Add(Handle) error
@@ -71,14 +78,6 @@ type TransactionRepository interface {
 	Add([]TransactionEntry) error
 	//Update([]TransactionEntry) error
 	MarkDone([]TransactionEntry) error
-}
-
-// PhasedTransaction defines the "SOP internal" transaction methods.
-type PhasedTransaction interface {
-	Begin() error
-	CommitPhase1() error
-	CommitPhase2() error
-	Rollback() error
 }
 
 // Transaction interface defines the "enduser facing" transaction methods.

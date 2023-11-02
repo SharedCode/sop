@@ -5,23 +5,25 @@ import (
 )
 
 // Item contains key & value pair, plus the version number.
-type Item[TKey Comparable, TValue any] struct {
-	Key             TKey
-	// Value is saved nil if data is to be persisted in the "data segment"(& ValudId set to a valid UUID),
+type Item[TK Comparable, TV any] struct {
+	// Key is the key part in key/value pair.
+	Key TK
+	// Value is saved nil if data is to be persisted in the "data segment"(& ValueId set to a valid UUID),
 	// otherwise it should point to the actual data and persisted in B-Tree Node segment together with the Key.
-	Value           *TValue
-	// ValueId should be a valid reference to the Id of the data if it is saved in the "data segment".
-	ValueId         UUID
+	Value *TV
+	// ValueLogicalId should be a valid (logical) Id of the data if it is saved in the "data segment",
+	// otherwise this should be nil(unused).
+	ValueLogicalId  UUID
 	Version         int
 	valueNeedsFetch bool
 }
 
 // Node contains a B-Tree node's data.
-type Node[TKey Comparable, TValue any] struct {
+type Node[TK Comparable, TV any] struct {
 	Id                 UUID
 	ParentId           UUID
 	ChildrenLogicalIds []UUID
-	Slots              []*Item[TKey, TValue]
+	Slots              []*Item[TK, TV]
 	Count              int
 	Version            int
 	IsDeleted          bool
@@ -31,17 +33,17 @@ type Node[TKey Comparable, TValue any] struct {
 	childrenIds        []UUID
 }
 
-func NewNode[TKey Comparable, TValue any](slotCount int) *Node[TKey, TValue] {
-	return &Node[TKey, TValue]{
-		Slots:       make([]*Item[TKey, TValue], slotCount),
+func NewNode[TK Comparable, TV any](slotCount int) *Node[TK, TV] {
+	return &Node[TK, TV]{
+		Slots:       make([]*Item[TK, TV], slotCount),
 		indexOfNode: -1,
 	}
 }
 
-func (node *Node[TKey, TValue]) add(btree *Btree[TKey, TValue], item *Item[TKey, TValue]) (bool, error) {
+func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, error) {
 	var currentNode = node
 	var index int
-	var parent *Node[TKey, TValue]
+	var parent *Node[TK, TV]
 	for {
 		var itemExists bool
 		index, itemExists = currentNode.getIndexToInsertTo(btree, item)
@@ -77,7 +79,7 @@ func (node *Node[TKey, TValue]) add(btree *Btree[TKey, TValue], item *Item[TKey,
 	return true, nil
 }
 
-func (node *Node[TKey, TValue]) saveNode(btree *Btree[TKey, TValue]) error {
+func (node *Node[TK, TV]) saveNode(btree *Btree[TK, TV]) error {
 	if node.Id.IsNil() {
 		node.Id = NewUUID()
 		return btree.StoreInterface.NodeRepository.Add(node)
@@ -85,7 +87,7 @@ func (node *Node[TKey, TValue]) saveNode(btree *Btree[TKey, TValue]) error {
 	return btree.StoreInterface.NodeRepository.Update(node)
 }
 
-func (node *Node[TKey, TValue]) find(btree *Btree[TKey, TValue], key TKey, firstItemWithKey bool) (bool, error) {
+func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bool) (bool, error) {
 	n := node
 	foundItemIndex := 0
 	foundNodeId := NilUUID
@@ -156,7 +158,7 @@ func (node *Node[TKey, TValue]) find(btree *Btree[TKey, TValue], key TKey, first
 	return false, nil
 }
 
-func (node *Node[TKey, TValue]) moveToNext(btree *Btree[TKey, TValue]) (bool, error) {
+func (node *Node[TK, TV]) moveToNext(btree *Btree[TK, TV]) (bool, error) {
 	n := node
 	slotIndex := btree.CurrentItemRef.NodeItemIndex
 	slotIndex++
@@ -210,7 +212,7 @@ func (node *Node[TKey, TValue]) moveToNext(btree *Btree[TKey, TValue]) (bool, er
 
 // Outermost(a.k.a. leaf) node, the end of the recursive traversing thru all inner nodes of the Btree.
 // Correct Node is reached at this point!
-func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item[TKey, TValue], index int, parent *Node[TKey, TValue]) (bool, error) {
+func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], index int, parent *Node[TK, TV]) (bool, error) {
 	// If node is not yet full.
 	if node.itemCount() < btree.Store.NodeSlotCount {
 		// Insert the Item to target position & "skud" over the items to the right.
@@ -229,8 +231,8 @@ func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item
 	// Set the item to the newly vacated slot.
 	btree.TempSlots[index] = item
 
-	var slotsHalf = btree.Store.NodeSlotCount >> 1
-	var rightNode, leftNode *Node[TKey, TValue]
+	// var slotsHalf = btree.Store.NodeSlotCount >> 1
+	// var rightNode, leftNode *Node[TK, TV]
 	var isVacantSlotInLeft, isVacantSlotInRight bool
 	var err error
 
@@ -249,147 +251,141 @@ func (node *Node[TKey, TValue]) addOnLeaf(btree *Btree[TKey, TValue], item *Item
 	if isVacantSlotInLeft || isVacantSlotInRight {
 		// Distribute to either left or right sibling the overflowed item.
 		// Copy temp buffer contents to the actual slots.
-		var b short = 1
+		var b int16 = 1
 		if isVacantSlotInLeft {
 			b = 0
 		}
 		copy(btree.TempSlots[b:], node.Slots)
 		// Save this node.
-		btree.SaveNode(node)
+		btree.saveNode(node)
 
 		btree.DistributeAction.Source = node
-		if (isVacantSlotInLeft){
-			btree.DistributeAction.Item = bTree.TempSlots[bTree.SlotLength]
+		if isVacantSlotInLeft {
+			btree.DistributeAction.Item = btree.TempSlots[btree.Store.NodeSlotCount]
 			clear(btree.TempSlots)
 
 			// Vacant in left, create a distribution action request to B-Tree.
 			// Logic is: "skud over" the leftmost node's item to parent and the item
 			// on parent to left sibling node (recursively).
 			btree.DistributeAction.DistributeToLeft = true
-			return
+			return true, nil
 		}
-		btree.DistributeAction.Item = bTree.TempSlots[0]
+		btree.DistributeAction.Item = btree.TempSlots[0]
 		clear(btree.TempSlots)
 		// Vacant in right, move the rightmost node item into the vacant slot in right.
 		btree.DistributeAction.DistributeToLeft = false
-		return
+		return true, nil
 	}
 
+	// TODO:
+	// 	if (bIsUnBalanced)
+	// 	{
+	// 		// if this branch is unbalanced..
+	// 		// _BreakNode
+	// 		// Description :
+	// 		// -copy the left half of the slots
+	// 		// -copy the right half of the slots
+	// 		// -zero out the current slot.
+	// 		// -copy the middle slot
+	// 		// -allocate memory for children node *s
+	// 		// -assign the new children nodes.
 
+	// 		// Initialize should throw an exception if in error.
+	// 		rightNode = CreateNode(bTree, this.GetAddress(bTree));
+	// 		leftNode = CreateNode(bTree, this.GetAddress(bTree));
+	// 		CopyArrayElements(bTree.TempSlots, 0, leftNode.Slots, 0, slotsHalf);
+	// 		leftNode.itemCount() = slotsHalf;
+	// 		CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
+	// 		rightNode.itemCount() = slotsHalf;
+	// 		ResetArray(Slots, null);
+	// 		Slots[0] = bTree.TempSlots[slotsHalf];
+	// 		ChildrenAddresses = new long[bTree.SlotLength + 1];
+	// 		ResetArray(ChildrenAddresses, -1);
 
+	// 		//** save this TreeNode, Left & Right Nodes
+	// 		leftNode.btree.SaveNode()
+	// 		rightNode.btree.SaveNode()
 
+	// 		ChildrenAddresses[(int) ChildNodes.LeftChild] = leftNode.GetAddress(bTree);
+	// 		ChildrenAddresses[(int) ChildNodes.RightChild] = rightNode.GetAddress(bTree);
+	// 		btree.SaveNode()
+	// 		//**
 
+	// 		ResetArray(bTree.TempSlots, null);
+	// 		return;
+	// 	}
+	// 	// All slots are occupied in this and other siblings' nodes..
 
+	// 	// prepare this and the right node sibling and promote the temporary parent node(pTempSlot).
+	// 	rightNode = CreateNode(bTree, ParentAddress);
+	// 	// zero out the current slot.
+	// 	ResetArray(Slots, null);
+	// 	RemoveFromBTreeBlocksCache(bTree, this);
 
+	// 	// copy the left half of the slots to left sibling
+	// 	CopyArrayElements(bTree.TempSlots, 0, Slots, 0, slotsHalf);
+	// 	Count = slotsHalf;
+	// 	// copy the right half of the slots to right sibling
+	// 	CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
+	// 	rightNode.itemCount() = slotsHalf;
 
-			if (bIsUnBalanced)
-			{
-				// if this branch is unbalanced..
-				// _BreakNode
-				// Description :
-				// -copy the left half of the slots
-				// -copy the right half of the slots
-				// -zero out the current slot.
-				// -copy the middle slot
-				// -allocate memory for children node *s
-				// -assign the new children nodes.
+	// 	// copy the middle slot to temp parent slot.
+	// 	bTree.TempParent = bTree.TempSlots[slotsHalf];
 
-				// Initialize should throw an exception if in error.
-				rightNode = CreateNode(bTree, this.GetAddress(bTree));
-				leftNode = CreateNode(bTree, this.GetAddress(bTree));
-				CopyArrayElements(bTree.TempSlots, 0, leftNode.Slots, 0, slotsHalf);
-				leftNode.itemCount() = slotsHalf;
-				CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
-				rightNode.itemCount() = slotsHalf;
-				ResetArray(Slots, null);
-				Slots[0] = bTree.TempSlots[slotsHalf];
-				ChildrenAddresses = new long[bTree.SlotLength + 1];
-				ResetArray(ChildrenAddresses, -1);
+	// 	//*** save this and Right Node
+	// 	btree.SaveNode()
+	// 	rightNode.btree.SaveNode()
 
-				//** save this TreeNode, Left & Right Nodes
-				leftNode.btree.SaveNode()
-				rightNode.btree.SaveNode()
+	// 	// assign the new children nodes.
+	// 	bTree.TempParentChildren[(int) ChildNodes.LeftChild] = this.GetAddress(bTree);
+	// 	bTree.TempParentChildren[(int) ChildNodes.RightChild] = rightNode.GetAddress(bTree);
 
-				ChildrenAddresses[(int) ChildNodes.LeftChild] = leftNode.GetAddress(bTree);
-				ChildrenAddresses[(int) ChildNodes.RightChild] = rightNode.GetAddress(bTree);
-				btree.SaveNode()
-				//**
+	// 	BTreeNodeOnDisk o = parent ?? GetParent(bTree);
+	// 	if (o == null)
+	// 		throw new SopException(string.Format("Can't get parent (Id='{0}') of this Node.", ParentAddress));
 
-				ResetArray(bTree.TempSlots, null);
-				return;
-			}
-			// All slots are occupied in this and other siblings' nodes..
+	// 	bTree.PromoteParent = o;
+	// 	bTree.PromoteIndexOfNode = GetIndexOfNode(bTree);
+	// 	return;
+	// }
+	// // _BreakNode
+	// // Description :
+	// // -copy the left half of the temp slots
+	// // -copy the right half of the temp slots
+	// // -zero out the current slot.
+	// // -copy the middle of temp slot to 1st elem of current slot
+	// // -allocate memory for children node *s
+	// // -assign the new children nodes.
+	// rightNode = CreateNode(bTree, GetAddress(bTree));
+	// leftNode = CreateNode(bTree, GetAddress(bTree));
+	// CopyArrayElements(bTree.TempSlots, 0, leftNode.Slots, 0, slotsHalf);
+	// leftNode.itemCount() = slotsHalf;
+	// CopyArrayElements(bTree.TempSlots, (short)(slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
+	// rightNode.itemCount() = slotsHalf;
+	// ResetArray(Slots, null);
+	// Slots[0] = bTree.TempSlots[slotsHalf];
+	// RemoveFromBTreeBlocksCache(bTree, this);
 
-			// prepare this and the right node sibling and promote the temporary parent node(pTempSlot).
-			rightNode = CreateNode(bTree, ParentAddress);
-			// zero out the current slot.
-			ResetArray(Slots, null);
-			RemoveFromBTreeBlocksCache(bTree, this);
+	// Count = 1;
 
-			// copy the left half of the slots to left sibling
-			CopyArrayElements(bTree.TempSlots, 0, Slots, 0, slotsHalf);
-			Count = slotsHalf;
-			// copy the right half of the slots to right sibling
-			CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
-			rightNode.itemCount() = slotsHalf;
+	// // save Left and Right Nodes
+	// leftNode.btree.SaveNode()
+	// rightNode.btree.SaveNode()
 
-			// copy the middle slot to temp parent slot.
-			bTree.TempParent = bTree.TempSlots[slotsHalf];
+	// ChildrenAddresses = new long[bTree.SlotLength + 1];
+	// ResetArray(ChildrenAddresses, -1);
+	// ChildrenAddresses[(int)ChildNodes.LeftChild] = leftNode.GetAddress(bTree);
+	// ChildrenAddresses[(int)ChildNodes.RightChild] = rightNode.GetAddress(bTree);
 
-			//*** save this and Right Node
-			btree.SaveNode()
-			rightNode.btree.SaveNode()
-
-			// assign the new children nodes.
-			bTree.TempParentChildren[(int) ChildNodes.LeftChild] = this.GetAddress(bTree);
-			bTree.TempParentChildren[(int) ChildNodes.RightChild] = rightNode.GetAddress(bTree);
-
-			BTreeNodeOnDisk o = parent ?? GetParent(bTree);
-			if (o == null)
-				throw new SopException(string.Format("Can't get parent (Id='{0}') of this Node.", ParentAddress));
-
-			bTree.PromoteParent = o;
-			bTree.PromoteIndexOfNode = GetIndexOfNode(bTree);
-			return;
-		}
-		// _BreakNode
-		// Description :
-		// -copy the left half of the temp slots
-		// -copy the right half of the temp slots
-		// -zero out the current slot.
-		// -copy the middle of temp slot to 1st elem of current slot
-		// -allocate memory for children node *s
-		// -assign the new children nodes.
-		rightNode = CreateNode(bTree, GetAddress(bTree));
-		leftNode = CreateNode(bTree, GetAddress(bTree));
-		CopyArrayElements(bTree.TempSlots, 0, leftNode.Slots, 0, slotsHalf);
-		leftNode.itemCount() = slotsHalf;
-		CopyArrayElements(bTree.TempSlots, (short)(slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
-		rightNode.itemCount() = slotsHalf;
-		ResetArray(Slots, null);
-		Slots[0] = bTree.TempSlots[slotsHalf];
-		RemoveFromBTreeBlocksCache(bTree, this);
-
-		Count = 1;
-
-		// save Left and Right Nodes
-		leftNode.btree.SaveNode()
-		rightNode.btree.SaveNode()
-
-		ChildrenAddresses = new long[bTree.SlotLength + 1];
-		ResetArray(ChildrenAddresses, -1);
-		ChildrenAddresses[(int)ChildNodes.LeftChild] = leftNode.GetAddress(bTree);
-		ChildrenAddresses[(int)ChildNodes.RightChild] = rightNode.GetAddress(bTree);
-
-		//*** save this TreeNode
-		btree.SaveNode()
-		ResetArray(bTree.TempSlots, null);
+	// //*** save this TreeNode
+	// btree.SaveNode()
+	// ResetArray(bTree.TempSlots, null);
 
 	return false, nil
 }
 
 // Returns true if a slot is available in left side siblings of this node modified to suit possible unbalanced branch.
-func (node *Node[TKey, TValue]) isThereVacantSlotInLeft(btree *Btree[TKey, TValue], isUnBalanced *bool) (bool, error) {
+func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
 	*isUnBalanced = false
 	// start from this node.
 	temp := node
@@ -410,13 +406,13 @@ func (node *Node[TKey, TValue]) isThereVacantSlotInLeft(btree *Btree[TKey, TValu
 	return false, nil
 }
 
-/// <summary>
-/// Returns true if a slot is available in right side siblings of this node modified to suit possible unbalanced branch.
-/// </summary>
-/// <param name="bTree">Parent BTree</param>
-/// <param name="isUnBalanced">Will be updated to true if this branch is detected to be "unbalanced", else false</param>
-/// <returns>true if there is a vacant slot, else false</returns>
-func (node *Node[TKey, TValue]) isThereVacantSlotInRight(btree *Btree[TKey, TValue], isUnBalanced *bool) (bool, error) {
+// / <summary>
+// / Returns true if a slot is available in right side siblings of this node modified to suit possible unbalanced branch.
+// / </summary>
+// / <param name="bTree">Parent BTree</param>
+// / <param name="isUnBalanced">Will be updated to true if this branch is detected to be "unbalanced", else false</param>
+// / <returns>true if there is a vacant slot, else false</returns>
+func (node *Node[TK, TV]) isThereVacantSlotInRight(btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
 	*isUnBalanced = false
 	// start from this node.
 	temp := node
@@ -438,7 +434,7 @@ func (node *Node[TKey, TValue]) isThereVacantSlotInRight(btree *Btree[TKey, TVal
 }
 
 // Returns left sibling or nil if finished traversing left side nodes.
-func (node *Node[TKey, TValue]) getLeftSibling(btree *Btree[TKey, TValue]) (*Node[TKey, TValue], error) {
+func (node *Node[TK, TV]) getLeftSibling(btree *Btree[TK, TV]) (*Node[TK, TV], error) {
 	index, err := node.getIndexOfNode(btree)
 	if err != nil {
 		return nil, err
@@ -458,7 +454,7 @@ func (node *Node[TKey, TValue]) getLeftSibling(btree *Btree[TKey, TValue]) (*Nod
 }
 
 // Returns right sibling or nil if finished traversing right side nodes.
-func (node *Node[TKey, TValue]) getRightSibling(btree *Btree[TKey, TValue]) (*Node[TKey, TValue], error) {
+func (node *Node[TK, TV]) getRightSibling(btree *Btree[TK, TV]) (*Node[TK, TV], error) {
 	index, err := node.getIndexOfNode(btree)
 	if err != nil {
 		return nil, err
@@ -478,7 +474,7 @@ func (node *Node[TKey, TValue]) getRightSibling(btree *Btree[TKey, TValue]) (*No
 }
 
 // Returns index of this node relative to parent.
-func (node *Node[TKey, TValue]) getIndexOfNode(btree *Btree[TKey, TValue]) (int, error) {
+func (node *Node[TK, TV]) getIndexOfNode(btree *Btree[TK, TV]) (int, error) {
 	parent, err := node.getParent(btree)
 	if err != nil {
 		return -1, err
@@ -501,24 +497,24 @@ func (node *Node[TKey, TValue]) getIndexOfNode(btree *Btree[TKey, TValue]) (int,
 	return 0, nil
 }
 
-func (node *Node[TKey, TValue]) getParent(btree *Btree[TKey, TValue]) (*Node[TKey, TValue], error) {
+func (node *Node[TK, TV]) getParent(btree *Btree[TK, TV]) (*Node[TK, TV], error) {
 	if node.ParentId.IsNil() {
 		return nil, nil
 	}
 	return btree.getNode(node.ParentId)
 }
 
-func (node *Node[TKey, TValue]) isFull(slotCount int) bool {
+func (node *Node[TK, TV]) isFull(slotCount int) bool {
 	return node.itemCount() >= slotCount
 }
 
-func (node *Node[TKey, TValue]) insertSlotItem(item *Item[TKey, TValue], position int) {
+func (node *Node[TK, TV]) insertSlotItem(item *Item[TK, TV], position int) {
 	copy(node.Slots[position+1:], node.Slots[position:])
 	node.Slots[position] = item
 	node.Count++
 }
 
-func (node *Node[TKey, TValue]) getIndexToInsertTo(btree *Btree[TKey, TValue], item *Item[TKey, TValue]) (int, bool) {
+func (node *Node[TK, TV]) getIndexToInsertTo(btree *Btree[TK, TV], item *Item[TK, TV]) (int, bool) {
 	if node.itemCount() == 0 {
 		// empty node.
 		return 0, false
@@ -542,7 +538,7 @@ func (node *Node[TKey, TValue]) getIndexToInsertTo(btree *Btree[TKey, TValue], i
 // TODO: Resolve story of fetching Nodes via logical Id vs. physical Id. Example, in a transaction,
 // like when adding an item, newly created nodes need to be using UUID that then becomes logical Id
 // during commit. When working with Children logical Ids(saved in backend!), we need to convert logical to physical Id.
-func (node *Node[TKey, TValue]) getChild(btree *Btree[TKey, TValue], childSlotIndex int) (*Node[TKey, TValue], error) {
+func (node *Node[TK, TV]) getChild(btree *Btree[TK, TV], childSlotIndex int) (*Node[TK, TV], error) {
 	h, err := btree.StoreInterface.VirtualIdRepository.Get(node.ChildrenLogicalIds[childSlotIndex])
 	if err != nil {
 		return nil, err
@@ -551,18 +547,18 @@ func (node *Node[TKey, TValue]) getChild(btree *Btree[TKey, TValue], childSlotIn
 }
 
 // hasChildren returns true if node has children or not.
-func (node *Node[TKey, TValue]) hasChildren() bool {
+func (node *Node[TK, TV]) hasChildren() bool {
 	return node.childrenIds != nil || node.ChildrenLogicalIds != nil
 }
 
-func (node *Node[TKey, TValue]) itemCount() int {
+func (node *Node[TK, TV]) itemCount() int {
 	return node.Count
 }
 
-func (node *Node[TKey, TValue]) DistributeToLeft(btree *Btree[TKey, TValue], item *Item[TKey, TValue]) error {
+func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, TV]) error {
 	return nil
 }
 
-func (node *Node[TKey, TValue]) DistributeToRight(btree *Btree[TKey, TValue], item *Item[TKey, TValue]) error {
+func (node *Node[TK, TV]) distributeToRight(btree *Btree[TK, TV], item *Item[TK, TV]) error {
 	return nil
 }

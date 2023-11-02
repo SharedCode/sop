@@ -19,7 +19,7 @@ func TestBtreeBasic(t *testing.T) {
 // TODO: support node breakup! this test fails until such feature is implemented.
 func testBtreeAddLoop(t *testing.T, n int) {
 	fmt.Printf("btree %d loop test\n\n", n)
-	btree, _ := in_memory.NewStore[string, string]()
+	btree, _ := in_memory.NewBtree[string, string]()
 	for i := 0; i < n; i++ {
 		k := fmt.Sprintf("foo%d", i)
 		v := fmt.Sprintf("bar%d", i)

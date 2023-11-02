@@ -2,22 +2,22 @@ package aws_s3
 
 import "github.com/SharedCode/sop/btree"
 
-type Node[TKey btree.Comparable, TValue any] btree.Node[TKey, TValue]
+type Node[TK btree.Comparable, TV any] btree.Node[TK, TV]
 
-func NewNodeRepository[TKey btree.Comparable, TValue any]() btree.NodeRepository[TKey, TValue] {
-	return Node[TKey, TValue]{}
+func NewNodeRepository[TK btree.Comparable, TV any]() btree.NodeRepository[TK, TV] {
+	return &Node[TK, TV]{}
 }
 
-func (Node[TKey, TValue]) Add(n *btree.Node[TKey, TValue]) error {
+func (Node[TK, TV]) Add(n *btree.Node[TK, TV]) error {
 	return nil
 }
 
-func (Node[TKey, TValue]) Update(n *btree.Node[TKey, TValue]) error {
+func (Node[TK, TV]) Update(n *btree.Node[TK, TV]) error {
 	return nil
 }
-func (Node[TKey, TValue]) Get(nodeID sop.UUID) (*btree.Node[TKey, TValue], error) {
-	return &btree.Node[TKey, TValue]{}, nil
+func (Node[TK, TV]) Get(nodeId btree.UUID) (*btree.Node[TK, TV], error) {
+	return &btree.Node[TK, TV]{}, nil
 }
-func (Node[TKey, TValue]) Remove(nodeID btree.Handle) error {
+func (Node[TK, TV]) Remove(nodeID btree.UUID) error {
 	return nil
 }

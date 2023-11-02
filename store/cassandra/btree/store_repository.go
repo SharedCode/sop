@@ -8,9 +8,9 @@ func NewStoreRepository() btree.StoreRepository {
 	return Store{}
 }
 
-func (Store) Get(name string) btree.Store {
+func (Store) Get(name string) (btree.Store , error){
 	// todo
-	return btree.Store{}
+	return btree.Store{}, nil
 }
 
 func (Store) Add(source btree.Store) error {
