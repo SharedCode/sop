@@ -73,7 +73,6 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 		return false, err
 	}
 	// Registers the root node to the transaction manager so it can get saved if needed.
-	btree.StoreInterface.TransactionManager.Add(node)
 	btree.distribute()
 	// Increment store's item count.
 	btree.Store.Count++

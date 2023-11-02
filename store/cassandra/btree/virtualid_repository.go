@@ -1,10 +1,11 @@
 package btree
 
 import (
+	"time"
+	"github.com/gocql/gocql"
+
 	"github.com/SharedCode/sop/btree"
 	cass "github.com/SharedCode/sop/store/cassandra"
-	"github.com/gocql/gocql"
-	"time"
 )
 
 type CC cass.Connection

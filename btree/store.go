@@ -1,7 +1,5 @@
 package btree
 
-import "github.com/SharedCode/sop/btree"
-
 // Store contains a given (B-Tree) store details.
 type Store struct {
 	// Name of this (B-Tree store).
@@ -111,7 +109,7 @@ const (
 // Their items do. New Stores are cached in-memory and get saved (conflict resolved)
 // during Transaction Commit.
 type TransactionEntry struct {
-	EntityLogicalId btree.UUID
+	EntityLogicalId UUID
 	EntityType EntityType
 	Sequence  int
 	Action    TransactionActionType

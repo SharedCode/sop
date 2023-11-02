@@ -9,7 +9,7 @@ const itemsPerNode = 4
 // how you use a Map. Implemented in SOP so we can mockup the (structural composition & interfaces of)
 // B-Tree and write some unit tests on it, but feel free to use it in your discretion if you have a use for it.
 func NewBtree[TK btree.Comparable, TV any]() (btree.BtreeInterface[TK, TV], error) {
-	transactionManager := NewTransactionManager[TK,TV]()
+	transactionManager := newTransactionManager[TK,TV]()
 	s := btree.NewStore("", itemsPerNode, false, true)
 	transactionManager.storeInterface.StoreRepository.Add(s)
 	return btree.NewBtree[TK, TV](s, transactionManager.storeInterface), nil

@@ -1,7 +1,10 @@
 package cache
 
-import "testing"
-import "fmt"
+import(
+	"context"
+	"fmt"
+	"testing"
+)
 
 type user struct {
 	Username  string `json:"username"`
@@ -15,7 +18,8 @@ func TestBasicUse(t *testing.T) {
 	option := DefaultOptions()
 	c := NewClient(option)
 
-	item, _ := c.Get("key")
+	ctx := context.Background()
+	item, _ := c.Get(ctx, "key")
 
 	fmt.Println(item)
 
@@ -40,7 +44,7 @@ func TestBasicUse(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	usr2, err = c.GetStruct("fooBar", &user{})
+	usr2, err = c.GetStruct(ctx, "fooBar", &user{})
 	if err == nil {
 		t.Error("Struct foo still exists after delete.")
 	}

@@ -4,26 +4,26 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
-type in_memory struct{}
+type vid_repository struct{}
 
 func newVirtualIdRepository() btree.VirtualIdRepository {
-	return &in_memory{}
+	return &vid_repository{}
 }
 
-func (conn *in_memory) Add(h btree.Handle) error {
+func (conn *vid_repository) Add(h btree.Handle) error {
 	return nil
 }
 
-func (conn *in_memory) Update(h btree.Handle) error {
+func (conn *vid_repository) Update(h btree.Handle) error {
 	return nil
 }
-func (conn *in_memory) Get(logicalID btree.UUID) (btree.Handle, error) {
+func (conn *vid_repository) Get(logicalID btree.UUID) (btree.Handle, error) {
 	return btree.Handle{
 		LogicalId: logicalID,
 		PhysicalIdA: logicalID,
 	}, nil
 }
-func (conn *in_memory) Remove(logicalID btree.UUID) error {
+func (conn *vid_repository) Remove(logicalID btree.UUID) error {
 	return nil
 }
 
