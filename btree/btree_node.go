@@ -33,7 +33,7 @@ type Node[TK Comparable, TV any] struct {
 	childrenIds        []UUID
 }
 
-func NewNode[TK Comparable, TV any](slotCount int) *Node[TK, TV] {
+func newNode[TK Comparable, TV any](slotCount int) *Node[TK, TV] {
 	return &Node[TK, TV]{
 		Slots:       make([]*Item[TK, TV], slotCount),
 		indexOfNode: -1,
@@ -160,7 +160,7 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 
 func (node *Node[TK, TV]) moveToNext(btree *Btree[TK, TV]) (bool, error) {
 	n := node
-	slotIndex := btree.CurrentItemRef.NodeItemIndex
+	slotIndex := btree.currentItemRef.NodeItemIndex
 	slotIndex++
 	goRightDown := n.hasChildren()
 	var err error
@@ -223,13 +223,13 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 	}
 
 	// Node is full, distribute or breakup the node (use temp slots in the process).
-	copy(btree.TempSlots, node.Slots)
+	copy(btree.tempSlots, node.Slots)
 
 	// Index now contains the correct array element number to insert item into.
 	// Skud over then assign the item to the vacatad slot.
-	copy(btree.TempSlots[index+1:], btree.TempSlots[index:])
+	copy(btree.tempSlots[index+1:], btree.tempSlots[index:])
 	// Set the item to the newly vacated slot.
-	btree.TempSlots[index] = item
+	btree.tempSlots[index] = item
 
 	// var slotsHalf = btree.Store.NodeSlotCount >> 1
 	// var rightNode, leftNode *Node[TK, TV]
@@ -255,25 +255,25 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 		if isVacantSlotInLeft {
 			b = 0
 		}
-		copy(btree.TempSlots[b:], node.Slots)
+		copy(btree.tempSlots[b:], node.Slots)
 		// Save this node.
 		btree.saveNode(node)
 
-		btree.DistributeAction.Source = node
+		btree.distributeAction.Source = node
 		if isVacantSlotInLeft {
-			btree.DistributeAction.Item = btree.TempSlots[btree.Store.NodeSlotCount]
-			clear(btree.TempSlots)
+			btree.distributeAction.Item = btree.tempSlots[btree.Store.NodeSlotCount]
+			clear(btree.tempSlots)
 
 			// Vacant in left, create a distribution action request to B-Tree.
 			// Logic is: "skud over" the leftmost node's item to parent and the item
 			// on parent to left sibling node (recursively).
-			btree.DistributeAction.DistributeToLeft = true
+			btree.distributeAction.DistributeToLeft = true
 			return true, nil
 		}
-		btree.DistributeAction.Item = btree.TempSlots[0]
-		clear(btree.TempSlots)
+		btree.distributeAction.Item = btree.tempSlots[0]
+		clear(btree.tempSlots)
 		// Vacant in right, move the rightmost node item into the vacant slot in right.
-		btree.DistributeAction.DistributeToLeft = false
+		btree.distributeAction.DistributeToLeft = false
 		return true, nil
 	}
 
@@ -293,12 +293,12 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 	// 		// Initialize should throw an exception if in error.
 	// 		rightNode = CreateNode(bTree, this.GetAddress(bTree));
 	// 		leftNode = CreateNode(bTree, this.GetAddress(bTree));
-	// 		CopyArrayElements(bTree.TempSlots, 0, leftNode.Slots, 0, slotsHalf);
+	// 		CopyArrayElements(bTree.tempSlots, 0, leftNode.Slots, 0, slotsHalf);
 	// 		leftNode.itemCount() = slotsHalf;
-	// 		CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
+	// 		CopyArrayElements(bTree.tempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
 	// 		rightNode.itemCount() = slotsHalf;
 	// 		ResetArray(Slots, null);
-	// 		Slots[0] = bTree.TempSlots[slotsHalf];
+	// 		Slots[0] = bTree.tempSlots[slotsHalf];
 	// 		ChildrenAddresses = new long[bTree.SlotLength + 1];
 	// 		ResetArray(ChildrenAddresses, -1);
 
@@ -311,7 +311,7 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 	// 		btree.SaveNode()
 	// 		//**
 
-	// 		ResetArray(bTree.TempSlots, null);
+	// 		ResetArray(bTree.tempSlots, null);
 	// 		return;
 	// 	}
 	// 	// All slots are occupied in this and other siblings' nodes..
@@ -323,14 +323,14 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 	// 	RemoveFromBTreeBlocksCache(bTree, this);
 
 	// 	// copy the left half of the slots to left sibling
-	// 	CopyArrayElements(bTree.TempSlots, 0, Slots, 0, slotsHalf);
+	// 	CopyArrayElements(bTree.tempSlots, 0, Slots, 0, slotsHalf);
 	// 	Count = slotsHalf;
 	// 	// copy the right half of the slots to right sibling
-	// 	CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
+	// 	CopyArrayElements(bTree.tempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
 	// 	rightNode.itemCount() = slotsHalf;
 
 	// 	// copy the middle slot to temp parent slot.
-	// 	bTree.TempParent = bTree.TempSlots[slotsHalf];
+	// 	bTree.TempParent = bTree.tempSlots[slotsHalf];
 
 	// 	//*** save this and Right Node
 	// 	btree.SaveNode()
@@ -358,12 +358,12 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 	// // -assign the new children nodes.
 	// rightNode = CreateNode(bTree, GetAddress(bTree));
 	// leftNode = CreateNode(bTree, GetAddress(bTree));
-	// CopyArrayElements(bTree.TempSlots, 0, leftNode.Slots, 0, slotsHalf);
+	// CopyArrayElements(bTree.tempSlots, 0, leftNode.Slots, 0, slotsHalf);
 	// leftNode.itemCount() = slotsHalf;
-	// CopyArrayElements(bTree.TempSlots, (short)(slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
+	// CopyArrayElements(bTree.tempSlots, (short)(slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
 	// rightNode.itemCount() = slotsHalf;
 	// ResetArray(Slots, null);
-	// Slots[0] = bTree.TempSlots[slotsHalf];
+	// Slots[0] = bTree.tempSlots[slotsHalf];
 	// RemoveFromBTreeBlocksCache(bTree, this);
 
 	// Count = 1;
@@ -379,7 +379,7 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 
 	// //*** save this TreeNode
 	// btree.SaveNode()
-	// ResetArray(bTree.TempSlots, null);
+	// ResetArray(bTree.tempSlots, null);
 
 	return false, nil
 }

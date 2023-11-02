@@ -9,23 +9,23 @@ import (
 type Btree[TK Comparable, TV any] struct {
 	Store            Store
 	StoreInterface   *StoreInterface[TK, TV] `json:"-"`
-	TempSlots        []*Item[TK, TV]         `json:"-"`
-	TempChildren     []UUID                  `json:"-"`
-	CurrentItemRef   CurrentItemRef          `json:"-"`
+	tempSlots        []*Item[TK, TV]
+	tempChildren     []UUID
+	currentItemRef   currentItemRef
 	currentItem      *Item[TK, TV]
-	DistributeAction DistributeAction[TK, TV] `json:"-"`
+	distributeAction distributeAction[TK, TV]
 }
 
-type CurrentItemRef struct {
+type currentItemRef struct {
 	NodeId        UUID
 	NodeItemIndex int
 }
 
-// DistributeAction contains details to allow B-Tree to balance item load across nodes.
+// distributeAction contains details to allow B-Tree to balance item load across nodes.
 // "distribute" function will use these details in order to distribute an item of a node
 // to either the left side or right side nodes of the branch(relative to the Source)
 // that is known to have a vacant slot.
-type DistributeAction[TK Comparable, TV any] struct {
+type distributeAction[TK Comparable, TV any] struct {
 	Source *Node[TK, TV]
 	Item   *Item[TK, TV]
 	// DistributeToLeft is true if item needs to be distributed to the left side,
@@ -37,8 +37,8 @@ func NewBtree[TK Comparable, TV any](store Store, si *StoreInterface[TK, TV]) *B
 	var b3 = Btree[TK, TV]{
 		Store:          store,
 		StoreInterface: si,
-		TempSlots:      make([]*Item[TK, TV], store.NodeSlotCount+1),
-		TempChildren:   make([]UUID, store.NodeSlotCount+2),
+		tempSlots:      make([]*Item[TK, TV], store.NodeSlotCount+1),
+		tempChildren:   make([]UUID, store.NodeSlotCount+2),
 	}
 	return &b3
 }
@@ -116,19 +116,19 @@ func (btree *Btree[TK, TV]) GetCurrentValue() TV {
 // GetCurrentItem returns the current item containing key/value pair.
 func (btree *Btree[TK, TV]) GetCurrentItem() Item[TK, TV] {
 	var zero Item[TK, TV]
-	if btree.CurrentItemRef.NodeId.IsNil() {
+	if btree.currentItemRef.NodeId.IsNil() {
 		btree.currentItem = nil
 		return zero
 	}
 	if btree.currentItem != nil {
 		return *btree.currentItem
 	}
-	n, err := btree.StoreInterface.NodeRepository.Get(btree.CurrentItemRef.NodeId)
+	n, err := btree.StoreInterface.NodeRepository.Get(btree.currentItemRef.NodeId)
 	if err != nil {
 		// TODO: Very rarely to happen, & we need to log err when logging is in.
 		return zero
 	}
-	btree.currentItem = n.Slots[btree.CurrentItemRef.NodeItemIndex]
+	btree.currentItem = n.Slots[btree.currentItemRef.NodeItemIndex]
 	return *btree.currentItem
 }
 
@@ -194,7 +194,7 @@ func (btree *Btree[TK, TV]) rootNode() (*Node[TK, TV], error) {
 	if btree.Store.RootNodeLogicalId.IsNil() {
 		// create new Root Node, if nil (implied new btree).
 		btree.Store.RootNodeLogicalId = NewUUID()
-		var root = NewNode[TK, TV](btree.Store.NodeSlotCount)
+		var root = newNode[TK, TV](btree.Store.NodeSlotCount)
 		// Set both logical Id & physical Id to the same UUID to begin with.
 		// Transaction commit should handle resolving them.
 		root.logicalId = btree.Store.RootNodeLogicalId
@@ -224,12 +224,12 @@ func (btree *Btree[TK, TV]) getNode(id UUID) (*Node[TK, TV], error) {
 }
 
 func (btree *Btree[TK, TV]) setCurrentItemId(nodeId UUID, itemIndex int) {
-	if btree.CurrentItemRef.NodeId == nodeId && btree.CurrentItemRef.NodeItemIndex == itemIndex {
+	if btree.currentItemRef.NodeId == nodeId && btree.currentItemRef.NodeItemIndex == itemIndex {
 		return
 	}
 	btree.currentItem = nil
-	btree.CurrentItemRef.NodeId = nodeId
-	btree.CurrentItemRef.NodeItemIndex = itemIndex
+	btree.currentItemRef.NodeId = nodeId
+	btree.currentItemRef.NodeItemIndex = itemIndex
 }
 
 func (btree *Btree[TK, TV]) isUnique() bool {
@@ -241,18 +241,18 @@ func (btree *Btree[TK, TV]) isUnique() bool {
 // in the sibling nodes, distribute allows a controller(distribute)-pawn(node.DistributeLeft or XxRight)
 // pattern and avoids recursion.
 func (btree *Btree[TK, TV]) distribute() {
-	if btree.DistributeAction.Source != nil {
+	if btree.distributeAction.Source != nil {
 		log.Debug("Distribute item with key(%v) of node Id(%v) to left(%v).",
-			btree.DistributeAction.Item.Key, btree.DistributeAction.Source.Id, btree.DistributeAction.DistributeToLeft)
+			btree.distributeAction.Item.Key, btree.distributeAction.Source.Id, btree.distributeAction.DistributeToLeft)
 	}
-	for btree.DistributeAction.Source != nil {
-		n := btree.DistributeAction.Source
-		btree.DistributeAction.Source = nil
-		item := btree.DistributeAction.Item
-		btree.DistributeAction.Item = nil
+	for btree.distributeAction.Source != nil {
+		n := btree.distributeAction.Source
+		btree.distributeAction.Source = nil
+		item := btree.distributeAction.Item
+		btree.distributeAction.Item = nil
 
 		// Call the node DistributeLeft or XxRight to do the 2nd part of the "item distribution" logic.
-		if btree.DistributeAction.DistributeToLeft {
+		if btree.distributeAction.DistributeToLeft {
 			n.distributeToLeft(btree, item)
 		} else {
 			n.distributeToRight(btree, item)
