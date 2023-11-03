@@ -224,39 +224,38 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 		return nil
 	}
 
-	// TODO:
-	// // _BreakNode
-	// // Description :
-	// // -copy the left half of the temp slots
-	// // -copy the right half of the temp slots
-	// // -zero out the current slot.
-	// // -copy the middle of temp slot to 1st elem of current slot
-	// // -allocate memory for children node *s
-	// // -assign the new children nodes.
-	// rightNode = CreateNode(bTree, GetAddress(bTree));
-	// leftNode = CreateNode(bTree, GetAddress(bTree));
-	// CopyArrayElements(bTree.tempSlots, 0, leftNode.Slots, 0, slotsHalf);
-	// leftNode.Count = slotsHalf;
-	// CopyArrayElements(bTree.tempSlots, (short)(slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
-	// rightNode.Count = slotsHalf;
-	// ResetArray(Slots, null);
-	// Slots[0] = bTree.tempSlots[slotsHalf];
-	// RemoveFromBTreeBlocksCache(bTree, this);
+	// _BreakNode
+	// Description :
+	// -copy the left half of the temp slots
+	// -copy the right half of the temp slots
+	// -zero out the current slot.
+	// -copy the middle of temp slot to 1st elem of current slot
+	// -allocate memory for children node *s
+	// -assign the new children nodes.
+	rightNode := newNode[TK,TV](btree.Store.NodeSlotCount)
+	rightNode.newIds(node.Id)
+	leftNode := newNode[TK,TV](btree.Store.NodeSlotCount)
+	leftNode.newIds(node.Id)
 
-	// Count = 1;
+	copyArrayElements(leftNode.Slots, btree.tempSlots, slotsHalf)
+	leftNode.Count = slotsHalf
+	copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf+1], slotsHalf)
+	rightNode.Count = slotsHalf
+	clear(node.Slots)
+	node.Slots[0] = btree.tempSlots[slotsHalf]
 
-	// // save Left and Right Nodes
-	// leftNode.btree.SaveNode()
-	// rightNode.btree.SaveNode()
+	node.Count = 1
 
-	// ChildrenAddresses = new long[bTree.SlotLength + 1];
-	// ResetArray(ChildrenAddresses, -1);
-	// ChildrenAddresses[(int)ChildNodes.LeftChild] = leftNode.GetAddress(bTree);
-	// ChildrenAddresses[(int)ChildNodes.RightChild] = rightNode.GetAddress(bTree);
+	// save Left and Right Nodes
+	btree.saveNode(leftNode)
+	btree.saveNode(rightNode)
 
-	// //*** save this TreeNode
-	// btree.SaveNode()
-	// ResetArray(bTree.tempSlots, null);
+	node.childrenIds[0] = leftNode.Id
+	node.childrenIds[1] = rightNode.Id
+
+	//*** save this TreeNode
+	btree.saveNode(node)
+	clear(btree.tempSlots)
 
 	return nil
 }
