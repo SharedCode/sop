@@ -289,3 +289,14 @@ func (btree *Btree[TK, TV]) distribute() {
 		}
 	}
 }
+
+func (btree *Btree[TK, TV]) promote() {
+	for btree.promoteAction.nodeForPromotion != nil {
+		log.Debug("Promote will promote a Node with Id {0}.", btree.promoteAction.nodeForPromotion.Id)
+		n := btree.promoteAction.nodeForPromotion
+		i := btree.promoteAction.nodeForPromotionIndex
+		btree.promoteAction.nodeForPromotion = nil
+		btree.promoteAction.nodeForPromotionIndex = 0
+		n.promote(btree, i)
+	}
+}

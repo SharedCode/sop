@@ -550,11 +550,218 @@ func (node *Node[TK, TV]) hasChildren() bool {
 	return node.childrenIds != nil || node.ChildrenLogicalIds != nil
 }
 
+// TODO
 func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, TV]) error {
+	// if (IsFull(bTree.SlotLength))
+	// {
+	// 	// counter-clockwise rotation..					
+	// 	//	----
+	// 	//	|  |
+	// 	//	-> |
+	// 	// NOTE: we don't check for null returns as this method is called only when there is vacant in left
+	// 	BTreeNodeOnDisk parent = GetParent(bTree);
+
+	// 	short indexOfNode = GetIndexOfNode(bTree);
+	// 	if (indexOfNode > parent.Count)
+	// 		return;
+
+	// 	bTree.DistributeSibling = GetLeftSibling(bTree);
+	// 	bTree.DistributeItem = parent.Slots[indexOfNode - 1];
+	// 	bTree.DistributeLeftDirection = true;
+	// 	//BTreeNodeOnDisk leftSibling = GetLeftSibling(bTree);
+	// 	//leftSibling.DistributeToLeft(bTree, parent.Slots[indexOfNode - 1]);
+
+	// 	//*** Update Parent (remove node and add updated one).
+	// 	parent.Slots[indexOfNode - 1] = Slots[0];
+	// 	parent.IsDirty = true;
+	// 	//parent.SaveNodeToDisk(bTree);
+	// 	MoveArrayElements(Slots, 1, 0, (short) (bTree.SlotLength - 1));
+	// }
+	// else
+	// 	Count++;
+	// Slots[Count - 1] = item;
+	// IsDirty = true; 
+	// //SaveNodeToDisk(bTree);
 	return nil
 }
 
+// TODO
 func (node *Node[TK, TV]) distributeToRight(btree *Btree[TK, TV], item *Item[TK, TV]) error {
+	// if (IsFull(bTree.SlotLength))
+	// {
+	// 	// clockwise rotation..
+	// 	//	----
+	// 	//	|  |
+	// 	//	| <-
+	// 	BTreeNodeOnDisk parent = GetParent(bTree);
+	// 	int i = GetIndexOfNode(bTree);
+
+	// 	//IsDirty = true;
+	// 	bTree.DistributeSibling = GetRightSibling(bTree);
+	// 	bTree.DistributeItem = parent.Slots[i];
+	// 	bTree.DistributeLeftDirection = false;
+	// 	//GetRightSibling(bTree).DistributeToRight(bTree, parent.Slots[i]);
+
+	// 	parent.Slots[i] = Slots[Count - 1];
+	// 	parent.IsDirty = true;
+	// 	//parent.SaveNodeToDisk(bTree);
+	// }
+	// else
+	// 	this.Count++;
+	// ShiftSlots(Slots, 0, (short) (bTree.SlotLength - 1));
+	// Slots[0] = item;
+	// IsDirty = true; 
+	// //SaveNodeToDisk(bTree);
+	return nil
+}
+
+// TODO
+func (node *Node[TK, TV]) promote(btree *Btree[TK, TV], indexPosition int) error {
+	// short noOfOccupiedSlots = Count, index = position;
+	// IsDirty = true;
+	// if (noOfOccupiedSlots < bTree.SlotLength)
+	// {
+	// 	// node is not yet full.. insert the parent.
+	// 	ShiftSlots(Slots, index, noOfOccupiedSlots);
+	// 	if (index > noOfOccupiedSlots)
+	// 		index = noOfOccupiedSlots;
+	// 	Slots[index] = bTree.TempParent;
+	// 	// insert the left child
+
+	// 	ChildrenAddresses[index] = bTree.TempParentChildren[(int) ChildNodes.LeftChild];
+	// 	// insert the right child
+	// 	ShiftSlots(ChildrenAddresses, (short) (index + 1), (short) (noOfOccupiedSlots + 1));
+	// 	Count++;
+
+	// 	ChildrenAddresses[index + 1] = bTree.TempParentChildren[(int) ChildNodes.RightChild];
+	// 	IsDirty = true;
+	// 	//SaveNodeToDisk(bTree);
+
+	// 	// successful
+	// 	return;
+	// }
+	// // *** Insert to temp slots.. node is full, use TempSlots
+
+	// // NOTE: ensure node & its children being promoted will point to the correct new ParentAddress as recursive node breakup occurs...
+
+	// CopyArrayElements(Slots, 0, bTree.TempSlots, 0, bTree.SlotLength);
+	// ShiftSlots(bTree.TempSlots, index, bTree.SlotLength);
+	// bTree.TempSlots[index] = bTree.TempParent;
+	// CopyArrayElements(ChildrenAddresses, 0, bTree.TempChildren, 0, (short) (bTree.SlotLength + 1));
+
+	// // insert the left child
+	// bTree.TempChildren[index] = bTree.TempParentChildren[(int) ChildNodes.LeftChild];
+	// // insert the right child
+	// ShiftSlots(bTree.TempChildren, (short) (index + 1), (short) (noOfOccupiedSlots + 1));
+	// bTree.TempChildren[index + 1] = bTree.TempParentChildren[(int) ChildNodes.RightChild];
+
+	// // *** Try to break up the node into 2 siblings.
+	// BTreeNodeOnDisk rightNode;
+	// short slotsHalf = (short) (bTree.SlotLength >> 1);
+	// if (ParentAddress != -1)
+	// {
+	// 	//** prepare this and the right node sibling and promote the temporary parent node(pTempSlot). 
+	// 	//** this is the left sibling !
+	// 	try
+	// 	{
+	// 		//if (bTree.InMaintenanceMode)
+	// 		//{
+	// 		//    IsDirty = true;
+	// 		//    //bTree.PromoteLookup.SetNode(bTree.GetId(DiskBuffer), this);
+	// 		//}
+	// 		rightNode = CreateNode(bTree, ParentAddress);
+	// 		rightNode.ChildrenAddresses = new long[bTree.SlotLength + 1];
+	// 		ResetArray(rightNode.ChildrenAddresses, -1);
+	// 		// zero out the current slot.
+	// 		ResetArray(Slots, null);
+	// 		RemoveFromBTreeBlocksCache(bTree, this);
+	// 		// zero out this children node pointers.
+	// 		ResetArray(ChildrenAddresses, -1);
+	// 		// copy the left half of the slots to left sibling(this)
+	// 		CopyArrayElements(bTree.TempSlots, 0, Slots, 0, slotsHalf);
+	// 		Count = slotsHalf;
+	// 		// copy the right half of the slots to right sibling
+	// 		CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
+	// 		rightNode.Count = slotsHalf;
+	// 		// copy the left half of the children nodes.
+	// 		CopyArrayElements(bTree.TempChildren, 0, ChildrenAddresses, 0, (short) (slotsHalf + 1));
+
+	// 		// copy the right half of the children nodes.
+	// 		CopyArrayElements(bTree.TempChildren, (short) (slotsHalf + 1), rightNode.ChildrenAddresses, 0,
+	// 						  (short) (slotsHalf + 1));
+
+	// 		// make sure this node(leftNode)'s children has this node as parent...
+	// 		//UpdateChildrenParent(bTree, this);
+
+	// 		rightNode.SaveNodeToDisk(bTree);
+	// 		// left sibling is already parent of its children. make the right sibling parent of its children.
+	// 		UpdateChildrenParent(bTree, rightNode);
+
+	// 		// copy the middle slot
+	// 		bTree.TempParent = bTree.TempSlots[slotsHalf];
+	// 		// assign the new children nodes.
+	// 		bTree.TempParentChildren[(int) ChildNodes.LeftChild] = GetAddress(bTree);
+	// 		bTree.TempParentChildren[(int) ChildNodes.RightChild] = rightNode.GetAddress(bTree);
+
+	// 		IsDirty = true; 
+	// 		//SaveNodeToDisk(bTree);
+
+	// 		bTree.PromoteParent = GetParent(bTree);
+	// 		bTree.PromoteIndexOfNode = GetIndexOfNode(bTree);
+	// 		//Parent.Promote(BTree, GetIndexOfNode(BTree));
+			
+	// 		return;
+	// 	}
+	// 	catch (Exception e)
+	// 	{
+	// 		throw new Exception("Error in attempt to promote parent of a splitted node.", e);
+	// 	}
+	// }
+	// //** no parent, break up this node into two children & make this new root...
+	// long thisAddress = GetAddress(bTree);
+	// BTreeNodeOnDisk leftNode = CreateNode(bTree, thisAddress);
+	// rightNode = CreateNode(bTree, thisAddress);
+	// // copy the left half of the slots
+	// CopyArrayElements(bTree.TempSlots, 0, leftNode.Slots, 0, slotsHalf);
+	// leftNode.Count = slotsHalf;
+	// // copy the right half of the slots
+	// CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
+	// rightNode.Count = slotsHalf;
+	// leftNode.ChildrenAddresses = new long[bTree.SlotLength + 1];
+	// ResetArray(leftNode.ChildrenAddresses, -1);
+	// rightNode.ChildrenAddresses = new long[bTree.SlotLength + 1];
+	// ResetArray(rightNode.ChildrenAddresses, -1);
+	// // copy the left half of the children nodes.
+	// CopyArrayElements(bTree.TempChildren, 0, leftNode.ChildrenAddresses, 0, (short) (slotsHalf + 1));
+	// // copy the right half of the children nodes.
+	// CopyArrayElements(bTree.TempChildren, (short) (slotsHalf + 1),
+	// 				  rightNode.ChildrenAddresses, 0, (short) (slotsHalf + 1));
+
+	// // reset this Node...
+	// ResetArray(Slots, null);
+	// RemoveFromBTreeBlocksCache(bTree, this);
+
+	// //children = null;
+	// ResetArray(ChildrenAddresses, -1);
+
+	// leftNode.SaveNodeToDisk(bTree);
+	// // make the left sibling parent of its children.
+	// UpdateChildrenParent(bTree, leftNode);
+
+	// rightNode.SaveNodeToDisk(bTree);
+	// // make the right sibling parent of its children.
+	// UpdateChildrenParent(bTree, rightNode);
+
+	// // copy the middle slot
+	// Slots[0] = bTree.TempSlots[slotsHalf];
+	// this.Count = 1;
+	// // assign the new children nodes.
+
+	// ChildrenAddresses[(int) ChildNodes.LeftChild] = leftNode.GetAddress(bTree);
+	// ChildrenAddresses[(int) ChildNodes.RightChild] = rightNode.GetAddress(bTree);
+	// IsDirty = true;
+	// //SaveNodeToDisk(bTree);
+	// // successful
 	return nil
 }
 
