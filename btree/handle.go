@@ -9,12 +9,12 @@ import (
 type UUID uuid.UUID
 
 // Handle is a structure that holds Logical Id and the underlying current Physical Id it maps to.
-// It a structure used for holding the "logical" & "physical" Ids to SOP data, e.g. - Node, Slot Value, etc...
+// E.g. - Node, Slot Value, etc...
 // It also contains other fields useful for allowing transaction manager to effectively manage & allow seamless
 // switching of data "pages", e.g. a modified Node or Value Data in a transaction can get switched to be the
-// "active" one upon commit.
+// "active" one upon commit, and thus, start to get seen by succeeding SOP I/O.
 //
-// Yes, it is part of the SOP solution for "two phase" commit, ACID type of transactional support.
+// Yes, it is part of the SOP solution for "two phase" commit, ACID type of transaction support.
 type Handle struct {
 	LogicalId   UUID
 	PhysicalIdA UUID
