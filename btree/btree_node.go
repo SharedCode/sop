@@ -82,9 +82,9 @@ func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, e
 func (node *Node[TK, TV]) saveNode(btree *Btree[TK, TV]) error {
 	if node.Id.IsNil() {
 		node.Id = NewUUID()
-		return btree.StoreInterface.NodeRepository.Add(node)
+		return btree.storeInterface.NodeRepository.Add(node)
 	}
-	return btree.StoreInterface.NodeRepository.Update(node)
+	return btree.storeInterface.NodeRepository.Update(node)
 }
 
 func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bool) (bool, error) {
@@ -539,7 +539,7 @@ func (node *Node[TK, TV]) getIndexToInsertTo(btree *Btree[TK, TV], item *Item[TK
 // like when adding an item, newly created nodes need to be using UUID that then becomes logical Id
 // during commit. When working with Children logical Ids(saved in backend!), we need to convert logical to physical Id.
 func (node *Node[TK, TV]) getChild(btree *Btree[TK, TV], childSlotIndex int) (*Node[TK, TV], error) {
-	h, err := btree.StoreInterface.VirtualIdRepository.Get(node.ChildrenLogicalIds[childSlotIndex])
+	h, err := btree.storeInterface.VirtualIdRepository.Get(node.ChildrenLogicalIds[childSlotIndex])
 	if err != nil {
 		return nil, err
 	}

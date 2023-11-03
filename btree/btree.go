@@ -8,7 +8,7 @@ import (
 // Btree manages items using B-tree data structure and algorithm.
 type Btree[TK Comparable, TV any] struct {
 	Store            Store
-	StoreInterface   *StoreInterface[TK, TV] `json:"-"`
+	storeInterface   *StoreInterface[TK, TV]
 	tempSlots        []*Item[TK, TV]
 	tempChildren     []UUID
 	currentItemRef   currentItemRef
@@ -36,7 +36,7 @@ type distributeAction[TK Comparable, TV any] struct {
 func NewBtree[TK Comparable, TV any](store Store, si *StoreInterface[TK, TV]) *Btree[TK, TV] {
 	var b3 = Btree[TK, TV]{
 		Store:          store,
-		StoreInterface: si,
+		storeInterface: si,
 		tempSlots:      make([]*Item[TK, TV], store.NodeSlotCount+1),
 		tempChildren:   make([]UUID, store.NodeSlotCount+2),
 	}
@@ -50,8 +50,8 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 		Value: &value,
 	}
 	localTrans := false
-	if !btree.StoreInterface.Transaction.HasBegun() {
-		err := btree.StoreInterface.Transaction.Begin()
+	if !btree.storeInterface.Transaction.HasBegun() {
+		err := btree.storeInterface.Transaction.Begin()
 		if err != nil {
 			return false, err
 		}
@@ -65,7 +65,7 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	if err != nil {
 		if localTrans {
 			// Rollback should rarely fail, but if it does, return it.
-			err2 := btree.StoreInterface.Transaction.Rollback()
+			err2 := btree.storeInterface.Transaction.Rollback()
 			if err2 != nil {
 				return false, fmt.Errorf("Transaction rollback failed, error: %v, original error: %v", err2, err)
 			}
@@ -77,7 +77,7 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	// Increment store's item count.
 	btree.Store.Count++
 	if localTrans {
-		err = btree.StoreInterface.Transaction.Commit()
+		err = btree.storeInterface.Transaction.Commit()
 		if err != nil {
 			return false, err
 		}
@@ -123,7 +123,7 @@ func (btree *Btree[TK, TV]) GetCurrentItem() Item[TK, TV] {
 	if btree.currentItem != nil {
 		return *btree.currentItem
 	}
-	n, err := btree.StoreInterface.NodeRepository.Get(btree.currentItemRef.NodeId)
+	n, err := btree.storeInterface.NodeRepository.Get(btree.currentItemRef.NodeId)
 	if err != nil {
 		// TODO: Very rarely to happen, & we need to log err when logging is in.
 		return zero
@@ -201,7 +201,7 @@ func (btree *Btree[TK, TV]) rootNode() (*Node[TK, TV], error) {
 		root.Id = btree.Store.RootNodeLogicalId
 		return root, nil
 	}
-	h, err := btree.StoreInterface.VirtualIdRepository.Get(btree.Store.RootNodeLogicalId)
+	h, err := btree.storeInterface.VirtualIdRepository.Get(btree.Store.RootNodeLogicalId)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +216,7 @@ func (btree *Btree[TK, TV]) rootNode() (*Node[TK, TV], error) {
 }
 
 func (btree *Btree[TK, TV]) getNode(id UUID) (*Node[TK, TV], error) {
-	n, e := btree.StoreInterface.NodeRepository.Get(id)
+	n, e := btree.storeInterface.NodeRepository.Get(id)
 	if e != nil {
 		return nil, e
 	}
