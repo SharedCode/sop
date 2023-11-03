@@ -272,8 +272,8 @@ func (btree *Btree[TK, TV]) isUnique() bool {
 // pattern and avoids recursion.
 func (btree *Btree[TK, TV]) distribute() {
 	if btree.distributeAction.sourceNode != nil {
-		log.Debug("Distribute item with key(%v) of node Id(%v) to left(%v).",
-			btree.distributeAction.item.Key, btree.distributeAction.sourceNode.Id, btree.distributeAction.distributeToLeft)
+		log.Debug(fmt.Sprintf("Distribute item with key(%v) of node Id(%v) to left(%v).",
+			btree.distributeAction.item.Key, btree.distributeAction.sourceNode.Id, btree.distributeAction.distributeToLeft))
 	}
 	for btree.distributeAction.sourceNode != nil {
 		n := btree.distributeAction.sourceNode
@@ -292,7 +292,7 @@ func (btree *Btree[TK, TV]) distribute() {
 
 func (btree *Btree[TK, TV]) promote() {
 	for btree.promoteAction.nodeForPromotion != nil {
-		log.Debug("Promote will promote a Node with Id {0}.", btree.promoteAction.nodeForPromotion.Id)
+		log.Debug(fmt.Sprintf("Promote will promote a Node with Id %v.", btree.promoteAction.nodeForPromotion.Id.ToString()))
 		n := btree.promoteAction.nodeForPromotion
 		i := btree.promoteAction.nodeForPromotionIndex
 		btree.promoteAction.nodeForPromotion = nil
