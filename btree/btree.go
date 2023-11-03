@@ -72,17 +72,32 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 		}
 		return false, err
 	}
+	// Add failed with no reason, 'just return false.
+	if !result {
+		return false, nil
+	}
 	// Registers the root node to the transaction manager so it can get saved if needed.
 	btree.distribute()
 	// Increment store's item count.
 	btree.Store.Count++
+	err = btree.saveNode(node)
+	if err != nil {
+		if localTrans {
+			// Rollback should rarely fail, but if it does, return it.
+			err2 := btree.storeInterface.Transaction.Rollback()
+			if err2 != nil {
+				return false, fmt.Errorf("Transaction rollback failed, error: %v, original error: %v", err2, err)
+			}
+		}
+		return false, err
+	}
 	if localTrans {
 		err = btree.storeInterface.Transaction.Commit()
 		if err != nil {
 			return false, err
 		}
 	}
-	return result, nil
+	return true, nil
 }
 
 // done
@@ -132,8 +147,13 @@ func (btree *Btree[TK, TV]) GetCurrentItem() Item[TK, TV] {
 	return *btree.currentItem
 }
 
-// TODO
+// AddIfNotExist will add an item if its key is not yet in the B-Tree.
 func (btree *Btree[TK, TV]) AddIfNotExist(key TK, value TV) (bool, error) {
+	// Steps:
+	// - set IsUnique true
+	// - delegate or call node.Add to do actual item add to node.
+	// - restore IsUnique previous value
+	// - return result of node.Add whether it succeeded to add an item or not.
 	return false, nil
 }
 
@@ -182,23 +202,24 @@ func (btree *Btree[TK, TV]) IsValueDataInNodeSegment() bool {
 	return btree.Store.IsValueDataInNodeSegment
 }
 
-// TODO
 // SaveNode will prepare & persist (if needed) the Node to the backend
-// via NodeRepository call.
+// via NodeRepository call. When Transaction Manager is implemented, this
+// will just register the modified/new node in the transaction session
+// so it can get persisted on tranaction commit.
 func (btree *Btree[TK, TV]) saveNode(node *Node[TK, TV]) error {
-	return nil
+	if node.Id.IsNil() {
+		node.Id = NewUUID()
+	}
+	return btree.storeInterface.NodeRepository.Upsert(node)
 }
 
 func (btree *Btree[TK, TV]) rootNode() (*Node[TK, TV], error) {
 	// TODO: register root node to nodeRepository or the Transaction.
 	if btree.Store.RootNodeLogicalId.IsNil() {
 		// create new Root Node, if nil (implied new btree).
-		btree.Store.RootNodeLogicalId = NewUUID()
 		var root = newNode[TK, TV](btree.Store.NodeSlotCount)
-		// Set both logical Id & physical Id to the same UUID to begin with.
-		// Transaction commit should handle resolving them.
-		root.logicalId = btree.Store.RootNodeLogicalId
-		root.Id = btree.Store.RootNodeLogicalId
+		root.newIds(NilUUID)
+		btree.Store.RootNodeLogicalId = root.logicalId
 		return root, nil
 	}
 	h, err := btree.storeInterface.VirtualIdRepository.Get(btree.Store.RootNodeLogicalId)

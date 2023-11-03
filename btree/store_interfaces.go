@@ -51,8 +51,7 @@ type StoreRepository interface {
 // NodeRepository interface specifies the node repository.
 type NodeRepository[TK Comparable, TV any] interface {
 	Get(nodeId UUID) (*Node[TK, TV], error)
-	Add(*Node[TK, TV]) error
-	Update(*Node[TK, TV]) error
+	Upsert(*Node[TK, TV]) error
 	Remove(nodeId UUID) error
 }
 

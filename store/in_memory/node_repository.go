@@ -12,12 +12,7 @@ func newNodeRepository[TK btree.Comparable, TV any]() btree.NodeRepository[TK, T
 	}
 }
 
-func (nr *nodeRepository[TK, TV]) Add(n *btree.Node[TK, TV]) error {
-	nr.lookup[n.Id] = n
-	return nil
-}
-
-func (nr *nodeRepository[TK, TV]) Update(n *btree.Node[TK, TV]) error {
+func (nr *nodeRepository[TK, TV]) Upsert(n *btree.Node[TK, TV]) error {
 	nr.lookup[n.Id] = n
 	return nil
 }
