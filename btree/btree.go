@@ -45,8 +45,8 @@ func NewBtree[TK Comparable, TV any](store Store, si *StoreInterface[TK, TV]) *B
 	var b3 = Btree[TK, TV]{
 		Store:          store,
 		storeInterface: si,
-		tempSlots:      make([]*Item[TK, TV], store.NodeSlotCount+1),
-		tempChildren:   make([]UUID, store.NodeSlotCount+2),
+		tempSlots:      make([]*Item[TK, TV], store.SlotLength+1),
+		tempChildren:   make([]UUID, store.SlotLength+2),
 		tempParentChildren: make([]UUID, 2),
 	}
 	return &b3
@@ -226,7 +226,7 @@ func (btree *Btree[TK, TV]) rootNode() (*Node[TK, TV], error) {
 	// TODO: register root node to nodeRepository or the Transaction.
 	if btree.Store.RootNodeLogicalId.IsNil() {
 		// create new Root Node, if nil (implied new btree).
-		var root = newNode[TK, TV](btree.Store.NodeSlotCount)
+		var root = newNode[TK, TV](btree.Store.SlotLength)
 		root.newIds(NilUUID)
 		btree.Store.RootNodeLogicalId = root.logicalId
 		return root, nil

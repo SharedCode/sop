@@ -5,7 +5,7 @@ type Store struct {
 	// Name of this (B-Tree store).
 	Name string
 	// Count of items that can be stored on a given node.
-	NodeSlotCount int
+	SlotLength int
 	// IsUnique tells whether key/value pair (items) of this tree should be unique on key.
 	IsUnique  bool
 	KeyInfo   string
@@ -40,10 +40,10 @@ type StoreInterface[TK Comparable, TV any] struct {
 }
 
 // NewStore instantiates a new Store.
-func NewStore(name string, nodeSlotCount int, isUnique bool, isValueDataInNodeSegment bool) Store {
+func NewStore(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool) Store {
 	return Store{
 		Name:                     name,
-		NodeSlotCount:            nodeSlotCount,
+		SlotLength:            slotLength,
 		IsUnique:                 isUnique,
 		IsValueDataInNodeSegment: isValueDataInNodeSegment,
 	}
