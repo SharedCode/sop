@@ -1,6 +1,7 @@
 package btree
 
 import (
+	"fmt"
 	"sort"
 )
 
@@ -102,6 +103,7 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 	var isVacantSlotInLeft, isVacantSlotInRight bool
 	var err error
 
+	slotsHalf := btree.Store.NodeSlotCount >> 1
 	var isUnBalanced bool
 	if !node.ParentId.IsNil() {
 		isVacantSlotInLeft, err = node.isThereVacantSlotInLeft(btree, &isUnBalanced)
@@ -112,112 +114,117 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 		if err != nil {
 			return err
 		}
-	}
 
-	slotsHalf := btree.Store.NodeSlotCount >> 1
-	if isVacantSlotInLeft || isVacantSlotInRight {
-		// Distribute to either left or right sibling the overflowed item.
-		// Copy temp buffer contents to the actual slots.
-		var b int16 = 1
-		if isVacantSlotInLeft {
-			b = 0
-		}
-		copy(node.Slots, btree.tempSlots[b:])
-		// Save this node.
-		btree.saveNode(node)
-
-		btree.distributeAction.Source = node
-		if isVacantSlotInLeft {
-			btree.distributeAction.Item = btree.tempSlots[btree.Store.NodeSlotCount]
+		if isVacantSlotInLeft || isVacantSlotInRight {
+			// Distribute to either left or right sibling the overflowed item.
+			// Copy temp buffer contents to the actual slots.
+			var b int16 = 1
+			if isVacantSlotInLeft {
+				b = 0
+			}
+			copy(node.Slots, btree.tempSlots[b:])
+			// Save this node.
+			btree.saveNode(node)
+	
+			btree.distributeAction.sourceNode = node
+			if isVacantSlotInLeft {
+				btree.distributeAction.item = btree.tempSlots[btree.Store.NodeSlotCount]
+				clear(btree.tempSlots)
+	
+				// Vacant in left, create a distribution action request to B-Tree.
+				// Logic is: "skud over" the leftmost node's item to parent and the item
+				// on parent to left sibling node (recursively).
+				btree.distributeAction.distributeToLeft = true
+				return nil
+			}
+			btree.distributeAction.item = btree.tempSlots[0]
 			clear(btree.tempSlots)
-
-			// Vacant in left, create a distribution action request to B-Tree.
-			// Logic is: "skud over" the leftmost node's item to parent and the item
-			// on parent to left sibling node (recursively).
-			btree.distributeAction.DistributeToLeft = true
+			// Vacant in right, move the rightmost node item into the vacant slot in right.
+			btree.distributeAction.distributeToLeft = false
 			return nil
 		}
-		btree.distributeAction.Item = btree.tempSlots[0]
-		clear(btree.tempSlots)
-		// Vacant in right, move the rightmost node item into the vacant slot in right.
-		btree.distributeAction.DistributeToLeft = false
-		return nil
-	}
+	
+		if isUnBalanced {
+			// if this branch is unbalanced..
+			// _BreakNode
+			// Description :
+			// -copy the left half of the slots
+			// -copy the right half of the slots
+			// -zero out the current slot.
+			// -copy the middle slot
+			// -allocate memory for children node *s
+			// -assign the new children nodes.
+	
+			// Initialize should throw an exception if in error.
+			rightNode := newNode[TK,TV](btree.Store.NodeSlotCount)
+			rightNode.newIds(node.Id)
+			leftNode := newNode[TK,TV](btree.Store.NodeSlotCount)
+			leftNode.newIds(node.Id)
+			copyArrayElements(leftNode.Slots, btree.tempSlots, slotsHalf)
+			leftNode.Count = slotsHalf
+			copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf + 1], slotsHalf)
+	
+			rightNode.Count = slotsHalf
+			clear(node.Slots)
+			node.Slots[0] = btree.tempSlots[slotsHalf]
+			//clear(node.childrenIds)
+	
+			//** save this TreeNode, Left & Right Nodes
+			btree.saveNode(leftNode)
+			btree.saveNode(rightNode)
+	
+			node.childrenIds[0] = leftNode.Id
+			node.childrenIds[1] = rightNode.Id
+			btree.saveNode(node)
+			//**
+	
+			clear(btree.tempSlots)
+			return nil
+		}
+		// All slots are occupied in this and other siblings' nodes..
 
-	if isUnBalanced {
-		// if this branch is unbalanced..
-		// _BreakNode
-		// Description :
-		// -copy the left half of the slots
-		// -copy the right half of the slots
-		// -zero out the current slot.
-		// -copy the middle slot
-		// -allocate memory for children node *s
-		// -assign the new children nodes.
-
-		// Initialize should throw an exception if in error.
+		// prepare this and the right node sibling and promote the temporary parent node(pTempSlot).
 		rightNode := newNode[TK,TV](btree.Store.NodeSlotCount)
 		rightNode.newIds(node.Id)
-		leftNode := newNode[TK,TV](btree.Store.NodeSlotCount)
-		leftNode.newIds(node.Id)
-		copyArrayElements(leftNode.Slots, btree.tempSlots, slotsHalf)
-		leftNode.Count = slotsHalf
-		copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf + 1], slotsHalf)
-
-		rightNode.Count = slotsHalf
+		// zero out the node slots in preparation to make it the left sibling.
 		clear(node.Slots)
-		node.Slots[0] = btree.tempSlots[slotsHalf]
-		//clear(node.childrenIds)
 
-		//** save this TreeNode, Left & Right Nodes
-		btree.saveNode(leftNode)
+		// copy the left half of the slots to left sibling(node).
+		copyArrayElements(node.Slots, btree.tempSlots, slotsHalf)
+		node.Count = slotsHalf
+		// copy the right half of the slots to right sibling
+		copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf + 1], slotsHalf)
+		rightNode.Count = slotsHalf
+
+		// copy the middle slot to temp parent slot.
+		btree.tempParent = btree.tempSlots[slotsHalf]
+
+		//*** save this and Right Node
+		btree.saveNode(node)
 		btree.saveNode(rightNode)
 
-		node.childrenIds[0] = leftNode.Id
-		node.childrenIds[1] = rightNode.Id
-		btree.saveNode(node)
-		//**
+		// assign the new children nodes.
+		btree.tempParentChildren[0] = node.Id
+		btree.tempParentChildren[1] = rightNode.Id
 
-		clear(btree.tempSlots)
+		o, err := btree.getNode(node.ParentId)
+		if err != nil {
+			return err
+		}
+		if o == nil {
+			return fmt.Errorf("Can't get parent (Id='{0}') of this Node.", node.ParentId)
+		}
+
+		btree.promoteAction.nodeForPromotion = o
+		i, err := node.getIndexOfNode(btree)
+		if err != nil {
+			return err
+		}
+		btree.promoteAction.nodeForPromotionIndex = i
 		return nil
 	}
 
-
-
-	// 	// All slots are occupied in this and other siblings' nodes..
-
-	// 	// prepare this and the right node sibling and promote the temporary parent node(pTempSlot).
-	// 	rightNode = CreateNode(bTree, ParentAddress);
-	// 	// zero out the current slot.
-	// 	ResetArray(Slots, null);
-	// 	RemoveFromBTreeBlocksCache(bTree, this);
-
-	// 	// copy the left half of the slots to left sibling
-	// 	CopyArrayElements(bTree.tempSlots, 0, Slots, 0, slotsHalf);
-	// 	Count = slotsHalf;
-	// 	// copy the right half of the slots to right sibling
-	// 	CopyArrayElements(bTree.tempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
-	// 	rightNode.Count = slotsHalf;
-
-	// 	// copy the middle slot to temp parent slot.
-	// 	bTree.TempParent = bTree.tempSlots[slotsHalf];
-
-	// 	//*** save this and Right Node
-	// 	btree.SaveNode()
-	// 	rightNode.btree.SaveNode()
-
-	// 	// assign the new children nodes.
-	// 	bTree.TempParentChildren[(int) ChildNodes.LeftChild] = this.GetAddress(bTree);
-	// 	bTree.TempParentChildren[(int) ChildNodes.RightChild] = rightNode.GetAddress(bTree);
-
-	// 	BTreeNodeOnDisk o = parent ?? GetParent(bTree);
-	// 	if (o == null)
-	// 		throw new SopException(string.Format("Can't get parent (Id='{0}') of this Node.", ParentAddress));
-
-	// 	bTree.PromoteParent = o;
-	// 	bTree.PromoteIndexOfNode = GetIndexOfNode(bTree);
-	// 	return;
-	// }
+	// TODO:
 	// // _BreakNode
 	// // Description :
 	// // -copy the left half of the temp slots
