@@ -99,8 +99,6 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 	// Set the item to the newly vacated slot.
 	btree.tempSlots[index] = item
 
-	// var slotsHalf = btree.Store.NodeSlotCount >> 1
-	// var rightNode, leftNode *Node[TK, TV]
 	var isVacantSlotInLeft, isVacantSlotInRight bool
 	var err error
 
