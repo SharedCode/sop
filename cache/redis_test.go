@@ -31,14 +31,14 @@ func TestBasicUse(t *testing.T) {
 		LastName:  "rec",
 	}
 
-	c.SetStruct("fooBar", usr, 0)
-	usr2, err := c.GetStruct("fooBar", &user{})
+	c.SetStruct(ctx, "fooBar", usr, 0)
+	usr2, err := c.GetStruct(ctx, "fooBar", &user{})
 	if err != nil {
 		t.Error("Struct foo NOT exists.")
 	}
 	fmt.Println(usr2)
 
-	err = c.Delete("fooBar")
+	err = c.Delete(ctx, "fooBar")
 
 	if err != nil {
 		t.Errorf(err.Error())

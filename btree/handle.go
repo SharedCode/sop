@@ -8,14 +8,20 @@ import (
 // UUID type.
 type UUID uuid.UUID
 
-// Handle contains Id to SOP data, e.g. - Node, Slot Value, etc...
-// It is called Handle
+// Handle is a structure that holds Logical Id and the underlying current Physical Id it maps to.
+// It a structure used for holding the "logical" & "physical" Ids to SOP data, e.g. - Node, Slot Value, etc...
+// It also contains other fields useful for allowing transaction manager to effectively manage & allow seamless
+// switching of data "pages", e.g. a modified Node or Value Data in a transaction can get switched to be the
+// "active" one upon commit.
+//
+// Yes, it is part of the SOP solution for "two phase" commit, ACID type of transactional support.
 type Handle struct {
 	LogicalId   UUID
 	PhysicalIdA UUID
 	PhysicalIdB UUID
 	IsActiveIdB bool
 	Version     int
+	IsDeleted bool
 }
 
 func (id UUID) ToString() string {

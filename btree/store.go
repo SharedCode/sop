@@ -79,13 +79,6 @@ type Recyclable struct {
 	IsDeleted  bool
 }
 
-// VirtualId is a structure that holds Logical Id and the underlying current Physical Id it maps to.
-// It also has other members used for Transaction processing.
-type VirtualId struct {
-	Handle
-	IsDeleted bool
-}
-
 type TransactionActionType uint
 
 const (
