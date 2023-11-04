@@ -35,12 +35,15 @@ type distributeAction[TK Comparable, TV any] struct {
 	// otherwise to the right side.
 	distributeToLeft bool
 }
-
+// promoteAction similar to distributeAction, contains details to allow controller in B-Tree
+// to drive calls for Node promotion to a higher level branch without using recursion.
+// Recursion can be more "taxing" as it accumulates items pushed to the stack.
 type promoteAction[TK Comparable, TV any] struct {
 	nodeForPromotion *Node[TK, TV]
 	nodeForPromotionIndex int
 }
 
+// NewBtree creates a new B-Tree instance.
 func NewBtree[TK Comparable, TV any](store Store, si *StoreInterface[TK, TV]) *Btree[TK, TV] {
 	var b3 = Btree[TK, TV]{
 		Store:          store,
@@ -52,7 +55,7 @@ func NewBtree[TK Comparable, TV any](store Store, si *StoreInterface[TK, TV]) *B
 	return &b3
 }
 
-// done
+// Add a key/value pair item to the tree.
 func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	var itm = Item[TK, TV]{
 		Key:   key,
@@ -109,7 +112,7 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	return true, nil
 }
 
-// done
+// FindOne will traverse the tree to find an item with such key.
 func (btree *Btree[TK, TV]) FindOne(key TK, firstItemWithKey bool) (bool, error) {
 	// return default value & no error if B-Tree is empty.
 	if btree.Store.Count == 0 {
@@ -227,7 +230,7 @@ func (btree *Btree[TK, TV]) rootNode() (*Node[TK, TV], error) {
 	if btree.Store.RootNodeLogicalId.IsNil() {
 		// create new Root Node, if nil (implied new btree).
 		var root = newNode[TK, TV](btree.Store.SlotLength)
-		root.newIds(NilUUID)
+		root.newId(NilUUID)
 		btree.Store.RootNodeLogicalId = root.logicalId
 		return root, nil
 	}
@@ -266,22 +269,24 @@ func (btree *Btree[TK, TV]) isUnique() bool {
 	return btree.Store.IsUnique
 }
 
+func (btree *Btree[TK, TV]) getSlotLength() int {
+	return btree.Store.SlotLength
+}
+
 // distribute function allows B-Tree to avoid using recursion. I.e. - instead of the node calling
 // a recursive function that distributes or moves an item from a source node to a vacant slot somewhere
-// in the sibling nodes, distribute allows a controller(distribute)-pawn(node.DistributeLeft or XxRight)
+// in the sibling nodes, distribute allows a controller(distribute)-controllee(node.DistributeLeft or XxRight)
 // pattern and avoids recursion.
 func (btree *Btree[TK, TV]) distribute() {
-	if btree.distributeAction.sourceNode != nil {
+	for btree.distributeAction.sourceNode != nil {
 		log.Debug(fmt.Sprintf("Distribute item with key(%v) of node Id(%v) to left(%v).",
 			btree.distributeAction.item.Key, btree.distributeAction.sourceNode.Id, btree.distributeAction.distributeToLeft))
-	}
-	for btree.distributeAction.sourceNode != nil {
 		n := btree.distributeAction.sourceNode
 		btree.distributeAction.sourceNode = nil
 		item := btree.distributeAction.item
 		btree.distributeAction.item = nil
 
-		// Call the node DistributeLeft or XxRight to do the 2nd part of the "item distribution" logic.
+		// Node DistributeLeft or XxRight contains actual logic of "item distribution".
 		if btree.distributeAction.distributeToLeft {
 			n.distributeToLeft(btree, item)
 		} else {
@@ -290,6 +295,9 @@ func (btree *Btree[TK, TV]) distribute() {
 	}
 }
 
+// promote function allows B-Tree to avoid using recursion. I.e. - instead of the node calling
+// a recursive function that promotes a sub-tree "parent" node for insert on a vacant slot,
+// promote allows a controller(btree.promote)-controllee(node.promote) pattern and avoid recursion.
 func (btree *Btree[TK, TV]) promote() {
 	for btree.promoteAction.nodeForPromotion != nil {
 		log.Debug(fmt.Sprintf("Promote will promote a Node with Id %v.", btree.promoteAction.nodeForPromotion.Id.ToString()))
@@ -297,6 +305,7 @@ func (btree *Btree[TK, TV]) promote() {
 		i := btree.promoteAction.nodeForPromotionIndex
 		btree.promoteAction.nodeForPromotion = nil
 		btree.promoteAction.nodeForPromotionIndex = 0
+		// Node promote tcontains actual logic to promote a node to higher up.
 		n.promote(btree, i)
 	}
 }

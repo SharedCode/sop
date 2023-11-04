@@ -83,7 +83,7 @@ func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, e
 // Correct Node is reached at this point!
 func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], index int, parent *Node[TK, TV]) (error) {
 	// If node is not yet full.
-	if node.Count < btree.Store.SlotLength {
+	if node.Count < btree.getSlotLength() {
 		// Insert the Item to target position & "skud" over the items to the right.
 		node.insertSlotItem(item, index)
 		// Save this TreeNode
@@ -103,7 +103,7 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 	var isVacantSlotInLeft, isVacantSlotInRight bool
 	var err error
 
-	slotsHalf := btree.Store.SlotLength >> 1
+	slotsHalf := btree.getSlotLength() >> 1
 	var isUnBalanced bool
 	if !node.ParentId.IsNil() {
 		isVacantSlotInLeft, err = node.isThereVacantSlotInLeft(btree, &isUnBalanced)
@@ -128,7 +128,7 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 	
 			btree.distributeAction.sourceNode = node
 			if isVacantSlotInLeft {
-				btree.distributeAction.item = btree.tempSlots[btree.Store.SlotLength]
+				btree.distributeAction.item = btree.tempSlots[btree.getSlotLength()]
 				clear(btree.tempSlots)
 	
 				// Vacant in left, create a distribution action request to B-Tree.
@@ -156,10 +156,10 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 			// -assign the new children nodes.
 	
 			// Initialize should throw an exception if in error.
-			rightNode := newNode[TK,TV](btree.Store.SlotLength)
-			rightNode.newIds(node.Id)
-			leftNode := newNode[TK,TV](btree.Store.SlotLength)
-			leftNode.newIds(node.Id)
+			rightNode := newNode[TK,TV](btree.getSlotLength())
+			rightNode.newId(node.Id)
+			leftNode := newNode[TK,TV](btree.getSlotLength())
+			leftNode.newId(node.Id)
 			copyArrayElements(leftNode.Slots, btree.tempSlots, slotsHalf)
 			leftNode.Count = slotsHalf
 			copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf + 1], slotsHalf)
@@ -184,8 +184,8 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 		// All slots are occupied in this and other siblings' nodes..
 
 		// prepare this and the right node sibling and promote the temporary parent node(pTempSlot).
-		rightNode := newNode[TK,TV](btree.Store.SlotLength)
-		rightNode.newIds(node.Id)
+		rightNode := newNode[TK,TV](btree.getSlotLength())
+		rightNode.newId(node.Id)
 		// zero out the node slots in preparation to make it the left sibling.
 		clear(node.Slots)
 
@@ -232,10 +232,10 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 	// -copy the middle of temp slot to 1st elem of current slot
 	// -allocate memory for children node *s
 	// -assign the new children nodes.
-	rightNode := newNode[TK,TV](btree.Store.SlotLength)
-	rightNode.newIds(node.Id)
-	leftNode := newNode[TK,TV](btree.Store.SlotLength)
-	leftNode.newIds(node.Id)
+	rightNode := newNode[TK,TV](btree.getSlotLength())
+	rightNode.newId(node.Id)
+	leftNode := newNode[TK,TV](btree.getSlotLength())
+	leftNode.newId(node.Id)
 
 	copyArrayElements(leftNode.Slots, btree.tempSlots, slotsHalf)
 	leftNode.Count = slotsHalf
@@ -273,7 +273,7 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 				return compare(n.Slots[index].Key, key) >= 0
 			})
 			// If key is found in node n.
-			if index < btree.Store.SlotLength {
+			if index < btree.getSlotLength() {
 				// Make the found node & item index the "current item" of btree.
 				foundNodeId = n.Id
 				foundItemIndex = index
@@ -312,7 +312,7 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 	// This must be the outermost node
 	// This block will make this item the current one to give chance to the Btree
 	// caller the chance to check the items having the nearest key to the one it is interested at.
-	if index == btree.Store.SlotLength {
+	if index == btree.getSlotLength() {
 		// make sure i points to valid item
 		index--
 	}
@@ -393,7 +393,7 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBala
 			*isUnBalanced = true
 			return false, nil
 		}
-		if !temp.isFull(btree.Store.SlotLength) {
+		if !temp.isFull(btree.getSlotLength()) {
 			return true, nil
 		}
 		var err error
@@ -420,7 +420,7 @@ func (node *Node[TK, TV]) isThereVacantSlotInRight(btree *Btree[TK, TV], isUnBal
 			*isUnBalanced = true
 			return false, nil
 		}
-		if !temp.isFull(btree.Store.SlotLength) {
+		if !temp.isFull(btree.getSlotLength()) {
 			return true, nil
 		}
 		var err error
@@ -482,7 +482,7 @@ func (node *Node[TK, TV]) getIndexOfNode(btree *Btree[TK, TV]) (int, error) {
 		// Make sure we don't access an invalid node item.
 		if parent.childrenIds != nil &&
 			(node.indexOfNode == -1 || node.Id != parent.childrenIds[node.indexOfNode]) {
-			for node.indexOfNode = 0; node.indexOfNode <= btree.Store.SlotLength &&
+			for node.indexOfNode = 0; node.indexOfNode <= btree.getSlotLength() &&
 				!parent.childrenIds[node.indexOfNode].IsNil(); node.indexOfNode++ {
 				if parent.childrenIds[node.indexOfNode] == node.Id {
 					break
@@ -515,7 +515,7 @@ func (node *Node[TK, TV]) insertSlotItem(item *Item[TK, TV], position int) {
 
 func (node *Node[TK, TV]) getIndexToInsertTo(btree *Btree[TK, TV], item *Item[TK, TV]) (int, bool) {
 	if node.Count == 0 {
-		// empty node.
+		// Empty node.
 		return 0, false
 	}
 	index := sort.Search(node.Count, func(index int) bool {
@@ -523,7 +523,7 @@ func (node *Node[TK, TV]) getIndexToInsertTo(btree *Btree[TK, TV], item *Item[TK
 	})
 	if btree.isUnique() {
 		i := index
-		if i >= btree.Store.SlotLength {
+		if i >= btree.getSlotLength() {
 			i--
 		}
 		// Returns index in slot that is available for insert to.
@@ -534,15 +534,27 @@ func (node *Node[TK, TV]) getIndexToInsertTo(btree *Btree[TK, TV], item *Item[TK
 	return index, false
 }
 
-// TODO: Resolve story of fetching Nodes via logical Id vs. physical Id. Example, in a transaction,
+// Transaction will resolve story of fetching Nodes via logical Id vs. physical Id. Example, in a transaction,
 // like when adding an item, newly created nodes need to be using UUID that then becomes logical Id
 // during commit. When working with Children logical Ids(saved in backend!), we need to convert logical to physical Id.
 func (node *Node[TK, TV]) getChild(btree *Btree[TK, TV], childSlotIndex int) (*Node[TK, TV], error) {
-	h, err := btree.storeInterface.VirtualIdRepository.Get(node.ChildrenLogicalIds[childSlotIndex])
-	if err != nil {
-		return nil, err
+	id := node.getChildId(childSlotIndex)
+	if id == NilUUID {
+		return nil, fmt.Errorf("Can't get child Node on child index position %d", childSlotIndex)
 	}
-	return btree.getNode(h.GetActiveId())
+	return btree.getNode(id)
+}
+
+func (node *Node[TK, TV]) getChildren(btree *Btree[TK, TV]) ([]*Node[TK, TV], error) {
+	children := make([]*Node[TK,TV], len(node.childrenIds))
+	var err error
+	for i := range node.childrenIds {
+		children[i], err = node.getChild(btree, i)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return children, nil
 }
 
 // hasChildren returns true if node has children or not.
@@ -551,7 +563,7 @@ func (node *Node[TK, TV]) hasChildren() bool {
 }
 
 func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, TV]) error {
-	if node.isFull(btree.Store.SlotLength) {
+	if node.isFull(btree.getSlotLength()) {
 		// counter-clockwise rotation..
 		//	----
 		//	|  |
@@ -571,6 +583,7 @@ func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, 
 			return nil
 		}
 
+		// Let controller to make another call to distribute item to left action.
 		btree.distributeAction.sourceNode, err = node.getLeftSibling(btree)
 		if err != nil {
 			return err
@@ -582,7 +595,7 @@ func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, 
 		// Update Parent (remove node and add updated one).
 		parent.Slots[indexOfNode - 1] = node.Slots[0]
 		btree.saveNode(parent)
-		moveArrayElements(node.Slots, 1, 0, btree.Store.SlotLength - 1)
+		moveArrayElements(node.Slots, 1, 0, btree.getSlotLength() - 1)
 	} else {
 		node.Count++
 	}
@@ -592,7 +605,7 @@ func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, 
 }
 
 func (node *Node[TK, TV]) distributeToRight(btree *Btree[TK, TV], item *Item[TK, TV]) error {
-	if node.isFull(btree.Store.SlotLength) {
+	if node.isFull(btree.getSlotLength()) {
 		// clockwise rotation..
 		//	----
 		//	|  |
@@ -606,182 +619,194 @@ func (node *Node[TK, TV]) distributeToRight(btree *Btree[TK, TV], item *Item[TK,
 			return nil
 		}
 
+		// Let controller to make another call to distribute item to right action.
 		btree.distributeAction.sourceNode, err = node.getRightSibling(btree)
 		if err != nil {
 			return nil
 		}
 		btree.distributeAction.item = parent.Slots[i]
 		btree.distributeAction.distributeToLeft = false
-		//GetRightSibling(bTree).DistributeToRight(bTree, parent.Slots[i]);
 
 		parent.Slots[i] = node.Slots[node.Count - 1]
 		btree.saveNode(parent)
 	} else {
 		node.Count++
 	}
-	moveArrayElements(node.Slots, 0, 1, btree.Store.SlotLength - 1)
+	moveArrayElements(node.Slots, 0, 1, btree.getSlotLength() - 1)
 	node.Slots[0] = item
 	btree.saveNode(node)
 	return nil
 }
 
-// TODO
 func (node *Node[TK, TV]) promote(btree *Btree[TK, TV], indexPosition int) error {
-	// short noOfOccupiedSlots = Count, index = position;
-	// IsDirty = true;
-	// if (noOfOccupiedSlots < bTree.SlotLength)
-	// {
-	// 	// node is not yet full.. insert the parent.
-	// 	ShiftSlots(Slots, index, noOfOccupiedSlots);
-	// 	if (index > noOfOccupiedSlots)
-	// 		index = noOfOccupiedSlots;
-	// 	Slots[index] = bTree.TempParent;
-	// 	// insert the left child
+	noOfOccupiedSlots := node.Count
+	index := indexPosition
+	if noOfOccupiedSlots < btree.getSlotLength() {
+		// node is not yet full.. insert the parent.
+		shiftSlots(node.Slots, index, noOfOccupiedSlots)
+		if index > noOfOccupiedSlots {
+			index = noOfOccupiedSlots
+		}
+		node.Slots[index] = btree.tempParent
 
-	// 	ChildrenAddresses[index] = bTree.TempParentChildren[(int) ChildNodes.LeftChild];
-	// 	// insert the right child
-	// 	ShiftSlots(ChildrenAddresses, (short) (index + 1), (short) (noOfOccupiedSlots + 1));
-	// 	Count++;
+		// Insert the left child.
+		node.childrenIds[index] = btree.tempParentChildren[0]
+	
+		// Insert the right child.
+		shiftSlots(node.childrenIds, index + 1, noOfOccupiedSlots + 1)
+		node.Count++
+		node.childrenIds[index + 1] = btree.tempParentChildren[1]
+		btree.saveNode(node)
 
-	// 	ChildrenAddresses[index + 1] = bTree.TempParentChildren[(int) ChildNodes.RightChild];
-	// 	IsDirty = true;
-	// 	//SaveNodeToDisk(bTree);
+		// successful
+		return nil
+	}
 
-	// 	// successful
-	// 	return;
-	// }
-	// // *** Insert to temp slots.. node is full, use TempSlots
+	// Insert to temp slots.. node is full, use TempSlots
+	// NOTE: ensure node & its children being promoted will point to the correct
+	// new ParentAddress as recursive node breakup occurs...
 
-	// // NOTE: ensure node & its children being promoted will point to the correct new ParentAddress as recursive node breakup occurs...
+	copyArrayElements(btree.tempSlots, node.Slots, btree.getSlotLength())
+	shiftSlots(btree.tempSlots, index, btree.getSlotLength())
+	btree.tempSlots[index] = btree.tempParent
+	copyArrayElements(btree.tempChildren, node.childrenIds, btree.getSlotLength() + 1)
 
-	// CopyArrayElements(Slots, 0, bTree.TempSlots, 0, bTree.SlotLength);
-	// ShiftSlots(bTree.TempSlots, index, bTree.SlotLength);
-	// bTree.TempSlots[index] = bTree.TempParent;
-	// CopyArrayElements(ChildrenAddresses, 0, bTree.TempChildren, 0, (short) (bTree.SlotLength + 1));
+	// Insert the left child.
+	btree.tempChildren[index] = btree.tempParentChildren[0]
+	// Insert the right child.
+	shiftSlots(btree.tempChildren, index + 1, noOfOccupiedSlots + 1)
+	btree.tempChildren[index + 1] = btree.tempParentChildren[1]
 
-	// // insert the left child
-	// bTree.TempChildren[index] = bTree.TempParentChildren[(int) ChildNodes.LeftChild];
-	// // insert the right child
-	// ShiftSlots(bTree.TempChildren, (short) (index + 1), (short) (noOfOccupiedSlots + 1));
-	// bTree.TempChildren[index + 1] = bTree.TempParentChildren[(int) ChildNodes.RightChild];
+	// Try to break up the node into 2 siblings.
+	slotsHalf := btree.getSlotLength() >> 1
+	if node.ParentId != NilUUID {
 
-	// // *** Try to break up the node into 2 siblings.
-	// BTreeNodeOnDisk rightNode;
-	// short slotsHalf = (short) (bTree.SlotLength >> 1);
-	// if (ParentAddress != -1)
-	// {
-	// 	//** prepare this and the right node sibling and promote the temporary parent node(pTempSlot). 
-	// 	//** this is the left sibling !
-	// 	try
-	// 	{
-	// 		//if (bTree.InMaintenanceMode)
-	// 		//{
-	// 		//    IsDirty = true;
-	// 		//    //bTree.PromoteLookup.SetNode(bTree.GetId(DiskBuffer), this);
-	// 		//}
-	// 		rightNode = CreateNode(bTree, ParentAddress);
-	// 		rightNode.ChildrenAddresses = new long[bTree.SlotLength + 1];
-	// 		ResetArray(rightNode.ChildrenAddresses, -1);
-	// 		// zero out the current slot.
-	// 		ResetArray(Slots, null);
-	// 		RemoveFromBTreeBlocksCache(bTree, this);
-	// 		// zero out this children node pointers.
-	// 		ResetArray(ChildrenAddresses, -1);
-	// 		// copy the left half of the slots to left sibling(this)
-	// 		CopyArrayElements(bTree.TempSlots, 0, Slots, 0, slotsHalf);
-	// 		Count = slotsHalf;
-	// 		// copy the right half of the slots to right sibling
-	// 		CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
-	// 		rightNode.Count = slotsHalf;
-	// 		// copy the left half of the children nodes.
-	// 		CopyArrayElements(bTree.TempChildren, 0, ChildrenAddresses, 0, (short) (slotsHalf + 1));
+		// Prepare this and the right node sibling and promote the temporary parent node(pTempSlot). 
+		// This will be the left sibling !
+		rightNode := newNode[TK, TV](btree.getSlotLength())
+		rightNode.newId(node.ParentId)
+		rightNode.childrenIds = make([]UUID, btree.getSlotLength() + 1)
 
-	// 		// copy the right half of the children nodes.
-	// 		CopyArrayElements(bTree.TempChildren, (short) (slotsHalf + 1), rightNode.ChildrenAddresses, 0,
-	// 						  (short) (slotsHalf + 1));
+		// zero out the current slot.
+		clear(node.Slots)
+		// zero out this children node pointers.
+		clear(node.childrenIds)
 
-	// 		// make sure this node(leftNode)'s children has this node as parent...
-	// 		//UpdateChildrenParent(bTree, this);
+		// copy the left half of the slots to left sibling(this)
+		copyArrayElements(node.Slots, btree.tempSlots, slotsHalf)
+		node.Count = slotsHalf
 
-	// 		rightNode.SaveNodeToDisk(bTree);
-	// 		// left sibling is already parent of its children. make the right sibling parent of its children.
-	// 		UpdateChildrenParent(bTree, rightNode);
+		// copy the right half of the slots to right sibling
+		copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf + 1], slotsHalf)
+		rightNode.Count = slotsHalf;
+		// copy the left half of the children nodes.
+		copyArrayElements(node.childrenIds, btree.tempChildren, slotsHalf + 1)
 
-	// 		// copy the middle slot
-	// 		bTree.TempParent = bTree.TempSlots[slotsHalf];
-	// 		// assign the new children nodes.
-	// 		bTree.TempParentChildren[(int) ChildNodes.LeftChild] = GetAddress(bTree);
-	// 		bTree.TempParentChildren[(int) ChildNodes.RightChild] = rightNode.GetAddress(bTree);
+		// copy the right half of the children nodes.
+		copyArrayElements(rightNode.childrenIds, btree.tempChildren[:slotsHalf + 1], slotsHalf + 1)
 
-	// 		IsDirty = true; 
-	// 		//SaveNodeToDisk(bTree);
+		// make sure this node(leftNode)'s children has this node as parent...
+		//UpdateChildrenParent(bTree, this);
+		btree.saveNode(rightNode)
+		// left sibling is already parent of its children. make the right sibling parent of its children.
+		rightNode.updateChildrenParent(btree)
 
-	// 		bTree.PromoteParent = GetParent(bTree);
-	// 		bTree.PromoteIndexOfNode = GetIndexOfNode(bTree);
-	// 		//Parent.Promote(BTree, GetIndexOfNode(BTree));
-			
-	// 		return;
-	// 	}
-	// 	catch (Exception e)
-	// 	{
-	// 		throw new Exception("Error in attempt to promote parent of a splitted node.", e);
-	// 	}
-	// }
-	// //** no parent, break up this node into two children & make this new root...
-	// long thisAddress = GetAddress(bTree);
-	// BTreeNodeOnDisk leftNode = CreateNode(bTree, thisAddress);
-	// rightNode = CreateNode(bTree, thisAddress);
-	// // copy the left half of the slots
-	// CopyArrayElements(bTree.TempSlots, 0, leftNode.Slots, 0, slotsHalf);
-	// leftNode.Count = slotsHalf;
-	// // copy the right half of the slots
-	// CopyArrayElements(bTree.TempSlots, (short) (slotsHalf + 1), rightNode.Slots, 0, slotsHalf);
-	// rightNode.Count = slotsHalf;
-	// leftNode.ChildrenAddresses = new long[bTree.SlotLength + 1];
-	// ResetArray(leftNode.ChildrenAddresses, -1);
-	// rightNode.ChildrenAddresses = new long[bTree.SlotLength + 1];
-	// ResetArray(rightNode.ChildrenAddresses, -1);
-	// // copy the left half of the children nodes.
-	// CopyArrayElements(bTree.TempChildren, 0, leftNode.ChildrenAddresses, 0, (short) (slotsHalf + 1));
-	// // copy the right half of the children nodes.
-	// CopyArrayElements(bTree.TempChildren, (short) (slotsHalf + 1),
-	// 				  rightNode.ChildrenAddresses, 0, (short) (slotsHalf + 1));
+		// copy the middle slot
+		btree.tempParent = btree.tempSlots[slotsHalf]
+		// assign the new children nodes.
+		btree.tempParentChildren[0] = node.Id
+		btree.tempParentChildren[1] = rightNode.Id
 
-	// // reset this Node...
-	// ResetArray(Slots, null);
-	// RemoveFromBTreeBlocksCache(bTree, this);
+		btree.saveNode(node)
 
-	// //children = null;
-	// ResetArray(ChildrenAddresses, -1);
+		// Trigger promotion.
+		var err error
+		btree.promoteAction.nodeForPromotion, err = node.getParent(btree)
+		if err != nil {
+			return err
+		}
+		btree.promoteAction.nodeForPromotionIndex, err = node.getIndexOfNode(btree)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	// No parent, break up this node into two children & make this new root.
+	leftNode  := newNode[TK,TV](btree.getSlotLength())
+	leftNode.newId(node.Id)
 
-	// leftNode.SaveNodeToDisk(bTree);
-	// // make the left sibling parent of its children.
-	// UpdateChildrenParent(bTree, leftNode);
+	rightNode := newNode[TK,TV](btree.getSlotLength())
+	rightNode.newId(node.Id)
 
-	// rightNode.SaveNodeToDisk(bTree);
-	// // make the right sibling parent of its children.
-	// UpdateChildrenParent(bTree, rightNode);
+	// Copy the left half of the slots
+	copyArrayElements(leftNode.Slots, btree.tempSlots, slotsHalf)
+	leftNode.Count = slotsHalf
+	// Copy the right half of the slots
+	copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf + 1], slotsHalf)
+	rightNode.Count = slotsHalf
+	leftNode.childrenIds = make([]UUID, btree.getSlotLength() + 1)
+	rightNode.childrenIds = make([]UUID, btree.getSlotLength() + 1)
+	// Copy the left half of the children nodes.
+	copyArrayElements(leftNode.childrenIds, btree.tempChildren, slotsHalf + 1)
+	// Copy the right half of the children nodes.
+	copyArrayElements(rightNode.childrenIds, btree.tempChildren[:slotsHalf + 1], slotsHalf + 1)
 
-	// // copy the middle slot
-	// Slots[0] = bTree.TempSlots[slotsHalf];
-	// this.Count = 1;
-	// // assign the new children nodes.
+	// Reset this Node.
+	clear(node.Slots)
+	clear(node.childrenIds)
 
-	// ChildrenAddresses[(int) ChildNodes.LeftChild] = leftNode.GetAddress(bTree);
-	// ChildrenAddresses[(int) ChildNodes.RightChild] = rightNode.GetAddress(bTree);
-	// IsDirty = true;
-	// //SaveNodeToDisk(bTree);
-	// // successful
+	btree.saveNode(leftNode)
+	// make the left sibling parent of its children.
+	leftNode.updateChildrenParent(btree)
+
+	btree.saveNode(rightNode)
+	// make the right sibling parent of its children.
+	rightNode.updateChildrenParent(btree)
+
+	// copy the middle slot
+	node.Slots[0] = btree.tempSlots[slotsHalf]
+	node.Count = 1
+
+	// assign the new children nodes.
+	node.childrenIds[0] = leftNode.Id
+	node.childrenIds[1] = rightNode.Id
+	btree.saveNode(node)
+	// successful
 	return nil
 }
 
-func (node *Node[TK, TV]) newIds(parentId UUID) {
-	// Set both logical Id & physical Id to the same UUID to begin with.
-	// Transaction commit should handle resolving them.
-	node.logicalId = NewUUID()
-	node.Id = node.logicalId
+func (node *Node[TK, TV]) newId(parentId UUID) {
+	// Set the Physical Ids, transaction commit should handle resolving physical & logical Ids.
+	node.Id = NewUUID()
 	node.ParentId = parentId
-	node.parentLogicalId = parentId
+}
+
+func (node *Node[TK, TV]) getChildId(index int) UUID {
+	if len(node.childrenIds) > 0 {
+		id := node.childrenIds[index]
+		if id != NilUUID {
+			return id
+		}
+	}
+	if len(node.ChildrenLogicalIds) == 0 {
+		return NilUUID
+	}
+	return node.ChildrenLogicalIds[index]
+}
+
+func (node *Node[TK,TV]) updateChildrenParent(btree *Btree[TK, TV]) error {
+	if (node.childrenIds != nil) {
+		children, err := node.getChildren(btree)
+		if err != nil {
+			return err
+		}
+		// make the right sibling parent of its children.
+		for index := 0; index < len(children) && children[index] != nil; index++ {
+			children[index].ParentId = node.Id
+			btree.saveNode(children[index])
+		}
+	}
+	return nil
 }
 
 // copyArrayElements is a helper function for internal use only.
@@ -793,6 +818,14 @@ func copyArrayElements[T any](destination, source []T, count int) {
 		destination[i] = source[i]
 	}
 }
+
+func shiftSlots[T any](array []T, position int , noOfOccupiedSlots int ) {
+	if position < noOfOccupiedSlots {
+		// create a vacant slot by shifting node contents one slot
+		moveArrayElements(array, position, position + 1, noOfOccupiedSlots - position)
+	}
+}
+
 // moveArrayElements is a helper function for internal use only.
 func moveArrayElements[T any](array []T, srcStartIndex, destStartIndex, count int) {
 	if array == nil {
@@ -808,10 +841,11 @@ func moveArrayElements[T any](array []T, srcStartIndex, destStartIndex, count in
 	}
 	for i := 0; i < count; i++ {
 		// only process if w/in array range
-		if destIndex < len(array) || srcIndex < len(array) {
-			array[destIndex] = array[srcIndex]
-			destIndex = destIndex + addValue
-			srcIndex = srcIndex + addValue
+		if destIndex < 0 || srcIndex < 0 || destIndex >= len(array) || srcIndex >= len(array) {
+			break
 		}
+		array[destIndex] = array[srcIndex]
+		destIndex = destIndex + addValue
+		srcIndex = srcIndex + addValue
 	}
 }
