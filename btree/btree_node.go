@@ -52,8 +52,9 @@ func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, e
 		}
 		if currentNode.hasChildren() {
 			parent = nil
+			var err error
 			// if not an outermost node let next lower level node do the 'Add'.
-			currentNode, err := currentNode.getChild(btree, index)
+			currentNode, err = currentNode.getChild(btree, index)
 			if err != nil || currentNode == nil {
 				return false, err
 			}
@@ -66,8 +67,7 @@ func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, e
 		if index > 0 && index >= currentNode.Count {
 			currItemIndex--
 		}
-		i := compare(currentNode.Slots[currItemIndex].Key, item.Key)
-		if i == 0 {
+		if compare(currentNode.Slots[currItemIndex].Key, item.Key) == 0 {
 			// set the Current item pointer to the discovered existing item.
 			btree.setCurrentItemId(currentNode.Id, currItemIndex)
 			return false, nil
@@ -159,7 +159,7 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 			leftNode.newId(node.Id)
 			copyArrayElements(leftNode.Slots, btree.tempSlots, slotsHalf)
 			leftNode.Count = slotsHalf
-			copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf+1], slotsHalf)
+			copyArrayElements(rightNode.Slots, btree.tempSlots[slotsHalf+1:], slotsHalf)
 
 			rightNode.Count = slotsHalf
 			clear(node.Slots)
@@ -188,7 +188,7 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 		copyArrayElements(node.Slots, btree.tempSlots, slotsHalf)
 		node.Count = slotsHalf
 		// Copy the right half of the slots to right sibling.
-		copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf+1], slotsHalf)
+		copyArrayElements(rightNode.Slots, btree.tempSlots[slotsHalf+1:], slotsHalf)
 		rightNode.Count = slotsHalf
 
 		// Copy the middle slot to temp parent slot.
@@ -234,7 +234,7 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 
 	copyArrayElements(leftNode.Slots, btree.tempSlots, slotsHalf)
 	leftNode.Count = slotsHalf
-	copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf+1], slotsHalf)
+	copyArrayElements(rightNode.Slots, btree.tempSlots[slotsHalf+1:], slotsHalf)
 	rightNode.Count = slotsHalf
 	clear(node.Slots)
 	node.Slots[0] = btree.tempSlots[slotsHalf]
@@ -265,11 +265,11 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 	for {
 		index = 0
 		if n.Count > 0 {
-			index = sort.Search(n.Count-1, func(index int) bool {
+			index = sort.Search(n.Count, func(index int) bool {
 				return compare(n.Slots[index].Key, key) >= 0
 			})
 			// If key is found in node n.
-			if index < btree.getSlotLength() {
+			if index < n.Count {
 				// Make the found node & item index the "current item" of btree.
 				foundNodeId = n.Id
 				foundItemIndex = index
@@ -284,8 +284,6 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 					}
 					continue
 				}
-			} else {
-				index--
 			}
 		}
 		// Check children if there are.
@@ -688,13 +686,13 @@ func (node *Node[TK, TV]) promote(btree *Btree[TK, TV], indexPosition int) error
 		node.Count = slotsHalf
 
 		// Copy the right half of the slots to right sibling
-		copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf+1], slotsHalf)
+		copyArrayElements(rightNode.Slots, btree.tempSlots[slotsHalf+1:], slotsHalf)
 		rightNode.Count = slotsHalf
 		// Copy the left half of the children nodes.
 		copyArrayElements(node.childrenIds, btree.tempChildren, slotsHalf+1)
 
 		// Copy the right half of the children nodes.
-		copyArrayElements(rightNode.childrenIds, btree.tempChildren[:slotsHalf+1], slotsHalf+1)
+		copyArrayElements(rightNode.childrenIds, btree.tempChildren[slotsHalf+1:], slotsHalf+1)
 
 		// Left sibling is already parent of its children. make the right sibling parent of its children.
 		rightNode.updateChildrenParent(btree)
@@ -731,14 +729,14 @@ func (node *Node[TK, TV]) promote(btree *Btree[TK, TV], indexPosition int) error
 	copyArrayElements(leftNode.Slots, btree.tempSlots, slotsHalf)
 	leftNode.Count = slotsHalf
 	// Copy the right half of the slots
-	copyArrayElements(rightNode.Slots, btree.tempSlots[:slotsHalf+1], slotsHalf)
+	copyArrayElements(rightNode.Slots, btree.tempSlots[slotsHalf+1:], slotsHalf)
 	rightNode.Count = slotsHalf
 	leftNode.childrenIds = make([]UUID, btree.getSlotLength()+1)
 	rightNode.childrenIds = make([]UUID, btree.getSlotLength()+1)
 	// Copy the left half of the children nodes.
 	copyArrayElements(leftNode.childrenIds, btree.tempChildren, slotsHalf+1)
 	// Copy the right half of the children nodes.
-	copyArrayElements(rightNode.childrenIds, btree.tempChildren[:slotsHalf+1], slotsHalf+1)
+	copyArrayElements(rightNode.childrenIds, btree.tempChildren[slotsHalf+1:], slotsHalf+1)
 
 	// Reset this Node.
 	clear(node.Slots)

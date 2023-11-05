@@ -9,11 +9,7 @@ import (
 )
 
 func TestBtreeBasic(t *testing.T) {
-	// testBtreeAddLoop(t, 1)
-	// testBtreeAddLoop(t, 2)
-	// testBtreeAddLoop(t, 3)
-	// testBtreeAddLoop(t, 4)
-	testBtreeAddLoop(t, 5)
+	testBtreeAddLoop(t, 20)
 }
 
 // TODO: support node breakup! this test fails until such feature is implemented.

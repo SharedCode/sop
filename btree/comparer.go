@@ -16,6 +16,7 @@ type Comparable interface {
 	cmp.Ordered | *Comparer
 }
 
+// compare can compare a Comparable type.
 func compare[T Comparable](x, y T) int {
 	anyX := any(x)
 	anyY := any(y)

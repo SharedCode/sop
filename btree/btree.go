@@ -265,10 +265,10 @@ func (btree *Btree[TK, TV]) getNode(id UUID) (*Node[TK, TV], error) {
 }
 
 func (btree *Btree[TK, TV]) setCurrentItemId(nodeId UUID, itemIndex int) {
+	btree.currentItem = nil
 	if btree.currentItemRef.nodeId == nodeId && btree.currentItemRef.getNodeItemIndex() == itemIndex {
 		return
 	}
-	btree.currentItem = nil
 	btree.currentItemRef.nodeId = nodeId
 	btree.currentItemRef.nodeItemIndex = itemIndex
 }

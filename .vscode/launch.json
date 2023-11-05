@@ -11,14 +11,26 @@
         "mode": "local",
         "processId": 0
     },
-        {
-            "name": "Launch",
-            "type": "go",
-            "request": "launch",
-            "mode": "auto",
-            "program": "${fileDirname}",
-            "env": {},
-            "args": []
-        }
+    {
+        "name": "Launch",
+        "type": "go",
+        "request": "launch",
+        "mode": "auto",
+        "program": "${fileDirname}",
+        "env": {},
+        "args": []
+    },
+    {
+        "name": "Test Current File",
+        "type": "go",
+        "request": "launch",
+        "mode": "test",
+        "port": 2345,
+        "host": "127.0.0.1",
+        "program": "${file}",
+        "env": {},
+        "args": [],
+        "showLog": true
+    }        
     ]
 }
