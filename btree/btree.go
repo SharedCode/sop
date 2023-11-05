@@ -163,12 +163,12 @@ func (btree *Btree[TK, TV]) GetCurrentItem() Item[TK, TV] {
 	if btree.currentItem != nil {
 		return *btree.currentItem
 	}
-	n, err := btree.storeInterface.NodeRepository.Get(btree.currentItemRef.nodeId)
+	n, err := btree.storeInterface.NodeRepository.Get(btree.currentItemRef.getNodeId())
 	if err != nil {
 		// TODO: Very rarely to happen, & we need to log err when logging is in.
 		return zero
 	}
-	btree.currentItem = n.Slots[btree.currentItemRef.nodeItemIndex]
+	btree.currentItem = n.Slots[btree.currentItemRef.getNodeItemIndex()]
 	return *btree.currentItem
 }
 
@@ -265,7 +265,7 @@ func (btree *Btree[TK, TV]) getNode(id UUID) (*Node[TK, TV], error) {
 }
 
 func (btree *Btree[TK, TV]) setCurrentItemId(nodeId UUID, itemIndex int) {
-	if btree.currentItemRef.nodeId == nodeId && btree.currentItemRef.nodeItemIndex == itemIndex {
+	if btree.currentItemRef.nodeId == nodeId && btree.currentItemRef.getNodeItemIndex() == itemIndex {
 		return
 	}
 	btree.currentItem = nil

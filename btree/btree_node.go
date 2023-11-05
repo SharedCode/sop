@@ -539,8 +539,8 @@ func (node *Node[TK, TV]) getChild(btree *Btree[TK, TV], childSlotIndex int) (*N
 func (node *Node[TK, TV]) getChildren(btree *Btree[TK, TV]) ([]*Node[TK, TV], error) {
 	children := make([]*Node[TK, TV], len(node.childrenIds))
 	var err error
-	for i := range node.childrenIds {
-		children[i], err = node.getChild(btree, i)
+	for i, id := range node.childrenIds {
+		children[i], err = btree.getNode(id)
 		if err != nil {
 			return nil, err
 		}
