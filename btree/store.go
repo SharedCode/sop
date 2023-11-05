@@ -10,8 +10,8 @@ type Store struct {
 	IsUnique  bool
 	KeyInfo   string
 	ValueInfo string
-	// RootNodeLogicalId is the root node's logical Id.
-	RootNodeLogicalId UUID
+	// RootNodeId is the root node's Id.
+	RootNodeId UUID
 	// Total count of items stored.
 	Count int64
 	// Version number.

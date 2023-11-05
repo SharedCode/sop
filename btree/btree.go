@@ -7,21 +7,28 @@ import (
 
 // Btree manages items using B-tree data structure and algorithm.
 type Btree[TK Comparable, TV any] struct {
-	Store            Store
-	storeInterface   *StoreInterface[TK, TV]
-	tempSlots        []*Item[TK, TV]
-	tempParent       *Item[TK, TV]
-	tempChildren     []UUID
-	tempParentChildren     []UUID
-	currentItemRef   currentItemRef
-	currentItem      *Item[TK, TV]
-	distributeAction distributeAction[TK, TV]
-	promoteAction    promoteAction[TK, TV]
+	Store              Store
+	storeInterface     *StoreInterface[TK, TV]
+	tempSlots          []*Item[TK, TV]
+	tempParent         *Item[TK, TV]
+	tempChildren       []UUID
+	tempParentChildren []UUID
+	currentItemRef     currentItemRef
+	currentItem        *Item[TK, TV]
+	distributeAction   distributeAction[TK, TV]
+	promoteAction      promoteAction[TK, TV]
 }
 
 type currentItemRef struct {
-	NodeId        UUID
-	NodeItemIndex int
+	nodeId        UUID
+	nodeItemIndex int
+}
+
+func (c currentItemRef) getNodeItemIndex() int {
+	return c.nodeItemIndex
+}
+func (c currentItemRef) getNodeId() UUID {
+	return c.nodeId
 }
 
 // distributeAction contains details to allow B-Tree to balance item load across nodes.
@@ -30,26 +37,27 @@ type currentItemRef struct {
 // that is known to have a vacant slot.
 type distributeAction[TK Comparable, TV any] struct {
 	sourceNode *Node[TK, TV]
-	item   *Item[TK, TV]
+	item       *Item[TK, TV]
 	// distributeToLeft is true if item needs to be distributed to the left side,
 	// otherwise to the right side.
 	distributeToLeft bool
 }
+
 // promoteAction similar to distributeAction, contains details to allow controller in B-Tree
 // to drive calls for Node promotion to a higher level branch without using recursion.
 // Recursion can be more "taxing" as it accumulates items pushed to the stack.
 type promoteAction[TK Comparable, TV any] struct {
-	nodeForPromotion *Node[TK, TV]
+	nodeForPromotion      *Node[TK, TV]
 	nodeForPromotionIndex int
 }
 
 // NewBtree creates a new B-Tree instance.
 func NewBtree[TK Comparable, TV any](store Store, si *StoreInterface[TK, TV]) *Btree[TK, TV] {
 	var b3 = Btree[TK, TV]{
-		Store:          store,
-		storeInterface: si,
-		tempSlots:      make([]*Item[TK, TV], store.SlotLength+1),
-		tempChildren:   make([]UUID, store.SlotLength+2),
+		Store:              store,
+		storeInterface:     si,
+		tempSlots:          make([]*Item[TK, TV], store.SlotLength+1),
+		tempChildren:       make([]UUID, store.SlotLength+2),
 		tempParentChildren: make([]UUID, 2),
 	}
 	return &b3
@@ -69,7 +77,7 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 		}
 		localTrans = true
 	}
-	node, err := btree.rootNode()
+	node, err := btree.getRootNode()
 	if err != nil {
 		return false, err
 	}
@@ -88,10 +96,15 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	if !result {
 		return false, nil
 	}
-	// Registers the root node to the transaction manager so it can get saved if needed.
+
+	// Service the node's requested action(s).
 	btree.distribute()
+	btree.promote()
+
 	// Increment store's item count.
 	btree.Store.Count++
+
+	// Registers the root node to the transaction manager so it can get saved if needed.
 	err = btree.saveNode(node)
 	if err != nil {
 		if localTrans {
@@ -123,7 +136,7 @@ func (btree *Btree[TK, TV]) FindOne(key TK, firstItemWithKey bool) (bool, error)
 	if !firstItemWithKey && compare[TK](ci.Key, key) == 0 {
 		return true, nil
 	}
-	node, err := btree.rootNode()
+	node, err := btree.getRootNode()
 	if err != nil {
 		return false, err
 	}
@@ -143,19 +156,19 @@ func (btree *Btree[TK, TV]) GetCurrentValue() TV {
 // GetCurrentItem returns the current item containing key/value pair.
 func (btree *Btree[TK, TV]) GetCurrentItem() Item[TK, TV] {
 	var zero Item[TK, TV]
-	if btree.currentItemRef.NodeId.IsNil() {
+	if btree.currentItemRef.nodeId.IsNil() {
 		btree.currentItem = nil
 		return zero
 	}
 	if btree.currentItem != nil {
 		return *btree.currentItem
 	}
-	n, err := btree.storeInterface.NodeRepository.Get(btree.currentItemRef.NodeId)
+	n, err := btree.storeInterface.NodeRepository.Get(btree.currentItemRef.nodeId)
 	if err != nil {
 		// TODO: Very rarely to happen, & we need to log err when logging is in.
 		return zero
 	}
-	btree.currentItem = n.Slots[btree.currentItemRef.NodeItemIndex]
+	btree.currentItem = n.Slots[btree.currentItemRef.nodeItemIndex]
 	return *btree.currentItem
 }
 
@@ -225,25 +238,20 @@ func (btree *Btree[TK, TV]) saveNode(node *Node[TK, TV]) error {
 	return btree.storeInterface.NodeRepository.Upsert(node)
 }
 
-func (btree *Btree[TK, TV]) rootNode() (*Node[TK, TV], error) {
-	// TODO: register root node to nodeRepository or the Transaction.
-	if btree.Store.RootNodeLogicalId.IsNil() {
-		// create new Root Node, if nil (implied new btree).
-		var root = newNode[TK, TV](btree.Store.SlotLength)
+func (btree *Btree[TK, TV]) getRootNode() (*Node[TK, TV], error) {
+	if btree.Store.RootNodeId.IsNil() {
+		// Create new Root Node if nil, implied new btree.
+		var root = newNode[TK, TV](btree.getSlotLength())
 		root.newId(NilUUID)
-		btree.Store.RootNodeLogicalId = root.logicalId
+		btree.Store.RootNodeId = root.Id
 		return root, nil
 	}
-	h, err := btree.storeInterface.VirtualIdRepository.Get(btree.Store.RootNodeLogicalId)
-	if err != nil {
-		return nil, err
-	}
-	root, err := btree.getNode(h.GetActiveId())
+	root, err := btree.getNode(btree.Store.RootNodeId)
 	if err != nil {
 		return nil, err
 	}
 	if root == nil {
-		return nil, fmt.Errorf("Can't retrieve Root Node w/ logical Id '%s'", btree.Store.RootNodeLogicalId.ToString())
+		return nil, fmt.Errorf("Can't retrieve Root Node w/ logical Id '%s'", btree.Store.RootNodeId.ToString())
 	}
 	return root, nil
 }
@@ -257,12 +265,12 @@ func (btree *Btree[TK, TV]) getNode(id UUID) (*Node[TK, TV], error) {
 }
 
 func (btree *Btree[TK, TV]) setCurrentItemId(nodeId UUID, itemIndex int) {
-	if btree.currentItemRef.NodeId == nodeId && btree.currentItemRef.NodeItemIndex == itemIndex {
+	if btree.currentItemRef.nodeId == nodeId && btree.currentItemRef.nodeItemIndex == itemIndex {
 		return
 	}
 	btree.currentItem = nil
-	btree.currentItemRef.NodeId = nodeId
-	btree.currentItemRef.NodeItemIndex = itemIndex
+	btree.currentItemRef.nodeId = nodeId
+	btree.currentItemRef.nodeItemIndex = itemIndex
 }
 
 func (btree *Btree[TK, TV]) isUnique() bool {
