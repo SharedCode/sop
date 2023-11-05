@@ -45,6 +45,8 @@ func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, e
 	for {
 		var itemExists bool
 		index, itemExists = currentNode.getIndexToInsertTo(btree, item)
+		// itemExists will be true if and only if btree.IsUnique() is true, thus,
+		// will prevent insert of duplicated key item.
 		if itemExists {
 			// set the Current item pointer to the duplicate item.
 			btree.setCurrentItemId(currentNode.Id, index)
@@ -180,7 +182,7 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 
 		// Prepare this and the right node sibling and promote the temporary parent node(pTempSlot).
 		rightNode := newNode[TK, TV](btree.getSlotLength())
-		rightNode.newId(node.Id)
+		rightNode.newId(node.ParentId)
 		// Zero out the node slots in preparation to make it the left sibling.
 		clear(node.Slots)
 
@@ -194,10 +196,6 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 		// Copy the middle slot to temp parent slot.
 		btree.tempParent = btree.tempSlots[slotsHalf]
 
-		//  Save this and Right Node.
-		btree.saveNode(node)
-		btree.saveNode(rightNode)
-
 		// Assign the new children nodes.
 		btree.tempParentChildren[0] = node.Id
 		btree.tempParentChildren[1] = rightNode.Id
@@ -209,6 +207,10 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 		if o == nil {
 			return fmt.Errorf("Can't get parent (Id='%v') of this Node.", node.ParentId)
 		}
+
+		//  Save this and Right Node.
+		btree.saveNode(node)
+		btree.saveNode(rightNode)
 
 		btree.promoteAction.nodeForPromotion = o
 		i, err := node.getIndexOfNode(btree)
@@ -269,7 +271,7 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 				return compare(n.Slots[index].Key, key) >= 0
 			})
 			// If key is found in node n.
-			if index < n.Count {
+			if index < n.Count && compare(n.Slots[index].Key, key) == 0 {
 				// Make the found node & item index the "current item" of btree.
 				foundNodeId = n.Id
 				foundItemIndex = index
@@ -306,7 +308,7 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 	// This must be the outermost node
 	// This block will make this item the current one to give chance to the Btree
 	// caller the chance to check the items having the nearest key to the one it is interested at.
-	if index == btree.getSlotLength() {
+	if index == n.Count {
 		// make sure i points to valid item
 		index--
 	}
@@ -451,7 +453,7 @@ func (node *Node[TK, TV]) getRightSibling(btree *Btree[TK, TV]) (*Node[TK, TV], 
 	if err != nil {
 		return nil, err
 	}
-	if p != nil {
+	if p != nil && index >= 0 {
 		// If we are not at the rightmost sibling yet..
 		if index < p.Count {
 			return p.getChild(btree, index+1)
