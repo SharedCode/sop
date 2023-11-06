@@ -36,7 +36,7 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	MoveToLast() (bool, error)
 	MoveToNext() (bool, error)
 	MoveToPrevious() (bool, error)
-	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's data segment.
+	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's segment.
 	// Otherwise is false.
 	IsValueDataInNodeSegment() bool
 }
@@ -75,7 +75,6 @@ type TransactionRepository interface {
 	Get(transactionId UUID) ([]TransactionEntry, error)
 	GetByStore(transactionId UUID, storeName string) ([]TransactionEntry, error)
 	Add([]TransactionEntry) error
-	//Update([]TransactionEntry) error
 	MarkDone([]TransactionEntry) error
 }
 

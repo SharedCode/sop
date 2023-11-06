@@ -15,7 +15,7 @@ func TestBtreeBasic(t *testing.T) {
 func TestBtreePromoteAndDistributeStability(t *testing.T) {
 	n := 100000
 	fmt.Printf("Promote & Distribute(P&D) %d loop test\n\n", n)
-	b3, _ := in_memory.NewBtree[string, string]()
+	b3, _ := in_memory.NewBtree[string, string](false)
 	for i := 0; i < n; i++ {
 		k := fmt.Sprintf("foo%d", i)
 		v := fmt.Sprintf("bar%d", i)
@@ -36,7 +36,7 @@ func TestBtreePromoteAndDistributeStability(t *testing.T) {
 
 func testBtreeAddLoop(t *testing.T, n int) {
 	fmt.Printf("btree %d loop test\n\n", n)
-	b3, _ := in_memory.NewBtree[string, string]()
+	b3, _ := in_memory.NewBtree[string, string](false)
 	for i := 0; i < n; i++ {
 		k := fmt.Sprintf("foo%d", i)
 		v := fmt.Sprintf("bar%d", i)

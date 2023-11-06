@@ -287,9 +287,9 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 	return false, nil
 }
 
-// IsValueDataInNodeSegment returns true if Value part of the item (key/value pair) is stored
-// in another segment & not in the segment where Node & Keys are persisted.
-// Always false in in-memory B-Tree.
+// IsValueDataInNodeSegment is true if Item's Values are stored in the Node segment together
+// with the Items' Keys.
+// Always true in in-memory B-Tree.
 func (btree *Btree[TK, TV]) IsValueDataInNodeSegment() bool {
 	return btree.Store.IsValueDataInNodeSegment
 }
