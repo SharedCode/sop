@@ -72,6 +72,7 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 		Key:   key,
 		Value: &value,
 	}
+	// TODO: simplify the automatically provided transaction management logic so code is easier to read.
 	// Transaction is a V2 feature, 'just demonstrated here, but it does NOT
 	// do anything for in-memory version.
 	localTrans := false
