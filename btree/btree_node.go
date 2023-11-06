@@ -327,6 +327,42 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 	return false, nil
 }
 
+func (node *Node[TK, TV]) moveToFirst(btree *Btree[TK, TV]) (bool, error) {
+	n := node
+	var prev *Node[TK, TV]
+	var err error
+	for n.childrenIds != nil {
+		prev = n
+		cid := n.childrenIds[0]
+		n, err = btree.getNode(cid)
+		if err != nil {
+			return false, err
+		}
+		if n == nil {
+			break
+		}
+	}
+	if n != nil {
+		prev = n
+	}
+	btree.setCurrentItemId(prev.Id, 0)
+	return true, nil
+}
+
+func (node *Node[TK, TV]) moveToLast(btree *Btree[TK, TV]) (bool, error) {
+	n := node
+	var err error
+	for n.childrenIds != nil {
+		cid := n.childrenIds[n.Count]
+		n, err = btree.getNode(cid)
+		if err != nil {
+			return false, err
+		}
+	}
+	btree.setCurrentItemId(n.Id, n.Count-1)
+	return n.Id != NilUUID, nil
+}
+
 func (node *Node[TK, TV]) moveToNext(btree *Btree[TK, TV]) (bool, error) {
 	n := node
 	slotIndex := btree.currentItemRef.getNodeItemIndex()
@@ -373,6 +409,52 @@ func (node *Node[TK, TV]) moveToNext(btree *Btree[TK, TV]) (bool, error) {
 			}
 		} else {
 			// this is root node. set to null the current item(End of Btree is reached)
+			btree.setCurrentItemId(NilUUID, 0)
+			return false, nil
+		}
+	}
+}
+
+func (node *Node[TK, TV]) moveToPrevious(btree *Btree[TK, TV]) (bool, error) {
+	n := node
+	slotIndex := btree.currentItemRef.getNodeItemIndex()
+	goLeftDown := n.hasChildren()
+	var err error
+	if goLeftDown {
+		for {
+			if n.hasChildren() {
+				n, err = n.getChild(btree, slotIndex)
+				if err != nil {
+					return false, err
+				}
+				slotIndex = n.Count
+			} else {
+				// 'SlotIndex -1' since we are now using SlotIndex as index to pSlots.
+				btree.setCurrentItemId(n.Id, slotIndex - 1)
+				return true, nil
+			}
+		}
+	}
+	slotIndex--
+	for {
+		// Check if SlotIndex is within the maximum slot items and if it is, will index an occupied slot.
+		if slotIndex >= 0 {
+			btree.setCurrentItemId(n.Id, slotIndex)
+			return true, nil
+		}
+		// Check if this is not the root node. (Root nodes don't have parent node)
+		if n.ParentId != NilUUID {
+			i, err := n.getIndexOfNode(btree)
+			if err != nil {
+				return false, err
+			}
+			n, err = n.getParent(btree)
+			if err != nil {
+				return false, err
+			}
+			slotIndex = i - 1
+		} else {
+			// This is root node. set to null the current item(End of Btree is reached).
 			btree.setCurrentItemId(NilUUID, 0)
 			return false, nil
 		}

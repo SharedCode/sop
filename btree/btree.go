@@ -19,6 +19,9 @@ type Btree[TK Comparable, TV any] struct {
 	promoteAction      promoteAction[TK, TV]
 }
 
+// currentItemRef contains node Id & item slot index position in the node.
+// SOP B-Tree has a "cursor" like feature to allow navigation & fetch of the items
+// for most complicated querying scenario possible, or as needed by the business.
 type currentItemRef struct {
 	nodeId        UUID
 	nodeItemIndex int
@@ -172,7 +175,7 @@ func (btree *Btree[TK, TV]) GetCurrentItem() Item[TK, TV] {
 	return *btree.currentItem
 }
 
-// AddIfNotExist will add an item if its key is not yet in the B-Tree.
+// TODO: AddIfNotExist will add an item if its key is not yet in the B-Tree.
 func (btree *Btree[TK, TV]) AddIfNotExist(key TK, value TV) (bool, error) {
 	// Steps:
 	// - set IsUnique true
@@ -180,6 +183,68 @@ func (btree *Btree[TK, TV]) AddIfNotExist(key TK, value TV) (bool, error) {
 	// - restore IsUnique previous value
 	// - return result of node.Add whether it succeeded to add an item or not.
 	return false, nil
+}
+
+// MoveToFirst will traverse the tree and find the first item, first according to
+// the key ordering sequence.
+func (btree *Btree[TK, TV]) MoveToFirst() (bool, error) {
+	// Return default value & no error if B-Tree is empty.
+	if btree.Store.Count == 0 {
+		return false, nil
+	}
+	node, err := btree.getRootNode()
+	if err != nil {
+		return false, err
+	}
+	return node.moveToFirst(btree)
+}
+
+func (btree *Btree[TK, TV]) MoveToLast() (bool, error) {
+	// Return default value & no error if B-Tree is empty.
+	if btree.Store.Count == 0 {
+		return false, nil
+	}
+	node, err := btree.getRootNode()
+	if err != nil {
+		return false, err
+	}
+	return node.moveToLast(btree)
+}
+
+func (btree *Btree[TK, TV]) MoveToNext() (bool, error) {
+	// Return default value & no error if B-Tree is empty.
+	if btree.Store.Count == 0 {
+		return false, nil
+	}
+	if btree.currentItemRef.getNodeId() == NilUUID {
+		return false, nil
+	}
+	node, err := btree.getNode(btree.currentItemRef.getNodeId())
+	if err != nil {
+		return false, err
+	}
+	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+		return false, nil
+	}
+	return node.moveToNext(btree)
+}
+
+func (btree *Btree[TK, TV]) MoveToPrevious() (bool, error) {
+	// Return default value & no error if B-Tree is empty.
+	if btree.Store.Count == 0 {
+		return false, nil
+	}
+	if btree.currentItemRef.getNodeId() == NilUUID {
+		return false, nil
+	}
+	node, err := btree.getNode(btree.currentItemRef.getNodeId())
+	if err != nil {
+		return false, err
+	}
+	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+		return false, nil
+	}
+	return node.moveToPrevious(btree)
 }
 
 // TODO
@@ -202,27 +267,9 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 	return false, nil
 }
 
-// TODO
-func (btree *Btree[TK, TV]) MoveToFirst() (bool, error) {
-	return false, nil
-}
-
-// TODO
-func (btree *Btree[TK, TV]) MoveToLast() (bool, error) {
-	return false, nil
-}
-
-// TODO
-func (btree *Btree[TK, TV]) MoveToNext() (bool, error) {
-	return false, nil
-}
-
-// TODO
-func (btree *Btree[TK, TV]) MoveToPrevious() (bool, error) {
-	return false, nil
-}
-
-// TODO
+// IsValueDataInNodeSegment returns true if Value part of the item (key/value pair) is stored
+// in another segment & not in the segment where Node & Keys are persisted.
+// Always false in in-memory B-Tree.
 func (btree *Btree[TK, TV]) IsValueDataInNodeSegment() bool {
 	return btree.Store.IsValueDataInNodeSegment
 }
