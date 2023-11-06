@@ -182,7 +182,7 @@ func (btree *Btree[TK, TV]) AddIfNotExist(key TK, value TV) (bool, error) {
 	// - delegate or call node.Add to do actual item add to node.
 	// - restore IsUnique previous value
 	// - return result of node.Add whether it succeeded to add an item or not.
-	return false, nil
+	return false, fmt.Errorf("Unimplemented.")
 }
 
 // MoveToFirst will traverse the tree and find the first item, first according to
@@ -257,6 +257,10 @@ func (btree *Btree[TK, TV]) Update(key TK, value TV) (bool, error) {
 	if !ok {
 		return false, nil
 	}
+	return btree.UpdateCurrentItem(value)
+}
+
+func (btree *Btree[TK, TV]) UpdateCurrentItem(newValue TV) (bool, error) {
 	if btree.currentItemRef.getNodeId() == NilUUID {
 		return false, nil
 	}
@@ -267,46 +271,10 @@ func (btree *Btree[TK, TV]) Update(key TK, value TV) (bool, error) {
 	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
 		return false, nil
 	}
-	node.Slots[btree.currentItemRef.getNodeItemIndex()].Value = &value
+	node.Slots[btree.currentItemRef.getNodeItemIndex()].Value = &newValue
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
 	btree.storeInterface.NodeRepository.Upsert(node)
 	return true, nil
-}
-
-// TODO
-func (btree *Btree[TK, TV]) UpdateCurrentItem(newValue TV) (bool, error) {
-	return false, nil
-	// // BTreeNodeOnDisk n = CurrentNode;
-	// // BTreeItemOnDisk itm = n.Slots[CurrentItem.NodeItemIndex];
-
-	// // if (itm == null) return false;
-	// // if (!itm.ValueLoaded)
-	// // {
-	// // 	long da = GetId(itm.Value.DiskBuffer);
-	// // 	if (itm.Value != null && da > -1)
-	// // 	{
-	// // 		Sop.DataBlock d = GetDiskBlock(DataSet, da);
-	// // 		//DataBlockDriver.ReadBlockFromDisk(DataSet, da, false);
-	// // 		itm.Value.DiskBuffer = d;
-	// // 		var iod = (ItemOnDisk) ReadFromBlock(d);
-	// // 		d = null;
-	// // 		if (iod != null)
-	// // 		{
-	// // 			iod.DiskBuffer = itm.Value.DiskBuffer;
-	// // 			itm.Value = iod;
-	// // 		}
-	// // 	}
-	// // 	itm.ValueLoaded = true;
-	// // }
-	// // if (itm.Value == null)
-	// // 	return false;
-	// // var db = (Sop.DataBlock)itm.Value.Data;
-	// // source.Copy(db);
-	// // itm.IsDirty = true;
-	// // itm.Value.IsDirty = true;
-	// // n.IsDirty = true;
-	// // MruManager.Add(CurrentItem.NodeAddress, n);
-	// return true;
 }
 
 // TODO
