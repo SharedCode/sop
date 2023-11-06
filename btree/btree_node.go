@@ -430,7 +430,7 @@ func (node *Node[TK, TV]) moveToPrevious(btree *Btree[TK, TV]) (bool, error) {
 				slotIndex = n.Count
 			} else {
 				// 'SlotIndex -1' since we are now using SlotIndex as index to pSlots.
-				btree.setCurrentItemId(n.Id, slotIndex - 1)
+				btree.setCurrentItemId(n.Id, slotIndex-1)
 				return true, nil
 			}
 		}
@@ -461,10 +461,6 @@ func (node *Node[TK, TV]) moveToPrevious(btree *Btree[TK, TV]) (bool, error) {
 	}
 }
 
-
-
-
-
 // Returns true if a slot is available in left side siblings of this node modified to suit possible unbalanced branch.
 func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
 	*isUnBalanced = false
@@ -485,6 +481,92 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBala
 		}
 	}
 	return false, nil
+}
+
+func (node *Node[TK, TV]) fixTheVacatedSlot(btree *Btree[TK, TV]) error {
+	// short c = Count;
+	// if (c > 1) // if there are more than 1 items in slot then..
+	// {
+	// 	//***** We don't fix the children since there are no children at this scenario.
+	// 	if (bTree.CurrentItem.NodeItemIndex < c - 1)
+	// 		MoveArrayElements(Slots,
+	// 						  (int) (bTree.CurrentItem.NodeItemIndex + 1),
+	// 						  bTree.CurrentItem.NodeItemIndex,
+	// 						  (short) (c - 1 - bTree.CurrentItem.NodeItemIndex));
+	// 	Count--;
+	// 	Slots[Count] = null; // nullify the last slot.
+	// 	IsDirty = true;
+	// 	//SaveNodeToDisk(bTree);
+	// 	return;
+	// }
+	// // only 1 item in slot
+	// if (ParentAddress != -1)
+	// {
+	// 	short ucIndex;
+	// 	// if there is a pullable item from sibling nodes.
+	// 	if (SearchForPullableItem(bTree, out ucIndex))
+	// 	{
+	// 		short ion = GetIndexOfNode(bTree);
+	// 		if (ion == -1)
+	// 		{
+	// 			bTree.RemoveFromCache(this);
+
+	// 			BTreeNodeOnDisk thisNode = GetNode(bTree, GetAddress(bTree));
+	// 			return;
+	// 		}
+	// 		if (ucIndex < ion)
+	// 			PullFromLeft(bTree); // pull an item from left
+	// 		else
+	// 			PullFromRight(bTree); // pull an item from right
+
+	// 		//if (Count > 0)
+	// 		//    SaveNodeToDisk(bTree);
+	// 		return;
+	// 	}
+	// 	// Parent has only 2 children nodes
+	// 	BTreeNodeOnDisk parent = GetParent(bTree);
+	// 	BTreeNodeOnDisk[] c2 = parent.GetChildren(bTree);
+	// 	if (c2[0] == this ||
+	// 		(DiskBuffer.DataAddress >= 0 &&
+	// 		 parent.ChildrenAddresses[0] == GetAddress(bTree)))
+	// 	{
+	// 		// this is left node
+	// 		BTreeNodeOnDisk rightSibling = GetRightSibling(bTree);
+	// 		parent.Slots[1] = rightSibling.Slots[0];
+	// 		parent.Count = 2;
+	// 		parent.IsDirty = true;
+	// 		bTree.RemoveFromCache(rightSibling);
+	// 		bTree.RemoveBlock(bTree.KeySet, rightSibling.DiskBuffer);
+	// 		rightSibling.Dispose(false, true, true);
+	// 	}
+	// 	else
+	// 	{
+	// 		// this is right node
+	// 		parent.Slots[1] = parent.Slots[0];
+	// 		parent.Count = 2;
+	// 		parent.IsDirty = true;
+	// 		BTreeNodeOnDisk leftSibling = GetLeftSibling(bTree);
+	// 		parent.Slots[0] = leftSibling.Slots[0];
+	// 		bTree.RemoveFromCache(leftSibling);
+	// 		bTree.RemoveBlock(bTree.KeySet, leftSibling.DiskBuffer);
+	// 		leftSibling.Dispose(false, true, true);
+	// 	}
+	// 	bTree.RemoveFromCache(this);
+	// 	bTree.RemoveBlock(bTree.KeySet, this.DiskBuffer);
+	// 	Dispose(false, true, true);
+	// 	parent.ChildrenAddresses = null;
+	// 	parent.IsDirty = true;
+	// 	//parent.SaveNodeToDisk(bTree);
+	// 	return;
+	// }
+	// // delete the single item in root node
+	// Count = 0;
+	// Slots[0] = null;
+	// IsDirty = true;
+	// //this.SaveNodeToDisk(bTree);
+	// bTree.SetCurrentItemAddress(-1, 0); // Point the current item pointer to end of tree
+
+	return nil
 }
 
 // Returns true if a slot is available in right side siblings of this node modified to suit possible unbalanced branch.

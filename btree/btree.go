@@ -72,6 +72,8 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 		Key:   key,
 		Value: &value,
 	}
+	// Transaction is a V2 feature, 'just demonstrated here, but it does NOT
+	// do anything for in-memory version.
 	localTrans := false
 	if !btree.storeInterface.Transaction.HasBegun() {
 		err := btree.storeInterface.Transaction.Begin()
@@ -105,6 +107,7 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	btree.promote()
 
 	// Increment store's item count.
+	// TODO: Register Store change to transaction manager (on V2) so it can get persisted.
 	btree.Store.Count++
 
 	// Registers the root node to the transaction manager so it can get saved if needed.
@@ -277,14 +280,62 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(newValue TV) (bool, error) {
 	return true, nil
 }
 
-// TODO
 func (btree *Btree[TK, TV]) Remove(key TK) (bool, error) {
-	return false, nil
+	ok, err := btree.FindOne(key, false)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	return btree.RemoveCurrentItem()
 }
 
-// TODO
 func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
-	return false, nil
+	if btree.currentItemRef.getNodeId() == NilUUID {
+		return false, nil
+	}
+	node, err := btree.getNode(btree.currentItemRef.getNodeId())
+	if err != nil {
+		return false, err
+	}
+	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+		return false, nil
+	}
+	// check if there are children nodes.
+	if node.hasChildren() {
+		index := btree.currentItemRef.getNodeItemIndex()
+		// Below code allows for deletion to happen in the leaf(a.k.a. outermost) node's slots.
+		// MoveNext method will position the Current Item ref to point to a leaf node.
+		ok, err := node.moveToNext(btree)
+		if err != nil {
+			return false, err
+		}
+		if !ok {
+			return false, nil
+		}
+		currentNode, err := btree.getCurrentNode()
+		if err != nil {
+			return false, nil
+		}
+		// Replace the requested item for delete with the next item found on leaf node,
+		// so we can delete that instead & make it happen on the leaf.
+		// Deletion on leaf nodes is easier to repair/fix respective leaf branch.
+		node.Slots[index] = currentNode.Slots[btree.currentItemRef.getNodeItemIndex()]
+		btree.storeInterface.NodeRepository.Upsert(node)
+		node = currentNode
+	}
+	err = node.fixTheVacatedSlot(btree)
+	if err != nil {
+		return false, err
+	}
+	// Make the current item pointer point to null since we just deleted the current item.
+	btree.setCurrentItemId(NilUUID, 0)
+	// TODO: Register Store change to transaction manager (on V2) so it can get persisted.
+	// Not needed in in-memory (V1) version.
+	btree.Store.Count--
+
+	return true, nil
 }
 
 // IsValueDataInNodeSegment is true if Item's Values are stored in the Node segment together
@@ -303,6 +354,14 @@ func (btree *Btree[TK, TV]) saveNode(node *Node[TK, TV]) error {
 		node.Id = NewUUID()
 	}
 	return btree.storeInterface.NodeRepository.Upsert(node)
+}
+
+func (btree *Btree[TK, TV]) getCurrentNode() (*Node[TK, TV], error) {
+	n, err := btree.getNode(btree.currentItemRef.nodeId)
+	if n == nil {
+		return nil, err
+	}
+	return n, nil
 }
 
 func (btree *Btree[TK, TV]) getRootNode() (*Node[TK, TV], error) {
