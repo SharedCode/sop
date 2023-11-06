@@ -72,30 +72,12 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 		Key:   key,
 		Value: &value,
 	}
-	// TODO: simplify the automatically provided transaction management logic so code is easier to read.
-	// Transaction is a V2 feature, 'just demonstrated here, but it does NOT
-	// do anything for in-memory version.
-	localTrans := false
-	if !btree.storeInterface.Transaction.HasBegun() {
-		err := btree.storeInterface.Transaction.Begin()
-		if err != nil {
-			return false, err
-		}
-		localTrans = true
-	}
 	node, err := btree.getRootNode()
 	if err != nil {
 		return false, err
 	}
 	result, err := node.add(btree, &itm)
 	if err != nil {
-		if localTrans {
-			// Rollback should rarely fail, but if it does, return it.
-			err2 := btree.storeInterface.Transaction.Rollback()
-			if err2 != nil {
-				return false, fmt.Errorf("Transaction rollback failed, error: %v, original error: %v", err2, err)
-			}
-		}
 		return false, err
 	}
 	// Add failed with no reason, 'just return false.
@@ -114,20 +96,7 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	// Registers the root node to the transaction manager so it can get saved if needed.
 	err = btree.saveNode(node)
 	if err != nil {
-		if localTrans {
-			// Rollback should rarely fail, but if it does, return it.
-			err2 := btree.storeInterface.Transaction.Rollback()
-			if err2 != nil {
-				return false, fmt.Errorf("Transaction rollback failed, error: %v, original error: %v", err2, err)
-			}
-		}
 		return false, err
-	}
-	if localTrans {
-		err = btree.storeInterface.Transaction.Commit()
-		if err != nil {
-			return false, err
-		}
 	}
 	return true, nil
 }
