@@ -392,13 +392,13 @@ func (node *Node[TK, TV]) moveToNext(btree *Btree[TK, TV]) (bool, error) {
 			btree.setCurrentItemId(NilUUID, 0)
 			return false, nil
 		}
-		// check if SlotIndex is within the maximum slot items and if it is, will index an occupied slot.
+		// Check if SlotIndex is within the maximum slot items and if it is, will index an occupied slot.
 		if slotIndex < n.Count {
 			btree.setCurrentItemId(n.Id, slotIndex)
 			return true, nil
 		}
-		// check if this is not the root node. (Root nodes don't have parent node.)
-		if n.ParentId != NilUUID {
+		// Check if this is not the root node. (Root nodes don't have parent node.)
+		if !n.isRootNode() {
 			slotIndex, err = n.getIndexOfNode(btree)
 			if err != nil {
 				return false, err
@@ -442,22 +442,20 @@ func (node *Node[TK, TV]) moveToPrevious(btree *Btree[TK, TV]) (bool, error) {
 			btree.setCurrentItemId(n.Id, slotIndex)
 			return true, nil
 		}
-		// Check if this is not the root node. (Root nodes don't have parent node)
-		if n.ParentId != NilUUID {
-			i, err := n.getIndexOfNode(btree)
-			if err != nil {
-				return false, err
-			}
-			n, err = n.getParent(btree)
-			if err != nil {
-				return false, err
-			}
-			slotIndex = i - 1
-		} else {
-			// This is root node. set to null the current item(End of Btree is reached).
+		if n.isRootNode() {
+			// Set to null the current item, end of Btree is reached.
 			btree.setCurrentItemId(NilUUID, 0)
 			return false, nil
 		}
+		i, err := n.getIndexOfNode(btree)
+		if err != nil {
+			return false, err
+		}
+		n, err = n.getParent(btree)
+		if err != nil {
+			return false, err
+		}
+		slotIndex = i - 1
 	}
 }
 
@@ -721,6 +719,11 @@ func (node *Node[TK, TV]) hasChildren() bool {
 	return node.childrenIds != nil
 }
 
+// isRootNode returns true if node has no parent.
+func (node *Node[TK, TV]) isRootNode() bool {
+	return node.ParentId == NilUUID
+}
+
 func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, TV]) error {
 	if node.isFull(btree.getSlotLength()) {
 		// counter-clockwise rotation..
@@ -838,7 +841,7 @@ func (node *Node[TK, TV]) promote(btree *Btree[TK, TV], indexPosition int) error
 
 	// Try to break up the node into 2 siblings.
 	slotsHalf := btree.getSlotLength() >> 1
-	if node.ParentId != NilUUID {
+	if !node.isRootNode() {
 
 		// Prepare this and the right node sibling and promote the temporary parent node(pTempSlot).
 		// This will be the left sibling !
