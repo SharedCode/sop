@@ -247,14 +247,66 @@ func (btree *Btree[TK, TV]) MoveToPrevious() (bool, error) {
 	return node.moveToPrevious(btree)
 }
 
-// TODO
+// Update will find the item with matching key as the key parameter & update its value
+// with the provided value parameter.
 func (btree *Btree[TK, TV]) Update(key TK, value TV) (bool, error) {
-	return false, nil
+	ok, err := btree.FindOne(key, false)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	if btree.currentItemRef.getNodeId() == NilUUID {
+		return false, nil
+	}
+	node, err := btree.getNode(btree.currentItemRef.getNodeId())
+	if err != nil {
+		return false, err
+	}
+	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+		return false, nil
+	}
+	node.Slots[btree.currentItemRef.getNodeItemIndex()].Value = &value
+	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
+	btree.storeInterface.NodeRepository.Upsert(node)
+	return true, nil
 }
 
 // TODO
 func (btree *Btree[TK, TV]) UpdateCurrentItem(newValue TV) (bool, error) {
 	return false, nil
+	// // BTreeNodeOnDisk n = CurrentNode;
+	// // BTreeItemOnDisk itm = n.Slots[CurrentItem.NodeItemIndex];
+
+	// // if (itm == null) return false;
+	// // if (!itm.ValueLoaded)
+	// // {
+	// // 	long da = GetId(itm.Value.DiskBuffer);
+	// // 	if (itm.Value != null && da > -1)
+	// // 	{
+	// // 		Sop.DataBlock d = GetDiskBlock(DataSet, da);
+	// // 		//DataBlockDriver.ReadBlockFromDisk(DataSet, da, false);
+	// // 		itm.Value.DiskBuffer = d;
+	// // 		var iod = (ItemOnDisk) ReadFromBlock(d);
+	// // 		d = null;
+	// // 		if (iod != null)
+	// // 		{
+	// // 			iod.DiskBuffer = itm.Value.DiskBuffer;
+	// // 			itm.Value = iod;
+	// // 		}
+	// // 	}
+	// // 	itm.ValueLoaded = true;
+	// // }
+	// // if (itm.Value == null)
+	// // 	return false;
+	// // var db = (Sop.DataBlock)itm.Value.Data;
+	// // source.Copy(db);
+	// // itm.IsDirty = true;
+	// // itm.Value.IsDirty = true;
+	// // n.IsDirty = true;
+	// // MruManager.Add(CurrentItem.NodeAddress, n);
+	// return true;
 }
 
 // TODO
