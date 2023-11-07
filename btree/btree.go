@@ -295,7 +295,7 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 		btree.storeInterface.NodeRepository.Upsert(node)
 		node = currentNode
 	}
-	err = node.fixTheVacatedSlot(btree)
+	err = node.fixVacatedSlot(btree)
 	if err != nil {
 		return false, err
 	}

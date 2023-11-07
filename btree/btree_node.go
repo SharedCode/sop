@@ -38,6 +38,9 @@ func newNode[TK Comparable, TV any](slotCount int) *Node[TK, TV] {
 	}
 }
 
+// add an item to the b-tree, will traverse the tree and find the leaf node where to
+// properly add the item to, according to the sort order.
+// Actual add of items on target node is handled by addOnLeaf method.
 func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, error) {
 	var currentNode = node
 	var index int
@@ -79,8 +82,8 @@ func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, e
 	return true, nil
 }
 
-// Outermost(a.k.a. leaf) node, the end of the recursive traversing thru all inner nodes of the Btree.
-// Correct Node is reached at this point!
+// Add item on the outermost(a.k.a. leaf) node, the end of the recursive traversing thru all inner nodes of the Btree.
+// Correct Node to add item to is reached at this point.
 func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], index int, parent *Node[TK, TV]) error {
 	// If node is not yet full.
 	if node.Count < btree.getSlotLength() {
@@ -481,88 +484,39 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBala
 	return false, nil
 }
 
-func (node *Node[TK, TV]) fixTheVacatedSlot(btree *Btree[TK, TV]) error {
-	// short c = Count;
-	// if (c > 1) // if there are more than 1 items in slot then..
-	// {
-	// 	//***** We don't fix the children since there are no children at this scenario.
-	// 	if (bTree.CurrentItem.NodeItemIndex < c - 1)
-	// 		MoveArrayElements(Slots,
-	// 						  (int) (bTree.CurrentItem.NodeItemIndex + 1),
-	// 						  bTree.CurrentItem.NodeItemIndex,
-	// 						  (short) (c - 1 - bTree.CurrentItem.NodeItemIndex));
-	// 	Count--;
-	// 	Slots[Count] = null; // nullify the last slot.
-	// 	IsDirty = true;
-	// 	//SaveNodeToDisk(bTree);
-	// 	return;
-	// }
-	// // only 1 item in slot
-	// if (ParentAddress != -1)
-	// {
-	// 	short ucIndex;
-	// 	// if there is a pullable item from sibling nodes.
-	// 	if (SearchForPullableItem(bTree, out ucIndex))
-	// 	{
-	// 		short ion = GetIndexOfNode(bTree);
-	// 		if (ion == -1)
-	// 		{
-	// 			bTree.RemoveFromCache(this);
+func (node *Node[TK, TV]) fixVacatedSlot(btree *Btree[TK, TV]) error {
+	c := node.Count
+	// If there are more than 1 items in slot then we move the items 1 slot to omit deleted item slot.
+	if c > 1 {
+		if btree.currentItemRef.getNodeItemIndex() < c-1 {
+			moveArrayElements(node.Slots,
+				btree.currentItemRef.getNodeItemIndex()+1,
+				btree.currentItemRef.getNodeItemIndex(),
+				1)
+		}
+		// Nullify the last slot.
+		node.Count--
+		node.Slots[node.Count] = nil
+		// We don't fix the children since there are no children at this scenario.
+		return btree.saveNode(node)
+	}
+	if node.isRootNode() {
+		// Delete the single item in root node.
+		node.Count = 0
+		node.Slots[0] = nil
+		btree.setCurrentItemId(NilUUID, 0)
+		return btree.saveNode(node)
+	}
 
-	// 			BTreeNodeOnDisk thisNode = GetNode(bTree, GetAddress(bTree));
-	// 			return;
-	// 		}
-	// 		if (ucIndex < ion)
-	// 			PullFromLeft(bTree); // pull an item from left
-	// 		else
-	// 			PullFromRight(bTree); // pull an item from right
-
-	// 		//if (Count > 0)
-	// 		//    SaveNodeToDisk(bTree);
-	// 		return;
-	// 	}
-	// 	// Parent has only 2 children nodes
-	// 	BTreeNodeOnDisk parent = GetParent(bTree);
-	// 	BTreeNodeOnDisk[] c2 = parent.GetChildren(bTree);
-	// 	if (c2[0] == this ||
-	// 		(DiskBuffer.DataAddress >= 0 &&
-	// 		 parent.ChildrenAddresses[0] == GetAddress(bTree)))
-	// 	{
-	// 		// this is left node
-	// 		BTreeNodeOnDisk rightSibling = GetRightSibling(bTree);
-	// 		parent.Slots[1] = rightSibling.Slots[0];
-	// 		parent.Count = 2;
-	// 		parent.IsDirty = true;
-	// 		bTree.RemoveFromCache(rightSibling);
-	// 		bTree.RemoveBlock(bTree.KeySet, rightSibling.DiskBuffer);
-	// 		rightSibling.Dispose(false, true, true);
-	// 	}
-	// 	else
-	// 	{
-	// 		// this is right node
-	// 		parent.Slots[1] = parent.Slots[0];
-	// 		parent.Count = 2;
-	// 		parent.IsDirty = true;
-	// 		BTreeNodeOnDisk leftSibling = GetLeftSibling(bTree);
-	// 		parent.Slots[0] = leftSibling.Slots[0];
-	// 		bTree.RemoveFromCache(leftSibling);
-	// 		bTree.RemoveBlock(bTree.KeySet, leftSibling.DiskBuffer);
-	// 		leftSibling.Dispose(false, true, true);
-	// 	}
-	// 	bTree.RemoveFromCache(this);
-	// 	bTree.RemoveBlock(bTree.KeySet, this.DiskBuffer);
-	// 	Dispose(false, true, true);
-	// 	parent.ChildrenAddresses = null;
-	// 	parent.IsDirty = true;
-	// 	//parent.SaveNodeToDisk(bTree);
-	// 	return;
-	// }
-	// // delete the single item in root node
-	// Count = 0;
-	// Slots[0] = null;
-	// IsDirty = true;
-	// //this.SaveNodeToDisk(bTree);
-	// bTree.SetCurrentItemAddress(-1, 0); // Point the current item pointer to end of tree
+	// Delete single item of node. Keep it simple:
+	// - set parent child pointer to the node as nil.
+	// - make sure all methods can accommodate "nil" child, e.g. moveToNext & moveToPrevious
+	// to behave properly with "nil" child.
+	// - make sure the "nil" child can get allocated to a new node.
+	// - when deleting an item with "nil" child, treat it like it is in a leaf node item.
+	// simple slot item overwrite.
+	// - make sure promote & distributeXx methods respect item(s) with "nil" child(ren).
+	// TODO:
 
 	return nil
 }
@@ -1003,3 +957,64 @@ func moveArrayElements[T any](array []T, srcStartIndex, destStartIndex, count in
 		srcIndex = srcIndex + addValue
 	}
 }
+
+/* Following are few scenarios studied on branch merging during item delete. After much consideration,
+it was identified that such algorithm is potentially exhaustive. It is thus avoided so we can
+implement a minimalist "item delete" logic that keeps the change within the node where delete of
+item occurred. This will work well with V2 as well, as blob/record deletes are typically very
+expensive in cloud storage such as AWS S3.
+
+Kept the analysis detail just because, perhaps we'll move the details somewhere later on...
+
+// Scenario:
+// - node has 1 item that got deleted & is a leaf node
+// - node has parent
+//
+// Merging cases for "minimalist" branch node(s) updates:
+// a. deleted item node is a middle chlid, merge next or previous item to a sibling node.
+//		[ 5 | 7 ]
+//     /    |    \
+//   [3]  [*7*] [10]
+// Outcome:
+//		[ 7 ]
+//     /     \
+//  [3|5]    [10]
+//
+// b. deleted item node is rightmost child, merge previous item to left sibling.
+//		[ 5 | 10 ]
+//     /    |    \
+//   [3]  [6]   [*10*]
+// Outcome:
+//		[ 5 ]
+//     /     \
+//  [3]      [6|10]
+//
+// c. deleted item node is leftmost child, merge next item to right sibling.
+//		[ 5 | 7 ]
+//     /    |    \
+//   [*3*]  [6]   [10]
+// Outcome:
+//		[ 7 ]
+//     /     \
+//  [5|6]      [10]
+//
+// d. parent node has single item & sibling's items can't fit in one node.
+//		[ 7 ]
+//     /     \
+//  [*5*]      [10|11|12|14] (full)
+// Outcome:
+//		[ 10 ]
+//     /     \
+//  [7]      [11|12|14]
+//
+// e. parent node has single item & sibling's items can fit in one node.
+//		[ 10 ]
+//     /     \
+//  [*7*]      [11|12|14]
+// Outcome:
+//    [10|11|12|14]
+//
+// f. Unbalanced branch, parent node has single item & sibling has children.
+//    This will propagate the fix &  merge logic to the other branch, unnecessary
+//    "tax" penalty!
+*/
