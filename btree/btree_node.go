@@ -44,7 +44,6 @@ func newNode[TK Comparable, TV any](slotCount int) *Node[TK, TV] {
 func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, error) {
 	var currentNode = node
 	var index int
-	var parent *Node[TK, TV]
 	for {
 		var itemExists bool
 		index, itemExists = currentNode.getIndexToInsertTo(btree, item)
@@ -56,8 +55,10 @@ func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, e
 			return false, nil
 		}
 		if currentNode.hasChildren() {
-			parent = nil
-			var err error
+			ok, err := currentNode.handleAddItemWithNilChild(btree, item, index)
+			if err != nil || ok {
+				return ok, err
+			}
 			// if not an outermost node let next lower level node do the 'Add'.
 			currentNode, err = currentNode.getChild(btree, index)
 			if err != nil || currentNode == nil {
@@ -78,13 +79,13 @@ func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, e
 			return false, nil
 		}
 	}
-	currentNode.addOnLeaf(btree, item, index, parent)
+	currentNode.addOnLeaf(btree, item, index)
 	return true, nil
 }
 
 // Add item on the outermost(a.k.a. leaf) node, the end of the recursive traversing thru all inner nodes of the Btree.
 // Correct Node to add item to is reached at this point.
-func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], index int, parent *Node[TK, TV]) error {
+func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], index int) error {
 	// If node is not yet full.
 	if node.Count < btree.getSlotLength() {
 		// Insert the Item to target position & "skud" over the items to the right.
@@ -282,6 +283,9 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 					break
 				}
 				if n.hasChildren() {
+					if ok, err := n.handleFindItemWithNilChild(btree, index); ok || err != nil {
+						return ok, err
+					}
 					// Try to navigate to the 1st item with key, in case there are duplicate keys.
 					n, err = n.getChild(btree, index)
 					if err != nil {
@@ -293,6 +297,9 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 		}
 		// Check children if there are.
 		if n.hasChildren() {
+			if ok, err := n.handleFindItemWithNilChild(btree, index); ok || err != nil {
+				return ok, err
+			}
 			n, err = n.getChild(btree, index)
 			if err != nil {
 				return false, err
@@ -337,6 +344,10 @@ func (node *Node[TK, TV]) moveToFirst(btree *Btree[TK, TV]) (bool, error) {
 	for n.childrenIds != nil {
 		prev = n
 		cid := n.childrenIds[0]
+		// If nil Child, then we've reached the 1st item's node, stop the walk.
+		if cid == NilUUID {
+			break
+		}
 		n, err = btree.getNode(cid)
 		if err != nil {
 			return false, err
@@ -357,6 +368,10 @@ func (node *Node[TK, TV]) moveToLast(btree *Btree[TK, TV]) (bool, error) {
 	var err error
 	for n.childrenIds != nil {
 		cid := n.childrenIds[n.Count]
+		// If nil Child, then we've reached the last item's node, stop the walk.
+		if cid == NilUUID {
+			break
+		}
 		n, err = btree.getNode(cid)
 		if err != nil {
 			return false, err
@@ -379,6 +394,9 @@ func (node *Node[TK, TV]) moveToNext(btree *Btree[TK, TV]) (bool, error) {
 				return false, nil
 			}
 			if n.hasChildren() {
+				if ok, err := n.handleMoveToNextItemWithNilChild(btree, slotIndex); ok || err != nil {
+					return ok, err
+				}
 				n, err = n.getChild(btree, slotIndex)
 				if err != nil {
 					return false, err
@@ -426,6 +444,9 @@ func (node *Node[TK, TV]) moveToPrevious(btree *Btree[TK, TV]) (bool, error) {
 	if goLeftDown {
 		for {
 			if n.hasChildren() {
+				if ok, err := n.handleMoveToPreviousItemWithNilChild(btree, slotIndex); ok || err != nil {
+					return ok, err
+				}
 				n, err = n.getChild(btree, slotIndex)
 				if err != nil {
 					return false, err
@@ -468,6 +489,9 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBala
 	// Start from this node.
 	temp := node
 	for temp != nil {
+		if temp.hasItemWithNilChild(btree) {
+			return true, nil
+		}
 		if temp.childrenIds != nil {
 			*isUnBalanced = true
 			return false, nil
@@ -516,8 +540,16 @@ func (node *Node[TK, TV]) fixVacatedSlot(btree *Btree[TK, TV]) error {
 	// - when deleting an item with "nil" child, treat it like it is in a leaf node item.
 	// simple slot item overwrite.
 	// - make sure promote & distributeXx methods respect item(s) with "nil" child(ren).
-	// TODO:
-
+	p, err := node.getParent(btree)
+	if err != nil {
+		return err
+	}
+	i, err := node.getIndexOfNode(btree)
+	if err != nil {
+		return err
+	}
+	p.childrenIds[i] = NilUUID
+	btree.saveNode(p)
 	return nil
 }
 
@@ -527,6 +559,9 @@ func (node *Node[TK, TV]) isThereVacantSlotInRight(btree *Btree[TK, TV], isUnBal
 	// Start from this node.
 	temp := node
 	for temp != nil {
+		if temp.hasItemWithNilChild(btree) {
+			return true, nil
+		}
 		if temp.childrenIds != nil {
 			*isUnBalanced = true
 			return false, nil
@@ -634,7 +669,7 @@ func (node *Node[TK, TV]) getIndexToInsertTo(btree *Btree[TK, TV], item *Item[TK
 	})
 	if btree.isUnique() {
 		i := index
-		if i >= btree.getSlotLength() {
+		if i >= node.Count {
 			i--
 		}
 		// Returns index in slot that is available for insert to.
@@ -651,7 +686,7 @@ func (node *Node[TK, TV]) getIndexToInsertTo(btree *Btree[TK, TV], item *Item[TK
 func (node *Node[TK, TV]) getChild(btree *Btree[TK, TV], childSlotIndex int) (*Node[TK, TV], error) {
 	id := node.getChildId(childSlotIndex)
 	if id == NilUUID {
-		return nil, fmt.Errorf("Can't get child Node on child index position %d", childSlotIndex)
+		return nil, nil
 	}
 	return btree.getNode(id)
 }
@@ -679,6 +714,9 @@ func (node *Node[TK, TV]) isRootNode() bool {
 }
 
 func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, TV]) error {
+	if ok, err := node.handleDistributeItemWithNilChild(btree, item); ok || err != nil {
+		return err
+	}
 	if node.isFull(btree.getSlotLength()) {
 		// counter-clockwise rotation..
 		//	----
@@ -721,6 +759,9 @@ func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, 
 }
 
 func (node *Node[TK, TV]) distributeToRight(btree *Btree[TK, TV], item *Item[TK, TV]) error {
+	if ok, err := node.handleDistributeItemWithNilChild(btree, item); ok || err != nil {
+		return err
+	}
 	if node.isFull(btree.getSlotLength()) {
 		// clockwise rotation..
 		//	----
@@ -957,64 +998,3 @@ func moveArrayElements[T any](array []T, srcStartIndex, destStartIndex, count in
 		srcIndex = srcIndex + addValue
 	}
 }
-
-/* Following are few scenarios studied on branch merging during item delete. After much consideration,
-it was identified that such algorithm is potentially exhaustive. It is thus avoided so we can
-implement a minimalist "item delete" logic that keeps the change within the node where delete of
-item occurred. This will work well with V2 as well, as blob/record deletes are typically very
-expensive in cloud storage such as AWS S3.
-
-Kept the analysis detail just because, perhaps we'll move the details somewhere later on...
-
-// Scenario:
-// - node has 1 item that got deleted & is a leaf node
-// - node has parent
-//
-// Merging cases for "minimalist" branch node(s) updates:
-// a. deleted item node is a middle chlid, merge next or previous item to a sibling node.
-//		[ 5 | 7 ]
-//     /    |    \
-//   [3]  [*7*] [10]
-// Outcome:
-//		[ 7 ]
-//     /     \
-//  [3|5]    [10]
-//
-// b. deleted item node is rightmost child, merge previous item to left sibling.
-//		[ 5 | 10 ]
-//     /    |    \
-//   [3]  [6]   [*10*]
-// Outcome:
-//		[ 5 ]
-//     /     \
-//  [3]      [6|10]
-//
-// c. deleted item node is leftmost child, merge next item to right sibling.
-//		[ 5 | 7 ]
-//     /    |    \
-//   [*3*]  [6]   [10]
-// Outcome:
-//		[ 7 ]
-//     /     \
-//  [5|6]      [10]
-//
-// d. parent node has single item & sibling's items can't fit in one node.
-//		[ 7 ]
-//     /     \
-//  [*5*]      [10|11|12|14] (full)
-// Outcome:
-//		[ 10 ]
-//     /     \
-//  [7]      [11|12|14]
-//
-// e. parent node has single item & sibling's items can fit in one node.
-//		[ 10 ]
-//     /     \
-//  [*7*]      [11|12|14]
-// Outcome:
-//    [10|11|12|14]
-//
-// f. Unbalanced branch, parent node has single item & sibling has children.
-//    This will propagate the fix &  merge logic to the other branch, unnecessary
-//    "tax" penalty!
-*/

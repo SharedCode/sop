@@ -246,7 +246,7 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(newValue TV) (bool, error) {
 	}
 	node.Slots[btree.currentItemRef.getNodeItemIndex()].Value = &newValue
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
-	btree.storeInterface.NodeRepository.Upsert(node)
+	btree.saveNode(node)
 	return true, nil
 }
 
@@ -272,12 +272,20 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
 		return false, nil
 	}
-	// check if there are children nodes.
+	// Check if there are children nodes.
 	if node.hasChildren() {
+		ok, err :=node.handleRemoveItemWithNilChild(btree)
+		if err != nil {
+			return false, err
+		}
+		if ok {
+			return true, err
+		}
 		index := btree.currentItemRef.getNodeItemIndex()
+
 		// Below code allows for deletion to happen in the leaf(a.k.a. outermost) node's slots.
 		// MoveNext method will position the Current Item ref to point to a leaf node.
-		ok, err := node.moveToNext(btree)
+		ok, err = node.moveToNext(btree)
 		if err != nil {
 			return false, err
 		}
@@ -292,7 +300,8 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 		// so we can delete that instead & make it happen on the leaf.
 		// Deletion on leaf nodes is easier to repair/fix respective leaf branch.
 		node.Slots[index] = currentNode.Slots[btree.currentItemRef.getNodeItemIndex()]
-		btree.storeInterface.NodeRepository.Upsert(node)
+
+		btree.saveNode(node)
 		node = currentNode
 	}
 	err = node.fixVacatedSlot(btree)
