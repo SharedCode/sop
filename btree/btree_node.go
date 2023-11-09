@@ -522,11 +522,12 @@ func (node *Node[TK, TV]) fixVacatedSlot(btree *Btree[TK, TV]) error {
 	c := node.Count
 	// If there are more than 1 items in slot then we move the items 1 slot to omit deleted item slot.
 	if c > 1 {
-		if btree.currentItemRef.getNodeItemIndex() < c-1 {
+		position := btree.currentItemRef.getNodeItemIndex()
+		if position < c-1 {
 			moveArrayElements(node.Slots,
-				btree.currentItemRef.getNodeItemIndex(),
-				btree.currentItemRef.getNodeItemIndex()+1,
-				1)
+				position,
+				position+1,
+				node.Count-position-1)
 		}
 		// Nullify the last slot.
 		node.Count--

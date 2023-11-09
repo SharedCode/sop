@@ -12,6 +12,42 @@ func TestBtreeBasic(t *testing.T) {
 	testBtreeAddLoop(t, 200)
 }
 
+func TestBtreeNilChild(t *testing.T) {
+	n := 100000
+	fmt.Printf("Nil child %d loop test\n\n", n)
+	b3, _ := in_memory.NewBtree[string, string](false)
+	for i := 0; i < n; i++ {
+		k := fmt.Sprintf("foo%d", i)
+		v := fmt.Sprintf("bar%d", i)
+		b3.Add(k, v)
+	}
+
+	removeStart := 450
+	removeEnd := 500
+
+	for i := removeStart; i < removeEnd; i++ {
+		k := fmt.Sprintf("foo%d", i)
+		if ok,_ := b3.Remove(k); !ok {
+			t.Errorf("Failed deleting item with key %s.\n", k)
+		}
+	}
+
+	for i := removeStart; i < removeEnd; i++ {
+		k := fmt.Sprintf("foo%d", i)
+		v := fmt.Sprintf("bar%d", i)
+		b3.Add(k,v)
+	}
+
+	for i := 0; i < n; i++ {
+		k := fmt.Sprintf("foo%d", i)
+		v := fmt.Sprintf("bar%d", i)
+		if ok, _ := b3.FindOne(k, true); !ok || b3.GetCurrentValue() != v {
+			fmt.Printf("Not found key:%s, value: %s\n", k, v)
+		}
+	}
+	fmt.Printf("Nil child %d loop test end.\n\n", n)
+}
+
 func TestBtreePromoteAndDistributeStability(t *testing.T) {
 	n := 100000
 	fmt.Printf("Promote & Distribute(P&D) %d loop test\n\n", n)
