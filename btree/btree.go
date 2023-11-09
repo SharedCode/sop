@@ -274,23 +274,15 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 	}
 	// Check if there are children nodes.
 	if node.hasChildren() {
-		ok, err :=node.handleRemoveItemWithNilChild(btree)
-		if err != nil {
-			return false, err
-		}
-		if ok {
-			return true, err
-		}
 		index := btree.currentItemRef.getNodeItemIndex()
+		if ok, err := node.removeItemOnNodeWithNilChild(btree, index); ok || err != nil {
+			return ok, err
+		}
 
 		// Below code allows for deletion to happen in the leaf(a.k.a. outermost) node's slots.
 		// MoveNext method will position the Current Item ref to point to a leaf node.
-		ok, err = node.moveToNext(btree)
-		if err != nil {
+		if ok, err := node.moveToNext(btree); !ok || err != nil {
 			return false, err
-		}
-		if !ok {
-			return false, nil
 		}
 		currentNode, err := btree.getCurrentNode()
 		if err != nil {

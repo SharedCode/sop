@@ -55,7 +55,7 @@ func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, e
 			return false, nil
 		}
 		if currentNode.hasChildren() {
-			ok, err := currentNode.handleAddItemWithNilChild(btree, item, index)
+			ok, err := currentNode.addItemOnNodeWithNilChild(btree, item, index)
 			if err != nil || ok {
 				return ok, err
 			}
@@ -283,8 +283,9 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 					break
 				}
 				if n.hasChildren() {
-					if ok, err := n.handleFindItemWithNilChild(btree, index); ok || err != nil {
-						return ok, err
+					// Short circuit if child is nil as there is no more duplicate on left side.
+					if n.childrenIds[index] == NilUUID {
+						break
 					}
 					// Try to navigate to the 1st item with key, in case there are duplicate keys.
 					n, err = n.getChild(btree, index)
@@ -297,14 +298,23 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 		}
 		// Check children if there are.
 		if n.hasChildren() {
-			if ok, err := n.handleFindItemWithNilChild(btree, index); ok || err != nil {
-				return ok, err
+			// Short circuit if child is nil as there is no more duplicate on left side.
+			if n.childrenIds[index] == NilUUID {
+				if !foundNodeId.IsNil() {
+					btree.setCurrentItemId(foundNodeId, foundItemIndex)
+					return true, nil
+				}
+				return false, nil
 			}
 			n, err = n.getChild(btree, index)
 			if err != nil {
 				return false, err
 			}
 			if n == nil {
+				if !foundNodeId.IsNil() {
+					btree.setCurrentItemId(foundNodeId, foundItemIndex)
+					return true, nil
+				}
 				return false, nil
 			}
 		} else {
@@ -394,7 +404,7 @@ func (node *Node[TK, TV]) moveToNext(btree *Btree[TK, TV]) (bool, error) {
 				return false, nil
 			}
 			if n.hasChildren() {
-				if ok, err := n.handleMoveToNextItemWithNilChild(btree, slotIndex); ok || err != nil {
+				if ok, err := n.moveToNextItemOnNodeWithNilChild(btree, slotIndex); ok || err != nil {
 					return ok, err
 				}
 				n, err = n.getChild(btree, slotIndex)
@@ -444,7 +454,7 @@ func (node *Node[TK, TV]) moveToPrevious(btree *Btree[TK, TV]) (bool, error) {
 	if goLeftDown {
 		for {
 			if n.hasChildren() {
-				if ok, err := n.handleMoveToPreviousItemWithNilChild(btree, slotIndex); ok || err != nil {
+				if ok, err := n.moveToPreviousItemOnNodeWithNilChild(btree, slotIndex); ok || err != nil {
 					return ok, err
 				}
 				n, err = n.getChild(btree, slotIndex)
@@ -489,7 +499,7 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBala
 	// Start from this node.
 	temp := node
 	for temp != nil {
-		if temp.hasItemWithNilChild(btree) {
+		if temp.nodeHasNilChild(btree) {
 			return true, nil
 		}
 		if temp.childrenIds != nil {
@@ -514,8 +524,8 @@ func (node *Node[TK, TV]) fixVacatedSlot(btree *Btree[TK, TV]) error {
 	if c > 1 {
 		if btree.currentItemRef.getNodeItemIndex() < c-1 {
 			moveArrayElements(node.Slots,
-				btree.currentItemRef.getNodeItemIndex()+1,
 				btree.currentItemRef.getNodeItemIndex(),
+				btree.currentItemRef.getNodeItemIndex()+1,
 				1)
 		}
 		// Nullify the last slot.
@@ -559,7 +569,7 @@ func (node *Node[TK, TV]) isThereVacantSlotInRight(btree *Btree[TK, TV], isUnBal
 	// Start from this node.
 	temp := node
 	for temp != nil {
-		if temp.hasItemWithNilChild(btree) {
+		if temp.nodeHasNilChild(btree) {
 			return true, nil
 		}
 		if temp.childrenIds != nil {
@@ -705,7 +715,7 @@ func (node *Node[TK, TV]) getChildren(btree *Btree[TK, TV]) ([]*Node[TK, TV], er
 
 // hasChildren returns true if node has children or not.
 func (node *Node[TK, TV]) hasChildren() bool {
-	return node.childrenIds != nil
+	return node.childrenIds != nil && len(node.childrenIds) > 0
 }
 
 // isRootNode returns true if node has no parent.
@@ -714,7 +724,7 @@ func (node *Node[TK, TV]) isRootNode() bool {
 }
 
 func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, TV]) error {
-	if ok, err := node.handleDistributeItemWithNilChild(btree, item); ok || err != nil {
+	if ok, err := node.distributeItemOnNodeWithNilChild(btree, item); ok || err != nil {
 		return err
 	}
 	if node.isFull(btree.getSlotLength()) {
@@ -749,7 +759,7 @@ func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, 
 		// Update Parent (remove node and add updated one).
 		parent.Slots[indexOfNode-1] = node.Slots[0]
 		btree.saveNode(parent)
-		moveArrayElements(node.Slots, 1, 0, btree.getSlotLength()-1)
+		moveArrayElements(node.Slots, 0, 1, btree.getSlotLength()-1)
 	} else {
 		node.Count++
 	}
@@ -759,7 +769,7 @@ func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, 
 }
 
 func (node *Node[TK, TV]) distributeToRight(btree *Btree[TK, TV], item *Item[TK, TV]) error {
-	if ok, err := node.handleDistributeItemWithNilChild(btree, item); ok || err != nil {
+	if ok, err := node.distributeItemOnNodeWithNilChild(btree, item); ok || err != nil {
 		return err
 	}
 	if node.isFull(btree.getSlotLength()) {
@@ -789,7 +799,7 @@ func (node *Node[TK, TV]) distributeToRight(btree *Btree[TK, TV], item *Item[TK,
 	} else {
 		node.Count++
 	}
-	moveArrayElements(node.Slots, 0, 1, btree.getSlotLength()-1)
+	moveArrayElements(node.Slots, 1, 0, btree.getSlotLength()-1)
 	node.Slots[0] = item
 	btree.saveNode(node)
 	return nil
@@ -971,12 +981,12 @@ func copyArrayElements[T any](destination, source []T, count int) {
 func shiftSlots[T any](array []T, position int, noOfOccupiedSlots int) {
 	if position < noOfOccupiedSlots {
 		// Create a vacant slot by shifting node contents one slot.
-		moveArrayElements(array, position, position+1, noOfOccupiedSlots-position)
+		moveArrayElements(array, position+1, position, noOfOccupiedSlots-position)
 	}
 }
 
 // moveArrayElements is a helper function for internal use only.
-func moveArrayElements[T any](array []T, srcStartIndex, destStartIndex, count int) {
+func moveArrayElements[T any](array []T, destStartIndex, srcStartIndex, count int) {
 	if array == nil {
 		return
 	}
