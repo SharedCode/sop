@@ -41,9 +41,17 @@ type StoreInterface[TK Comparable, TV any] struct {
 
 // NewStore instantiates a new Store.
 func NewStore(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool) Store {
+	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
+	if slotLength%2 != 0 {
+		slotLength--
+	}
+	// Minimum slot length is 4, you lose gains if you use less than 4.
+	if slotLength < 4 {
+		slotLength = 4
+	}
 	return Store{
 		Name:                     name,
-		SlotLength:            slotLength,
+		SlotLength:               slotLength,
 		IsUnique:                 isUnique,
 		IsValueDataInNodeSegment: isValueDataInNodeSegment,
 	}
@@ -89,6 +97,7 @@ const (
 )
 
 type EntityType uint
+
 const (
 	// BTreeNode is the entity type of the B-Tree Node.
 	BTreeNode = iota
@@ -103,8 +112,8 @@ const (
 // during Transaction Commit.
 type TransactionEntry struct {
 	EntityLogicalId UUID
-	EntityType EntityType
-	Sequence  int
-	Action    TransactionActionType
-	IsDeleted bool
+	EntityType      EntityType
+	Sequence        int
+	Action          TransactionActionType
+	IsDeleted       bool
 }

@@ -250,6 +250,7 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(newValue TV) (bool, error) {
 	return true, nil
 }
 
+// Remove will find the item with given key and delete it.
 func (btree *Btree[TK, TV]) Remove(key TK) (bool, error) {
 	ok, err := btree.FindOne(key, false)
 	if err != nil {
@@ -261,6 +262,7 @@ func (btree *Btree[TK, TV]) Remove(key TK) (bool, error) {
 	return btree.RemoveCurrentItem()
 }
 
+// RemoveCurrentItem will remove the current item, i.e. - referenced by CurrentItemRef.
 func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 	if btree.currentItemRef.getNodeId() == NilUUID {
 		return false, nil
@@ -276,9 +278,13 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 	if node.hasChildren() {
 		index := btree.currentItemRef.getNodeItemIndex()
 		if ok, err := node.removeItemOnNodeWithNilChild(btree, index); ok || err != nil {
+			if ok {
+				// Make the current item pointer point to null since we just deleted the current item.
+				btree.setCurrentItemId(NilUUID, 0)
+				btree.Store.Count--
+			}
 			return ok, err
 		}
-
 		// Below code allows for deletion to happen in the leaf(a.k.a. outermost) node's slots.
 		// MoveNext method will position the Current Item ref to point to a leaf node.
 		if ok, err := node.moveToNext(btree); !ok || err != nil {
@@ -292,8 +298,15 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 		// so we can delete that instead & make it happen on the leaf.
 		// Deletion on leaf nodes is easier to repair/fix respective leaf branch.
 		node.Slots[index] = currentNode.Slots[btree.currentItemRef.getNodeItemIndex()]
-
 		btree.saveNode(node)
+		if ok, err := currentNode.removeItemOnNodeWithNilChild(btree, btree.currentItemRef.getNodeItemIndex()); ok || err != nil {
+			if ok {
+				// Make the current item pointer point to null since we just deleted the current item.
+				btree.setCurrentItemId(NilUUID, 0)
+				btree.Store.Count--
+			}
+			return ok, err
+		}
 		node = currentNode
 	}
 	err = node.fixVacatedSlot(btree)
@@ -316,7 +329,7 @@ func (btree *Btree[TK, TV]) IsValueDataInNodeSegment() bool {
 	return btree.Store.IsValueDataInNodeSegment
 }
 
-// SaveNode will prepare & persist (if needed) the Node to the backend
+// saveNode will prepare & persist (if needed) the Node to the backend
 // via NodeRepository call. When Transaction Manager is implemented, this
 // will just register the modified/new node in the transaction session
 // so it can get persisted on tranaction commit.
@@ -325,6 +338,13 @@ func (btree *Btree[TK, TV]) saveNode(node *Node[TK, TV]) error {
 		node.Id = NewUUID()
 	}
 	return btree.storeInterface.NodeRepository.Upsert(node)
+}
+// removeNode will remove the node from backend repository.
+func (btree *Btree[TK, TV]) removeNode(node *Node[TK, TV]) error {
+	if node.Id.IsNil() {
+		return nil
+	}
+	return btree.storeInterface.NodeRepository.Remove(node.Id)
 }
 
 func (btree *Btree[TK, TV]) getCurrentNode() (*Node[TK, TV], error) {
@@ -405,12 +425,13 @@ func (btree *Btree[TK, TV]) distribute() {
 // promote allows a controller(btree.promote)-controllee(node.promote) pattern and avoid recursion.
 func (btree *Btree[TK, TV]) promote() {
 	for btree.promoteAction.nodeForPromotion != nil {
-		log.Debug(fmt.Sprintf("Promote will promote a Node with Id %v.", btree.promoteAction.nodeForPromotion.Id.ToString()))
+		log.Debug(fmt.Sprintf("Promote will promote a Node with Id %v.", btree.promoteAction.nodeForPromotion.Id))
 		n := btree.promoteAction.nodeForPromotion
 		i := btree.promoteAction.nodeForPromotionIndex
 		btree.promoteAction.nodeForPromotion = nil
 		btree.promoteAction.nodeForPromotionIndex = 0
-		// Node promote tcontains actual logic to promote a node to higher up.
+		// Node's promote method contains actual logic to promote a (new parent outcome of
+		// splittin a full node) node to higher up.
 		n.promote(btree, i)
 	}
 }

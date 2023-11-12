@@ -268,7 +268,7 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 	foundNodeId := NilUUID
 	var err error
 	index := 0
-	for {
+	for n != nil {
 		index = 0
 		if n.Count > 0 {
 			index = sort.Search(n.Count, func(index int) bool {
@@ -282,44 +282,22 @@ func (node *Node[TK, TV]) find(btree *Btree[TK, TV], key TK, firstItemWithKey bo
 				if !firstItemWithKey {
 					break
 				}
-				if n.hasChildren() {
-					// Short circuit if child is nil as there is no more duplicate on left side.
-					if n.childrenIds[index] == NilUUID {
-						break
-					}
-					// Try to navigate to the 1st item with key, in case there are duplicate keys.
-					n, err = n.getChild(btree, index)
-					if err != nil {
-						return false, err
-					}
-					continue
-				}
 			}
 		}
 		// Check children if there are.
 		if n.hasChildren() {
 			// Short circuit if child is nil as there is no more duplicate on left side.
 			if n.childrenIds[index] == NilUUID {
-				if !foundNodeId.IsNil() {
-					btree.setCurrentItemId(foundNodeId, foundItemIndex)
-					return true, nil
-				}
-				return false, nil
+				break
 			}
 			n, err = n.getChild(btree, index)
 			if err != nil {
 				return false, err
 			}
-			if n == nil {
-				if !foundNodeId.IsNil() {
-					btree.setCurrentItemId(foundNodeId, foundItemIndex)
-					return true, nil
-				}
-				return false, nil
-			}
-		} else {
-			break
+			continue
 		}
+		// Short circuit loop if there are no more children.
+		break
 	}
 	if !foundNodeId.IsNil() {
 		btree.setCurrentItemId(foundNodeId, foundItemIndex)
@@ -404,7 +382,7 @@ func (node *Node[TK, TV]) moveToNext(btree *Btree[TK, TV]) (bool, error) {
 				return false, nil
 			}
 			if n.hasChildren() {
-				if ok, err := n.moveToNextItemOnNodeWithNilChild(btree, slotIndex); ok || err != nil {
+				if ok, err := n.goRightUpItemOnNodeWithNilChild(btree, slotIndex); ok || err != nil {
 					return ok, err
 				}
 				n, err = n.getChild(btree, slotIndex)
@@ -429,20 +407,17 @@ func (node *Node[TK, TV]) moveToNext(btree *Btree[TK, TV]) (bool, error) {
 			return true, nil
 		}
 		// Check if this is not the root node. (Root nodes don't have parent node.)
-		if !n.isRootNode() {
-			slotIndex, err = n.getIndexOfNode(btree)
-			if err != nil {
-				return false, err
-			}
-			n, err = n.getParent(btree)
-			if err != nil {
-				return false, err
-			}
-		} else {
+		if n.isRootNode() {
 			// this is root node. set to null the current item(End of Btree is reached)
 			btree.setCurrentItemId(NilUUID, 0)
 			return false, nil
 		}
+		p, err := n.getParent(btree)
+		if err != nil {
+			return false, err
+		}
+		slotIndex = p.getIndexOfChild(n)
+		n = p
 	}
 }
 
@@ -454,7 +429,7 @@ func (node *Node[TK, TV]) moveToPrevious(btree *Btree[TK, TV]) (bool, error) {
 	if goLeftDown {
 		for {
 			if n.hasChildren() {
-				if ok, err := n.moveToPreviousItemOnNodeWithNilChild(btree, slotIndex); ok || err != nil {
+				if ok, err := n.goLeftUpItemOnNodeWithNilChild(btree, slotIndex); ok || err != nil {
 					return ok, err
 				}
 				n, err = n.getChild(btree, slotIndex)
@@ -481,15 +456,12 @@ func (node *Node[TK, TV]) moveToPrevious(btree *Btree[TK, TV]) (bool, error) {
 			btree.setCurrentItemId(NilUUID, 0)
 			return false, nil
 		}
-		i, err := n.getIndexOfNode(btree)
+		p, err := n.getParent(btree)
 		if err != nil {
 			return false, err
 		}
-		n, err = n.getParent(btree)
-		if err != nil {
-			return false, err
-		}
-		slotIndex = i - 1
+		slotIndex = p.getIndexOfChild(n) - 1
+		n = p
 	}
 }
 
@@ -543,25 +515,36 @@ func (node *Node[TK, TV]) fixVacatedSlot(btree *Btree[TK, TV]) error {
 		return btree.saveNode(node)
 	}
 
-	// Delete single item of node. Keep it simple:
-	// - set parent child pointer to the node as nil.
-	// - make sure all methods can accommodate "nil" child, e.g. moveToNext & moveToPrevious
-	// to behave properly with "nil" child.
-	// - make sure the "nil" child can get allocated to a new node.
-	// - when deleting an item with "nil" child, treat it like it is in a leaf node item.
-	// simple slot item overwrite.
-	// - make sure promote & distributeXx methods respect item(s) with "nil" child(ren).
+	return node.unlink(btree)
+}
+
+func (node *Node[TK, TV]) unlink(btree *Btree[TK, TV]) error {
 	p, err := node.getParent(btree)
 	if err != nil {
 		return err
 	}
-	i, err := node.getIndexOfNode(btree)
-	if err != nil {
+	if !p.hasChildren() {
+		return nil
+	}
+	// Prune empty children.
+	i := p.getIndexOfChild(node)
+	p.childrenIds[i] = NilUUID
+	if p.isNilChildren() {
+		p.childrenIds = nil
+	}
+	if err = btree.saveNode(p); err != nil {
 		return err
 	}
-	p.childrenIds[i] = NilUUID
-	btree.saveNode(p)
-	return nil
+	return btree.removeNode(node)
+}
+
+func (node *Node[TK, TV]) isNilChildren() bool {
+	for _, id := range node.childrenIds {
+		if id != NilUUID {
+			return false
+		}
+	}
+	return true
 }
 
 // Returns true if a slot is available in right side siblings of this node modified to suit possible unbalanced branch.
@@ -629,6 +612,21 @@ func (node *Node[TK, TV]) getRightSibling(btree *Btree[TK, TV]) (*Node[TK, TV], 
 	return nil, nil
 }
 
+func (node *Node[TK, TV]) getIndexOfChild(child *Node[TK, TV]) int {
+	parent := node
+	// Make sure we don't access an invalid node item.
+	if parent.childrenIds != nil &&
+		(child.indexOfNode == -1 || child.Id != parent.childrenIds[child.indexOfNode]) {
+		for child.indexOfNode = 0; child.indexOfNode <= len(parent.Slots) &&
+			!parent.childrenIds[child.indexOfNode].IsNil(); child.indexOfNode++ {
+			if parent.childrenIds[child.indexOfNode] == child.Id {
+				break
+			}
+		}
+	}
+	return child.indexOfNode
+}
+
 // Returns index of this node relative to parent.
 func (node *Node[TK, TV]) getIndexOfNode(btree *Btree[TK, TV]) (int, error) {
 	parent, err := node.getParent(btree)
@@ -636,17 +634,7 @@ func (node *Node[TK, TV]) getIndexOfNode(btree *Btree[TK, TV]) (int, error) {
 		return -1, err
 	}
 	if parent != nil {
-		// Make sure we don't access an invalid node item.
-		if parent.childrenIds != nil &&
-			(node.indexOfNode == -1 || node.Id != parent.childrenIds[node.indexOfNode]) {
-			for node.indexOfNode = 0; node.indexOfNode <= btree.getSlotLength() &&
-				!parent.childrenIds[node.indexOfNode].IsNil(); node.indexOfNode++ {
-				if parent.childrenIds[node.indexOfNode] == node.Id {
-					break
-				}
-			}
-		}
-		return node.indexOfNode, nil
+		return parent.getIndexOfChild(node), nil
 	}
 	// Just return 0 if called in the root node, anyway,
 	// the caller code should check if it is the root node and not call this function if it is!
@@ -739,11 +727,7 @@ func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, 
 			return err
 		}
 
-		indexOfNode, err := node.getIndexOfNode(btree)
-		if err != nil {
-			return err
-		}
-
+		indexOfNode := parent.getIndexOfChild(node)
 		if indexOfNode > parent.Count {
 			return nil
 		}
