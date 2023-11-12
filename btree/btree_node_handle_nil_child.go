@@ -13,18 +13,12 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], ind
 			itemsToMove := node.Count - index
 			moveArrayElements(node.Slots, index, index+1, itemsToMove)
 			moveArrayElements(node.childrenIds, index, index+1, itemsToMove+1)
-		} else {
-			i := 0
-			i++
 		}
 	} else if node.childrenIds[index+1] == NilUUID {
 		if index < node.Count {
 			itemsToMove := node.Count - index
 			moveArrayElements(node.Slots, index, index+1, itemsToMove)
 			moveArrayElements(node.childrenIds, index+1, index+2, itemsToMove+1)
-		} else {
-			i := 0
-			i++
 		}
 	}
 	// Set to nil the last item & its child.
@@ -87,8 +81,7 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], ind
 		return true, nil
 	}
 
-	err := btree.saveNode(node)
-	if err != nil {
+	if err := btree.saveNode(node); err != nil {
 		return false, err
 	}
 	return true, nil

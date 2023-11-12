@@ -10,7 +10,7 @@ import (
 func TestBtree_AdvancedRemoveCases(t *testing.T) {
 	// TODO: still under development.
 	max := 7000
-	fmt.Printf("Btree tests started, manage %d items.\n\n", max)
+	fmt.Printf("Btree advanced remove tests started, manage %d items.\n\n", max)
 	b3, _ := in_memory.NewBtree[int, string](false)
 
 	tests := []struct {
@@ -159,12 +159,12 @@ func TestBtree_AdvancedRemoveCases(t *testing.T) {
 		}
 		t.Logf("Test %s ended.", test.name)
 	}
-	fmt.Printf("Btree tests ended.\n\n")
+	fmt.Printf("Btree advanced remove tests ended.\n\n")
 }
 
 func TestBtree_SimpleRemoveCases(t *testing.T) {
 	max := 100000
-	fmt.Printf("Nil child %d loop test\n\n", max)
+	fmt.Printf("Btree simple remove %d loop test\n\n", max)
 	b3, _ := in_memory.NewBtree[string, string](false)
 
 	tests := []struct {
@@ -246,5 +246,5 @@ func TestBtree_SimpleRemoveCases(t *testing.T) {
 		}
 		t.Logf("Test %s ended.", test.name)
 	}
-	fmt.Printf("Nil child %d loop test ended.\n\n", max)
+	fmt.Printf("Btree simple remove %d loop test ended.\n\n", max)
 }
