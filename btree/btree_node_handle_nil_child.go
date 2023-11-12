@@ -28,7 +28,7 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], ind
 
 	if node.Count == 0 && node.childrenIds[0] != NilUUID {
 		if node.isRootNode() {
-			// Copy contents of the child to this root node.			
+			// Copy contents of the child to this root node.
 			nc, err := node.getChild(btree, 0)
 			if err != nil {
 				return false, err
@@ -87,7 +87,7 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], ind
 	return true, nil
 }
 
-// - insert/distribute item on a full node with a nil child, 'should occupy nil child
+// addItemOnNodeWithNilChild handles insert/distribute item on a full node with a nil child, 'should occupy nil child.
 func (node *Node[TK, TV]) addItemOnNodeWithNilChild(btree *Btree[TK, TV], item *Item[TK, TV], index int) (bool, error) {
 	if node.childrenIds[index] != NilUUID {
 		return false, nil
@@ -195,6 +195,7 @@ func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(btree *Btree[TK, TV],
 	if i > node.Count {
 		return false, nil
 	}
+	// TODO: complete the logic.
 	// Create a new Child node & populate it with the item.
 	child := newNode[TK, TV](btree.getSlotLength())
 	child.newId(node.Id)

@@ -8,8 +8,7 @@ import (
 )
 
 func TestBtree_AdvancedRemoveCases(t *testing.T) {
-	// TODO: still under development.
-	max := 7000
+	max := 100000
 	fmt.Printf("Btree advanced remove tests started, manage %d items.\n\n", max)
 	b3, _ := in_memory.NewBtree[int, string](false)
 
@@ -26,12 +25,12 @@ func TestBtree_AdvancedRemoveCases(t *testing.T) {
 			endRange:   max,
 			action:     1, // add
 		},
-		// {
-		// 	name:       "find1",
-		// 	startRange: 0,
-		// 	endRange:   max,
-		// 	action:     2, // find
-		// },
+		{
+			name:       "find1",
+			startRange: 0,
+			endRange:   max,
+			action:     2, // find
+		},
 		{
 			name:       "remove1",
 			startRange: 450,
@@ -44,57 +43,63 @@ func TestBtree_AdvancedRemoveCases(t *testing.T) {
 			endRange:   600,
 			action:     3, // remove
 		},
-		// {
-		// 	name:       "Find with missing items 1",
-		// 	startRange: 445,
-		// 	endRange:   484,
-		// 	action:     4,  // FindOne + track not found items
-		// 	wantFound:  12, // items 445-449 & 801-807 (5 + 7 = 12)
-		// },
-		// {
-		// 	name:       "readd deleted items",
-		// 	startRange: 450,
-		// 	endRange:   477,
-		// 	action:     1,
-		// },
-		// {
-		// 	name:       "findAll1",
-		// 	startRange: 0,
-		// 	endRange:   max,
-		// 	action:     2,
-		// },
-		// {
-		// 	name:       "remove2",
-		// 	startRange: 1000,
-		// 	endRange:   1010,
-		// 	action:     3,
-		// },
-		// {
-		// 	name:       "remove3",
-		// 	startRange: 5040,
-		// 	endRange:   5042,
-		// 	action:     3,
-		// },
-		// {
-		// 	name:       "readd deleted items2",
-		// 	startRange: 5000,
-		// 	endRange:   10000,
-		// 	action:     1,
-		// },
 		{
-			name:       "findAll2",
+			name:       "Find with missing items 1",
+			startRange: 445,
+			endRange:   607,
+			action:     4,  // FindOne + track not found items
+			wantFound:  12,
+		},
+		{
+			name:       "readd deleted items",
+			startRange: 450,
+			endRange:   600,
+			action:     1,
+		},
+		{
+			name:       "findAll1",
 			startRange: 0,
 			endRange:   max,
-			action:     4, // find
-			wantFound:  6850,
+			action:     2,
 		},
-		// {
-		// 	name:       "Range Query 1",
-		// 	startRange: 445,
-		// 	endRange:   807,
-		// 	action:     5,   // FindOne + MoveNext()
-		// 	wantFound:  362, // items (807-445=362)
-		// },
+		{
+			name:       "remove3",
+			startRange: 60000,
+			endRange:   90000,
+			action:     3,
+		},
+		{
+			name:       "remove4",
+			startRange: 91000,
+			endRange:   99000,
+			action:     3,
+		},
+		{
+			name:       "findAll1",
+			startRange: 0,
+			endRange:   max,
+			action:     4,
+			wantFound:  61999,
+		},
+		{
+			name:       "readd 2",
+			startRange: 60000,
+			endRange:   90000,
+			action:     1,
+		},
+		{
+			name:       "readd 3",
+			startRange: 91000,
+			endRange:   99000,
+			action:     1,
+		},
+		{
+			name:       "Range Query 1",
+			startRange: 0,
+			endRange:   max,
+			action:     5,   // FindOne + MoveNext()
+			wantFound:  max+1,
+		},
 	}
 
 	var k int
