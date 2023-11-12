@@ -107,7 +107,8 @@ func (node *Node[TK, TV]) addItemOnNodeWithNilChild(btree *Btree[TK, TV], item *
 	return true, nil
 }
 
-// - moveToNext on a node with nil child
+// goRightUpItemOnNodeWithNilChild will point the current item ref to the item to the right or up a parent.
+// Applicable when child at index position is nil.
 func (node *Node[TK, TV]) goRightUpItemOnNodeWithNilChild(btree *Btree[TK, TV], index int) (bool, error) {
 	if node.childrenIds[index] != NilUUID {
 		return false, nil
@@ -139,7 +140,8 @@ func (node *Node[TK, TV]) goRightUpItemOnNodeWithNilChild(btree *Btree[TK, TV], 
 	}
 }
 
-// - moveToPrevious on a node with nil child
+// goLeftUpItemOnNodeWithNilChild will point the current item ref to the item to the left or up a parent.
+// Applicable when child at index position is nil.
 func (node *Node[TK, TV]) goLeftUpItemOnNodeWithNilChild(btree *Btree[TK, TV], index int) (bool, error) {
 	if node.childrenIds[index] != NilUUID {
 		return false, nil
@@ -179,6 +181,7 @@ func (node *Node[TK, TV]) nodeHasNilChild(btree *Btree[TK, TV]) bool {
 	return false
 }
 
+// distributeItemOnNodeWithNilChild is used to balance load among nodes of a given branch.
 func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, error) {
 	if !node.hasChildren() {
 		return false, nil

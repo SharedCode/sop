@@ -94,8 +94,7 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	btree.Store.Count++
 
 	// Registers the root node to the transaction manager so it can get saved if needed.
-	err = btree.saveNode(node)
-	if err != nil {
+	if err = btree.saveNode(node); err != nil {
 		return false, err
 	}
 	return true, nil

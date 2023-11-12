@@ -31,6 +31,7 @@ type Node[TK Comparable, TV any] struct {
 	childrenIds []UUID
 }
 
+// newNode creates a new node.
 func newNode[TK Comparable, TV any](slotCount int) *Node[TK, TV] {
 	return &Node[TK, TV]{
 		Slots:       make([]*Item[TK, TV], slotCount),
@@ -79,7 +80,9 @@ func (node *Node[TK, TV]) add(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, e
 			return false, nil
 		}
 	}
-	currentNode.addOnLeaf(btree, item, index)
+	if err := currentNode.addOnLeaf(btree, item, index); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -514,7 +517,6 @@ func (node *Node[TK, TV]) fixVacatedSlot(btree *Btree[TK, TV]) error {
 		btree.setCurrentItemId(NilUUID, 0)
 		return btree.saveNode(node)
 	}
-
 	return node.unlink(btree)
 }
 
@@ -817,7 +819,6 @@ func (node *Node[TK, TV]) promote(btree *Btree[TK, TV], indexPosition int) error
 	// Insert to temp slots.. node is full, use TempSlots
 	// NOTE: ensure node & its children being promoted will point to the correct
 	// new ParentAddress as recursive node breakup occurs...
-
 	copyArrayElements(btree.tempSlots, node.Slots, btree.getSlotLength())
 	shiftSlots(btree.tempSlots, index, btree.getSlotLength())
 	btree.tempSlots[index] = btree.tempParent
@@ -921,7 +922,7 @@ func (node *Node[TK, TV]) promote(btree *Btree[TK, TV], indexPosition int) error
 	node.childrenIds[0] = leftNode.Id
 	node.childrenIds[1] = rightNode.Id
 	btree.saveNode(node)
-	// successful
+
 	return nil
 }
 
@@ -939,15 +940,18 @@ func (node *Node[TK, TV]) getChildId(index int) UUID {
 }
 
 func (node *Node[TK, TV]) updateChildrenParent(btree *Btree[TK, TV]) error {
-	if node.childrenIds != nil {
-		children, err := node.getChildren(btree)
-		if err != nil {
+	if !node.hasChildren() {
+		return nil
+	}
+	children, err := node.getChildren(btree)
+	if err != nil {
+		return err
+	}
+	// Make node parent of its children.
+	for index := 0; index < len(children) && children[index] != nil; index++ {
+		children[index].ParentId = node.Id
+		if err = btree.saveNode(children[index]); err != nil {
 			return err
-		}
-		// Make the right sibling parent of its children.
-		for index := 0; index < len(children) && children[index] != nil; index++ {
-			children[index].ParentId = node.Id
-			btree.saveNode(children[index])
 		}
 	}
 	return nil

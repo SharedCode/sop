@@ -2,6 +2,7 @@ package in_memory
 
 import "github.com/SharedCode/sop/btree"
 
+// in-memory implementation of NodeRepository. Uses a map to manage nodes in memory.
 type nodeRepository[TK btree.Comparable, TV any] struct {
 	lookup map[btree.UUID]*btree.Node[TK, TV]
 }
