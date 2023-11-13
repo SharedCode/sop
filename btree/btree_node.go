@@ -112,7 +112,7 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 
 	slotsHalf := btree.getSlotLength() >> 1
 	var isUnBalanced bool
-	if !node.ParentId.IsNil() {
+	if !node.isRootNode() {
 		isVacantSlotInLeft, err = node.isThereVacantSlotInLeft(btree, &isUnBalanced)
 		if err != nil {
 			return err
@@ -131,7 +131,9 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 			}
 			copy(node.Slots, btree.tempSlots[b:])
 			// Save this node.
-			btree.saveNode(node)
+			if err = btree.saveNode(node); err != nil {
+				return err
+			}
 
 			btree.distributeAction.sourceNode = node
 			if isVacantSlotInLeft {
@@ -175,12 +177,18 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 			node.Slots[0] = btree.tempSlots[slotsHalf]
 
 			// Save this Node, Left & Right Nodes.
-			btree.saveNode(leftNode)
-			btree.saveNode(rightNode)
+			if err = btree.saveNode(leftNode); err != nil {
+				return err
+			}
+			if err = btree.saveNode(rightNode); err != nil {
+				return err
+			}
 			node.childrenIds = make([]UUID, btree.getSlotLength()+1)
 			node.childrenIds[0] = leftNode.Id
 			node.childrenIds[1] = rightNode.Id
-			btree.saveNode(node)
+			if err = btree.saveNode(node); err != nil {
+				return err
+			}
 
 			clear(btree.tempSlots)
 			return nil
@@ -207,24 +215,24 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 		btree.tempParentChildren[0] = node.Id
 		btree.tempParentChildren[1] = rightNode.Id
 
-		o, err := btree.getNode(node.ParentId)
+		p, err := btree.getNode(node.ParentId)
 		if err != nil {
 			return err
 		}
-		if o == nil {
+		if p == nil {
 			return fmt.Errorf("Can't get parent (Id='%v') of this Node.", node.ParentId)
 		}
 
 		//  Save this and Right Node.
-		btree.saveNode(node)
-		btree.saveNode(rightNode)
-
-		btree.promoteAction.nodeForPromotion = o
-		i, err := node.getIndexOfNode(btree)
-		if err != nil {
+		if err = btree.saveNode(node); err != nil {
 			return err
 		}
-		btree.promoteAction.nodeForPromotionIndex = i
+		if err = btree.saveNode(rightNode); err != nil {
+			return err
+		}
+
+		btree.promoteAction.targetNode = p
+		btree.promoteAction.slotIndex = p.getIndexOfChild(node)
 		return nil
 	}
 
@@ -251,15 +259,21 @@ func (node *Node[TK, TV]) addOnLeaf(btree *Btree[TK, TV], item *Item[TK, TV], in
 	node.Count = 1
 
 	// Save Left and Right Nodes.
-	btree.saveNode(leftNode)
-	btree.saveNode(rightNode)
+	if err = btree.saveNode(leftNode); err != nil {
+		return err
+	}
+	if err = btree.saveNode(rightNode); err != nil {
+		return err
+	}
 
 	node.childrenIds = make([]UUID, btree.getSlotLength()+1)
 	node.childrenIds[0] = leftNode.Id
 	node.childrenIds[1] = rightNode.Id
 
-	// Save this TreeNode.
-	btree.saveNode(node)
+	// Save this Node.
+	if err = btree.saveNode(node); err != nil {
+		return err
+	}
 	clear(btree.tempSlots)
 
 	return nil
@@ -409,7 +423,7 @@ func (node *Node[TK, TV]) moveToNext(btree *Btree[TK, TV]) (bool, error) {
 			btree.setCurrentItemId(n.Id, slotIndex)
 			return true, nil
 		}
-		// Check if this is not the root node. (Root nodes don't have parent node.)
+		// Check if this is the root node. (Root nodes don't have parent node.)
 		if n.isRootNode() {
 			// this is root node. set to null the current item(End of Btree is reached)
 			btree.setCurrentItemId(NilUUID, 0)
@@ -494,11 +508,10 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBala
 }
 
 func (node *Node[TK, TV]) fixVacatedSlot(btree *Btree[TK, TV]) error {
-	c := node.Count
 	// If there are more than 1 items in slot then we move the items 1 slot to omit deleted item slot.
-	if c > 1 {
+	if node.Count > 1 {
 		position := btree.currentItemRef.getNodeItemIndex()
-		if position < c-1 {
+		if position < node.Count-1 {
 			moveArrayElements(node.Slots,
 				position,
 				position+1,
@@ -517,27 +530,10 @@ func (node *Node[TK, TV]) fixVacatedSlot(btree *Btree[TK, TV]) error {
 		btree.setCurrentItemId(NilUUID, 0)
 		return btree.saveNode(node)
 	}
+	if ok, err := node.unlinkNodeWithNilChild(btree); ok || err != nil {
+		return err
+	}
 	return node.unlink(btree)
-}
-
-func (node *Node[TK, TV]) unlink(btree *Btree[TK, TV]) error {
-	p, err := node.getParent(btree)
-	if err != nil {
-		return err
-	}
-	if !p.hasChildren() {
-		return nil
-	}
-	// Prune empty children.
-	i := p.getIndexOfChild(node)
-	p.childrenIds[i] = NilUUID
-	if p.isNilChildren() {
-		p.childrenIds = nil
-	}
-	if err = btree.saveNode(p); err != nil {
-		return err
-	}
-	return btree.removeNode(node)
 }
 
 func (node *Node[TK, TV]) isNilChildren() bool {
@@ -696,6 +692,9 @@ func (node *Node[TK, TV]) getChildren(btree *Btree[TK, TV]) ([]*Node[TK, TV], er
 	children := make([]*Node[TK, TV], len(node.childrenIds))
 	var err error
 	for i, id := range node.childrenIds {
+		if id == NilUUID {
+			continue
+		}
 		children[i], err = btree.getNode(id)
 		if err != nil {
 			return nil, err
@@ -745,14 +744,15 @@ func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, 
 
 		// Update Parent (remove node and add updated one).
 		parent.Slots[indexOfNode-1] = node.Slots[0]
-		btree.saveNode(parent)
+		if err = btree.saveNode(parent); err != nil {
+			return err
+		}
 		moveArrayElements(node.Slots, 0, 1, btree.getSlotLength()-1)
 	} else {
 		node.Count++
 	}
 	node.Slots[node.Count-1] = item
-	btree.saveNode(node)
-	return nil
+	return btree.saveNode(node)
 }
 
 func (node *Node[TK, TV]) distributeToRight(btree *Btree[TK, TV], item *Item[TK, TV]) error {
@@ -768,10 +768,7 @@ func (node *Node[TK, TV]) distributeToRight(btree *Btree[TK, TV], item *Item[TK,
 		if err != nil {
 			return nil
 		}
-		i, err := node.getIndexOfNode(btree)
-		if err != nil {
-			return nil
-		}
+		i := parent.getIndexOfChild(node)
 
 		// Let controller to make another call to distribute item to right action.
 		btree.distributeAction.sourceNode, err = node.getRightSibling(btree)
@@ -782,14 +779,15 @@ func (node *Node[TK, TV]) distributeToRight(btree *Btree[TK, TV], item *Item[TK,
 		btree.distributeAction.distributeToLeft = false
 
 		parent.Slots[i] = node.Slots[node.Count-1]
-		btree.saveNode(parent)
+		if err = btree.saveNode(parent); err != nil {
+			return err
+		}
 	} else {
 		node.Count++
 	}
 	moveArrayElements(node.Slots, 1, 0, btree.getSlotLength()-1)
 	node.Slots[0] = item
-	btree.saveNode(node)
-	return nil
+	return btree.saveNode(node)
 }
 
 func (node *Node[TK, TV]) promote(btree *Btree[TK, TV], indexPosition int) error {
@@ -805,20 +803,16 @@ func (node *Node[TK, TV]) promote(btree *Btree[TK, TV], indexPosition int) error
 
 		// Insert the left child.
 		node.childrenIds[index] = btree.tempParentChildren[0]
-
 		// Insert the right child.
 		shiftSlots(node.childrenIds, index+1, noOfOccupiedSlots+1)
 		node.Count++
 		node.childrenIds[index+1] = btree.tempParentChildren[1]
-		btree.saveNode(node)
-
-		// successful
-		return nil
+		return btree.saveNode(node)
 	}
 
 	// Insert to temp slots.. node is full, use TempSlots
 	// NOTE: ensure node & its children being promoted will point to the correct
-	// new ParentAddress as recursive node breakup occurs...
+	// new ParentId as recursive node breakup occurs...
 	copyArrayElements(btree.tempSlots, node.Slots, btree.getSlotLength())
 	shiftSlots(btree.tempSlots, index, btree.getSlotLength())
 	btree.tempSlots[index] = btree.tempParent
@@ -832,97 +826,105 @@ func (node *Node[TK, TV]) promote(btree *Btree[TK, TV], indexPosition int) error
 
 	// Try to break up the node into 2 siblings.
 	slotsHalf := btree.getSlotLength() >> 1
-	if !node.isRootNode() {
 
-		// Prepare this and the right node sibling and promote the temporary parent node(pTempSlot).
-		// This will be the left sibling !
+	if node.isRootNode() {
+		// No parent, break up this node into two children & keep node as root.
+		leftNode := newNode[TK, TV](btree.getSlotLength())
+		leftNode.newId(node.Id)
+
 		rightNode := newNode[TK, TV](btree.getSlotLength())
-		rightNode.newId(node.ParentId)
-		rightNode.childrenIds = make([]UUID, btree.getSlotLength()+1)
+		rightNode.newId(node.Id)
 
-		// Zero out the current slot.
-		clear(node.Slots)
-		// Zero out this children node pointers.
-		clear(node.childrenIds)
-
-		// Copy the left half of the slots to left sibling(this)
-		copyArrayElements(node.Slots, btree.tempSlots, slotsHalf)
-		node.Count = slotsHalf
-
-		// Copy the right half of the slots to right sibling
+		// Copy the left half of the slots
+		copyArrayElements(leftNode.Slots, btree.tempSlots, slotsHalf)
+		leftNode.Count = slotsHalf
+		// Copy the right half of the slots
 		copyArrayElements(rightNode.Slots, btree.tempSlots[slotsHalf+1:], slotsHalf)
 		rightNode.Count = slotsHalf
+		leftNode.childrenIds = make([]UUID, btree.getSlotLength()+1)
+		rightNode.childrenIds = make([]UUID, btree.getSlotLength()+1)
 		// Copy the left half of the children nodes.
-		copyArrayElements(node.childrenIds, btree.tempChildren, slotsHalf+1)
-
+		copyArrayElements(leftNode.childrenIds, btree.tempChildren, slotsHalf+1)
 		// Copy the right half of the children nodes.
 		copyArrayElements(rightNode.childrenIds, btree.tempChildren[slotsHalf+1:], slotsHalf+1)
 
-		// Left sibling is already parent of its children. make the right sibling parent of its children.
+		// Reset this Node.
+		clear(node.Slots)
+		clear(node.childrenIds)
+
+		// Make the left sibling parent of its children.
+		leftNode.updateChildrenParent(btree)
+
+		// Make the right sibling parent of its children.
 		rightNode.updateChildrenParent(btree)
-		btree.saveNode(rightNode)
 
-		// Copy the middle slot.
-		btree.tempParent = btree.tempSlots[slotsHalf]
+		// Copy the middle slot
+		node.Slots[0] = btree.tempSlots[slotsHalf]
+		node.Count = 1
+
 		// Assign the new children nodes.
-		btree.tempParentChildren[0] = node.Id
-		btree.tempParentChildren[1] = rightNode.Id
-
-		btree.saveNode(node)
-
-		// Trigger another promotion.
-		var err error
-		btree.promoteAction.nodeForPromotion, err = node.getParent(btree)
-		if err != nil {
+		node.childrenIds[0] = leftNode.Id
+		node.childrenIds[1] = rightNode.Id
+		if err := btree.saveNode(node); err != nil {
 			return err
 		}
-		btree.promoteAction.nodeForPromotionIndex, err = node.getIndexOfNode(btree)
-		if err != nil {
+		if err := btree.saveNode(leftNode); err != nil {
 			return err
 		}
-		return nil
+		return btree.saveNode(rightNode)
 	}
-	// No parent, break up this node into two children & make this new root.
-	leftNode := newNode[TK, TV](btree.getSlotLength())
-	leftNode.newId(node.Id)
-
+	// Prepare this and the right node sibling and promote the temporary parent node(btree.tempParent).
+	// This will be the left sibling !
 	rightNode := newNode[TK, TV](btree.getSlotLength())
-	rightNode.newId(node.Id)
+	rightNode.newId(node.ParentId)
+	rightNode.childrenIds = make([]UUID, btree.getSlotLength()+1)
 
-	// Copy the left half of the slots
-	copyArrayElements(leftNode.Slots, btree.tempSlots, slotsHalf)
-	leftNode.Count = slotsHalf
-	// Copy the right half of the slots
+	// Zero out the current slot.
+	clear(node.Slots)
+	// Zero out this children node pointers.
+	clear(node.childrenIds)
+
+	// Copy the left half of the slots to left sibling(this)
+	copyArrayElements(node.Slots, btree.tempSlots, slotsHalf)
+	node.Count = slotsHalf
+
+	// Copy the right half of the slots to right sibling
 	copyArrayElements(rightNode.Slots, btree.tempSlots[slotsHalf+1:], slotsHalf)
 	rightNode.Count = slotsHalf
-	leftNode.childrenIds = make([]UUID, btree.getSlotLength()+1)
-	rightNode.childrenIds = make([]UUID, btree.getSlotLength()+1)
 	// Copy the left half of the children nodes.
-	copyArrayElements(leftNode.childrenIds, btree.tempChildren, slotsHalf+1)
+	copyArrayElements(node.childrenIds, btree.tempChildren, slotsHalf+1)
+
 	// Copy the right half of the children nodes.
 	copyArrayElements(rightNode.childrenIds, btree.tempChildren[slotsHalf+1:], slotsHalf+1)
 
-	// Reset this Node.
-	clear(node.Slots)
-	clear(node.childrenIds)
-
-	btree.saveNode(leftNode)
-	// Make the left sibling parent of its children.
-	leftNode.updateChildrenParent(btree)
-
-	btree.saveNode(rightNode)
 	// Make the right sibling parent of its children.
-	rightNode.updateChildrenParent(btree)
+	if err := rightNode.updateChildrenParent(btree); err != nil {
+		return err
+	}
+	if err := btree.saveNode(rightNode); err != nil {
+		return err
+	}
+	// Make "all" of the left sibling parent of its children.
+	if err := node.updateChildrenParent(btree); err != nil {
+		return err
+	}
+	if err := btree.saveNode(node); err != nil {
+		return err
+	}
 
-	// Copy the middle slot
-	node.Slots[0] = btree.tempSlots[slotsHalf]
-	node.Count = 1
-
+	// Copy the middle slot.
+	btree.tempParent = btree.tempSlots[slotsHalf]
 	// Assign the new children nodes.
-	node.childrenIds[0] = leftNode.Id
-	node.childrenIds[1] = rightNode.Id
-	btree.saveNode(node)
+	btree.tempParentChildren[0] = node.Id
+	btree.tempParentChildren[1] = rightNode.Id
 
+	// Trigger another promotion.
+	var err error
+	btree.promoteAction.targetNode, err = node.getParent(btree)
+	if err != nil {
+		return err
+	}
+	btree.promoteAction.slotIndex = btree.promoteAction.targetNode.getIndexOfChild(node)
 	return nil
 }
 
@@ -948,10 +950,12 @@ func (node *Node[TK, TV]) updateChildrenParent(btree *Btree[TK, TV]) error {
 		return err
 	}
 	// Make node parent of its children.
-	for index := 0; index < len(children) && children[index] != nil; index++ {
-		children[index].ParentId = node.Id
-		if err = btree.saveNode(children[index]); err != nil {
-			return err
+	for index := 0; index < len(children); index++ {
+		if children[index] != nil {
+			children[index].ParentId = node.Id
+			if err = btree.saveNode(children[index]); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -996,4 +1000,24 @@ func moveArrayElements[T any](array []T, destStartIndex, srcStartIndex, count in
 		destIndex = destIndex + addValue
 		srcIndex = srcIndex + addValue
 	}
+}
+
+func (node *Node[TK, TV]) unlink(btree *Btree[TK, TV]) error {
+	p, err := node.getParent(btree)
+	if err != nil {
+		return err
+	}
+	if !p.hasChildren() {
+		return nil
+	}
+	// Prune empty children.
+	i := p.getIndexOfChild(node)
+	p.childrenIds[i] = NilUUID
+	if p.isNilChildren() {
+		p.childrenIds = nil
+	}
+	if err = btree.saveNode(p); err != nil {
+		return err
+	}
+	return btree.removeNode(node)
 }

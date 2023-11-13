@@ -48,10 +48,10 @@ type distributeAction[TK Comparable, TV any] struct {
 
 // promoteAction similar to distributeAction, contains details to allow controller in B-Tree
 // to drive calls for Node promotion to a higher level branch without using recursion.
-// Recursion can be more "taxing" as it accumulates items pushed to the stack.
+// Recursion can be more "taxing"(on edge case) as it accumulates items pushed to the stack.
 type promoteAction[TK Comparable, TV any] struct {
-	nodeForPromotion      *Node[TK, TV]
-	nodeForPromotionIndex int
+	targetNode      *Node[TK, TV]
+	slotIndex   int
 }
 
 // NewBtree creates a new B-Tree instance.
@@ -245,7 +245,9 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(newValue TV) (bool, error) {
 	}
 	node.Slots[btree.currentItemRef.getNodeItemIndex()].Value = &newValue
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
-	btree.saveNode(node)
+	if err = btree.saveNode(node); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -297,7 +299,9 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 		// so we can delete that instead & make it happen on the leaf.
 		// Deletion on leaf nodes is easier to repair/fix respective leaf branch.
 		node.Slots[index] = currentNode.Slots[btree.currentItemRef.getNodeItemIndex()]
-		btree.saveNode(node)
+		if err = btree.saveNode(node); err != nil {
+			return false, err
+		}
 		if ok, err := currentNode.removeItemOnNodeWithNilChild(btree, btree.currentItemRef.getNodeItemIndex()); ok || err != nil {
 			if ok {
 				// Make the current item pointer point to null since we just deleted the current item.
@@ -423,12 +427,12 @@ func (btree *Btree[TK, TV]) distribute() {
 // a recursive function that promotes a sub-tree "parent" node for insert on a vacant slot,
 // promote allows a controller(btree.promote)-controllee(node.promote) pattern and avoid recursion.
 func (btree *Btree[TK, TV]) promote() {
-	for btree.promoteAction.nodeForPromotion != nil {
-		log.Debug(fmt.Sprintf("Promote will promote a Node with Id %v.", btree.promoteAction.nodeForPromotion.Id))
-		n := btree.promoteAction.nodeForPromotion
-		i := btree.promoteAction.nodeForPromotionIndex
-		btree.promoteAction.nodeForPromotion = nil
-		btree.promoteAction.nodeForPromotionIndex = 0
+	for btree.promoteAction.targetNode != nil {
+		log.Debug(fmt.Sprintf("Promote will promote a Node with Id %v.", btree.promoteAction.targetNode.Id))
+		n := btree.promoteAction.targetNode
+		i := btree.promoteAction.slotIndex
+		btree.promoteAction.targetNode = nil
+		btree.promoteAction.slotIndex = 0
 		// Node's promote method contains actual logic to promote a (new parent outcome of
 		// splittin a full node) node to higher up.
 		n.promote(btree, i)

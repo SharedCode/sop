@@ -94,7 +94,19 @@ func TestBtree_AdvancedRemoveCases(t *testing.T) {
 			action:     1,
 		},
 		{
-			name:       "Range Query 1",
+			name:       "remove all",
+			startRange: 0,
+			endRange:   max,
+			action:     3,
+		},
+		{
+			name:       "readd all",
+			startRange: 0,
+			endRange:   max,
+			action:     1,
+		},
+		{
+			name:       "Range Query all",
 			startRange: 0,
 			endRange:   max,
 			action:     5,   // FindOne + MoveNext()
@@ -157,6 +169,10 @@ func TestBtree_AdvancedRemoveCases(t *testing.T) {
 					t.Errorf("Failed FindOne item with key %d.\n", k)
 				}
 			case 3:
+				if test.name == "remove all" && k == 99999 {
+					i := 90
+					i++
+				}
 				if ok, err := b3.Remove(k); !ok {
 					t.Errorf("Failed Remove item with key %d, error: %v\n", k, err)
 				}

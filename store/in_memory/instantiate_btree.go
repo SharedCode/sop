@@ -3,7 +3,7 @@ package in_memory
 import "github.com/SharedCode/sop/btree"
 
 // For in-memory b-tree, hardcode to 8 items per node. We don't need wide array for in-memory.
-const itemsPerNode = 4
+const itemsPerNode = 8
 
 // NewBtree will create an in-memory B-Tree & its required data stores. You can use this similar to
 // how you use a Map. Implemented in SOP so we can mockup the (structural composition & interfaces of)

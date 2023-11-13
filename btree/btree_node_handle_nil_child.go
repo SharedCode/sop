@@ -1,11 +1,15 @@
 package btree
 
+import (
+	"fmt"
+)
+
 // removeItemOnNodeWithNilChild will manage these remove item cases.
 // - remove item on a node slot with nil left child
 // - remove item on a node slot with nil right child
 // - remove item on the right edge node slot with nil right child
 func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], index int) (bool, error) {
-	if !node.hasChildren() || node.childrenIds[index] != NilUUID && node.childrenIds[index+1] != NilUUID {
+	if !node.hasChildren() || (node.childrenIds[index] != NilUUID && node.childrenIds[index+1] != NilUUID) {
 		return false, nil
 	}
 	if node.childrenIds[index] == NilUUID {
@@ -33,11 +37,23 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], ind
 			if err != nil {
 				return false, err
 			}
+			if nc == nil {
+				return false, fmt.Errorf("Can't get child (Id='%v') of this root node.", node.childrenIds[0])
+			}
 			copy(node.Slots, nc.Slots)
+			node.Count = nc.Count
 			if nc.hasChildren() {
 				copy(node.childrenIds, nc.childrenIds)
+				if err = node.updateChildrenParent(btree); err != nil {
+					return false, err
+				}
+			} else {
+				// Nilify the child because we've merged its contents to root node.
+				node.childrenIds[0] = NilUUID
+				if node.isNilChildren() {
+					node.childrenIds = nil
+				}
 			}
-			node.Count = nc.Count
 			if err = btree.removeNode(nc); err != nil {
 				return false, err
 			}
@@ -48,30 +64,7 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], ind
 		}
 
 		// Promote the single child as parent's new child instead of this node.
-		p, err := node.getParent(btree)
-		if err != nil {
-			return false, err
-		}
-		ion := p.getIndexOfChild(node)
-		p.childrenIds[ion] = node.childrenIds[0]
-		nc, err := node.getChild(btree, 0)
-		if err != nil {
-			return false, err
-		}
-		nc.ParentId = p.Id
-		// Save changes to the modified nodes.
-		if err = btree.saveNode(nc); err != nil {
-			return false, err
-		}
-		if err = btree.saveNode(p); err != nil {
-			return false, err
-		}
-		// Remove this node since it is now empty.
-		err = btree.removeNode(node)
-		if err != nil {
-			return false, err
-		}
-		return true, nil
+		return node.promoteSingleChildAsParentChild(btree)
 	}
 
 	if node.Count == 0 {
@@ -82,6 +75,44 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], ind
 	}
 
 	if err := btree.saveNode(node); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (node *Node[TK, TV]) unlinkNodeWithNilChild(btree *Btree[TK, TV]) (bool,error) {
+	if node.isNilChildren() {
+		return false, nil
+	}
+	return node.promoteSingleChildAsParentChild(btree)
+}
+
+func (node *Node[TK, TV]) promoteSingleChildAsParentChild(btree *Btree[TK, TV]) (bool,error) {
+	// Promote the single child as parent's new child instead of this node.
+	p, err := node.getParent(btree)
+	if err != nil {
+		return false, err
+	}
+	if p == nil {
+		return false, fmt.Errorf("Can't get parent (Id='%v') of this node.", node.ParentId)
+	}
+	ion := p.getIndexOfChild(node)
+	p.childrenIds[ion] = node.childrenIds[0]
+	nc, err := node.getChild(btree, 0)
+	if err != nil {
+		return false, err
+	}
+	nc.ParentId = p.Id
+	// Save changes to the modified nodes.
+	if err = btree.saveNode(nc); err != nil {
+		return false, err
+	}
+	if err = btree.saveNode(p); err != nil {
+		return false, err
+	}
+	// Remove this node since it is now empty.
+	err = btree.removeNode(node)
+	if err != nil {
 		return false, err
 	}
 	return true, nil
