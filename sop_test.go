@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/SharedCode/sop/store/in_memory"
+	"github.com/SharedCode/sop/in_memory"
 )
 
 func TestBtree_AdvancedRemoveCases(t *testing.T) {
