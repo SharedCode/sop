@@ -2,11 +2,11 @@
 
 Scalable Object Persistence (SOP) Framework
 
-SOP Version 1(beta) is an in-memory implementation. It was created in order to model the structural bits of SOP and allow creation of mocks that can be used for V2. Usage of common unit tests for in-memory and the real thing is ideal as it allows us to have two versions that behave in the same manner when it comes to storage and management of items, thus, allowing baseline comparison between the two versions.
+SOP Version 1(beta) is an in-memory implementation. It was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithm that will work irrespective of backend, be it in-memory or others, such as that geared for V2.
 
-SOP in-memory however, is a full implementation. It has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage data in your desired sort order (as driven by your item key type & its Comparer implementation).
+SOP in-memory, is a full implementation. It has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query".
 
-Usage:
+Sample Basic Usage:
   * Import the sop/in_memory, e.g. ```import sop "github.com/SharedCode/sop/in_memory"```
   * Instantiate the b-tree manager, e.g. - ```sop.NewBtree[int, string](false)```. The single parameter specifies whether you would want to manage unique keys.
   * Populate the b-tree, e.g. - ```b3.Add(<key>, <value>)```
