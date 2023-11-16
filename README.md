@@ -60,7 +60,7 @@ Btree hello world ended.
 ```
 
 Requirements
-  * Golang toolset version that supports generics
+  * Golang version that supports generics
   * Internet access to github
 
 
