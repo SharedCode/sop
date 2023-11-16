@@ -13,17 +13,21 @@ Usage:
   * Do a range query, e.g. b3.FindOne(<key>, true),... b3.MoveToNext(), b3.GetCurrentKey or b3.GetCurrentValue will return either the key or the value currently selected by the built-in "cursor".
   * Let the b-tree go out of scope or assign nil to it.
 
-Here is the example in all its glory:
+Here is the complete example:
+
+```
+package hello_world
 
 import (
 	"fmt"
 	"testing"
-	"github.com/SharedCode/sop/in_memory"
+
+	sop "github.com/SharedCode/sop/in_memory"
 )
+
 func TestBtree_HelloWorld(t *testing.T) {
 	fmt.Printf("Btree hello world.\n")
-	b3, _ := in_memory.NewBtree[int, string](false)
-
+	b3, _ := sop.NewBtree[int, string](false)
 	b3.Add(5000, "I am the value with 5000 key.")
 	b3.Add(5001, "I am the value with 5001 key.")
 	b3.Add(5000, "I am also a value with 5000 key.")
@@ -53,6 +57,7 @@ Hello, I am also a value with 5000 key..
 Hello, I am the value with 5000 key..
 Hello, I am the value with 5001 key..
 Btree hello world ended.
+```
 
 Requirements
   * Golang toolset version that supports generics
