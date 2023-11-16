@@ -7,6 +7,30 @@ import (
 	"github.com/SharedCode/sop/in_memory"
 )
 
+func TestBtree_HelloWorld(t *testing.T) {
+	fmt.Printf("Btree hello world.\n")
+	b3, _ := in_memory.NewBtree[int, string](false)
+
+	b3.Add(5000, "I am the value with 5000 key.")
+	b3.Add(5001, "I am the value with 5001 key.")
+	b3.Add(5000, "I am also a value with 5000 key.")
+
+	if ok,_ := b3.FindOne(5000, true); ok && b3.GetCurrentKey() == 5000 {
+		fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
+		if ok,_ := b3.MoveToNext(); ok && b3.GetCurrentKey() == 5000 {
+			fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
+			if ok,_ :=b3.MoveToNext(); ok && b3.GetCurrentKey() == 5001 {
+				fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
+				fmt.Printf("Btree hello world ended.\n\n")
+				b3 = nil
+				return
+			}
+		}
+	}
+	t.Errorf("Btree hello world failed unexpectedly.")
+	b3 = nil
+}
+
 func TestBtree_AdvancedRemoveCases(t *testing.T) {
 	max := 100000
 	fmt.Printf("Btree advanced remove tests started, manage %d items.\n\n", max)
