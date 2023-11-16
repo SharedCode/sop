@@ -7,10 +7,10 @@ SOP Version 1(beta) is an in-memory implementation. It was created in order to m
 SOP in-memory however, is a full implementation. It has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage data in your desired sort order (as driven by your item key type & its Comparer implementation).
 
 Usage:
-  * Import the sop/in_memory, e.g. import "github.com/SharedCode/sop/in_memory"
-  * Instantiate the b-tree manager, e.g. - in_memory.NewBtree[int, string](false). The single parameter specifies whether you would want to manage unique keys.
-  * Populate the b-tree, e.g. - b3.Add(<key>, <value>)
-  * Do a range query, e.g. b3.FindOne(<key>, true),... b3.MoveToNext(), b3.GetCurrentKey or b3.GetCurrentValue will return either the key or the value currently selected by the built-in "cursor".
+  * Import the sop/in_memory, e.g. ```import sop "github.com/SharedCode/sop/in_memory"```
+  * Instantiate the b-tree manager, e.g. - ```sop.NewBtree[int, string](false)```. The single parameter specifies whether you would want to manage unique keys.
+  * Populate the b-tree, e.g. - ```b3.Add(<key>, <value>)```
+  * Do a range query, e.g. ```b3.FindOne(<key>, true),... b3.MoveToNext(), b3.GetCurrentKey or b3.GetCurrentValue``` will return either the key or the value currently selected by the built-in "cursor".
   * Let the b-tree go out of scope or assign nil to it.
 
 Here is the complete example:
