@@ -2,6 +2,65 @@
 
 Scalable Object Persistence (SOP) Framework
 
+SOP Version 1(beta) is an in-memory implementation. It was created in order to model the structural bits of SOP and allow creation of mocks that can be used for V2. Usage of common unit tests for in-memory and the real thing is ideal as it allows us to have two versions that behave in the same manner when it comes to storage and management of items, thus, allowing baseline comparison between the two versions.
+
+SOP in-memory however, is a full implementation. It has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage data in your desired sort order (as driven by your item key type & its Comparer implementation).
+
+Usage:
+	* Import the sop/in_memory, e.g. import "github.com/SharedCode/sop/in_memory"
+  * Instantiate the b-tree manager, e.g. - in_memory.NewBtree[int, string](false). The single parameter specifies whether you would want to manage unique keys.
+  * Populate the b-tree, e.g. - b3.Add(<key>, <value>)
+  * Do a range query, e.g. b3.FindOne(<key>, true),... b3.MoveToNext(), b3.GetCurrentKey or b3.GetCurrentValue will return either the key or the value currently selected by the built-in "cursor".
+  * Let the b-tree go out of scope or assign nil to it.
+
+Here is the example in all its glory:
+
+import (
+	"fmt"
+	"testing"
+	"github.com/SharedCode/sop/in_memory"
+)
+func TestBtree_HelloWorld(t *testing.T) {
+	fmt.Printf("Btree hello world.\n")
+	b3, _ := in_memory.NewBtree[int, string](false)
+
+	b3.Add(5000, "I am the value with 5000 key.")
+	b3.Add(5001, "I am the value with 5001 key.")
+	b3.Add(5000, "I am also a value with 5000 key.")
+
+	if ok,_ := b3.FindOne(5000, true); !ok || b3.GetCurrentKey() != 5000 {
+		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
+	}
+	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
+
+	if ok,_ := b3.MoveToNext(); !ok || b3.GetCurrentKey() != 5000 {
+		t.Errorf("MoveToNext() failed, got = %v, want = 5000", b3.GetCurrentKey())
+	}
+	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
+
+	if ok,_ :=b3.MoveToNext(); !ok || b3.GetCurrentKey() != 5001 {
+		t.Errorf("MoveToNext() failed, got = %v, want = 5001", b3.GetCurrentKey())
+	}
+	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
+
+	fmt.Printf("Btree hello world ended.\n\n")
+	b3 = nil
+}
+
+Here is the output of the sample code above:
+Btree hello world.
+Hello, I am also a value with 5000 key..
+Hello, I am the value with 5000 key..
+Hello, I am the value with 5001 key..
+Btree hello world ended.
+
+Requirements
+  * Golang toolset version that supports generics
+  * Internet access to github
+
+
+Below discussions are for the next version, V2.
+
 SOP is a modern database engine within a code library. It is categorized as a NoSql engine, but which because of its scale-ability, is considered to be an enabler, coo-petition/player in the Big Data space.
 
 Integration is one of SOP's primary goals, its ease of use, API, being part/closest! to the App & in-memory performance level were designed so it can get (optionally) utilized as a middle-ware for current RDBMS and other NoSql/Big Data engines/solution.
