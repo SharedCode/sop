@@ -226,7 +226,6 @@ func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(btree *Btree[TK, TV],
 	if i > node.Count {
 		return false, nil
 	}
-	// TODO: complete the logic.
 	// Create a new Child node & populate it with the item.
 	child := newNode[TK, TV](btree.getSlotLength())
 	child.newId(node.Id)

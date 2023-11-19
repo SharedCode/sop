@@ -495,7 +495,7 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBala
 			*isUnBalanced = true
 			return false, nil
 		}
-		if !temp.isFull(btree.getSlotLength()) {
+		if !temp.isFull() {
 			return true, nil
 		}
 		var err error
@@ -558,7 +558,7 @@ func (node *Node[TK, TV]) isThereVacantSlotInRight(btree *Btree[TK, TV], isUnBal
 			*isUnBalanced = true
 			return false, nil
 		}
-		if !temp.isFull(btree.getSlotLength()) {
+		if !temp.isFull() {
 			return true, nil
 		}
 		var err error
@@ -646,8 +646,8 @@ func (node *Node[TK, TV]) getParent(btree *Btree[TK, TV]) (*Node[TK, TV], error)
 	return btree.getNode(node.ParentId)
 }
 
-func (node *Node[TK, TV]) isFull(slotCount int) bool {
-	return node.Count >= slotCount
+func (node *Node[TK, TV]) isFull() bool {
+	return node.Count >= len(node.Slots)
 }
 
 func (node *Node[TK, TV]) insertSlotItem(item *Item[TK, TV], position int) {
@@ -717,7 +717,7 @@ func (node *Node[TK, TV]) distributeToLeft(btree *Btree[TK, TV], item *Item[TK, 
 	if ok, err := node.distributeItemOnNodeWithNilChild(btree, item); ok || err != nil {
 		return err
 	}
-	if node.isFull(btree.getSlotLength()) {
+	if node.isFull() {
 		// counter-clockwise rotation..
 		//	----
 		//	|  |
@@ -759,7 +759,7 @@ func (node *Node[TK, TV]) distributeToRight(btree *Btree[TK, TV], item *Item[TK,
 	if ok, err := node.distributeItemOnNodeWithNilChild(btree, item); ok || err != nil {
 		return err
 	}
-	if node.isFull(btree.getSlotLength()) {
+	if node.isFull() {
 		// clockwise rotation..
 		//	----
 		//	|  |
