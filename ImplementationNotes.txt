@@ -3,10 +3,6 @@ Welcome to SOP!
 This is a port from c#, thus, our coding style is very modular because the goal here is to also expand to support
 an Enterprise layout. Meaning, create B-Tree constructs that can optionally use out of process Caching(e.g. Redis)
 & a backend Store like Cassandra or AWS S3.
-Thus, an onboarding/guest engineer may find the coding style somewhat different. Yes, porting projects are not the
-same as typical application development. Because the code had been written already and is just getting translated
-to the new target language, and in this case, getting expanded to support a different "scheme or client/server topology"
-as mentioned.
 
 On Persistence
 * Will use go generics for type system. The c# implementation uses a very rich type system. Public interfaces
@@ -45,8 +41,7 @@ Scenario: transaction for reading
 * On transaction Commit(completion)...
   - check if there was any "fetch" error of type transaction
     fail commit if there is
-  - check each of Item(s) version #(compare with Redis'/C*' copy) if not modified, if any were modified,
-    fail commit
+  - check each of Item(s) version #(compare with Redis'/C*' copy) if not modified, if any were modified fail commit
   - if there is no item version # conflict then commit succeeded
 Scenario: no transaction reader, cache nodes with TTL(defaults to 30 seconds)
 * Will do an L1/L2 caching where local memory is L1 & Redis is L2
