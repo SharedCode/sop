@@ -29,9 +29,7 @@ func TestBtree_HelloWorld(t *testing.T) {
 		t.Errorf("MoveToNext() failed, got = %v, want = 5001", b3.GetCurrentKey())
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
-
 	fmt.Printf("Btree hello world ended.\n\n")
-	b3 = nil
 }
 
 func TestBtree_FunctionalityTests(t *testing.T) {
@@ -65,7 +63,6 @@ func TestBtree_FunctionalityTests(t *testing.T) {
 	if ok :=b3.MoveToNext(); !ok || b3.GetCurrentKey() != 5001 {
 		t.Errorf("MoveToNext() failed, got = %v, want = 5001", b3.GetCurrentKey())
 	}
-
 	fmt.Printf("Btree functionality tests ended.\n\n")
 }
 
