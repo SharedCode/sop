@@ -108,7 +108,8 @@ func (b3 inmemoryBtree[TK, TV]) GetCurrentKey() TK {
 
 // GetCurrentValue returns the current item's value.
 func (b3 inmemoryBtree[TK, TV]) GetCurrentValue() TV {
-	return b3.btree.GetCurrentValue()
+	v,_ := b3.btree.GetCurrentValue()
+	return v
 }
 
 // Update finds the item with key and update its value to the value argument.

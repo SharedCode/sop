@@ -124,8 +124,10 @@ func (btree *Btree[TK, TV]) GetCurrentKey() TK {
 }
 
 // GetCurrentValue returns the current item's value part.
-func (btree *Btree[TK, TV]) GetCurrentValue() TV {
-	return *btree.GetCurrentItem().Value
+func (btree *Btree[TK, TV]) GetCurrentValue() (TV, error) {
+	// TODO: in V2, we need to fetch Value if btree is set to save Value in another "data segment"
+	// and it is not yet fetched. That fetch action can error thus, need to be able to return an error.
+	return *btree.GetCurrentItem().Value, nil
 }
 
 // GetCurrentItem returns the current item containing key/value pair.

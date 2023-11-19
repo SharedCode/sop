@@ -19,7 +19,7 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// GetCurrentKey returns the current item's key.
 	GetCurrentKey() TK
 	// GetCurrentValue returns the current item's value.
-	GetCurrentValue() TV
+	GetCurrentValue() (TV, error)
 	// Update finds the item with key and update its value to the value argument.
 	Update(key TK, value TV) (bool, error)
 	// UpdateCurrentItem will update the Value of the current item.
