@@ -36,7 +36,7 @@ func TestBtree_HelloWorld(t *testing.T) {
 
 func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 	max := 100000
-	fmt.Printf("Btree complex data mgmt tests started, manage %d items.\n\n", max)
+	fmt.Printf("Btree complex data mgmt tests started(%d items).\n\n", max)
 	b3, _ := sop.NewBtree[int, string](false)
 
 	tests := []struct {
@@ -212,7 +212,7 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 
 func TestBtree_SimpleDataMgmtCases(t *testing.T) {
 	max := 100000
-	fmt.Printf("Btree simple data mgmt %d loop test\n\n", max)
+	fmt.Printf("Btree simple data mgmt tests started(%d items)\n\n", max)
 	b3, _ := sop.NewBtree[string, string](false)
 
 	tests := []struct {
@@ -294,5 +294,5 @@ func TestBtree_SimpleDataMgmtCases(t *testing.T) {
 		}
 		t.Logf("Test %s ended.", test.name)
 	}
-	fmt.Printf("Btree simple data mgmt %d loop test ended.\n\n", max)
+	fmt.Printf("Btree simple data mgmt tests ended.\n\n")
 }
