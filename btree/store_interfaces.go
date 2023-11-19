@@ -39,6 +39,11 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's segment.
 	// Otherwise is false.
 	IsValueDataInNodeSegment() bool
+
+	// IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
+	// Specifying uniqueness base on key makes the B-Tree permanently set. If you want just a temporary
+	// unique check during Add of an item, then you can use AddIfNotExist method for that.
+	IsUnique() bool
 }
 
 // StoreRepository interface specifies the store repository.

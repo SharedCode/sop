@@ -34,9 +34,44 @@ func TestBtree_HelloWorld(t *testing.T) {
 	b3 = nil
 }
 
+func TestBtree_FunctionalityTests(t *testing.T) {
+	fmt.Printf("Btree functionality tests.\n")
+	b3, _ := sop.NewBtree[int, string](false)
+
+	// Populate with some values.
+	b3.Add(5000, "I am the value with 5000 key.")
+	b3.Add(5001, "I am the value with 5001 key.")
+
+	// Test AddIfNotExist method #1.
+	if ok,_ := b3.AddIfNotExist(5000, "foobar"); ok {
+		t.Errorf("AddIfNotExist(5000, 'foobar') got success, want fail.")
+	}
+
+	b3.Add(5000, "I am also a value with 5000 key.")
+
+	// Test AddIfNotExist method #2.
+	if ok,_ := b3.AddIfNotExist(5000, "foobar"); ok {
+		t.Errorf("AddIfNotExist(5000, 'foobar') got success, want fail.")
+	}
+	// Add more checks here as needed..
+
+	// Check if B-Tree items are intact.
+	if ok,_ := b3.FindOne(5000, true); !ok || b3.GetCurrentKey() != 5000 {
+		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
+	}
+	if ok,_ := b3.MoveToNext(); !ok || b3.GetCurrentKey() != 5000 {
+		t.Errorf("MoveToNext() failed, got = %v, want = 5000", b3.GetCurrentKey())
+	}
+	if ok,_ :=b3.MoveToNext(); !ok || b3.GetCurrentKey() != 5001 {
+		t.Errorf("MoveToNext() failed, got = %v, want = 5001", b3.GetCurrentKey())
+	}
+
+	fmt.Printf("Btree functionality tests ended.\n\n")
+}
+
 func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 	max := 100000
-	fmt.Printf("Btree complex data mgmt tests started(%d items).\n\n", max)
+	fmt.Printf("Btree complex data mgmt tests started(%d items).\n", max)
 	b3, _ := sop.NewBtree[int, string](false)
 
 	tests := []struct {
@@ -47,25 +82,25 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 		wantFound  int
 	}{
 		{
-			name:       "populate",
+			name:       "Populate",
 			startRange: 0,
 			endRange:   max,
 			action:     1, // add
 		},
 		{
-			name:       "find1",
+			name:       "Find 1",
 			startRange: 0,
 			endRange:   max,
 			action:     2, // find
 		},
 		{
-			name:       "remove1",
+			name:       "Remove 1",
 			startRange: 450,
 			endRange:   542,
 			action:     3, // remove
 		},
 		{
-			name:       "remove2",
+			name:       "Remove 2",
 			startRange: 543,
 			endRange:   600,
 			action:     3, // remove
@@ -78,56 +113,56 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 			wantFound:  12,
 		},
 		{
-			name:       "readd deleted items",
+			name:       "Re add deleted items",
 			startRange: 450,
 			endRange:   600,
 			action:     1,
 		},
 		{
-			name:       "findAll1",
+			name:       "Find All 1",
 			startRange: 0,
 			endRange:   max,
 			action:     2,
 		},
 		{
-			name:       "remove3",
+			name:       "Remove 3",
 			startRange: 60000,
 			endRange:   90000,
 			action:     3,
 		},
 		{
-			name:       "remove4",
+			name:       "Remove 4",
 			startRange: 91000,
 			endRange:   99000,
 			action:     3,
 		},
 		{
-			name:       "findAll1",
+			name:       "Find All 1",
 			startRange: 0,
 			endRange:   max,
 			action:     4,
 			wantFound:  61999,
 		},
 		{
-			name:       "readd 2",
+			name:       "Re add 2",
 			startRange: 60000,
 			endRange:   90000,
 			action:     1,
 		},
 		{
-			name:       "readd 3",
+			name:       "Re add 3",
 			startRange: 91000,
 			endRange:   99000,
 			action:     1,
 		},
 		{
-			name:       "remove all",
+			name:       "Remove all",
 			startRange: 0,
 			endRange:   max,
 			action:     3,
 		},
 		{
-			name:       "readd all",
+			name:       "Re add all",
 			startRange: 0,
 			endRange:   max,
 			action:     1,
@@ -212,7 +247,7 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 
 func TestBtree_SimpleDataMgmtCases(t *testing.T) {
 	max := 100000
-	fmt.Printf("Btree simple data mgmt tests started(%d items)\n\n", max)
+	fmt.Printf("Btree simple data mgmt tests started(%d items)\n", max)
 	b3, _ := sop.NewBtree[string, string](false)
 
 	tests := []struct {
@@ -222,49 +257,49 @@ func TestBtree_SimpleDataMgmtCases(t *testing.T) {
 		action int
 	}{
 		{
-			name: "populate",
+			name: "Populate",
 			startRange: 0,
 			endRange: max,
 			action: 1,	// add
 		},
 		{
-			name: "find1",
+			name: "Find 1",
 			startRange: 0,
 			endRange: max,
 			action: 2,	// find
 		},
 		{
-			name: "remove1",
+			name: "Remove 1",
 			startRange: 450,
 			endRange: 800,
 			action: 3, // remove
 		},
 		{
-			name: "readd deleted items",
+			name: "Re add deleted items",
 			startRange: 450,
 			endRange: 800,
 			action: 1,
 		},
 		{
-			name: "findAll1",
+			name: "Find All 1",
 			startRange: 0,
 			endRange: max,
 			action: 2,
 		},
 		{
-			name: "remove2",
+			name: "Remove 2",
 			startRange: 5000,
 			endRange: 10000,
 			action: 3,
 		},
 		{
-			name: "readd deleted items2",
+			name: "Re add deleted items 2",
 			startRange: 5000,
 			endRange: 10000,
 			action: 1,
 		},
 		{
-			name: "findAll2",
+			name: "Find All 2",
 			startRange: 0,
 			endRange: max,
 			action: 2,	// find

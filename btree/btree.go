@@ -147,14 +147,13 @@ func (btree *Btree[TK, TV]) GetCurrentItem() Item[TK, TV] {
 	return *btree.currentItem
 }
 
-// TODO: AddIfNotExist will add an item if its key is not yet in the B-Tree.
+// AddIfNotExist will add an item if its key is not yet in the B-Tree.
 func (btree *Btree[TK, TV]) AddIfNotExist(key TK, value TV) (bool, error) {
-	// Steps:
-	// - set IsUnique true
-	// - delegate or call node.Add to do actual item add to node.
-	// - restore IsUnique previous value
-	// - return result of node.Add whether it succeeded to add an item or not.
-	return false, fmt.Errorf("Unimplemented.")
+	u := btree.Store.IsUnique
+	btree.Store.IsUnique = true
+	ok, err := btree.Add(key, value)
+	btree.Store.IsUnique = u
+	return ok, err
 }
 
 // MoveToFirst will traverse the tree and find the first item, first according to
@@ -330,6 +329,11 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 // Always true in in-memory B-Tree.
 func (btree *Btree[TK, TV]) IsValueDataInNodeSegment() bool {
 	return btree.Store.IsValueDataInNodeSegment
+}
+
+// IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
+func (btree *Btree[TK, TV]) IsUnique() bool {
+	return btree.Store.IsUnique
 }
 
 // saveNode will prepare & persist (if needed) the Node to the backend
