@@ -1,1 +1,1 @@
-This directory will be deprecated and files/code moved to a directory higher.
+Code files in this directory are under development for V2.
