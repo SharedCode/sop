@@ -38,9 +38,6 @@ type BtreeInterface[TK btree.Comparable, TV any] interface {
 	MoveToLast() bool
 	MoveToNext() bool
 	MoveToPrevious() bool
-	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's segment.
-	// Otherwise is false.
-	IsValueDataInNodeSegment() bool
 
 	// IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
 	// Specifying uniqueness base on key makes the B-Tree permanently set. If you want just a temporary
@@ -157,12 +154,6 @@ func (b3 inmemoryBtree[TK, TV]) MoveToNext() bool {
 func (b3 inmemoryBtree[TK, TV]) MoveToPrevious() bool {
 	ok, _ := b3.btree.MoveToPrevious()
 	return ok
-}
-
-// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's segment.
-// Otherwise is false.
-func (b3 inmemoryBtree[TK, TV]) IsValueDataInNodeSegment() bool {
-	return b3.btree.IsValueDataInNodeSegment()
 }
 
 // IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
