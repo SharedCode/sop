@@ -85,6 +85,7 @@ Via usage of SOP API, your application will experience low latency, very high pe
 Here are the prerequisites for doing a local run:
 * Redis running locally using default Port
 * Cassandra running locally using default Port
+* Access & permission to an AWS S3 bucket
 
 ## How to Build & Run
 Nothing special here, just issue a "go build" in the folder where you have the go.mod file and it will build the code libraries. Issue a "go test" to run the unit test on test files, to see they pass. You can debug, step-through the test files to learn how to use the code library.
