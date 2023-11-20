@@ -27,7 +27,7 @@ import (
 
 func TestBtree_HelloWorld(t *testing.T) {
 	fmt.Printf("Btree hello world.\n")
-	b3, _ := sop.NewBtree[int, string](false)
+	b3 := sop.NewBtree[int, string](false)
 	b3.Add(5000, "I am the value with 5000 key.")
 	b3.Add(5001, "I am the value with 5001 key.")
 	b3.Add(5000, "I am also a value with 5000 key.")
@@ -46,9 +46,7 @@ func TestBtree_HelloWorld(t *testing.T) {
 		t.Errorf("MoveToNext() failed, got = %v, want = 5001", b3.GetCurrentKey())
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
-
 	fmt.Printf("Btree hello world ended.\n\n")
-	b3 = nil
 }
 
 Here is the output of the sample code above:
