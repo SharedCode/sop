@@ -1,6 +1,6 @@
-# Sop
+# M-Way Trie algorithms for Scaleable Object Persistence (SOP)
 
-Scalable Object Persistence (SOP) Framework
+Scaleable Object Persistence (SOP) Framework
 
 SOP Version 1(beta) is an in-memory implementation. It was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithm that will work irrespective of backend, be it in-memory or others, such as that geared for V2.
 
@@ -85,6 +85,7 @@ Via usage of SOP API, your application will experience low latency, very high pe
 Here are the prerequisites for doing a local run:
 * Redis running locally using default Port
 * Cassandra running locally using default Port
+* Access & permission to an AWS S3 bucket
 
 ## How to Build & Run
 Nothing special here, just issue a "go build" in the folder where you have the go.mod file and it will build the code libraries. Issue a "go test" to run the unit test on test files, to see they pass. You can debug, step-through the test files to learn how to use the code library.
@@ -93,23 +94,18 @@ Nothing special here, just issue a "go build" in the folder where you have the g
 SOP written in Go will be a full re-implementation. A lot of key technical features of SOP will be carried over and few more will be added in order to support a master-less implementation. That is, backend Stores such as Cassandra, AWS S3 bucket will be utilized and SOP library will be master-less in order to offer a complete, 100% horizontal scaling with no hot-spotting or any application instance bottlenecks.
 
 ## Component Layout
-* SOP code library for managing key/value pair of any data type (interface{}/interface{}).
+* SOP code library for managing key/value pair of any data type using Go's generics.
 * redis for clustered, out of process data caching.
-* Cassandra, AWS S3 (future next), etc... as backend Stores.
-Support for additional backends other than Cassandra & AWS S3 will be done on per request basis.
+* Cassandra, AWS S3, etc... as backend Stores.
+Support for additional backends other than Cassandra & AWS S3 will be done on per request basis, or as time permits.
 
-Cassandra integration will sport recommended "time series" solution to scale storage and access on Cassandra. Tomb Stones will also be minimally used. SOP has deleted data (block) recycling technology, thus, making usage of Storage engines like Cassandra where deletes are expensive & large blobs, can be made optimal or efficiency unaffected.
+Cassandra will be used as data Registry & AWS S3 as the data blob store. Redis will provide the necessary out of process "caching" needs to accelerate I/O.
 
 ## Very Large Blob Layout
-Large data including vlblobs are optionally storable as a set of data blocks. Being able to use many small to medium sized data blocks to store a huge data is considered optimal. Example, a 2GB data can be stored using four 512MB data blocks. Each block having its own partition and thus, all four can be read "served" up from the Cluster by four different cluster node. Similarly, during write, Cassandra cluster can perform optimally storing these four blocks on four different partitions.
-
-This storage structure together with SOP's "data block" recycling feature, solves the issue of Cassandra (and any backend store for this matter) not being suited for storing large data sets. Operating without requirement to use "streaming" feature also simplifies the API and the Application trying to access/use this kind of large data.
-This solution is so much better than streaming because, other than it doesn't require special "streaming" feature in Cassandra engine, it utilizes the backend's optimal IO method. i.e. - parallel access using multiple cluster nodes on multi-partitioned data sets.
-
-Data blocks' uniform size also removes any Cassandra "hot spots" when the data is being served. Even after data is recycled multiple times, its IO performance when it comes to being stored/served by Cassandra doesn't degrade at all.
+Blobs will be stored in AWS S3, thus, benefitting from its built-in features like "replication" across regions, etc...
 
 ## Item Serialization
-Application can specify Item (key & value pair) serialization and if not, SOP will default to treating Key and Value pairs as "string" types. This means each Item will be persisted/read as string and keys will be compared & thus, Items sorted like a string type based on key.
+Will use Golang's built-in marshaller for serialization for simplicity and support for "streaming".
 
 ## Transaction
 SOP will sport ACID, two phase commit transactions with two modes:
@@ -120,4 +116,3 @@ SOP will sport ACID, two phase commit transactions with two modes:
 Two phase commit is required so SOP can offer "seamless" integration with your App's other DB backend(s)' transactions. On Phase 1 commit, SOP will commit all transaction session changes onto respective new (but geared for permanence) Btree transaction nodes. Your App will then be allowed to commit any other DB(s) transactions it use. Your app is allowed to Rollback any of these transactions and just relay the Rollback to SOP ongoing transaction if needed.
 On successful commit on Phase 1, SOP will then commit Phase 2, which is, to tell all Btrees affected in the transaction to finalize the committed Nodes and make them available on succeeding Btree I/O.
 Phase 2 commit will be a very fast, quick action as changes and Nodes are already resident on the Btree storage, it is just a matter of finalizing the Virtual ID registry with the new Nodes' physicall addresses to swap the old with the new ones.
-
