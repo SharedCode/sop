@@ -4,7 +4,7 @@ Scaleable Object Persistence (SOP) Framework
 
 SOP Version 1(beta) is an in-memory implementation. It was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithm that will work irrespective of backend, be it in-memory or others, such as that geared for V2.
 
-SOP in-memory, is a full implementation. It has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your DML.
+SOP in-memory, is a full implementation. It has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your app. No need to have impedance mismatch.
 
 Sample Basic Usage:
   * Import the sop/in_memory, e.g. ```import sop "github.com/SharedCode/sop/in_memory"```
@@ -62,7 +62,7 @@ Requirements
   * Internet access to github
 
 
-Below discussions are for the next version, V2.
+Below discussions are for the "next version", V2.
 
 SOP is a modern database engine within a code library. It is categorized as a NoSql engine, but which because of its scale-ability, is considered to be an enabler, coo-petition/player in the Big Data space.
 
