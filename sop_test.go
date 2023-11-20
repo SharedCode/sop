@@ -15,17 +15,17 @@ func TestBtree_HelloWorld(t *testing.T) {
 	b3.Add(5001, "I am the value with 5001 key.")
 	b3.Add(5000, "I am also a value with 5000 key.")
 
-	if ok := b3.FindOne(5000, true); !ok || b3.GetCurrentKey() != 5000 {
+	if !b3.FindOne(5000, true) || b3.GetCurrentKey() != 5000 {
 		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
 
-	if ok := b3.MoveToNext(); !ok || b3.GetCurrentKey() != 5000 {
+	if !b3.MoveToNext() || b3.GetCurrentKey() != 5000 {
 		t.Errorf("MoveToNext() failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
 
-	if ok :=b3.MoveToNext(); !ok || b3.GetCurrentKey() != 5001 {
+	if !b3.MoveToNext() || b3.GetCurrentKey() != 5001 {
 		t.Errorf("MoveToNext() failed, got = %v, want = 5001", b3.GetCurrentKey())
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
@@ -36,33 +36,70 @@ func TestBtree_FunctionalityTests(t *testing.T) {
 	fmt.Printf("Btree functionality tests.\n")
 	b3 := sop.NewBtree[int, string](false)
 
+	const five001Value = "I am the value with 5001 key."
+
 	// Populate with some values.
 	b3.Add(5000, "I am the value with 5000 key.")
-	b3.Add(5001, "I am the value with 5001 key.")
+	b3.Add(5001, five001Value)
 
 	// Test AddIfNotExist method #1.
-	if ok := b3.AddIfNotExist(5000, "foobar"); ok {
+	if b3.AddIfNotExist(5000, "foobar") {
 		t.Errorf("AddIfNotExist(5000, 'foobar') got success, want fail.")
 	}
 
 	b3.Add(5000, "I am also a value with 5000 key.")
 
 	// Test AddIfNotExist method #2.
-	if ok := b3.AddIfNotExist(5000, "foobar"); ok {
+	if b3.AddIfNotExist(5000, "foobar") {
 		t.Errorf("AddIfNotExist(5000, 'foobar') got success, want fail.")
 	}
 	// Add more checks here as needed..
 
 	// Check if B-Tree items are intact.
-	if ok := b3.FindOne(5000, true); !ok || b3.GetCurrentKey() != 5000 {
+	if !b3.FindOne(5000, true) || b3.GetCurrentKey() != 5000 {
 		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
-	if ok := b3.MoveToNext(); !ok || b3.GetCurrentKey() != 5000 {
+	if !b3.MoveToNext() || b3.GetCurrentKey() != 5000 {
 		t.Errorf("MoveToNext() failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
-	if ok :=b3.MoveToNext(); !ok || b3.GetCurrentKey() != 5001 {
+	if !b3.MoveToNext() || b3.GetCurrentKey() != 5001 {
 		t.Errorf("MoveToNext() failed, got = %v, want = 5001", b3.GetCurrentKey())
 	}
+
+	// Test MoveToNext on EOF.
+	if b3.MoveToNext() {
+		t.Errorf("MoveToNext() on EOF failed, got = true, want = false")
+	}
+
+	// Test UpdateCurrentItem.
+	b3.FindOne(5000, true)
+	newVal := "Updated with new Value."
+	if !b3.UpdateCurrentItem(newVal) || b3.GetCurrentValue() != newVal {
+		t.Errorf("UpdateCurrentItem() failed, got = %s, want = %s", b3.GetCurrentValue(), newVal)
+	}
+
+	if !b3.FindOne(5000, true) || b3.GetCurrentValue() != newVal {
+		t.Errorf("UpdateCurrentItem(<k>) succeeded but FindOne(<k>, true) failed, got = %s, want = %s", b3.GetCurrentValue(), newVal)
+	}
+
+	// Test RemoveCurrentItem
+	b3.FindOne(5000, true)
+	if !b3.RemoveCurrentItem() {
+		t.Errorf("RemoveCurrentItem() failed.")
+	}
+	b3.FindOne(5000, true)
+	if !b3.MoveToNext() || b3.GetCurrentKey() != 5001 {
+		t.Errorf("MoveToNext() after RemoveCurrentItem failed, expected item(5001) not found.")
+	}
+	if b3.GetCurrentValue() != five001Value {
+		t.Errorf("MoveToNext() after RemoveCurrentItem failed, got = %s, want = %s.", b3.GetCurrentValue(), five001Value)
+	}
+
+	// Test MoveToNext on EOF.
+	if b3.MoveToNext() {
+		t.Errorf("MoveToNext() on EOF failed, got = true, want = false")
+	}
+
 	fmt.Printf("Btree functionality tests ended.\n\n")
 }
 
@@ -180,7 +217,7 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 			itemsFoundCount := 0
 			for i := test.startRange; i <= test.endRange; i++ {
 				k = i
-				if ok := b3.FindOne(k, true); ok {
+				if b3.FindOne(k, true) {
 					itemsFoundCount++
 				}
 			}
@@ -194,12 +231,12 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 		if test.action == 5 {
 			itemsFoundCount := 0
 			k = test.startRange
-			if ok := b3.FindOne(k, true); ok {
+			if b3.FindOne(k, true) {
 				itemsFoundCount++
 			}
 			for i := test.startRange+1; i <= test.endRange; i++ {
 				k = i
-				if ok := b3.MoveToNext(); ok {
+				if b3.MoveToNext() {
 					if b3.GetCurrentKey() == k {
 						itemsFoundCount++
 						continue
@@ -220,11 +257,11 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 
 			switch test.action {
 			case 1:
-				if ok := b3.Add(k, v); !ok {
+				if !b3.Add(k, v) {
 					t.Errorf("Failed Add item with key %d.\n", k)
 				}
 			case 2:
-				if ok := b3.FindOne(k, true); !ok {
+				if !b3.FindOne(k, true) {
 					t.Errorf("Failed FindOne item with key %d.\n", k)
 				}
 			case 3:
@@ -232,7 +269,7 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 					i := 90
 					i++
 				}
-				if ok := b3.Remove(k); !ok {
+				if !b3.Remove(k) {
 					t.Errorf("Failed Remove item with key %d.\n", k)
 				}
 			}
@@ -311,15 +348,15 @@ func TestBtree_SimpleDataMgmtCases(t *testing.T) {
 
 			switch test.action {
 			case 1:
-				if ok := b3.Add(k,v); !ok {
+				if !b3.Add(k,v) {
 					t.Errorf("Failed Add item with key %s.\n", k)
 				}
 			case 2:
-				if ok := b3.FindOne(k, true); !ok {
+				if !b3.FindOne(k, true) {
 					t.Errorf("Failed FindOne item with key %s.\n", k)
 				}
 			case 3:
-				if ok := b3.Remove(k); !ok {
+				if !b3.Remove(k) {
 					t.Errorf("Failed Delete item with key %s.\n", k)
 				}
 			}
