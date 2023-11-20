@@ -9,7 +9,7 @@ import (
 // Nothing much logic here for in-memory, 'just demonstrates/stubs implementation for V2.
 
 type transaction[TK btree.Comparable, TV any] struct {
-	id            btree.UUID
+	id             btree.UUID
 	nodeRepository btree.NodeRepository[TK, TV]
 }
 

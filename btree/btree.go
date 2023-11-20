@@ -50,8 +50,8 @@ type distributeAction[TK Comparable, TV any] struct {
 // to drive calls for Node promotion to a higher level branch without using recursion.
 // Recursion can be more "taxing"(on edge case) as it accumulates items pushed to the stack.
 type promoteAction[TK Comparable, TV any] struct {
-	targetNode      *Node[TK, TV]
-	slotIndex   int
+	targetNode *Node[TK, TV]
+	slotIndex  int
 }
 
 // NewBtree creates a new B-Tree instance.
@@ -348,6 +348,7 @@ func (btree *Btree[TK, TV]) saveNode(node *Node[TK, TV]) error {
 	}
 	return btree.storeInterface.NodeRepository.Upsert(node)
 }
+
 // removeNode will remove the node from backend repository.
 func (btree *Btree[TK, TV]) removeNode(node *Node[TK, TV]) error {
 	if node.Id.IsNil() {

@@ -80,14 +80,14 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], ind
 	return true, nil
 }
 
-func (node *Node[TK, TV]) unlinkNodeWithNilChild(btree *Btree[TK, TV]) (bool,error) {
+func (node *Node[TK, TV]) unlinkNodeWithNilChild(btree *Btree[TK, TV]) (bool, error) {
 	if node.isNilChildren() {
 		return false, nil
 	}
 	return node.promoteSingleChildAsParentChild(btree)
 }
 
-func (node *Node[TK, TV]) promoteSingleChildAsParentChild(btree *Btree[TK, TV]) (bool,error) {
+func (node *Node[TK, TV]) promoteSingleChildAsParentChild(btree *Btree[TK, TV]) (bool, error) {
 	// Promote the single child as parent's new child instead of this node.
 	p, err := node.getParent(btree)
 	if err != nil {

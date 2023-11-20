@@ -21,7 +21,7 @@ func (conn *vid_repository) Update(h btree.Handle) error {
 }
 func (conn *vid_repository) Get(logicalID btree.UUID) (btree.Handle, error) {
 	return btree.Handle{
-		LogicalId: logicalID,
+		LogicalId:   logicalID,
 		PhysicalIdA: logicalID,
 	}, nil
 }

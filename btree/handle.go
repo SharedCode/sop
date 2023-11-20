@@ -19,7 +19,7 @@ type Handle struct {
 	PhysicalIdB UUID
 	IsActiveIdB bool
 	Version     int
-	IsDeleted bool
+	IsDeleted   bool
 }
 
 func (id UUID) ToString() string {

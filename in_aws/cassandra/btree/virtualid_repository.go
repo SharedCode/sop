@@ -1,8 +1,8 @@
 package btree
 
 import (
-	"time"
 	"github.com/gocql/gocql"
+	"time"
 
 	"github.com/SharedCode/sop/btree"
 	cass "github.com/SharedCode/sop/store/cassandra"

@@ -143,7 +143,7 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 			name:       "Find with missing items 1",
 			startRange: 445,
 			endRange:   607,
-			action:     4,  // FindOne + track not found items
+			action:     4, // FindOne + track not found items
 			wantFound:  12,
 		},
 		{
@@ -205,8 +205,8 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 			name:       "Range Query all",
 			startRange: 0,
 			endRange:   max,
-			action:     5,   // FindOne + MoveNext()
-			wantFound:  max+1,
+			action:     5, // FindOne + MoveNext()
+			wantFound:  max + 1,
 		},
 	}
 
@@ -234,7 +234,7 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 			if b3.FindOne(k, true) {
 				itemsFoundCount++
 			}
-			for i := test.startRange+1; i <= test.endRange; i++ {
+			for i := test.startRange + 1; i <= test.endRange; i++ {
 				k = i
 				if b3.MoveToNext() {
 					if b3.GetCurrentKey() == k {
@@ -285,62 +285,62 @@ func TestBtree_SimpleDataMgmtCases(t *testing.T) {
 	b3 := sop.NewBtree[string, string](false)
 
 	tests := []struct {
-		name string
+		name       string
 		startRange int
-		endRange int
-		action int
+		endRange   int
+		action     int
 	}{
 		{
-			name: "Populate",
+			name:       "Populate",
 			startRange: 0,
-			endRange: max,
-			action: 1,	// add
+			endRange:   max,
+			action:     1, // add
 		},
 		{
-			name: "Find 1",
+			name:       "Find 1",
 			startRange: 0,
-			endRange: max,
-			action: 2,	// find
+			endRange:   max,
+			action:     2, // find
 		},
 		{
-			name: "Remove 1",
+			name:       "Remove 1",
 			startRange: 450,
-			endRange: 800,
-			action: 3, // remove
+			endRange:   800,
+			action:     3, // remove
 		},
 		{
-			name: "Re add deleted items",
+			name:       "Re add deleted items",
 			startRange: 450,
-			endRange: 800,
-			action: 1,
+			endRange:   800,
+			action:     1,
 		},
 		{
-			name: "Find All 1",
+			name:       "Find All 1",
 			startRange: 0,
-			endRange: max,
-			action: 2,
+			endRange:   max,
+			action:     2,
 		},
 		{
-			name: "Remove 2",
+			name:       "Remove 2",
 			startRange: 5000,
-			endRange: 10000,
-			action: 3,
+			endRange:   10000,
+			action:     3,
 		},
 		{
-			name: "Re add deleted items 2",
+			name:       "Re add deleted items 2",
 			startRange: 5000,
-			endRange: 10000,
-			action: 1,
+			endRange:   10000,
+			action:     1,
 		},
 		{
-			name: "Find All 2",
+			name:       "Find All 2",
 			startRange: 0,
-			endRange: max,
-			action: 2,	// find
+			endRange:   max,
+			action:     2, // find
 		},
 	}
 
-	for _,test := range tests {
+	for _, test := range tests {
 		t.Logf("Test %s started.", test.name)
 		for i := test.startRange; i < test.endRange; i++ {
 			k := fmt.Sprintf("foo%d", i)
@@ -348,7 +348,7 @@ func TestBtree_SimpleDataMgmtCases(t *testing.T) {
 
 			switch test.action {
 			case 1:
-				if !b3.Add(k,v) {
+				if !b3.Add(k, v) {
 					t.Errorf("Failed Add item with key %s.\n", k)
 				}
 			case 2:
