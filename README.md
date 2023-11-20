@@ -1,6 +1,6 @@
 # Sop
 
-Scalable Object Persistence (SOP) Framework
+Scaleable Object Persistence (SOP) Framework
 
 SOP Version 1(beta) is an in-memory implementation. It was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithm that will work irrespective of backend, be it in-memory or others, such as that geared for V2.
 
