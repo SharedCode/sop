@@ -107,9 +107,11 @@ func (btree *Btree[TK, TV]) FindOne(key TK, firstItemWithKey bool) (bool, error)
 		return false, nil
 	}
 	// Return current Value if key is same as current Key.
-	ci := btree.GetCurrentItem()
-	if !firstItemWithKey && compare[TK](ci.Key, key) == 0 {
-		return true, nil
+	if btree.isCurrentItemSelected() {
+		ci := btree.GetCurrentItem()
+		if !firstItemWithKey && compare[TK](ci.Key, key) == 0 {
+			return true, nil
+		}
 	}
 	node, err := btree.getRootNode()
 	if err != nil {
@@ -186,10 +188,7 @@ func (btree *Btree[TK, TV]) MoveToLast() (bool, error) {
 
 func (btree *Btree[TK, TV]) MoveToNext() (bool, error) {
 	// Return default value & no error if B-Tree is empty.
-	if btree.Store.Count == 0 {
-		return false, nil
-	}
-	if btree.currentItemRef.getNodeId() == NilUUID {
+	if btree.Store.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
 	}
 	node, err := btree.getNode(btree.currentItemRef.getNodeId())
@@ -204,10 +203,7 @@ func (btree *Btree[TK, TV]) MoveToNext() (bool, error) {
 
 func (btree *Btree[TK, TV]) MoveToPrevious() (bool, error) {
 	// Return default value & no error if B-Tree is empty.
-	if btree.Store.Count == 0 {
-		return false, nil
-	}
-	if btree.currentItemRef.getNodeId() == NilUUID {
+	if btree.Store.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
 	}
 	node, err := btree.getNode(btree.currentItemRef.getNodeId())
@@ -406,6 +402,10 @@ func (btree *Btree[TK, TV]) isUnique() bool {
 
 func (btree *Btree[TK, TV]) getSlotLength() int {
 	return btree.Store.SlotLength
+}
+
+func (btree *Btree[TK, TV]) isCurrentItemSelected() bool {
+	return btree.currentItemRef.getNodeId() != NilUUID
 }
 
 // distribute function allows B-Tree to avoid using recursion. I.e. - instead of the node calling

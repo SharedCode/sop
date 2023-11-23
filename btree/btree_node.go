@@ -482,31 +482,6 @@ func (node *Node[TK, TV]) moveToPrevious(btree *Btree[TK, TV]) (bool, error) {
 	}
 }
 
-// Returns true if a slot is available in left side siblings of this node modified to suit possible unbalanced branch.
-func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
-	*isUnBalanced = false
-	// Start from this node.
-	temp := node
-	for temp != nil {
-		if temp.nodeHasNilChild(btree) {
-			return true, nil
-		}
-		if temp.childrenIds != nil {
-			*isUnBalanced = true
-			return false, nil
-		}
-		if !temp.isFull() {
-			return true, nil
-		}
-		var err error
-		temp, err = temp.getLeftSibling(btree)
-		if err != nil {
-			return false, err
-		}
-	}
-	return false, nil
-}
-
 func (node *Node[TK, TV]) fixVacatedSlot(btree *Btree[TK, TV]) error {
 	// If there are more than 1 items in slot then we move the items 1 slot to omit deleted item slot.
 	if node.Count > 1 {
@@ -545,6 +520,30 @@ func (node *Node[TK, TV]) isNilChildren() bool {
 	return true
 }
 
+// Returns true if a slot is available in left side siblings of this node modified to suit possible unbalanced branch.
+func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
+	*isUnBalanced = false
+	// Start from this node.
+	temp := node
+	for temp != nil {
+		if temp.nodeHasNilChild(btree) {
+			return true, nil
+		}
+		if temp.childrenIds != nil {
+			*isUnBalanced = true
+			return false, nil
+		}
+		if !temp.isFull() {
+			return true, nil
+		}
+		var err error
+		temp, err = temp.getLeftSibling(btree)
+		if err != nil {
+			return false, err
+		}
+	}
+	return false, nil
+}
 // Returns true if a slot is available in right side siblings of this node modified to suit possible unbalanced branch.
 func (node *Node[TK, TV]) isThereVacantSlotInRight(btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
 	*isUnBalanced = false
@@ -615,8 +614,10 @@ func (node *Node[TK, TV]) getIndexOfChild(child *Node[TK, TV]) int {
 	// Make sure we don't access an invalid node item.
 	if parent.childrenIds != nil &&
 		(child.indexOfNode == -1 || child.Id != parent.childrenIds[child.indexOfNode]) {
-		for child.indexOfNode = 0; child.indexOfNode <= len(parent.Slots) &&
-			!parent.childrenIds[child.indexOfNode].IsNil(); child.indexOfNode++ {
+		for child.indexOfNode = 0; child.indexOfNode <= len(parent.Slots); child.indexOfNode++ {
+			if parent.childrenIds[child.indexOfNode].IsNil() {
+				continue
+			}
 			if parent.childrenIds[child.indexOfNode] == child.Id {
 				break
 			}
