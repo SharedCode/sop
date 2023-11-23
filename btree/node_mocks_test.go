@@ -48,17 +48,32 @@ func Test_MockDistributeItemOnNodeWithNilChild(t *testing.T) {
 
 	b3.Add(26, "foo26")
 
+	t.Log("\nMock DistributeItemOnNodeWithNilChild MoveToNext test.\n")
 	b3.MoveToFirst()
 	ctr := 0
 	for {
 		ctr++
-		fmt.Printf("key: %d", b3.GetCurrentKey())
+		t.Logf("key: %d", b3.GetCurrentKey())
 		if ok,_ := b3.MoveToNext(); !ok {
 			break
 		}
 	}
 	if ctr != 22 {
-		t.Errorf("Mock DistributeItemOnNodeWithNilChild failed, got = %d, want = 22 items found.", ctr)
+		t.Errorf("Mock DistributeItemOnNodeWithNilChild MoveToNext failed, got = %d, want = 22 items found.", ctr)
+	}
+
+	t.Log("\nMock DistributeItemOnNodeWithNilChild MoveToPrevious test.\n")
+	b3.MoveToLast()
+	ctr = 0
+	for {
+		ctr++
+		t.Logf("key: %d", b3.GetCurrentKey())
+		if ok,_ := b3.MoveToPrevious(); !ok {
+			break
+		}
+	}
+	if ctr != 22 {
+		t.Errorf("Mock DistributeItemOnNodeWithNilChild MoveToPrevious failed, got = %d, want = 22 items found.", ctr)
 	}
 
 	t.Log("Mock DistributeItemOnNodeWithNilChild end.\n\n")

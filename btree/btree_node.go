@@ -453,6 +453,11 @@ func (node *Node[TK, TV]) moveToPrevious(btree *Btree[TK, TV]) (bool, error) {
 				if err != nil {
 					return false, err
 				}
+				if n == nil {
+					// Set to null the current item, end of Btree is reached.
+					btree.setCurrentItemId(NilUUID, 0)
+					return false, nil
+				}
 				slotIndex = n.Count
 			} else {
 				// 'SlotIndex -1' since we are now using SlotIndex as index to pSlots.
