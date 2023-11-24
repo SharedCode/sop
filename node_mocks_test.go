@@ -1,33 +1,53 @@
 package sop
 
 import (
-	"fmt"
+	"cmp"
 	"testing"
 
 	sop "github.com/SharedCode/sop/in_memory"
 )
 
-func Test_MockDistributeItemOnNodeWithNilChild(t *testing.T) {
-	fmt.Printf("Btree hello world.\n")
-	b3 := sop.NewBtree[int, string](false)
+type personKey struct {
+	firstname string
+	lastname string
+}
 
-	b3.Add(5000, "I am the value with 5000 key.")
-	b3.Add(5001, "I am the value with 5001 key.")
-	b3.Add(5000, "I am also a value with 5000 key.")
-
-	if !b3.FindOne(5000, true) || b3.GetCurrentKey() != 5000 {
-		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
+type person struct {
+	personKey
+	gender string
+	email string
+	phone string
+}
+func newPerson(fname string, lname string, gender string, email string, phone string) person {
+	return person {
+		personKey: personKey{
+			firstname: fname,
+			lastname: lname,
+		},
+		gender: gender,
+		email: email,
+		phone: phone,
 	}
-	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
-
-	if !b3.MoveToNext() || b3.GetCurrentKey() != 5000 {
-		t.Errorf("MoveToNext() failed, got = %v, want = 5000", b3.GetCurrentKey())
+}
+func (x personKey)Compare(other interface{}) int {
+	y := other.(personKey)
+	i := cmp.Compare[string](x.lastname, y.lastname)
+	if i != 0 {
+		return i
 	}
-	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
+	return cmp.Compare[string](x.firstname, y.firstname)
+}
 
-	if !b3.MoveToNext() || b3.GetCurrentKey() != 5001 {
-		t.Errorf("MoveToNext() failed, got = %v, want = 5001", b3.GetCurrentKey())
+func Test_PersonLookup(t *testing.T) {
+	t.Log("Btree demo, used as a person struct lookup.\n")
+
+	p := newPerson("joe", "krueger", "male", "email", "phone")
+	b3 := sop.NewBtree[personKey, person](false)
+	b3.Add(p.personKey, p)
+
+	if b3.FindOne(p.personKey, false) {
+		t.Logf("Person w/ key %v found.", b3.GetCurrentKey())
 	}
-	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
-	fmt.Printf("Btree hello world ended.\n\n")
+
+	t.Log("Btree demo, used as a person struct lookup end.\n")
 }
