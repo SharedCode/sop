@@ -19,7 +19,7 @@ type transaction_manager[TK btree.Comparable, TV any] struct {
 // that simply stores/manages items in-memory.
 func newTransactionManager[TK btree.Comparable, TV any]() *transaction_manager[TK, TV] {
 	si := btree.StoreInterface[TK, TV]{
-		NodeRepository:      btree.NewInMemoryNodeRepository[TK, TV](),
+		NodeRepository:      newNodeRepository[TK, TV](),
 		RecyclerRepository:  newRecycler(),
 		VirtualIdRepository: newVirtualIdRepository(),
 		Transaction:         newTransaction[TK, TV](),

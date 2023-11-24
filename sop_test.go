@@ -106,8 +106,14 @@ func TestBtree_FunctionalityTests(t *testing.T) {
 func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 	max := 100000
 	fmt.Printf("Btree complex data mgmt tests started(%d items).\n", max)
-	b3 := sop.NewBtree[int, string](false)
+	b3 := sop.NewBtree[int, string](true)
 
+	// Simple IsUnique check.
+	if !b3.IsUnique() {
+		t.Errorf("b3.IsUnique() got false, want true.")
+	}
+
+	// The Complex Data Mgmt Test cases.
 	tests := []struct {
 		name       string
 		startRange int
