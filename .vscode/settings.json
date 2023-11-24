@@ -1,0 +1,25 @@
+{
+    "editor.codeLens": true,
+    "editor.folding": false,
+    "editor.foldingHighlight": true,
+    "editor.glyphMargin": false,
+    "settings.cycle": [{
+        "id": "lineNumbers",
+        "overrideWorkspaceSettings": true,
+        "values":[
+            {
+                "editor.lineNumbers": "off",
+                "editor.folding": false,
+                "editor.glyphMargin": false
+            },
+            {
+                "editor.lineNumbers": "on",
+                "editor.folding": false,
+                "editor.glyphMargin": false
+    
+            }
+        ]
+    }
+],
+"editor.lineNumbers": "off",
+}
