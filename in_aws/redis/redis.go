@@ -34,7 +34,7 @@ func DefaultOptions() Options {
 	}
 }
 
-func NewClient(options Options) Cache {
+func NewClient(options Options) *Connection {
 	client := redis.NewClient(&redis.Options{
 		Addr:     options.Address,
 		Password: options.Password,
