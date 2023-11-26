@@ -75,7 +75,7 @@ Long Lived Transactions(TODO in far future)
 *   - if an item being managed was modified(different version) then rollback as well
 *   - finalize commit if successfully mapped
 
-Logical ID to Physical ID story
+Logical ID to Physical ID story (VirtualIdRepository)
 A. Node ID handling
 - Btree reader will always use Logical ID so it can read the "active" Node
 - During a Transaction phase 1 commit:

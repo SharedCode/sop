@@ -1,4 +1,4 @@
-package cassandra
+package in_aws
 
 import "github.com/SharedCode/sop/btree"
 

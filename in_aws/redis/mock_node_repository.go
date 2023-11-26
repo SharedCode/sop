@@ -1,4 +1,4 @@
-package cassandra
+package redis
 
 import "github.com/SharedCode/sop/btree"
 

@@ -1,4 +1,4 @@
-package in_memory
+package in_aws
 
 import "github.com/SharedCode/sop/btree"
 
