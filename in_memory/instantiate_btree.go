@@ -32,11 +32,13 @@ type BtreeInterface[TK btree.Comparable, TV any] interface {
 	// RemoveCurrentItem will remove the current key/value pair from the store.
 	RemoveCurrentItem() bool
 
-	// Cursor like "move" functions. Use the CurrentKey/CurrentValue to retrieve the
-	// "current item" details(key &/or value).
+	// MoveToFirst positions the "cursor" to the first item as per key ordering.
 	MoveToFirst() bool
+	// MoveToLast positionts the "cursor" to the last item as per key ordering.
 	MoveToLast() bool
+	// MoveToNext positions the "cursor" to the next item as per key ordering.
 	MoveToNext() bool
+	// MoveToPrevious positions the "cursor" to the previous item as per key ordering.
 	MoveToPrevious() bool
 
 	// IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
