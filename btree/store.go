@@ -29,14 +29,6 @@ type StoreInterface[TK Comparable, TV any] struct {
 	StoreRepository StoreRepository
 	// NodeRepository is used to manage/access B-Tree nodes.
 	NodeRepository NodeRepository[TK, TV]
-	// VirtualIdRepository is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
-	VirtualIdRepository VirtualIdRepository
-	// RecyclerRepository is used to manage/access all deleted objects' "data blocks".
-	RecyclerRepository RecyclerRepository
-	// TransactionRepository is used to manage a transaction.
-	TransactionRepository TransactionRepository
-	// Transaction object if there is one.
-	Transaction Transaction
 }
 
 // NewStore instantiates a new Store.

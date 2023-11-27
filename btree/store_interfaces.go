@@ -60,29 +60,6 @@ type NodeRepository[TK Comparable, TV any] interface {
 	Remove(nodeId UUID) error
 }
 
-// VirtualIdRepository interface specifies the "virtualized Id" repository, a.k.a. Id registry.
-type VirtualIdRepository interface {
-	Get(lid UUID) (Handle, error)
-	Add(Handle) error
-	Update(Handle) error
-	Remove(lid UUID) error
-}
-
-// RecyclerRepository provides capability to recycle storage areas for storing data such as Node, etc...
-// There are backends where this is not needed at all, e.g. Cassandra backend will not need this.
-type RecyclerRepository interface {
-	Get(itemCount int, objectType int) []Recyclable
-	Add(recyclables []Recyclable) error
-	Remove(items []Recyclable) error
-}
-
-type TransactionRepository interface {
-	Get(transactionId UUID) ([]TransactionEntry, error)
-	GetByStore(transactionId UUID, storeName string) ([]TransactionEntry, error)
-	Add([]TransactionEntry) error
-	MarkDone([]TransactionEntry) error
-}
-
 // Transaction interface defines the "enduser facing" transaction methods.
 type Transaction interface {
 	Begin() error
