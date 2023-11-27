@@ -4,7 +4,7 @@ import "github.com/SharedCode/sop/btree"
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.
 type StoreInterface[TK btree.Comparable, TV any] struct {
-	btree.StoreInterface[TK,TV]
+	btree.StoreInterface[TK, TV]
 	// VirtualIdRepository is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
 	VirtualIdRepository VirtualIdRepository
 	// RecyclerRepository is used to manage/access all deleted objects' "data blocks".
@@ -49,9 +49,9 @@ type TransactionRepository interface {
 func newTransactionManager[TK btree.Comparable, TV any]() *transaction_manager[TK, TV] {
 	si := btree.StoreInterface[TK, TV]{
 		NodeRepository:      newNodeRepository[TK, TV](),
-		RecyclerRepository:  newRecycler(),	// shared globally.
+		RecyclerRepository:  newRecycler(), // shared globally.
 		VirtualIdRepository: newVirtualIdRepository(),
-		StoreRepository:     newStoreRepository(),	// shared globally.
+		StoreRepository:     newStoreRepository(), // shared globally.
 	}
 	return &transaction_manager[TK, TV]{
 		storeInterface: &si,

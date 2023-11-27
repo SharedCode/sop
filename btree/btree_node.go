@@ -549,6 +549,7 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(btree *Btree[TK, TV], isUnBala
 	}
 	return false, nil
 }
+
 // Returns true if a slot is available in right side siblings of this node modified to suit possible unbalanced branch.
 func (node *Node[TK, TV]) isThereVacantSlotInRight(btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
 	*isUnBalanced = false

@@ -12,14 +12,14 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
 	/* Sample code for a transaction and BTree:
-		trans := NewTransaction()
-		trans.Begin()
-		b3 := NewBtree(<..>, trans)
-		b3.Add(..)
-		b3.FindOne(..)
-		..
-		..
-		trans.Commit()
+	trans := NewTransaction()
+	trans.Begin()
+	b3 := NewBtree(<..>, trans)
+	b3.Add(..)
+	b3.FindOne(..)
+	..
+	..
+	trans.Commit()
 	*/
 }
 
@@ -30,10 +30,6 @@ func Test_TransactionStory_ManyBTree(t *testing.T) {
 	// 3. Instantiate a BTree2
 	// 3. Do CRUD on BTree & BTree2
 	// 4. Commit Transaction
-
-	NewTransaction[]()
-
-
 }
 
 func Test_TransactionManagerStory(t *testing.T) {
@@ -44,5 +40,5 @@ func Test_TransactionManagerStory(t *testing.T) {
 	// 3. All BTrees should be registered/accounted for in the active Transaction where they got instantiated/CRUDs.
 	//    - On Commit, transaction will persist all changes in all BTrees it accounted for.
 	//    - On Rollback, transaction will undo or not save the canged done in all BTree it accounted for.
-	// 
+	//
 }

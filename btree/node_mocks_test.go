@@ -10,7 +10,7 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 	store := Store{
 		SlotLength: 4,
 	}
-	si := StoreInterface[int,string] {
+	si := StoreInterface[int, string]{
 		NodeRepository: newNodeRepository[int, string](),
 	}
 	b3 := NewBtree[int, string](store, &si)
@@ -54,7 +54,7 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 	for {
 		ctr++
 		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok,_ := b3.MoveToNext(); !ok {
+		if ok, _ := b3.MoveToNext(); !ok {
 			break
 		}
 	}
@@ -68,7 +68,7 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 	for {
 		ctr++
 		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok,_ := b3.MoveToPrevious(); !ok {
+		if ok, _ := b3.MoveToPrevious(); !ok {
 			break
 		}
 	}
@@ -84,7 +84,7 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 	store := Store{
 		SlotLength: 4,
 	}
-	si := StoreInterface[int,string] {
+	si := StoreInterface[int, string]{
 		NodeRepository: newNodeRepository[int, string](),
 	}
 	b3 := NewBtree[int, string](store, &si)
@@ -128,7 +128,7 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 	for {
 		ctr++
 		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok,_ := b3.MoveToNext(); !ok {
+		if ok, _ := b3.MoveToNext(); !ok {
 			break
 		}
 	}
@@ -142,7 +142,7 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 	for {
 		ctr++
 		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok,_ := b3.MoveToPrevious(); !ok {
+		if ok, _ := b3.MoveToPrevious(); !ok {
 			break
 		}
 	}
@@ -158,7 +158,7 @@ func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	store := Store{
 		SlotLength: 4,
 	}
-	si := StoreInterface[int,string] {
+	si := StoreInterface[int, string]{
 		NodeRepository: newNodeRepository[int, string](),
 	}
 	b3 := NewBtree[int, string](store, &si)
@@ -206,7 +206,7 @@ func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	for {
 		got++
 		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok,_ := b3.MoveToNext(); !ok {
+		if ok, _ := b3.MoveToNext(); !ok {
 			break
 		}
 	}
@@ -220,7 +220,7 @@ func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	for {
 		got++
 		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok,_ := b3.MoveToPrevious(); !ok {
+		if ok, _ := b3.MoveToPrevious(); !ok {
 			break
 		}
 	}
