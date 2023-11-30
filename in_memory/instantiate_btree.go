@@ -18,7 +18,6 @@ const itemsPerNode = 8
 func NewBtree[TK btree.Comparable, TV any](isUnique bool) BtreeInterface[TK, TV] {
 	transactionManager := newTransactionManager[TK, TV]()
 	s := btree.NewStore("", itemsPerNode, isUnique, true)
-	transactionManager.storeInterface.StoreRepository.Add(s)
 	b3 := btree.NewBtree[TK, TV](s, transactionManager.storeInterface)
 	return BtreeInterface[TK, TV]{
 		btree: b3,
@@ -32,7 +31,6 @@ func NewBtree[TK btree.Comparable, TV any](isUnique bool) BtreeInterface[TK, TV]
 func NewBtreeWithNoWrapper[TK btree.Comparable, TV any](isUnique bool) btree.BtreeInterface[TK, TV] {
 	transactionManager := newTransactionManager[TK, TV]()
 	s := btree.NewStore("", itemsPerNode, isUnique, true)
-	transactionManager.storeInterface.StoreRepository.Add(s)
 	return btree.NewBtree[TK, TV](s, transactionManager.storeInterface)
 }
 

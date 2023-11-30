@@ -12,7 +12,6 @@ type transaction_manager[TK btree.Comparable, TV any] struct {
 func newTransactionManager[TK btree.Comparable, TV any]() *transaction_manager[TK, TV] {
 	si := btree.StoreInterface[TK, TV]{
 		NodeRepository:  newNodeRepository[TK, TV](),
-		StoreRepository: newStoreRepository(),
 	}
 	return &transaction_manager[TK, TV]{
 		storeInterface: &si,

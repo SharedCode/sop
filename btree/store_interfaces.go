@@ -46,12 +46,6 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	IsUnique() bool
 }
 
-// StoreRepository interface specifies the store repository.
-type StoreRepository interface {
-	Get(name string) (Store, error)
-	Add(Store) error
-	Remove(name string) error
-}
 
 // NodeRepository interface specifies the node repository.
 type NodeRepository[TK Comparable, TV any] interface {

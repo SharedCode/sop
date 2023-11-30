@@ -5,6 +5,8 @@ import "github.com/SharedCode/sop/btree"
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.
 type StoreInterface[TK btree.Comparable, TV any] struct {
 	btree.StoreInterface[TK, TV]
+	// StoreRepository is used to manage/access stores.
+	StoreRepository StoreRepository
 	// VirtualIdRepository is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
 	VirtualIdRepository VirtualIdRepository
 	// RecyclerRepository is used to manage/access all deleted objects' "data blocks".
@@ -37,6 +39,13 @@ type TransactionRepository interface {
 	GetByStore(transactionId UUID, storeName string) ([]TransactionEntry, error)
 	Add([]TransactionEntry) error
 	MarkDone([]TransactionEntry) error
+}
+
+// StoreRepository interface specifies the store repository.
+type StoreRepository interface {
+	Get(name string) (Store, error)
+	Add(Store) error
+	Remove(name string) error
 }
 
 // Transaction Manager surfaces a StoreInterface that which, knows how to reconcile/merge

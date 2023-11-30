@@ -25,8 +25,6 @@ type Store struct {
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.
 type StoreInterface[TK Comparable, TV any] struct {
-	// StoreRepository is used to manage/access stores.
-	StoreRepository StoreRepository
 	// NodeRepository is used to manage/access B-Tree nodes.
 	NodeRepository NodeRepository[TK, TV]
 }
