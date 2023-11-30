@@ -12,7 +12,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
 	/* Sample code for a transaction and BTree:
-	trans := NewTransaction()
+	var trans Transaction
 	trans.Begin()
 	b3 := NewBtree(<..>, trans)
 	b3.Add(..)
