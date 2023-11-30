@@ -1,7 +1,6 @@
 package in_aws
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -11,16 +10,21 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	/* Sample code for a transaction and BTree:
-	var trans Transaction
+	trans := Transaction{}
 	trans.Begin()
-	b3 := NewBtree(<..>, trans)
-	b3.Add(..)
-	b3.FindOne(..)
-	..
-	..
+	b3 := NewBtree[int, string]("fooStore", 8, false, false, &trans)
+	if ok, err := b3.Add(1, "hello world"); !ok || err != nil {
+		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		trans.Rollback()
+		return
+	}
+	if ok, err := b3.FindOne(1, false); !ok || err != nil {
+		t.Logf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		trans.Rollback()
+		return
+	}
+	t.Logf("Successfully added & found item with key 1.")
 	trans.Commit()
-	*/
 }
 
 func Test_TransactionStory_ManyBTree(t *testing.T) {

@@ -53,11 +53,3 @@ type NodeRepository[TK Comparable, TV any] interface {
 	Upsert(*Node[TK, TV]) error
 	Remove(nodeId UUID) error
 }
-
-// Transaction interface defines the "enduser facing" transaction methods.
-type Transaction interface {
-	Begin() error
-	Commit() error
-	Rollback() error
-	HasBegun() bool
-}

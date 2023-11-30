@@ -2,50 +2,9 @@ package in_aws
 
 import "github.com/SharedCode/sop/btree"
 
-// StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.
-type StoreInterface[TK btree.Comparable, TV any] struct {
-	btree.StoreInterface[TK, TV]
-	// StoreRepository is used to manage/access stores.
-	StoreRepository StoreRepository
-	// VirtualIdRepository is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
-	VirtualIdRepository VirtualIdRepository
-	// RecyclerRepository is used to manage/access all deleted objects' "data blocks".
-	RecyclerRepository RecyclerRepository
-}
-
 // in-memory transaction manager just relays CRUD actions to the actual in-memory NodeRepository.
 type transaction_manager[TK btree.Comparable, TV any] struct {
 	storeInterface *btree.StoreInterface[TK, TV]
-}
-
-// RecyclerRepository provides capability to recycle storage areas for storing data such as Node, etc...
-// There are backends where this is not needed at all, e.g. Cassandra backend will not need this.
-type RecyclerRepository interface {
-	Get(itemCount int, objectType int) []Recyclable
-	Add(recyclables []Recyclable) error
-	Remove(items []Recyclable) error
-}
-
-// VirtualIdRepository interface specifies the "virtualized Id" repository, a.k.a. Id registry.
-type VirtualIdRepository interface {
-	Get(lid UUID) (Handle, error)
-	Add(Handle) error
-	Update(Handle) error
-	Remove(lid UUID) error
-}
-
-type TransactionRepository interface {
-	Get(transactionId UUID) ([]TransactionEntry, error)
-	GetByStore(transactionId UUID, storeName string) ([]TransactionEntry, error)
-	Add([]TransactionEntry) error
-	MarkDone([]TransactionEntry) error
-}
-
-// StoreRepository interface specifies the store repository.
-type StoreRepository interface {
-	Get(name string) (Store, error)
-	Add(Store) error
-	Remove(name string) error
 }
 
 // Transaction Manager surfaces a StoreInterface that which, knows how to reconcile/merge
