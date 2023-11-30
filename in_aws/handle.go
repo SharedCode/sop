@@ -1,12 +1,13 @@
-package btree
+package in_aws
 
 import (
 	"bytes"
+
 	"github.com/google/uuid"
+    "github.com/SharedCode/sop/btree"
 )
 
-// UUID type.
-type UUID uuid.UUID
+
 
 // Handle is a structure that holds Logical Id and the underlying current Physical Id it maps to.
 // E.g. - Node, Slot Value, etc...
@@ -14,20 +15,20 @@ type UUID uuid.UUID
 // switching of data "objects", e.g. a modified Node or Value Data in a transaction can get switched to be the
 // "active" one upon commit, and thus, start to get seen by succeeding SOP I/O.
 type Handle struct {
-	LogicalId   UUID
-	PhysicalIdA UUID
-	PhysicalIdB UUID
+	LogicalId   btree.UUID
+	PhysicalIdA btree.UUID
+	PhysicalIdB btree.UUID
 	IsActiveIdB bool
 	Version     int
 	IsDeleted   bool
 }
 
-func (id UUID) ToString() string {
+func (id btree.UUID) ToString() string {
 	return string(id[:])
 }
-func ToUUID(id string) UUID {
+func ToUUID(id string) btree.UUID {
 	var bid = []byte(id)
-	var nid UUID
+	var nid btree.UUID
 	copy(nid[:], bid)
 	return nid
 }
@@ -35,25 +36,13 @@ func ToUUID(id string) UUID {
 // NewHandle creates a new Handle.
 func NewHandle() Handle {
 	return Handle{
-		LogicalId:   NewUUID(),
-		PhysicalIdA: NewUUID(),
+		LogicalId:   btree.NewUUID(),
+		PhysicalIdA: btree.NewUUID(),
 	}
 }
 
-// NewUUID returns a new UUID.
-func NewUUID() UUID {
-	return UUID(uuid.New())
-}
-
-// NillUUID is an empty UUID.
-var NilUUID UUID
-
-func (id UUID) IsNil() bool {
-	return bytes.Compare(id[:], NilUUID[:]) == 0
-}
-
 // ToHandle converts logical & physical UUIDs to a handle, a.k.a. - virtual Id.
-func ToHandle(lid UUID, physIdA UUID) Handle {
+func ToHandle(lid btree.UUID, physIdA btree.UUID) Handle {
 	return Handle{
 		LogicalId:   lid,
 		PhysicalIdA: physIdA,
@@ -65,14 +54,14 @@ func (id Handle) IsEmpty() bool {
 }
 
 // GetActiveId returns the currently active (if there is) UUID of a given Handle.
-func (id Handle) GetActiveId() UUID {
+func (id Handle) GetActiveId() btree.UUID {
 	if id.IsActiveIdB {
 		return id.PhysicalIdB
 	}
 	return id.PhysicalIdA
 }
 
-// ToString method of Handle returns the Handle's currently Active Id's string value.
-func (id Handle) ToString() string {
-	return id.GetActiveId().ToString()
-}
+// // ToString method of Handle returns the Handle's currently Active Id's string value.
+// func (id Handle) ToString() string {
+// 	return id.GetActiveId().ToString()
+// }

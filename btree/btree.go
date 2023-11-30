@@ -374,7 +374,7 @@ func (btree *Btree[TK, TV]) getRootNode() (*Node[TK, TV], error) {
 		return nil, err
 	}
 	if root == nil {
-		return nil, fmt.Errorf("Can't retrieve Root Node w/ logical Id '%s'", btree.Store.RootNodeId.ToString())
+		return nil, fmt.Errorf("Can't retrieve Root Node w/ logical Id '%v'", btree.Store.RootNodeId)
 	}
 	return root, nil
 }
