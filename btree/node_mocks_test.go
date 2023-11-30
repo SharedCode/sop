@@ -5,6 +5,28 @@ import (
 	"testing"
 )
 
+// in-memory mockup implementation of NodeRepository. Uses a map to manage nodes in memory.
+type nodeRepository[TK Comparable, TV any] struct {
+	lookup map[UUID]*Node[TK, TV]
+}
+func newNodeRepository[TK Comparable, TV any]() NodeRepository[TK, TV] {
+	return &nodeRepository[TK, TV]{
+		lookup: make(map[UUID]*Node[TK, TV]),
+	}
+}
+func (nr *nodeRepository[TK, TV]) Upsert(n *Node[TK, TV]) error {
+	nr.lookup[n.Id] = n
+	return nil
+}
+func (nr *nodeRepository[TK, TV]) Get(nodeId UUID) (*Node[TK, TV], error) {
+	v, _ := nr.lookup[nodeId]
+	return v, nil
+}
+func (nr *nodeRepository[TK, TV]) Remove(nodeId UUID) error {
+	delete(nr.lookup, nodeId)
+	return nil
+}
+
 func Test_MockNodeWithLeftNilChild(t *testing.T) {
 	t.Log("Mock MockNodeWithLeftNilChild.\n")
 	store := Store{
