@@ -20,3 +20,11 @@ func TestSearch(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestUUIDConversion(t *testing.T) {
+	want := NewUUID()
+	suuid := want.ToString()
+	if got := ToUUID(suuid); got != want {
+		t.Errorf("ToUUID(suuid) failed, got = %v, want = %v.", got, want)
+	}
+}

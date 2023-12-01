@@ -1,13 +1,8 @@
 package in_aws
 
 import (
-	"bytes"
-
-	"github.com/google/uuid"
     "github.com/SharedCode/sop/btree"
 )
-
-
 
 // Handle is a structure that holds Logical Id and the underlying current Physical Id it maps to.
 // E.g. - Node, Slot Value, etc...
@@ -21,16 +16,6 @@ type Handle struct {
 	IsActiveIdB bool
 	Version     int
 	IsDeleted   bool
-}
-
-func (id btree.UUID) ToString() string {
-	return string(id[:])
-}
-func ToUUID(id string) btree.UUID {
-	var bid = []byte(id)
-	var nid btree.UUID
-	copy(nid[:], bid)
-	return nid
 }
 
 // NewHandle creates a new Handle.
@@ -60,8 +45,3 @@ func (id Handle) GetActiveId() btree.UUID {
 	}
 	return id.PhysicalIdA
 }
-
-// // ToString method of Handle returns the Handle's currently Active Id's string value.
-// func (id Handle) ToString() string {
-// 	return id.GetActiveId().ToString()
-// }
