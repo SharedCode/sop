@@ -1,17 +1,33 @@
 package in_aws
 
-type Transaction struct {
+// Transaction interface defines the "enduser facing" transaction methods.
+type Transaction interface {
+	Begin() error
+	Commit() error
+	Rollback() error
+	HasBegun() bool
+}
+
+type transaction struct {
 
 }
 
-func (t *Transaction) Begin() error {
+func NewTransaction() Transaction {
+	return &transaction{}
+}
+
+func (t *transaction) Begin() error {
 	return nil
 }
 
-func (t *Transaction) Commit() error {
+func (t *transaction) Commit() error {
 	return nil
 }
 
-func (t *Transaction) Rollback() error {
+func (t *transaction) Rollback() error {
 	return nil
+}
+
+func (t *transaction) HasBegun() bool {
+	return false
 }
