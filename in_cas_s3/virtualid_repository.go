@@ -1,4 +1,4 @@
-package in_aws
+package in_cas_s3
 
 import (
 	"github.com/SharedCode/sop/btree"

@@ -1,4 +1,4 @@
-package in_aws
+package in_cas_s3
 
 // Transaction interface defines the "enduser facing" transaction methods.
 type Transaction interface {
@@ -9,7 +9,6 @@ type Transaction interface {
 }
 
 type transaction struct {
-
 }
 
 func NewTransaction() Transaction {

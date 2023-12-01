@@ -1,4 +1,4 @@
-package in_aws
+package in_cas_s3
 
 import "github.com/SharedCode/sop/btree"
 
@@ -20,7 +20,7 @@ func newTransactionManager[TK btree.Comparable, TV any]() *transaction_manager[T
 		VirtualIdRepository: newVirtualIdRepository(),
 		StoreRepository:     newStoreRepository(), // shared globally.
 	}
-	si.NodeRepository =  newNodeRepository[TK, TV]()
+	si.NodeRepository = newNodeRepository[TK, TV]()
 
 	return &transaction_manager[TK, TV]{
 		storeInterface: &si,

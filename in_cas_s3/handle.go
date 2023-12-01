@@ -1,7 +1,7 @@
-package in_aws
+package in_cas_s3
 
 import (
-    "github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/btree"
 )
 
 // Handle is a structure that holds Logical Id and the underlying current Physical Id it maps to.
