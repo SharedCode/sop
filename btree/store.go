@@ -23,12 +23,6 @@ type Store struct {
 	IsValueDataInNodeSegment bool
 }
 
-// StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.
-type StoreInterface[TK Comparable, TV any] struct {
-	// NodeRepository is used to manage/access B-Tree nodes.
-	NodeRepository NodeRepository[TK, TV]
-}
-
 // NewStore instantiates a new Store.
 func NewStore(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool) Store {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
