@@ -46,10 +46,28 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	IsUnique() bool
 }
 
-
 // NodeRepository interface specifies the node repository.
 type NodeRepository[TK Comparable, TV any] interface {
 	Get(nodeId UUID) (*Node[TK, TV], error)
 	Upsert(*Node[TK, TV]) error
 	Remove(nodeId UUID) error
+}
+
+// ItemCacheRepository specifies the methods for CRUD operations on items
+// stored/managed in host server's memory. These are short-lived items,
+// e.g. - lived only for the duration of the Transaction session that B-Tree is in.
+type ItemCacheRepository[TK Comparable, TV any] interface {
+	Add(item *Item[TK, TV])
+	Get(itemId UUID) (*Item[TK, TV], error)
+	Update(item *Item[TK, TV]) error
+	Remove(itemId UUID) error
+}
+
+// StoreInterface contains different repositories needed/used by B-Tree to manage/access its
+// data/objects from a backend.
+type StoreInterface[TK Comparable, TV any] struct {
+	// NodeRepository is used to manage/access B-Tree nodes.
+	NodeRepository NodeRepository[TK, TV]
+	// ItemCacheRepository is used to manage/access items in cache.
+	ItemCacheRepository ItemCacheRepository[TK, TV]
 }

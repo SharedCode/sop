@@ -1,5 +1,7 @@
 package in_cas_s3
 
+import "fmt"
+
 // Transaction interface defines the "enduser facing" transaction methods.
 type Transaction interface {
 	Begin() error
@@ -9,6 +11,9 @@ type Transaction interface {
 }
 
 type transaction struct {
+	// stores(or its items) accessed/managed within the transaction session.
+	stores []StoreInterface[interface{}, interface{}]
+	hasBegun bool
 }
 
 func NewTransaction() Transaction {
@@ -20,6 +25,10 @@ func (t *transaction) Begin() error {
 }
 
 func (t *transaction) Commit() error {
+	if !t.hasBegun {
+		return fmt.Errorf("No transaction session to commit, call Begin to start a transaction session.")
+	}
+	
 	return nil
 }
 
@@ -28,5 +37,5 @@ func (t *transaction) Rollback() error {
 }
 
 func (t *transaction) HasBegun() bool {
-	return false
+	return t.hasBegun
 }
