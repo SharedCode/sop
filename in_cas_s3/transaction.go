@@ -13,11 +13,16 @@ type Transaction interface {
 type transaction struct {
 	// stores(or its items) accessed/managed within the transaction session.
 	stores []StoreInterface[interface{}, interface{}]
+	forWriting bool
 	hasBegun bool
 }
 
-func NewTransaction() Transaction {
-	return &transaction{}
+// NewTransaction will instantiate a transaction object for writing(forWriting=true)
+// or for reading(forWriting=false).
+func NewTransaction(forWriting bool) Transaction {
+	return &transaction{
+		forWriting: forWriting,
+	}
 }
 
 func (t *transaction) Begin() error {
@@ -28,7 +33,7 @@ func (t *transaction) Commit() error {
 	if !t.hasBegun {
 		return fmt.Errorf("No transaction session to commit, call Begin to start a transaction session.")
 	}
-	
+
 	return nil
 }
 

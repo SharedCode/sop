@@ -10,7 +10,7 @@ import (
 )
 
 // Cache interface specifies the methods implemented for Redis caching.
-// String key and intrface{} value are the supported types.
+// String key and interface{} value are the supported types.
 type Cache interface {
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
 	Get(ctx context.Context, key string) (string, error)

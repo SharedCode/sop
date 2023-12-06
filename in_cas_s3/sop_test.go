@@ -10,7 +10,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans := NewTransaction()
+	trans := NewTransaction(true)
 	trans.Begin()
 	b3 := NewBtree[int, string]("fooStore", 8, false, false, trans)
 	if ok, err := b3.Add(1, "hello world"); !ok || err != nil {
