@@ -29,7 +29,7 @@ func (nr *nodeRepository[TK, TV]) Remove(nodeId UUID) error {
 
 func Test_MockNodeWithLeftNilChild(t *testing.T) {
 	t.Log("Mock MockNodeWithLeftNilChild.\n")
-	store := Store{
+	store := StoreInfo{
 		SlotLength: 4,
 	}
 	si := StoreInterface[int, string]{
@@ -103,7 +103,7 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 
 func Test_MockNodeWithRightNilChild(t *testing.T) {
 	t.Log("Mock MockNodeWithRightNilChild.\n")
-	store := Store{
+	store := StoreInfo{
 		SlotLength: 4,
 	}
 	si := StoreInterface[int, string]{
@@ -177,7 +177,7 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 
 func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	t.Log("Mock DistributeItemOnNodeWithRightNilChild.\n")
-	store := Store{
+	store := StoreInfo{
 		SlotLength: 4,
 	}
 	si := StoreInterface[int, string]{

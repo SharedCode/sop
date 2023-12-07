@@ -11,7 +11,7 @@ func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique
 		StoreRepository:     newStoreRepository(), // shared globally.
 	}
 	si.NodeRepository = newNodeRepository[TK, TV]()
-	s := btree.NewStore(name, slotLength, isUnique, true)
+	s := btree.NewStoreInfo(name, slotLength, isUnique, true)
 	si.StoreRepository.Add(s)
 	return btree.NewBtree[TK, TV](s, &si.StoreInterface)
 }

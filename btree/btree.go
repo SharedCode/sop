@@ -7,7 +7,7 @@ import (
 
 // Btree manages items using B-tree data structure and algorithm.
 type Btree[TK Comparable, TV any] struct {
-	Store              Store
+	StoreInfo          StoreInfo
 	storeInterface     *StoreInterface[TK, TV]
 	tempSlots          []*Item[TK, TV]
 	tempParent         *Item[TK, TV]
@@ -55,12 +55,12 @@ type promoteAction[TK Comparable, TV any] struct {
 }
 
 // NewBtree creates a new B-Tree instance.
-func NewBtree[TK Comparable, TV any](store Store, si *StoreInterface[TK, TV]) *Btree[TK, TV] {
+func NewBtree[TK Comparable, TV any](storeInfo StoreInfo, si *StoreInterface[TK, TV]) *Btree[TK, TV] {
 	var b3 = Btree[TK, TV]{
-		Store:              store,
+		StoreInfo:              storeInfo,
 		storeInterface:     si,
-		tempSlots:          make([]*Item[TK, TV], store.SlotLength+1),
-		tempChildren:       make([]UUID, store.SlotLength+2),
+		tempSlots:          make([]*Item[TK, TV], storeInfo.SlotLength+1),
+		tempChildren:       make([]UUID, storeInfo.SlotLength+2),
 		tempParentChildren: make([]UUID, 2),
 	}
 	return &b3
@@ -90,8 +90,8 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	btree.promote()
 
 	// Increment store's item count.
-	// TODO: Register Store change to transaction manager (on V2) so it can get persisted.
-	btree.Store.Count++
+	// TODO: Register StoreInfo change to transaction manager (on V2) so it can get persisted.
+	btree.StoreInfo.Count++
 
 	// Registers the root node to the transaction manager so it can get saved if needed.
 	if err = btree.saveNode(node); err != nil {
@@ -103,7 +103,7 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 // FindOne will traverse the tree to find an item with such key.
 func (btree *Btree[TK, TV]) FindOne(key TK, firstItemWithKey bool) (bool, error) {
 	// return default value & no error if B-Tree is empty.
-	if btree.Store.Count == 0 {
+	if btree.StoreInfo.Count == 0 {
 		return false, nil
 	}
 	// Return current Value if key is same as current Key.
@@ -153,10 +153,10 @@ func (btree *Btree[TK, TV]) GetCurrentItem() Item[TK, TV] {
 
 // AddIfNotExist will add an item if its key is not yet in the B-Tree.
 func (btree *Btree[TK, TV]) AddIfNotExist(key TK, value TV) (bool, error) {
-	u := btree.Store.IsUnique
-	btree.Store.IsUnique = true
+	u := btree.StoreInfo.IsUnique
+	btree.StoreInfo.IsUnique = true
 	ok, err := btree.Add(key, value)
-	btree.Store.IsUnique = u
+	btree.StoreInfo.IsUnique = u
 	return ok, err
 }
 
@@ -164,7 +164,7 @@ func (btree *Btree[TK, TV]) AddIfNotExist(key TK, value TV) (bool, error) {
 // the key ordering sequence.
 func (btree *Btree[TK, TV]) MoveToFirst() (bool, error) {
 	// Return default value & no error if B-Tree is empty.
-	if btree.Store.Count == 0 {
+	if btree.StoreInfo.Count == 0 {
 		return false, nil
 	}
 	node, err := btree.getRootNode()
@@ -176,7 +176,7 @@ func (btree *Btree[TK, TV]) MoveToFirst() (bool, error) {
 
 func (btree *Btree[TK, TV]) MoveToLast() (bool, error) {
 	// Return default value & no error if B-Tree is empty.
-	if btree.Store.Count == 0 {
+	if btree.StoreInfo.Count == 0 {
 		return false, nil
 	}
 	node, err := btree.getRootNode()
@@ -188,7 +188,7 @@ func (btree *Btree[TK, TV]) MoveToLast() (bool, error) {
 
 func (btree *Btree[TK, TV]) MoveToNext() (bool, error) {
 	// Return default value & no error if B-Tree is empty.
-	if btree.Store.Count == 0 || !btree.isCurrentItemSelected() {
+	if btree.StoreInfo.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
 	}
 	node, err := btree.getNode(btree.currentItemRef.getNodeId())
@@ -203,7 +203,7 @@ func (btree *Btree[TK, TV]) MoveToNext() (bool, error) {
 
 func (btree *Btree[TK, TV]) MoveToPrevious() (bool, error) {
 	// Return default value & no error if B-Tree is empty.
-	if btree.Store.Count == 0 || !btree.isCurrentItemSelected() {
+	if btree.StoreInfo.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
 	}
 	node, err := btree.getNode(btree.currentItemRef.getNodeId())
@@ -279,7 +279,7 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 			if ok {
 				// Make the current item pointer point to null since we just deleted the current item.
 				btree.setCurrentItemId(NilUUID, 0)
-				btree.Store.Count--
+				btree.StoreInfo.Count--
 			}
 			return ok, err
 		}
@@ -303,7 +303,7 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 			if ok {
 				// Make the current item pointer point to null since we just deleted the current item.
 				btree.setCurrentItemId(NilUUID, 0)
-				btree.Store.Count--
+				btree.StoreInfo.Count--
 			}
 			return ok, err
 		}
@@ -315,9 +315,9 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 	}
 	// Make the current item pointer point to null since we just deleted the current item.
 	btree.setCurrentItemId(NilUUID, 0)
-	// TODO: Register Store change to transaction manager (on V2) so it can get persisted.
+	// TODO: Register StoreInfo change to transaction manager (on V2) so it can get persisted.
 	// Not needed in in-memory (V1) version.
-	btree.Store.Count--
+	btree.StoreInfo.Count--
 
 	return true, nil
 }
@@ -326,12 +326,12 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 // with the Items' Keys.
 // Always true in in-memory B-Tree.
 func (btree *Btree[TK, TV]) IsValueDataInNodeSegment() bool {
-	return btree.Store.IsValueDataInNodeSegment
+	return btree.StoreInfo.IsValueDataInNodeSegment
 }
 
 // IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
 func (btree *Btree[TK, TV]) IsUnique() bool {
-	return btree.Store.IsUnique
+	return btree.StoreInfo.IsUnique
 }
 
 // saveNode will prepare & persist (if needed) the Node to the backend
@@ -362,19 +362,19 @@ func (btree *Btree[TK, TV]) getCurrentNode() (*Node[TK, TV], error) {
 }
 
 func (btree *Btree[TK, TV]) getRootNode() (*Node[TK, TV], error) {
-	if btree.Store.RootNodeId.IsNil() {
+	if btree.StoreInfo.RootNodeId.IsNil() {
 		// Create new Root Node if nil, implied new btree.
 		var root = newNode[TK, TV](btree.getSlotLength())
 		root.newId(NilUUID)
-		btree.Store.RootNodeId = root.Id
+		btree.StoreInfo.RootNodeId = root.Id
 		return root, nil
 	}
-	root, err := btree.getNode(btree.Store.RootNodeId)
+	root, err := btree.getNode(btree.StoreInfo.RootNodeId)
 	if err != nil {
 		return nil, err
 	}
 	if root == nil {
-		return nil, fmt.Errorf("Can't retrieve Root Node w/ logical Id '%v'", btree.Store.RootNodeId)
+		return nil, fmt.Errorf("Can't retrieve Root Node w/ logical Id '%v'", btree.StoreInfo.RootNodeId)
 	}
 	return root, nil
 }
@@ -397,11 +397,11 @@ func (btree *Btree[TK, TV]) setCurrentItemId(nodeId UUID, itemIndex int) {
 }
 
 func (btree *Btree[TK, TV]) isUnique() bool {
-	return btree.Store.IsUnique
+	return btree.StoreInfo.IsUnique
 }
 
 func (btree *Btree[TK, TV]) getSlotLength() int {
-	return btree.Store.SlotLength
+	return btree.StoreInfo.SlotLength
 }
 
 func (btree *Btree[TK, TV]) isCurrentItemSelected() bool {

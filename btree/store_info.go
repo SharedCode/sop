@@ -1,7 +1,7 @@
 package btree
 
-// Store contains a given (B-Tree) store details.
-type Store struct {
+// StoreInfo contains a given (B-Tree) store details.
+type StoreInfo struct {
 	// Name of this (B-Tree store).
 	Name string
 	// Count of items that can be stored on a given node.
@@ -23,8 +23,8 @@ type Store struct {
 	IsValueDataInNodeSegment bool
 }
 
-// NewStore instantiates a new Store.
-func NewStore(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool) Store {
+// NewStoreInfo instantiates a new Store.
+func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool) StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if slotLength%2 != 0 {
 		slotLength--
@@ -33,7 +33,7 @@ func NewStore(name string, slotLength int, isUnique bool, isValueDataInNodeSegme
 	if slotLength < 4 {
 		slotLength = 4
 	}
-	return Store{
+	return StoreInfo{
 		Name:                     name,
 		SlotLength:               slotLength,
 		IsUnique:                 isUnique,
