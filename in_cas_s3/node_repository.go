@@ -93,7 +93,14 @@ func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) error {
 	NOTE: Any error in redis or Cassandra will return the error and should trigger a rollback. Writers will only
 	work if redis and Cassandra are operational. Readers however, can still work despite redis failure(s).
 
-	Applicable for both reader & writer transaction.
+	Reader transaction:
+	- Check all explicitly fetched(i.e. - GetCurrentKey/GetCurrentValue invoked) & managed(add/update/remove) items 
+	  if they have the expected version number. If different, rollback.
+	  Compare local vs redis/blobStore copy and see if different. Read from blobStore if not found in redis.
+	  Commit to return error if there is at least an item with different version no. as compared to
+	  local cache's copy.
+
+	Writer transaction:
     1. Conflict Resolution:
 	- Check all explicitly fetched(i.e. - GetCurrentKey/GetCurrentValue invoked) & managed(add/update/remove) items 
 	  if they have the expected version number. If different, rollback.
