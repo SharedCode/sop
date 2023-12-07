@@ -16,9 +16,11 @@ const itemsPerNode = 8
 // NewBtree will create an in-memory B-Tree & its required data stores. You can use it to store
 // and access key/value pairs similar to a map but which, sorts items & allows "range queries".
 func NewBtree[TK btree.Comparable, TV any](isUnique bool) BtreeInterface[TK, TV] {
-	transactionManager := newTransactionManager[TK, TV]()
 	s := btree.NewStore("", itemsPerNode, isUnique, true)
-	b3 := btree.NewBtree[TK, TV](s, transactionManager.storeInterface)
+	si := btree.StoreInterface[TK, TV]{
+		NodeRepository:  newNodeRepository[TK, TV](),
+	}
+	b3 := btree.NewBtree[TK, TV](s, &si)
 	return BtreeInterface[TK, TV]{
 		btree: b3,
 	}
@@ -29,9 +31,11 @@ func NewBtree[TK btree.Comparable, TV any](isUnique bool) BtreeInterface[TK, TV]
 // This will return btree instance that has no wrapper, thus, methods have error in return where appropriate.
 // Handy for using in-memory b-tree for writing unit tests to mock the "Enterprise" V2 version.
 func NewBtreeWithNoWrapper[TK btree.Comparable, TV any](isUnique bool) btree.BtreeInterface[TK, TV] {
-	transactionManager := newTransactionManager[TK, TV]()
+	si := btree.StoreInterface[TK, TV]{
+		NodeRepository:  newNodeRepository[TK, TV](),
+	}
 	s := btree.NewStore("", itemsPerNode, isUnique, true)
-	return btree.NewBtree[TK, TV](s, transactionManager.storeInterface)
+	return btree.NewBtree[TK, TV](s, &si)
 }
 
 // Add adds an item to the b-tree and does not check for duplicates.
