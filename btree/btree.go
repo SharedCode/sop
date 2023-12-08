@@ -93,10 +93,6 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	// TODO: Register StoreInfo change to transaction manager (on V2) so it can get persisted.
 	btree.StoreInfo.Count++
 
-	// Registers the root node to the transaction manager so it can get saved if needed.
-	if err = btree.saveNode(node); err != nil {
-		return false, err
-	}
 	return true, nil
 }
 

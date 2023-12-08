@@ -2,8 +2,8 @@ package in_cas_s3
 
 import (
 	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_memory"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
+	"github.com/SharedCode/sop/in_memory"
 )
 
 // nodeRepository implementation for "cassandra-S3"(in_cas_s3) exposes a standard NodeRepository interface
@@ -12,7 +12,7 @@ import (
 type nodeRepository[TK btree.Comparable, TV any] struct {
 	localCache in_memory.BtreeInterface[btree.UUID, interface{}]
 	redisCache redis.Cache
-	blobStore btree.BtreeInterface[btree.UUID, interface{}]
+	blobStore  btree.BtreeInterface[btree.UUID, interface{}]
 }
 
 // NewNodeRepository instantiates a NodeRepository.
@@ -32,8 +32,8 @@ func (nr *nodeRepository[TK, TV]) Upsert(n *btree.Node[TK, TV]) error {
 
 // Get will retrieve a node with nodeId from the map.
 func (nr *nodeRepository[TK, TV]) Get(nodeId btree.UUID) (*btree.Node[TK, TV], error) {
-	n,err := nr.get(nodeId)
-	return n.(*btree.Node[TK,TV]), err
+	n, err := nr.get(nodeId)
+	return n.(*btree.Node[TK, TV]), err
 }
 
 // Remove will remove a node with nodeId from the map.
@@ -94,7 +94,7 @@ func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) error {
 	work if redis and Cassandra are operational. Readers however, can still work despite redis failure(s).
 
 	Reader transaction:
-	- Check all explicitly fetched(i.e. - GetCurrentKey/GetCurrentValue invoked) & managed(add/update/remove) items 
+	- Check all explicitly fetched(i.e. - GetCurrentKey/GetCurrentValue invoked) & managed(add/update/remove) items
 	  if they have the expected version number. If different, rollback.
 	  Compare local vs redis/blobStore copy and see if different. Read from blobStore if not found in redis.
 	  Commit to return error if there is at least an item with different version no. as compared to
@@ -102,7 +102,7 @@ func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) error {
 
 	Writer transaction:
     1. Conflict Resolution:
-	- Check all explicitly fetched(i.e. - GetCurrentKey/GetCurrentValue invoked) & managed(add/update/remove) items 
+	- Check all explicitly fetched(i.e. - GetCurrentKey/GetCurrentValue invoked) & managed(add/update/remove) items
 	  if they have the expected version number. If different, rollback.
 	  Compare local vs redis/blobStore copy and see if different. Read from blobStore if not found in redis.
 	- Mark these items as locked in Redis.
@@ -116,9 +116,9 @@ func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) error {
 	NOTE: Return error to trigger rollback for any operation below that fails.
 	- Create a lookup table of added/updated/removed items together with their Nodes
 	  Specify whether Node is updated, added or removed
-	* Repeat until timeout, for updated/added Nodes:
+	* Repeat until timeout, for updated Nodes:
 	- Upsert each Node from the lookup to blobStore(Add only if blobStore is S3)
-	- Log UUID in transaction rollback log categorized as either added or updated Node
+	- Log UUID in transaction rollback log categorized as updated Node
 	- Compare each updated Node to Redis copy if identical(active UUID is same)
 	  NOTE: added Node(s) don't need this logic.
 	  For identical Node(s), update the "inactive UUID" with the Node's UUID(in redis).
@@ -126,10 +126,13 @@ func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) error {
 	  Gather all the items of these Nodes(using the lookup table)
 	  Break if there are no more items different.
 	- Re-fetch the Nodes of these items, re-create the lookup table consisting only of these items & their re-fetched Nodes
-	- Repeat above.
+	- Loop end.
+	- Return error if loop timed out to trigger rollback.
 
+	* For removed Node(s):
 	- Log removed Node(s) UUIDs in transaction rollback log categorized as removed Nodes.
 	- Add removed Node(s) UUIDs to the trash bin so they can get physically removed later.
+	* For newly added Node(s):
 	- Log added Node(s) UUID(s) to transaction rollback log categorized as added virtual IDs.
 	- Add added Node(s) UUID(s) to virtual ID registry(cassandra then redis)
 	- Add added Node(s) data to Redis
