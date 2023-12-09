@@ -68,21 +68,23 @@ func NewBtree[TK Comparable, TV any](storeInfo StoreInfo, si *StoreInterface[TK,
 
 // Add a key/value pair item to the tree.
 func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
-	var itm = Item[TK, TV]{
-		Key:   key,
-		Value: &value,
-	}
+	var item = newItem[TK, TV](key, value)
 	node, err := btree.getRootNode()
 	if err != nil {
 		return false, err
 	}
-	result, err := node.add(btree, &itm)
+	result, err := node.add(btree, item)
 	if err != nil {
 		return false, err
 	}
 	// Add failed with no reason, 'just return false.
 	if !result {
 		return false, nil
+	}
+
+	// Add to local cache for submit/resolution on Commit.
+	if btree.storeInterface.ItemCacheRepository != nil {
+		btree.storeInterface.ItemCacheRepository.Add(item)
 	}
 
 	// Service the node's requested action(s).
@@ -123,9 +125,14 @@ func (btree *Btree[TK, TV]) GetCurrentKey() TK {
 
 // GetCurrentValue returns the current item's value part.
 func (btree *Btree[TK, TV]) GetCurrentValue() (TV, error) {
+	item := btree.GetCurrentItem()
+	// Register to local cache the "item get" for submit/resolution on Commit.
+	if btree.storeInterface.ItemCacheRepository != nil {
+		btree.storeInterface.ItemCacheRepository.Get(item.Id)
+	}
 	// TODO: in V2, we need to fetch Value if btree is set to save Value in another "data segment"
 	// and it is not yet fetched. That fetch action can error thus, need to be able to return an error.
-	return *btree.GetCurrentItem().Value, nil
+	return *item.Value, nil
 }
 
 // GetCurrentItem returns the current item containing key/value pair.
@@ -214,7 +221,7 @@ func (btree *Btree[TK, TV]) MoveToPrevious() (bool, error) {
 
 // Update will find the item with matching key as the key parameter & update its value
 // with the provided value parameter.
-func (btree *Btree[TK, TV]) Update(key TK, value TV) (bool, error) {
+func (btree *Btree[TK, TV]) Update(key TK, newValue TV) (bool, error) {
 	ok, err := btree.FindOne(key, false)
 	if err != nil {
 		return false, err
@@ -222,7 +229,7 @@ func (btree *Btree[TK, TV]) Update(key TK, value TV) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	return btree.UpdateCurrentItem(value)
+	return btree.UpdateCurrentItem(newValue)
 }
 
 func (btree *Btree[TK, TV]) UpdateCurrentItem(newValue TV) (bool, error) {
@@ -237,9 +244,14 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(newValue TV) (bool, error) {
 		return false, nil
 	}
 	node.Slots[btree.currentItemRef.getNodeItemIndex()].Value = &newValue
+	item := node.Slots[btree.currentItemRef.getNodeItemIndex()]
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
 	if err = btree.saveNode(node); err != nil {
 		return false, err
+	}
+	// Register to local cache the "item update" for submit/resolution on Commit.
+	if btree.storeInterface.ItemCacheRepository != nil {
+		btree.storeInterface.ItemCacheRepository.Update(item)
 	}
 	return true, nil
 }
@@ -271,8 +283,13 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 	// Check if there are children nodes.
 	if node.hasChildren() {
 		index := btree.currentItemRef.getNodeItemIndex()
+		itemId := node.Slots[index].Id
 		if ok, err := node.removeItemOnNodeWithNilChild(btree, index); ok || err != nil {
 			if ok {
+				// Register to local cache the "item remove" for submit/resolution on Commit.
+				if btree.storeInterface.ItemCacheRepository != nil {
+					btree.storeInterface.ItemCacheRepository.Remove(itemId)
+				}
 				// Make the current item pointer point to null since we just deleted the current item.
 				btree.setCurrentItemId(NilUUID, 0)
 				btree.StoreInfo.Count--
@@ -295,8 +312,14 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 		if err = btree.saveNode(node); err != nil {
 			return false, err
 		}
+		index = btree.currentItemRef.getNodeItemIndex()
+		itemId = currentNode.Slots[index].Id
 		if ok, err := currentNode.removeItemOnNodeWithNilChild(btree, btree.currentItemRef.getNodeItemIndex()); ok || err != nil {
 			if ok {
+				// Register to local cache the "item remove" for submit/resolution on Commit.
+				if btree.storeInterface.ItemCacheRepository != nil {
+					btree.storeInterface.ItemCacheRepository.Remove(itemId)
+				}
 				// Make the current item pointer point to null since we just deleted the current item.
 				btree.setCurrentItemId(NilUUID, 0)
 				btree.StoreInfo.Count--

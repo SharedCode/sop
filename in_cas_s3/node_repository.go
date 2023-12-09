@@ -1,27 +1,18 @@
 package in_cas_s3
 
-import (
-	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_cas_s3/redis"
-	"github.com/SharedCode/sop/in_memory"
-)
+import "github.com/SharedCode/sop/btree"
 
 // nodeRepository implementation for "cassandra-S3"(in_cas_s3) exposes a standard NodeRepository interface
 // but which, manages b-tree nodes in transaction cache, Redis and in Cassandra + S3,
 // or File System, for debugging &/or "poor man's" setup(no AWS required!).
 type nodeRepository[TK btree.Comparable, TV any] struct {
-	localCache in_memory.BtreeInterface[btree.UUID, interface{}]
-	redisCache redis.Cache
-	blobStore  btree.BtreeInterface[btree.UUID, interface{}]
+	storeInterface *StoreInterface[TK, TV]
 }
 
 // NewNodeRepository instantiates a NodeRepository.
-func newNodeRepository[TK btree.Comparable, TV any]() *nodeRepository[TK, TV] {
+func newNodeRepository[TK btree.Comparable, TV any](storeInterface *StoreInterface[TK, TV]) *nodeRepository[TK, TV] {
 	return &nodeRepository[TK, TV]{
-		localCache: in_memory.NewBtree[btree.UUID, interface{}](true),
-		redisCache: redis.NewClient(redis.DefaultOptions()),
-		// TODO: replace with real S3 or file system persisting repository.
-		blobStore: in_memory.NewBtreeWithNoWrapper[btree.UUID, interface{}](true),
+		storeInterface: storeInterface,
 	}
 }
 
@@ -41,34 +32,18 @@ func (nr *nodeRepository[TK, TV]) Remove(nodeId btree.UUID) error {
 	return nr.Remove(nodeId)
 }
 
+// Get will retrieve a node with nodeId from the map.
+func (nr *nodeRepository[TK, TV]) get(nodeId btree.UUID) (interface{}, error) {
+	if nr.storeInterface.localCache.FindOne(nodeId, false) {
+		// if nr.storeInterface.ItemCacheRepository
+	}
+	return nil, nil
+}
+
 // Upsert will upsert node to the map.
 func (nr *nodeRepository[TK, TV]) upsert(nodeId btree.UUID, node interface{}) error {
 
 	return nil
-}
-
-// Get will retrieve a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) get(nodeId btree.UUID) (interface{}, error) {
-	// // Somewhat implemented.
-	// n, err := nr.redisCache.Get(nodeId)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// if n != nil {
-	// 	return n, nil
-	// }
-	// n, err = nr.s3Repository.Get(nodeId)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// if n != nil {
-	// 	err = nr.redisCache.Upsert(n)
-	// 	if err != nil {
-	// 		// TODO: Log redis cache error.
-	// 	}
-	// 	return n, nil
-	// }
-	return nil, nil
 }
 
 func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) error {
