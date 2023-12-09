@@ -20,6 +20,13 @@ type Item[TK Comparable, TV any] struct {
 	Version         int
 	valueNeedsFetch bool
 }
+func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
+	return &Item[TK, TV]{
+		Key:   key,
+		Value: &value,
+		Id: NewUUID(),
+	}
+}
 
 // Node contains a B-Tree node's data.
 type Node[TK Comparable, TV any] struct {

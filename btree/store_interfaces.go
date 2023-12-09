@@ -57,10 +57,10 @@ type NodeRepository[TK Comparable, TV any] interface {
 // stored/managed in host server's memory. These are short-lived items,
 // e.g. - lived only for the duration of the Transaction session that B-Tree is in.
 type ItemCacheRepository[TK Comparable, TV any] interface {
-	Add(item *Item[TK, TV])
-	Get(itemId UUID) (*Item[TK, TV], error)
-	Update(item *Item[TK, TV]) error
-	Remove(itemId UUID) error
+	Add(item *Item[TK, TV]) bool
+	Get(itemId UUID) *Item[TK, TV]
+	Update(item *Item[TK, TV]) bool
+	Remove(itemId UUID) bool
 }
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its
