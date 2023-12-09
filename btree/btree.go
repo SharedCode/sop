@@ -69,10 +69,12 @@ func NewBtree[TK Comparable, TV any](storeInfo StoreInfo, si *StoreInterface[TK,
 // Add a key/value pair item to the tree.
 func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	var item = newItem[TK, TV](key, value)
+	var item = newItem[TK, TV](key, value)
 	node, err := btree.getRootNode()
 	if err != nil {
 		return false, err
 	}
+	result, err := node.add(btree, item)
 	result, err := node.add(btree, item)
 	if err != nil {
 		return false, err
@@ -80,6 +82,11 @@ func (btree *Btree[TK, TV]) Add(key TK, value TV) (bool, error) {
 	// Add failed with no reason, 'just return false.
 	if !result {
 		return false, nil
+	}
+
+	// Add to local cache for submit/resolution on Commit.
+	if btree.storeInterface.ItemCacheRepository != nil {
+		btree.storeInterface.ItemCacheRepository.Add(item)
 	}
 
 	// Add to local cache for submit/resolution on Commit.
@@ -130,8 +137,14 @@ func (btree *Btree[TK, TV]) GetCurrentValue() (TV, error) {
 	if btree.storeInterface.ItemCacheRepository != nil {
 		btree.storeInterface.ItemCacheRepository.Get(item.Id)
 	}
+	item := btree.GetCurrentItem()
+	// Register to local cache the "item get" for submit/resolution on Commit.
+	if btree.storeInterface.ItemCacheRepository != nil {
+		btree.storeInterface.ItemCacheRepository.Get(item.Id)
+	}
 	// TODO: in V2, we need to fetch Value if btree is set to save Value in another "data segment"
 	// and it is not yet fetched. That fetch action can error thus, need to be able to return an error.
+	return *item.Value, nil
 	return *item.Value, nil
 }
 
@@ -222,6 +235,7 @@ func (btree *Btree[TK, TV]) MoveToPrevious() (bool, error) {
 // Update will find the item with matching key as the key parameter & update its value
 // with the provided value parameter.
 func (btree *Btree[TK, TV]) Update(key TK, newValue TV) (bool, error) {
+func (btree *Btree[TK, TV]) Update(key TK, newValue TV) (bool, error) {
 	ok, err := btree.FindOne(key, false)
 	if err != nil {
 		return false, err
@@ -229,6 +243,7 @@ func (btree *Btree[TK, TV]) Update(key TK, newValue TV) (bool, error) {
 	if !ok {
 		return false, nil
 	}
+	return btree.UpdateCurrentItem(newValue)
 	return btree.UpdateCurrentItem(newValue)
 }
 
@@ -245,9 +260,14 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(newValue TV) (bool, error) {
 	}
 	node.Slots[btree.currentItemRef.getNodeItemIndex()].Value = &newValue
 	item := node.Slots[btree.currentItemRef.getNodeItemIndex()]
+	item := node.Slots[btree.currentItemRef.getNodeItemIndex()]
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
 	if err = btree.saveNode(node); err != nil {
 		return false, err
+	}
+	// Register to local cache the "item update" for submit/resolution on Commit.
+	if btree.storeInterface.ItemCacheRepository != nil {
+		btree.storeInterface.ItemCacheRepository.Update(item)
 	}
 	// Register to local cache the "item update" for submit/resolution on Commit.
 	if btree.storeInterface.ItemCacheRepository != nil {
@@ -284,8 +304,13 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 	if node.hasChildren() {
 		index := btree.currentItemRef.getNodeItemIndex()
 		itemId := node.Slots[index].Id
+		itemId := node.Slots[index].Id
 		if ok, err := node.removeItemOnNodeWithNilChild(btree, index); ok || err != nil {
 			if ok {
+				// Register to local cache the "item remove" for submit/resolution on Commit.
+				if btree.storeInterface.ItemCacheRepository != nil {
+					btree.storeInterface.ItemCacheRepository.Remove(itemId)
+				}
 				// Register to local cache the "item remove" for submit/resolution on Commit.
 				if btree.storeInterface.ItemCacheRepository != nil {
 					btree.storeInterface.ItemCacheRepository.Remove(itemId)
@@ -315,6 +340,10 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem() (bool, error) {
 		itemId = currentNode.Slots[btree.currentItemRef.getNodeItemIndex()].Id
 		if ok, err := currentNode.removeItemOnNodeWithNilChild(btree, btree.currentItemRef.getNodeItemIndex()); ok || err != nil {
 			if ok {
+				// Register to local cache the "item remove" for submit/resolution on Commit.
+				if btree.storeInterface.ItemCacheRepository != nil {
+					btree.storeInterface.ItemCacheRepository.Remove(itemId)
+				}
 				// Register to local cache the "item remove" for submit/resolution on Commit.
 				if btree.storeInterface.ItemCacheRepository != nil {
 					btree.storeInterface.ItemCacheRepository.Remove(itemId)
