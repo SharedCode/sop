@@ -1,6 +1,10 @@
 package in_cas_s3
 
-import "github.com/SharedCode/sop/btree"
+import (
+	"context"
+
+	"github.com/SharedCode/sop/btree"
+)
 
 // nodeRepository implementation for "cassandra-S3"(in_cas_s3) exposes a standard NodeRepository interface
 // but which, manages b-tree nodes in transaction cache, Redis and in Cassandra + S3,
@@ -17,37 +21,37 @@ func newNodeRepository[TK btree.Comparable, TV any](storeInterface *StoreInterfa
 }
 
 // Upsert will upsert node to the map.
-func (nr *nodeRepository[TK, TV]) Upsert(n *btree.Node[TK, TV]) error {
-	return nr.upsert(n.Id, n)
+func (nr *nodeRepository[TK, TV]) Upsert(ctx context.Context, n *btree.Node[TK, TV]) error {
+	return nr.upsert(ctx, n.Id, n)
 }
 
 // Get will retrieve a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) Get(nodeId btree.UUID) (*btree.Node[TK, TV], error) {
-	n, err := nr.get(nodeId)
+func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeId btree.UUID) (*btree.Node[TK, TV], error) {
+	n, err := nr.get(ctx, nodeId)
 	return n.(*btree.Node[TK, TV]), err
 }
 
 // Remove will remove a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) Remove(nodeId btree.UUID) error {
-	return nr.Remove(nodeId)
+func (nr *nodeRepository[TK, TV]) Remove(ctx context.Context, nodeId btree.UUID) error {
+	return nr.Remove(ctx, nodeId)
 }
 
 // Get will retrieve a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) get(nodeId btree.UUID) (interface{}, error) {
-	if nr.storeInterface.localCache.FindOne(nodeId, false) {
+func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (interface{}, error) {
+	if nr.storeInterface.nodeLocalCache.FindOne(nodeId, false) {
 		// if nr.storeInterface.ItemCacheRepository
 	}
 	return nil, nil
 }
 
 // Upsert will upsert node to the map.
-func (nr *nodeRepository[TK, TV]) upsert(nodeId btree.UUID, node interface{}) error {
+func (nr *nodeRepository[TK, TV]) upsert(ctx context.Context, nodeId btree.UUID, node interface{}) error {
 
 	return nil
 }
 
-func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) error {
-	return nr.Remove(nodeId)
+func (nr *nodeRepository[TK, TV]) remove(ctx context.Context, nodeId btree.UUID) error {
+	return nr.Remove(ctx, nodeId)
 }
 
 /* Feature discussion:

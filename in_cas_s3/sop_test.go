@@ -1,8 +1,11 @@
 package in_cas_s3
 
 import (
+	"context"
 	"testing"
 )
+
+var ctx = context.Background()
 
 func Test_TransactionStory_SingleBTree(t *testing.T) {
 	t.Logf("Transaction story test.\n")
@@ -13,12 +16,12 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	trans := NewTransaction(true)
 	trans.Begin()
 	b3 := NewBtree[int, string]("fooStore", 8, false, false, trans)
-	if ok, err := b3.Add(1, "hello world"); !ok || err != nil {
+	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		trans.Rollback()
 		return
 	}
-	if ok, err := b3.FindOne(1, false); !ok || err != nil {
+	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
 		t.Logf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		trans.Rollback()
 		return

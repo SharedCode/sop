@@ -1,6 +1,7 @@
 package btree
 
 import (
+	"context"
 	"fmt"
 	"testing"
 )
@@ -14,18 +15,20 @@ func newNodeRepository[TK Comparable, TV any]() NodeRepository[TK, TV] {
 		lookup: make(map[UUID]*Node[TK, TV]),
 	}
 }
-func (nr *nodeRepository[TK, TV]) Upsert(n *Node[TK, TV]) error {
+func (nr *nodeRepository[TK, TV]) Upsert(ctx context.Context, n *Node[TK, TV]) error {
 	nr.lookup[n.Id] = n
 	return nil
 }
-func (nr *nodeRepository[TK, TV]) Get(nodeId UUID) (*Node[TK, TV], error) {
+func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeId UUID) (*Node[TK, TV], error) {
 	v, _ := nr.lookup[nodeId]
 	return v, nil
 }
-func (nr *nodeRepository[TK, TV]) Remove(nodeId UUID) error {
+func (nr *nodeRepository[TK, TV]) Remove(ctx context.Context, nodeId UUID) error {
 	delete(nr.lookup, nodeId)
 	return nil
 }
+
+var ctx = context.Background()
 
 func Test_MockNodeWithLeftNilChild(t *testing.T) {
 	t.Log("Mock MockNodeWithLeftNilChild.\n")
@@ -39,7 +42,7 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 
 	for i := 0; i < 25; i++ {
 		x := i * 5
-		b3.Add(x, fmt.Sprintf("foo%d", x))
+		b3.Add(ctx, x, fmt.Sprintf("foo%d", x))
 	}
 	// node illustration:
 	// root: 70
@@ -53,10 +56,10 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 	// node23: 115,120
 
 	// Remove node 11 to create nil child(leftmost child) on node1.
-	b3.Remove(0)
-	b3.Remove(5)
-	b3.Remove(10)
-	b3.Remove(15)
+	b3.Remove(ctx, 0)
+	b3.Remove(ctx, 5)
+	b3.Remove(ctx, 10)
+	b3.Remove(ctx, 15)
 	// node illustration after deleting 0,5,10,15:
 	// root: 70
 	// node1: 20,45
@@ -68,15 +71,16 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 	// node22: 100,105
 	// node23: 115,120
 
-	b3.Add(26, "foo26")
+	b3.Add(ctx, 26, "foo26")
 
 	t.Log("\nMock MockNodeWithLeftNilChild MoveToNext test.\n")
-	b3.MoveToFirst()
+	b3.MoveToFirst(ctx)
 	ctr := 0
 	for {
 		ctr++
-		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok, _ := b3.MoveToNext(); !ok {
+		k, _ := b3.GetCurrentKey(ctx)
+		t.Logf("key: %d", k)
+		if ok, _ := b3.MoveToNext(ctx); !ok {
 			break
 		}
 	}
@@ -85,12 +89,13 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 	}
 
 	t.Log("\nMock MockNodeWithLeftNilChild MoveToPrevious test.\n")
-	b3.MoveToLast()
+	b3.MoveToLast(ctx)
 	ctr = 0
 	for {
 		ctr++
-		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok, _ := b3.MoveToPrevious(); !ok {
+		k, _ := b3.GetCurrentKey(ctx)
+		t.Logf("key: %d", k)
+		if ok, _ := b3.MoveToPrevious(ctx); !ok {
 			break
 		}
 	}
@@ -113,7 +118,7 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 
 	for i := 0; i < 25; i++ {
 		x := i * 5
-		b3.Add(x, fmt.Sprintf("foo%d", x))
+		b3.Add(ctx, x, fmt.Sprintf("foo%d", x))
 	}
 	// node illustration:
 	// root: 70
@@ -127,10 +132,10 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 	// node23: 115,120
 
 	// Remove node 11 to create nil child(leftmost child) on node1.
-	b3.Remove(50)
-	b3.Remove(55)
-	b3.Remove(60)
-	b3.Remove(65)
+	b3.Remove(ctx, 50)
+	b3.Remove(ctx, 55)
+	b3.Remove(ctx, 60)
+	b3.Remove(ctx, 65)
 	// node illustration after deleting 50,55,60,65:
 	// root: 70
 	// node1: 20,45
@@ -142,15 +147,16 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 	// node22: 100,105
 	// node23: 115,120
 
-	b3.Add(39, "foo39")
+	b3.Add(ctx, 39, "foo39")
 
 	t.Log("\nMock MockNodeWithRightNilChild MoveToNext test.\n")
-	b3.MoveToFirst()
+	b3.MoveToFirst(ctx)
 	ctr := 0
 	for {
 		ctr++
-		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok, _ := b3.MoveToNext(); !ok {
+		k, _ := b3.GetCurrentKey(ctx)
+		t.Logf("key: %d", k)
+		if ok, _ := b3.MoveToNext(ctx); !ok {
 			break
 		}
 	}
@@ -159,12 +165,13 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 	}
 
 	t.Log("\nMock MockNodeWithRightNilChild MoveToPrevious test.\n")
-	b3.MoveToLast()
+	b3.MoveToLast(ctx)
 	ctr = 0
 	for {
 		ctr++
-		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok, _ := b3.MoveToPrevious(); !ok {
+		k, _ := b3.GetCurrentKey(ctx)
+		t.Logf("key: %d", k)
+		if ok, _ := b3.MoveToPrevious(ctx); !ok {
 			break
 		}
 	}
@@ -187,7 +194,7 @@ func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 
 	for i := 0; i < 25; i++ {
 		x := i * 5
-		b3.Add(x, fmt.Sprintf("foo%d", x))
+		b3.Add(ctx, x, fmt.Sprintf("foo%d", x))
 	}
 	// node illustration:
 	// root: 70
@@ -201,10 +208,10 @@ func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	// node23: 115,120
 
 	// Remove node 11 to create nil child(leftmost child) on node1.
-	b3.Remove(50)
-	b3.Remove(55)
-	b3.Remove(60)
-	b3.Remove(65)
+	b3.Remove(ctx, 50)
+	b3.Remove(ctx, 55)
+	b3.Remove(ctx, 60)
+	b3.Remove(ctx, 65)
 	// node illustration after deleting 50,55,60,65:
 	// root: 70
 	// node1: 20,45
@@ -216,19 +223,20 @@ func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	// node22: 100,105
 	// node23: 115,120
 
-	b3.Add(38, "foo38")
-	b3.Add(39, "foo39")
-	b3.Add(50, "foo35")
+	b3.Add(ctx, 38, "foo38")
+	b3.Add(ctx, 39, "foo39")
+	b3.Add(ctx, 50, "foo35")
 
 	const want = 24
 
 	t.Log("\nMock DistributeItemOnNodeWithRightNilChild MoveToNext test.\n")
-	b3.MoveToFirst()
+	b3.MoveToFirst(ctx)
 	got := 0
 	for {
 		got++
-		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok, _ := b3.MoveToNext(); !ok {
+		k, _ := b3.GetCurrentKey(ctx)
+		t.Logf("key: %d", k)
+		if ok, _ := b3.MoveToNext(ctx); !ok {
 			break
 		}
 	}
@@ -237,12 +245,13 @@ func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	}
 
 	t.Log("\nMock DistributeItemOnNodeWithRightNilChild MoveToPrevious test.\n")
-	b3.MoveToLast()
+	b3.MoveToLast(ctx)
 	got = 0
 	for {
 		got++
-		t.Logf("key: %d", b3.GetCurrentKey())
-		if ok, _ := b3.MoveToPrevious(); !ok {
+		k, _ := b3.GetCurrentKey(ctx)
+		t.Logf("key: %d", k)
+		if ok, _ := b3.MoveToPrevious(ctx); !ok {
 			break
 		}
 	}

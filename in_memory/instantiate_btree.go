@@ -40,7 +40,7 @@ func NewBtreeWithNoWrapper[TK btree.Comparable, TV any](isUnique bool) btree.Btr
 
 // Add adds an item to the b-tree and does not check for duplicates.
 func (b3 BtreeInterface[TK, TV]) Add(key TK, value TV) bool {
-	ok, _ := b3.btree.Add(key, value)
+	ok, _ := b3.btree.Add(nil, key, value)
 	return ok
 }
 
@@ -48,7 +48,7 @@ func (b3 BtreeInterface[TK, TV]) Add(key TK, value TV) bool {
 // Otherwise, it will do nothing and return false, for not adding the item.
 // This is useful for cases one wants to add an item without creating a duplicate entry.
 func (b3 BtreeInterface[TK, TV]) AddIfNotExist(key TK, value TV) bool {
-	ok, _ := b3.btree.AddIfNotExist(key, value)
+	ok, _ := b3.btree.AddIfNotExist(nil, key, value)
 	return ok
 }
 
@@ -57,67 +57,68 @@ func (b3 BtreeInterface[TK, TV]) AddIfNotExist(key TK, value TV) bool {
 // true will position pointer to the first item with the given key,
 // according to key ordering sequence.
 func (b3 BtreeInterface[TK, TV]) FindOne(key TK, firstItemWithKey bool) bool {
-	ok, _ := b3.btree.FindOne(key, firstItemWithKey)
+	ok, _ := b3.btree.FindOne(nil, key, firstItemWithKey)
 	return ok
 }
 
 // GetCurrentKey returns the current item's key.
 func (b3 BtreeInterface[TK, TV]) GetCurrentKey() TK {
-	return b3.btree.GetCurrentKey()
+	k, _ := b3.btree.GetCurrentKey(nil)
+	return k
 }
 
 // GetCurrentValue returns the current item's value.
 func (b3 BtreeInterface[TK, TV]) GetCurrentValue() TV {
-	v, _ := b3.btree.GetCurrentValue()
+	v, _ := b3.btree.GetCurrentValue(nil)
 	return v
 }
 
 // Update finds the item with key and update its value to the value argument.
 func (b3 BtreeInterface[TK, TV]) Update(key TK, value TV) bool {
-	ok, _ := b3.btree.Update(key, value)
+	ok, _ := b3.btree.Update(nil, key, value)
 	return ok
 }
 
 // UpdateCurrentItem will update the Value of the current item.
 // Key is read-only, thus, no argument for the key.
 func (b3 BtreeInterface[TK, TV]) UpdateCurrentItem(newValue TV) bool {
-	ok, _ := b3.btree.UpdateCurrentItem(newValue)
+	ok, _ := b3.btree.UpdateCurrentItem(nil, newValue)
 	return ok
 }
 
 // Remove will find the item with a given key then remove that item.
 func (b3 BtreeInterface[TK, TV]) Remove(key TK) bool {
-	ok, _ := b3.btree.Remove(key)
+	ok, _ := b3.btree.Remove(nil, key)
 	return ok
 }
 
 // RemoveCurrentItem will remove the current key/value pair from the store.
 func (b3 BtreeInterface[TK, TV]) RemoveCurrentItem() bool {
-	ok, _ := b3.btree.RemoveCurrentItem()
+	ok, _ := b3.btree.RemoveCurrentItem(nil)
 	return ok
 }
 
 // MoveToFirst positions the "cursor" to the first item as per key ordering.
 func (b3 BtreeInterface[TK, TV]) MoveToFirst() bool {
-	ok, _ := b3.btree.MoveToFirst()
+	ok, _ := b3.btree.MoveToFirst(nil)
 	return ok
 }
 
 // MoveToLast positionts the "cursor" to the last item as per key ordering.
 func (b3 BtreeInterface[TK, TV]) MoveToLast() bool {
-	ok, _ := b3.btree.MoveToLast()
+	ok, _ := b3.btree.MoveToLast(nil)
 	return ok
 }
 
 // MoveToNext positions the "cursor" to the next item as per key ordering.
 func (b3 BtreeInterface[TK, TV]) MoveToNext() bool {
-	ok, _ := b3.btree.MoveToNext()
+	ok, _ := b3.btree.MoveToNext(nil)
 	return ok
 }
 
 // MoveToPrevious positions the "cursor" to the previous item as per key ordering.
 func (b3 BtreeInterface[TK, TV]) MoveToPrevious() bool {
-	ok, _ := b3.btree.MoveToPrevious()
+	ok, _ := b3.btree.MoveToPrevious(nil)
 	return ok
 }
 

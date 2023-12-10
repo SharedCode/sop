@@ -1,6 +1,7 @@
 package btree
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -8,7 +9,7 @@ import (
 // - remove item on a node slot with nil left child
 // - remove item on a node slot with nil right child
 // - remove item on the right edge node slot with nil right child
-func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], index int) (bool, error) {
+func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], index int) (bool, error) {
 	if !node.hasChildren() || (node.childrenIds[index] != NilUUID && node.childrenIds[index+1] != NilUUID) {
 		return false, nil
 	}
@@ -33,7 +34,7 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], ind
 	if node.Count == 0 && node.childrenIds[0] != NilUUID {
 		if node.isRootNode() {
 			// Copy contents of the child to this root node.
-			nc, err := node.getChild(btree, 0)
+			nc, err := node.getChild(ctx, btree, 0)
 			if err != nil {
 				return false, err
 			}
@@ -44,7 +45,7 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], ind
 			node.Count = nc.Count
 			if nc.hasChildren() {
 				copy(node.childrenIds, nc.childrenIds)
-				if err = node.updateChildrenParent(btree); err != nil {
+				if err = node.updateChildrenParent(ctx, btree); err != nil {
 					return false, err
 				}
 			} else {
@@ -54,42 +55,42 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(btree *Btree[TK, TV], ind
 					node.childrenIds = nil
 				}
 			}
-			if err = btree.removeNode(nc); err != nil {
+			if err = btree.removeNode(ctx, node); err != nil {
 				return false, err
 			}
-			if err = btree.saveNode(node); err != nil {
+			if err = btree.saveNode(ctx, node); err != nil {
 				return false, err
 			}
 			return true, nil
 		}
 
 		// Promote the single child as parent's new child instead of this node.
-		return node.promoteSingleChildAsParentChild(btree)
+		return node.promoteSingleChildAsParentChild(ctx, btree)
 	}
 
 	if node.Count == 0 {
-		if err := node.unlink(btree); err != nil {
+		if err := node.unlink(ctx, btree); err != nil {
 			return false, err
 		}
 		return true, nil
 	}
 
-	if err := btree.saveNode(node); err != nil {
+	if err := btree.saveNode(ctx, node); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func (node *Node[TK, TV]) unlinkNodeWithNilChild(btree *Btree[TK, TV]) (bool, error) {
+func (node *Node[TK, TV]) unlinkNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV]) (bool, error) {
 	if node.isNilChildren() {
 		return false, nil
 	}
-	return node.promoteSingleChildAsParentChild(btree)
+	return node.promoteSingleChildAsParentChild(ctx, btree)
 }
 
-func (node *Node[TK, TV]) promoteSingleChildAsParentChild(btree *Btree[TK, TV]) (bool, error) {
+func (node *Node[TK, TV]) promoteSingleChildAsParentChild(ctx context.Context, btree *Btree[TK, TV]) (bool, error) {
 	// Promote the single child as parent's new child instead of this node.
-	p, err := node.getParent(btree)
+	p, err := node.getParent(ctx, btree)
 	if err != nil {
 		return false, err
 	}
@@ -98,20 +99,20 @@ func (node *Node[TK, TV]) promoteSingleChildAsParentChild(btree *Btree[TK, TV]) 
 	}
 	ion := p.getIndexOfChild(node)
 	p.childrenIds[ion] = node.childrenIds[0]
-	nc, err := node.getChild(btree, 0)
+	nc, err := node.getChild(ctx, btree, 0)
 	if err != nil {
 		return false, err
 	}
 	nc.ParentId = p.Id
 	// Save changes to the modified nodes.
-	if err = btree.saveNode(nc); err != nil {
+	if err = btree.saveNode(ctx, nc); err != nil {
 		return false, err
 	}
-	if err = btree.saveNode(p); err != nil {
+	if err = btree.saveNode(ctx, p); err != nil {
 		return false, err
 	}
 	// Remove this node since it is now empty.
-	err = btree.removeNode(node)
+	err = btree.removeNode(ctx, node)
 	if err != nil {
 		return false, err
 	}
@@ -119,7 +120,7 @@ func (node *Node[TK, TV]) promoteSingleChildAsParentChild(btree *Btree[TK, TV]) 
 }
 
 // addItemOnNodeWithNilChild handles insert/distribute item on a full node with a nil child, 'should occupy nil child.
-func (node *Node[TK, TV]) addItemOnNodeWithNilChild(btree *Btree[TK, TV], item *Item[TK, TV], index int) (bool, error) {
+func (node *Node[TK, TV]) addItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], item *Item[TK, TV], index int) (bool, error) {
 	if node.childrenIds[index] != NilUUID {
 		return false, nil
 	}
@@ -129,10 +130,10 @@ func (node *Node[TK, TV]) addItemOnNodeWithNilChild(btree *Btree[TK, TV], item *
 	node.childrenIds[index] = child.Id
 	child.Slots[0] = item
 	child.Count = 1
-	if err := btree.saveNode(node); err != nil {
+	if err := btree.saveNode(ctx, node); err != nil {
 		return false, err
 	}
-	if err := btree.saveNode(child); err != nil {
+	if err := btree.saveNode(ctx, child); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -140,7 +141,7 @@ func (node *Node[TK, TV]) addItemOnNodeWithNilChild(btree *Btree[TK, TV], item *
 
 // goRightUpItemOnNodeWithNilChild will point the current item ref to the item to the right or up a parent.
 // Applicable when child at index position is nil.
-func (node *Node[TK, TV]) goRightUpItemOnNodeWithNilChild(btree *Btree[TK, TV], index int) (bool, error) {
+func (node *Node[TK, TV]) goRightUpItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], index int) (bool, error) {
 	if node.childrenIds[index] != NilUUID {
 		return false, nil
 	}
@@ -162,7 +163,7 @@ func (node *Node[TK, TV]) goRightUpItemOnNodeWithNilChild(btree *Btree[TK, TV], 
 			btree.setCurrentItemId(NilUUID, 0)
 			return false, nil
 		}
-		p, err := n.getParent(btree)
+		p, err := n.getParent(ctx, btree)
 		if err != nil {
 			return false, err
 		}
@@ -173,7 +174,7 @@ func (node *Node[TK, TV]) goRightUpItemOnNodeWithNilChild(btree *Btree[TK, TV], 
 
 // goLeftUpItemOnNodeWithNilChild will point the current item ref to the item to the left or up a parent.
 // Applicable when child at index position is nil.
-func (node *Node[TK, TV]) goLeftUpItemOnNodeWithNilChild(btree *Btree[TK, TV], index int) (bool, error) {
+func (node *Node[TK, TV]) goLeftUpItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], index int) (bool, error) {
 	if node.childrenIds[index] != NilUUID {
 		return false, nil
 	}
@@ -190,7 +191,7 @@ func (node *Node[TK, TV]) goLeftUpItemOnNodeWithNilChild(btree *Btree[TK, TV], i
 			btree.setCurrentItemId(NilUUID, 0)
 			return false, nil
 		}
-		p, err := n.getParent(btree)
+		p, err := n.getParent(ctx, btree)
 		if err != nil {
 			return false, err
 		}
@@ -213,7 +214,7 @@ func (node *Node[TK, TV]) nodeHasNilChild(btree *Btree[TK, TV]) bool {
 }
 
 // distributeItemOnNodeWithNilChild is used to balance load among nodes of a given branch.
-func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(btree *Btree[TK, TV], item *Item[TK, TV]) (bool, error) {
+func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], item *Item[TK, TV]) (bool, error) {
 	if !node.hasChildren() {
 		return false, nil
 	}
@@ -232,10 +233,10 @@ func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(btree *Btree[TK, TV],
 	node.childrenIds[i] = child.Id
 	child.Slots[0] = item
 	child.Count = 1
-	if err := btree.saveNode(node); err != nil {
+	if err := btree.saveNode(ctx, node); err != nil {
 		return false, err
 	}
-	if err := btree.saveNode(child); err != nil {
+	if err := btree.saveNode(ctx, child); err != nil {
 		return false, err
 	}
 	return true, nil

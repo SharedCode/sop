@@ -10,15 +10,15 @@ import (
 func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique bool,
 	isValueDataInNodeSegment bool, t Transaction) btree.BtreeInterface[TK, TV] {
 	si := StoreInterface[TK, TV]{
-		localCache: in_memory.NewBtree[btree.UUID, interface{}](true),
-		redisCache: redis.NewClient(redis.DefaultOptions()),
+		nodeLocalCache: in_memory.NewBtree[btree.UUID, interface{}](true),
+		nodeRedisCache: redis.NewClient(redis.DefaultOptions()),
 		// TODO: replace with real S3 or file system persisting repository.
-		blobStore: in_memory.NewBtreeWithNoWrapper[btree.UUID, interface{}](true),
+		nodeBlobStore: in_memory.NewBtreeWithNoWrapper[btree.UUID, interface{}](true),
 		recyclerRepository:  newRecycler(), // shared globally.
 		virtualIdRepository: newVirtualIdRepository(),
 		storeRepository:     newStoreRepository(), // shared globally.
 	}
-	si.ItemCacheRepository = newItemCacheRepository[TK, TV]()
+	si.ItemActionTracker = newItemActionTracker[TK, TV](&si)
 	si.NodeRepository = newNodeRepository[TK, TV](&si)
 	s := btree.NewStoreInfo(name, slotLength, isUnique, true)
 	si.storeRepository.Add(s)

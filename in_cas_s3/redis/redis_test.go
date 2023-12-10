@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	// "golang.org/x/sync/errgroup"
 )
 
 type user struct {
@@ -48,5 +50,8 @@ func TestBasicUse(t *testing.T) {
 	if err == nil {
 		t.Error("Struct foo still exists after delete.")
 	}
-
 }
+
+// func TestErrGroup(t *testing.T) {
+// 	errgroup.WithContext
+// }
