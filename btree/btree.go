@@ -1,3 +1,16 @@
+// Package btree contains the code artifacts implementing the M-Way Trie data structures and algorithms.
+// It also contains different interfaces necessary for btree to support different storage backends. In one
+// implementation, btree can be in-memory, in another, it can be using other backend storage systems like
+// Cassandra and AWS S3.
+//
+// A b-tree that can distribute items added on a given "leaf" sub-branch so it will tend to fill in the
+// nodes of the sub-branch. Instead of achieving half full on average load(typical), each node can then achieve
+// higher load average, perhaps up to 62% on average.
+// This logic is cut, limited within a given sub-branch so as not to affect performance. If it is found
+// to affect performance on a given backend, it may get turned off(TODO).
+//
+// "leaf" sub-branch is the outermost node of the trie that only has 1 level children, that is, its
+// children has no children.
 package btree
 
 import (

@@ -2,9 +2,6 @@ package btree
 
 import "context"
 
-// store_interfaces contains interface definitions of different repository that are
-// required by Btree. It is needed so we can support different backend storage.
-
 // BtreeInterface defines publicly callable methods of Btree.
 type BtreeInterface[TK Comparable, TV any] interface {
 	// Add adds an item to the b-tree and does not check for duplicates.
@@ -13,15 +10,7 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// Otherwise, it will do nothing and return false, for not adding the item.
 	// This is useful for cases one wants to add an item without creating a duplicate entry.
 	AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error)
-	// FindOne will search Btree for an item with a given key. Return true if found,
-	// otherwise false. firstItemWithKey is useful when there are items with same key.
-	// true will position pointer to the first item with the given key,
-	// according to key ordering sequence.
-	FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error)
-	// GetCurrentKey returns the current item's key.
-	GetCurrentKey(ctx context.Context) (TK, error)
-	// GetCurrentValue returns the current item's value.
-	GetCurrentValue(ctx context.Context) (TV, error)
+
 	// Update finds the item with key and update its value to the value argument.
 	Update(ctx context.Context, key TK, value TV) (bool, error)
 	// UpdateCurrentItem will update the Value of the current item.
@@ -32,12 +21,29 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// RemoveCurrentItem will remove the current key/value pair from the store.
 	RemoveCurrentItem(ctx context.Context) (bool, error)
 
-	// Cursor like "move" functions. Use the CurrentKey/CurrentValue to retrieve the
-	// "current item" details(key &/or value).
+	// FindOne will search Btree for an item with a given key. Return true if found,
+	// otherwise false. firstItemWithKey is useful when there are items with same key.
+	// true will position pointer to the first item with the given key,
+	// according to key ordering sequence.
+	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
+	FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error)
+	// GetCurrentKey returns the current item's key.
+	GetCurrentKey(ctx context.Context) (TK, error)
+	// GetCurrentValue returns the current item's value.
+	GetCurrentValue(ctx context.Context) (TV, error)
+	// First positions the "cursor" to the first item as per key ordering.
+	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 	First(ctx context.Context) (bool, error)
+	// Last positionts the "cursor" to the last item as per key ordering.
+	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 	Last(ctx context.Context) (bool, error)
+	// Next positions the "cursor" to the next item as per key ordering.
+	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 	Next(ctx context.Context) (bool, error)
+	// Previous positions the "cursor" to the previous item as per key ordering.
+	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 	Previous(ctx context.Context) (bool, error)
+
 	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's segment.
 	// Otherwise is false.
 	IsValueDataInNodeSegment() bool
