@@ -68,14 +68,14 @@ type NodeRepository[TK Comparable, TV any] interface {
 // These action methods can be implemented to allow the backend to resolve and submit 
 // these changes to the backend storage during transaction commit.
 type ItemActionTracker[TK Comparable, TV any] interface {
-	// Add will just cache the item for submit on transction commit.
+	// Add will just cache the item, "add" action for submit on transaction commit.
 	Add(item *Item[TK, TV])
-	// Get will fetch data from Redis if it is not yet then mark item as appropriate.
-	Get(ctx context.Context, itemId UUID) error
-	// Update will fetch data from Redis if it is not yet then mark item as appropriate. 
-	Update(ctx context.Context, item *Item[TK, TV]) error
-	// Remove will fetch data from Redis if it is not yet then mark item as appropriate.
-	Remove(ctx context.Context, itemId UUID) error
+	// Get will just cache the item so its version can be used to check with backend copy on transaction commit.
+	Get(item *Item[TK, TV])
+	// Update will just cache the item, "update" action for submit on transaction commit as appropriate.
+	Update(item *Item[TK, TV])
+	// Remove will just cache the item, "remove" action for submit on transaction commit as appropriate.
+	Remove(item *Item[TK, TV])
 }
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its

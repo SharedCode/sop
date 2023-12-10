@@ -1,13 +1,12 @@
 package in_cas_s3
 
 import (
-	"context"
-
 	"github.com/SharedCode/sop/btree"
 )
 
 type actionType int
-const(
+
+const (
 	getAction = iota
 	addAction
 	updateAction
@@ -15,13 +14,13 @@ const(
 )
 
 type cacheData[TK btree.Comparable, TV any] struct {
-	item *btree.Item[TK, TV]
+	item   *btree.Item[TK, TV]
 	action actionType
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
 	storeInterface *StoreInterface[TK, TV]
-	items map[btree.UUID]cacheData[TK, TV]
+	items          map[btree.UUID]cacheData[TK, TV]
 }
 
 func newItemActionTracker[TK btree.Comparable, TV any](storeInterface *StoreInterface[TK, TV]) btree.ItemActionTracker[TK, TV] {
@@ -46,29 +45,41 @@ func newItemActionTracker[TK btree.Comparable, TV any](storeInterface *StoreInte
 // Get			Remove		ForRemove
 // Get			Update		ForUpdate
 
-func (t *itemActionTracker[TK, TV])Get(ctx context.Context, itemId btree.UUID) error {
-	if _,ok := t.items[itemId]; !ok {
+func (t *itemActionTracker[TK, TV]) Get(item *btree.Item[TK, TV]) {
+	if _, ok := t.items[item.Id]; !ok {
 		item := btree.Item[TK, TV]{}
-		err := t.storeInterface.itemRedisCache.GetStruct(ctx, itemId.ToString(), &item)
-		if err != nil {
-			return err
-		}
-		t.items[itemId] = cacheData[TK, TV]{
-			item: &item,
+		t.items[item.Id] = cacheData[TK, TV]{
+			item:   &item,
 			action: getAction,
 		}
 	}
-	return nil
 }
 
-func (t *itemActionTracker[TK, TV])Add(item *btree.Item[TK, TV]) {
-	
+func (t *itemActionTracker[TK, TV]) Add(item *btree.Item[TK, TV]) {
+	t.items[item.Id] = cacheData[TK, TV]{
+		item:   item,
+		action: addAction,
+	}
 }
 
-func (t *itemActionTracker[TK, TV])Update(ctx context.Context, item *btree.Item[TK, TV]) error {
-	return nil
+func (t *itemActionTracker[TK, TV]) Update(item *btree.Item[TK, TV]) {
+	if v, ok := t.items[item.Id]; ok && v.action == addAction {
+		v.item = item
+		return
+	}
+	t.items[item.Id] = cacheData[TK, TV]{
+		item:   item,
+		action: updateAction,
+	}
 }
 
-func (t *itemActionTracker[TK, TV])Remove(ctx context.Context, itemId btree.UUID) error {
-	return nil
+func (t *itemActionTracker[TK, TV]) Remove(item *btree.Item[TK, TV]) {
+	if v, ok := t.items[item.Id]; ok && v.action == addAction {
+		delete(t.items, item.Id)
+		return
+	}
+	t.items[item.Id] = cacheData[TK, TV]{
+		item: item,
+		action: removeAction,
+	}
 }

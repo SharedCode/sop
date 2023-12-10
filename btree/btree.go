@@ -154,9 +154,7 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	}
 	// Register to local cache the "item get" for submit/resolution on Commit.
 	if btree.storeInterface.ItemActionTracker != nil {
-		if err = btree.storeInterface.ItemActionTracker.Get(ctx, item.Id); err != nil {
-			return zero, err
-		}
+		btree.storeInterface.ItemActionTracker.Get(&item)
 	}
 	// TODO: in V2, we need to fetch Value if btree is set to save Value in another "data segment"
 	// and it is not yet fetched. That fetch action can error thus, need to be able to return an error.
@@ -278,9 +276,7 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) 
 	}
 	// Register to local cache the "item update" for submit/resolution on Commit.
 	if btree.storeInterface.ItemActionTracker != nil {
-		if err = btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
-			return false, err
-		}
+		btree.storeInterface.ItemActionTracker.Update(item)
 	}
 	return true, nil
 }
@@ -312,14 +308,11 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 	// Check if there are children nodes.
 	if node.hasChildren() {
 		index := btree.currentItemRef.getNodeItemIndex()
-		itemId := node.Slots[index].Id
 		if ok, err := node.removeItemOnNodeWithNilChild(ctx, btree, index); ok || err != nil {
 			if ok {
 				// Register to local cache the "item remove" for submit/resolution on Commit.
 				if btree.storeInterface.ItemActionTracker != nil {
-					if err = btree.storeInterface.ItemActionTracker.Remove(ctx, itemId); err != nil {
-						return false, err
-					}
+					btree.storeInterface.ItemActionTracker.Remove(node.Slots[index])
 				}
 				// Make the current item pointer point to null since we just deleted the current item.
 				btree.setCurrentItemId(NilUUID, 0)
@@ -343,14 +336,11 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 		if err = btree.saveNode(ctx, node); err != nil {
 			return false, err
 		}
-		itemId = currentNode.Slots[btree.currentItemRef.getNodeItemIndex()].Id
 		if ok, err := currentNode.removeItemOnNodeWithNilChild(ctx, btree, btree.currentItemRef.getNodeItemIndex()); ok || err != nil {
 			if ok {
 				// Register to local cache the "item remove" for submit/resolution on Commit.
 				if btree.storeInterface.ItemActionTracker != nil {
-					if err = btree.storeInterface.ItemActionTracker.Remove(ctx, itemId); err != nil {
-						return false, err
-					}
+					btree.storeInterface.ItemActionTracker.Remove(currentNode.Slots[btree.currentItemRef.getNodeItemIndex()])
 				}
 				// Make the current item pointer point to null since we just deleted the current item.
 				btree.setCurrentItemId(NilUUID, 0)
