@@ -15,7 +15,7 @@ type Cache interface {
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
 	Get(ctx context.Context, key string) (string, error)
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
-	GetStruct(ctx context.Context, key string, target interface{}) (interface{}, error)
+	GetStruct(ctx context.Context, key string, target interface{}) error
 	Delete(ctx context.Context, key string) error
 }
 
@@ -97,7 +97,7 @@ func (c *Connection) SetStruct(ctx context.Context, key string, value interface{
 }
 
 // GetStruct executes the redis Get command
-func (c *Connection) GetStruct(ctx context.Context, key string, target interface{}) (interface{}, error) {
+func (c *Connection) GetStruct(ctx context.Context, key string, target interface{}) error {
 	if target == nil {
 		panic("target can't be nil.")
 	}
@@ -106,9 +106,9 @@ func (c *Connection) GetStruct(ctx context.Context, key string, target interface
 		err = json.Unmarshal([]byte(s), target)
 	}
 	if err == redis.Nil {
-		return nil, err
+		return err
 	}
-	return target, err
+	return err
 }
 
 // Delete executes the redis Del command

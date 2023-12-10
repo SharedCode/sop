@@ -20,13 +20,13 @@ func TestBtree_HelloWorld(t *testing.T) {
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
 
-	if !b3.MoveToNext() || b3.GetCurrentKey() != 5000 {
-		t.Errorf("MoveToNext() failed, got = %v, want = 5000", b3.GetCurrentKey())
+	if !b3.Next() || b3.GetCurrentKey() != 5000 {
+		t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
 
-	if !b3.MoveToNext() || b3.GetCurrentKey() != 5001 {
-		t.Errorf("MoveToNext() failed, got = %v, want = 5001", b3.GetCurrentKey())
+	if !b3.Next() || b3.GetCurrentKey() != 5001 {
+		t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey())
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
 	fmt.Printf("Btree hello world ended.\n\n")
@@ -59,16 +59,16 @@ func TestBtree_FunctionalityTests(t *testing.T) {
 	if !b3.FindOne(5000, true) || b3.GetCurrentKey() != 5000 {
 		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
-	if !b3.MoveToNext() || b3.GetCurrentKey() != 5000 {
-		t.Errorf("MoveToNext() failed, got = %v, want = 5000", b3.GetCurrentKey())
+	if !b3.Next() || b3.GetCurrentKey() != 5000 {
+		t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
-	if !b3.MoveToNext() || b3.GetCurrentKey() != 5001 {
-		t.Errorf("MoveToNext() failed, got = %v, want = 5001", b3.GetCurrentKey())
+	if !b3.Next() || b3.GetCurrentKey() != 5001 {
+		t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey())
 	}
 
-	// Test MoveToNext on EOF.
-	if b3.MoveToNext() {
-		t.Errorf("MoveToNext() on EOF failed, got = true, want = false")
+	// Test Next on EOF.
+	if b3.Next() {
+		t.Errorf("Next() on EOF failed, got = true, want = false")
 	}
 
 	// Test UpdateCurrentItem.
@@ -88,16 +88,16 @@ func TestBtree_FunctionalityTests(t *testing.T) {
 		t.Errorf("RemoveCurrentItem() failed.")
 	}
 	b3.FindOne(5000, true)
-	if !b3.MoveToNext() || b3.GetCurrentKey() != 5001 {
-		t.Errorf("MoveToNext() after RemoveCurrentItem failed, expected item(5001) not found.")
+	if !b3.Next() || b3.GetCurrentKey() != 5001 {
+		t.Errorf("Next() after RemoveCurrentItem failed, expected item(5001) not found.")
 	}
 	if b3.GetCurrentValue() != five001Value {
-		t.Errorf("MoveToNext() after RemoveCurrentItem failed, got = %s, want = %s.", b3.GetCurrentValue(), five001Value)
+		t.Errorf("Next() after RemoveCurrentItem failed, got = %s, want = %s.", b3.GetCurrentValue(), five001Value)
 	}
 
-	// Test MoveToNext on EOF.
-	if b3.MoveToNext() {
-		t.Errorf("MoveToNext() on EOF failed, got = true, want = false")
+	// Test Next on EOF.
+	if b3.Next() {
+		t.Errorf("Next() on EOF failed, got = true, want = false")
 	}
 
 	fmt.Printf("Btree functionality tests ended.\n\n")
@@ -242,7 +242,7 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 			}
 			for i := test.startRange + 1; i <= test.endRange; i++ {
 				k = i
-				if b3.MoveToNext() {
+				if b3.Next() {
 					if b3.GetCurrentKey() == k {
 						itemsFoundCount++
 						continue

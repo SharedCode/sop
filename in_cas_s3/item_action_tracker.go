@@ -46,18 +46,29 @@ func newItemActionTracker[TK btree.Comparable, TV any](storeInterface *StoreInte
 // Get			Remove		ForRemove
 // Get			Update		ForUpdate
 
-func (t *itemActionTracker[TK, TV])Get(ctx context.Context, itemId btree.UUID) {
+func (t *itemActionTracker[TK, TV])Get(ctx context.Context, itemId btree.UUID) error {
 	if _,ok := t.items[itemId]; !ok {
-		// item := btree.Item[TK, TV]
-		// t.items[itemId] = t.storeInterface.itemRedisCache.GetStruct(ctx, ))
+		item := btree.Item[TK, TV]{}
+		err := t.storeInterface.itemRedisCache.GetStruct(ctx, itemId.ToString(), &item)
+		if err != nil {
+			return err
+		}
+		t.items[itemId] = cacheData[TK, TV]{
+			item: &item,
+			action: getAction,
+		}
 	}
+	return nil
 }
 
 func (t *itemActionTracker[TK, TV])Add(item *btree.Item[TK, TV]) {
+	
 }
 
-func (t *itemActionTracker[TK, TV])Update(ctx context.Context, item *btree.Item[TK, TV]) {
+func (t *itemActionTracker[TK, TV])Update(ctx context.Context, item *btree.Item[TK, TV]) error {
+	return nil
 }
 
-func (t *itemActionTracker[TK, TV])Remove(ctx context.Context, itemId btree.UUID) {
+func (t *itemActionTracker[TK, TV])Remove(ctx context.Context, itemId btree.UUID) error {
+	return nil
 }

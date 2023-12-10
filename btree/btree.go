@@ -141,7 +141,9 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	}
 	// Register to local cache the "item get" for submit/resolution on Commit.
 	if btree.storeInterface.ItemActionTracker != nil {
-		btree.storeInterface.ItemActionTracker.Get(ctx, item.Id)
+		if err = btree.storeInterface.ItemActionTracker.Get(ctx, item.Id); err != nil {
+			return zero, err
+		}
 	}
 	// TODO: in V2, we need to fetch Value if btree is set to save Value in another "data segment"
 	// and it is not yet fetched. That fetch action can error thus, need to be able to return an error.
@@ -175,9 +177,9 @@ func (btree *Btree[TK, TV]) AddIfNotExist(ctx context.Context, key TK, value TV)
 	return ok, err
 }
 
-// MoveToFirst will traverse the tree and find the first item, first according to
+// First will traverse the tree and find the first item, first according to
 // the key ordering sequence.
-func (btree *Btree[TK, TV]) MoveToFirst(ctx context.Context) (bool, error) {
+func (btree *Btree[TK, TV]) First(ctx context.Context) (bool, error) {
 	// Return default value & no error if B-Tree is empty.
 	if btree.StoreInfo.Count == 0 {
 		return false, nil
@@ -189,7 +191,7 @@ func (btree *Btree[TK, TV]) MoveToFirst(ctx context.Context) (bool, error) {
 	return node.moveToFirst(ctx, btree)
 }
 
-func (btree *Btree[TK, TV]) MoveToLast(ctx context.Context) (bool, error) {
+func (btree *Btree[TK, TV]) Last(ctx context.Context) (bool, error) {
 	// Return default value & no error if B-Tree is empty.
 	if btree.StoreInfo.Count == 0 {
 		return false, nil
@@ -201,7 +203,7 @@ func (btree *Btree[TK, TV]) MoveToLast(ctx context.Context) (bool, error) {
 	return node.moveToLast(ctx, btree)
 }
 
-func (btree *Btree[TK, TV]) MoveToNext(ctx context.Context) (bool, error) {
+func (btree *Btree[TK, TV]) Next(ctx context.Context) (bool, error) {
 	// Return default value & no error if B-Tree is empty.
 	if btree.StoreInfo.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
@@ -216,7 +218,7 @@ func (btree *Btree[TK, TV]) MoveToNext(ctx context.Context) (bool, error) {
 	return node.moveToNext(ctx, btree)
 }
 
-func (btree *Btree[TK, TV]) MoveToPrevious(ctx context.Context) (bool, error) {
+func (btree *Btree[TK, TV]) Previous(ctx context.Context) (bool, error) {
 	// Return default value & no error if B-Tree is empty.
 	if btree.StoreInfo.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
@@ -263,7 +265,9 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) 
 	}
 	// Register to local cache the "item update" for submit/resolution on Commit.
 	if btree.storeInterface.ItemActionTracker != nil {
-		btree.storeInterface.ItemActionTracker.Update(ctx, item)
+		if err = btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
+			return false, err
+		}
 	}
 	return true, nil
 }
@@ -300,7 +304,9 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 			if ok {
 				// Register to local cache the "item remove" for submit/resolution on Commit.
 				if btree.storeInterface.ItemActionTracker != nil {
-					btree.storeInterface.ItemActionTracker.Remove(ctx, itemId)
+					if err = btree.storeInterface.ItemActionTracker.Remove(ctx, itemId); err != nil {
+						return false, err
+					}
 				}
 				// Make the current item pointer point to null since we just deleted the current item.
 				btree.setCurrentItemId(NilUUID, 0)
@@ -329,7 +335,9 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 			if ok {
 				// Register to local cache the "item remove" for submit/resolution on Commit.
 				if btree.storeInterface.ItemActionTracker != nil {
-					btree.storeInterface.ItemActionTracker.Remove(ctx, itemId)
+					if err = btree.storeInterface.ItemActionTracker.Remove(ctx, itemId); err != nil {
+						return false, err
+					}
 				}
 				// Make the current item pointer point to null since we just deleted the current item.
 				btree.setCurrentItemId(NilUUID, 0)

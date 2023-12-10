@@ -34,11 +34,12 @@ func TestBasicUse(t *testing.T) {
 	}
 
 	c.SetStruct(ctx, "fooBar", usr, 0)
-	usr2, err := c.GetStruct(ctx, "fooBar", &user{})
+	user := user{}
+	err := c.GetStruct(ctx, "fooBar", &user)
 	if err != nil {
 		t.Error("Struct foo NOT exists.")
 	}
-	fmt.Println(usr2)
+	fmt.Println(user)
 
 	err = c.Delete(ctx, "fooBar")
 
@@ -46,12 +47,8 @@ func TestBasicUse(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	usr2, err = c.GetStruct(ctx, "fooBar", &user{})
+	err = c.GetStruct(ctx, "fooBar", &user)
 	if err == nil {
 		t.Error("Struct foo still exists after delete.")
 	}
 }
-
-// func TestErrGroup(t *testing.T) {
-// 	errgroup.WithContext
-// }

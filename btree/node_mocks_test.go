@@ -73,34 +73,34 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 
 	b3.Add(ctx, 26, "foo26")
 
-	t.Log("\nMock MockNodeWithLeftNilChild MoveToNext test.\n")
-	b3.MoveToFirst(ctx)
+	t.Log("\nMock MockNodeWithLeftNilChild Next test.\n")
+	b3.First(ctx)
 	ctr := 0
 	for {
 		ctr++
 		k, _ := b3.GetCurrentKey(ctx)
 		t.Logf("key: %d", k)
-		if ok, _ := b3.MoveToNext(ctx); !ok {
+		if ok, _ := b3.Next(ctx); !ok {
 			break
 		}
 	}
 	if ctr != 22 {
-		t.Errorf("Mock MockNodeWithLeftNilChild MoveToNext failed, got = %d, want = 22 items found.", ctr)
+		t.Errorf("Mock MockNodeWithLeftNilChild Next failed, got = %d, want = 22 items found.", ctr)
 	}
 
-	t.Log("\nMock MockNodeWithLeftNilChild MoveToPrevious test.\n")
-	b3.MoveToLast(ctx)
+	t.Log("\nMock MockNodeWithLeftNilChild Previous test.\n")
+	b3.Last(ctx)
 	ctr = 0
 	for {
 		ctr++
 		k, _ := b3.GetCurrentKey(ctx)
 		t.Logf("key: %d", k)
-		if ok, _ := b3.MoveToPrevious(ctx); !ok {
+		if ok, _ := b3.Previous(ctx); !ok {
 			break
 		}
 	}
 	if ctr != 22 {
-		t.Errorf("Mock MockNodeWithLeftNilChild MoveToPrevious failed, got = %d, want = 22 items found.", ctr)
+		t.Errorf("Mock MockNodeWithLeftNilChild Previous failed, got = %d, want = 22 items found.", ctr)
 	}
 
 	t.Log("Mock MockNodeWithLeftNilChild end.\n\n")
@@ -149,34 +149,34 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 
 	b3.Add(ctx, 39, "foo39")
 
-	t.Log("\nMock MockNodeWithRightNilChild MoveToNext test.\n")
-	b3.MoveToFirst(ctx)
+	t.Log("\nMock MockNodeWithRightNilChild Next test.\n")
+	b3.First(ctx)
 	ctr := 0
 	for {
 		ctr++
 		k, _ := b3.GetCurrentKey(ctx)
 		t.Logf("key: %d", k)
-		if ok, _ := b3.MoveToNext(ctx); !ok {
+		if ok, _ := b3.Next(ctx); !ok {
 			break
 		}
 	}
 	if ctr != 22 {
-		t.Errorf("Mock MockNodeWithRightNilChild MoveToNext failed, got = %d, want = 22 items found.", ctr)
+		t.Errorf("Mock MockNodeWithRightNilChild Next failed, got = %d, want = 22 items found.", ctr)
 	}
 
-	t.Log("\nMock MockNodeWithRightNilChild MoveToPrevious test.\n")
-	b3.MoveToLast(ctx)
+	t.Log("\nMock MockNodeWithRightNilChild Previous test.\n")
+	b3.Last(ctx)
 	ctr = 0
 	for {
 		ctr++
 		k, _ := b3.GetCurrentKey(ctx)
 		t.Logf("key: %d", k)
-		if ok, _ := b3.MoveToPrevious(ctx); !ok {
+		if ok, _ := b3.Previous(ctx); !ok {
 			break
 		}
 	}
 	if ctr != 22 {
-		t.Errorf("Mock MockNodeWithRightNilChild MoveToPrevious failed, got = %d, want = 22 items found.", ctr)
+		t.Errorf("Mock MockNodeWithRightNilChild Previous failed, got = %d, want = 22 items found.", ctr)
 	}
 
 	t.Log("Mock MockNodeWithRightNilChild end.\n\n")
@@ -229,34 +229,34 @@ func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 
 	const want = 24
 
-	t.Log("\nMock DistributeItemOnNodeWithRightNilChild MoveToNext test.\n")
-	b3.MoveToFirst(ctx)
+	t.Log("\nMock DistributeItemOnNodeWithRightNilChild Next test.\n")
+	b3.First(ctx)
 	got := 0
 	for {
 		got++
 		k, _ := b3.GetCurrentKey(ctx)
 		t.Logf("key: %d", k)
-		if ok, _ := b3.MoveToNext(ctx); !ok {
+		if ok, _ := b3.Next(ctx); !ok {
 			break
 		}
 	}
 	if got != want {
-		t.Errorf("Mock DistributeItemOnNodeWithRightNilChild MoveToNext failed, got = %d, want = %d items found.", got, want)
+		t.Errorf("Mock DistributeItemOnNodeWithRightNilChild Next failed, got = %d, want = %d items found.", got, want)
 	}
 
-	t.Log("\nMock DistributeItemOnNodeWithRightNilChild MoveToPrevious test.\n")
-	b3.MoveToLast(ctx)
+	t.Log("\nMock DistributeItemOnNodeWithRightNilChild Previous test.\n")
+	b3.Last(ctx)
 	got = 0
 	for {
 		got++
 		k, _ := b3.GetCurrentKey(ctx)
 		t.Logf("key: %d", k)
-		if ok, _ := b3.MoveToPrevious(ctx); !ok {
+		if ok, _ := b3.Previous(ctx); !ok {
 			break
 		}
 	}
 	if got != want {
-		t.Errorf("Mock DistributeItemOnNodeWithRightNilChild MoveToPrevious failed, got = %d, want = %d items found.", got, want)
+		t.Errorf("Mock DistributeItemOnNodeWithRightNilChild Previous failed, got = %d, want = %d items found.", got, want)
 	}
 
 	t.Log("Mock DistributeItemOnNodeWithRightNilChild end.\n\n")

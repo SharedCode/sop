@@ -34,10 +34,10 @@ type BtreeInterface[TK Comparable, TV any] interface {
 
 	// Cursor like "move" functions. Use the CurrentKey/CurrentValue to retrieve the
 	// "current item" details(key &/or value).
-	MoveToFirst(ctx context.Context) (bool, error)
-	MoveToLast(ctx context.Context) (bool, error)
-	MoveToNext(ctx context.Context) (bool, error)
-	MoveToPrevious(ctx context.Context) (bool, error)
+	First(ctx context.Context) (bool, error)
+	Last(ctx context.Context) (bool, error)
+	Next(ctx context.Context) (bool, error)
+	Previous(ctx context.Context) (bool, error)
 	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's segment.
 	// Otherwise is false.
 	IsValueDataInNodeSegment() bool
@@ -62,11 +62,11 @@ type ItemActionTracker[TK Comparable, TV any] interface {
 	// Add will just cache the item for submit on transction commit.
 	Add(item *Item[TK, TV])
 	// Get will fetch data from Redis if it is not yet then mark item as appropriate.
-	Get(ctx context.Context, itemId UUID)
+	Get(ctx context.Context, itemId UUID) error
 	// Update will fetch data from Redis if it is not yet then mark item as appropriate. 
-	Update(ctx context.Context, item *Item[TK, TV])
+	Update(ctx context.Context, item *Item[TK, TV]) error
 	// Remove will fetch data from Redis if it is not yet then mark item as appropriate.
-	Remove(ctx context.Context, itemId UUID)
+	Remove(ctx context.Context, itemId UUID) error
 }
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its

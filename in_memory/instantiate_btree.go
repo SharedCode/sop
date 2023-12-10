@@ -98,27 +98,27 @@ func (b3 BtreeInterface[TK, TV]) RemoveCurrentItem() bool {
 	return ok
 }
 
-// MoveToFirst positions the "cursor" to the first item as per key ordering.
-func (b3 BtreeInterface[TK, TV]) MoveToFirst() bool {
-	ok, _ := b3.btree.MoveToFirst(nil)
+// First positions the "cursor" to the first item as per key ordering.
+func (b3 BtreeInterface[TK, TV]) First() bool {
+	ok, _ := b3.btree.First(nil)
 	return ok
 }
 
-// MoveToLast positionts the "cursor" to the last item as per key ordering.
-func (b3 BtreeInterface[TK, TV]) MoveToLast() bool {
-	ok, _ := b3.btree.MoveToLast(nil)
+// Last positionts the "cursor" to the last item as per key ordering.
+func (b3 BtreeInterface[TK, TV]) Last() bool {
+	ok, _ := b3.btree.Last(nil)
 	return ok
 }
 
-// MoveToNext positions the "cursor" to the next item as per key ordering.
-func (b3 BtreeInterface[TK, TV]) MoveToNext() bool {
-	ok, _ := b3.btree.MoveToNext(nil)
+// Next positions the "cursor" to the next item as per key ordering.
+func (b3 BtreeInterface[TK, TV]) Next() bool {
+	ok, _ := b3.btree.Next(nil)
 	return ok
 }
 
-// MoveToPrevious positions the "cursor" to the previous item as per key ordering.
-func (b3 BtreeInterface[TK, TV]) MoveToPrevious() bool {
-	ok, _ := b3.btree.MoveToPrevious(nil)
+// Previous positions the "cursor" to the previous item as per key ordering.
+func (b3 BtreeInterface[TK, TV]) Previous() bool {
+	ok, _ := b3.btree.Previous(nil)
 	return ok
 }
 
