@@ -56,8 +56,11 @@ type BtreeInterface[TK Comparable, TV any] interface {
 
 // NodeRepository interface specifies the node repository.
 type NodeRepository[TK Comparable, TV any] interface {
+	// Get returns the Node with a given nodeId.
 	Get(ctx context.Context, nodeId UUID) (*Node[TK, TV], error)
+	// Upsert adds or updates a given Node.
 	Upsert(ctx context.Context, node *Node[TK, TV]) error
+	// Remove deletes the Node with a given nodeId.
 	Remove(ctx context.Context, nodeId UUID) error
 }
 
