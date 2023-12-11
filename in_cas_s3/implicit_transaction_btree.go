@@ -11,5 +11,5 @@ import (
 // These methods will allow code to use B-tree without bothering with transactions. Caveat, since
 // transaction is per method, then there is no guarantee that multiple calls to these methods will
 // give you the outcome that you expect, specially if there are other transaction(s) that managed
-// the same item in the store. Last edit wins.
+// the same item in the store.
 // It is still best to use an explicit transaction.
