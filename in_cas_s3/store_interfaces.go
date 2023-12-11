@@ -3,7 +3,6 @@ package in_cas_s3
 import (
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
-	"github.com/SharedCode/sop/in_memory"
 )
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.
@@ -12,14 +11,10 @@ type StoreInterface[TK btree.Comparable, TV any] struct {
 	// itemRedisCache is a global lookup table for used for tracking, conflict detection & resolution
 	// across different transactions in same and/or different machines.
 	itemRedisCache redis.Cache
-	// Needed by NodeRepository for Node data merging,
-	nodeLocalCache in_memory.BtreeInterface[btree.UUID, interface{}]
-	nodeRedisCache redis.Cache
-	nodeBlobStore  btree.BtreeInterface[btree.UUID, interface{}]
 	// StoreRepository is used to manage/access stores.
 	storeRepository StoreRepository
-	// VirtualIdRepository is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
-	virtualIdRepository VirtualIdRepository
+	// VirtualIdRegistry is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
+	virtualIdRegistry VirtualIdRegistry
 	// RecyclerRepository is used to manage/access all deleted objects' "data blocks".
 	recyclerRepository RecyclerRepository
 }

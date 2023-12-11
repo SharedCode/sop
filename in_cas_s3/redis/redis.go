@@ -57,6 +57,11 @@ func NewClient(options Options) *Connection {
 	return &c
 }
 
+// KeyNotFound will detect whether error signifies key not found by Redis.
+func KeyNotFound(err error) bool {
+	return err == redis.Nil
+}
+
 // Ping tests connectivity for redis (PONG should be returned)
 func (connection *Connection) Ping(ctx context.Context) error {
 	pong, err := connection.Client.Ping(ctx).Result()

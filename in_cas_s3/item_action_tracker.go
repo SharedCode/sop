@@ -19,14 +19,11 @@ type cacheData[TK btree.Comparable, TV any] struct {
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
-	storeInterface *StoreInterface[TK, TV]
 	items          map[btree.UUID]cacheData[TK, TV]
 }
 
-func newItemActionTracker[TK btree.Comparable, TV any](storeInterface *StoreInterface[TK, TV]) btree.ItemActionTracker[TK, TV] {
-	return &itemActionTracker[TK, TV]{
-		storeInterface: storeInterface,
-	}
+func newItemActionTracker[TK btree.Comparable, TV any]() btree.ItemActionTracker[TK, TV] {
+	return &itemActionTracker[TK, TV]{}
 }
 
 // Sample use-case logic table:

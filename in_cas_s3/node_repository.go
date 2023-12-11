@@ -4,19 +4,31 @@ import (
 	"context"
 
 	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/in_cas_s3/redis"
+	"github.com/SharedCode/sop/in_cas_s3/s3"
 )
+
+type cacheNode struct {
+	node   interface{}
+	action actionType
+}
 
 // nodeRepository implementation for "cassandra-S3"(in_cas_s3) exposes a standard NodeRepository interface
 // but which, manages b-tree nodes in transaction cache, Redis and in Cassandra + S3,
 // or File System, for debugging &/or "poor man's" setup(no AWS required!).
 type nodeRepository[TK btree.Comparable, TV any] struct {
-	storeInterface *StoreInterface[TK, TV]
+	// Needed by NodeRepository for Node data merging to the backend storage systems.
+	nodeRedisCache redis.Cache
+	nodeBlobStore  s3.BlobStore
+	nodeLocalCache map[btree.UUID]cacheNode
 }
 
 // NewNodeRepository instantiates a NodeRepository.
-func newNodeRepository[TK btree.Comparable, TV any](storeInterface *StoreInterface[TK, TV]) *nodeRepository[TK, TV] {
+func newNodeRepository[TK btree.Comparable, TV any]() *nodeRepository[TK, TV] {
 	return &nodeRepository[TK, TV]{
-		storeInterface: storeInterface,
+		nodeLocalCache: make(map[btree.UUID]cacheNode),
+		nodeRedisCache: redis.NewClient(redis.DefaultOptions()),
+		nodeBlobStore: s3.NewBlobStore(),
 	}
 }
 
@@ -45,10 +57,25 @@ func (nr *nodeRepository[TK, TV]) Remove( nodeId btree.UUID) {
 
 // Get will retrieve a node with nodeId from the map.
 func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (interface{}, error) {
-	if nr.storeInterface.nodeLocalCache.FindOne(nodeId, false) {
-		// if nr.storeInterface.ItemCacheRepository
+	if v, ok := nr.nodeLocalCache[nodeId]; ok {
+		if v.action == removeAction {
+			return nil, nil
+		}
+		return v.node, nil
 	}
-	return nil, nil
+	var node btree.Node[TK, TV]
+	if err := nr.nodeRedisCache.GetStruct(ctx, nodeId.ToString(), &node); err != nil {
+		if redis.KeyNotFound(err) {
+			// Fetch from blobStore and cache to Redis/local.
+			// nr.nodeBlobStore.FindOne()
+		}
+		return nil, err
+	}
+	nr.nodeLocalCache[nodeId] = cacheNode{
+		action: getAction,
+		node: &node,
+	}
+	return &node, nil
 }
 
 func (nr *nodeRepository[TK, TV]) add(nodeId btree.UUID, node interface{}) {
@@ -60,7 +87,6 @@ func (nr *nodeRepository[TK, TV]) update(nodeId btree.UUID, node interface{}) {
 }
 
 func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) {
-	nr.Remove(nodeId)
 }
 
 /* Feature discussion:
