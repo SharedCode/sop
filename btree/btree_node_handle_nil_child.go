@@ -55,12 +55,8 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(ctx context.Context, btre
 					node.childrenIds = nil
 				}
 			}
-			if err = btree.removeNode(ctx, node); err != nil {
-				return false, err
-			}
-			if err = btree.saveNode(ctx, node); err != nil {
-				return false, err
-			}
+			btree.removeNode(node)
+			btree.saveNode(node)
 			return true, nil
 		}
 
@@ -75,9 +71,7 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(ctx context.Context, btre
 		return true, nil
 	}
 
-	if err := btree.saveNode(ctx, node); err != nil {
-		return false, err
-	}
+	btree.saveNode(node)
 	return true, nil
 }
 
@@ -105,17 +99,10 @@ func (node *Node[TK, TV]) promoteSingleChildAsParentChild(ctx context.Context, b
 	}
 	nc.ParentId = p.Id
 	// Save changes to the modified nodes.
-	if err = btree.saveNode(ctx, nc); err != nil {
-		return false, err
-	}
-	if err = btree.saveNode(ctx, p); err != nil {
-		return false, err
-	}
+	btree.saveNode(nc)
+	btree.saveNode(p)
 	// Remove this node since it is now empty.
-	err = btree.removeNode(ctx, node)
-	if err != nil {
-		return false, err
-	}
+	btree.removeNode(node)
 	return true, nil
 }
 
@@ -130,12 +117,8 @@ func (node *Node[TK, TV]) addItemOnNodeWithNilChild(ctx context.Context, btree *
 	node.childrenIds[index] = child.Id
 	child.Slots[0] = item
 	child.Count = 1
-	if err := btree.saveNode(ctx, node); err != nil {
-		return false, err
-	}
-	if err := btree.saveNode(ctx, child); err != nil {
-		return false, err
-	}
+	btree.saveNode(node)
+	btree.saveNode(child)
 	return true, nil
 }
 
@@ -214,9 +197,9 @@ func (node *Node[TK, TV]) nodeHasNilChild(btree *Btree[TK, TV]) bool {
 }
 
 // distributeItemOnNodeWithNilChild is used to balance load among nodes of a given branch.
-func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], item *Item[TK, TV]) (bool, error) {
+func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(btree *Btree[TK, TV], item *Item[TK, TV]) (bool) {
 	if !node.hasChildren() {
-		return false, nil
+		return false
 	}
 	i := 0
 	for ; i <= node.Count; i++ {
@@ -225,7 +208,7 @@ func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(ctx context.Context, 
 		}
 	}
 	if i > node.Count {
-		return false, nil
+		return false
 	}
 	// Create a new Child node & populate it with the item.
 	child := newNode[TK, TV](btree.getSlotLength())
@@ -233,11 +216,7 @@ func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(ctx context.Context, 
 	node.childrenIds[i] = child.Id
 	child.Slots[0] = item
 	child.Count = 1
-	if err := btree.saveNode(ctx, node); err != nil {
-		return false, err
-	}
-	if err := btree.saveNode(ctx, child); err != nil {
-		return false, err
-	}
-	return true, nil
+	btree.saveNode(node)
+	btree.saveNode(child)
+	return true
 }

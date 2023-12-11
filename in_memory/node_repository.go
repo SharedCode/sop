@@ -18,10 +18,14 @@ func newNodeRepository[TK btree.Comparable, TV any]() btree.NodeRepository[TK, T
 	}
 }
 
-// Upsert will upsert node to the map.
-func (nr *nodeRepository[TK, TV]) Upsert(ctx context.Context, n *btree.Node[TK, TV]) error {
+// Add will upsert node to the map.
+func (nr *nodeRepository[TK, TV]) Add(n *btree.Node[TK, TV]) {
 	nr.lookup[n.Id] = n
-	return nil
+}
+
+// Update will upsert node to the map.
+func (nr *nodeRepository[TK, TV]) Update(n *btree.Node[TK, TV]) {
+	nr.lookup[n.Id] = n
 }
 
 // Get will retrieve a node with nodeId from the map.
@@ -31,7 +35,6 @@ func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeId btree.UUID) (*
 }
 
 // Remove will remove a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) Remove(ctx context.Context, nodeId btree.UUID) error {
+func (nr *nodeRepository[TK, TV]) Remove(nodeId btree.UUID) {
 	delete(nr.lookup, nodeId)
-	return nil
 }

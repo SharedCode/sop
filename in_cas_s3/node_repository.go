@@ -20,9 +20,14 @@ func newNodeRepository[TK btree.Comparable, TV any](storeInterface *StoreInterfa
 	}
 }
 
-// Upsert will upsert node to the map.
-func (nr *nodeRepository[TK, TV]) Upsert(ctx context.Context, n *btree.Node[TK, TV]) error {
-	return nr.upsert(ctx, n.Id, n)
+// Add will upsert node to the map.
+func (nr *nodeRepository[TK, TV]) Add(n *btree.Node[TK, TV]) {
+	nr.add(n.Id, n)
+}
+
+// Update will upsert node to the map.
+func (nr *nodeRepository[TK, TV]) Update(n *btree.Node[TK, TV]) {
+	nr.update(n.Id, n)
 }
 
 // Get will retrieve a node with nodeId from the map.
@@ -32,9 +37,11 @@ func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeId btree.UUID) (*
 }
 
 // Remove will remove a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) Remove(ctx context.Context, nodeId btree.UUID) error {
-	return nr.Remove(ctx, nodeId)
+func (nr *nodeRepository[TK, TV]) Remove( nodeId btree.UUID) {
+	nr.Remove(nodeId)
 }
+
+
 
 // Get will retrieve a node with nodeId from the map.
 func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (interface{}, error) {
@@ -44,14 +51,16 @@ func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (i
 	return nil, nil
 }
 
-// Upsert will upsert node to the map.
-func (nr *nodeRepository[TK, TV]) upsert(ctx context.Context, nodeId btree.UUID, node interface{}) error {
+func (nr *nodeRepository[TK, TV]) add(nodeId btree.UUID, node interface{}) {
 
-	return nil
 }
 
-func (nr *nodeRepository[TK, TV]) remove(ctx context.Context, nodeId btree.UUID) error {
-	return nr.Remove(ctx, nodeId)
+func (nr *nodeRepository[TK, TV]) update(nodeId btree.UUID, node interface{}) {
+
+}
+
+func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) {
+	nr.Remove(nodeId)
 }
 
 /* Feature discussion:
@@ -59,14 +68,15 @@ func (nr *nodeRepository[TK, TV]) remove(ctx context.Context, nodeId btree.UUID)
     Get or Fetch:
 	- If not found locally(& no remove marker) & found in blobStore, fetch data & populate local cache(& redis).
 	  Return not found if found locally & there is a remove marker on it.
-	Upsert:
-	- Upsert to local cache if not yet, for upsert to blobStore(& redis) on transaction commit.
-	  Mark data as new/modified.
-	- Remove any marker for removal if there is.
+	Add:
+	- Add to local cache if not yet, for add to blobStore(& redis) on transaction commit.
+	  Mark data as new.
+	Update:
+	- Update to local cache if not yet, for update to blobStore(& redis) on transaction commit.
+	  Mark data as modified.
 	Remove:
 	- If data is new(found in local cache only), then just remove from local cache.
-	- Otherwise, mark data as removed if not yet, for actual remove from
-	  blobStore(& redis) on transaction commit.
+	- Otherwise, mark data as removed, for actual remove from blobStore(& redis) on transaction commit.
 
   Transaction commit logic(in Transaction):
 	NOTE: Any error in redis or Cassandra will return the error and should trigger a rollback. Writers will only

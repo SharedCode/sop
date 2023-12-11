@@ -15,17 +15,18 @@ func newNodeRepository[TK Comparable, TV any]() NodeRepository[TK, TV] {
 		lookup: make(map[UUID]*Node[TK, TV]),
 	}
 }
-func (nr *nodeRepository[TK, TV]) Upsert(ctx context.Context, n *Node[TK, TV]) error {
+func (nr *nodeRepository[TK, TV]) Add(n *Node[TK, TV]) {
 	nr.lookup[n.Id] = n
-	return nil
+}
+func (nr *nodeRepository[TK, TV]) Update(n *Node[TK, TV]) {
+	nr.lookup[n.Id] = n
 }
 func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeId UUID) (*Node[TK, TV], error) {
 	v, _ := nr.lookup[nodeId]
 	return v, nil
 }
-func (nr *nodeRepository[TK, TV]) Remove(ctx context.Context, nodeId UUID) error {
+func (nr *nodeRepository[TK, TV]) Remove(nodeId UUID) {
 	delete(nr.lookup, nodeId)
-	return nil
 }
 
 var ctx = context.Background()

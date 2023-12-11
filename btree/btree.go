@@ -271,9 +271,7 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) 
 	node.Slots[btree.currentItemRef.getNodeItemIndex()].Value = &newValue
 	item := node.Slots[btree.currentItemRef.getNodeItemIndex()]
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
-	if err = btree.saveNode(ctx, node); err != nil {
-		return false, err
-	}
+	btree.saveNode(node)
 	// Register to local cache the "item update" for submit/resolution on Commit.
 	if btree.storeInterface.ItemActionTracker != nil {
 		btree.storeInterface.ItemActionTracker.Update(item)
@@ -333,9 +331,7 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 		// so we can delete that instead & make it happen on the leaf.
 		// Deletion on leaf nodes is easier to repair/fix respective leaf branch.
 		node.Slots[index] = currentNode.Slots[btree.currentItemRef.getNodeItemIndex()]
-		if err = btree.saveNode(ctx, node); err != nil {
-			return false, err
-		}
+		btree.saveNode(node)
 		if ok, err := currentNode.removeItemOnNodeWithNilChild(ctx, btree, btree.currentItemRef.getNodeItemIndex()); ok || err != nil {
 			if ok {
 				// Register to local cache the "item remove" for submit/resolution on Commit.
@@ -379,19 +375,22 @@ func (btree *Btree[TK, TV]) IsUnique() bool {
 // via NodeRepository call. When Transaction Manager is implemented, this
 // will just register the modified/new node in the transaction session
 // so it can get persisted on tranaction commit.
-func (btree *Btree[TK, TV]) saveNode(ctx context.Context, node *Node[TK, TV]) error {
+func (btree *Btree[TK, TV]) saveNode(node *Node[TK, TV]) {
 	if node.Id.IsNil() {
 		node.Id = NewUUID()
+		btree.storeInterface.NodeRepository.Add(node)
+		return
 	}
-	return btree.storeInterface.NodeRepository.Upsert(ctx, node)
+	btree.storeInterface.NodeRepository.Update(node)
+	return
 }
 
 // removeNode will remove the node from backend repository.
-func (btree *Btree[TK, TV]) removeNode(ctx context.Context, node *Node[TK, TV]) error {
+func (btree *Btree[TK, TV]) removeNode(node *Node[TK, TV]) {
 	if node.Id.IsNil() {
-		return nil
+		return
 	}
-	return btree.storeInterface.NodeRepository.Remove(ctx, node.Id)
+	btree.storeInterface.NodeRepository.Remove(node.Id)
 }
 
 func (btree *Btree[TK, TV]) getCurrentNode(ctx context.Context) (*Node[TK, TV], error) {

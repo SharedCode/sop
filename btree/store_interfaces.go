@@ -56,12 +56,14 @@ type BtreeInterface[TK Comparable, TV any] interface {
 
 // NodeRepository interface specifies the node repository.
 type NodeRepository[TK Comparable, TV any] interface {
-	// Get returns the Node with a given nodeId.
+	// Add will just cache the item, "add" action for submit on transaction commit as appropriate.
+	Add(node *Node[TK, TV])
+	// Get fetches from backend & returns the Node with a given nodeId.
 	Get(ctx context.Context, nodeId UUID) (*Node[TK, TV], error)
-	// Upsert adds or updates a given Node.
-	Upsert(ctx context.Context, node *Node[TK, TV]) error
-	// Remove deletes the Node with a given nodeId.
-	Remove(ctx context.Context, nodeId UUID) error
+	// Update will just cache the item, "update" action for resolve on transaction commit as appropriate.
+	Update(node *Node[TK, TV])
+	// Remove will just cache the item, "remove" action for resolve on transaction commit as appropriate.
+	Remove(nodeId UUID)
 }
 
 // ItemActionTracker specifies the CRUD action methods that can be done to manage Items.
@@ -70,7 +72,8 @@ type NodeRepository[TK Comparable, TV any] interface {
 type ItemActionTracker[TK Comparable, TV any] interface {
 	// Add will just cache the item, "add" action for submit on transaction commit as appropriate.
 	Add(item *Item[TK, TV])
-	// Get will just cache the item so its version can be used to check with backend copy on transaction commit.
+	// Get will just cache the item, "get" action then resolve on transaction commit, compare version 
+	// with backend copy, error out if version shows another transaction modified/deleted this item on the back.
 	Get(item *Item[TK, TV])
 	// Update will just cache the item, "update" action for submit on transaction commit as appropriate.
 	Update(item *Item[TK, TV])
