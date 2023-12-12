@@ -58,7 +58,7 @@ type BtreeInterface[TK Comparable, TV any] interface {
 type NodeRepository[TK Comparable, TV any] interface {
 	// Add will just cache the item, "add" action for submit on transaction commit as appropriate.
 	Add(node *Node[TK, TV])
-	// Get fetches from backend & returns the Node with a given nodeId.
+	// Get fetches from backend(or from cache if exists) & returns the Node with a given nodeId.
 	Get(ctx context.Context, nodeId UUID) (*Node[TK, TV], error)
 	// Update will just cache the item, "update" action for resolve on transaction commit as appropriate.
 	Update(node *Node[TK, TV])
@@ -67,12 +67,12 @@ type NodeRepository[TK Comparable, TV any] interface {
 }
 
 // ItemActionTracker specifies the CRUD action methods that can be done to manage Items.
-// These action methods can be implemented to allow the backend to resolve and submit 
+// These action methods can be implemented to allow the backend to resolve and submit
 // these changes to the backend storage during transaction commit.
 type ItemActionTracker[TK Comparable, TV any] interface {
 	// Add will just cache the item, "add" action for submit on transaction commit as appropriate.
 	Add(item *Item[TK, TV])
-	// Get will just cache the item, "get" action then resolve on transaction commit, compare version 
+	// Get will just cache the item, "get" action then resolve on transaction commit, compare version
 	// with backend copy, error out if version shows another transaction modified/deleted this item on the back.
 	Get(item *Item[TK, TV])
 	// Update will just cache the item, "update" action for submit on transaction commit as appropriate.
