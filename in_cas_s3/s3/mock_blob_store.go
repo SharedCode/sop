@@ -7,22 +7,24 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
-type blobStore struct {
+type mockBlobStore struct {
 	lookup map[btree.UUID][]byte
 }
 
 func newBlobStore() BlobStore {
-	return &blobStore{
+	return &mockBlobStore{
 		lookup: make(map[btree.UUID][]byte),
 	}
 }
 
-func (b *blobStore)Get(ctx context.Context, blobId btree.UUID, target interface{}) error {
-	ba,_ := b.lookup[blobId]
-	return json.Unmarshal(ba, target)
+func (b *mockBlobStore)Get(ctx context.Context, blobId btree.UUID, target interface{}) error {
+	if ba,ok := b.lookup[blobId]; ok {
+		return json.Unmarshal(ba, target)
+	}
+	return nil
 }
 
-func (b *blobStore)Add(ctx context.Context, blobId btree.UUID, blob interface{}) error {
+func (b *mockBlobStore)Add(ctx context.Context, blobId btree.UUID, blob interface{}) error {
 	ba, err := json.Marshal(blob)
 	if err != nil {
 		return err
@@ -31,7 +33,7 @@ func (b *blobStore)Add(ctx context.Context, blobId btree.UUID, blob interface{})
 	return nil
 }
 
-func (b *blobStore)Update(ctx context.Context, blobId btree.UUID, blob interface{}) error {
+func (b *mockBlobStore)Update(ctx context.Context, blobId btree.UUID, blob interface{}) error {
 	ba, err := json.Marshal(blob)
 	if err != nil {
 		return err
@@ -40,7 +42,7 @@ func (b *blobStore)Update(ctx context.Context, blobId btree.UUID, blob interface
 	return nil
 }
 
-func (b *blobStore)Remove(ctx context.Context, blobId btree.UUID) error {
+func (b *mockBlobStore)Remove(ctx context.Context, blobId btree.UUID) error {
 	delete(b.lookup, blobId)
 	return nil
 }
