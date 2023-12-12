@@ -11,7 +11,7 @@ import (
 // as it will impose performance penalties. This kind of data are typically stored in blob stores
 // like AWS S3, or file system, etc...
 type BlobStore interface {
-	Get(ctx context.Context, blobId btree.UUID) (interface{}, error)
+	Get(ctx context.Context, blobId btree.UUID, target interface{}) error
 	Add(ctx context.Context, blobId btree.UUID, blob interface{}) error
 	Update(ctx context.Context, blobId btree.UUID, blob interface{}) error
 	Remove(ctx context.Context, blobId btree.UUID) error

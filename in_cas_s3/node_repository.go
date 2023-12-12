@@ -53,8 +53,6 @@ func (nr *nodeRepository[TK, TV]) Remove( nodeId btree.UUID) {
 	nr.Remove(nodeId)
 }
 
-
-
 // Get will retrieve a node with nodeId from the map.
 func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (interface{}, error) {
 	if v, ok := nr.nodeLocalCache[nodeId]; ok {
@@ -67,7 +65,15 @@ func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (i
 	if err := nr.nodeRedisCache.GetStruct(ctx, nodeId.ToString(), &node); err != nil {
 		if redis.KeyNotFound(err) {
 			// Fetch from blobStore and cache to Redis/local.
-			// nr.nodeBlobStore.FindOne()
+			if err = nr.nodeBlobStore.Get(ctx, nodeId, &node); err != nil {
+				return nil, err
+			}
+			nr.nodeRedisCache.SetStruct(ctx, nodeId.ToString(), interface{}(&node), -1)
+			nr.nodeLocalCache[nodeId] = cacheNode{
+				action: getAction,
+				node: &node,
+			}
+			return &node, nil
 		}
 		return nil, err
 	}
@@ -79,14 +85,39 @@ func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (i
 }
 
 func (nr *nodeRepository[TK, TV]) add(nodeId btree.UUID, node interface{}) {
-
+	nr.nodeLocalCache[nodeId] = cacheNode{
+		action: addAction,
+		node: &node,
+	}
 }
 
 func (nr *nodeRepository[TK, TV]) update(nodeId btree.UUID, node interface{}) {
-
+	if v,ok := nr.nodeLocalCache[nodeId]; ok {
+		// Update the node and keep the "action" marker if new, otherwise update to "update" action.
+		v.node = node
+		if v.action != addAction {
+			v.action = updateAction
+		}
+		nr.nodeLocalCache[nodeId] = v
+		return
+	}
+	nr.nodeLocalCache[nodeId] = cacheNode{
+		action: updateAction,
+		node: &node,
+	}
 }
 
 func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) {
+	if v,ok := nr.nodeLocalCache[nodeId]; ok {
+		if v.action == addAction {
+			delete(nr.nodeLocalCache, nodeId)
+			return
+		}
+		v.action = removeAction
+		nr.nodeLocalCache[nodeId] = v
+		return
+	}
+	// Code should not reach this point, as B-tree will not issue a remove if node is not cached locally.
 }
 
 /* Feature discussion:
@@ -99,7 +130,7 @@ func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) {
 	  Mark data as new.
 	Update:
 	- Update to local cache if not yet, for update to blobStore(& redis) on transaction commit.
-	  Mark data as modified.
+	  Mark data as modified if not new.
 	Remove:
 	- If data is new(found in local cache only), then just remove from local cache.
 	- Otherwise, mark data as removed, for actual remove from blobStore(& redis) on transaction commit.
