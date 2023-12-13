@@ -11,7 +11,7 @@ type mockBlobStore struct {
 	lookup map[btree.UUID][]byte
 }
 
-func newBlobStore() BlobStore {
+func newMockBlobStore() BlobStore {
 	return &mockBlobStore{
 		lookup: make(map[btree.UUID][]byte),
 	}

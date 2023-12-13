@@ -33,7 +33,7 @@ func TestBasicUse(t *testing.T) {
 		LastName:  "rec",
 	}
 
-	c.SetStruct(ctx, "fooBar", usr, 0)
+	c.SetStruct(ctx, "fooBar", &usr, 0)
 	user := user{}
 	err := c.GetStruct(ctx, "fooBar", &user)
 	if err != nil {

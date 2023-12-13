@@ -82,7 +82,7 @@ func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (i
 			if err = nr.nodeBlobStore.Get(ctx, nodeId, &node); err != nil {
 				return nil, err
 			}
-			nr.nodeRedisCache.SetStruct(ctx, nodeId.ToString(), interface{}(&node), -1)
+			nr.nodeRedisCache.SetStruct(ctx, nodeId.ToString(), &node, -1)
 			nr.nodeLocalCache[nodeId] = cacheNode{
 				action: getAction,
 				node: &node,
@@ -101,7 +101,7 @@ func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (i
 func (nr *nodeRepository[TK, TV]) add(nodeId btree.UUID, node interface{}) {
 	nr.nodeLocalCache[nodeId] = cacheNode{
 		action: addAction,
-		node: &node,
+		node: node,
 	}
 }
 
@@ -115,9 +115,10 @@ func (nr *nodeRepository[TK, TV]) update(nodeId btree.UUID, node interface{}) {
 		nr.nodeLocalCache[nodeId] = v
 		return
 	}
+	// Treat as add if not in local cache, because it should be there unless node is new.
 	nr.nodeLocalCache[nodeId] = cacheNode{
-		action: updateAction,
-		node: &node,
+		action: addAction,
+		node: node,
 	}
 }
 
