@@ -12,9 +12,10 @@ type Transaction interface {
 
 type transaction struct {
 	// stores(or its items) accessed/managed within the transaction session.
-	stores []StoreInterface[interface{}, interface{}]
+	stores     []StoreInterface[interface{}, interface{}]
 	forWriting bool
-	hasBegun bool
+	hasBegun   bool
+	done       bool
 }
 
 // NewTransaction will instantiate a transaction object for writing(forWriting=true)
@@ -26,25 +27,65 @@ func NewTransaction(forWriting bool) Transaction {
 }
 
 func (t *transaction) Begin() error {
+	if t.done {
+		return fmt.Errorf("Transaction is done, 'create a new one.")
+	}
+	if t.HasBegun() {
+		return fmt.Errorf("Transaction is ongoing, 'can't begin again.")
+	}
+	t.hasBegun = true
 	return nil
 }
 
 func (t *transaction) Commit() error {
-	if !t.hasBegun {
-		return fmt.Errorf("No transaction session to commit, call Begin to start a transaction session.")
+	if t.done {
+		return fmt.Errorf("Transaction is done, 'create a new one.")
 	}
-
-	return nil
+	if !t.HasBegun() {
+		return fmt.Errorf("No transaction to commit, call Begin to start a transaction.")
+	}
+	t.hasBegun = false
+	t.done = true
+	return t.commit()
 }
 
 func (t *transaction) Rollback() error {
-	return nil
+	if t.done {
+		return fmt.Errorf("Transaction is done, 'create a new one.")
+	}
+	if !t.HasBegun() {
+		return fmt.Errorf("No transaction to rollback, call Begin to start a transaction.")
+	}
+	t.hasBegun = false
+	t.done = true
+	return t.rollback()
 }
 
 func (t *transaction) HasBegun() bool {
 	return t.hasBegun
 }
 
+func (t *transaction) commit() error {
+	if t.trackedItemsHasConflict() {
+		return fmt.Errorf("No transaction to rollback, call Begin to start a transaction.")
+	}
+	if !t.forWriting {
+	}
+	// TODO
+	// for _,s := range t.stores {
+	// 	s.ItemActionTracker
+	// }
+	return nil
+}
+func (t *transaction) rollback() error {
+	// TODO
+	return nil
+}
+
+func (t *transaction) trackedItemsHasConflict() bool {
+	// TODO
+	return false
+}
 
 /* Feature discussion:
   Transaction commit logic(in Transaction):
