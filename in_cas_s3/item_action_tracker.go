@@ -23,7 +23,9 @@ type itemActionTracker[TK btree.Comparable, TV any] struct {
 }
 
 func newItemActionTracker[TK btree.Comparable, TV any]() btree.ItemActionTracker[TK, TV] {
-	return &itemActionTracker[TK, TV]{}
+	return &itemActionTracker[TK, TV]{
+		items: make(map[btree.UUID]cacheData[TK, TV]),
+	}
 }
 
 // Sample use-case logic table:
