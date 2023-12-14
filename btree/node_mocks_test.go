@@ -10,6 +10,7 @@ import (
 type nodeRepository[TK Comparable, TV any] struct {
 	lookup map[UUID]*Node[TK, TV]
 }
+
 func newNodeRepository[TK Comparable, TV any]() NodeRepository[TK, TV] {
 	return &nodeRepository[TK, TV]{
 		lookup: make(map[UUID]*Node[TK, TV]),

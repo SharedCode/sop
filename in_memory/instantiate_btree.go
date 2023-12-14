@@ -18,7 +18,7 @@ const itemsPerNode = 8
 func NewBtree[TK btree.Comparable, TV any](isUnique bool) BtreeInterface[TK, TV] {
 	s := btree.NewStoreInfo("", itemsPerNode, isUnique, true)
 	si := btree.StoreInterface[TK, TV]{
-		NodeRepository:  newNodeRepository[TK, TV](),
+		NodeRepository: newNodeRepository[TK, TV](),
 	}
 	b3 := btree.NewBtree[TK, TV](s, &si)
 	return BtreeInterface[TK, TV]{
@@ -32,7 +32,7 @@ func NewBtree[TK btree.Comparable, TV any](isUnique bool) BtreeInterface[TK, TV]
 // Handy for using in-memory b-tree for writing unit tests to mock the "Enterprise" V2 version.
 func NewBtreeWithNoWrapper[TK btree.Comparable, TV any](isUnique bool) btree.BtreeInterface[TK, TV] {
 	si := btree.StoreInterface[TK, TV]{
-		NodeRepository:  newNodeRepository[TK, TV](),
+		NodeRepository: newNodeRepository[TK, TV](),
 	}
 	s := btree.NewStoreInfo("", itemsPerNode, isUnique, true)
 	return btree.NewBtree[TK, TV](s, &si)

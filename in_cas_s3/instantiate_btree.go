@@ -8,9 +8,9 @@ import (
 func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique bool,
 	isValueDataInNodeSegment bool, t Transaction) btree.BtreeInterface[TK, TV] {
 	si := StoreInterface[TK, TV]{
-		recyclerRepository:  newRecycler(), // shared globally.
-		virtualIdRegistry : newVirtualIdRegistry(),
-		storeRepository:     newStoreRepository(), // shared globally.
+		recyclerRepository: newRecycler(), // shared globally.
+		virtualIdRegistry:  newVirtualIdRegistry(),
+		storeRepository:    newStoreRepository(), // shared globally.
 	}
 	si.ItemActionTracker = newItemActionTracker[TK, TV]()
 	si.NodeRepository = newNodeRepository[TK, TV]()

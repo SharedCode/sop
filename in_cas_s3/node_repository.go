@@ -28,7 +28,7 @@ func newNodeRepository[TK btree.Comparable, TV any]() *nodeRepository[TK, TV] {
 	return &nodeRepository[TK, TV]{
 		nodeLocalCache: make(map[btree.UUID]cacheNode),
 		nodeRedisCache: redis.NewClient(redis.DefaultOptions()),
-		nodeBlobStore: s3.NewBlobStore(),
+		nodeBlobStore:  s3.NewBlobStore(),
 	}
 }
 
@@ -49,7 +49,7 @@ func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeId btree.UUID) (*
 }
 
 // Remove will remove a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) Remove( nodeId btree.UUID) {
+func (nr *nodeRepository[TK, TV]) Remove(nodeId btree.UUID) {
 	nr.Remove(nodeId)
 }
 
@@ -85,7 +85,7 @@ func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (i
 			nr.nodeRedisCache.SetStruct(ctx, nodeId.ToString(), &node, -1)
 			nr.nodeLocalCache[nodeId] = cacheNode{
 				action: getAction,
-				node: &node,
+				node:   &node,
 			}
 			return &node, nil
 		}
@@ -93,7 +93,7 @@ func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (i
 	}
 	nr.nodeLocalCache[nodeId] = cacheNode{
 		action: getAction,
-		node: &node,
+		node:   &node,
 	}
 	return &node, nil
 }
@@ -101,12 +101,12 @@ func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (i
 func (nr *nodeRepository[TK, TV]) add(nodeId btree.UUID, node interface{}) {
 	nr.nodeLocalCache[nodeId] = cacheNode{
 		action: addAction,
-		node: node,
+		node:   node,
 	}
 }
 
 func (nr *nodeRepository[TK, TV]) update(nodeId btree.UUID, node interface{}) {
-	if v,ok := nr.nodeLocalCache[nodeId]; ok {
+	if v, ok := nr.nodeLocalCache[nodeId]; ok {
 		// Update the node and keep the "action" marker if new, otherwise update to "update" action.
 		v.node = node
 		if v.action != addAction {
@@ -118,12 +118,12 @@ func (nr *nodeRepository[TK, TV]) update(nodeId btree.UUID, node interface{}) {
 	// Treat as add if not in local cache, because it should be there unless node is new.
 	nr.nodeLocalCache[nodeId] = cacheNode{
 		action: addAction,
-		node: node,
+		node:   node,
 	}
 }
 
 func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) {
-	if v,ok := nr.nodeLocalCache[nodeId]; ok {
+	if v, ok := nr.nodeLocalCache[nodeId]; ok {
 		if v.action == addAction {
 			delete(nr.nodeLocalCache, nodeId)
 			return

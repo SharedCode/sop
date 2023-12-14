@@ -19,7 +19,7 @@ type cacheData[TK btree.Comparable, TV any] struct {
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
-	items          map[btree.UUID]cacheData[TK, TV]
+	items map[btree.UUID]cacheData[TK, TV]
 }
 
 func newItemActionTracker[TK btree.Comparable, TV any]() btree.ItemActionTracker[TK, TV] {
@@ -78,7 +78,7 @@ func (t *itemActionTracker[TK, TV]) Remove(item *btree.Item[TK, TV]) {
 		return
 	}
 	t.items[item.Id] = cacheData[TK, TV]{
-		item: item,
+		item:   item,
 		action: removeAction,
 	}
 }

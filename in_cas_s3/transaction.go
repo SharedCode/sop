@@ -39,7 +39,7 @@ func NewTransactionWithMaxSessionTime(forWriting bool, maxTime time.Duration) Tr
 	}
 	return &transaction{
 		forWriting: forWriting,
-		maxTime: maxTime,
+		maxTime:    maxTime,
 	}
 }
 
@@ -146,7 +146,7 @@ func (t *transaction) commit() error {
 
 type nodeEntry struct {
 	nodeId btree.UUID
-	node interface{}
+	node   interface{}
 }
 
 func (t *transaction) cleanup() {
@@ -161,7 +161,6 @@ func (t *transaction) deleteTransactionLogs() {
 
 func (t *transaction) setActiveModifiedInactiveNodes([]nodeEntry) {
 }
-
 
 func (t *transaction) saveStores([]btree.StoreInfo) {
 }
@@ -185,7 +184,7 @@ func (t *transaction) manageTrackedItemsLocking(lockOrUnlock bool) bool {
 
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes.
-func (t *transaction) classifyModifiedNodes() ([]nodeEntry,[]nodeEntry,[]nodeEntry) {
+func (t *transaction) classifyModifiedNodes() ([]nodeEntry, []nodeEntry, []nodeEntry) {
 	// for  t.stores
 	return nil, nil, nil
 }

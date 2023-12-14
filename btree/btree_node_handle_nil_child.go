@@ -197,7 +197,7 @@ func (node *Node[TK, TV]) nodeHasNilChild(btree *Btree[TK, TV]) bool {
 }
 
 // distributeItemOnNodeWithNilChild is used to balance load among nodes of a given branch.
-func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(btree *Btree[TK, TV], item *Item[TK, TV]) (bool) {
+func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(btree *Btree[TK, TV], item *Item[TK, TV]) bool {
 	if !node.hasChildren() {
 		return false
 	}

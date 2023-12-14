@@ -12,20 +12,21 @@ type Item[TK Comparable, TV any] struct {
 	// 1. so B-Tree can identify or differentiate item(s) with duplicated Key.
 	// 2. used as the Value "data" Id if item's value data is persisted in another
 	// data segment, separate from the Node segment(IsValueDataInNodeSegment=false).
-	Id  UUID
+	Id UUID
 	// Key is the key part in key/value pair.
 	Key TK
 	// Value is saved nil if data is to be persisted in the "data segment"(& ValueId set to a valid UUID),
 	// otherwise it should point to the actual data and persisted in B-Tree Node segment together with the Key.
-	Value *TV
+	Value           *TV
 	Version         int
 	valueNeedsFetch bool
 }
+
 func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
 	return &Item[TK, TV]{
 		Key:   key,
 		Value: &value,
-		Id: NewUUID(),
+		Id:    NewUUID(),
 	}
 }
 

@@ -71,7 +71,7 @@ type promoteAction[TK Comparable, TV any] struct {
 // NewBtree creates a new B-Tree instance.
 func NewBtree[TK Comparable, TV any](storeInfo StoreInfo, si *StoreInterface[TK, TV]) *Btree[TK, TV] {
 	var b3 = Btree[TK, TV]{
-		StoreInfo:              storeInfo,
+		StoreInfo:          storeInfo,
 		storeInterface:     si,
 		tempSlots:          make([]*Item[TK, TV], storeInfo.SlotLength+1),
 		tempChildren:       make([]UUID, storeInfo.SlotLength+2),
