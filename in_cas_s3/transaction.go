@@ -106,7 +106,7 @@ func (t *transaction) commit() error {
 	// - Return error if loop timed out to trigger rollback.
 	for {
 		if getCurrentTime().Sub(startTime).Minutes() > float64(t.maxTime) {
-			return fmt.Errorf("Transaction timed out.")
+			return fmt.Errorf("Transaction timed out(maxTime=%v).", t.maxTime)
 		}
 		if t.trackedItemsHasConflict() {
 			if rerr := t.rollback(); rerr != nil {
@@ -116,7 +116,7 @@ func (t *transaction) commit() error {
 		}
 
 		if !t.forWriting {
-			// Reader transaction only checks tracked items consistency, return at this point.
+			// Reader transaction only checks tracked items consistency, return success at this point.
 			return nil
 		}
 
@@ -178,10 +178,6 @@ func (t *transaction) getModifiedStores() []btree.StoreInfo {
 	return nil
 }
 
-func (t *transaction) manageTrackedItemsLocking(lockOrUnlock bool) bool {
-	return true
-}
-
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes.
 func (t *transaction) classifyModifiedNodes() ([]nodeEntry, []nodeEntry, []nodeEntry) {
@@ -191,7 +187,19 @@ func (t *transaction) classifyModifiedNodes() ([]nodeEntry, []nodeEntry, []nodeE
 
 func (t *transaction) rollback() error {
 	// TODO
+	t.cleanup()
 	return nil
+}
+
+func (t *transaction) manageTrackedItemsLocking(lockOrUnlock bool) bool {
+	// TODO: Lock items tracked.
+
+	// If action is to lock, re-check (again) after locking if tracked items has conflict.
+	if lockOrUnlock && t.trackedItemsHasConflict() {
+		// TODO: unlock before returning failure.
+		return false
+	}
+	return true
 }
 
 // Check all explicitly fetched(i.e. - GetCurrentKey/GetCurrentValue invoked) & managed(add/update/remove) items
