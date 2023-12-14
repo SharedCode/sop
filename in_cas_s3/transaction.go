@@ -2,6 +2,7 @@ package in_cas_s3
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/SharedCode/sop/btree"
 )
@@ -20,13 +21,25 @@ type transaction struct {
 	forWriting bool
 	hasBegun   bool
 	done       bool
+	maxTime    time.Duration
 }
 
+// Use lambda for time.Now so automated test can replace with replayable time if needed.
+var getCurrentTime = time.Now
+
 // NewTransaction will instantiate a transaction object for writing(forWriting=true)
-// or for reading(forWriting=false).
-func NewTransaction(forWriting bool) Transaction {
+// or for reading(forWriting=false). Defaults to 15 minutes session duration.
+func NewTransaction(forWriting bool, maxTime time.Duration) Transaction {
+	return NewTransactionWithMaxSessionTime(forWriting, -1)
+}
+func NewTransactionWithMaxSessionTime(forWriting bool, maxTime time.Duration) Transaction {
+	if maxTime <= 0 {
+		m := 15
+		maxTime = time.Duration(m * int(time.Minute))
+	}
 	return &transaction{
 		forWriting: forWriting,
+		maxTime: maxTime,
 	}
 }
 
@@ -70,17 +83,8 @@ func (t *transaction) HasBegun() bool {
 }
 
 func (t *transaction) commit() error {
-	if t.trackedItemsHasConflict() {
-		if rerr := t.rollback(); rerr != nil {
-			return fmt.Errorf("Item(s) that were modified as well by another transaction was detected, and rollback failed as well, details: %v.", rerr)
-		}
-		return fmt.Errorf("Item(s) that were modified as well by another transaction was detected, 'failing commit as violating Isolation & affecting Consistency.")
-	}
-
-	if !t.forWriting {
-		// Reader transaction only checks tracked items consistency, return at this point.
-		return nil
-	}
+	var updatedNodes, removedNodes, addedNodes []nodeEntry
+	startTime := getCurrentTime()
 
 	// For writer transaction. Save the managed Node(s) as inactive:
 	// NOTE: a transaction Commit can timeout and thus, rollback if it exceeds the maximum time(defaults to 30 mins).
@@ -100,21 +104,43 @@ func (t *transaction) commit() error {
 	// - Re-fetch the Nodes of these items, re-create the lookup table consisting only of these items & their re-fetched Nodes
 	// - Loop end.
 	// - Return error if loop timed out to trigger rollback.
+	for {
+		if getCurrentTime().Sub(startTime).Minutes() > float64(t.maxTime) {
+			return fmt.Errorf("Transaction timed out.")
+		}
+		if t.trackedItemsHasConflict() {
+			if rerr := t.rollback(); rerr != nil {
+				return fmt.Errorf("Item(s) that were modified as well by another transaction was detected, and rollback failed as well, details: %v.", rerr)
+			}
+			return fmt.Errorf("Item(s) that were modified as well by another transaction was detected, 'failing commit as violating Isolation & affecting Consistency.")
+		}
 
-	updatedNodes, removedNodes, addedNodes := t.classifyModifiedNodes()
-	t.saveUpdatedNodes(updatedNodes)
+		if !t.forWriting {
+			// Reader transaction only checks tracked items consistency, return at this point.
+			return nil
+		}
+
+		updatedNodes, removedNodes, addedNodes = t.classifyModifiedNodes()
+		t.saveUpdatedNodes(updatedNodes)
+
+		if t.countDiffsWithRedisNodes(updatedNodes) == 0 {
+			break
+		}
+	}
+
 	t.saveRemovedNodes(removedNodes)
 	t.saveAddedNodes(addedNodes)
-
 	stores := t.getModifiedStores()
 	t.saveStores(stores)
 
+	// Mark these items as locked in Redis.
+	// Return error to rollback if any failed to lock as alredy locked by another transaction. Or if Redis fetch failed(error).
+	if !t.manageTrackedItemsLocking(true) {
+		return fmt.Errorf("Tracked items within the transaction failed to lock, thus, conflict with other transaction changes is presumed.")
+	}
+
 	t.setActiveModifiedInactiveNodes(updatedNodes)
 	t.cleanup()
-
-	// - Mark these items as locked in Redis.
-	//   Rollback if any failed to lock as alredy locked by another transaction. Or if Redis fetch failed(error).
-
 	return nil
 }
 
@@ -125,6 +151,7 @@ type nodeEntry struct {
 
 func (t *transaction) cleanup() {
 	t.deleteTransactionLogs()
+	t.manageTrackedItemsLocking(false)
 	// TODO: delete cached data sets on this transaction.
 }
 
@@ -140,6 +167,9 @@ func (t *transaction) saveStores([]btree.StoreInfo) {
 }
 func (t *transaction) saveUpdatedNodes([]nodeEntry) {
 }
+func (t *transaction) countDiffsWithRedisNodes([]nodeEntry) int {
+	return 0
+}
 func (t *transaction) saveRemovedNodes([]nodeEntry) {
 }
 func (t *transaction) saveAddedNodes([]nodeEntry) {
@@ -147,6 +177,10 @@ func (t *transaction) saveAddedNodes([]nodeEntry) {
 
 func (t *transaction) getModifiedStores() []btree.StoreInfo {
 	return nil
+}
+
+func (t *transaction) manageTrackedItemsLocking(lockOrUnlock bool) bool {
+	return true
 }
 
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
