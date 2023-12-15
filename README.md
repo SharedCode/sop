@@ -37,13 +37,13 @@ func TestBtree_HelloWorld(t *testing.T) {
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
 
-	if !b3.MoveToNext() || b3.GetCurrentKey() != 5000 {
-		t.Errorf("MoveToNext() failed, got = %v, want = 5000", b3.GetCurrentKey())
+	if !b3.Next() || b3.GetCurrentKey() != 5000 {
+		t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
 
-	if !b3.MoveToNext() || b3.GetCurrentKey() != 5001 {
-		t.Errorf("MoveToNext() failed, got = %v, want = 5001", b3.GetCurrentKey())
+	if !b3.Next() || b3.GetCurrentKey() != 5001 {
+		t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey())
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
 	fmt.Printf("Btree hello world ended.\n\n")
