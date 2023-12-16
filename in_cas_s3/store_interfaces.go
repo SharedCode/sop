@@ -8,6 +8,7 @@ import (
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.
 type StoreInterface[TK btree.Comparable, TV any] struct {
 	btree.StoreInterface[TK, TV]
+	nodeRepository *nodeRepository
 	// itemRedisCache is a global lookup table for used for tracking, conflict detection & resolution
 	// across different transactions in same and/or different machines.
 	itemRedisCache redis.Cache

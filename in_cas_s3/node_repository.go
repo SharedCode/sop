@@ -13,10 +13,36 @@ type cacheNode struct {
 	action actionType
 }
 
+type nodeRepositoryTyped[TK btree.Comparable, TV any] struct {
+	realNodeRepository *nodeRepository
+}
+
+// Add will upsert node to the map.
+func (nr *nodeRepositoryTyped[TK, TV]) Add(n *btree.Node[TK, TV]) {
+	nr.realNodeRepository.add(n.Id, n)
+}
+
+// Update will upsert node to the map.
+func (nr *nodeRepositoryTyped[TK, TV]) Update(n *btree.Node[TK, TV]) {
+	nr.realNodeRepository.update(n.Id, n)
+}
+
+// Get will retrieve a node with nodeId from the map.
+func (nr *nodeRepositoryTyped[TK, TV]) Get(ctx context.Context, nodeId btree.UUID) (*btree.Node[TK, TV], error) {
+	var target btree.Node[TK, TV]
+	n, err := nr.realNodeRepository.get(ctx, nodeId, &target)
+	return n.(*btree.Node[TK, TV]), err
+}
+
+// Remove will remove a node with nodeId from the map.
+func (nr *nodeRepositoryTyped[TK, TV]) Remove(nodeId btree.UUID) {
+	nr.realNodeRepository.remove(nodeId)
+}
+
 // nodeRepository implementation for "cassandra-S3"(in_cas_s3) exposes a standard NodeRepository interface
 // but which, manages b-tree nodes in transaction cache, Redis and in Cassandra + S3,
 // or File System, for debugging &/or "poor man's" setup(no AWS required!).
-type nodeRepository[TK btree.Comparable, TV any] struct {
+type nodeRepository struct {
 	// Needed by NodeRepository for Node data merging to the backend storage systems.
 	nodeRedisCache redis.Cache
 	nodeBlobStore  s3.BlobStore
@@ -24,33 +50,15 @@ type nodeRepository[TK btree.Comparable, TV any] struct {
 }
 
 // NewNodeRepository instantiates a NodeRepository.
-func newNodeRepository[TK btree.Comparable, TV any]() *nodeRepository[TK, TV] {
-	return &nodeRepository[TK, TV]{
+func newNodeRepository[TK btree.Comparable, TV any]() *nodeRepositoryTyped[TK, TV] {
+	nr :=&nodeRepository{
 		nodeLocalCache: make(map[btree.UUID]cacheNode),
 		nodeRedisCache: redis.NewClient(redis.DefaultOptions()),
 		nodeBlobStore:  s3.NewBlobStore(),
 	}
-}
-
-// Add will upsert node to the map.
-func (nr *nodeRepository[TK, TV]) Add(n *btree.Node[TK, TV]) {
-	nr.add(n.Id, n)
-}
-
-// Update will upsert node to the map.
-func (nr *nodeRepository[TK, TV]) Update(n *btree.Node[TK, TV]) {
-	nr.update(n.Id, n)
-}
-
-// Get will retrieve a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeId btree.UUID) (*btree.Node[TK, TV], error) {
-	n, err := nr.get(ctx, nodeId)
-	return n.(*btree.Node[TK, TV]), err
-}
-
-// Remove will remove a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) Remove(nodeId btree.UUID) {
-	nr.Remove(nodeId)
+	return &nodeRepositoryTyped[TK, TV]{
+		realNodeRepository: nr,
+	}
 }
 
 // Transaction "session" logic(in NodeRepository):
@@ -68,44 +76,43 @@ func (nr *nodeRepository[TK, TV]) Remove(nodeId btree.UUID) {
 // - Otherwise, mark data as removed, for actual remove from blobStore(& redis) on transaction commit.
 
 // Get will retrieve a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) get(ctx context.Context, nodeId btree.UUID) (interface{}, error) {
+func (nr *nodeRepository) get(ctx context.Context, nodeId btree.UUID, target interface{}) (interface{}, error) {
 	if v, ok := nr.nodeLocalCache[nodeId]; ok {
 		if v.action == removeAction {
 			return nil, nil
 		}
 		return v.node, nil
 	}
-	var node btree.Node[TK, TV]
-	if err := nr.nodeRedisCache.GetStruct(ctx, nodeId.ToString(), &node); err != nil {
+	if err := nr.nodeRedisCache.GetStruct(ctx, nodeId.ToString(), target); err != nil {
 		if redis.KeyNotFound(err) {
 			// Fetch from blobStore and cache to Redis/local.
-			if err = nr.nodeBlobStore.Get(ctx, nodeId, &node); err != nil {
+			if err = nr.nodeBlobStore.Get(ctx, nodeId, target); err != nil {
 				return nil, err
 			}
-			nr.nodeRedisCache.SetStruct(ctx, nodeId.ToString(), &node, -1)
+			nr.nodeRedisCache.SetStruct(ctx, nodeId.ToString(), target, -1)
 			nr.nodeLocalCache[nodeId] = cacheNode{
 				action: getAction,
-				node:   &node,
+				node:   target,
 			}
-			return &node, nil
+			return target, nil
 		}
 		return nil, err
 	}
 	nr.nodeLocalCache[nodeId] = cacheNode{
 		action: getAction,
-		node:   &node,
+		node:   target,
 	}
-	return &node, nil
+	return target, nil
 }
 
-func (nr *nodeRepository[TK, TV]) add(nodeId btree.UUID, node interface{}) {
+func (nr *nodeRepository) add(nodeId btree.UUID, node interface{}) {
 	nr.nodeLocalCache[nodeId] = cacheNode{
 		action: addAction,
 		node:   node,
 	}
 }
 
-func (nr *nodeRepository[TK, TV]) update(nodeId btree.UUID, node interface{}) {
+func (nr *nodeRepository) update(nodeId btree.UUID, node interface{}) {
 	if v, ok := nr.nodeLocalCache[nodeId]; ok {
 		// Update the node and keep the "action" marker if new, otherwise update to "update" action.
 		v.node = node
@@ -122,7 +129,7 @@ func (nr *nodeRepository[TK, TV]) update(nodeId btree.UUID, node interface{}) {
 	}
 }
 
-func (nr *nodeRepository[TK, TV]) remove(nodeId btree.UUID) {
+func (nr *nodeRepository) remove(nodeId btree.UUID) {
 	if v, ok := nr.nodeLocalCache[nodeId]; ok {
 		if v.action == addAction {
 			delete(nr.nodeLocalCache, nodeId)

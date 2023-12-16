@@ -46,9 +46,8 @@ func newItemActionTracker[TK btree.Comparable, TV any]() btree.ItemActionTracker
 
 func (t *itemActionTracker[TK, TV]) Get(item *btree.Item[TK, TV]) {
 	if _, ok := t.items[item.Id]; !ok {
-		item := btree.Item[TK, TV]{}
 		t.items[item.Id] = cacheData[TK, TV]{
-			item:   &item,
+			item:   item,
 			action: getAction,
 		}
 	}

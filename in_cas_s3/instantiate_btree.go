@@ -13,7 +13,11 @@ func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique
 		storeRepository:    newStoreRepository(), // shared globally.
 	}
 	si.ItemActionTracker = newItemActionTracker[TK, TV]()
-	si.NodeRepository = newNodeRepository[TK, TV]()
+	nrw := newNodeRepository[TK, TV]()
+	// Assign the client facing NodeRepository that uses generics.
+	si.NodeRepository = nrw
+	// Assign the backend transaction nodeRepository that is not generics.
+	si.nodeRepository = nrw.realNodeRepository
 	s := btree.NewStoreInfo(name, slotLength, isUnique, true)
 	si.storeRepository.Add(s)
 	return btree.NewBtree[TK, TV](s, &si.StoreInterface)

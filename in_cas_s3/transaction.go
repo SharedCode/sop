@@ -208,6 +208,11 @@ func (t *transaction) manageTrackedItemsLocking(lockOrUnlock bool) bool {
 // Commit to return error if there is at least an item with different version no. as compared to
 // local cache's copy.
 func (t *transaction) trackedItemsHasConflict() bool {
-	// TODO
+	// for _,s := range t.stores {
+	// 	iat := s.ItemActionTracker.(itemActionTracker[interface{}, interface{}])
+	// 	for k,v := range iat.items {
+			
+	// 	}
+	// }
 	return false
 }
