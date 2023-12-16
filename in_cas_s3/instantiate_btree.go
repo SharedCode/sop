@@ -14,9 +14,9 @@ func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique
 	}
 	si.ItemActionTracker = newItemActionTracker[TK, TV]()
 	nrw := newNodeRepository[TK, TV]()
-	// Assign the client facing NodeRepository that uses generics.
+	// Assign the frontend facing NodeRepository that uses generics.
 	si.NodeRepository = nrw
-	// Assign the backend transaction nodeRepository that is not generics.
+	// Assign the backend transaction nodeRepository that we can process in transaction commit.
 	si.nodeRepository = nrw.realNodeRepository
 	s := btree.NewStoreInfo(name, slotLength, isUnique, true)
 	si.storeRepository.Add(s)
