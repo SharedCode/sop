@@ -33,37 +33,41 @@ func TestUUIDConversion(t *testing.T) {
 func TestItemMarshallingBetweenInterfaceAndGenerics(t *testing.T) {
 	foobar := "foobar"
 	vd := Item[int, string]{
-		Key: 1,
-		Value: &foobar,
-		Version: 1,
+		Key:     1,
+		Value:   &foobar,
 	}
-	ba,_ := json.Marshal(vd)
+	ba, _ := json.Marshal(vd)
 	var obj Item[interface{}, interface{}]
 	json.Unmarshal(ba, &obj)
 
-	ba2,_ := json.Marshal(obj)
+	obj.SetUpsertTime()
+	expectedTIme := obj.GetUpsertTime()
 
-	var item2 Item[int,string]
+	ba2, _ := json.Marshal(obj)
+
+	var item2 Item[int, string]
 	json.Unmarshal(ba2, &item2)
 
-	if item2.Key != 1 || *item2.Value != foobar || item2.Version != 1 {
-		t.Errorf("VersionedData Item[TK,TV] failed to marshall back and forth.")
+	if item2.Key != 1 || *item2.Value != foobar || item2.UpsertTime != expectedTIme {
+		t.Errorf("UpsertTime Item[TK,TV] failed to marshall back and forth.")
 	}
 }
 
 func TestItemAndNodeMarshallingToVersionedData(t *testing.T) {
 	n := Node[int, string]{
-		Version: 1,
+		Count: 7,
 	}
 	var obj interface{} = &n
-	vd := obj.(VersionedData)
-	version := vd.GetVersion()
-	t.Logf("Version %d", version)
+	vd := obj.(TimestampedData)
+	vd.SetUpsertTime()
+	upsertTime := vd.GetUpsertTime()
+	t.Logf("upsertTime %d", upsertTime)
 
-	ba,_ := json.Marshal(n)
+	ba, _ := json.Marshal(n)
 	var n2 interface{} = &Node[interface{}, interface{}]{}
 	json.Unmarshal(ba, n2)
-	intf := n2.(VersionedData)
-	version = intf.GetVersion()
-	t.Logf("Version n2 %d", version)
+	intf := n2.(TimestampedData)
+	intf.SetUpsertTime()
+	upsertTime = intf.GetUpsertTime()
+	t.Logf("upsertTime n2 %d", upsertTime)
 }

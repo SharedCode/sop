@@ -2,6 +2,8 @@ package in_cas_s3
 
 import (
 	"context"
+	"encoding/json"
+	"slices"
 
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
@@ -96,16 +98,48 @@ func (t *itemActionTrackerTyped[TK, TV]) Remove(item *btree.Item[TK, TV]) {
 // Returns true if there is at least an item that got modified(by another transaction) in Redis.
 // Otherwise returns false.
 func (t *itemActionTracker) hasConflict(ctx context.Context, itemRedisCache redis.Cache) (bool, error) {
-	for uuid, cd := range t.items {
+	for uuid,_ := range t.items {
 		var target interface{}
 		if err := itemRedisCache.GetStruct(ctx, uuid.ToString(), &target); err != nil {
+			if redis.KeyNotFound(err) {
+				continue
+			}
 			return false, err
 		}
-		inRedisItem := target.(btree.VersionedData)
-		inLocalCacheItem := cd.item.(btree.VersionedData)
-		if inLocalCacheItem.GetVersion() != inRedisItem.GetVersion() {
-			return true, nil
-		}
+		// If item is found in Redis, it means it is already being committed by another transaction.
+		return true, nil
 	}
 	return false, nil
+}
+
+// lock the tracked items in Redis in preparation to finalize the transaction commit.
+// This should work in combination of optimistic locking implemented by hasConflict above.
+func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache, toLock bool) (bool, error) {
+	for uuid, cachedData := range t.items {
+		inLocalCacheItem := cachedData.item.(btree.TimestampedData)
+		inLocalCacheItem.SetUpsertTime()
+		var target interface{}
+		if err := itemRedisCache.GetStruct(ctx, uuid.ToString(), &target); err != nil {
+			if redis.KeyNotFound(err) {
+				if err := itemRedisCache.SetStruct(ctx, uuid.ToString(), inLocalCacheItem, 0); err != nil {
+					return false, err
+				}
+				if err := itemRedisCache.GetStruct(ctx, uuid.ToString(), &target); err != nil {
+					ba1, err := json.Marshal(target)
+					if err != nil {
+						return false, err
+					}
+					ba2, err := json.Marshal(inLocalCacheItem)
+					if err != nil {
+							return false, err
+					}
+					if slices.Compare[[]byte](ba1, ba2) != 0 {
+						return false, nil
+					}
+				}
+			}
+			return false, err
+		}
+	}
+	return true, nil
 }

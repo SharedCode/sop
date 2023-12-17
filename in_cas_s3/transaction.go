@@ -142,7 +142,7 @@ func (t *transaction) commit(ctx context.Context) error {
 
 	// Mark these items as locked in Redis.
 	// Return error to rollback if any failed to lock as alredy locked by another transaction. Or if Redis fetch failed(error).
-	if ok, err := t.manageTrackedItemsLocking(ctx, true); !ok || err != nil {
+	if ok, err := t.lockTrackedItems(ctx, true); !ok || err != nil {
 		if err == nil {
 			return fmt.Errorf("Tracked items within the transaction failed to lock, thus, conflict with other transaction changes is presumed.")
 		}
@@ -160,7 +160,7 @@ type nodeEntry struct {
 
 func (t *transaction) cleanup(ctx context.Context) error {
 	t.deleteTransactionLogs()
-	if ok, err := t.manageTrackedItemsLocking(ctx, false); !ok || err != nil {
+	if ok, err := t.lockTrackedItems(ctx, false); !ok || err != nil {
 		// TODO: delete cached data sets on this transaction.
 		return err
 	}
@@ -206,10 +206,10 @@ func (t *transaction) rollback(ctx context.Context) error {
 	return t.cleanup(ctx)
 }
 
-func (t *transaction) manageTrackedItemsLocking(ctx context.Context, lockOrUnlock bool) (bool, error) {
+func (t *transaction) lockTrackedItems(ctx context.Context, toLock bool) (bool, error) {
 	// TODO: Lock items tracked.
 	// If action is to lock, re-check (again) after locking if tracked items has conflict.
-	if lockOrUnlock {
+	if toLock {
 		if hasConflict, err := t.trackedItemsHasConflict(ctx);hasConflict || err != nil {
 			// TODO: unlock before returning failure.
 			return false, err
