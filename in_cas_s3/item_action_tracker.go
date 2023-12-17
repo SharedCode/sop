@@ -13,18 +13,25 @@ const (
 	removeAction
 )
 
-type cacheData[TK btree.Comparable, TV any] struct {
-	item   *btree.Item[TK, TV]
+type cacheData struct {
+	item   interface{}
 	action actionType
 }
 
-type itemActionTracker[TK btree.Comparable, TV any] struct {
-	items map[btree.UUID]cacheData[TK, TV]
+type itemActionTracker struct {
+	items map[btree.UUID]cacheData
 }
 
-func newItemActionTracker[TK btree.Comparable, TV any]() btree.ItemActionTracker[TK, TV] {
-	return &itemActionTracker[TK, TV]{
-		items: make(map[btree.UUID]cacheData[TK, TV]),
+type itemActionTrackerTyped[TK btree.Comparable, TV any] struct {
+	realItemActionTracker *itemActionTracker
+}
+
+func newItemActionTracker[TK btree.Comparable, TV any]() *itemActionTrackerTyped[TK, TV] {
+	iat := itemActionTracker{
+		items: make(map[btree.UUID]cacheData),
+	}
+	return &itemActionTrackerTyped[TK, TV] {
+		realItemActionTracker: &iat,
 	}
 }
 
@@ -44,39 +51,39 @@ func newItemActionTracker[TK btree.Comparable, TV any]() btree.ItemActionTracker
 // Get			Remove		ForRemove
 // Get			Update		ForUpdate
 
-func (t *itemActionTracker[TK, TV]) Get(item *btree.Item[TK, TV]) {
-	if _, ok := t.items[item.Id]; !ok {
-		t.items[item.Id] = cacheData[TK, TV]{
+func (t *itemActionTrackerTyped[TK, TV]) Get(item *btree.Item[TK, TV]) {
+	if _, ok := t.realItemActionTracker.items[item.Id]; !ok {
+		t.realItemActionTracker.items[item.Id] = cacheData{
 			item:   item,
 			action: getAction,
 		}
 	}
 }
 
-func (t *itemActionTracker[TK, TV]) Add(item *btree.Item[TK, TV]) {
-	t.items[item.Id] = cacheData[TK, TV]{
+func (t *itemActionTrackerTyped[TK, TV]) Add(item *btree.Item[TK, TV]) {
+	t.realItemActionTracker.items[item.Id] = cacheData{
 		item:   item,
 		action: addAction,
 	}
 }
 
-func (t *itemActionTracker[TK, TV]) Update(item *btree.Item[TK, TV]) {
-	if v, ok := t.items[item.Id]; ok && v.action == addAction {
+func (t *itemActionTrackerTyped[TK, TV]) Update(item *btree.Item[TK, TV]) {
+	if v, ok := t.realItemActionTracker.items[item.Id]; ok && v.action == addAction {
 		v.item = item
 		return
 	}
-	t.items[item.Id] = cacheData[TK, TV]{
+	t.realItemActionTracker.items[item.Id] = cacheData{
 		item:   item,
 		action: updateAction,
 	}
 }
 
-func (t *itemActionTracker[TK, TV]) Remove(item *btree.Item[TK, TV]) {
-	if v, ok := t.items[item.Id]; ok && v.action == addAction {
-		delete(t.items, item.Id)
+func (t *itemActionTrackerTyped[TK, TV]) Remove(item *btree.Item[TK, TV]) {
+	if v, ok := t.realItemActionTracker.items[item.Id]; ok && v.action == addAction {
+		delete(t.realItemActionTracker.items, item.Id)
 		return
 	}
-	t.items[item.Id] = cacheData[TK, TV]{
+	t.realItemActionTracker.items[item.Id] = cacheData{
 		item:   item,
 		action: removeAction,
 	}

@@ -8,7 +8,12 @@ import (
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.
 type StoreInterface[TK btree.Comparable, TV any] struct {
 	btree.StoreInterface[TK, TV]
-	nodeRepository *nodeRepository
+
+	// Non-generics item action tracker, used in transaction commit to process modified Items.
+	backendItemActionTracker *itemActionTracker
+	// Non-generics node repository, used in transaction commit to process modified Nodes.
+	backendNodeRepository *nodeRepository
+
 	// itemRedisCache is a global lookup table for used for tracking, conflict detection & resolution
 	// across different transactions in same and/or different machines.
 	itemRedisCache redis.Cache

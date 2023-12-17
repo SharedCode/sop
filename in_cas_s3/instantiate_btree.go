@@ -12,12 +12,17 @@ func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique
 		virtualIdRegistry:  newVirtualIdRegistry(),
 		storeRepository:    newStoreRepository(), // shared globally.
 	}
-	si.ItemActionTracker = newItemActionTracker[TK, TV]()
+
+	// Assign the item action tracker frontend and backend bits.
+	iatw := newItemActionTracker[TK, TV]()
+	si.ItemActionTracker = iatw
+	si.backendItemActionTracker = iatw.realItemActionTracker
+
+	// Assign the node repository frontend and backend bits.
 	nrw := newNodeRepository[TK, TV]()
-	// Assign the frontend facing NodeRepository that uses generics.
 	si.NodeRepository = nrw
-	// Assign the backend transaction nodeRepository that we can process in transaction commit.
-	si.nodeRepository = nrw.realNodeRepository
+	si.backendNodeRepository = nrw.realNodeRepository
+
 	s := btree.NewStoreInfo(name, slotLength, isUnique, true)
 	si.storeRepository.Add(s)
 	return btree.NewBtree[TK, TV](s, &si.StoreInterface)

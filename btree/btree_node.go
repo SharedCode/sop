@@ -6,6 +6,11 @@ import (
 	"sort"
 )
 
+// VersionedData specifies the method to return version number.
+type VersionedData interface {
+	GetVersion() int
+}
+
 // Item contains key & value pair, plus the version number.
 type Item[TK Comparable, TV any] struct {
 	// (Internal) Id is the Item's UUID. Id is needed for two reasons:
@@ -21,7 +26,9 @@ type Item[TK Comparable, TV any] struct {
 	Version         int
 	valueNeedsFetch bool
 }
-
+func (i Item[TK, TV]) GetVersion() int {
+	return i.Version
+}
 func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
 	return &Item[TK, TV]{
 		Key:   key,
@@ -41,7 +48,9 @@ type Node[TK Comparable, TV any] struct {
 	indexOfNode int
 	childrenIds []UUID
 }
-
+func (n Node[TK, TV]) GetVersion() int {
+	return n.Version
+}
 // newNode creates a new node.
 func newNode[TK Comparable, TV any](slotCount int) *Node[TK, TV] {
 	return &Node[TK, TV]{
