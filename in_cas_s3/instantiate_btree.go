@@ -23,7 +23,9 @@ func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique
 	si.NodeRepository = nrw
 	si.backendNodeRepository = nrw.realNodeRepository
 
+	// Create, populate & assign the Store Info.
 	s := btree.NewStoreInfo(name, slotLength, isUnique, true)
 	si.storeRepository.Add(s)
+
 	return btree.NewBtree[TK, TV](s, &si.StoreInterface)
 }

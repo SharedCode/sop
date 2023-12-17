@@ -1,7 +1,10 @@
 package in_cas_s3
 
 import (
+	"context"
+
 	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/in_cas_s3/redis"
 )
 
 type actionType int
@@ -87,4 +90,22 @@ func (t *itemActionTrackerTyped[TK, TV]) Remove(item *btree.Item[TK, TV]) {
 		item:   item,
 		action: removeAction,
 	}
+}
+
+// hasConflict will compare the locally cached items' version with their copies in Redis.
+// Returns true if there is at least an item that got modified(by another transaction) in Redis.
+// Otherwise returns false.
+func (t *itemActionTracker) hasConflict(ctx context.Context, itemRedisCache redis.Cache) (bool, error) {
+	for uuid, cd := range t.items {
+		var target interface{}
+		if err := itemRedisCache.GetStruct(ctx, uuid.ToString(), &target); err != nil {
+			return false, err
+		}
+		inRedisItem := target.(btree.VersionedData)
+		inLocalCacheItem := cd.item.(btree.VersionedData)
+		if inLocalCacheItem.GetVersion() != inRedisItem.GetVersion() {
+			return true, nil
+		}
+	}
+	return false, nil
 }

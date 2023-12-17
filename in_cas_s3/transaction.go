@@ -1,6 +1,7 @@
 package in_cas_s3
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -10,8 +11,8 @@ import (
 // Transaction interface defines the "enduser facing" transaction methods.
 type Transaction interface {
 	Begin() error
-	Commit() error
-	Rollback() error
+	Commit(ctx context.Context) error
+	Rollback(ctx context.Context) error
 	HasBegun() bool
 }
 
@@ -54,7 +55,7 @@ func (t *transaction) Begin() error {
 	return nil
 }
 
-func (t *transaction) Commit() error {
+func (t *transaction) Commit(ctx context.Context) error {
 	if t.done {
 		return fmt.Errorf("Transaction is done, 'create a new one.")
 	}
@@ -63,10 +64,10 @@ func (t *transaction) Commit() error {
 	}
 	t.hasBegun = false
 	t.done = true
-	return t.commit()
+	return t.commit(ctx)
 }
 
-func (t *transaction) Rollback() error {
+func (t *transaction) Rollback(ctx context.Context) error {
 	if t.done {
 		return fmt.Errorf("Transaction is done, 'create a new one.")
 	}
@@ -75,14 +76,14 @@ func (t *transaction) Rollback() error {
 	}
 	t.hasBegun = false
 	t.done = true
-	return t.rollback()
+	return t.rollback(ctx)
 }
 
 func (t *transaction) HasBegun() bool {
 	return t.hasBegun
 }
 
-func (t *transaction) commit() error {
+func (t *transaction) commit(ctx context.Context) error {
 	var updatedNodes, removedNodes, addedNodes []nodeEntry
 	startTime := getCurrentTime()
 
@@ -108,11 +109,17 @@ func (t *transaction) commit() error {
 		if getCurrentTime().Sub(startTime).Minutes() > float64(t.maxTime) {
 			return fmt.Errorf("Transaction timed out(maxTime=%v).", t.maxTime)
 		}
-		if t.trackedItemsHasConflict() {
-			if rerr := t.rollback(); rerr != nil {
-				return fmt.Errorf("Item(s) that were modified as well by another transaction was detected, and rollback failed as well, details: %v.", rerr)
+		if hasConflict, err := t.trackedItemsHasConflict(ctx); hasConflict || err != nil {
+			if hasConflict {
+				if rerr := t.rollback(ctx); rerr != nil {
+					return fmt.Errorf("Item(s) that were modified as well by another transaction was detected, and rollback failed as well, details: %v.", rerr)
+				}
+				return fmt.Errorf("Item(s) that were modified as well by another transaction was detected, 'failing commit as violating Isolation & affecting Consistency.")
 			}
-			return fmt.Errorf("Item(s) that were modified as well by another transaction was detected, 'failing commit as violating Isolation & affecting Consistency.")
+			if rerr := t.rollback(ctx); rerr != nil {
+				return fmt.Errorf("API error on commit, details: %v. Rollback also failed, details: %v.", err, rerr)
+			}
+			return fmt.Errorf("API error on commit, details: %v.", err)
 		}
 
 		if !t.forWriting {
@@ -135,13 +142,15 @@ func (t *transaction) commit() error {
 
 	// Mark these items as locked in Redis.
 	// Return error to rollback if any failed to lock as alredy locked by another transaction. Or if Redis fetch failed(error).
-	if !t.manageTrackedItemsLocking(true) {
-		return fmt.Errorf("Tracked items within the transaction failed to lock, thus, conflict with other transaction changes is presumed.")
+	if ok, err := t.manageTrackedItemsLocking(ctx, true); !ok || err != nil {
+		if err == nil {
+			return fmt.Errorf("Tracked items within the transaction failed to lock, thus, conflict with other transaction changes is presumed.")
+		}
+		return fmt.Errorf("Tracked items within the transaction failed to lock, error: %v.", err)
 	}
 
 	t.setActiveModifiedInactiveNodes(updatedNodes)
-	t.cleanup()
-	return nil
+	return t.cleanup(ctx)
 }
 
 type nodeEntry struct {
@@ -149,10 +158,14 @@ type nodeEntry struct {
 	node   interface{}
 }
 
-func (t *transaction) cleanup() {
+func (t *transaction) cleanup(ctx context.Context) error {
 	t.deleteTransactionLogs()
-	t.manageTrackedItemsLocking(false)
+	if ok, err := t.manageTrackedItemsLocking(ctx, false); !ok || err != nil {
+		// TODO: delete cached data sets on this transaction.
+		return err
+	}
 	// TODO: delete cached data sets on this transaction.
+	return nil
 }
 
 func (t *transaction) deleteTransactionLogs() {
@@ -181,25 +194,28 @@ func (t *transaction) getModifiedStores() []btree.StoreInfo {
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes.
 func (t *transaction) classifyModifiedNodes() ([]nodeEntry, []nodeEntry, []nodeEntry) {
-	// for  t.stores
+
+
+
+
 	return nil, nil, nil
 }
 
-func (t *transaction) rollback() error {
+func (t *transaction) rollback(ctx context.Context) error {
 	// TODO
-	t.cleanup()
-	return nil
+	return t.cleanup(ctx)
 }
 
-func (t *transaction) manageTrackedItemsLocking(lockOrUnlock bool) bool {
+func (t *transaction) manageTrackedItemsLocking(ctx context.Context, lockOrUnlock bool) (bool, error) {
 	// TODO: Lock items tracked.
-
 	// If action is to lock, re-check (again) after locking if tracked items has conflict.
-	if lockOrUnlock && t.trackedItemsHasConflict() {
-		// TODO: unlock before returning failure.
-		return false
+	if lockOrUnlock {
+		if hasConflict, err := t.trackedItemsHasConflict(ctx);hasConflict || err != nil {
+			// TODO: unlock before returning failure.
+			return false, err
+		}
 	}
-	return true
+	return true, nil
 }
 
 // Check all explicitly fetched(i.e. - GetCurrentKey/GetCurrentValue invoked) & managed(add/update/remove) items
@@ -207,12 +223,11 @@ func (t *transaction) manageTrackedItemsLocking(lockOrUnlock bool) bool {
 // Compare local vs redis/blobStore copy and see if different. Read from blobStore if not found in redis.
 // Commit to return error if there is at least an item with different version no. as compared to
 // local cache's copy.
-func (t *transaction) trackedItemsHasConflict() bool {
-	// for _,s := range t.stores {
-	// 	iat := s.ItemActionTracker.(itemActionTracker[interface{}, interface{}])
-	// 	for k,v := range iat.items {
-			
-	// 	}
-	// }
-	return false
+func (t *transaction) trackedItemsHasConflict(ctx context.Context) (bool, error) {
+	for _,s := range t.stores {
+		if hasConflict,err := s.backendItemActionTracker.hasConflict(ctx, s.itemRedisCache); hasConflict || err != nil {
+			return hasConflict, err
+		}
+	}
+	return false, nil
 }

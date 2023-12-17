@@ -18,16 +18,16 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	b3 := NewBtree[int, string]("fooStore", 8, false, false, trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
-		trans.Rollback()
+		trans.Rollback(ctx)
 		return
 	}
 	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
 		t.Logf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
-		trans.Rollback()
+		trans.Rollback(ctx)
 		return
 	}
 	t.Logf("Successfully added & found item with key 1.")
-	trans.Commit()
+	trans.Commit(ctx)
 }
 
 func Test_TransactionStory_ManyBTree(t *testing.T) {
