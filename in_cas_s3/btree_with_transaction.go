@@ -12,6 +12,7 @@ type btreeWithTransaction[TK btree.Comparable, TV any] struct {
 	btree btree.BtreeInterface[TK, TV]
 }
 
+// Instantiate a B-Tree wrapper that enforces transaction session on each method(a.k.a. operation).
 func newBtreeWithTransaction[TK btree.Comparable, TV any](t Transaction, btree btree.BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
 	return &btreeWithTransaction[TK, TV]{
 		transaction: t,
