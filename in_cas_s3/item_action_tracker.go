@@ -122,7 +122,7 @@ func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache
 				return err
 			}
 		} else if tlid != lid.ToString() {
-			return fmt.Errorf("lock call detected conflict.")
+			return fmt.Errorf("lock(item: %v) call detected conflict.", uuid)
 		}
 	}
 	return nil
