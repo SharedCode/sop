@@ -33,6 +33,7 @@ var getCurrentTime = time.Now
 func NewTransaction(forWriting bool) Transaction {
 	return NewTransactionWithMaxSessionTime(forWriting, -1)
 }
+
 // NewTransactionWithMaxSessionTime is synonymous to NewTransaction except you can specify
 // the transaction session max duration.
 func NewTransactionWithMaxSessionTime(forWriting bool, maxTime time.Duration) Transaction {
@@ -143,20 +144,21 @@ func (t *transaction) commit(ctx context.Context) error {
 	stores := t.getModifiedStores()
 	t.saveStores(stores)
 
-	// Mark these items as locked in Redis.
-	// Return error to rollback if any failed to lock as alredy locked by another transaction. Or if Redis fetch failed(error).
+	// Mark session modified items as locked in Redis.
 	if err := t.lockTrackedItems(ctx); err != nil {
 		if rerr := t.rollback(ctx); rerr != nil {
 			return fmt.Errorf("lockTrackedItems call failed, details: %v, rollback error: %v.", err, rerr)
 		}
 		return err
 	}
+	// Switch to active "state" the (inactive) updated/new Nodes so they will get started to be "seen" if fetched.
 	if err := t.setActiveModifiedInactiveNodes(updatedNodes); err != nil {
 		if rerr := t.rollback(ctx); rerr != nil {
 			return fmt.Errorf("setActiveModifiedInactiveNodes call failed, details: %v, rollback error: %v.", err, rerr)
 		}
 		return err
 	}
+	// Unlock the items in Redis.
 	if err := t.unlockTrackedItems(ctx); err != nil {
 		if rerr := t.rollback(ctx); rerr != nil {
 			return fmt.Errorf("unlockTrackedItems call failed, details: %v, rollback error: %v.", err, rerr)
@@ -181,7 +183,10 @@ func (t *transaction) deleteTransactionLogs() {
 
 }
 
+// Go through all Virtual IDs of the modified Nodes and update them so the inactive UUID becomes the active ones.
+// Should be a lightweight operation & quick. Should use backend system's transaction for all or nothing commit.
 func (t *transaction) setActiveModifiedInactiveNodes([]nodeEntry) error {
+
 	return nil
 }
 
