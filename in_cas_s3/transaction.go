@@ -33,6 +33,8 @@ var getCurrentTime = time.Now
 func NewTransaction(forWriting bool) Transaction {
 	return NewTransactionWithMaxSessionTime(forWriting, -1)
 }
+// NewTransactionWithMaxSessionTime is synonymous to NewTransaction except you can specify
+// the transaction session max duration.
 func NewTransactionWithMaxSessionTime(forWriting bool, maxTime time.Duration) Transaction {
 	if maxTime <= 0 {
 		m := 15
@@ -83,6 +85,13 @@ func (t *transaction) HasBegun() bool {
 	return t.hasBegun
 }
 
+func (t *transaction) timedOut(startTime time.Time) error {
+	if getCurrentTime().Sub(startTime).Minutes() > float64(t.maxTime) {
+		return fmt.Errorf("Transaction timed out(maxTime=%v).", t.maxTime)
+	}
+	return nil
+}
+
 func (t *transaction) commit(ctx context.Context) error {
 	var updatedNodes, removedNodes, addedNodes []nodeEntry
 	startTime := getCurrentTime()
@@ -106,20 +115,14 @@ func (t *transaction) commit(ctx context.Context) error {
 	// - Loop end.
 	// - Return error if loop timed out to trigger rollback.
 	for {
-		if getCurrentTime().Sub(startTime).Minutes() > float64(t.maxTime) {
-			return fmt.Errorf("Transaction timed out(maxTime=%v).", t.maxTime)
+		if err := t.timedOut(startTime); err != nil {
+			return err
 		}
-		if hasConflict, err := t.trackedItemsHasConflict(ctx); hasConflict || err != nil {
-			if hasConflict {
-				if rerr := t.rollback(ctx); rerr != nil {
-					return fmt.Errorf("Item(s) that were modified as well by another transaction was detected, and rollback failed as well, details: %v.", rerr)
-				}
-				return fmt.Errorf("Item(s) that were modified as well by another transaction was detected, 'failing commit as violating Isolation & affecting Consistency.")
-			}
+		if err := t.trackedItemsHasConflict(ctx); err != nil {
 			if rerr := t.rollback(ctx); rerr != nil {
-				return fmt.Errorf("API error on commit, details: %v. Rollback also failed, details: %v.", err, rerr)
+				return fmt.Errorf("trackedItemsHasConflict call failed, details: %v, rollback error: %v.", err, rerr)
 			}
-			return fmt.Errorf("API error on commit, details: %v.", err)
+			return err
 		}
 
 		if !t.forWriting {
@@ -142,14 +145,24 @@ func (t *transaction) commit(ctx context.Context) error {
 
 	// Mark these items as locked in Redis.
 	// Return error to rollback if any failed to lock as alredy locked by another transaction. Or if Redis fetch failed(error).
-	if ok, err := t.lockTrackedItems(ctx); !ok || err != nil {
-		if err == nil {
-			return fmt.Errorf("Tracked items within the transaction failed to lock, thus, conflict with other transaction changes is presumed.")
+	if err := t.lockTrackedItems(ctx); err != nil {
+		if rerr := t.rollback(ctx); rerr != nil {
+			return fmt.Errorf("lockTrackedItems call failed, details: %v, rollback error: %v.", err, rerr)
 		}
-		return fmt.Errorf("Tracked items within the transaction failed to lock, error: %v.", err)
+		return err
 	}
-
-	t.setActiveModifiedInactiveNodes(updatedNodes)
+	if err := t.setActiveModifiedInactiveNodes(updatedNodes); err != nil {
+		if rerr := t.rollback(ctx); rerr != nil {
+			return fmt.Errorf("setActiveModifiedInactiveNodes call failed, details: %v, rollback error: %v.", err, rerr)
+		}
+		return err
+	}
+	if err := t.unlockTrackedItems(ctx); err != nil {
+		if rerr := t.rollback(ctx); rerr != nil {
+			return fmt.Errorf("unlockTrackedItems call failed, details: %v, rollback error: %v.", err, rerr)
+		}
+		return err
+	}
 	return t.cleanup(ctx)
 }
 
@@ -160,11 +173,7 @@ type nodeEntry struct {
 
 func (t *transaction) cleanup(ctx context.Context) error {
 	t.deleteTransactionLogs()
-	if ok, err := t.unlockTrackedItems(ctx); !ok || err != nil {
-		// TODO: delete cached data sets on this transaction.
-		return err
-	}
-	// TODO: delete cached data sets on this transaction.
+	// TODO: delete cached data sets of this transaction on Redis.
 	return nil
 }
 
@@ -172,7 +181,8 @@ func (t *transaction) deleteTransactionLogs() {
 
 }
 
-func (t *transaction) setActiveModifiedInactiveNodes([]nodeEntry) {
+func (t *transaction) setActiveModifiedInactiveNodes([]nodeEntry) error {
+	return nil
 }
 
 func (t *transaction) saveStores([]btree.StoreInfo) {
@@ -203,22 +213,23 @@ func (t *transaction) rollback(ctx context.Context) error {
 	return t.cleanup(ctx)
 }
 
-func (t *transaction) lockTrackedItems(ctx context.Context) (bool, error) {
+func (t *transaction) lockTrackedItems(ctx context.Context) error {
 	for _, s := range t.stores {
-		if ok, err := s.backendItemActionTracker.lock(ctx, s.itemRedisCache, t.maxTime); !ok || err != nil {
-			return false, err
+		if err := s.backendItemActionTracker.lock(ctx, s.itemRedisCache, t.maxTime); err != nil {
+			return err
 		}
 	}
-	return true, nil
+	return nil
 }
 
-func (t *transaction) unlockTrackedItems(ctx context.Context) (bool, error) {
+func (t *transaction) unlockTrackedItems(ctx context.Context) error {
+	var lastError error
 	for _, s := range t.stores {
-		if ok, err := s.backendItemActionTracker.unlock(ctx, s.itemRedisCache); !ok || err != nil {
-			return false, err
+		if err := s.backendItemActionTracker.unlock(ctx, s.itemRedisCache); err != nil {
+			lastError = err
 		}
 	}
-	return true, nil
+	return lastError
 }
 
 // Check all explicitly fetched(i.e. - GetCurrentKey/GetCurrentValue invoked) & managed(add/update/remove) items
@@ -226,11 +237,14 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) (bool, error) {
 // Compare local vs redis/blobStore copy and see if different. Read from blobStore if not found in redis.
 // Commit to return error if there is at least an item with different version no. as compared to
 // local cache's copy.
-func (t *transaction) trackedItemsHasConflict(ctx context.Context) (bool, error) {
+func (t *transaction) trackedItemsHasConflict(ctx context.Context) error {
 	for _, s := range t.stores {
 		if hasConflict, err := s.backendItemActionTracker.hasConflict(ctx, s.itemRedisCache); hasConflict || err != nil {
-			return hasConflict, err
+			if hasConflict {
+				return fmt.Errorf("hasConflict call detected conflict.")
+			}
+			return err
 		}
 	}
-	return false, nil
+	return nil
 }

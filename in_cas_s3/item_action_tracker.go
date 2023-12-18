@@ -2,6 +2,7 @@ package in_cas_s3
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/SharedCode/sop/btree"
@@ -96,12 +97,11 @@ func (t *itemActionTrackerTyped[TK, TV]) Remove(item *btree.Item[TK, TV]) {
 // Returns true if there is at least an item that got modified(by another transaction) in Redis.
 // Otherwise returns false.
 func (t *itemActionTracker) hasConflict(ctx context.Context, itemRedisCache redis.Cache) (bool, error) {
-	for uuid,_ := range t.items {
+	for uuid := range t.items {
 		if _, err := itemRedisCache.Get(ctx, uuid.ToString()); err != nil {
-			if redis.KeyNotFound(err) {
-				continue
+			if !redis.KeyNotFound(err) {
+				return false, err
 			}
-			return false, err
 		}
 		// If item is found in Redis, it means it is already being committed by another transaction.
 		return true, nil
@@ -111,35 +111,34 @@ func (t *itemActionTracker) hasConflict(ctx context.Context, itemRedisCache redi
 
 // lock the tracked items in Redis in preparation to finalize the transaction commit.
 // This should work in combination of optimistic locking implemented by hasConflict above.
-func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) (bool, error) {
+func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error {
 	for uuid, cachedData := range t.items {
 		lid := cachedData.lockId
 		if tlid, err := itemRedisCache.Get(ctx, uuid.ToString()); err != nil {
-			if redis.KeyNotFound(err) {
-				if err := itemRedisCache.Set(ctx, uuid.ToString(), lid.ToString(), duration); err != nil {
-					return false, err
-				}
-				continue
+			if !redis.KeyNotFound(err) {
+				return err
 			}
-			return false, err
+			if err := itemRedisCache.Set(ctx, uuid.ToString(), lid.ToString(), duration); err != nil {
+				return err
+			}
 		} else if tlid != lid.ToString() {
-			return false, nil
+			return fmt.Errorf("lock call detected conflict.")
 		}
 	}
-	return true, nil
+	return nil
 }
 
 // unlock will attempt to unlock or delete all tracked items from redis. It will issue a delete even
 // if there is an error and complete trying to delete them all and return the last error encountered
 // as a sample, if there is.
-func (t *itemActionTracker) unlock(ctx context.Context, itemRedisCache redis.Cache) (bool, error) {
+func (t *itemActionTracker) unlock(ctx context.Context, itemRedisCache redis.Cache) error {
 	var lastError error
-	for uuid, _ := range t.items {
+	for uuid := range t.items {
 		if err := itemRedisCache.Delete(ctx, uuid.ToString()); err != nil {
 			if !redis.KeyNotFound(err) {
 				lastError = err
 			}
 		}
 	}
-	return lastError == nil, lastError
+	return lastError
 }
