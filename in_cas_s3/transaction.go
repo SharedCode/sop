@@ -142,7 +142,7 @@ func (t *transaction) commit(ctx context.Context) error {
 
 	// Mark these items as locked in Redis.
 	// Return error to rollback if any failed to lock as alredy locked by another transaction. Or if Redis fetch failed(error).
-	if ok, err := t.lockTrackedItems(ctx, true); !ok || err != nil {
+	if ok, err := t.lockTrackedItems(ctx); !ok || err != nil {
 		if err == nil {
 			return fmt.Errorf("Tracked items within the transaction failed to lock, thus, conflict with other transaction changes is presumed.")
 		}
@@ -160,7 +160,7 @@ type nodeEntry struct {
 
 func (t *transaction) cleanup(ctx context.Context) error {
 	t.deleteTransactionLogs()
-	if ok, err := t.lockTrackedItems(ctx, false); !ok || err != nil {
+	if ok, err := t.unlockTrackedItems(ctx); !ok || err != nil {
 		// TODO: delete cached data sets on this transaction.
 		return err
 	}
@@ -195,9 +195,6 @@ func (t *transaction) getModifiedStores() []btree.StoreInfo {
 // a. updated Nodes, b. removed Nodes, c. added Nodes.
 func (t *transaction) classifyModifiedNodes() ([]nodeEntry, []nodeEntry, []nodeEntry) {
 
-
-
-
 	return nil, nil, nil
 }
 
@@ -206,12 +203,18 @@ func (t *transaction) rollback(ctx context.Context) error {
 	return t.cleanup(ctx)
 }
 
-func (t *transaction) lockTrackedItems(ctx context.Context, toLock bool) (bool, error) {
-	// TODO: Lock items tracked.
-	// If action is to lock, re-check (again) after locking if tracked items has conflict.
-	if toLock {
-		if hasConflict, err := t.trackedItemsHasConflict(ctx);hasConflict || err != nil {
-			// TODO: unlock before returning failure.
+func (t *transaction) lockTrackedItems(ctx context.Context) (bool, error) {
+	for _, s := range t.stores {
+		if ok, err := s.backendItemActionTracker.lock(ctx, s.itemRedisCache, t.maxTime); !ok || err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (t *transaction) unlockTrackedItems(ctx context.Context) (bool, error) {
+	for _, s := range t.stores {
+		if ok, err := s.backendItemActionTracker.unlock(ctx, s.itemRedisCache); !ok || err != nil {
 			return false, err
 		}
 	}
@@ -224,8 +227,8 @@ func (t *transaction) lockTrackedItems(ctx context.Context, toLock bool) (bool, 
 // Commit to return error if there is at least an item with different version no. as compared to
 // local cache's copy.
 func (t *transaction) trackedItemsHasConflict(ctx context.Context) (bool, error) {
-	for _,s := range t.stores {
-		if hasConflict,err := s.backendItemActionTracker.hasConflict(ctx, s.itemRedisCache); hasConflict || err != nil {
+	for _, s := range t.stores {
+		if hasConflict, err := s.backendItemActionTracker.hasConflict(ctx, s.itemRedisCache); hasConflict || err != nil {
 			return hasConflict, err
 		}
 	}

@@ -27,5 +27,5 @@ func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique
 	s := btree.NewStoreInfo(name, slotLength, isUnique, true)
 	si.storeRepository.Add(s)
 
-	return btree.NewBtree[TK, TV](s, &si.StoreInterface)
+	return newBtreeWithTransaction[TK, TV](t, btree.NewBtree[TK, TV](s, &si.StoreInterface))
 }
