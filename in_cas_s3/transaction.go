@@ -3,6 +3,7 @@ package in_cas_s3
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/SharedCode/sop/btree"
@@ -10,9 +11,13 @@ import (
 
 // Transaction interface defines the "enduser facing" transaction methods.
 type Transaction interface {
+	// Begin the transaction.
 	Begin() error
+	// Commit the transaction.
 	Commit(ctx context.Context) error
+	// Rollback the transaction.
 	Rollback(ctx context.Context) error
+	// Returns true if transaction has begun, false otherwise.
 	HasBegun() bool
 }
 
@@ -23,6 +28,11 @@ type transaction struct {
 	hasBegun   bool
 	done       bool
 	maxTime    time.Duration
+}
+
+type nodeEntry struct {
+	nodeId btree.UUID
+	node   interface{}
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
@@ -124,7 +134,8 @@ func (t *transaction) commit(ctx context.Context) error {
 	// - Re-fetch the Nodes of these items, re-create the lookup table consisting only of these items & their re-fetched Nodes
 	// - Loop end.
 	// - Return error if loop timed out to trigger rollback.
-	for {
+	done := false
+	for !done {
 		if err := t.timedOut(startTime); err != nil {
 			return err
 		}
@@ -137,21 +148,16 @@ func (t *transaction) commit(ctx context.Context) error {
 			return nil
 		}
 
-		retry := false
+		done = true
 		if ok, err := t.saveUpdatedNodes(ctx, updatedNodes); err != nil {
 			return err
 		} else if !ok {
-			retry = true
+			done = false
 		}
 		if ok, err := t.saveRemovedNodes(ctx, removedNodes); err != nil {
 			return err
 		} else if !ok {
-			retry = true
-		}
-
-		// Retry only if both updated & removed nodes got persisted successfully, i.e. - no merge conflict with Redis.
-		if !retry {
-			break
+			done = false
 		}
 	}
 
@@ -179,18 +185,16 @@ func (t *transaction) commit(ctx context.Context) error {
 }
 
 func (t *transaction) cleanup(ctx context.Context) error {
-	t.deleteTransactionLogs()
+	sb := strings.Builder{}
+	if err := t.deleteTransactionLogs(); err != nil {
+		sb.WriteString(fmt.Sprintln(err.Error()))
+	}
 	// TODO: delete cached data sets of this transaction on Redis.
+	return fmt.Errorf(sb.String())
+}
+
+func (t *transaction) deleteTransactionLogs() error {
 	return nil
-}
-
-func (t *transaction) deleteTransactionLogs() {
-
-}
-
-type nodeEntry struct {
-	nodeId btree.UUID
-	node   interface{}
 }
 
 // Go through all Virtual IDs of the modified Nodes and update them so the inactive UUID becomes the active ones.
@@ -241,10 +245,31 @@ func (t *transaction) getModifiedStores() []btree.StoreInfo {
 }
 
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
-// a. updated Nodes, b. removed Nodes, c. added Nodes.
+// a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes.
 func (t *transaction) classifyModifiedNodes() ([]nodeEntry, []nodeEntry, []nodeEntry) {
-
-	return nil, nil, nil
+	var updatedNodes, removedNodes, addedNodes []nodeEntry
+	for _, s := range t.stores {
+		for nodeId, cacheNode := range s.backendNodeRepository.nodeLocalCache {
+			switch cacheNode.action {
+			case updateAction:
+				updatedNodes = append(updatedNodes, nodeEntry{
+					nodeId: nodeId,
+					node: cacheNode.node,
+				})
+			case removeAction:
+				removedNodes = append(removedNodes, nodeEntry{
+					nodeId: nodeId,
+					node: cacheNode.node,
+				})
+			case addAction:
+				addedNodes = append(addedNodes, nodeEntry{
+					nodeId: nodeId,
+					node: cacheNode.node,
+				})
+			}
+		}
+	}
+	return updatedNodes, removedNodes, addedNodes
 }
 
 func (t *transaction) rollback(ctx context.Context) error {

@@ -137,7 +137,6 @@ func (nr *nodeRepository) remove(nodeId btree.UUID) {
 		}
 		v.action = removeAction
 		nr.nodeLocalCache[nodeId] = v
-		return
 	}
 	// Code should not reach this point, as B-tree will not issue a remove if node is not cached locally.
 }

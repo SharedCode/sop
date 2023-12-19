@@ -21,6 +21,7 @@ const (
 type cacheData struct {
 	lockId btree.UUID
 	action actionType
+	item interface{}
 }
 
 type itemActionTracker struct {
@@ -31,6 +32,7 @@ type itemActionTrackerTyped[TK btree.Comparable, TV any] struct {
 	realItemActionTracker *itemActionTracker
 }
 
+// Creates a new Item Action Tracker instance with frontend and backend interface/methods.
 func newItemActionTracker[TK btree.Comparable, TV any]() *itemActionTrackerTyped[TK, TV] {
 	iat := itemActionTracker{
 		items: make(map[btree.UUID]cacheData),
@@ -61,6 +63,7 @@ func (t *itemActionTrackerTyped[TK, TV]) Get(item *btree.Item[TK, TV]) {
 		t.realItemActionTracker.items[item.Id] = cacheData{
 			lockId: btree.NewUUID(),
 			action: getAction,
+			item: item,
 		}
 	}
 }
@@ -69,6 +72,7 @@ func (t *itemActionTrackerTyped[TK, TV]) Add(item *btree.Item[TK, TV]) {
 	t.realItemActionTracker.items[item.Id] = cacheData{
 		lockId: btree.NewUUID(),
 		action: addAction,
+		item: item,
 	}
 }
 
@@ -79,6 +83,7 @@ func (t *itemActionTrackerTyped[TK, TV]) Update(item *btree.Item[TK, TV]) {
 	t.realItemActionTracker.items[item.Id] = cacheData{
 		lockId: btree.NewUUID(),
 		action: updateAction,
+		item: item,
 	}
 }
 
@@ -90,8 +95,11 @@ func (t *itemActionTrackerTyped[TK, TV]) Remove(item *btree.Item[TK, TV]) {
 	t.realItemActionTracker.items[item.Id] = cacheData{
 		lockId: btree.NewUUID(),
 		action: removeAction,
+		item: item,
 	}
 }
+
+
 
 // hasConflict will compare the locally cached items' version with their copies in Redis.
 // Returns true if there is at least an item that got modified(by another transaction) in Redis.
