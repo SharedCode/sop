@@ -27,7 +27,9 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		return
 	}
 	t.Logf("Successfully added & found item with key 1.")
-	trans.Commit(ctx)
+	if err := trans.Commit(ctx); err != nil {
+		t.Logf("Commit returned error, details: %v.", err)
+	}
 }
 
 func Test_TransactionStory_ManyBTree(t *testing.T) {

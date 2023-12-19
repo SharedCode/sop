@@ -67,7 +67,13 @@ func (t *transaction) Commit(ctx context.Context) error {
 	}
 	t.hasBegun = false
 	t.done = true
-	return t.commit(ctx)
+	if err := t.commit(ctx); err != nil {
+		if rerr := t.rollback(ctx); rerr != nil {
+			return fmt.Errorf("commit call failed, details: %v, rollback error: %v.", err, rerr)
+		}
+		return err
+	}
+	return t.cleanup(ctx)
 }
 
 func (t *transaction) Rollback(ctx context.Context) error {
@@ -94,7 +100,10 @@ func (t *transaction) timedOut(startTime time.Time) error {
 }
 
 func (t *transaction) commit(ctx context.Context) error {
-	var updatedNodes, removedNodes, addedNodes []nodeEntry
+
+	// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
+	// has to do merging & conflict resolution. Add is simple upsert.
+	updatedNodes, removedNodes, addedNodes := t.classifyModifiedNodes()
 	startTime := getCurrentTime()
 
 	// For writer transaction. Save the managed Node(s) as inactive:
@@ -120,9 +129,6 @@ func (t *transaction) commit(ctx context.Context) error {
 			return err
 		}
 		if err := t.trackedItemsHasConflict(ctx); err != nil {
-			if rerr := t.rollback(ctx); rerr != nil {
-				return fmt.Errorf("trackedItemsHasConflict call failed, details: %v, rollback error: %v.", err, rerr)
-			}
 			return err
 		}
 
@@ -131,46 +137,45 @@ func (t *transaction) commit(ctx context.Context) error {
 			return nil
 		}
 
-		updatedNodes, removedNodes, addedNodes = t.classifyModifiedNodes()
-		t.saveUpdatedNodes(updatedNodes)
-
-		if t.countDiffsWithRedisNodes(updatedNodes) == 0 {
+		retry := false
+		if ok, err := t.saveUpdatedNodes(ctx, updatedNodes); err != nil {
+			return err
+		} else if !ok {
+			retry = true
+		}
+		if ok, err := t.saveRemovedNodes(ctx, removedNodes); err != nil {
+			return err
+		} else if !ok {
+			retry = true
+		}
+	
+		// Retry only if both updated & removed nodes got persisted successfully, i.e. - no merge conflict with Redis.
+		if !retry {
 			break
 		}
 	}
 
-	t.saveRemovedNodes(removedNodes)
-	t.saveAddedNodes(addedNodes)
+	if err := t.saveAddedNodes(ctx, addedNodes); err != nil {
+		return err
+	}
 	stores := t.getModifiedStores()
-	t.saveStores(stores)
+	if err := t.saveStores(ctx, stores); err != nil {
+		return err
+	}
 
 	// Mark session modified items as locked in Redis.
 	if err := t.lockTrackedItems(ctx); err != nil {
-		if rerr := t.rollback(ctx); rerr != nil {
-			return fmt.Errorf("lockTrackedItems call failed, details: %v, rollback error: %v.", err, rerr)
-		}
 		return err
 	}
 	// Switch to active "state" the (inactive) updated/new Nodes so they will get started to be "seen" if fetched.
 	if err := t.setActiveModifiedInactiveNodes(updatedNodes); err != nil {
-		if rerr := t.rollback(ctx); rerr != nil {
-			return fmt.Errorf("setActiveModifiedInactiveNodes call failed, details: %v, rollback error: %v.", err, rerr)
-		}
 		return err
 	}
 	// Unlock the items in Redis.
 	if err := t.unlockTrackedItems(ctx); err != nil {
-		if rerr := t.rollback(ctx); rerr != nil {
-			return fmt.Errorf("unlockTrackedItems call failed, details: %v, rollback error: %v.", err, rerr)
-		}
 		return err
 	}
-	return t.cleanup(ctx)
-}
-
-type nodeEntry struct {
-	nodeId btree.UUID
-	node   interface{}
+	return nil
 }
 
 func (t *transaction) cleanup(ctx context.Context) error {
@@ -183,6 +188,11 @@ func (t *transaction) deleteTransactionLogs() {
 
 }
 
+type nodeEntry struct {
+	nodeId btree.UUID
+	node   interface{}
+}
+
 // Go through all Virtual IDs of the modified Nodes and update them so the inactive UUID becomes the active ones.
 // Should be a lightweight operation & quick. Should use backend system's transaction for all or nothing commit.
 func (t *transaction) setActiveModifiedInactiveNodes([]nodeEntry) error {
@@ -190,16 +200,40 @@ func (t *transaction) setActiveModifiedInactiveNodes([]nodeEntry) error {
 	return nil
 }
 
-func (t *transaction) saveStores([]btree.StoreInfo) {
+func (t *transaction) saveStores(ctx context.Context, store []btree.StoreInfo) error {
+	return nil
 }
-func (t *transaction) saveUpdatedNodes([]nodeEntry) {
+
+func (t *transaction) saveUpdatedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
+	// TODO:
+	if c, err := t.countDiffsWithRedisNodes(nodes); err != nil {
+		if rerr := t.rollback(ctx); rerr != nil {
+			return false, fmt.Errorf("countDiffsWithRedisNodes call failed, details: %v, rollback error: %v.", err, rerr)
+		}
+		return false, err
+	} else if c == 0 {
+		return true, nil
+	}
+	return false, nil
 }
-func (t *transaction) countDiffsWithRedisNodes([]nodeEntry) int {
-	return 0
+func (t *transaction) countDiffsWithRedisNodes([]nodeEntry) (int, error) {
+	return 0, nil
 }
-func (t *transaction) saveRemovedNodes([]nodeEntry) {
+func (t *transaction) saveRemovedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
+	// TODO:
+	if c, err := t.countDiffsWithRedisNodes(nodes); err != nil {
+		if rerr := t.rollback(ctx); rerr != nil {
+			return false, fmt.Errorf("countDiffsWithRedisNodes call failed, details: %v, rollback error: %v.", err, rerr)
+		}
+		return false, err
+	} else if c == 0 {
+		return true, nil
+	}
+	return false, nil
 }
-func (t *transaction) saveAddedNodes([]nodeEntry) {
+func (t *transaction) saveAddedNodes(ctx context.Context, nodes []nodeEntry) error {
+	// TODO:
+	return nil
 }
 
 func (t *transaction) getModifiedStores() []btree.StoreInfo {
