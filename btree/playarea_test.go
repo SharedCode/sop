@@ -33,8 +33,8 @@ func TestUUIDConversion(t *testing.T) {
 func TestItemMarshallingBetweenInterfaceAndGenerics(t *testing.T) {
 	foobar := "foobar"
 	vd := Item[int, string]{
-		Key:     1,
-		Value:   &foobar,
+		Key:   1,
+		Value: &foobar,
 	}
 	ba, _ := json.Marshal(vd)
 	var obj Item[interface{}, interface{}]

@@ -35,7 +35,7 @@ func newItemActionTracker[TK btree.Comparable, TV any]() *itemActionTrackerTyped
 	iat := itemActionTracker{
 		items: make(map[btree.UUID]cacheData),
 	}
-	return &itemActionTrackerTyped[TK, TV] {
+	return &itemActionTrackerTyped[TK, TV]{
 		realItemActionTracker: &iat,
 	}
 }
@@ -59,7 +59,7 @@ func newItemActionTracker[TK btree.Comparable, TV any]() *itemActionTrackerTyped
 func (t *itemActionTrackerTyped[TK, TV]) Get(item *btree.Item[TK, TV]) {
 	if _, ok := t.realItemActionTracker.items[item.Id]; !ok {
 		t.realItemActionTracker.items[item.Id] = cacheData{
-			lockId:   btree.NewUUID(),
+			lockId: btree.NewUUID(),
 			action: getAction,
 		}
 	}
@@ -67,7 +67,7 @@ func (t *itemActionTrackerTyped[TK, TV]) Get(item *btree.Item[TK, TV]) {
 
 func (t *itemActionTrackerTyped[TK, TV]) Add(item *btree.Item[TK, TV]) {
 	t.realItemActionTracker.items[item.Id] = cacheData{
-		lockId:   btree.NewUUID(),
+		lockId: btree.NewUUID(),
 		action: addAction,
 	}
 }

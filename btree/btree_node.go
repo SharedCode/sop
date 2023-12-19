@@ -28,6 +28,7 @@ type Item[TK Comparable, TV any] struct {
 	UpsertTime      int64
 	valueNeedsFetch bool
 }
+
 func (n Item[TK, TV]) GetUpsertTime() int64 {
 	return n.UpsertTime
 }
@@ -54,6 +55,7 @@ type Node[TK Comparable, TV any] struct {
 	indexOfNode int
 	childrenIds []UUID
 }
+
 func (n Node[TK, TV]) GetUpsertTime() int64 {
 	return n.UpsertTime
 }
@@ -61,6 +63,7 @@ func (n *Node[TK, TV]) SetUpsertTime() int64 {
 	n.UpsertTime = time.Now().UnixNano()
 	return n.UpsertTime
 }
+
 // newNode creates a new node.
 func newNode[TK Comparable, TV any](slotCount int) *Node[TK, TV] {
 	return &Node[TK, TV]{

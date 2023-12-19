@@ -148,7 +148,7 @@ func (t *transaction) commit(ctx context.Context) error {
 		} else if !ok {
 			retry = true
 		}
-	
+
 		// Retry only if both updated & removed nodes got persisted successfully, i.e. - no merge conflict with Redis.
 		if !retry {
 			break
