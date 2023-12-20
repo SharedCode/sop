@@ -9,11 +9,11 @@ import (
 
 type btreeWithTransaction[TK btree.Comparable, TV any] struct {
 	transaction Transaction
-	btree       btree.BtreeInterface[TK, TV]
+	btree       btree.BtreeInterface[interface{}, interface{}]
 }
 
 // Instantiate a B-Tree wrapper that enforces transaction session on each method(a.k.a. operation).
-func newBtreeWithTransaction[TK btree.Comparable, TV any](t Transaction, btree btree.BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
+func newBtreeWithTransaction[TK btree.Comparable, TV any](t Transaction, btree btree.BtreeInterface[interface{}, interface{}]) *btreeWithTransaction[TK, TV] {
 	return &btreeWithTransaction[TK, TV]{
 		transaction: t,
 		btree:       btree,
@@ -89,7 +89,8 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentKey(ctx context.Context) (TK, 
 	if !b3.transaction.HasBegun() {
 		return zero, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
 	}
-	return b3.btree.GetCurrentKey(ctx)
+	k, err := b3.btree.GetCurrentKey(ctx)
+	return k.(TK), err
 }
 
 // GetCurrentValue returns the current item's value.
@@ -98,7 +99,8 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValue(ctx context.Context) (TV
 	if !b3.transaction.HasBegun() {
 		return zero, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
 	}
-	return b3.btree.GetCurrentValue(ctx)
+	v, err := b3.btree.GetCurrentValue(ctx)
+	return v.(TV), err
 }
 
 // First positions the "cursor" to the first item as per key ordering.
