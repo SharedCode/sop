@@ -23,7 +23,8 @@ type Transaction interface {
 
 type transaction struct {
 	// stores(or its items) accessed/managed within the transaction session.
-	stores     []StoreInterface[interface{}, interface{}]
+	btreesBackend     []StoreInterface[interface{}, interface{}]
+	btrees     []btree.BtreeInterface[interface{}, interface{}]
 	forWriting bool
 	hasBegun   bool
 	done       bool
@@ -204,10 +205,6 @@ func (t *transaction) setActiveModifiedInactiveNodes([]nodeEntry) error {
 	return nil
 }
 
-func (t *transaction) saveStores(ctx context.Context, store []btree.StoreInfo) error {
-	return nil
-}
-
 func (t *transaction) saveUpdatedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
 	// TODO:
 	if c, err := t.countDiffsWithRedisNodes(nodes); err != nil {
@@ -240,36 +237,39 @@ func (t *transaction) saveAddedNodes(ctx context.Context, nodes []nodeEntry) err
 	return nil
 }
 
-func (t *transaction) getModifiedStores() []btree.StoreInfo {
-	return nil
-}
-
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes.
 func (t *transaction) classifyModifiedNodes() ([]nodeEntry, []nodeEntry, []nodeEntry) {
 	var updatedNodes, removedNodes, addedNodes []nodeEntry
-	for _, s := range t.stores {
+	for _, s := range t.btreesBackend {
 		for nodeId, cacheNode := range s.backendNodeRepository.nodeLocalCache {
 			switch cacheNode.action {
 			case updateAction:
 				updatedNodes = append(updatedNodes, nodeEntry{
 					nodeId: nodeId,
-					node: cacheNode.node,
+					node:   cacheNode.node,
 				})
 			case removeAction:
 				removedNodes = append(removedNodes, nodeEntry{
 					nodeId: nodeId,
-					node: cacheNode.node,
+					node:   cacheNode.node,
 				})
 			case addAction:
 				addedNodes = append(addedNodes, nodeEntry{
 					nodeId: nodeId,
-					node: cacheNode.node,
+					node:   cacheNode.node,
 				})
 			}
 		}
 	}
 	return updatedNodes, removedNodes, addedNodes
+}
+
+func (t *transaction) getModifiedStores() []btree.StoreInfo {
+	return nil
+}
+func (t *transaction) saveStores(ctx context.Context, store []btree.StoreInfo) error {
+	return nil
 }
 
 func (t *transaction) rollback(ctx context.Context) error {
@@ -278,7 +278,7 @@ func (t *transaction) rollback(ctx context.Context) error {
 }
 
 func (t *transaction) lockTrackedItems(ctx context.Context) error {
-	for _, s := range t.stores {
+	for _, s := range t.btreesBackend {
 		if err := s.backendItemActionTracker.lock(ctx, s.itemRedisCache, t.maxTime); err != nil {
 			return err
 		}
@@ -288,7 +288,7 @@ func (t *transaction) lockTrackedItems(ctx context.Context) error {
 
 func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	var lastError error
-	for _, s := range t.stores {
+	for _, s := range t.btreesBackend {
 		if err := s.backendItemActionTracker.unlock(ctx, s.itemRedisCache); err != nil {
 			lastError = err
 		}
@@ -302,7 +302,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 // Commit to return error if there is at least an item with different version no. as compared to
 // local cache's copy.
 func (t *transaction) trackedItemsHasConflict(ctx context.Context) error {
-	for _, s := range t.stores {
+	for _, s := range t.btreesBackend {
 		if hasConflict, err := s.backendItemActionTracker.hasConflict(ctx, s.itemRedisCache); hasConflict || err != nil {
 			if hasConflict {
 				return fmt.Errorf("hasConflict call detected conflict.")

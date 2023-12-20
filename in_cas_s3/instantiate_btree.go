@@ -6,7 +6,8 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
-// NewBtree will create B-Tree with data persisted in backend store, e.g. - AWS storage services.
+// NewBtree will create B-Tree with data persisted in backend store,
+// e.g. - AWS storage services.
 func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique bool,
 	isValueDataInNodeSegment bool, t Transaction) btree.BtreeInterface[TK, TV] {
 	si := StoreInterface[interface{}, interface{}]{
@@ -30,9 +31,12 @@ func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique
 	s := btree.NewStoreInfo(name, slotLength, isUnique, true)
 	si.storeRepository.Add(s)
 
+	// Wire up the B-tree & its backend store interface of the transaction.
+	b3 := btree.NewBtree[interface{}, interface{}](s, &si.StoreInterface)
 	var t2 interface{} = t
 	trans := t2.(*transaction)
-	trans.stores = append(trans.stores, si)
+	trans.btreesBackend = append(trans.btreesBackend, si)
+	trans.btrees = append(trans.btrees, b3)
 
-	return newBtreeWithTransaction[TK, TV](t, btree.NewBtree[interface{}, interface{}](s, &si.StoreInterface))
+	return newBtreeWithTransaction[TK, TV](t, b3)
 }

@@ -26,6 +26,11 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		trans.Rollback(ctx)
 		return
 	}
+	if k, err := b3.GetCurrentKey(ctx); k != 1 || err != nil {
+		t.Logf("GetCurrentKey() failed, got = %v, %v, want = 1, nil.", k, err)
+		trans.Rollback(ctx)
+		return
+	}
 	t.Logf("Successfully added & found item with key 1.")
 	if err := trans.Commit(ctx); err != nil {
 		t.Logf("Commit returned error, details: %v.", err)
