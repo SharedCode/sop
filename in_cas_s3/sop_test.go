@@ -15,7 +15,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 4. Commit Transaction
 	trans := NewTransaction(true)
 	trans.Begin()
-	b3 := NewBtree[int, string]("fooStore", 8, false, false, trans)
+	b3,_ := NewBtree[int, string]("fooStore", 8, false, false, trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		trans.Rollback(ctx)

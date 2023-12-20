@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/in_cas_s3/redis"
 )
 
 // Transaction interface defines the "enduser facing" transaction methods.
@@ -25,6 +26,11 @@ type transaction struct {
 	// stores(or its items) accessed/managed within the transaction session.
 	btreesBackend []StoreInterface[interface{}, interface{}]
 	btrees        []btree.BtreeInterface[interface{}, interface{}]
+	// itemRedisCache is a global lookup table for used for tracking, conflict detection & resolution
+	// across different transactions in same and/or different machines.
+	itemRedisCache redis.Cache
+	storeRepository  StoreRepository
+	recyclerRepository RecyclerRepository
 	forWriting    bool
 	hasBegun      bool
 	done          bool
@@ -55,6 +61,9 @@ func NewTransactionWithMaxSessionTime(forWriting bool, maxTime time.Duration) Tr
 	return &transaction{
 		forWriting: forWriting,
 		maxTime:    maxTime,
+		itemRedisCache: redis.NewClient(redis.DefaultOptions()),
+		storeRepository: newStoreRepository(),
+		recyclerRepository: newRecycler(),
 	}
 }
 
@@ -279,7 +288,7 @@ func (t *transaction) rollback(ctx context.Context) error {
 
 func (t *transaction) lockTrackedItems(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
-		if err := s.backendItemActionTracker.lock(ctx, s.itemRedisCache, t.maxTime); err != nil {
+		if err := s.backendItemActionTracker.lock(ctx, t.itemRedisCache, t.maxTime); err != nil {
 			return err
 		}
 	}
@@ -289,7 +298,7 @@ func (t *transaction) lockTrackedItems(ctx context.Context) error {
 func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	var lastError error
 	for _, s := range t.btreesBackend {
-		if err := s.backendItemActionTracker.unlock(ctx, s.itemRedisCache); err != nil {
+		if err := s.backendItemActionTracker.unlock(ctx, t.itemRedisCache); err != nil {
 			lastError = err
 		}
 	}
@@ -303,7 +312,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 // local cache's copy.
 func (t *transaction) trackedItemsHasConflict(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
-		if hasConflict, err := s.backendItemActionTracker.hasConflict(ctx, s.itemRedisCache); hasConflict || err != nil {
+		if hasConflict, err := s.backendItemActionTracker.hasConflict(ctx, t.itemRedisCache); hasConflict || err != nil {
 			if hasConflict {
 				return fmt.Errorf("hasConflict call detected conflict.")
 			}
