@@ -23,12 +23,12 @@ type Transaction interface {
 
 type transaction struct {
 	// stores(or its items) accessed/managed within the transaction session.
-	btreesBackend     []StoreInterface[interface{}, interface{}]
-	btrees     []btree.BtreeInterface[interface{}, interface{}]
-	forWriting bool
-	hasBegun   bool
-	done       bool
-	maxTime    time.Duration
+	btreesBackend []StoreInterface[interface{}, interface{}]
+	btrees        []btree.BtreeInterface[interface{}, interface{}]
+	forWriting    bool
+	hasBegun      bool
+	done          bool
+	maxTime       time.Duration
 }
 
 type nodeEntry struct {
