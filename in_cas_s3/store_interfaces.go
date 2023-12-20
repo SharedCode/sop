@@ -2,7 +2,6 @@ package in_cas_s3
 
 import (
 	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_cas_s3/redis"
 )
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.
@@ -14,9 +13,6 @@ type StoreInterface[TK btree.Comparable, TV any] struct {
 	// Non-generics node repository, used in transaction commit to process modified Nodes.
 	backendNodeRepository *nodeRepository
 
-	// itemRedisCache is a global lookup table for used for tracking, conflict detection & resolution
-	// across different transactions in same and/or different machines.
-	itemRedisCache redis.Cache
 	// StoreRepository is used to manage/access stores.
 	storeRepository StoreRepository
 	// VirtualIdRegistry is used to manage/access all objects keyed off of their virtual Ids (UUIDs).

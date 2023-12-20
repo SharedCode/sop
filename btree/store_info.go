@@ -40,3 +40,10 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 		IsValueDataInNodeSegment: isValueDataInNodeSegment,
 	}
 }
+
+// Returns true if this StoreInfo is empty, false otherwise.
+// Empty StoreInfo signifies B-Tree does not exist yet.
+func (s StoreInfo) IsEmpty() bool {
+	var zero StoreInfo
+	return s == zero
+}
