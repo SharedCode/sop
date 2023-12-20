@@ -12,13 +12,6 @@ type StoreInterface[TK btree.Comparable, TV any] struct {
 	backendItemActionTracker *itemActionTracker
 	// Non-generics node repository, used in transaction commit to process modified Nodes.
 	backendNodeRepository *nodeRepository
-
-	// StoreRepository is used to manage/access stores.
-	storeRepository StoreRepository
-	// VirtualIdRegistry is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
-	virtualIdRegistry VirtualIdRegistry
-	// RecyclerRepository is used to manage/access all deleted objects' "data blocks".
-	recyclerRepository RecyclerRepository
 }
 
 // TODO: uncomment and reuse anything below as needed. (initial design artifacts)

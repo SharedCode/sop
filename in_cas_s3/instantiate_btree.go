@@ -38,14 +38,12 @@ func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique
 }
 
 func newBtree[TK btree.Comparable, TV any](s btree.StoreInfo, trans *transaction) (btree.BtreeInterface[TK, TV], error) {
-	si := StoreInterface[interface{}, interface{}]{
-		virtualIdRegistry: newVirtualIdRegistry(),
-	}
+	si := StoreInterface[interface{}, interface{}]{}
 
 	// Assign the item action tracker frontend and backend bits.
-	iatw := newItemActionTracker[interface{}, interface{}]()
+	iatw := newItemActionTracker()
 	si.ItemActionTracker = iatw
-	si.backendItemActionTracker = iatw.realItemActionTracker
+	si.backendItemActionTracker = iatw
 
 	// Assign the node repository frontend and backend bits.
 	nrw := newNodeRepository[interface{}, interface{}]()

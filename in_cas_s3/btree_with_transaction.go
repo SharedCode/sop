@@ -82,6 +82,12 @@ func (b3 *btreeWithTransaction[TK, TV]) FindOne(ctx context.Context, key TK, fir
 	}
 	return b3.btree.FindOne(ctx, key, firstItemWithKey)
 }
+func (b3 *btreeWithTransaction[TK, TV]) FindOneWithId(ctx context.Context, key TK, id btree.UUID) (bool, error) {
+	if !b3.transaction.HasBegun() {
+		return false, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
+	}
+	return b3.btree.FindOneWithId(ctx, key, id)
+}
 
 // GetCurrentKey returns the current item's key.
 func (b3 *btreeWithTransaction[TK, TV]) GetCurrentKey(ctx context.Context) (TK, error) {
@@ -101,6 +107,14 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValue(ctx context.Context) (TV
 	}
 	v, err := b3.btree.GetCurrentValue(ctx)
 	return v.(TV), err
+}
+
+// GetCurrentId returns the current item's key.
+func (b3 *btreeWithTransaction[TK, TV]) GetCurrentId(ctx context.Context) (btree.UUID, error) {
+	if !b3.transaction.HasBegun() {
+		return btree.NilUUID, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
+	}
+	return b3.GetCurrentId(ctx)
 }
 
 // First positions the "cursor" to the first item as per key ordering.

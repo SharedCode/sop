@@ -31,6 +31,8 @@ type transaction struct {
 	itemRedisCache     redis.Cache
 	storeRepository    StoreRepository
 	recyclerRepository RecyclerRepository
+	// VirtualIdRegistry is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
+	virtualIdRegistry VirtualIdRegistry
 	forWriting         bool
 	hasBegun           bool
 	done               bool
@@ -64,6 +66,7 @@ func NewTransactionWithMaxSessionTime(forWriting bool, maxTime time.Duration) Tr
 		itemRedisCache:     redis.NewClient(redis.DefaultOptions()),
 		storeRepository:    newStoreRepository(),
 		recyclerRepository: newRecycler(),
+		virtualIdRegistry: newVirtualIdRegistry(),
 	}
 }
 
@@ -121,9 +124,7 @@ func (t *transaction) timedOut(startTime time.Time) error {
 
 func (t *transaction) commit(ctx context.Context) error {
 
-	// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
-	// has to do merging & conflict resolution. Add is simple upsert.
-	updatedNodes, removedNodes, addedNodes := t.classifyModifiedNodes()
+	var updatedNodes, removedNodes, addedNodes []nodeEntry
 	startTime := getCurrentTime()
 
 	// For writer transaction. Save the managed Node(s) as inactive:
@@ -159,6 +160,9 @@ func (t *transaction) commit(ctx context.Context) error {
 		}
 
 		done = true
+		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
+		// has to do merging & conflict resolution. Add is simple upsert.
+		updatedNodes, removedNodes, addedNodes = t.classifyModifiedNodes()
 		if ok, err := t.saveUpdatedNodes(ctx, updatedNodes); err != nil {
 			return err
 		} else if !ok {
@@ -168,6 +172,11 @@ func (t *transaction) commit(ctx context.Context) error {
 			return err
 		} else if !ok {
 			done = false
+		}
+		if !done {
+			if err := t.refetchAndMergeModifications(ctx); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -243,6 +252,28 @@ func (t *transaction) saveRemovedNodes(ctx context.Context, nodes []nodeEntry) (
 }
 func (t *transaction) saveAddedNodes(ctx context.Context, nodes []nodeEntry) error {
 	// TODO:
+	return nil
+}
+
+// Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in.
+func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
+	for b3Index, b3 := range t.btrees {
+		b3ModifiedItems := t.btreesBackend[b3Index].backendItemActionTracker.items
+		t.btreesBackend[b3Index].backendItemActionTracker.items = make(map[btree.UUID]cacheData)
+		for itemId, cd := range b3ModifiedItems {
+			if ok, err := b3.FindOneWithId(ctx, cd.item.Key, itemId); !ok || err != nil {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("refetchAndMergeModifications failed, item with key %v was not found.", cd.item.Key)
+			}
+			// for b3.
+			// switch cd.action {
+
+			// }
+		}
+	}
+
 	return nil
 }
 

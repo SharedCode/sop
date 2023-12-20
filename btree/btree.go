@@ -135,48 +135,74 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 	return node.find(ctx, btree, key, firstItemWithKey)
 }
 
+// FindOneWithId is synonymous to FindOne but allows code to supply the Item's Id to identify it.
+func (btree *Btree[TK, TV]) FindOneWithId(ctx context.Context, key TK, id UUID) (bool, error) {
+	if ok, err := btree.FindOne(ctx, key, true); ok && err == nil {
+		for {
+			if id2, err := btree.GetCurrentId(ctx); err != nil {
+				return false, err
+			} else if id2 == id {
+				return true, nil
+			}
+			if ok, err := btree.Next(ctx); !ok || err != nil {
+				return false, err
+			}
+		}
+	} else {
+		return ok, err
+	}
+}
+
 // GetCurrentKey returns the current item's key part.
 func (btree *Btree[TK, TV]) GetCurrentKey(ctx context.Context) (TK, error) {
-	item, err := btree.getCurrentItem(ctx)
-	var zero TK
-	if err != nil {
-		return zero, err
+	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
+		var zero TK
+		return zero, nil
+	} else {
+		return item.Key, nil
 	}
-	return item.Key, nil
 }
 
 // GetCurrentValue returns the current item's value part.
 func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
-	item, err := btree.getCurrentItem(ctx)
-	var zero TV
-	if err != nil {
-		return zero, err
+	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
+		var zero TV
+		return zero, nil	
+	} else {
+		// Register to local cache the "item get" for submit/resolution on Commit.
+		if btree.storeInterface.ItemActionTracker != nil {
+			btree.storeInterface.ItemActionTracker.Get(item)
+		}
+		// TODO: in V2, we need to fetch Value if btree is set to save Value in another "data segment"
+		// and it is not yet fetched. That fetch action can error thus, need to be able to return an error.
+		return *item.Value, nil
 	}
-	// Register to local cache the "item get" for submit/resolution on Commit.
-	if btree.storeInterface.ItemActionTracker != nil {
-		btree.storeInterface.ItemActionTracker.Get(&item)
+}
+
+// GetCurrentId returns the current item's Id.
+func (btree *Btree[TK, TV]) GetCurrentId(ctx context.Context) (UUID, error) {
+	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
+		return NilUUID, err
+	} else {
+		return item.Id, nil
 	}
-	// TODO: in V2, we need to fetch Value if btree is set to save Value in another "data segment"
-	// and it is not yet fetched. That fetch action can error thus, need to be able to return an error.
-	return *item.Value, nil
 }
 
 // getCurrentItem returns the current item containing key/value pair.
-func (btree *Btree[TK, TV]) getCurrentItem(ctx context.Context) (Item[TK, TV], error) {
-	var zero Item[TK, TV]
+func (btree *Btree[TK, TV]) getCurrentItem(ctx context.Context) (*Item[TK, TV], error) {
 	if btree.currentItemRef.nodeId.IsNil() {
 		btree.currentItem = nil
-		return zero, nil
+		return nil, nil
 	}
 	if btree.currentItem != nil {
-		return *btree.currentItem, nil
+		return btree.currentItem, nil
 	}
 	n, err := btree.storeInterface.NodeRepository.Get(ctx, btree.currentItemRef.getNodeId())
 	if err != nil {
-		return zero, err
+		return nil, err
 	}
 	btree.currentItem = n.Slots[btree.currentItemRef.getNodeItemIndex()]
-	return *btree.currentItem, nil
+	return btree.currentItem, nil
 }
 
 // AddIfNotExist will add an item if its key is not yet in the B-Tree.
