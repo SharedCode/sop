@@ -274,41 +274,41 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 					}
 					return fmt.Errorf("refetchAndMergeModifications failed to merge add item with key %v", ci.item.Key)
 				}
-			} else {
-				if ok, err := b3.FindOneWithId(ctx, ci.item.Key, itemId); !ok || err != nil {
+				continue
+			}
+			if ok, err := b3.FindOneWithId(ctx, ci.item.Key, itemId); !ok || err != nil {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("refetchAndMergeModifications failed to find item with key %v.", ci.item.Key)
+			}
+
+			if item, err := b3.GetCurrentItem(ctx); err != nil || item.UpsertTime > ci.item.UpsertTime {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("refetchAndMergeModifications detected a newer version of item with key %v.", ci.item.Key)
+			}
+
+			if ci.action == getAction {
+				// GetCurrentItem call above already "marked" the "get" (or fetch) done.
+				continue
+			}
+			if ci.action == removeAction {
+				if ok, err := b3.RemoveCurrentItem(ctx); !ok || err != nil {
 					if err != nil {
 						return err
 					}
-					return fmt.Errorf("refetchAndMergeModifications failed to find item with key %v.", ci.item.Key)
+					return fmt.Errorf("refetchAndMergeModifications failed to merge remove item with key %v.", ci.item.Key)
 				}
-
-				if item, err := b3.GetCurrentItem(ctx); err != nil || item.UpsertTime > ci.item.UpsertTime {
+				continue
+			}
+			if ci.action == updateAction {
+				if ok, err := b3.UpdateCurrentItem(ctx, ci.item.Value); !ok || err != nil {
 					if err != nil {
 						return err
 					}
-					return fmt.Errorf("refetchAndMergeModifications detected a newer version of item with key %v.", ci.item.Key)
-				}
-
-				if ci.action == getAction {
-					// GetCurrentItem call above already "marked" the "get" (or fetch) done.
-					continue
-				}
-				if ci.action == removeAction {
-					if ok, err := b3.RemoveCurrentItem(ctx); !ok || err != nil {
-						if err != nil {
-							return err
-						}
-						return fmt.Errorf("refetchAndMergeModifications failed to merge remove item with key %v.", ci.item.Key)
-					}
-					continue
-				}
-				if ci.action == updateAction {
-					if ok, err := b3.UpdateCurrentItem(ctx, ci.item.Value); !ok || err != nil {
-						if err != nil {
-							return err
-						}
-						return fmt.Errorf("refetchAndMergeModifications failed to merge update item with key %v.", ci.item.Key)
-					}
+					return fmt.Errorf("refetchAndMergeModifications failed to merge update item with key %v.", ci.item.Key)
 				}
 			}
 		}
