@@ -187,10 +187,6 @@ func (btree *Btree[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], e
 	if item, err := btree.getCurrentItem(ctx); err != nil {
 		return zero, err
 	} else {
-		// Register to local cache the "item get" for submit/resolution on Commit.
-		if btree.storeInterface.ItemActionTracker != nil {
-			btree.storeInterface.ItemActionTracker.Get(item)
-		}
 		return *item, nil
 	}
 }
