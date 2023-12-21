@@ -282,7 +282,10 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 					return fmt.Errorf("refetchAndMergeModifications failed to find item with key %v.", cd.item.Key)
 				}
 
-				if cd.item.UpsertTime != t.btreesBackend[b3Index].backendItemActionTracker.items[itemId].item.UpsertTime {
+				if item, err := b3.GetCurrentItem(ctx); err != nil || cd.item.UpsertTime != item.UpsertTime {
+					if err != nil {
+						return err
+					}
 					return fmt.Errorf("refetchAndMergeModifications detected a newer version of item with key %v.", cd.item.Key)
 				}
 

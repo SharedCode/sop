@@ -35,8 +35,8 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	GetCurrentKey(ctx context.Context) (TK, error)
 	// GetCurrentValue returns the current item's value.
 	GetCurrentValue(ctx context.Context) (TV, error)
-	// GetCurrentId returns the current item's Id.
-	GetCurrentId(ctx context.Context) (UUID, error)
+	// GetCurrentItem returns the current item.
+	GetCurrentItem(ctx context.Context) (Item[TK, TV], error)
 
 	// First positions the "cursor" to the first item as per key ordering.
 	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).

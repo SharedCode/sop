@@ -141,9 +141,9 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 func (btree *Btree[TK, TV]) FindOneWithId(ctx context.Context, key TK, id UUID) (bool, error) {
 	if ok, err := btree.FindOne(ctx, key, true); ok && err == nil {
 		for {
-			if id2, err := btree.GetCurrentId(ctx); err != nil {
+			if item, err := btree.getCurrentItem(ctx); err != nil {
 				return false, err
-			} else if id2 == id {
+			} else if id == item.Id {
 				return true, nil
 			}
 			if ok, err := btree.Next(ctx); !ok || err != nil {
@@ -181,12 +181,13 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	}
 }
 
-// GetCurrentId returns the current item's Id.
-func (btree *Btree[TK, TV]) GetCurrentId(ctx context.Context) (UUID, error) {
-	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
-		return NilUUID, err
+// getCurrentItem returns the current item containing key/value pair.
+func (btree *Btree[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], error) {
+	var zero Item[TK, TV]
+	if item, err := btree.getCurrentItem(ctx); err != nil {
+		return zero, err
 	} else {
-		return item.Id, nil
+		return *item, nil
 	}
 }
 
