@@ -3,6 +3,7 @@ package in_cas_s3
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -174,6 +175,9 @@ func (t *transaction) commit(ctx context.Context) error {
 			done = false
 		}
 		if !done {
+			// Sleep in random seconds to allow different conflicting (Node modifying) transactions (in-flight) to retry on different times.
+			sleepTime := rand.Intn(4+1) + 5
+			time.Sleep(time.Duration(sleepTime) * time.Second)
 			if err := t.refetchAndMergeModifications(ctx); err != nil {
 				return err
 			}
@@ -259,21 +263,55 @@ func (t *transaction) saveAddedNodes(ctx context.Context, nodes []nodeEntry) err
 func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 	for b3Index, b3 := range t.btrees {
 		b3ModifiedItems := t.btreesBackend[b3Index].backendItemActionTracker.items
-		t.btreesBackend[b3Index].backendItemActionTracker.items = make(map[btree.UUID]cacheData)
+		// Clear the backend "cache" so we can force B-Tree to re-fetch from Redis(or BlobStore).
+		t.btreesBackend[b3Index].backendItemActionTracker.items = make(map[btree.UUID]cacheItem)
+		t.btreesBackend[b3Index].backendNodeRepository.nodeLocalCache = make(map[btree.UUID]cacheNode)
 		for itemId, cd := range b3ModifiedItems {
-			if ok, err := b3.FindOneWithId(ctx, cd.item.Key, itemId); !ok || err != nil {
-				if err != nil {
-					return err
+			if cd.action == addAction {
+				if ok, err := b3.Add(ctx, cd.item.Key, cd.item.Value); !ok || err != nil {
+					if err != nil {
+						return err
+					}
+					return fmt.Errorf("refetchAndMergeModifications failed to merge add item with key %v", cd.item.Key)
 				}
-				return fmt.Errorf("refetchAndMergeModifications failed, item with key %v was not found.", cd.item.Key)
-			}
-			// for b3.
-			// switch cd.action {
+			} else {
+				if ok, err := b3.FindOneWithId(ctx, cd.item.Key, itemId); !ok || err != nil {
+					if err != nil {
+						return err
+					}
+					return fmt.Errorf("refetchAndMergeModifications failed to find item with key %v.", cd.item.Key)
+				}
 
-			// }
+				if cd.item.UpsertTime != t.btreesBackend[b3Index].backendItemActionTracker.items[itemId].item.UpsertTime {
+					return fmt.Errorf("refetchAndMergeModifications detected a newer version of item with key %v.", cd.item.Key)
+				}
+
+				if cd.action == getAction {
+					if _, err := b3.GetCurrentKey(ctx); err != nil {
+						return err
+					}
+					continue
+				}
+				if cd.action == removeAction {
+					if ok, err := b3.RemoveCurrentItem(ctx); !ok || err != nil {
+						if err != nil {
+							return err
+						}
+						return fmt.Errorf("refetchAndMergeModifications failed to merge remove item with key %v.", cd.item.Key)
+					}
+					continue
+				}
+				if cd.action == updateAction {
+					if ok, err := b3.UpdateCurrentItem(ctx, cd.item.Value); !ok || err != nil {
+						if err != nil {
+							return err
+						}
+						return fmt.Errorf("refetchAndMergeModifications failed to merge update item with key %v.", cd.item.Key)
+					}
+				}
+			}
 		}
 	}
-
 	return nil
 }
 

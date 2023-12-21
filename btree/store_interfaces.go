@@ -28,7 +28,8 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 	FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error)
 	// FindOneWithId is synonymous to FindOne but allows code to supply the Item's Id to identify it.
-	// This is useful for B-Tree that allows duplicate keys(IsUnique = false).
+	// This is useful for B-Tree that allows duplicate keys(IsUnique = false) as it provides a way to
+	// differentiate duplicated keys via the unique Id(UUID).
 	FindOneWithId(ctx context.Context, key TK, id UUID) (bool, error)
 	// GetCurrentKey returns the current item's key.
 	GetCurrentKey(ctx context.Context) (TK, error)

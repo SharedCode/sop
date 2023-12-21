@@ -18,20 +18,20 @@ const (
 	removeAction
 )
 
-type cacheData struct {
+type cacheItem struct {
 	lockId btree.UUID
 	action actionType
 	item   *btree.Item[interface{}, interface{}]
 }
 
 type itemActionTracker struct {
-	items map[btree.UUID]cacheData
+	items map[btree.UUID]cacheItem
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
 func newItemActionTracker() *itemActionTracker {
 	return &itemActionTracker{
-		items: make(map[btree.UUID]cacheData),
+		items: make(map[btree.UUID]cacheItem),
 	}
 }
 
@@ -53,7 +53,7 @@ func newItemActionTracker() *itemActionTracker {
 
 func (t *itemActionTracker) Get(item *btree.Item[interface{}, interface{}]) {
 	if _, ok := t.items[item.Id]; !ok {
-		t.items[item.Id] = cacheData{
+		t.items[item.Id] = cacheItem{
 			lockId: btree.NewUUID(),
 			action: getAction,
 			item:   item,
@@ -62,7 +62,7 @@ func (t *itemActionTracker) Get(item *btree.Item[interface{}, interface{}]) {
 }
 
 func (t *itemActionTracker) Add(item *btree.Item[interface{}, interface{}]) {
-	t.items[item.Id] = cacheData{
+	t.items[item.Id] = cacheItem{
 		lockId: btree.NewUUID(),
 		action: addAction,
 		item:   item,
@@ -73,7 +73,7 @@ func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
 	if v, ok := t.items[item.Id]; ok && v.action == addAction {
 		return
 	}
-	t.items[item.Id] = cacheData{
+	t.items[item.Id] = cacheItem{
 		lockId: btree.NewUUID(),
 		action: updateAction,
 		item:   item,
@@ -85,7 +85,7 @@ func (t *itemActionTracker) Remove(item *btree.Item[interface{}, interface{}]) {
 		delete(t.items, item.Id)
 		return
 	}
-	t.items[item.Id] = cacheData{
+	t.items[item.Id] = cacheItem{
 		lockId: btree.NewUUID(),
 		action: removeAction,
 		item:   item,

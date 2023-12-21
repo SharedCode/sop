@@ -4,14 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"time"
 )
-
-// TimestampedData specifies the methods to allow fetch and update timestampe(nano precision).
-type TimestampedData interface {
-	GetUpsertTime() int64
-	SetUpsertTime() int64
-}
 
 // Item contains key & value pair, plus the version number.
 type Item[TK Comparable, TV any] struct {
@@ -25,17 +18,11 @@ type Item[TK Comparable, TV any] struct {
 	// Value is saved nil if data is to be persisted in the "data segment"(& ValueId set to a valid UUID),
 	// otherwise it should point to the actual data and persisted in B-Tree Node segment together with the Key.
 	Value           *TV
+	// UpsertTime in milliseconds.
 	UpsertTime      int64
 	valueNeedsFetch bool
 }
 
-func (n Item[TK, TV]) GetUpsertTime() int64 {
-	return n.UpsertTime
-}
-func (n *Item[TK, TV]) SetUpsertTime() int64 {
-	n.UpsertTime = time.Now().UnixNano()
-	return n.UpsertTime
-}
 func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
 	return &Item[TK, TV]{
 		Key:   key,
@@ -51,17 +38,10 @@ type Node[TK Comparable, TV any] struct {
 	Slots       []*Item[TK, TV]
 	Count       int
 	IsDeleted   bool
+	// UpsertTime in milliseconds.
 	UpsertTime  int64
 	indexOfNode int
 	childrenIds []UUID
-}
-
-func (n Node[TK, TV]) GetUpsertTime() int64 {
-	return n.UpsertTime
-}
-func (n *Node[TK, TV]) SetUpsertTime() int64 {
-	n.UpsertTime = time.Now().UnixNano()
-	return n.UpsertTime
 }
 
 // newNode creates a new node.
