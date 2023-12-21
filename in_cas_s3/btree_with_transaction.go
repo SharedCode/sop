@@ -109,12 +109,13 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValue(ctx context.Context) (TV
 	return v.(TV), err
 }
 
-// GetCurrentId returns the current item's key.
-func (b3 *btreeWithTransaction[TK, TV]) GetCurrentId(ctx context.Context) (btree.UUID, error) {
+// GetCurrentItem returns the current item.
+func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (btree.Item[TK, TV], error) {
+	var zero btree.Item[TK, TV]
 	if !b3.transaction.HasBegun() {
-		return btree.NilUUID, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
+		return zero, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
 	}
-	return b3.GetCurrentId(ctx)
+	return b3.GetCurrentItem(ctx)
 }
 
 // First positions the "cursor" to the first item as per key ordering.

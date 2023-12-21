@@ -141,9 +141,9 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 func (btree *Btree[TK, TV]) FindOneWithId(ctx context.Context, key TK, id UUID) (bool, error) {
 	if ok, err := btree.FindOne(ctx, key, true); ok && err == nil {
 		for {
-			if id2, err := btree.GetCurrentId(ctx); err != nil {
+			if item, err := btree.getCurrentItem(ctx); err != nil {
 				return false, err
-			} else if id2 == id {
+			} else if id == item.Id {
 				return true, nil
 			}
 			if ok, err := btree.Next(ctx); !ok || err != nil {
@@ -169,7 +169,7 @@ func (btree *Btree[TK, TV]) GetCurrentKey(ctx context.Context) (TK, error) {
 func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
 		var zero TV
-		return zero, nil	
+		return zero, nil
 	} else {
 		// Register to local cache the "item get" for submit/resolution on Commit.
 		if btree.storeInterface.ItemActionTracker != nil {
@@ -181,12 +181,17 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	}
 }
 
-// GetCurrentId returns the current item's Id.
-func (btree *Btree[TK, TV]) GetCurrentId(ctx context.Context) (UUID, error) {
-	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
-		return NilUUID, err
+// getCurrentItem returns the current item containing key/value pair.
+func (btree *Btree[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], error) {
+	var zero Item[TK, TV]
+	if item, err := btree.getCurrentItem(ctx); err != nil {
+		return zero, err
 	} else {
-		return item.Id, nil
+		// Register to local cache the "item get" for submit/resolution on Commit.
+		if btree.storeInterface.ItemActionTracker != nil {
+			btree.storeInterface.ItemActionTracker.Get(item)
+		}
+		return *item, nil
 	}
 }
 

@@ -34,10 +34,10 @@ type transaction struct {
 	recyclerRepository RecyclerRepository
 	// VirtualIdRegistry is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
 	virtualIdRegistry VirtualIdRegistry
-	forWriting         bool
-	hasBegun           bool
-	done               bool
-	maxTime            time.Duration
+	forWriting        bool
+	hasBegun          bool
+	done              bool
+	maxTime           time.Duration
 }
 
 type nodeEntry struct {
@@ -67,7 +67,7 @@ func NewTransactionWithMaxSessionTime(forWriting bool, maxTime time.Duration) Tr
 		itemRedisCache:     redis.NewClient(redis.DefaultOptions()),
 		storeRepository:    newStoreRepository(),
 		recyclerRepository: newRecycler(),
-		virtualIdRegistry: newVirtualIdRegistry(),
+		virtualIdRegistry:  newVirtualIdRegistry(),
 	}
 }
 
@@ -266,47 +266,48 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 		// Clear the backend "cache" so we can force B-Tree to re-fetch from Redis(or BlobStore).
 		t.btreesBackend[b3Index].backendItemActionTracker.items = make(map[btree.UUID]cacheItem)
 		t.btreesBackend[b3Index].backendNodeRepository.nodeLocalCache = make(map[btree.UUID]cacheNode)
-		for itemId, cd := range b3ModifiedItems {
-			if cd.action == addAction {
-				if ok, err := b3.Add(ctx, cd.item.Key, cd.item.Value); !ok || err != nil {
+		for itemId, ci := range b3ModifiedItems {
+			if ci.action == addAction {
+				if ok, err := b3.Add(ctx, ci.item.Key, ci.item.Value); !ok || err != nil {
 					if err != nil {
 						return err
 					}
-					return fmt.Errorf("refetchAndMergeModifications failed to merge add item with key %v", cd.item.Key)
+					return fmt.Errorf("refetchAndMergeModifications failed to merge add item with key %v", ci.item.Key)
 				}
 			} else {
-				if ok, err := b3.FindOneWithId(ctx, cd.item.Key, itemId); !ok || err != nil {
+				if ok, err := b3.FindOneWithId(ctx, ci.item.Key, itemId); !ok || err != nil {
 					if err != nil {
 						return err
 					}
-					return fmt.Errorf("refetchAndMergeModifications failed to find item with key %v.", cd.item.Key)
+					return fmt.Errorf("refetchAndMergeModifications failed to find item with key %v.", ci.item.Key)
 				}
 
-				if cd.item.UpsertTime != t.btreesBackend[b3Index].backendItemActionTracker.items[itemId].item.UpsertTime {
-					return fmt.Errorf("refetchAndMergeModifications detected a newer version of item with key %v.", cd.item.Key)
-				}
-
-				if cd.action == getAction {
-					if _, err := b3.GetCurrentKey(ctx); err != nil {
+				if item, err := b3.GetCurrentItem(ctx); err != nil || item.UpsertTime > ci.item.UpsertTime {
+					if err != nil {
 						return err
 					}
+					return fmt.Errorf("refetchAndMergeModifications detected a newer version of item with key %v.", ci.item.Key)
+				}
+
+				if ci.action == getAction {
+					// GetCurrentItem call above already "marked" the "get" (or fetch) done.
 					continue
 				}
-				if cd.action == removeAction {
+				if ci.action == removeAction {
 					if ok, err := b3.RemoveCurrentItem(ctx); !ok || err != nil {
 						if err != nil {
 							return err
 						}
-						return fmt.Errorf("refetchAndMergeModifications failed to merge remove item with key %v.", cd.item.Key)
+						return fmt.Errorf("refetchAndMergeModifications failed to merge remove item with key %v.", ci.item.Key)
 					}
 					continue
 				}
-				if cd.action == updateAction {
-					if ok, err := b3.UpdateCurrentItem(ctx, cd.item.Value); !ok || err != nil {
+				if ci.action == updateAction {
+					if ok, err := b3.UpdateCurrentItem(ctx, ci.item.Value); !ok || err != nil {
 						if err != nil {
 							return err
 						}
-						return fmt.Errorf("refetchAndMergeModifications failed to merge update item with key %v.", cd.item.Key)
+						return fmt.Errorf("refetchAndMergeModifications failed to merge update item with key %v.", ci.item.Key)
 					}
 				}
 			}

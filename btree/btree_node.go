@@ -17,7 +17,7 @@ type Item[TK Comparable, TV any] struct {
 	Key TK
 	// Value is saved nil if data is to be persisted in the "data segment"(& ValueId set to a valid UUID),
 	// otherwise it should point to the actual data and persisted in B-Tree Node segment together with the Key.
-	Value           *TV
+	Value *TV
 	// UpsertTime in milliseconds.
 	UpsertTime      int64
 	valueNeedsFetch bool
@@ -33,11 +33,11 @@ func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
 
 // Node contains a B-Tree node's data.
 type Node[TK Comparable, TV any] struct {
-	Id          UUID
-	ParentId    UUID
-	Slots       []*Item[TK, TV]
-	Count       int
-	IsDeleted   bool
+	Id        UUID
+	ParentId  UUID
+	Slots     []*Item[TK, TV]
+	Count     int
+	IsDeleted bool
 	// UpsertTime in milliseconds.
 	UpsertTime  int64
 	indexOfNode int
