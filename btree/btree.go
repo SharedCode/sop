@@ -69,7 +69,14 @@ type promoteAction[TK Comparable, TV any] struct {
 }
 
 // New creates a new B-Tree instance.
-func New[TK Comparable, TV any](storeInfo StoreInfo, si *StoreInterface[TK, TV]) *Btree[TK, TV] {
+func New[TK Comparable, TV any](storeInfo StoreInfo, si *StoreInterface[TK, TV]) (*Btree[TK, TV], error) {
+	// Return nil B-Tree to signify failure if there is not enough info to create an instance.
+	if si == nil {
+		return nil, fmt.Errorf("Can't create a b-tree with nil StoreInterface parameter.")
+	}
+	if storeInfo.IsEmpty() {
+		return nil, fmt.Errorf("Can't create a b-tree with empty StoreInfo parameter.")
+	}
 	var b3 = Btree[TK, TV]{
 		StoreInfo:          storeInfo,
 		storeInterface:     si,
@@ -77,7 +84,7 @@ func New[TK Comparable, TV any](storeInfo StoreInfo, si *StoreInterface[TK, TV])
 		tempChildren:       make([]UUID, storeInfo.SlotLength+2),
 		tempParentChildren: make([]UUID, 2),
 	}
-	return &b3
+	return &b3, nil
 }
 
 // Add a key/value pair item to the tree.

@@ -51,7 +51,7 @@ func newBtree[TK btree.Comparable, TV any](s btree.StoreInfo, trans *transaction
 	si.backendNodeRepository = nrw.realNodeRepository
 
 	// Wire up the B-tree & its backend store interface of the transaction.
-	b3 := btree.New[interface{}, interface{}](s, &si.StoreInterface)
+	b3,_ := btree.New[interface{}, interface{}](s, &si.StoreInterface)
 	trans.btreesBackend = append(trans.btreesBackend, si)
 	trans.btrees = append(trans.btrees, b3)
 	trans.storeRepository.Add(s)
