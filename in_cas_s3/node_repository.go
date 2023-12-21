@@ -44,9 +44,10 @@ func (nr *nodeRepositoryTyped[TK, TV]) Remove(nodeId btree.UUID) {
 // or File System, for debugging &/or "poor man's" setup(no AWS required!).
 type nodeRepository struct {
 	// Needed by NodeRepository for Node data merging to the backend storage systems.
+	// TODO: implement a MRU caching on nodeLocalCache so we only retain a handful in memory.
+	nodeLocalCache map[btree.UUID]cacheNode
 	nodeRedisCache redis.Cache
 	nodeBlobStore  s3.BlobStore
-	nodeLocalCache map[btree.UUID]cacheNode
 }
 
 // NewNodeRepository instantiates a NodeRepository.

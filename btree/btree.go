@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	log "log/slog"
-	"time"
 )
 
 // Btree manages items using B-tree data structure and algorithm.
@@ -69,8 +68,8 @@ type promoteAction[TK Comparable, TV any] struct {
 	slotIndex  int
 }
 
-// NewBtree creates a new B-Tree instance.
-func NewBtree[TK Comparable, TV any](storeInfo StoreInfo, si *StoreInterface[TK, TV]) *Btree[TK, TV] {
+// New creates a new B-Tree instance.
+func New[TK Comparable, TV any](storeInfo StoreInfo, si *StoreInterface[TK, TV]) *Btree[TK, TV] {
 	var b3 = Btree[TK, TV]{
 		StoreInfo:          storeInfo,
 		storeInterface:     si,
@@ -88,7 +87,6 @@ func (btree *Btree[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, er
 	if err != nil {
 		return false, err
 	}
-	item.UpsertTime = time.Now().UnixMilli()
 	result, err := node.add(ctx, btree, item)
 	if err != nil {
 		return false, err
@@ -299,7 +297,6 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) 
 	}
 	item := node.Slots[btree.currentItemRef.getNodeItemIndex()]
 	item.Value = &newValue
-	item.UpsertTime = time.Now().UnixMilli()
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
 	btree.saveNode(node)
 	// Register to local cache the "item update" for submit/resolution on Commit.
