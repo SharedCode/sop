@@ -5,7 +5,7 @@
 //
 // A b-tree that can distribute items added on a given "leaf" sub-branch so it will tend to fill in the
 // nodes of the sub-branch. Instead of achieving half full on average load(typical), each node can then achieve
-// higher load average, perhaps up to 62% on average.
+// higher load average, perhaps up to 62%-75% on average.
 // This logic is cut, limited within a given sub-branch so as not to affect performance. If it is found
 // to affect performance on a given backend, it may get turned off(TODO).
 //

@@ -9,7 +9,7 @@ var ctx = context.Background()
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	t.Logf("Transaction story test.\n")
-	trans := NewTransaction(true)
+	trans := NewTransaction(true, -1)
 	trans.Begin()
 	b3, _ := NewBtree[int, string]("fooStore", 8, false, false, trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
@@ -29,7 +29,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans := NewTransaction(true)
+	trans := NewTransaction(true, -1)
 	trans.Begin()
 	b3, _ := NewBtree[int, string]("fooStore", 8, false, false, trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {

@@ -49,14 +49,9 @@ type nodeEntry struct {
 var getCurrentTime = time.Now
 
 // NewTransaction will instantiate a transaction object for writing(forWriting=true)
-// or for reading(forWriting=false). Defaults to 15 minutes session duration.
-func NewTransaction(forWriting bool) Transaction {
-	return NewTransactionWithMaxSessionTime(forWriting, -1)
-}
-
-// NewTransactionWithMaxSessionTime is synonymous to NewTransaction except you can specify
-// the transaction session max duration.
-func NewTransactionWithMaxSessionTime(forWriting bool, maxTime time.Duration) Transaction {
+// or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes
+// of session duration.
+func NewTransaction(forWriting bool, maxTime time.Duration) Transaction {
 	if maxTime <= 0 {
 		m := 15
 		maxTime = time.Duration(m * int(time.Minute))
