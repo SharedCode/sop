@@ -284,7 +284,7 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 			}
 
 			// Check if the item read from backend has been updated since the time we read it.
-			if item, err := b3.GetCurrentItem(ctx); err != nil || item.UpsertTime > ci.upsertTimeInDB {
+			if item, err := b3.GetCurrentItem(ctx); err != nil || item.UpsertTime != ci.upsertTimeInDB {
 				if err != nil {
 					return err
 				}

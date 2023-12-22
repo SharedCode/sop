@@ -304,12 +304,12 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) 
 	}
 	item := node.Slots[btree.currentItemRef.getNodeItemIndex()]
 	item.Value = &newValue
-	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
-	btree.saveNode(node)
 	// Register to local cache the "item update" for submit/resolution on Commit.
 	if btree.storeInterface.ItemActionTracker != nil {
 		btree.storeInterface.ItemActionTracker.Update(item)
 	}
+	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
+	btree.saveNode(node)
 	return true, nil
 }
 
