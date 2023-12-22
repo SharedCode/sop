@@ -59,6 +59,7 @@ func NewTransaction(forWriting bool, maxTime time.Duration) Transaction {
 	return &transaction{
 		forWriting:         forWriting,
 		maxTime:            maxTime,
+		// TODO: Allow caller to supply Redis settings.
 		itemRedisCache:     redis.NewClient(redis.DefaultOptions()),
 		storeRepository:    newStoreRepository(),
 		recyclerRepository: newRecycler(),
@@ -170,7 +171,8 @@ func (t *transaction) commit(ctx context.Context) error {
 			done = false
 		}
 		if !done {
-			// Sleep in random seconds to allow different conflicting (Node modifying) transactions (in-flight) to retry on different times.
+			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
+			// (in-flight) to retry on different times.
 			sleepTime := rand.Intn(4+1) + 5
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 			if err := t.refetchAndMergeModifications(ctx); err != nil {
@@ -371,11 +373,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	return lastError
 }
 
-// Check all explicitly fetched(i.e. - GetCurrentKey/GetCurrentValue invoked) & managed(add/update/remove) items
-// if they have the expected version number. If different, rollback.
-// Compare local vs redis/blobStore copy and see if different. Read from blobStore if not found in redis.
-// Commit to return error if there is at least an item with different version no. as compared to
-// local cache's copy.
+// Check all explicitly fetched(i.e. - GetCurrentValue invoked) & managed(add/update/remove) items for conflict.
 func (t *transaction) trackedItemsHasConflict(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
 		if hasConflict, err := s.backendItemActionTracker.hasConflict(ctx, t.itemRedisCache); hasConflict || err != nil {

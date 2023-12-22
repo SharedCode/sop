@@ -54,6 +54,7 @@ type nodeRepository struct {
 func newNodeRepository[TK btree.Comparable, TV any]() *nodeRepositoryTyped[TK, TV] {
 	nr := &nodeRepository{
 		nodeLocalCache: make(map[btree.UUID]cacheNode),
+		// TODO: Allow caller to supply Redis & blob store settings.
 		nodeRedisCache: redis.NewClient(redis.DefaultOptions()),
 		nodeBlobStore:  s3.NewBlobStore(),
 	}

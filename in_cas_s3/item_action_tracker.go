@@ -100,9 +100,8 @@ func (t *itemActionTracker) Remove(item *btree.Item[interface{}, interface{}]) {
 	}
 }
 
-// hasConflict will compare the locally cached items' version with their copies in Redis.
-// Returns true if there is at least an item that got modified(by another transaction) in Redis.
-// Otherwise returns false.
+// hasConflict simply checks whether tracked items are also in-flight in other transactions &
+// returns true if such, false otherwise. Commit will cause rollback if returned true.
 func (t *itemActionTracker) hasConflict(ctx context.Context, itemRedisCache redis.Cache) (bool, error) {
 	for uuid := range t.items {
 		if _, err := itemRedisCache.Get(ctx, uuid.ToString()); err != nil {
