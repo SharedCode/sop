@@ -11,6 +11,7 @@ type StoreRepository interface {
 	Get(ctx context.Context, name string) (btree.StoreInfo, error)
 	Add(btree.StoreInfo) error
 	Remove(name string) error
+	CommitChanges(ctx context.Context) error
 }
 
 // storeRepository is a simple in-memory implementation of store repository to demonstrate
@@ -19,7 +20,7 @@ type storeRepository struct {
 	lookup map[string]btree.StoreInfo
 }
 
-func newStoreRepository() *storeRepository {
+func newStoreRepository() StoreRepository {
 	return &storeRepository{
 		lookup: make(map[string]btree.StoreInfo),
 	}
@@ -40,6 +41,6 @@ func (sr *storeRepository) Remove(name string) error {
 	return nil
 }
 
-func (sr *storeRepository) commitChanges(ctx context.Context) error {
+func (sr *storeRepository) CommitChanges(ctx context.Context) error {
 	return nil
 }
