@@ -1,16 +1,17 @@
 package in_cas_s3
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SharedCode/sop/btree"
 )
 
 // OpenBtree will open an existing B-Tree instance it for use in a transaction.
-func OpenBtree[TK btree.Comparable, TV any](name string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
+func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	var t2 interface{} = t
 	trans := t2.(*transaction)
-	if s, err := trans.storeRepository.Get(name); s.IsEmpty() || err != nil {
+	if s, err := trans.storeRepository.Get(ctx, name); s.IsEmpty() || err != nil {
 		if s.IsEmpty() {
 			return nil, fmt.Errorf("B-Tree '%s' does not exist, please use NewBtree to create an instance of it.", name)
 		}
@@ -22,13 +23,13 @@ func OpenBtree[TK btree.Comparable, TV any](name string, t Transaction) (btree.B
 
 // NewBtree will create a new B-Tree instance with data persisted in backend store,
 // e.g. - AWS storage services.
-func NewBtree[TK btree.Comparable, TV any](name string, slotLength int, isUnique bool,
+func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
 	isValueDataInNodeSegment bool, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 
 	var t2 interface{} = t
 	trans := t2.(*transaction)
 
-	if s, err := trans.storeRepository.Get(name); !s.IsEmpty() || err != nil {
+	if s, err := trans.storeRepository.Get(ctx, name); !s.IsEmpty() || err != nil {
 		if !s.IsEmpty() {
 			return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it.", name)
 		}

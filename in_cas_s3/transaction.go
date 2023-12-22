@@ -30,7 +30,7 @@ type transaction struct {
 	// itemRedisCache is a global lookup table for used for tracking, conflict detection & resolution
 	// across different transactions in same and/or different machines.
 	itemRedisCache     redis.Cache
-	storeRepository    StoreRepository
+	storeRepository    *storeRepository
 	recyclerRepository RecyclerRepository
 	// VirtualIdRegistry is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
 	virtualIdRegistry VirtualIdRegistry
@@ -184,8 +184,7 @@ func (t *transaction) commit(ctx context.Context) error {
 	if err := t.saveAddedNodes(ctx, addedNodes); err != nil {
 		return err
 	}
-	stores := t.getModifiedStores()
-	if err := t.saveStores(ctx, stores); err != nil {
+	if err := t.storeRepository.commitChanges(ctx); err != nil {
 		return err
 	}
 
@@ -340,13 +339,6 @@ func (t *transaction) classifyModifiedNodes() ([]nodeEntry, []nodeEntry, []nodeE
 		}
 	}
 	return updatedNodes, removedNodes, addedNodes
-}
-
-func (t *transaction) getModifiedStores() []btree.StoreInfo {
-	return nil
-}
-func (t *transaction) saveStores(ctx context.Context, store []btree.StoreInfo) error {
-	return nil
 }
 
 func (t *transaction) rollback(ctx context.Context) error {

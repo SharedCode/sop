@@ -1,10 +1,14 @@
 package in_cas_s3
 
-import "github.com/SharedCode/sop/btree"
+import (
+	"context"
+
+	"github.com/SharedCode/sop/btree"
+)
 
 // StoreRepository interface specifies the store repository.
 type StoreRepository interface {
-	Get(name string) (btree.StoreInfo, error)
+	Get(ctx context.Context, name string) (btree.StoreInfo, error)
 	Add(btree.StoreInfo) error
 	Remove(name string) error
 }
@@ -15,7 +19,7 @@ type storeRepository struct {
 	lookup map[string]btree.StoreInfo
 }
 
-func newStoreRepository() StoreRepository {
+func newStoreRepository() *storeRepository {
 	return &storeRepository{
 		lookup: make(map[string]btree.StoreInfo),
 	}
@@ -26,12 +30,16 @@ func (sr *storeRepository) Add(store btree.StoreInfo) error {
 	return nil
 }
 
-func (sr *storeRepository) Get(name string) (btree.StoreInfo, error) {
+func (sr *storeRepository) Get(ctx context.Context, name string) (btree.StoreInfo, error) {
 	v, _ := sr.lookup[name]
 	return v, nil
 }
 
 func (sr *storeRepository) Remove(name string) error {
 	delete(sr.lookup, name)
+	return nil
+}
+
+func (sr *storeRepository) commitChanges(ctx context.Context) error {
 	return nil
 }
