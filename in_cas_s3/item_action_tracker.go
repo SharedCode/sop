@@ -22,8 +22,8 @@ type cacheItem struct {
 	lockId btree.UUID
 	action actionType
 	item   *btree.Item[interface{}, interface{}]
-	// UpsertTime in milliseconds.
-	upsertTime int64
+	// upsert time in milliseconds.
+	upsertTimeInDB int64
 }
 
 type itemActionTracker struct {
@@ -68,8 +68,10 @@ func (t *itemActionTracker) Add(item *btree.Item[interface{}, interface{}]) {
 		lockId: btree.NewUUID(),
 		action: addAction,
 		item:   item,
-		upsertTime: time.Now().UnixMilli(),
+		upsertTimeInDB: item.UpsertTime,
 	}
+	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
+	item.UpsertTime = time.Now().UnixMilli()
 }
 
 func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
@@ -80,8 +82,10 @@ func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
 		lockId: btree.NewUUID(),
 		action: updateAction,
 		item:   item,
-		upsertTime: time.Now().UnixMilli(),
+		upsertTimeInDB: item.UpsertTime,
 	}
+	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
+	item.UpsertTime = time.Now().UnixMilli()
 }
 
 func (t *itemActionTracker) Remove(item *btree.Item[interface{}, interface{}]) {
