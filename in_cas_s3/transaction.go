@@ -9,6 +9,7 @@ import (
 
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
+	"github.com/SharedCode/sop/in_cas_s3/s3"
 )
 
 // Transaction interface defines the "enduser facing" transaction methods.
@@ -27,9 +28,14 @@ type transaction struct {
 	// stores(or its items) accessed/managed within the transaction session.
 	btreesBackend []StoreInterface[interface{}, interface{}]
 	btrees        []btree.BtreeInterface[interface{}, interface{}]
-	// itemRedisCache is a global lookup table for used for tracking, conflict detection & resolution
+	// itemRedisCache is a transaction lookup table used for tracking, conflict detection & resolution
 	// across different transactions in same and/or different machines.
 	itemRedisCache     redis.Cache
+
+	// nodeBlobStore & nodeRedisCache used for managing Nodes data during commit.
+	nodeBlobStore  s3.BlobStore
+	nodeRedisCache redis.Cache
+
 	storeRepository    StoreRepository
 	recyclerRepository RecyclerRepository
 	// VirtualIdRegistry is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
@@ -223,8 +229,14 @@ func (t *transaction) setActiveModifiedInactiveNodes([]nodeEntry) error {
 	return nil
 }
 
+
+
+
+
+// TODO: solve UUID to virtual Id conversion and back, let NodeRepository handle some of that part of fetching the node.
+// And some here in Transaction, so it can handle transaction logging and rollback, plus the switch from inactive to active
+// Node, etc...
 func (t *transaction) saveUpdatedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
-	// TODO:
 	if c, err := t.countDiffsWithRedisNodes(nodes); err != nil {
 		if rerr := t.rollback(ctx); rerr != nil {
 			return false, fmt.Errorf("countDiffsWithRedisNodes call failed, details: %v, rollback error: %v.", err, rerr)
@@ -254,6 +266,11 @@ func (t *transaction) saveAddedNodes(ctx context.Context, nodes []nodeEntry) err
 	// TODO:
 	return nil
 }
+
+
+
+
+
 
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in.
 func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {

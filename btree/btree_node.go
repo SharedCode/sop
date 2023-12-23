@@ -18,7 +18,7 @@ type Item[TK Comparable, TV any] struct {
 	// Value is saved nil if data is to be persisted in the "data segment"(& ValueId set to a valid UUID),
 	// otherwise it should point to the actual data and persisted in B-Tree Node segment together with the Key.
 	Value *TV
-	// UpsertTime in milliseconds.
+	// Upsert time in milliseconds, is also used for conflict resolution among (in-flight) transactions.
 	UpsertTime      int64
 	valueNeedsFetch bool
 }
@@ -37,9 +37,13 @@ type Node[TK Comparable, TV any] struct {
 	ParentId  UUID
 	Slots     []*Item[TK, TV]
 	Count     int
-	IsDeleted bool
-	// UpsertTime in milliseconds.
+	// Upsert time in milliseconds, is also used for conflict resolution among (in-flight) transactions.
 	UpsertTime  int64
+	// IsDeleted is used for "logical" deletes, useful for implementation on backends such as Cassandra, where
+	// physical record deletes are expensive. SOP can respect logically deleted records to accommodate being
+	// stored in such backends like Cassandra, and offer an alternative manner when to (schedule/)physically
+	// delete such logically deleted records.
+	IsDeleted bool
 	indexOfNode int
 	childrenIds []UUID
 }
