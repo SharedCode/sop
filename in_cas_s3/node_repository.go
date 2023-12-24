@@ -143,3 +143,34 @@ func (nr *nodeRepository) remove(nodeId btree.UUID) {
 	// Code should not reach this point, as B-tree will not issue a remove if node is not cached locally.
 }
 
+// TODO: solve UUID to virtual Id conversion and back, let NodeRepository handle some of that part of fetching the node.
+// And some here in Transaction, so it can handle transaction logging and rollback, plus the switch from inactive to active
+// Node, etc...
+
+func (nr *nodeRepository) saveUpdatedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
+
+	if c, err := nr.countDiffsWithRedisNodes(nodes); err != nil {
+		return false, err
+	} else if c == 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (nr *nodeRepository) countDiffsWithRedisNodes([]nodeEntry) (int, error) {
+	return 0, nil
+}
+
+func (nr *nodeRepository) saveRemovedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
+	// TODO:
+	if c, err := nr.countDiffsWithRedisNodes(nodes); err != nil {
+		return false, err
+	} else if c == 0 {
+		return true, nil
+	}
+	return false, nil
+}
+func (nr *nodeRepository) saveAddedNodes(ctx context.Context, nodes []nodeEntry) error {
+	// TODO:
+	return nil
+}
