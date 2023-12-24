@@ -9,6 +9,7 @@ import (
 
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
+	"github.com/SharedCode/sop/in_cas_s3/s3"
 )
 
 // Transaction interface defines the "enduser facing" transaction methods.
@@ -29,7 +30,11 @@ type transaction struct {
 	btrees        []*btree.Btree[interface{}, interface{}]
 	// itemRedisCache is a transaction lookup table used for tracking, conflict detection & resolution
 	// across different transactions in same and/or different machines.
-	itemRedisCache     redis.Cache
+	itemRedisCache redis.Cache
+	// Needed by NodeRepository for Node data merging to the backend storage systems.
+	// Needed by NodeRepository for Node data merging to the backend storage systems.
+	nodeBlobStore      s3.BlobStore
+	nodeRedisCache     redis.Cache
 	storeRepository    StoreRepository
 	recyclerRepository RecyclerRepository
 	// VirtualIdRegistry is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
@@ -57,13 +62,16 @@ func NewTransaction(forWriting bool, maxTime time.Duration) Transaction {
 		maxTime = time.Duration(m * int(time.Minute))
 	}
 	return &transaction{
-		forWriting:         forWriting,
-		maxTime:            maxTime,
+		forWriting: forWriting,
+		maxTime:    maxTime,
 		// TODO: Allow caller to supply Redis settings.
 		itemRedisCache:     redis.NewClient(redis.DefaultOptions()),
 		storeRepository:    newStoreRepository(),
 		recyclerRepository: newRecycler(),
 		virtualIdRegistry:  newVirtualIdRegistry(),
+		// TODO: Allow caller to supply Redis & blob store settings.
+		nodeRedisCache: redis.NewClient(redis.DefaultOptions()),
+		nodeBlobStore:  s3.NewBlobStore(),
 	}
 }
 
@@ -160,12 +168,12 @@ func (t *transaction) commit(ctx context.Context) error {
 		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
 		// has to do merging & conflict resolution. Add is simple upsert.
 		updatedNodes, removedNodes, addedNodes = t.classifyModifiedNodes()
-		if ok, err := t.btreesBackend[0].backendNodeRepository.saveUpdatedNodes(ctx, t, updatedNodes); err != nil {
+		if ok, err := t.btreesBackend[0].backendNodeRepository.saveUpdatedNodes(ctx, updatedNodes); err != nil {
 			return err
 		} else if !ok {
 			done = false
 		}
-		if ok, err := t.btreesBackend[0].backendNodeRepository.saveRemovedNodes(ctx, t, removedNodes); err != nil {
+		if ok, err := t.btreesBackend[0].backendNodeRepository.saveRemovedNodes(ctx, removedNodes); err != nil {
 			return err
 		} else if !ok {
 			done = false
@@ -181,7 +189,7 @@ func (t *transaction) commit(ctx context.Context) error {
 		}
 	}
 
-	if err := t.btreesBackend[0].backendNodeRepository.saveAddedNodes(ctx, t, addedNodes); err != nil {
+	if err := t.btreesBackend[0].backendNodeRepository.saveAddedNodes(ctx, addedNodes); err != nil {
 		return err
 	}
 	if err := t.storeRepository.CommitChanges(ctx); err != nil {

@@ -5,7 +5,6 @@ import (
 
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
-	"github.com/SharedCode/sop/in_cas_s3/s3"
 )
 
 type cacheNode struct {
@@ -43,20 +42,16 @@ func (nr *nodeRepositoryTyped[TK, TV]) Remove(nodeId btree.UUID) {
 // but which, manages b-tree nodes in transaction cache, Redis and in Cassandra + S3,
 // or File System, for debugging &/or "poor man's" setup(no AWS required!).
 type nodeRepository struct {
-	// Needed by NodeRepository for Node data merging to the backend storage systems.
-	nodeBlobStore  s3.BlobStore
-	nodeRedisCache redis.Cache
+	transaction *transaction
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
 	nodeLocalCache map[btree.UUID]cacheNode
 }
 
 // NewNodeRepository instantiates a NodeRepository.
-func newNodeRepository[TK btree.Comparable, TV any]() *nodeRepositoryTyped[TK, TV] {
+func newNodeRepository[TK btree.Comparable, TV any](t *transaction) *nodeRepositoryTyped[TK, TV] {
 	nr := &nodeRepository{
+		transaction:    t,
 		nodeLocalCache: make(map[btree.UUID]cacheNode),
-		// TODO: Allow caller to supply Redis & blob store settings.
-		nodeRedisCache: redis.NewClient(redis.DefaultOptions()),
-		nodeBlobStore:  s3.NewBlobStore(),
 	}
 	return &nodeRepositoryTyped[TK, TV]{
 		realNodeRepository: nr,
@@ -85,13 +80,13 @@ func (nr *nodeRepository) get(ctx context.Context, nodeId btree.UUID, target int
 		}
 		return v.node, nil
 	}
-	if err := nr.nodeRedisCache.GetStruct(ctx, nodeId.ToString(), target); err != nil {
+	if err := nr.transaction.nodeRedisCache.GetStruct(ctx, nodeId.ToString(), target); err != nil {
 		if redis.KeyNotFound(err) {
 			// Fetch from blobStore and cache to Redis/local.
-			if err = nr.nodeBlobStore.Get(ctx, nodeId, target); err != nil {
+			if err = nr.transaction.nodeBlobStore.Get(ctx, nodeId, target); err != nil {
 				return nil, err
 			}
-			nr.nodeRedisCache.SetStruct(ctx, nodeId.ToString(), target, -1)
+			nr.transaction.nodeRedisCache.SetStruct(ctx, nodeId.ToString(), target, -1)
 			nr.nodeLocalCache[nodeId] = cacheNode{
 				action: getAction,
 				node:   target,
@@ -147,7 +142,7 @@ func (nr *nodeRepository) remove(nodeId btree.UUID) {
 // And some here in Transaction, so it can handle transaction logging and rollback, plus the switch from inactive to active
 // Node, etc...
 
-func (nr *nodeRepository) saveUpdatedNodes(ctx context.Context, t *transaction, nodes []nodeEntry) (bool, error) {
+func (nr *nodeRepository) saveUpdatedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
 
 	if c, err := nr.countDiffsWithRedisNodes(nodes); err != nil {
 		return false, err
@@ -161,7 +156,7 @@ func (nr *nodeRepository) countDiffsWithRedisNodes([]nodeEntry) (int, error) {
 	return 0, nil
 }
 
-func (nr *nodeRepository) saveRemovedNodes(ctx context.Context, t *transaction, nodes []nodeEntry) (bool, error) {
+func (nr *nodeRepository) saveRemovedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
 	// TODO:
 	if c, err := nr.countDiffsWithRedisNodes(nodes); err != nil {
 		return false, err
@@ -170,7 +165,7 @@ func (nr *nodeRepository) saveRemovedNodes(ctx context.Context, t *transaction, 
 	}
 	return false, nil
 }
-func (nr *nodeRepository) saveAddedNodes(ctx context.Context, t *transaction, nodes []nodeEntry) error {
+func (nr *nodeRepository) saveAddedNodes(ctx context.Context, nodes []nodeEntry) error {
 	// TODO:
 	return nil
 }

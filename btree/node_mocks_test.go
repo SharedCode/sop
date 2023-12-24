@@ -40,7 +40,7 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 	si := StoreInterface[int, string]{
 		NodeRepository: newNodeRepository[int, string](),
 	}
-	b3,_ := New[int, string](&store, &si)
+	b3, _ := New[int, string](&store, &si)
 
 	for i := 0; i < 25; i++ {
 		x := i * 5
@@ -116,7 +116,7 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 	si := StoreInterface[int, string]{
 		NodeRepository: newNodeRepository[int, string](),
 	}
-	b3,_ := New[int, string](&store, &si)
+	b3, _ := New[int, string](&store, &si)
 
 	for i := 0; i < 25; i++ {
 		x := i * 5
@@ -192,7 +192,7 @@ func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	si := StoreInterface[int, string]{
 		NodeRepository: newNodeRepository[int, string](),
 	}
-	b3,_ := New[int, string](&store, &si)
+	b3, _ := New[int, string](&store, &si)
 
 	for i := 0; i < 25; i++ {
 		x := i * 5

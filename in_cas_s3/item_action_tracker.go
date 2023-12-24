@@ -65,9 +65,9 @@ func (t *itemActionTracker) Get(item *btree.Item[interface{}, interface{}]) {
 
 func (t *itemActionTracker) Add(item *btree.Item[interface{}, interface{}]) {
 	t.items[item.Id] = cacheItem{
-		lockId: btree.NewUUID(),
-		action: addAction,
-		item:   item,
+		lockId:         btree.NewUUID(),
+		action:         addAction,
+		item:           item,
 		upsertTimeInDB: item.UpsertTime,
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
@@ -79,9 +79,9 @@ func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
 		return
 	}
 	t.items[item.Id] = cacheItem{
-		lockId: btree.NewUUID(),
-		action: updateAction,
-		item:   item,
+		lockId:         btree.NewUUID(),
+		action:         updateAction,
+		item:           item,
 		upsertTimeInDB: item.UpsertTime,
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.

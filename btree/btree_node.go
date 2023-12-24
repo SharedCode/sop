@@ -33,17 +33,17 @@ func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
 
 // Node contains a B-Tree node's data.
 type Node[TK Comparable, TV any] struct {
-	Id        UUID
-	ParentId  UUID
-	Slots     []*Item[TK, TV]
-	Count     int
+	Id       UUID
+	ParentId UUID
+	Slots    []*Item[TK, TV]
+	Count    int
 	// Upsert time in milliseconds, is also used for conflict resolution among (in-flight) transactions.
-	UpsertTime  int64
+	UpsertTime int64
 	// IsDeleted is used for "logical" deletes, useful for implementation on backends such as Cassandra, where
 	// physical record deletes are expensive. SOP can respect logically deleted records to accommodate being
 	// stored in such backends like Cassandra, and offer an alternative manner when to (schedule/)physically
 	// delete such logically deleted records.
-	IsDeleted bool
+	IsDeleted   bool
 	indexOfNode int
 	childrenIds []UUID
 }

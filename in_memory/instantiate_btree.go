@@ -20,7 +20,7 @@ func NewBtree[TK btree.Comparable, TV any](isUnique bool) BtreeInterface[TK, TV]
 	si := btree.StoreInterface[TK, TV]{
 		NodeRepository: newNodeRepository[TK, TV](),
 	}
-	b3,_ := btree.New[TK, TV](s, &si)
+	b3, _ := btree.New[TK, TV](s, &si)
 	return BtreeInterface[TK, TV]{
 		btree: b3,
 	}

@@ -15,12 +15,12 @@ type Handle struct {
 	PhysicalIdB btree.UUID
 	IsActiveIdB bool
 	// Upsert time in milliseconds, is also used for conflict resolution among (in-flight) transactions.
-	UpsertTime  int64
+	UpsertTime int64
 	// IsDeleted is used for "logical" deletes, useful for implementation on backends such as Cassandra, where
 	// physical record deletes are expensive. SOP can respect logically deleted records to accommodate being
 	// stored in such backends like Cassandra, and offer an alternative manner when to (schedule/)physically
 	// delete such logically deleted records.
-	IsDeleted   bool
+	IsDeleted bool
 }
 
 // NewHandle creates a new Handle.
