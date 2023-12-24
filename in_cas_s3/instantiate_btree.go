@@ -17,7 +17,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 		}
 		return nil, err
 	} else {
-		return newBtree[TK, TV](s, trans)
+		return newBtree[TK, TV](&s, trans)
 	}
 }
 
@@ -38,7 +38,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 	return newBtree[TK, TV](btree.NewStoreInfo(name, slotLength, isUnique, true), trans)
 }
 
-func newBtree[TK btree.Comparable, TV any](s btree.StoreInfo, trans *transaction) (btree.BtreeInterface[TK, TV], error) {
+func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transaction) (btree.BtreeInterface[TK, TV], error) {
 	si := StoreInterface[interface{}, interface{}]{}
 
 	// Assign the item action tracker frontend and backend bits.
@@ -55,7 +55,7 @@ func newBtree[TK btree.Comparable, TV any](s btree.StoreInfo, trans *transaction
 	b3,_ := btree.New[interface{}, interface{}](s, &si.StoreInterface)
 	trans.btreesBackend = append(trans.btreesBackend, si)
 	trans.btrees = append(trans.btrees, b3)
-	trans.storeRepository.Add(s)
+	trans.storeRepository.Add(*s)
 
 	return newBtreeWithTransaction[TK, TV](trans, b3), nil
 }

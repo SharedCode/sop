@@ -21,7 +21,7 @@ import (
 
 // Btree manages items using B-tree data structure and algorithm.
 type Btree[TK Comparable, TV any] struct {
-	StoreInfo          StoreInfo
+	StoreInfo          *StoreInfo
 	storeInterface     *StoreInterface[TK, TV]
 	tempSlots          []*Item[TK, TV]
 	tempParent         *Item[TK, TV]
@@ -69,7 +69,7 @@ type promoteAction[TK Comparable, TV any] struct {
 }
 
 // New creates a new B-Tree instance.
-func New[TK Comparable, TV any](storeInfo StoreInfo, si *StoreInterface[TK, TV]) (*Btree[TK, TV], error) {
+func New[TK Comparable, TV any](storeInfo *StoreInfo, si *StoreInterface[TK, TV]) (*Btree[TK, TV], error) {
 	// Return nil B-Tree to signify failure if there is not enough info to create an instance.
 	if si == nil {
 		return nil, fmt.Errorf("Can't create a b-tree with nil StoreInterface parameter.")

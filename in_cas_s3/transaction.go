@@ -27,7 +27,7 @@ type Transaction interface {
 type transaction struct {
 	// stores(or its items) accessed/managed within the transaction session.
 	btreesBackend []StoreInterface[interface{}, interface{}]
-	btrees        []btree.BtreeInterface[interface{}, interface{}]
+	btrees        []*btree.Btree[interface{}, interface{}]
 	// itemRedisCache is a transaction lookup table used for tracking, conflict detection & resolution
 	// across different transactions in same and/or different machines.
 	itemRedisCache     redis.Cache
@@ -288,6 +288,13 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 		// Clear the backend "cache" so we can force B-Tree to re-fetch from Redis(or BlobStore).
 		t.btreesBackend[b3Index].backendItemActionTracker.items = make(map[btree.UUID]cacheItem)
 		t.btreesBackend[b3Index].backendNodeRepository.nodeLocalCache = make(map[btree.UUID]cacheNode)
+		// Reset StoreInfo of B-Tree in prep to replay the "actions".
+		if storeInfo, err := t.storeRepository.Get(ctx, b3.StoreInfo.Name); err != nil {
+			return err
+		} else {
+			b3.StoreInfo.Count = storeInfo.Count
+		}
+
 		for itemId, ci := range b3ModifiedItems {
 			if ci.action == addAction {
 				if ok, err := b3.Add(ctx, ci.item.Key, *ci.item.Value); !ok || err != nil {

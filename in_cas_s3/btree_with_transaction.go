@@ -9,11 +9,11 @@ import (
 
 type btreeWithTransaction[TK btree.Comparable, TV any] struct {
 	transaction Transaction
-	btree       btree.BtreeInterface[interface{}, interface{}]
+	btree       *btree.Btree[interface{}, interface{}]
 }
 
 // Instantiate a B-Tree wrapper that enforces transaction session on each method(a.k.a. operation).
-func newBtreeWithTransaction[TK btree.Comparable, TV any](t Transaction, btree btree.BtreeInterface[interface{}, interface{}]) *btreeWithTransaction[TK, TV] {
+func newBtreeWithTransaction[TK btree.Comparable, TV any](t Transaction, btree *btree.Btree[interface{}, interface{}]) *btreeWithTransaction[TK, TV] {
 	return &btreeWithTransaction[TK, TV]{
 		transaction: t,
 		btree:       btree,

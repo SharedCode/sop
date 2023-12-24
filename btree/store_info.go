@@ -14,8 +14,8 @@ type StoreInfo struct {
 	RootNodeId UUID
 	// Total count of items stored.
 	Count int64
-	// Version number.
-	Version int
+	// UpsertTime in milliseconds.
+	UpsertTime int64
 	// Is marked deleted or not.
 	IsDeleted bool
 	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's data segment.
@@ -24,7 +24,7 @@ type StoreInfo struct {
 }
 
 // NewStoreInfo instantiates a new Store.
-func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool) StoreInfo {
+func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if slotLength%2 != 0 {
 		slotLength--
@@ -33,7 +33,7 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 	if slotLength < 4 {
 		slotLength = 4
 	}
-	return StoreInfo{
+	return &StoreInfo{
 		Name:                     name,
 		SlotLength:               slotLength,
 		IsUnique:                 isUnique,
