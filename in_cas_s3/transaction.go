@@ -293,6 +293,7 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 			return err
 		} else {
 			b3.StoreInfo.Count = storeInfo.Count
+			b3.StoreInfo.RootNodeId = storeInfo.RootNodeId
 		}
 
 		for itemId, ci := range b3ModifiedItems {
