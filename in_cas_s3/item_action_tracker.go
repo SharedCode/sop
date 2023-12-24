@@ -105,9 +105,10 @@ func (t *itemActionTracker) Remove(item *btree.Item[interface{}, interface{}]) {
 func (t *itemActionTracker) hasConflict(ctx context.Context, itemRedisCache redis.Cache) (bool, error) {
 	for uuid := range t.items {
 		if _, err := itemRedisCache.Get(ctx, uuid.ToString()); err != nil {
-			if !redis.KeyNotFound(err) {
-				return false, err
+			if redis.KeyNotFound(err) {
+				continue
 			}
+			return false, err
 		}
 		// If item is found in Redis, it means it is already being committed by another transaction.
 		return true, nil

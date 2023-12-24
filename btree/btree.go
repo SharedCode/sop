@@ -450,6 +450,12 @@ func (btree *Btree[TK, TV]) getRootNode(ctx context.Context) (*Node[TK, TV], err
 	if root == nil {
 		return nil, fmt.Errorf("Can't retrieve Root Node w/ logical Id '%v'", btree.StoreInfo.RootNodeId)
 	}
+	if len(root.Slots) == 0 {
+		// Create new Root Node if nil, implied new btree.
+		var nr = newNode[TK, TV](btree.getSlotLength())
+		nr.Id = btree.StoreInfo.RootNodeId
+		return nr, nil
+	}
 	return root, nil
 }
 

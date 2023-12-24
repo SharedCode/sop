@@ -33,23 +33,23 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	trans.Begin()
 	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
-		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		trans.Rollback(ctx)
 		return
 	}
 
 	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
-		t.Logf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		trans.Rollback(ctx)
 		return
 	}
 	if k, err := b3.GetCurrentKey(ctx); k != 1 || err != nil {
-		t.Logf("GetCurrentKey() failed, got = %v, %v, want = 1, nil.", k, err)
+		t.Errorf("GetCurrentKey() failed, got = %v, %v, want = 1, nil.", k, err)
 		trans.Rollback(ctx)
 		return
 	}
 	if v, err := b3.GetCurrentValue(ctx); v != "hello world" || err != nil {
-		t.Logf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
+		t.Errorf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
 		trans.Rollback(ctx)
 		return
 	}
@@ -57,7 +57,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// TODO: add more unit tests to exercise/verify commit's conflict detection, lightweight locking
 	// and Nodes upserts, i.e. - save updated nodes, save removed nodes & save added nodes.
 	if err := trans.Commit(ctx); err != nil {
-		t.Logf("Commit returned error, details: %v.", err)
+		t.Errorf("Commit returned error, details: %v.", err)
 	}
 }
 

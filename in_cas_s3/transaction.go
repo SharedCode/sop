@@ -166,6 +166,12 @@ func (t *transaction) commit(ctx context.Context) error {
 		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
 		// has to do merging & conflict resolution. Add is simple upsert.
 		updatedNodes, removedNodes, addedNodes = t.classifyModifiedNodes()
+
+
+		if err := t.refetchAndMergeModifications(ctx); err != nil {
+			return err
+		}
+
 		if ok, err := t.saveUpdatedNodes(ctx, updatedNodes); err != nil {
 			return err
 		} else if !ok {
@@ -215,6 +221,9 @@ func (t *transaction) cleanup(ctx context.Context) error {
 		sb.WriteString(fmt.Sprintln(err.Error()))
 	}
 	// TODO: delete cached data sets of this transaction on Redis.
+	if sb.Len() == 0 {
+		return nil
+	}
 	return fmt.Errorf(sb.String())
 }
 
@@ -281,7 +290,7 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 		t.btreesBackend[b3Index].backendNodeRepository.nodeLocalCache = make(map[btree.UUID]cacheNode)
 		for itemId, ci := range b3ModifiedItems {
 			if ci.action == addAction {
-				if ok, err := b3.Add(ctx, ci.item.Key, ci.item.Value); !ok || err != nil {
+				if ok, err := b3.Add(ctx, ci.item.Key, *ci.item.Value); !ok || err != nil {
 					if err != nil {
 						return err
 					}
@@ -318,7 +327,7 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 				continue
 			}
 			if ci.action == updateAction {
-				if ok, err := b3.UpdateCurrentItem(ctx, ci.item.Value); !ok || err != nil {
+				if ok, err := b3.UpdateCurrentItem(ctx, *ci.item.Value); !ok || err != nil {
 					if err != nil {
 						return err
 					}
