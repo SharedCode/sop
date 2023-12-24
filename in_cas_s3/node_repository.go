@@ -147,7 +147,7 @@ func (nr *nodeRepository) remove(nodeId btree.UUID) {
 // And some here in Transaction, so it can handle transaction logging and rollback, plus the switch from inactive to active
 // Node, etc...
 
-func (nr *nodeRepository) saveUpdatedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
+func (nr *nodeRepository) saveUpdatedNodes(ctx context.Context, t *transaction, nodes []nodeEntry) (bool, error) {
 
 	if c, err := nr.countDiffsWithRedisNodes(nodes); err != nil {
 		return false, err
@@ -161,7 +161,7 @@ func (nr *nodeRepository) countDiffsWithRedisNodes([]nodeEntry) (int, error) {
 	return 0, nil
 }
 
-func (nr *nodeRepository) saveRemovedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
+func (nr *nodeRepository) saveRemovedNodes(ctx context.Context, t *transaction, nodes []nodeEntry) (bool, error) {
 	// TODO:
 	if c, err := nr.countDiffsWithRedisNodes(nodes); err != nil {
 		return false, err
@@ -170,7 +170,7 @@ func (nr *nodeRepository) saveRemovedNodes(ctx context.Context, nodes []nodeEntr
 	}
 	return false, nil
 }
-func (nr *nodeRepository) saveAddedNodes(ctx context.Context, nodes []nodeEntry) error {
+func (nr *nodeRepository) saveAddedNodes(ctx context.Context, t *transaction, nodes []nodeEntry) error {
 	// TODO:
 	return nil
 }

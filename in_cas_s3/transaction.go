@@ -160,12 +160,12 @@ func (t *transaction) commit(ctx context.Context) error {
 		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
 		// has to do merging & conflict resolution. Add is simple upsert.
 		updatedNodes, removedNodes, addedNodes = t.classifyModifiedNodes()
-		if ok, err := t.btreesBackend[0].backendNodeRepository.saveUpdatedNodes(ctx, updatedNodes); err != nil {
+		if ok, err := t.btreesBackend[0].backendNodeRepository.saveUpdatedNodes(ctx, t, updatedNodes); err != nil {
 			return err
 		} else if !ok {
 			done = false
 		}
-		if ok, err := t.btreesBackend[0].backendNodeRepository.saveRemovedNodes(ctx, removedNodes); err != nil {
+		if ok, err := t.btreesBackend[0].backendNodeRepository.saveRemovedNodes(ctx, t, removedNodes); err != nil {
 			return err
 		} else if !ok {
 			done = false
@@ -181,7 +181,7 @@ func (t *transaction) commit(ctx context.Context) error {
 		}
 	}
 
-	if err := t.btreesBackend[0].backendNodeRepository.saveAddedNodes(ctx, addedNodes); err != nil {
+	if err := t.btreesBackend[0].backendNodeRepository.saveAddedNodes(ctx, t, addedNodes); err != nil {
 		return err
 	}
 	if err := t.storeRepository.CommitChanges(ctx); err != nil {
