@@ -18,6 +18,8 @@ On Persistence
 
 On Transactions
 * Use Redis/C* for storing Transaction changes
+* Use Kafka queue for storing deleted items which will be serviced on the background/on idle times
+* Transaction log: use a in-memory list backed by Kafka queue so list can be retrieved for rollback if app crash
 * Early conflict resolution, If current item being "managed" is already modified by another transaction, trigger a rollback
 
 On Persistence & Transaction(V2)
