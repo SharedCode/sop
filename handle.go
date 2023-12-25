@@ -1,4 +1,4 @@
-package in_cas_s3
+package sop
 
 import (
 	"github.com/SharedCode/sop/btree"
@@ -34,21 +34,9 @@ func (h Handle) GetActiveId() btree.UUID {
 	return h.PhysicalIdA
 }
 
-// // NewHandle creates a new Handle.
-// func NewHandle(id btree.UUID) Handle {
-// 	return Handle{
-// 		LogicalId:   id,
-// 	}
-// }
-
-// // ToHandle converts logical & physical UUIDs to a handle, a.k.a. - virtual Id.
-// func ToHandle(lid btree.UUID, physIdA btree.UUID) Handle {
-// 	return Handle{
-// 		LogicalId:   lid,
-// 		PhysicalIdA: physIdA,
-// 	}
-// }
-
-// func (id Handle) IsEmpty() bool {
-// 	return id.GetActiveId().IsNil()
-// }
+// NewHandle creates a new Handle.
+func NewHandle(id btree.UUID) Handle {
+	return Handle{
+		LogicalId:   id,
+	}
+}

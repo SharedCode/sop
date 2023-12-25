@@ -3,6 +3,7 @@ package in_cas_s3
 import (
 	"context"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
 )
@@ -80,13 +81,13 @@ func (nr *nodeRepository) get(ctx context.Context, nodeId btree.UUID, target int
 		}
 		return v.node, nil
 	}
-	if err := nr.transaction.nodeRedisCache.GetStruct(ctx, nodeId.ToString(), target); err != nil {
+	if err := nr.transaction.redisCache.GetStruct(ctx, nodeId.ToString(), target); err != nil {
 		if redis.KeyNotFound(err) {
 			// Fetch from blobStore and cache to Redis/local.
 			if err = nr.transaction.nodeBlobStore.Get(ctx, nodeId, target); err != nil {
 				return nil, err
 			}
-			nr.transaction.nodeRedisCache.SetStruct(ctx, nodeId.ToString(), target, -1)
+			nr.transaction.redisCache.SetStruct(ctx, nodeId.ToString(), target, -1)
 			nr.nodeLocalCache[nodeId] = cacheNode{
 				action: getAction,
 				node:   target,
@@ -172,11 +173,13 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []nodeEntr
 
 	for _, n := range nodes {
 		// Add node to blob store.
+		h := sop.NewHandle(n.nodeId)
+		nr.transaction.virtualIdRegistry.Add(ctx, h)
 		if err := nr.transaction.nodeBlobStore.Add(ctx, n.nodeId, n); err != nil {
 			return err
 		}
 		// Add node to Redis cache.
-		if err := nr.transaction.nodeRedisCache.SetStruct(ctx, n.nodeId.ToString(), n, -1); err != nil {
+		if err := nr.transaction.redisCache.SetStruct(ctx, n.nodeId.ToString(), n, -1); err != nil {
 			return err
 		}
 	}

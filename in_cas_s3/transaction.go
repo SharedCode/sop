@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop/btree"
+	cas "github.com/SharedCode/sop/in_cas_s3/cassandra"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
 	"github.com/SharedCode/sop/in_cas_s3/s3"
 )
@@ -28,17 +29,14 @@ type transaction struct {
 	// stores(or its items) accessed/managed within the transaction session.
 	btreesBackend []StoreInterface[interface{}, interface{}]
 	btrees        []*btree.Btree[interface{}, interface{}]
-	// itemRedisCache is a transaction lookup table used for tracking, conflict detection & resolution
 	// across different transactions in same and/or different machines.
-	itemRedisCache redis.Cache
 	// Needed by NodeRepository for Node data merging to the backend storage systems.
 	// Needed by NodeRepository for Node data merging to the backend storage systems.
 	nodeBlobStore      s3.BlobStore
-	nodeRedisCache     redis.Cache
-	storeRepository    StoreRepository
-	recyclerRepository RecyclerRepository
+	redisCache     redis.Cache
+	storeRepository    cas.StoreRepository
 	// VirtualIdRegistry is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
-	virtualIdRegistry VirtualIdRegistry
+	virtualIdRegistry cas.VirtualIdRegistry
 	forWriting        bool
 	hasBegun          bool
 	done              bool
@@ -65,11 +63,9 @@ func NewTransaction(forWriting bool, maxTime time.Duration) Transaction {
 		forWriting: forWriting,
 		maxTime:    maxTime,
 		// TODO: Allow caller to supply Redis & blob store settings.
-		itemRedisCache:     redis.NewClient(redis.DefaultOptions()),
-		storeRepository:    newStoreRepository(),
-		recyclerRepository: newRecycler(),
-		virtualIdRegistry:  newVirtualIdRegistry(),
-		nodeRedisCache: redis.NewClient(redis.DefaultOptions()),
+		storeRepository:    cas.NewStoreRepository(),
+		virtualIdRegistry:  cas.NewVirtualIdRegistry(),
+		redisCache: redis.NewClient(redis.DefaultOptions()),
 		nodeBlobStore:  s3.NewBlobStore(),
 	}
 }
@@ -336,7 +332,7 @@ func (t *transaction) rollback(ctx context.Context) error {
 
 func (t *transaction) lockTrackedItems(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
-		if err := s.backendItemActionTracker.lock(ctx, t.itemRedisCache, t.maxTime); err != nil {
+		if err := s.backendItemActionTracker.lock(ctx, t.redisCache, t.maxTime); err != nil {
 			return err
 		}
 	}
@@ -346,7 +342,7 @@ func (t *transaction) lockTrackedItems(ctx context.Context) error {
 func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	var lastError error
 	for _, s := range t.btreesBackend {
-		if err := s.backendItemActionTracker.unlock(ctx, t.itemRedisCache); err != nil {
+		if err := s.backendItemActionTracker.unlock(ctx, t.redisCache); err != nil {
 			lastError = err
 		}
 	}
@@ -356,7 +352,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 // Check all explicitly fetched(i.e. - GetCurrentValue invoked) & managed(add/update/remove) items for conflict.
 func (t *transaction) trackedItemsHasConflict(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
-		if hasConflict, err := s.backendItemActionTracker.hasConflict(ctx, t.itemRedisCache); hasConflict || err != nil {
+		if hasConflict, err := s.backendItemActionTracker.hasConflict(ctx, t.redisCache); hasConflict || err != nil {
 			if hasConflict {
 				return fmt.Errorf("hasConflict call detected conflict.")
 			}

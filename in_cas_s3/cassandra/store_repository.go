@@ -1,4 +1,4 @@
-package in_cas_s3
+package cassandra
 
 import (
 	"context"
@@ -27,7 +27,8 @@ type storeRepository struct {
 	lookup map[string]btree.StoreInfo
 }
 
-func newStoreRepository() StoreRepository {
+// TODO: NewStoreRepository manages the StoreInfo in Cassandra table.
+func NewStoreRepository() StoreRepository {
 	return &storeRepository{
 		lookup: make(map[string]btree.StoreInfo),
 	}
