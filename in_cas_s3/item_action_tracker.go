@@ -125,8 +125,15 @@ func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache
 			if !redis.KeyNotFound(err) {
 				return err
 			}
+			// Item does not exist, upsert it.
 			if err := itemRedisCache.Set(ctx, uuid.ToString(), lid.ToString(), duration); err != nil {
 				return err
+			}
+			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
+			if tlid, err := itemRedisCache.Get(ctx, uuid.ToString()); err != nil {
+				return err
+			} else if tlid != lid.ToString() {
+				return fmt.Errorf("lock(item: %v) call detected conflict.", uuid)
 			}
 		} else if tlid != lid.ToString() {
 			return fmt.Errorf("lock(item: %v) call detected conflict.", uuid)

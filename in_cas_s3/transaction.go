@@ -64,12 +64,11 @@ func NewTransaction(forWriting bool, maxTime time.Duration) Transaction {
 	return &transaction{
 		forWriting: forWriting,
 		maxTime:    maxTime,
-		// TODO: Allow caller to supply Redis settings.
+		// TODO: Allow caller to supply Redis & blob store settings.
 		itemRedisCache:     redis.NewClient(redis.DefaultOptions()),
 		storeRepository:    newStoreRepository(),
 		recyclerRepository: newRecycler(),
 		virtualIdRegistry:  newVirtualIdRegistry(),
-		// TODO: Allow caller to supply Redis & blob store settings.
 		nodeRedisCache: redis.NewClient(redis.DefaultOptions()),
 		nodeBlobStore:  s3.NewBlobStore(),
 	}
@@ -128,6 +127,19 @@ func (t *transaction) timedOut(startTime time.Time) error {
 }
 
 func (t *transaction) commit(ctx context.Context) error {
+	// If reader transaction, only do a conflict check, that is enough.
+	if !t.forWriting {
+		if err := t.trackedItemsHasConflict(ctx); err != nil {
+			return err
+		}
+		// Reader transaction only checks tracked items consistency, return success at this point.
+		return nil
+	}
+
+	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
+	if err := t.lockTrackedItems(ctx); err != nil {
+		return err
+	}
 
 	var updatedNodes, removedNodes, addedNodes []nodeEntry
 	startTime := getCurrentTime()
@@ -155,25 +167,12 @@ func (t *transaction) commit(ctx context.Context) error {
 		if err := t.timedOut(startTime); err != nil {
 			return err
 		}
-		if err := t.trackedItemsHasConflict(ctx); err != nil {
-			return err
-		}
-
-		if !t.forWriting {
-			// Reader transaction only checks tracked items consistency, return success at this point.
-			return nil
-		}
 
 		done = true
 		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
 		// has to do merging & conflict resolution. Add is simple upsert.
 		updatedNodes, removedNodes, addedNodes = t.classifyModifiedNodes()
-		if ok, err := t.btreesBackend[0].backendNodeRepository.saveUpdatedNodes(ctx, updatedNodes); err != nil {
-			return err
-		} else if !ok {
-			done = false
-		}
-		if ok, err := t.btreesBackend[0].backendNodeRepository.saveRemovedNodes(ctx, removedNodes); err != nil {
+		if ok, err := t.btreesBackend[0].backendNodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 			return err
 		} else if !ok {
 			done = false
@@ -189,17 +188,19 @@ func (t *transaction) commit(ctx context.Context) error {
 		}
 	}
 
-	if err := t.btreesBackend[0].backendNodeRepository.saveAddedNodes(ctx, addedNodes); err != nil {
+	if err := t.btreesBackend[0].backendNodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
 		return err
 	}
+	if ok, err := t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
+		return err
+	} else if !ok {
+		done = false
+	}
+
 	if err := t.storeRepository.CommitChanges(ctx); err != nil {
 		return err
 	}
 
-	// Mark session modified items as locked in Redis.
-	if err := t.lockTrackedItems(ctx); err != nil {
-		return err
-	}
 	// Switch to active "state" the (inactive) updated/new Nodes so they will get started to be "seen" if fetched.
 	if err := t.setActiveModifiedInactiveNodes(updatedNodes); err != nil {
 		return err

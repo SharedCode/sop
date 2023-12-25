@@ -138,11 +138,9 @@ func (nr *nodeRepository) remove(nodeId btree.UUID) {
 	// Code should not reach this point, as B-tree will not issue a remove if node is not cached locally.
 }
 
-// TODO: solve UUID to virtual Id conversion and back, let NodeRepository handle some of that part of fetching the node.
-// And some here in Transaction, so it can handle transaction logging and rollback, plus the switch from inactive to active
-// Node, etc...
+func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
 
-func (nr *nodeRepository) saveUpdatedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
+	// TODO: save to blob store, save node Id to the alternate(inactive) physical Id(see virtual Id).
 
 	if c, err := nr.countDiffsWithRedisNodes(nodes); err != nil {
 		return false, err
@@ -156,16 +154,31 @@ func (nr *nodeRepository) countDiffsWithRedisNodes([]nodeEntry) (int, error) {
 	return 0, nil
 }
 
-func (nr *nodeRepository) saveRemovedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
-	// TODO:
-	if c, err := nr.countDiffsWithRedisNodes(nodes); err != nil {
-		return false, err
-	} else if c == 0 {
-		return true, nil
-	}
+func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
+	// TODO: Add the renmoved Node(s) and their Item(s) Data(if not in node segment) to the recycler
+	// so they can get serviced for physical delete on schedule in the future.
+
 	return false, nil
 }
-func (nr *nodeRepository) saveAddedNodes(ctx context.Context, nodes []nodeEntry) error {
-	// TODO:
+func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []nodeEntry) error {
+
+	// TODO: solve UUID to virtual Id conversion and back.
+	/* UUID to Virtual Id story:
+	   - (on commit) New(added) nodes will have their Ids converted to virtual Id with empty
+	     phys Ids(or same Id with active & virtual Id).
+	   - On get, 'will read the Node using currently active Id.
+	   - (on commit) On update, 'will save and register the node phys Id to the "inactive Id" part of the virtual Id.
+	*/
+
+	for _, n := range nodes {
+		// Add node to blob store.
+		if err := nr.transaction.nodeBlobStore.Add(ctx, n.nodeId, n); err != nil {
+			return err
+		}
+		// Add node to Redis cache.
+		if err := nr.transaction.nodeRedisCache.SetStruct(ctx, n.nodeId.ToString(), n, -1); err != nil {
+			return err
+		}
+	}
 	return nil
 }
