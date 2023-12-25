@@ -6,7 +6,7 @@ import (
 
 // Handle is a structure that holds Logical Id and the underlying Physical Id it maps to.
 // It is used by SOP to provide ability to support ACID transactions and swiftly replace
-// Node(s) of the trie, with minimal to zero disruption.
+// Node(s) of the trie.
 type Handle struct {
 	// LogicalId is the "functional" Id of the entity.
 	LogicalId   btree.UUID
@@ -34,7 +34,7 @@ func (h Handle) GetActiveId() btree.UUID {
 	return h.PhysicalIdA
 }
 
-// NewHandle creates a new Handle.
+// NewHandle creates a new Handle given a logical Id.
 func NewHandle(id btree.UUID) Handle {
 	return Handle{
 		LogicalId:   id,
