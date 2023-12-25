@@ -7,7 +7,6 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
-// VirtualIdRegistry interface specifies the "virtualized Id" repository.
 type VirtualIdRegistry interface {
 	Get(ctx context.Context, lid btree.UUID) (sop.Handle, error)
 	Add(ctx context.Context, h sop.Handle) error
