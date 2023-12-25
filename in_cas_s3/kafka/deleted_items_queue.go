@@ -6,11 +6,11 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
-// TODO: finalize the Deleted Items queue interface.
 
-type DeletedItemsQueue interface {
-	Dequeue(ctx context.Context) (DeletedItem, error)
-	Enqueue(ctx context.Context, delItem DeletedItem) error
+type DeletedItemsRepository interface {
+	Get(ctx context.Context, itemId btree.UUID) (DeletedItem, error)
+	Add(ctx context.Context, delItem DeletedItem) error
+	Remove(ctx context.Context, itemId btree.UUID) error
 }
 
 type ItemType int
