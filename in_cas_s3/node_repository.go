@@ -159,20 +159,19 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []nodeEn
 		n.nodeId = id
 		if err := nr.transaction.nodeBlobStore.Add(ctx, id, n); err != nil {
 			return false, err
-		} else {
-			if err := nr.transaction.redisCache.SetStruct(ctx, id.ToString(), n, -1); err != nil {
-				return false, err
-			}
-			h.UpsertTime = time.Now().UnixMilli()
-			if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
-				return false, err
-			}
-			// Do a second "get" and check the upsert time to see if we "won" the update, fail (for retry) if not.
-			if h2, err := nr.transaction.virtualIdRegistry.Get(ctx, h.LogicalId); err != nil {
-				return false, err
-			} else if h.UpsertTime != h2.UpsertTime {
-				return false, nil
-			}
+		}
+		if err := nr.transaction.redisCache.SetStruct(ctx, id.ToString(), n, -1); err != nil {
+			return false, err
+		}
+		h.UpsertTime = time.Now().UnixMilli()
+		if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
+			return false, err
+		}
+		// Do a second "get" and check the upsert time to see if we "won" the update, fail (for retry) if not.
+		if h2, err := nr.transaction.virtualIdRegistry.Get(ctx, h.LogicalId); err != nil {
+			return false, err
+		} else if h.UpsertTime != h2.UpsertTime {
+			return false, nil
 		}
 	}
 	return true, nil
@@ -182,7 +181,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []nodeEn
 	// TODO: Add the renmoved Node(s) and their Item(s) Data(if not in node segment) to the recycler
 	// so they can get serviced for physical delete on schedule in the future.
 
-	return false, nil
+	return true, nil
 }
 func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []nodeEntry) error {
 
