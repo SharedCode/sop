@@ -176,6 +176,11 @@ func (t *transaction) commit(ctx context.Context) error {
 		} else if !ok {
 			done = false
 		}
+		if ok, err := t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
+			return err
+		} else if !ok {
+			done = false
+		}
 		if !done {
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
@@ -189,11 +194,6 @@ func (t *transaction) commit(ctx context.Context) error {
 
 	if err := t.btreesBackend[0].backendNodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
 		return err
-	}
-	if ok, err := t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
-		return err
-	} else if !ok {
-		done = false
 	}
 
 	if err := t.storeRepository.CommitChanges(ctx); err != nil {

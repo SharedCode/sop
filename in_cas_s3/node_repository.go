@@ -2,6 +2,7 @@ package in_cas_s3
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/SharedCode/sop"
@@ -141,37 +142,39 @@ func (nr *nodeRepository) remove(nodeId btree.UUID) {
 }
 
 func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
-
 	// TODO: save to blob store, save node Id to the alternate(inactive) physical Id(see virtual Id).
 	for _, n := range nodes {
-		if h, err := nr.transaction.virtualIdRegistry.Get(ctx, n.nodeId); err != nil {
+		h, err := nr.transaction.virtualIdRegistry.Get(ctx, n.nodeId)
+		if err != nil {
+			return false, err
+		}
+		if h.IsDeleted {
+			return false, fmt.Errorf("Node with Id %v is marked deleted.", n.nodeId)
+		}
+		id := h.AllocateId()
+		if id == btree.NilUUID {
+			// Return false as both A and B phys Ids are taken by other transactions.
+			return false, nil
+		}
+		n.nodeId = id
+		if err := nr.transaction.nodeBlobStore.Add(ctx, id, n); err != nil {
 			return false, err
 		} else {
-			if id := h.AllocateId(); id == btree.NilUUID {
-				// Return false as both A and B phys Ids are taken by other transactions.
+			if err := nr.transaction.redisCache.SetStruct(ctx, id.ToString(), n, -1); err != nil {
+				return false, err
+			}
+			h.UpsertTime = time.Now().UnixMilli()
+			if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
+				return false, err
+			}
+			// Do a second "get" and check the upsert time to see if we "won" the update, fail (for retry) if not.
+			if h2, err := nr.transaction.virtualIdRegistry.Get(ctx, h.LogicalId); err != nil {
+				return false, err
+			} else if h.UpsertTime != h2.UpsertTime {
 				return false, nil
-			} else {
-				n.nodeId = id
-				if err := nr.transaction.nodeBlobStore.Add(ctx, id, n); err != nil {
-					return false, err
-				} else {
-					if err := nr.transaction.redisCache.SetStruct(ctx, id.ToString(), n, -1); err != nil {
-						return false, err
-					}
-					h.UpsertTime = time.Now().UnixMilli()
-					if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
-						return false, err
-					}
-					// Do a second "get" and check the upsert time to see if we "won" the update, fail if not.
-					if h2, err := nr.transaction.virtualIdRegistry.Get(ctx, h.LogicalId); err != nil {
-						return false, err
-					} else if h.UpsertTime != h2.UpsertTime {
-						return false, err
-					}
-				}
 			}
 		}
-	}	
+	}
 	return true, nil
 }
 
