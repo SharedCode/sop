@@ -3,7 +3,7 @@ package in_cas_s3
 import (
 	"context"
 	"fmt"
-	"time"
+	"strings"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
@@ -141,16 +141,18 @@ func (nr *nodeRepository) remove(nodeId btree.UUID) {
 	// Code should not reach this point, as B-tree will not issue a remove if node is not cached locally.
 }
 
+// Save to blob store, save node Id to the alternate(inactive) physical Id(see virtual Id).
 func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
-	// TODO: save to blob store, save node Id to the alternate(inactive) physical Id(see virtual Id).
 	for _, n := range nodes {
 		h, err := nr.transaction.virtualIdRegistry.Get(ctx, n.nodeId)
 		if err != nil {
 			return false, err
 		}
+		// Node with such Id is marked deleted.
 		if h.IsDeleted {
-			return false, fmt.Errorf("Node with Id %v is marked deleted.", n.nodeId)
+			return false, nil
 		}
+		// Create new phys. UUID and auto-assign it to the available phys. Id(A or B).
 		id := h.AllocateId()
 		if id == btree.NilUUID {
 			// Return false as both A and B phys Ids are taken by other transactions.
@@ -163,14 +165,23 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []nodeEn
 		if err := nr.transaction.redisCache.SetStruct(ctx, id.ToString(), n, -1); err != nil {
 			return false, err
 		}
-		h.UpsertTime = time.Now().UnixMilli()
 		if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
 			return false, err
 		}
-		// Do a second "get" and check the upsert time to see if we "won" the update, fail (for retry) if not.
+		// Do a second "get" and check the lock id to see if we "won" the update, fail (for retry) if not.
 		if h2, err := nr.transaction.virtualIdRegistry.Get(ctx, h.LogicalId); err != nil {
 			return false, err
-		} else if h.UpsertTime != h2.UpsertTime {
+		} else if !h2.HasId(id) {
+			sb := strings.Builder{}
+			if err := nr.transaction.nodeBlobStore.Remove(ctx, id); err != nil {
+				sb.WriteString(err.Error())
+			}
+			if err := nr.transaction.redisCache.Delete(ctx, id.ToString()); err != nil {
+				sb.WriteString(err.Error())
+			}
+			if sb.Len() > 0 {
+				return false, fmt.Errorf("Error undoing blob store and/or redis change, details: %s.", sb.String())
+			}
 			return false, nil
 		}
 	}
@@ -183,6 +194,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []nodeEn
 
 	return true, nil
 }
+
 func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []nodeEntry) error {
 
 	// TODO: solve UUID to virtual Id conversion and back.
