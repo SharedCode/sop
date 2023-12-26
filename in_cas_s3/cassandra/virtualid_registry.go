@@ -18,7 +18,7 @@ type vid_registry struct{
 	lookup map[btree.UUID]sop.Handle
 }
 
-// TODO: NewVirtualIdRegistry manages the Handle in Cassandra table.
+// TODO: NewVirtualIdRegistry manages the Handle in Cassandra table, cached in Redis.
 func NewVirtualIdRegistry() VirtualIdRegistry {
 	return &vid_registry{
 		lookup: make(map[btree.UUID]sop.Handle),

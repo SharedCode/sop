@@ -23,20 +23,41 @@ type Handle struct {
 	IsDeleted bool
 }
 
+// NewHandle creates a new Handle given a logical Id.
+func NewHandle(id btree.UUID) Handle {
+	return Handle{
+		LogicalId:   id,
+		PhysicalIdA: id,
+	}
+}
+
 // GetActiveId returns the currently active (if there is) UUID of a given Handle.
 func (h Handle) GetActiveId() btree.UUID {
-	if h.PhysicalIdA.IsNil() && h.PhysicalIdB.IsNil() {
-		return h.LogicalId
-	}
 	if h.IsActiveIdB {
 		return h.PhysicalIdB
 	}
 	return h.PhysicalIdA
 }
 
-// NewHandle creates a new Handle given a logical Id.
-func NewHandle(id btree.UUID) Handle {
-	return Handle{
-		LogicalId:   id,
+// Returns true if physical A and B are both in use across transactions, false otherwise.
+func (h Handle) isAandBinUse() bool {
+	return !h.PhysicalIdA.IsNil() && !h.PhysicalIdB.IsNil()
+}
+
+func (h *Handle) AllocateId() btree.UUID {
+	if h.isAandBinUse() {
+		return btree.NilUUID
 	}
+	id := btree.NewUUID()
+	if h.IsActiveIdB {
+		h.PhysicalIdA = id
+		return id
+	}
+	h.PhysicalIdB = id
+	return id
+}
+
+// Make inactive physical Id as active.
+func (h *Handle) FlipActiveId() {
+	h.IsActiveIdB = !h.IsActiveIdB
 }

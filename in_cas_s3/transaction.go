@@ -9,6 +9,7 @@ import (
 
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_cas_s3/cassandra"
+	q "github.com/SharedCode/sop/in_cas_s3/kafka"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
 	"github.com/SharedCode/sop/in_cas_s3/s3"
 )
@@ -37,6 +38,7 @@ type transaction struct {
 	storeRepository    cas.StoreRepository
 	// VirtualIdRegistry is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
 	virtualIdRegistry cas.VirtualIdRegistry
+	deletedItemsQueue q.DeletedItemsQueue
 	forWriting        bool
 	hasBegun          bool
 	done              bool
@@ -67,6 +69,7 @@ func NewTransaction(forWriting bool, maxTime time.Duration) Transaction {
 		virtualIdRegistry:  cas.NewVirtualIdRegistry(),
 		redisCache: redis.NewClient(redis.DefaultOptions()),
 		nodeBlobStore:  s3.NewBlobStore(),
+		deletedItemsQueue: q.NewDeletedItemsQueue(),
 	}
 }
 

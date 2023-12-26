@@ -6,6 +6,10 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
+// TODO: when need arise, move these interfaces to a common package, but keep them for now
+// in package where they are implemented, 'just because we wanted to keep changes minimal, 
+// and driven by needs.
+
 // StoreRepository interface specifies the store repository. Stores are readonly after creation, thus, no update method.
 type StoreRepository interface {
 	// Fetch from backend if not yet in the (local) cache list a given store info with name.
