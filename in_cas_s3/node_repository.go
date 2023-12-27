@@ -293,3 +293,20 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []node
 	}
 	return true, lastErr
 }
+
+// Set to active the inactive nodes. This is the last persistence step in transaction commit.
+func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
+	var lastErr error
+	for _, n := range nodes {
+		h, err := nr.transaction.virtualIdRegistry.Get(ctx, n.nodeId)
+		if err != nil {
+			return false, err
+		}
+		// Set the inactive as active Id.
+		h.FlipActiveId()
+		if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
+			lastErr = err
+		}
+	}
+	return true, lastErr
+}

@@ -43,6 +43,8 @@ func (h Handle) IsAandBinUse() bool {
 	return !h.PhysicalIdA.IsNil() && !h.PhysicalIdB.IsNil()
 }
 
+// AllocateId will create a new UUID and auto-assign it to the available phys. A or B slot.
+// Will return nil UUID if there is no slot left.
 func (h *Handle) AllocateId() btree.UUID {
 	if h.IsAandBinUse() {
 		return btree.NilUUID
@@ -63,5 +65,10 @@ func (h *Handle) HasId(id btree.UUID) bool {
 
 // Make inactive physical Id as active.
 func (h *Handle) FlipActiveId() {
+	if h.IsActiveIdB {
+		h.PhysicalIdB = btree.NilUUID
+	} else {
+		h.PhysicalIdA = btree.NilUUID
+	}
 	h.IsActiveIdB = !h.IsActiveIdB
 }

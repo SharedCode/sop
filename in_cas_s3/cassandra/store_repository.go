@@ -23,15 +23,13 @@ type StoreRepository interface {
 	CommitChanges(ctx context.Context) error
 }
 
-// TODO: implement a real Store Repository, for now, mock it up using a map like below.
-
 // storeRepository is a simple in-memory implementation of store repository to demonstrate
 // or mockup the structure composition, so we can define it in preparation of v2.
 type storeRepository struct {
 	lookup map[string]btree.StoreInfo
 }
 
-// TODO: NewStoreRepository manages the StoreInfo in Cassandra table.
+// NewStoreRepository manages the StoreInfo in Cassandra table.
 func NewStoreRepository() StoreRepository {
 	return &storeRepository{
 		lookup: make(map[string]btree.StoreInfo),
@@ -54,5 +52,6 @@ func (sr *storeRepository) Remove(name string) error {
 }
 
 func (sr *storeRepository) CommitChanges(ctx context.Context) error {
+	// TODO: Persist to Cassandra table the changes done.
 	return nil
 }

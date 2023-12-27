@@ -28,16 +28,14 @@ type Transaction interface {
 }
 
 type transaction struct {
-	// stores(or its items) accessed/managed within the transaction session.
+	// B-Tree instances, & their backend bits, managed within the transaction session.
 	btreesBackend []StoreInterface[interface{}, interface{}]
 	btrees        []*btree.Btree[interface{}, interface{}]
-	// across different transactions in same and/or different machines.
-	// Needed by NodeRepository for Node data merging to the backend storage systems.
 	// Needed by NodeRepository for Node data merging to the backend storage systems.
 	nodeBlobStore      s3.BlobStore
 	redisCache     redis.Cache
 	storeRepository    cas.StoreRepository
-	// VirtualIdRegistry is used to manage/access all objects keyed off of their virtual Ids (UUIDs).
+	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
 	virtualIdRegistry cas.VirtualIdRegistry
 	deletedItemsQueue q.DeletedItemsQueue
 	forWriting        bool
@@ -203,7 +201,7 @@ func (t *transaction) commit(ctx context.Context) error {
 			sleepTime := rand.Intn(4+1) + 5
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 
-			// Recreate the changes using latest committed nodes.
+			// Recreate the changes on latest committed nodes.
 			if err := t.refetchAndMergeModifications(ctx); err != nil {
 				return err
 			}
@@ -220,36 +218,17 @@ func (t *transaction) commit(ctx context.Context) error {
 
 	// Switch to active "state" the (inactive) updated Nodes(& deleted nodes) so they will 
 	// get started to be "seen" in such state on succeeding fetch.
-	if err := t.setActiveModifiedInactiveNodes(append(updatedNodes, removedNodes...)); err != nil {
-		return err
+	if ok, err := t.btreesBackend[0].backendNodeRepository.activateInactiveNodes(ctx, append(updatedNodes, removedNodes...)); err != nil {
+		if !ok {
+			return err
+		}
+		log.Warn(err.Error())
 	}
+
 	// Unlock the items in Redis.
 	if err := t.unlockTrackedItems(ctx); err != nil {
 		return err
 	}
-	return nil
-}
-
-func (t *transaction) cleanup(ctx context.Context) error {
-	sb := strings.Builder{}
-	if err := t.deleteTransactionLogs(); err != nil {
-		sb.WriteString(fmt.Sprintln(err.Error()))
-	}
-	// TODO: delete cached data sets of this transaction on Redis.
-	if sb.Len() == 0 {
-		return nil
-	}
-	return fmt.Errorf(sb.String())
-}
-
-func (t *transaction) deleteTransactionLogs() error {
-	return nil
-}
-
-// Go through all Virtual IDs of the modified Nodes and update them so the inactive UUID becomes the active ones.
-// Should be a lightweight operation & quick. Should use backend system's transaction for all or nothing commit.
-func (t *transaction) setActiveModifiedInactiveNodes([]nodeEntry) error {
-
 	return nil
 }
 
@@ -347,11 +326,6 @@ func (t *transaction) classifyModifiedNodes() ([]nodeEntry, []nodeEntry, []nodeE
 	return updatedNodes, removedNodes, addedNodes
 }
 
-func (t *transaction) rollback(ctx context.Context) error {
-	// TODO
-	return t.cleanup(ctx)
-}
-
 func (t *transaction) lockTrackedItems(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
 		if err := s.backendItemActionTracker.lock(ctx, t.redisCache, t.maxTime); err != nil {
@@ -381,5 +355,27 @@ func (t *transaction) trackedItemsHasConflict(ctx context.Context) error {
 			return err
 		}
 	}
+	return nil
+}
+
+
+func (t *transaction) rollback(ctx context.Context) error {
+	// TODO
+	return t.cleanup(ctx)
+}
+
+func (t *transaction) cleanup(ctx context.Context) error {
+	sb := strings.Builder{}
+	if err := t.deleteTransactionLogs(); err != nil {
+		sb.WriteString(fmt.Sprintln(err.Error()))
+	}
+	// TODO: delete cached data sets of this transaction on Redis.
+	if sb.Len() == 0 {
+		return nil
+	}
+	return fmt.Errorf(sb.String())
+}
+
+func (t *transaction) deleteTransactionLogs() error {
 	return nil
 }
