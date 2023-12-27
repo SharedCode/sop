@@ -18,8 +18,7 @@ type Handle struct {
 	IsActiveIdB bool
 	// Upsert time in milliseconds.
 	UpsertTime int64
-	// IsDeleted is used for "logical" deletes, useful for implementation on backends such as Cassandra, where
-	// physical record deletes are expensive. If true then Handle is treated like it is deleted.
+	// IsDeleted is used for "logical" deletes.
 	IsDeleted bool
 }
 
@@ -40,12 +39,12 @@ func (h Handle) GetActiveId() btree.UUID {
 }
 
 // Returns true if physical A and B are both in use across transactions, false otherwise.
-func (h Handle) isAandBinUse() bool {
+func (h Handle) IsAandBinUse() bool {
 	return !h.PhysicalIdA.IsNil() && !h.PhysicalIdB.IsNil()
 }
 
 func (h *Handle) AllocateId() btree.UUID {
-	if h.isAandBinUse() {
+	if h.IsAandBinUse() {
 		return btree.NilUUID
 	}
 	id := btree.NewUUID()

@@ -2,11 +2,10 @@ package in_cas_s3
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/in_cas_s3/kafka"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
 )
 
@@ -83,6 +82,12 @@ func (nr *nodeRepository) get(ctx context.Context, nodeId btree.UUID, target int
 		}
 		return v.node, nil
 	}
+	h, err := nr.transaction.virtualIdRegistry.Get(ctx, nodeId)
+	if err != nil {
+		return nil, err
+	}
+	// Replace with active physical Id if in case different.
+	nodeId = h.GetActiveId()
 	if err := nr.transaction.redisCache.GetStruct(ctx, nodeId.ToString(), target); err != nil {
 		if redis.KeyNotFound(err) {
 			// Fetch from blobStore and cache to Redis/local.
@@ -152,14 +157,16 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []nodeEn
 		if h.IsDeleted {
 			return false, nil
 		}
-		// Create new phys. UUID and auto-assign it to the available phys. Id(A or B).
+		// Create new phys. UUID and auto-assign it to the available phys. Id(A or B) "Id slot".
 		id := h.AllocateId()
 		if id == btree.NilUUID {
-			// Return false as both A and B phys Ids are taken by other transactions.
+			// Return false as there is an ongoing update on node by another transaction.
 			return false, nil
 		}
 		n.nodeId = id
-		if err := nr.transaction.nodeBlobStore.Add(ctx, id, n); err != nil {
+
+		// TODO: Should we support bulk update to blob store? Node tends to be medium-big data.
+		if err := nr.transaction.nodeBlobStore.Update(ctx, id, n); err != nil {
 			return false, err
 		}
 		if err := nr.transaction.redisCache.SetStruct(ctx, id.ToString(), n, -1); err != nil {
@@ -171,44 +178,65 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []nodeEn
 		// Do a second "get" and check the lock id to see if we "won" the update, fail (for retry) if not.
 		if h2, err := nr.transaction.virtualIdRegistry.Get(ctx, h.LogicalId); err != nil {
 			return false, err
-		} else if !h2.HasId(id) {
-			sb := strings.Builder{}
-			if err := nr.transaction.nodeBlobStore.Remove(ctx, id); err != nil {
-				sb.WriteString(err.Error())
-			}
-			if err := nr.transaction.redisCache.Delete(ctx, id.ToString()); err != nil {
-				sb.WriteString(err.Error())
-			}
-			if sb.Len() > 0 {
-				return false, fmt.Errorf("Error undoing blob store and/or redis change, details: %s.", sb.String())
-			}
+		} else if !h2.HasId(id) || h2.IsDeleted {
 			return false, nil
 		}
 	}
 	return true, nil
 }
 
+// Add the removed Node(s) and their Item(s) Data(if not in node segment) to the recycler
+// so they can get serviced for physical delete on schedule in the future.
 func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
-	// TODO: Add the renmoved Node(s) and their Item(s) Data(if not in node segment) to the recycler
-	// so they can get serviced for physical delete on schedule in the future.
+	deletedIds := make([]kafka.DeletedItem, len(nodes))
+	for _, n := range nodes {
+		h, err := nr.transaction.virtualIdRegistry.Get(ctx, n.nodeId)
+		if err != nil {
+			return false, err
+		}
+		// Node with such Id is already marked deleted or is in-flight change, fail it for "refetch" & retry.
+		if h.IsDeleted || h.IsAandBinUse() {
+			return false, nil
+		}
+		// Mark Id as deleted.
+		h.IsDeleted = true
+		if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
+			return false, err
+		}
+		// Do a second "get" and check the lock id to see if we "won" the update, fail (for retry) if not.
+		if h2, err := nr.transaction.virtualIdRegistry.Get(ctx, h.LogicalId); err != nil {
+			return false, err
+		} else if !h2.IsDeleted || h2.IsAandBinUse() {
+			return false, nil
+		}
+		// Include this node for physical delete servicing.
+		deletedIds = append(deletedIds, kafka.DeletedItem{
+			ItemType: kafka.BtreeNode,
+			ItemId: h.LogicalId,
+		})
+	}
+
+	// Enqueue so deleted Ids' resources(nodes' or items values' blob) can get serviced for physical delete.
+	if err := nr.transaction.deletedItemsQueue.Enqueue(ctx, deletedIds); err != nil {
+		return false, err
+	}
 
 	return true, nil
 }
 
 func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []nodeEntry) error {
-
-	// TODO: solve UUID to virtual Id conversion and back.
 	/* UUID to Virtual Id story:
 	   - (on commit) New(added) nodes will have their Ids converted to virtual Id with empty
 	     phys Ids(or same Id with active & virtual Id).
 	   - On get, 'will read the Node using currently active Id.
 	   - (on commit) On update, 'will save and register the node phys Id to the "inactive Id" part of the virtual Id.
 	*/
-
 	for _, n := range nodes {
 		// Add node to blob store.
 		h := sop.NewHandle(n.nodeId)
+		// Register node Id as logical Id(handle).
 		nr.transaction.virtualIdRegistry.Add(ctx, h)
+		// Add node to blob store.
 		if err := nr.transaction.nodeBlobStore.Add(ctx, n.nodeId, n); err != nil {
 			return err
 		}
@@ -218,4 +246,50 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []nodeEntr
 		}
 	}
 	return nil
+}
+
+func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
+	var lastErr error
+	for _, n := range nodes {
+		h, err := nr.transaction.virtualIdRegistry.Get(ctx, n.nodeId)
+		if err != nil {
+			return false, err
+		}
+		// TODO: Should we support bulk update to blob store? Node tends to be medium-big data.
+		inactiveId := h.PhysicalIdA
+		if !h.IsActiveIdB {
+			inactiveId = h.PhysicalIdB
+		}
+		if err := nr.transaction.nodeBlobStore.Remove(ctx, inactiveId); err != nil {
+			lastErr = err
+		}
+		if err := nr.transaction.redisCache.Delete(ctx, inactiveId.ToString()); err != nil {
+			lastErr = err
+		}
+		if h.IsActiveIdB {
+			h.PhysicalIdA = btree.NilUUID
+		} else {
+			h.PhysicalIdB = btree.NilUUID
+		}
+		if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
+			lastErr = err
+		}
+	}
+	return true, lastErr
+}
+
+func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []nodeEntry) (bool, error) {
+	var lastErr error
+	for _, n := range nodes {
+		h, err := nr.transaction.virtualIdRegistry.Get(ctx, n.nodeId)
+		if err != nil {
+			return false, err
+		}
+		// Mark Id as not deleted.
+		h.IsDeleted = false
+		if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
+			lastErr = err
+		}
+	}
+	return true, lastErr
 }

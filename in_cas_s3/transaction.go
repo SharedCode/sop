@@ -3,6 +3,7 @@ package in_cas_s3
 import (
 	"context"
 	"fmt"
+	log "log/slog"
 	"math/rand"
 	"strings"
 	"time"
@@ -182,10 +183,27 @@ func (t *transaction) commit(ctx context.Context) error {
 			done = false
 		}
 		if !done {
+			// Rollback updated & deleted nodes changes, 'just log any error.
+			// Needed before syncing & re-creating the changes.
+			if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
+				if !ok {
+					return err
+				}
+				log.Warn(err.Error())
+			}
+			if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
+				if !ok {
+					return err
+				}
+				log.Warn(err.Error())
+			}
+
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
 			sleepTime := rand.Intn(4+1) + 5
 			time.Sleep(time.Duration(sleepTime) * time.Second)
+
+			// Recreate the changes using latest committed nodes.
 			if err := t.refetchAndMergeModifications(ctx); err != nil {
 				return err
 			}
@@ -200,8 +218,9 @@ func (t *transaction) commit(ctx context.Context) error {
 		return err
 	}
 
-	// Switch to active "state" the (inactive) updated/new Nodes so they will get started to be "seen" if fetched.
-	if err := t.setActiveModifiedInactiveNodes(updatedNodes); err != nil {
+	// Switch to active "state" the (inactive) updated Nodes(& deleted nodes) so they will 
+	// get started to be "seen" in such state on succeeding fetch.
+	if err := t.setActiveModifiedInactiveNodes(append(updatedNodes, removedNodes...)); err != nil {
 		return err
 	}
 	// Unlock the items in Redis.
