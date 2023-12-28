@@ -9,10 +9,12 @@ var ctx = context.Background()
 
 // TODO: more unit tests to follow. Unit tests are intentionally delayed to cover more grounds in
 // implementation, as we still don't have enough developers. But before each release, e.g. alpha,
-// beta, beta 2, production release, unit tests will get good coverage.
-// It is slightly tweaked dev't process tailored for one-man show or developer resources scarcity.
+// beta, beta 2, production release, unit tests will get good coverage. See in-memory beta release,
+// it has good coverage.
+//
+// Dev't is slightly tweaked tailored for one-man show or developer resources scarcity.
 // a.k.a. - extreme RAD(Rapid Application Development). No choice actually, but if more developers
-// come/volunteer then the approach will need to change.
+// come/volunteer then the approach will change.
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	t.Logf("Transaction story test.\n")
