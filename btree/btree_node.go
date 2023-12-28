@@ -37,11 +37,7 @@ type Node[TK Comparable, TV any] struct {
 	ParentId UUID
 	Slots    []*Item[TK, TV]
 	Count    int
-	// IsDeleted is used for "logical" deletes, useful for implementation on backends such as Cassandra, where
-	// physical record deletes are expensive. SOP can respect logically deleted records to accommodate being
-	// stored in such backends like Cassandra, and offer an alternative manner when to (schedule/)physically
-	// delete such logically deleted records.
-	IsDeleted   bool
+	UpsertTime int64
 	indexOfNode int
 	childrenIds []UUID
 }

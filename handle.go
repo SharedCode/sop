@@ -37,6 +37,13 @@ func (h Handle) GetActiveId() btree.UUID {
 	}
 	return h.PhysicalIdA
 }
+// Returns the inactive phys. Id.
+func (h Handle) GetInActiveId() btree.UUID {
+	if h.IsActiveIdB {
+		return h.PhysicalIdA
+	}
+	return h.PhysicalIdB
+}
 
 // Returns true if physical A and B are both in use across transactions, false otherwise.
 func (h Handle) IsAandBinUse() bool {

@@ -358,7 +358,6 @@ func (t *transaction) trackedItemsHasConflict(ctx context.Context) error {
 	return nil
 }
 
-
 func (t *transaction) rollback(ctx context.Context) error {
 	// TODO
 	return t.cleanup(ctx)
