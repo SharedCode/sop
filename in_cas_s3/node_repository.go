@@ -22,23 +22,20 @@ type nodeRepositoryTyped[TK btree.Comparable, TV any] struct {
 // Add will upsert node to the map.
 func (nr *nodeRepositoryTyped[TK, TV]) Add(n *btree.Node[TK, TV]) {
 	var intf interface{} = n
-	var o *btree.Node[interface{},interface{}] = intf.(*btree.Node[interface{},interface{}])
-	nr.realNodeRepository.add(n.Id, o)
+	nr.realNodeRepository.add(n.Id, intf.(*btree.Node[interface{},interface{}]))
 }
 
 // Update will upsert node to the map.
 func (nr *nodeRepositoryTyped[TK, TV]) Update(n *btree.Node[TK, TV]) {
 	var intf interface{} = n
-	var o *btree.Node[interface{},interface{}] = intf.(*btree.Node[interface{},interface{}])
-	nr.realNodeRepository.update(n.Id, o)
+	nr.realNodeRepository.update(n.Id, intf.(*btree.Node[interface{},interface{}]))
 }
 
 // Get will retrieve a node with nodeId from the map.
 func (nr *nodeRepositoryTyped[TK, TV]) Get(ctx context.Context, nodeId btree.UUID) (*btree.Node[TK, TV], error) {
 	var target btree.Node[TK, TV]
 	var intf interface{} = &target
-	var o *btree.Node[interface{},interface{}] = intf.(*btree.Node[interface{},interface{}])
-	n, err := nr.realNodeRepository.get(ctx, nodeId, o)
+	n, err := nr.realNodeRepository.get(ctx, nodeId, intf.(*btree.Node[interface{},interface{}]))
 	return n.(*btree.Node[TK, TV]), err
 }
 
@@ -192,7 +189,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree
 		}
 	}
 	// Add node blobs to blob store.
-	if err := nr.transaction.nodeBlobStore.Add(ctx, nodes); err != nil {
+	if err := nr.transaction.nodeBlobStore.Add(ctx, nodes...); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -231,7 +228,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []*btree
 	}
 
 	// Enqueue so deleted Ids' resources(nodes' or items values' blob) can get serviced for physical delete.
-	if err := nr.transaction.deletedItemsQueue.Enqueue(ctx, deletedIds); err != nil {
+	if err := nr.transaction.deletedItemsQueue.Enqueue(ctx, deletedIds...); err != nil {
 		return false, err
 	}
 
@@ -259,7 +256,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []*btree.N
 		}
 	}
 	// Add nodes to blob store.
-	if err := nr.transaction.nodeBlobStore.Add(ctx, nodes); err != nil {
+	if err := nr.transaction.nodeBlobStore.Add(ctx, nodes...); err != nil {
 		return err
 	}
 	return nil
@@ -293,7 +290,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []*btr
 			lastErr = err
 		}
 	}
-	if err := nr.transaction.nodeBlobStore.Remove(ctx, inactiveIds); err != nil {
+	if err := nr.transaction.nodeBlobStore.Remove(ctx, inactiveIds...); err != nil {
 		lastErr = err
 	}
 	return true, lastErr

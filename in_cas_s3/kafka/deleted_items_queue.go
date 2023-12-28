@@ -13,7 +13,7 @@ type DeletedItemsQueue interface {
 	// Dequeue takes out 'count' number of elements from the queue.
 	Dequeue(ctx context.Context, count int) ([]DeletedItem, error)
 	// Enqueue add elements to the queue.
-	Enqueue(ctx context.Context, delItem []DeletedItem) error
+	Enqueue(ctx context.Context, delItem ...DeletedItem) error
 }
 
 type ItemType int
@@ -40,7 +40,7 @@ func NewDeletedItemsQueue() DeletedItemsQueue {
 	}
 }
 
-func (d *deletedItemsQueue) Enqueue(ctx context.Context, delItem []DeletedItem) error {
+func (d *deletedItemsQueue) Enqueue(ctx context.Context, delItem ...DeletedItem) error {
 	d.deletedItems = append(d.deletedItems, delItem...)
 	return nil
 }

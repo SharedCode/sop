@@ -17,14 +17,14 @@ func newMockBlobStore() BlobStore {
 	}
 }
 
-func (b *mockBlobStore) Get(ctx context.Context, blobId btree.UUID, target interface{}) error {
+func (b *mockBlobStore) Get(ctx context.Context, blobId btree.UUID, target *btree.Node[interface{}, interface{}]) error {
 	if ba, ok := b.lookup[blobId]; ok {
 		return json.Unmarshal(ba, target)
 	}
 	return nil
 }
 
-func (b *mockBlobStore) Add(ctx context.Context, blobs []*btree.Node[interface{}, interface{}]) error {
+func (b *mockBlobStore) Add(ctx context.Context, blobs ...*btree.Node[interface{}, interface{}]) error {
 	for _, blob := range blobs {
 		ba, err := json.Marshal(blob)
 		if err != nil {
@@ -35,7 +35,7 @@ func (b *mockBlobStore) Add(ctx context.Context, blobs []*btree.Node[interface{}
 	return nil
 }
 
-func (b *mockBlobStore) Update(ctx context.Context, blobs []*btree.Node[interface{}, interface{}]) error {
+func (b *mockBlobStore) Update(ctx context.Context, blobs ...*btree.Node[interface{}, interface{}]) error {
 	for _, blob := range blobs {
 		ba, err := json.Marshal(blob)
 		if err != nil {
@@ -46,7 +46,7 @@ func (b *mockBlobStore) Update(ctx context.Context, blobs []*btree.Node[interfac
 	return nil
 }
 
-func (b *mockBlobStore) Remove(ctx context.Context, blobIds []btree.UUID) error {
+func (b *mockBlobStore) Remove(ctx context.Context, blobIds ...btree.UUID) error {
 	for _, blobId := range blobIds {
 		delete(b.lookup, blobId)
 	}
