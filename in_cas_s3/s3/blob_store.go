@@ -12,9 +12,9 @@ import (
 // like AWS S3, or file system, etc...
 type BlobStore interface {
 	Get(ctx context.Context, blobId btree.UUID, target interface{}) error
-	Add(ctx context.Context, blobId btree.UUID, blob interface{}) error
-	Update(ctx context.Context, blobId btree.UUID, blob interface{}) error
-	Remove(ctx context.Context, blobId btree.UUID) error
+	Add(ctx context.Context, blobs []*btree.Node[interface{}, interface{}]) error
+	Update(ctx context.Context, blobs []*btree.Node[interface{}, interface{}]) error
+	Remove(ctx context.Context, blobIds []btree.UUID) error
 }
 
 // NewBlobStore instantiates a new (mocked) blobstore.

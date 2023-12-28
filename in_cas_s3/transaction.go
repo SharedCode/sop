@@ -44,11 +44,6 @@ type transaction struct {
 	maxTime           time.Duration
 }
 
-type nodeEntry struct {
-	nodeId btree.UUID
-	node   interface{}
-}
-
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
 var getCurrentTime = time.Now
 
@@ -139,7 +134,7 @@ func (t *transaction) commit(ctx context.Context) error {
 		return err
 	}
 
-	var updatedNodes, removedNodes, addedNodes []nodeEntry
+	var updatedNodes, removedNodes, addedNodes []*btree.Node[interface{}, interface{}]
 	startTime := getCurrentTime()
 
 	// For writer transaction. Save the managed Node(s) as inactive:
@@ -300,26 +295,17 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes.
-func (t *transaction) classifyModifiedNodes() ([]nodeEntry, []nodeEntry, []nodeEntry) {
-	var updatedNodes, removedNodes, addedNodes []nodeEntry
+func (t *transaction) classifyModifiedNodes() ([]*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}]) {
+	var updatedNodes, removedNodes, addedNodes []*btree.Node[interface{}, interface{}]
 	for _, s := range t.btreesBackend {
-		for nodeId, cacheNode := range s.backendNodeRepository.nodeLocalCache {
+		for _, cacheNode := range s.backendNodeRepository.nodeLocalCache {
 			switch cacheNode.action {
 			case updateAction:
-				updatedNodes = append(updatedNodes, nodeEntry{
-					nodeId: nodeId,
-					node:   cacheNode.node,
-				})
+				updatedNodes = append(updatedNodes, cacheNode.node)
 			case removeAction:
-				removedNodes = append(removedNodes, nodeEntry{
-					nodeId: nodeId,
-					node:   cacheNode.node,
-				})
+				removedNodes = append(removedNodes, cacheNode.node)
 			case addAction:
-				addedNodes = append(addedNodes, nodeEntry{
-					nodeId: nodeId,
-					node:   cacheNode.node,
-				})
+				addedNodes = append(addedNodes, cacheNode.node)
 			}
 		}
 	}
