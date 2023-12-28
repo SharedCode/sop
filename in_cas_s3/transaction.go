@@ -120,19 +120,21 @@ func (t *transaction) timedOut(startTime time.Time) error {
 }
 
 func (t *transaction) commit(ctx context.Context) error {
-	// If reader transaction, only do a conflict check, that is enough.
-	if !t.forWriting {
-		if err := t.trackedItemsHasConflict(ctx); err != nil {
-			return err
-		}
-		// Reader transaction only checks tracked items consistency, return success at this point.
-		return nil
-	}
+	// // If reader transaction, only do a conflict check, that is enough.
+	// if !t.forWriting {
+	// 	if err := t.trackedItemsHasConflict(ctx); err != nil {
+	// 		return err
+	// 	}
+	// 	// Reader transaction only checks tracked items consistency, return success at this point.
+	// 	return nil
+	// }
 
 	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
 	if err := t.lockTrackedItems(ctx); err != nil {
 		return err
 	}
+
+	// TODO: update to enforce "reader" transaction check for "fetch" objects' version(upsert time) check.
 
 	var updatedNodes, removedNodes, addedNodes []*btree.Node[interface{}, interface{}]
 	startTime := getCurrentTime()
@@ -331,18 +333,18 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	return lastError
 }
 
-// Check all explicitly fetched(i.e. - GetCurrentValue invoked) & managed(add/update/remove) items for conflict.
-func (t *transaction) trackedItemsHasConflict(ctx context.Context) error {
-	for _, s := range t.btreesBackend {
-		if hasConflict, err := s.backendItemActionTracker.hasConflict(ctx, t.redisCache); hasConflict || err != nil {
-			if hasConflict {
-				return fmt.Errorf("hasConflict call detected conflict.")
-			}
-			return err
-		}
-	}
-	return nil
-}
+// // Check all explicitly fetched(i.e. - GetCurrentValue invoked) & managed(add/update/remove) items for conflict.
+// func (t *transaction) trackedItemsHasConflict(ctx context.Context) error {
+// 	for _, s := range t.btreesBackend {
+// 		if hasConflict, err := s.backendItemActionTracker.hasConflict(ctx, t.redisCache); hasConflict || err != nil {
+// 			if hasConflict {
+// 				return fmt.Errorf("hasConflict call detected conflict.")
+// 			}
+// 			return err
+// 		}
+// 	}
+// 	return nil
+// }
 
 func (t *transaction) rollback(ctx context.Context) error {
 	// TODO

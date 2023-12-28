@@ -18,9 +18,12 @@ const (
 	removeAction
 )
 
-type cacheItem struct {
+type lockRecord struct {
 	lockId btree.UUID
 	action actionType
+}
+type cacheItem struct {
+	lockRecord
 	item   *btree.Item[interface{}, interface{}]
 	// upsert time in milliseconds.
 	upsertTimeInDB int64
@@ -56,8 +59,10 @@ func newItemActionTracker() *itemActionTracker {
 func (t *itemActionTracker) Get(item *btree.Item[interface{}, interface{}]) {
 	if _, ok := t.items[item.Id]; !ok {
 		t.items[item.Id] = cacheItem{
-			lockId: btree.NewUUID(),
-			action: getAction,
+			lockRecord: lockRecord{
+				lockId: btree.NewUUID(),
+				action: getAction,
+			},
 			item:   item,
 		}
 	}
@@ -65,8 +70,10 @@ func (t *itemActionTracker) Get(item *btree.Item[interface{}, interface{}]) {
 
 func (t *itemActionTracker) Add(item *btree.Item[interface{}, interface{}]) {
 	t.items[item.Id] = cacheItem{
-		lockId:         btree.NewUUID(),
-		action:         addAction,
+		lockRecord: lockRecord{
+			lockId:         btree.NewUUID(),
+			action:         addAction,
+		},
 		item:           item,
 		upsertTimeInDB: item.UpsertTime,
 	}
@@ -79,8 +86,10 @@ func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
 		return
 	}
 	t.items[item.Id] = cacheItem{
-		lockId:         btree.NewUUID(),
-		action:         updateAction,
+		lockRecord: lockRecord{
+			lockId:         btree.NewUUID(),
+			action:         updateAction,
+		},
 		item:           item,
 		upsertTimeInDB: item.UpsertTime,
 	}
@@ -94,27 +103,33 @@ func (t *itemActionTracker) Remove(item *btree.Item[interface{}, interface{}]) {
 		return
 	}
 	t.items[item.Id] = cacheItem{
-		lockId: btree.NewUUID(),
-		action: removeAction,
+		lockRecord: lockRecord{
+			lockId: btree.NewUUID(),
+			action: removeAction,
+		},
 		item:   item,
 	}
 }
 
-// hasConflict simply checks whether tracked items are also in-flight in other transactions &
-// returns true if such, false otherwise. Commit will cause rollback if returned true.
-func (t *itemActionTracker) hasConflict(ctx context.Context, itemRedisCache redis.Cache) (bool, error) {
-	for uuid := range t.items {
-		if _, err := itemRedisCache.Get(ctx, uuid.ToString()); err != nil {
-			if redis.KeyNotFound(err) {
-				continue
-			}
-			return false, err
-		}
-		// If item is found in Redis, it means it is already being committed by another transaction.
-		return true, nil
-	}
-	return false, nil
-}
+// // hasConflict simply checks whether tracked items are also in-flight in other transactions &
+// // returns true if such, false otherwise. Commit will cause rollback if returned true.
+// func (t *itemActionTracker) hasConflict(ctx context.Context, itemRedisCache redis.Cache) (bool, error) {
+// 	for uuid, item := range t.items {
+// 		var readItem lockRecord
+// 		if err := itemRedisCache.GetStruct(ctx, uuid.ToString(), &readItem); err != nil {
+// 			if redis.KeyNotFound(err) {
+// 				continue
+// 			}
+// 			return false, err
+// 		}
+// 		if readItem.action == getAction && item.action == getAction {
+// 			continue
+// 		}
+// 		// If item is found in Redis, it means it is already being committed by another transaction.
+// 		return true, nil
+// 	}
+// 	return false, nil
+// }
 
 // lock the tracked items in Redis in preparation to finalize the transaction commit.
 // This should work in combination of optimistic locking implemented by hasConflict above.
@@ -125,6 +140,9 @@ func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache
 			if !redis.KeyNotFound(err) {
 				return err
 			}
+
+			// TODO: add logic check for action compatibility. e.g. - get vs get is allowed, get vs. update not, etc...
+
 			// Item does not exist, upsert it.
 			if err := itemRedisCache.Set(ctx, uuid.ToString(), lid.ToString(), duration); err != nil {
 				return err

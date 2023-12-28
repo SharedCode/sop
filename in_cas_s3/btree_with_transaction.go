@@ -8,12 +8,12 @@ import (
 )
 
 type btreeWithTransaction[TK btree.Comparable, TV any] struct {
-	transaction Transaction
+	transaction *transaction
 	btree       *btree.Btree[interface{}, interface{}]
 }
 
 // Instantiate a B-Tree wrapper that enforces transaction session on each method(a.k.a. operation).
-func newBtreeWithTransaction[TK btree.Comparable, TV any](t Transaction, btree *btree.Btree[interface{}, interface{}]) *btreeWithTransaction[TK, TV] {
+func newBtreeWithTransaction[TK btree.Comparable, TV any](t *transaction, btree *btree.Btree[interface{}, interface{}]) *btreeWithTransaction[TK, TV] {
 	return &btreeWithTransaction[TK, TV]{
 		transaction: t,
 		btree:       btree,
@@ -25,6 +25,9 @@ func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value T
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
 	}
+	if !b3.transaction.forWriting {
+		return false, fmt.Errorf("Can't add item, transaction is for reading.")
+	}
 	return b3.btree.Add(ctx, key, value)
 }
 
@@ -35,6 +38,9 @@ func (b3 *btreeWithTransaction[TK, TV]) AddIfNotExist(ctx context.Context, key T
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
 	}
+	if !b3.transaction.forWriting {
+		return false, fmt.Errorf("Can't add item, transaction is for reading.")
+	}
 	return b3.btree.AddIfNotExist(ctx, key, value)
 }
 
@@ -42,6 +48,9 @@ func (b3 *btreeWithTransaction[TK, TV]) AddIfNotExist(ctx context.Context, key T
 func (b3 *btreeWithTransaction[TK, TV]) Update(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
+	}
+	if !b3.transaction.forWriting {
+		return false, fmt.Errorf("Can't update item, transaction is for reading.")
 	}
 	return b3.btree.Update(ctx, key, value)
 }
@@ -52,6 +61,9 @@ func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, v
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
 	}
+	if !b3.transaction.forWriting {
+		return false, fmt.Errorf("Can't update item, transaction is for reading.")
+	}
 	return b3.btree.UpdateCurrentItem(ctx, value)
 }
 
@@ -60,6 +72,9 @@ func (b3 *btreeWithTransaction[TK, TV]) Remove(ctx context.Context, key TK) (boo
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
 	}
+	if !b3.transaction.forWriting {
+		return false, fmt.Errorf("Can't remove item, transaction is for reading.")
+	}
 	return b3.btree.Remove(ctx, key)
 }
 
@@ -67,6 +82,9 @@ func (b3 *btreeWithTransaction[TK, TV]) Remove(ctx context.Context, key TK) (boo
 func (b3 *btreeWithTransaction[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
+	}
+	if !b3.transaction.forWriting {
+		return false, fmt.Errorf("Can't remove item, transaction is for reading.")
 	}
 	return b3.btree.RemoveCurrentItem(ctx)
 }
