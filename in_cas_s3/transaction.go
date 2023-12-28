@@ -120,30 +120,8 @@ func (t *transaction) timedOut(startTime time.Time) error {
 }
 
 func (t *transaction) commit(ctx context.Context) error {
-	// For a reader transaction, conflict check is enough.
 	if !t.forWriting {
-		startTime := getCurrentTime()
-		for {
-			if err := t.timedOut(startTime); err != nil {
-				return err
-			}
-			// Check items if have not changed since fetching.
-			_, _, _, fetchedNodes := t.classifyModifiedNodes()
-			if ok, err := t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes); err != nil {
-				return err
-			} else if ok {
-				return nil
-			}
-			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
-			// (in-flight) to retry on different times.
-			sleepTime := rand.Intn(4+1) + 5
-			time.Sleep(time.Duration(sleepTime) * time.Second)
-
-			// Recreate the changes on latest committed nodes & check if fetched Nodes are unchanged.
-			if err := t.refetchAndMergeModifications(ctx); err != nil {
-				return err
-			}
-		}
+		return t.commitForReaderTransaction(ctx)
 	}
 
 	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
@@ -249,6 +227,35 @@ func (t *transaction) commit(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
+	if t.forWriting {
+		return nil
+	}
+	// For a reader transaction, conflict check is enough.
+	startTime := getCurrentTime()
+	for {
+		if err := t.timedOut(startTime); err != nil {
+			return err
+		}
+		// Check items if have not changed since fetching.
+		_, _, _, fetchedNodes := t.classifyModifiedNodes()
+		if ok, err := t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes); err != nil {
+			return err
+		} else if ok {
+			return nil
+		}
+		// Sleep in random seconds to allow different conflicting (Node modifying) transactions
+		// (in-flight) to retry on different times.
+		sleepTime := rand.Intn(4+1) + 5
+		time.Sleep(time.Duration(sleepTime) * time.Second)
+
+		// Recreate the changes on latest committed nodes & check if fetched Nodes are unchanged.
+		if err := t.refetchAndMergeModifications(ctx); err != nil {
+			return err
+		}
+	}
 }
 
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in.
