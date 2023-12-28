@@ -120,7 +120,7 @@ func (t *transaction) timedOut(startTime time.Time) error {
 }
 
 func (t *transaction) commit(ctx context.Context) error {
-	// If reader transaction, only do a conflict check, that is enough as 1st check.
+	// For a reader transaction, conflict check is enough.
 	if !t.forWriting {
 		startTime := getCurrentTime()
 		for {
