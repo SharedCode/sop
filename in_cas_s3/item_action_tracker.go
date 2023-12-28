@@ -19,14 +19,15 @@ const (
 )
 
 type lockRecord struct {
-	lockId btree.UUID
-	action actionType
+	LockId btree.UUID
+	Action actionType
 }
 type cacheItem struct {
 	lockRecord
 	item   *btree.Item[interface{}, interface{}]
 	// upsert time in milliseconds.
 	upsertTimeInDB int64
+	isLockOwner bool
 }
 
 type itemActionTracker struct {
@@ -60,8 +61,8 @@ func (t *itemActionTracker) Get(item *btree.Item[interface{}, interface{}]) {
 	if _, ok := t.items[item.Id]; !ok {
 		t.items[item.Id] = cacheItem{
 			lockRecord: lockRecord{
-				lockId: btree.NewUUID(),
-				action: getAction,
+				LockId: btree.NewUUID(),
+				Action: getAction,
 			},
 			item:   item,
 		}
@@ -71,8 +72,8 @@ func (t *itemActionTracker) Get(item *btree.Item[interface{}, interface{}]) {
 func (t *itemActionTracker) Add(item *btree.Item[interface{}, interface{}]) {
 	t.items[item.Id] = cacheItem{
 		lockRecord: lockRecord{
-			lockId:         btree.NewUUID(),
-			action:         addAction,
+			LockId:         btree.NewUUID(),
+			Action:         addAction,
 		},
 		item:           item,
 		upsertTimeInDB: item.UpsertTime,
@@ -82,13 +83,13 @@ func (t *itemActionTracker) Add(item *btree.Item[interface{}, interface{}]) {
 }
 
 func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
-	if v, ok := t.items[item.Id]; ok && v.action == addAction {
+	if v, ok := t.items[item.Id]; ok && v.Action == addAction {
 		return
 	}
 	t.items[item.Id] = cacheItem{
 		lockRecord: lockRecord{
-			lockId:         btree.NewUUID(),
-			action:         updateAction,
+			LockId:         btree.NewUUID(),
+			Action:         updateAction,
 		},
 		item:           item,
 		upsertTimeInDB: item.UpsertTime,
@@ -98,64 +99,51 @@ func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
 }
 
 func (t *itemActionTracker) Remove(item *btree.Item[interface{}, interface{}]) {
-	if v, ok := t.items[item.Id]; ok && v.action == addAction {
+	if v, ok := t.items[item.Id]; ok && v.Action == addAction {
 		delete(t.items, item.Id)
 		return
 	}
 	t.items[item.Id] = cacheItem{
 		lockRecord: lockRecord{
-			lockId: btree.NewUUID(),
-			action: removeAction,
+			LockId: btree.NewUUID(),
+			Action: removeAction,
 		},
 		item:   item,
 	}
 }
 
-// // hasConflict simply checks whether tracked items are also in-flight in other transactions &
-// // returns true if such, false otherwise. Commit will cause rollback if returned true.
-// func (t *itemActionTracker) hasConflict(ctx context.Context, itemRedisCache redis.Cache) (bool, error) {
-// 	for uuid, item := range t.items {
-// 		var readItem lockRecord
-// 		if err := itemRedisCache.GetStruct(ctx, uuid.ToString(), &readItem); err != nil {
-// 			if redis.KeyNotFound(err) {
-// 				continue
-// 			}
-// 			return false, err
-// 		}
-// 		if readItem.action == getAction && item.action == getAction {
-// 			continue
-// 		}
-// 		// If item is found in Redis, it means it is already being committed by another transaction.
-// 		return true, nil
-// 	}
-// 	return false, nil
-// }
-
 // lock the tracked items in Redis in preparation to finalize the transaction commit.
 // This should work in combination of optimistic locking implemented by hasConflict above.
 func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error {
-	for uuid, cachedData := range t.items {
-		lid := cachedData.lockId
-		if tlid, err := itemRedisCache.Get(ctx, uuid.ToString()); err != nil {
+	for uuid, cachedItem := range t.items {
+		var readItem lockRecord
+		if err := itemRedisCache.GetStruct(ctx, uuid.ToString(), &readItem); err != nil {
 			if !redis.KeyNotFound(err) {
 				return err
 			}
-
-			// TODO: add logic check for action compatibility. e.g. - get vs get is allowed, get vs. update not, etc...
-
 			// Item does not exist, upsert it.
-			if err := itemRedisCache.Set(ctx, uuid.ToString(), lid.ToString(), duration); err != nil {
+			if err := itemRedisCache.SetStruct(ctx, uuid.ToString(), &(cachedItem.lockRecord), duration); err != nil {
 				return err
 			}
 			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-			if tlid, err := itemRedisCache.Get(ctx, uuid.ToString()); err != nil {
+			if err := itemRedisCache.GetStruct(ctx, uuid.ToString(), &readItem); err != nil {
 				return err
-			} else if tlid != lid.ToString() {
+			} else if readItem.LockId != cachedItem.LockId {
 				return fmt.Errorf("lock(item: %v) call detected conflict.", uuid)
 			}
-		} else if tlid != lid.ToString() {
-			return fmt.Errorf("lock(item: %v) call detected conflict.", uuid)
+			// We got the item locked, ensure we can unlock it.
+			cachedItem.isLockOwner = true
+			t.items[uuid] = cachedItem
 		}
+		// Item found in Redis.
+		if readItem.LockId == cachedItem.LockId {
+			continue
+		}
+		// Lock compatibility check.
+		if readItem.Action == getAction && cachedItem.Action == getAction {
+			continue
+		}
+		return fmt.Errorf("lock(item: %v) call detected conflict.", uuid)
 	}
 	return nil
 }
@@ -165,10 +153,12 @@ func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache
 // as a sample, if there is.
 func (t *itemActionTracker) unlock(ctx context.Context, itemRedisCache redis.Cache) error {
 	var lastError error
-	for uuid := range t.items {
-		if err := itemRedisCache.Delete(ctx, uuid.ToString()); err != nil {
-			if !redis.KeyNotFound(err) {
-				lastError = err
+	for uuid, cachedItem := range t.items {
+		if cachedItem.isLockOwner {
+			if err := itemRedisCache.Delete(ctx, uuid.ToString()); err != nil {
+				if !redis.KeyNotFound(err) {
+					lastError = err
+				}
 			}
 		}
 	}

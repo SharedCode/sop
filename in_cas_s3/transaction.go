@@ -120,23 +120,38 @@ func (t *transaction) timedOut(startTime time.Time) error {
 }
 
 func (t *transaction) commit(ctx context.Context) error {
-	// // If reader transaction, only do a conflict check, that is enough.
-	// if !t.forWriting {
-	// 	if err := t.trackedItemsHasConflict(ctx); err != nil {
-	// 		return err
-	// 	}
-	// 	// Reader transaction only checks tracked items consistency, return success at this point.
-	// 	return nil
-	// }
+	// If reader transaction, only do a conflict check, that is enough as 1st check.
+	if !t.forWriting {
+		startTime := getCurrentTime()
+		for {
+			if err := t.timedOut(startTime); err != nil {
+				return err
+			}
+			// Check items if have not changed since fetching.
+			_, _, _, fetchedNodes := t.classifyModifiedNodes()
+			if ok, err := t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes); err != nil {
+				return err
+			} else if ok {
+				return nil
+			}
+			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
+			// (in-flight) to retry on different times.
+			sleepTime := rand.Intn(4+1) + 5
+			time.Sleep(time.Duration(sleepTime) * time.Second)
+
+			// Recreate the changes on latest committed nodes & check if fetched Nodes are unchanged.
+			if err := t.refetchAndMergeModifications(ctx); err != nil {
+				return err
+			}
+		}
+	}
 
 	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
 	if err := t.lockTrackedItems(ctx); err != nil {
 		return err
 	}
 
-	// TODO: update to enforce "reader" transaction check for "fetch" objects' version(upsert time) check.
-
-	var updatedNodes, removedNodes, addedNodes []*btree.Node[interface{}, interface{}]
+	var updatedNodes, removedNodes, addedNodes, fetchedNodes []*btree.Node[interface{}, interface{}]
 	startTime := getCurrentTime()
 
 	// For writer transaction. Save the managed Node(s) as inactive:
@@ -157,48 +172,55 @@ func (t *transaction) commit(ctx context.Context) error {
 	// - Re-fetch the Nodes of these items, re-create the lookup table consisting only of these items & their re-fetched Nodes
 	// - Loop end.
 	// - Return error if loop timed out to trigger rollback.
-	done := false
-	for !done {
+	successful := false
+	for !successful {
 		if err := t.timedOut(startTime); err != nil {
 			return err
 		}
 
-		done = true
+		successful = true
 		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
 		// has to do merging & conflict resolution. Add is simple upsert.
-		updatedNodes, removedNodes, addedNodes = t.classifyModifiedNodes()
-		if ok, err := t.btreesBackend[0].backendNodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
+		updatedNodes, removedNodes, addedNodes, fetchedNodes = t.classifyModifiedNodes()
+		if ok, err := t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes); err != nil {
 			return err
-		} else if !ok {
-			done = false
-		}
-		if ok, err := t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
-			return err
-		} else if !ok {
-			done = false
-		}
-		if !done {
-			// Rollback updated & deleted nodes changes, 'just log any error.
-			// Needed before syncing & re-creating the changes.
-			if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
-				if !ok {
-					return err
+		} else if ok {
+			if ok, err := t.btreesBackend[0].backendNodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
+				return err
+			} else if !ok {
+				successful = false
+				if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
+					if !ok {
+						return err
+					}
+					log.Warn(err.Error())
 				}
-				log.Warn(err.Error())
 			}
-			if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
-				if !ok {
-					return err
-				}
-				log.Warn(err.Error())
-			}
+		} else {
+			successful = false
+		}
 
+		// Only do commit removed nodes if successful so far.
+		if successful {
+			if ok, err := t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
+				return err
+			} else if !ok {
+				successful = false
+				if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
+					if !ok {
+						return err
+					}
+					log.Warn(err.Error())
+				}
+			}
+		}
+		if !successful {
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
 			sleepTime := rand.Intn(4+1) + 5
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 
-			// Recreate the changes on latest committed nodes.
+			// Recreate the changes on latest committed nodes & check if fetched Nodes are unchanged.
 			if err := t.refetchAndMergeModifications(ctx); err != nil {
 				return err
 			}
@@ -245,7 +267,7 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 		}
 
 		for itemId, ci := range b3ModifiedItems {
-			if ci.action == addAction {
+			if ci.Action == addAction {
 				if ok, err := b3.Add(ctx, ci.item.Key, *ci.item.Value); !ok || err != nil {
 					if err != nil {
 						return err
@@ -269,11 +291,11 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 				return fmt.Errorf("refetchAndMergeModifications detected a newer version of item with key %v.", ci.item.Key)
 			}
 
-			if ci.action == getAction {
+			if ci.Action == getAction {
 				// GetCurrentItem call above already "marked" the "get" (or fetch) done.
 				continue
 			}
-			if ci.action == removeAction {
+			if ci.Action == removeAction {
 				if ok, err := b3.RemoveCurrentItem(ctx); !ok || err != nil {
 					if err != nil {
 						return err
@@ -282,7 +304,7 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 				}
 				continue
 			}
-			if ci.action == updateAction {
+			if ci.Action == updateAction {
 				if ok, err := b3.UpdateCurrentItem(ctx, *ci.item.Value); !ok || err != nil {
 					if err != nil {
 						return err
@@ -297,8 +319,8 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes.
-func (t *transaction) classifyModifiedNodes() ([]*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}]) {
-	var updatedNodes, removedNodes, addedNodes []*btree.Node[interface{}, interface{}]
+func (t *transaction) classifyModifiedNodes() ([]*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}]) {
+	var updatedNodes, removedNodes, addedNodes, fetchedNodes []*btree.Node[interface{}, interface{}]
 	for _, s := range t.btreesBackend {
 		for _, cacheNode := range s.backendNodeRepository.nodeLocalCache {
 			switch cacheNode.action {
@@ -308,10 +330,12 @@ func (t *transaction) classifyModifiedNodes() ([]*btree.Node[interface{}, interf
 				removedNodes = append(removedNodes, cacheNode.node)
 			case addAction:
 				addedNodes = append(addedNodes, cacheNode.node)
+			case getAction:
+				fetchedNodes = append(fetchedNodes, cacheNode.node)
 			}
 		}
 	}
-	return updatedNodes, removedNodes, addedNodes
+	return updatedNodes, removedNodes, addedNodes, fetchedNodes
 }
 
 func (t *transaction) lockTrackedItems(ctx context.Context) error {
@@ -332,19 +356,6 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	}
 	return lastError
 }
-
-// // Check all explicitly fetched(i.e. - GetCurrentValue invoked) & managed(add/update/remove) items for conflict.
-// func (t *transaction) trackedItemsHasConflict(ctx context.Context) error {
-// 	for _, s := range t.btreesBackend {
-// 		if hasConflict, err := s.backendItemActionTracker.hasConflict(ctx, t.redisCache); hasConflict || err != nil {
-// 			if hasConflict {
-// 				return fmt.Errorf("hasConflict call detected conflict.")
-// 			}
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
 
 func (t *transaction) rollback(ctx context.Context) error {
 	// TODO

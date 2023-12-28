@@ -262,6 +262,20 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []*btree.N
 	return nil
 }
 
+func (nr *nodeRepository) areFetchedNodesIntact(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) (bool, error) {
+	for _, n := range nodes {
+		h, err := nr.transaction.virtualIdRegistry.Get(ctx, n.Id)
+		if err != nil {
+			return false, err
+		}
+		// Node with such Id is marked deleted or had been updated since reading it.
+		if h.IsDeleted || h.UpsertTime != n.UpsertTime{
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) (bool, error) {
 	var lastErr error
 	inactiveIds := make([]btree.UUID, 0, len(nodes))
