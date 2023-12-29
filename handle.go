@@ -1,6 +1,8 @@
 package sop
 
 import (
+	"time"
+
 	"github.com/SharedCode/sop/btree"
 )
 
@@ -16,8 +18,10 @@ type Handle struct {
 	PhysicalIdB btree.UUID
 	// true if active Id is physicalIdB, otherwise false.
 	IsActiveIdB bool
-	// Upsert time in milliseconds.
+	// Upsert time of the active Id, in milliseconds.
 	UpsertTime int64
+	// Upsert time of the inactive Id, in milliseconds.
+	InactiveUpsertTime int64
 	// IsDeleted is used for "logical" deletes.
 	IsDeleted bool
 }
@@ -57,12 +61,20 @@ func (h *Handle) AllocateId() btree.UUID {
 		return btree.NilUUID
 	}
 	id := btree.NewUUID()
+	h.InactiveUpsertTime = time.Now().UnixMilli()
 	if h.IsActiveIdB {
 		h.PhysicalIdA = id
 		return id
 	}
 	h.PhysicalIdB = id
 	return id
+}
+
+// Returns true if inactive Id is expired, false otherwise.
+func (h *Handle) IsExpiredInactive() bool {
+	const maxDuration = 2
+	return h.InactiveUpsertTime > 0 &&
+		(time.Now().UnixMilli() - h.InactiveUpsertTime) > int64(time.Duration(maxDuration) * time.Hour)
 }
 
 // Returns true if id is either physical Id A or B, false otherwise.
@@ -78,4 +90,14 @@ func (h *Handle) FlipActiveId() {
 		h.PhysicalIdA = btree.NilUUID
 	}
 	h.IsActiveIdB = !h.IsActiveIdB
+}
+
+// Reset to nil the inactive phys. Id.
+func (h *Handle) ClearInactiveId() {
+	if h.IsActiveIdB {
+		h.PhysicalIdA = btree.NilUUID
+	} else {
+		h.PhysicalIdB = btree.NilUUID
+	}
+	h.InactiveUpsertTime = 0
 }

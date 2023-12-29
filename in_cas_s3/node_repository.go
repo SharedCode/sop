@@ -167,6 +167,18 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree
 		// Create new phys. UUID and auto-assign it to the available phys. Id(A or B) "Id slot".
 		id := h.AllocateId()
 		if id == btree.NilUUID {
+			if h.IsExpiredInactive() {
+				iid := h.GetInActiveId()
+				// For now, 'ignore any error while trying to cleanup the expired inactive phys Id.
+				if err := nr.transaction.nodeBlobStore.Remove(ctx, iid); err == nil {
+					if err := nr.transaction.redisCache.Delete(ctx, iid.ToString()); err == nil {
+						h.ClearInactiveId()
+						id = h.AllocateId()
+					}
+				}
+			}
+		}
+		if id == btree.NilUUID {
 			// Return false as there is an ongoing update on node by another transaction.
 			return false, nil
 		}
