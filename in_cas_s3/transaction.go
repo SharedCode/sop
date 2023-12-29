@@ -3,6 +3,7 @@ package in_cas_s3
 import (
 	"context"
 	"fmt"
+	log "log/slog"
 	"math/rand"
 	"strings"
 	"time"
@@ -126,9 +127,8 @@ func (t *transaction) commit(ctx context.Context) error {
 		return t.commitForReaderTransaction(ctx)
 	}
 
-	t.logger.log(lockTrackedItems)
-
 	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
+	t.logger.log(lockTrackedItems)
 	if err := t.lockTrackedItems(ctx); err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func (t *transaction) commit(ctx context.Context) error {
 	//   Gather all the items of these Nodes(using the lookup table)
 	//   Break if there are no more items different.
 	// - Re-fetch the Nodes of these items, re-create the lookup table consisting only of these items & their re-fetched Nodes
-	// - Loop end.
+	// Repeat end.
 	// - Return error if loop timed out to trigger rollback.
 	successful := false
 	for !successful {
@@ -168,17 +168,12 @@ func (t *transaction) commit(ctx context.Context) error {
 		if ok, err := t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes); err != nil {
 			return err
 		} else if ok {
+			// Commit updated nodes.
 			t.logger.log(commitUpdatedNodes)
 			if ok, err := t.btreesBackend[0].backendNodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
 			} else if !ok {
 				successful = false
-				// if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
-				// 	if !ok {
-				// 		return err
-				// 	}
-				// 	log.Warn(err.Error())
-				// }
 			}
 		} else {
 			successful = false
@@ -186,17 +181,12 @@ func (t *transaction) commit(ctx context.Context) error {
 
 		// Only do commit removed nodes if successful so far.
 		if successful {
+			// Commit removed nodes.
 			t.logger.log(commitRemovedNodes)
 			if ok, err := t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
 				return err
 			} else if !ok {
 				successful = false
-				// if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
-				// 	if !ok {
-				// 		return err
-				// 	}
-				// 	log.Warn(err.Error())
-				// }
 			}
 		}
 		if !successful {
@@ -212,32 +202,43 @@ func (t *transaction) commit(ctx context.Context) error {
 		}
 	}
 
+	// Commit added nodes.
 	t.logger.log(commitAddedNodes)
 	if err := t.btreesBackend[0].backendNodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
 		return err
 	}
 
+	// Commit Store repository changes.
 	t.logger.log(commitStoreRepositoryChanges)
 	if err := t.storeRepository.CommitChanges(ctx); err != nil {
 		return err
 	}
 
-	t.logger.log(activateInactiveNodes)
 	// Switch to active "state" the (inactive) updated Nodes so they will 
 	// get started to be "seen" in such state on succeeding fetch.
-	if err := t.btreesBackend[0].backendNodeRepository.activateInactiveNodes(ctx, updatedNodes); err != nil {
+	t.logger.log(activateInactiveNodes)
+	uh, err := t.btreesBackend[0].backendNodeRepository.activateInactiveNodes(ctx, updatedNodes)
+	if err != nil {
 		return err
 	}
+	// Update upsert time of removed nodes to signal that they are finalized.
 	t.logger.log(touchRemovedNodes)
-	// Update upsert time of removed nodes.
-	if err := t.btreesBackend[0].backendNodeRepository.touchNodes(ctx, removedNodes); err != nil {
+	rh, err := t.btreesBackend[0].backendNodeRepository.touchNodes(ctx, removedNodes)
+	if err != nil {
 		return err
 	}
 
-	t.logger.log(unlockTrackedItems)
-	// Unlock the items in Redis.
-	if err := t.unlockTrackedItems(ctx); err != nil {
+	// Finalize the commit, it is all or nothing action, thus, no partial failure/success.
+	if err := t.virtualIdRegistry.Update(ctx, append(uh, rh...)...); err != nil {
 		return err
+	}
+
+	// Unlock the items in Redis.
+	t.logger.log(unlockTrackedItems)
+	if err := t.unlockTrackedItems(ctx); err != nil {
+		// Just log as warning any error as at this point, commit is already finalized.
+		// Any partial changes before failure in unlock tracked items will just expire in Redis.
+		log.Warn(err.Error())
 	}
 	return nil
 }

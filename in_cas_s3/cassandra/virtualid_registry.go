@@ -7,11 +7,16 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
+// Virtual Id registry is essential in our support for all or nothing (sub)feature,
+// which is essential in "fault tolerant" & "self healing" feature.
+//
+// All methods are taking in a set of items and need to be implemented to do
+// all or nothing feature, e.g. wrapped in transaction in Cassandra.
 type VirtualIdRegistry interface {
-	Get(ctx context.Context, lid btree.UUID) (sop.Handle, error)
-	Add(ctx context.Context, h sop.Handle) error
-	Update(ctx context.Context, h sop.Handle) error
-	Remove(ctx context.Context, lid btree.UUID) error
+	Get(context.Context, ...btree.UUID) ([]sop.Handle, error)
+	Add(context.Context, ...sop.Handle) error
+	Update(context.Context, ...sop.Handle) error
+	Remove(context.Context, ...btree.UUID) error
 }
 
 type vid_registry struct{
@@ -25,20 +30,30 @@ func NewVirtualIdRegistry() VirtualIdRegistry {
 	}
 }
 
-func (v *vid_registry) Add(ctx context.Context, h sop.Handle) error {
-	v.lookup[h.LogicalId] = h
+func (v *vid_registry) Add(ctx context.Context, handles ...sop.Handle) error {
+	for _, h := range handles {
+		v.lookup[h.LogicalId] = h
+	}
 	return nil
 }
 
-func (v *vid_registry) Update(ctx context.Context, h sop.Handle) error {
-	v.lookup[h.LogicalId] = h
+func (v *vid_registry) Update(ctx context.Context, handles ...sop.Handle) error {
+	for _, h := range handles {
+		v.lookup[h.LogicalId] = h
+	}
 	return nil
 }
-func (v *vid_registry) Get(ctx context.Context, logicalID btree.UUID) (sop.Handle, error) {
-	h,_ := v.lookup[logicalID]
-	return h, nil
+func (v *vid_registry) Get(ctx context.Context, logicalIds ...btree.UUID) ([]sop.Handle, error) {
+	handles := make([]sop.Handle, 0, len(logicalIds))
+	for _, lid := range logicalIds {
+		h,_ := v.lookup[lid]
+		handles = append(handles, h)
+	}
+	return handles, nil
 }
-func (v *vid_registry) Remove(ctx context.Context, logicalID btree.UUID) error {
-	delete(v.lookup, logicalID)
+func (v *vid_registry) Remove(ctx context.Context, logicalIDs ...btree.UUID) error {
+	for _, lid := range logicalIDs {
+		delete(v.lookup, lid)
+	}
 	return nil
 }
