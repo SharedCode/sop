@@ -6,16 +6,6 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
-// DeletedItemsQueue specifies methods used for managing persisted queue, e.g. - in kafka.
-type DeletedItemsQueue interface {
-	// Peek allows you to read 'count' number of elements from the queue without taking them out of the queue.
-	Peek(ctx context.Context, count int) ([]DeletedItem, error)
-	// Dequeue takes out 'count' number of elements from the queue.
-	Dequeue(ctx context.Context, count int) ([]DeletedItem, error)
-	// Enqueue add elements to the queue.
-	Enqueue(ctx context.Context, delItem ...DeletedItem) error
-}
-
 type ItemType int
 const(
 	Unknown = iota
@@ -32,9 +22,10 @@ type deletedItemsQueue struct{
 	deletedItems []DeletedItem
 }
 
-// TODO: NewDeletedItemsQueue manages the deleted Items in Kafka or something similar/for simple queue/dequeue.
-// Belos is just a mock so we can move forward prototyping the system.
-func NewDeletedItemsQueue() DeletedItemsQueue {
+// TODO: NewDeletedItemsQueue manages the deleted Items in Kafka or something similar/for simple enqueue/dequeue.
+// Below is just a mock so we can move forward prototyping the system. Finalize the API as well, e.g. perhaps
+// we can use one (generics) Queue implemented to talk to Kafka and can take in any struct type.
+func NewDeletedItemsQueue() Queue[DeletedItem] {
 	return &deletedItemsQueue{
 		deletedItems: make([]DeletedItem, 0, 25),
 	}

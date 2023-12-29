@@ -37,7 +37,8 @@ type transaction struct {
 	storeRepository    cas.StoreRepository
 	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
 	virtualIdRegistry cas.VirtualIdRegistry
-	deletedItemsQueue q.DeletedItemsQueue
+	deletedItemsQueue q.Queue[q.DeletedItem]
+	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
 	forWriting        bool
 	hasBegun          bool
 	done              bool
@@ -87,11 +88,11 @@ func (t *transaction) Commit(ctx context.Context) error {
 	}
 	t.hasBegun = false
 	t.done = true
-	if err := t.commit(ctx); err != nil {
+	if err := t.commit(ctx); err != nil && t.forWriting {
 		if rerr := t.rollback(ctx); rerr != nil {
-			return fmt.Errorf("commit call failed, details: %v, rollback error: %v.", err, rerr)
+			return fmt.Errorf("commit failed, details: %v, rollback error: %v.", err, rerr)
 		}
-		return fmt.Errorf("commit call failed, details: %v.", err)
+		return fmt.Errorf("commit failed, details: %v.", err)
 	}
 	return t.cleanup(ctx)
 }
@@ -167,12 +168,12 @@ func (t *transaction) commit(ctx context.Context) error {
 				return err
 			} else if !ok {
 				successful = false
-				if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
-					if !ok {
-						return err
-					}
-					log.Warn(err.Error())
-				}
+				// if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
+				// 	if !ok {
+				// 		return err
+				// 	}
+				// 	log.Warn(err.Error())
+				// }
 			}
 		} else {
 			successful = false
@@ -184,12 +185,12 @@ func (t *transaction) commit(ctx context.Context) error {
 				return err
 			} else if !ok {
 				successful = false
-				if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
-					if !ok {
-						return err
-					}
-					log.Warn(err.Error())
-				}
+				// if ok, err := t.btreesBackend[0].backendNodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
+				// 	if !ok {
+				// 		return err
+				// 	}
+				// 	log.Warn(err.Error())
+				// }
 			}
 		}
 		if !successful {
@@ -198,7 +199,7 @@ func (t *transaction) commit(ctx context.Context) error {
 			sleepTime := rand.Intn(4+1) + 5
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 
-			// Recreate the changes on latest committed nodes & check if fetched Nodes are unchanged.
+			// Recreate the changes on latest committed nodes, if there is no conflict.
 			if err := t.refetchAndMergeModifications(ctx); err != nil {
 				return err
 			}
@@ -229,6 +230,7 @@ func (t *transaction) commit(ctx context.Context) error {
 	return nil
 }
 
+// Checks if fetched items are intact.
 func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 	if t.forWriting {
 		return nil
@@ -258,7 +260,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 	}
 }
 
-// Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in.
+// Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.
 func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 	for b3Index, b3 := range t.btrees {
 		b3ModifiedItems := t.btreesBackend[b3Index].backendItemActionTracker.items
@@ -365,10 +367,12 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 }
 
 func (t *transaction) rollback(ctx context.Context) error {
-	// TODO
+	// TODO: Using transaction log, undo any changes to rollback.
+	// Implement transaction logging so we can implement rollback cleanly.
 	return t.cleanup(ctx)
 }
 
+// Cleanup should do things like transaction log removal, etc...
 func (t *transaction) cleanup(ctx context.Context) error {
 	sb := strings.Builder{}
 	if err := t.deleteTransactionLogs(); err != nil {
