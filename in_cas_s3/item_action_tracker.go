@@ -24,10 +24,10 @@ type lockRecord struct {
 }
 type cacheItem struct {
 	lockRecord
-	item   *btree.Item[interface{}, interface{}]
+	item *btree.Item[interface{}, interface{}]
 	// upsert time in milliseconds.
 	upsertTimeInDB int64
-	isLockOwner bool
+	isLockOwner    bool
 }
 
 type itemActionTracker struct {
@@ -64,7 +64,7 @@ func (t *itemActionTracker) Get(item *btree.Item[interface{}, interface{}]) {
 				LockId: btree.NewUUID(),
 				Action: getAction,
 			},
-			item:   item,
+			item: item,
 		}
 	}
 }
@@ -72,14 +72,14 @@ func (t *itemActionTracker) Get(item *btree.Item[interface{}, interface{}]) {
 func (t *itemActionTracker) Add(item *btree.Item[interface{}, interface{}]) {
 	t.items[item.Id] = cacheItem{
 		lockRecord: lockRecord{
-			LockId:         btree.NewUUID(),
-			Action:         addAction,
+			LockId: btree.NewUUID(),
+			Action: addAction,
 		},
 		item:           item,
 		upsertTimeInDB: item.UpsertTime,
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
-	item.UpsertTime = time.Now().UnixMilli()
+	item.UpsertTime = Now()
 }
 
 func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
@@ -88,14 +88,14 @@ func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
 	}
 	t.items[item.Id] = cacheItem{
 		lockRecord: lockRecord{
-			LockId:         btree.NewUUID(),
-			Action:         updateAction,
+			LockId: btree.NewUUID(),
+			Action: updateAction,
 		},
 		item:           item,
 		upsertTimeInDB: item.UpsertTime,
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
-	item.UpsertTime = time.Now().UnixMilli()
+	item.UpsertTime = Now()
 }
 
 func (t *itemActionTracker) Remove(item *btree.Item[interface{}, interface{}]) {
@@ -108,7 +108,7 @@ func (t *itemActionTracker) Remove(item *btree.Item[interface{}, interface{}]) {
 			LockId: btree.NewUUID(),
 			Action: removeAction,
 		},
-		item:   item,
+		item: item,
 	}
 }
 
@@ -148,19 +148,16 @@ func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache
 	return nil
 }
 
-// unlock will attempt to unlock or delete all tracked items from redis. It will issue a delete even
-// if there is an error and complete trying to delete them all and return the last error encountered
-// as a sample, if there is.
+// unlock will attempt to unlock or delete all tracked items from redis.
 func (t *itemActionTracker) unlock(ctx context.Context, itemRedisCache redis.Cache) error {
-	var lastError error
 	for uuid, cachedItem := range t.items {
 		if cachedItem.isLockOwner {
 			if err := itemRedisCache.Delete(ctx, uuid.ToString()); err != nil {
 				if !redis.KeyNotFound(err) {
-					lastError = err
+					return err
 				}
 			}
 		}
 	}
-	return lastError
+	return nil
 }

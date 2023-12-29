@@ -18,10 +18,10 @@ type Handle struct {
 	PhysicalIdB btree.UUID
 	// true if active Id is physicalIdB, otherwise false.
 	IsActiveIdB bool
-	// Upsert time of the active Id, in milliseconds.
-	UpsertTime int64
-	// Upsert time of the inactive Id, in milliseconds.
-	InactiveUpsertTime int64
+	// Current state(active Id, final deleted state) timestamp in milliseconds.
+	Timestamp int64
+	// Work in progress(inactive Id, non final deleted state) timestamp in milliseconds.
+	WorkInProgressTimestamp int64
 	// IsDeleted is used for "logical" deletes.
 	IsDeleted bool
 }
@@ -61,7 +61,7 @@ func (h *Handle) AllocateId() btree.UUID {
 		return btree.NilUUID
 	}
 	id := btree.NewUUID()
-	h.InactiveUpsertTime = time.Now().UnixMilli()
+	h.WorkInProgressTimestamp = time.Now().UnixMilli()
 	if h.IsActiveIdB {
 		h.PhysicalIdA = id
 		return id
@@ -76,8 +76,8 @@ func (h *Handle) IsExpiredInactive() bool {
 	// Transactions are encouraged to be around 15 mins max, thus, 7 hrs for expiration of failed
 	// node update Id(inactive Id) is really beyond and over it(safe).
 	const maxDuration = 7
-	return h.InactiveUpsertTime > 0 &&
-		(time.Now().UnixMilli() - h.InactiveUpsertTime) > int64(time.Duration(maxDuration) * time.Hour)
+	return h.WorkInProgressTimestamp > 0 &&
+		(time.Now().UnixMilli() - h.WorkInProgressTimestamp) > int64(time.Duration(maxDuration) * time.Hour)
 }
 
 // Returns true if id is either physical Id A or B, false otherwise.
@@ -87,13 +87,8 @@ func (h *Handle) HasId(id btree.UUID) bool {
 
 // Make inactive physical Id as active.
 func (h *Handle) FlipActiveId() {
-	if h.IsActiveIdB {
-		h.PhysicalIdB = btree.NilUUID
-	} else {
-		h.PhysicalIdA = btree.NilUUID
-	}
 	h.IsActiveIdB = !h.IsActiveIdB
-	h.InactiveUpsertTime = 0
+	h.WorkInProgressTimestamp = 0
 }
 
 // Reset to nil the inactive phys. Id.
@@ -103,5 +98,5 @@ func (h *Handle) ClearInactiveId() {
 	} else {
 		h.PhysicalIdB = btree.NilUUID
 	}
-	h.InactiveUpsertTime = 0
+	h.WorkInProgressTimestamp = 0
 }

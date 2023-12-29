@@ -3,7 +3,6 @@ package in_cas_s3
 import (
 	"context"
 	"fmt"
-	log "log/slog"
 	"math/rand"
 	"strings"
 	"time"
@@ -43,6 +42,7 @@ type transaction struct {
 	hasBegun          bool
 	done              bool
 	maxTime           time.Duration
+	logger *transactionLog
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
@@ -65,6 +65,7 @@ func NewTransaction(forWriting bool, maxTime time.Duration) Transaction {
 		redisCache: redis.NewClient(redis.DefaultOptions()),
 		nodeBlobStore:  s3.NewBlobStore(),
 		deletedItemsQueue: q.NewDeletedItemsQueue(),
+		logger: newTransactionLogger(),
 	}
 }
 
@@ -125,6 +126,8 @@ func (t *transaction) commit(ctx context.Context) error {
 		return t.commitForReaderTransaction(ctx)
 	}
 
+	t.logger.log(lockTrackedItems)
+
 	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
 	if err := t.lockTrackedItems(ctx); err != nil {
 		return err
@@ -161,9 +164,11 @@ func (t *transaction) commit(ctx context.Context) error {
 		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
 		// has to do merging & conflict resolution. Add is simple upsert.
 		updatedNodes, removedNodes, addedNodes, fetchedNodes = t.classifyModifiedNodes()
+	
 		if ok, err := t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes); err != nil {
 			return err
 		} else if ok {
+			t.logger.log(commitUpdatedNodes)
 			if ok, err := t.btreesBackend[0].backendNodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
 			} else if !ok {
@@ -181,6 +186,7 @@ func (t *transaction) commit(ctx context.Context) error {
 
 		// Only do commit removed nodes if successful so far.
 		if successful {
+			t.logger.log(commitRemovedNodes)
 			if ok, err := t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
 				return err
 			} else if !ok {
@@ -206,30 +212,29 @@ func (t *transaction) commit(ctx context.Context) error {
 		}
 	}
 
+	t.logger.log(commitAddedNodes)
 	if err := t.btreesBackend[0].backendNodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
 		return err
 	}
 
+	t.logger.log(commitStoreRepositoryChanges)
 	if err := t.storeRepository.CommitChanges(ctx); err != nil {
 		return err
 	}
 
+	t.logger.log(activateInactiveNodes)
 	// Switch to active "state" the (inactive) updated Nodes so they will 
 	// get started to be "seen" in such state on succeeding fetch.
-	if ok, err := t.btreesBackend[0].backendNodeRepository.activateInactiveNodes(ctx, updatedNodes); err != nil {
-		if !ok {
-			return err
-		}
-		log.Warn(err.Error())
+	if err := t.btreesBackend[0].backendNodeRepository.activateInactiveNodes(ctx, updatedNodes); err != nil {
+		return err
 	}
+	t.logger.log(touchRemovedNodes)
 	// Update upsert time of removed nodes.
-	if ok, err := t.btreesBackend[0].backendNodeRepository.touchNodes(ctx, removedNodes); err != nil {
-		if !ok {
-			return err
-		}
-		log.Warn(err.Error())
+	if err := t.btreesBackend[0].backendNodeRepository.touchNodes(ctx, removedNodes); err != nil {
+		return err
 	}
 
+	t.logger.log(unlockTrackedItems)
 	// Unlock the items in Redis.
 	if err := t.unlockTrackedItems(ctx); err != nil {
 		return err
@@ -364,18 +369,25 @@ func (t *transaction) lockTrackedItems(ctx context.Context) error {
 }
 
 func (t *transaction) unlockTrackedItems(ctx context.Context) error {
-	var lastError error
 	for _, s := range t.btreesBackend {
 		if err := s.backendItemActionTracker.unlock(ctx, t.redisCache); err != nil {
-			lastError = err
+			return err
 		}
 	}
-	return lastError
+	return nil
 }
 
 func (t *transaction) rollback(ctx context.Context) error {
 	// TODO: Using transaction log, undo any changes to rollback.
 	// Implement transaction logging so we can implement rollback cleanly.
+
+	// for cf := unlockTrackedItems; cf >= lockTrackedItems; cf-- {
+	// 	switch(cf) {
+	// 	case lockTrackedItems:
+	// 		t.
+	// 	}
+	// }
+
 	return t.cleanup(ctx)
 }
 
