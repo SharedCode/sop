@@ -93,6 +93,7 @@ func (h *Handle) FlipActiveId() {
 		h.PhysicalIdA = btree.NilUUID
 	}
 	h.IsActiveIdB = !h.IsActiveIdB
+	h.InactiveUpsertTime = 0
 }
 
 // Reset to nil the inactive phys. Id.

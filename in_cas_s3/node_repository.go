@@ -280,8 +280,8 @@ func (nr *nodeRepository) areFetchedNodesIntact(ctx context.Context, nodes []*bt
 		if err != nil {
 			return false, err
 		}
-		// Node with such Id is marked deleted or had been updated since reading it.
-		if h.IsDeleted || h.UpsertTime != n.UpsertTime{
+		// Node with Id had been updated(or deleted) since reading it.
+		if h.UpsertTime != n.UpsertTime{
 			return false, nil
 		}
 	}
@@ -348,6 +348,23 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []*bt
 		}
 		// Set the inactive as active Id.
 		h.FlipActiveId()
+		// Update upsert time, we are finalizing the commit for the node.
+		h.UpsertTime = time.Now().UnixMilli()
+		if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
+			lastErr = err
+		}
+	}
+	return true, lastErr
+}
+
+// Update upsert time of a given set of nodes.
+func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) (bool, error) {
+	var lastErr error
+	for _, n := range nodes {
+		h, err := nr.transaction.virtualIdRegistry.Get(ctx, n.Id)
+		if err != nil {
+			return false, err
+		}
 		// Update upsert time, we are finalizing the commit for the node.
 		h.UpsertTime = time.Now().UnixMilli()
 		if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {

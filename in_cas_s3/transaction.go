@@ -214,9 +214,16 @@ func (t *transaction) commit(ctx context.Context) error {
 		return err
 	}
 
-	// Switch to active "state" the (inactive) updated Nodes(& deleted nodes) so they will 
+	// Switch to active "state" the (inactive) updated Nodes so they will 
 	// get started to be "seen" in such state on succeeding fetch.
-	if ok, err := t.btreesBackend[0].backendNodeRepository.activateInactiveNodes(ctx, append(updatedNodes, removedNodes...)); err != nil {
+	if ok, err := t.btreesBackend[0].backendNodeRepository.activateInactiveNodes(ctx, updatedNodes); err != nil {
+		if !ok {
+			return err
+		}
+		log.Warn(err.Error())
+	}
+	// Update upsert time of removed nodes.
+	if ok, err := t.btreesBackend[0].backendNodeRepository.touchNodes(ctx, removedNodes); err != nil {
 		if !ok {
 			return err
 		}
