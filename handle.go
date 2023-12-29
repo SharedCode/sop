@@ -72,6 +72,7 @@ func (h *Handle) AllocateId() btree.UUID {
 
 // Returns true if inactive Id is expired, false otherwise.
 func (h *Handle) IsExpiredInactive() bool {
+	// TODO: Do we want maxDuration to be configurable? For now, hardcode to 2 hours.
 	const maxDuration = 2
 	return h.InactiveUpsertTime > 0 &&
 		(time.Now().UnixMilli() - h.InactiveUpsertTime) > int64(time.Duration(maxDuration) * time.Hour)
