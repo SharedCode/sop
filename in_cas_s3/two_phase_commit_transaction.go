@@ -48,8 +48,8 @@ type transaction struct {
 	maxTime   time.Duration
 	logger    *transactionLog
 	// Phase 1 commit generated objects required for phase 2 commit.
-	handles      []sop.Handle
-	removedNodes []*btree.Node[interface{}, interface{}]
+	updatedNodeHandles      []sop.Handle
+	removedNodeHandles      []sop.Handle
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
@@ -256,8 +256,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	// Populate the phase 2 commit required objects.
-	t.handles = append(uh, rh...)
-	t.removedNodes = removedNodes
+	t.updatedNodeHandles = uh
+	t.removedNodeHandles = rh
 
 	return nil
 }
@@ -265,12 +265,22 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 func (t *transaction) phase2Commit(ctx context.Context) error {
 	// Finalize the commit, it is all or nothing action, thus, no partial failure/success.
 	t.logger.log(finalizeCommit)
-	if err := t.virtualIdRegistry.Update(ctx, t.handles...); err != nil {
+	if err := t.virtualIdRegistry.Update(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
 		return err
 	}
 
-	// Enqueue the deleted Ids, 'should not fail.
-	t.enqueueRemovedIds(ctx, t.removedNodes)
+	// Assemble & enqueue the deleted Ids, 'should not fail.
+	deletedIds := make([]btree.UUID, len(t.updatedNodeHandles) + len(t.removedNodeHandles))
+	for i := range t.updatedNodeHandles {
+		// Since we've flipped the inactive to active, the new inactive Id is to be deleted(unused).
+		deletedIds[i] = t.updatedNodeHandles[i].GetInActiveId()
+	}
+	offset := len(t.updatedNodeHandles)
+	for i := range t.updatedNodeHandles {
+		// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
+		deletedIds[offset+i] = t.removedNodeHandles[i].GetActiveId()
+	}
+	t.enqueueRemovedIds(ctx, deletedIds)
 
 	// Unlock the items in Redis.
 	t.logger.log(unlockTrackedItems)
@@ -417,12 +427,13 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) enqueueRemovedIds(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) {
-	deletedItems := make([]kafka.DeletedItem, 0, len(nodes))
-	for i := range nodes {
+// Enqueue the deleted node Ids for scheduled physical delete.
+func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds []btree.UUID) {
+	deletedItems := make([]kafka.DeletedItem, len(deletedNodeIds))
+	for _, did := range deletedNodeIds {
 		deletedItems = append(deletedItems, kafka.DeletedItem{
 			ItemType: kafka.BtreeNode,
-			ItemId:   nodes[i].Id,
+			ItemId:   did,
 		})
 	}
 	// Enqueue to Kafka should not fail, but in any case, log as Error to log file as last resort.

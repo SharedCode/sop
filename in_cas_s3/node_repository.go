@@ -272,9 +272,9 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []*btree.N
 }
 
 func (nr *nodeRepository) areFetchedNodesIntact(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) (bool, error) {
-	nids := make([]btree.UUID, 0, len(nodes))
+	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
-		nids = append(nids, nodes[i].Id)
+		nids[i] = nodes[i].Id
 	}
 	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
 	if err != nil {
@@ -342,9 +342,9 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []*btr
 }
 
 func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) error {
-	nids := make([]btree.UUID, 0, len(nodes))
+	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
-		nids = append(nids, nodes[i].Id)
+		nids[i] = nodes[i].Id
 	}
 	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
 	if err != nil {
@@ -362,9 +362,9 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []*btr
 
 // Set to active the inactive nodes. This is the last persistence step in transaction commit.
 func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) ([]sop.Handle, error) {
-	nids := make([]btree.UUID, 0, len(nodes))
+	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
-		nids = append(nids, nodes[i].Id)
+		nids[i] = nodes[i].Id
 	}
 	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
 	if err != nil {
@@ -382,9 +382,9 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []*bt
 
 // Update upsert time of a given set of nodes.
 func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) ([]sop.Handle, error) {
-	nids := make([]btree.UUID, 0, len(nodes))
+	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
-		nids = append(nids, nodes[i].Id)
+		nids[i] = nodes[i].Id
 	}
 	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
 	if err != nil {
