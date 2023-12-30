@@ -106,7 +106,7 @@ func (t *transaction) Rollback(ctx context.Context) error {
 	if !t.HasBegun() {
 		return fmt.Errorf("No transaction to rollback, call Begin to start a transaction.")
 	}
-	// Just reset transaction status and done, so transaction can't be "reused".
+	// Reset transaction status and mark done to end it without persisting any change.
 	t.hasBegun = false
 	t.done = true
 	return nil
