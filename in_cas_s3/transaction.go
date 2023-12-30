@@ -5,7 +5,6 @@ import (
 	"fmt"
 	log "log/slog"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/SharedCode/sop/btree"
@@ -97,7 +96,7 @@ func (t *transaction) Commit(ctx context.Context) error {
 		}
 		return fmt.Errorf("commit failed, details: %v.", err)
 	}
-	return t.cleanup(ctx)
+	return nil
 }
 
 func (t *transaction) Rollback(ctx context.Context) error {
@@ -107,9 +106,10 @@ func (t *transaction) Rollback(ctx context.Context) error {
 	if !t.HasBegun() {
 		return fmt.Errorf("No transaction to rollback, call Begin to start a transaction.")
 	}
+	// Just reset transaction status and done, so transaction can't be "reused".
 	t.hasBegun = false
 	t.done = true
-	return t.rollback(ctx)
+	return nil
 }
 
 func (t *transaction) HasBegun() bool {
@@ -400,6 +400,8 @@ func (t *transaction) rollback(ctx context.Context) error {
 		return nil
 	}
 
+	// TODO:
+
 	// updatedNodes, removedNodes, addedNodes, fetchedNodes := t.classifyModifiedNodes()
 
 	// if t.logger.committedState == finalizeCommit {
@@ -417,22 +419,5 @@ func (t *transaction) rollback(ctx context.Context) error {
 	// if t.logger.committedState > lockTrackedItems {
 	// 	t.unlockTrackedItems(ctx)
 	// }
-	return t.cleanup(ctx)
-}
-
-// Cleanup should do things like transaction log removal, etc...
-func (t *transaction) cleanup(ctx context.Context) error {
-	sb := strings.Builder{}
-	if err := t.deleteTransactionLogs(); err != nil {
-		sb.WriteString(fmt.Sprintln(err.Error()))
-	}
-	// TODO: delete cached data sets of this transaction on Redis.
-	if sb.Len() == 0 {
-		return nil
-	}
-	return fmt.Errorf(sb.String())
-}
-
-func (t *transaction) deleteTransactionLogs() error {
 	return nil
 }
