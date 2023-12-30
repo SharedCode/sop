@@ -41,7 +41,8 @@ func (t *singlePhaseTransaction) Begin() error {
 }
 
 // Commit the transaction. If multiple phase 1 commit erors are returned,
-// this will return the last error.
+// this will return the sop phase 1 commit error or
+// your other transactions phase 1 commits' last error.
 func (t *singlePhaseTransaction) Commit(ctx context.Context) error {
 	var lastErr error
 	// Phase 1 commit.
