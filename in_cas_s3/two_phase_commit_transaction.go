@@ -10,7 +10,6 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_cas_s3/cassandra"
-	"github.com/SharedCode/sop/in_cas_s3/kafka"
 	q "github.com/SharedCode/sop/in_cas_s3/kafka"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
 	"github.com/SharedCode/sop/in_cas_s3/s3"
@@ -438,10 +437,10 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 
 // Enqueue the deleted node Ids for scheduled physical delete.
 func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds ...btree.UUID) {
-	deletedItems := make([]kafka.DeletedItem, len(deletedNodeIds))
+	deletedItems := make([]q.DeletedItem, len(deletedNodeIds))
 	for _, did := range deletedNodeIds {
-		deletedItems = append(deletedItems, kafka.DeletedItem{
-			ItemType: kafka.BtreeNode,
+		deletedItems = append(deletedItems, q.DeletedItem{
+			ItemType: q.BtreeNode,
 			ItemId:   did,
 		})
 	}
