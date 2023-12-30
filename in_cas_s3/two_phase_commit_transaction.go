@@ -270,21 +270,26 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	}
 
 	// Assemble & enqueue the deleted Ids, 'should not fail.
-	deletedIds := make([]btree.UUID, len(t.updatedNodeHandles) + len(t.removedNodeHandles))
+	updatedNodesInactiveIds := make([]btree.UUID, len(t.updatedNodeHandles))
+	deletedIds := make([]btree.UUID, len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
 		// Since we've flipped the inactive to active, the new inactive Id is to be deleted(unused).
-		deletedIds[i] = t.updatedNodeHandles[i].GetInActiveId()
+		updatedNodesInactiveIds[i] = t.updatedNodeHandles[i].GetInActiveId()
 		t.updatedNodeHandles[i].ClearInactiveId()
 	}
 	if err := t.virtualIdRegistry.Update(ctx, t.updatedNodeHandles...); err != nil {
+		// Exclude the updated nodes inactive Ids for deletion because they failed getting cleared in registry.
+		updatedNodesInactiveIds = nil
 		log.Warn(err.Error())
 	}
-	offset := len(t.updatedNodeHandles)
 	for i := range t.removedNodeHandles {
 		// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
-		deletedIds[offset+i] = t.removedNodeHandles[i].GetActiveId()
+		deletedIds[i] = t.removedNodeHandles[i].GetActiveId()
 	}
-	t.enqueueRemovedIds(ctx, deletedIds)
+	if updatedNodesInactiveIds != nil {
+		deletedIds = append(deletedIds, updatedNodesInactiveIds...)
+	}
+	t.enqueueRemovedIds(ctx, deletedIds...)
 
 	// Unlock the items in Redis.
 	t.logger.log(unlockTrackedItems)
@@ -432,7 +437,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 }
 
 // Enqueue the deleted node Ids for scheduled physical delete.
-func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds []btree.UUID) {
+func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds ...btree.UUID) {
 	deletedItems := make([]kafka.DeletedItem, len(deletedNodeIds))
 	for _, did := range deletedNodeIds {
 		deletedItems = append(deletedItems, kafka.DeletedItem{
