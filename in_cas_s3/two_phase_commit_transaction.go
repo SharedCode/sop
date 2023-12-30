@@ -433,24 +433,36 @@ func (t *transaction) enqueueRemovedIds(ctx context.Context, nodes []*btree.Node
 
 func (t *transaction) rollback(ctx context.Context) error {
 	if t.logger.committedState == unlockTrackedItems {
-		return nil
+		// This state should not be reached and rollback invoked, but return an error about it, in case.
+		return fmt.Errorf("Transaction got committed, 'can't rollback it.")
 	}
 
-	// updatedNodes, removedNodes, addedNodes, fetchedNodes := t.classifyModifiedNodes()
+	updatedNodes, removedNodes, addedNodes, _ := t.classifyModifiedNodes()
 
-	// if t.logger.committedState == finalizeCommit {
-	// 	// t.storeRepository.
-	// }
-	// if t.logger.committedState > commitAddedNodes {
-	// }
-	// if t.logger.committedState > commitRemovedNodes {
-	// }
-	// if t.logger.committedState > commitUpdatedNodes {
+	var lastErr error
+	if t.logger.committedState == finalizeCommit {
+		// do nothing as the function failed, nothing to undo.
+	}
+	if t.logger.committedState > commitAddedNodes {
+		if err := t.btreesBackend[0].backendNodeRepository.rollbackAddedNodes(ctx, addedNodes); err != nil {
+			lastErr = err
+		}
+	}
+	if t.logger.committedState > commitRemovedNodes {
+		if err := t.btreesBackend[0].backendNodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
+			lastErr = err
+		}
+	}
+	if t.logger.committedState > commitUpdatedNodes {
+		if err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
+			lastErr = err
+		}
+	}
+	if t.logger.committedState > lockTrackedItems {
+		if err := t.unlockTrackedItems(ctx); err != nil {
+			lastErr = err
+		}
+	}
 
-	// }
-	// if t.logger.committedState > lockTrackedItems {
-	// 	t.unlockTrackedItems(ctx)
-	// }
-
-	return nil
+	return lastErr
 }

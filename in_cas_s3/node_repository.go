@@ -7,6 +7,7 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
+	"github.com/SharedCode/sop/in_cas_s3/s3"
 )
 
 type cacheNode struct {
@@ -156,18 +157,16 @@ func (nr *nodeRepository) remove(nodeId btree.UUID) {
 // Save to blob store, save node Id to the alternate(inactive) physical Id(see virtual Id).
 func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) (bool, error) {
 	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
-	nids := make([]btree.UUID, 0, len(nodes))
+	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
-		nids = append(nids, nodes[i].Id)
+		nids[i] = nodes[i].Id
 	}
 	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
 	if err != nil {
 		return false, err
 	}
+	blobs := make([]s3.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(nodes))
 	for i, h := range handles {
-		if err != nil {
-			return false, err
-		}
 		// Node with such Id is marked deleted or had been updated since reading it.
 		if h.IsDeleted || h.Timestamp != nodes[i].UpsertTime {
 			return false, nil
@@ -190,6 +189,8 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree
 			// Return false as there is an ongoing update on node by another transaction.
 			return false, nil
 		}
+		blobs[i].Key = h.GetInActiveId()
+		blobs[i].Value = nodes[i]
 		handles[i] = h
 	}
 	if err := nr.transaction.virtualIdRegistry.Update(ctx, handles...); err != nil {
@@ -197,7 +198,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree
 	}
 
 	// 2nd pass, persist the nodes blobs to blob store and redis cache.
-	if err := nr.transaction.nodeBlobStore.Add(ctx, nodes...); err != nil {
+	if err := nr.transaction.nodeBlobStore.Add(ctx, blobs...); err != nil {
 		return false, err
 	}
 	for i := range nodes {
@@ -211,15 +212,14 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree
 // Add the removed Node(s) and their Item(s) Data(if not in node segment) to the recycler
 // so they can get serviced for physical delete on schedule in the future.
 func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) (bool, error) {
-	nids := make([]btree.UUID, 0, len(nodes))
+	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
-		nids = append(nids, nodes[i].Id)
+		nids[i] = nodes[i].Id
 	}
 	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
 	if err != nil {
 		return false, err
 	}
-	deletedIds := make([]btree.UUID, 0, len(nodes))
 	for i := range handles {
 		// Node with such Id is already marked deleted, is in-flight change or had been updated since reading it,
 		// fail it for "refetch" & retry.
@@ -229,8 +229,6 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []*btree
 		// Mark Id as deleted.
 		handles[i].IsDeleted = true
 		handles[i].WorkInProgressTimestamp = Now()
-		// Include this node for physical delete servicing.
-		deletedIds = append(deletedIds, handles[i].LogicalId)
 	}
 	// Persist the handles changes.
 	if err := nr.transaction.virtualIdRegistry.Update(ctx, handles...); err != nil {
@@ -247,22 +245,28 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []*btree.N
 	   - (on commit) On update, 'will save and register the node phys Id to the "inactive Id" part of the virtual Id.
 	   - On finalization of commit, inactive will be switched to active (node) Ids.
 	*/
-	handles := make([]sop.Handle, 0, len(nodes))
+
+	handles := make([]sop.Handle, len(nodes))
+	blobs := make([]s3.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(nodes))
 	for i := range nodes {
 		// Add node to blob store.
 		h := sop.NewHandle(nodes[i].Id)
 		// Update upsert time.
 		h.Timestamp = Now()
-		handles = append(handles, h)
+		blobs[i].Key = nodes[i].Id
+		blobs[i].Value = nodes[i]
+		handles[i] = h
 		// Add node to Redis cache.
 		if err := nr.transaction.redisCache.SetStruct(ctx, nodes[i].Id.ToString(), nodes[i], -1); err != nil {
 			return err
 		}
 	}
 	// Register node Id as logical Id(handle).
-	nr.transaction.virtualIdRegistry.Add(ctx, handles...)
+	if err := nr.transaction.virtualIdRegistry.Add(ctx, handles...); err != nil {
+		return err
+	}
 	// Add nodes to blob store.
-	if err := nr.transaction.nodeBlobStore.Add(ctx, nodes...); err != nil {
+	if err := nr.transaction.nodeBlobStore.Add(ctx, blobs...); err != nil {
 		return err
 	}
 	return nil
@@ -286,44 +290,75 @@ func (nr *nodeRepository) areFetchedNodesIntact(ctx context.Context, nodes []*bt
 	return true, nil
 }
 
+func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) error {
+	ids := make([]btree.UUID, len(nodes))
+	var lastErr error
+	for i := range nodes {
+		ids[i] = nodes[i].Id
+		// Remove node from Redis cache.
+		if err := nr.transaction.redisCache.Delete(ctx, nodes[i].Id.ToString()); err != nil {
+			lastErr = err
+		}
+	}
+	// Unregister nodes Ids.
+	if err := nr.transaction.virtualIdRegistry.Remove(ctx, ids...); err != nil {
+		lastErr = err
+	}
+	// Remove nodes from blob store.
+	if err := nr.transaction.nodeBlobStore.Remove(ctx, ids...); err != nil {
+		lastErr = err
+	}
+	return lastErr
+}
+
 func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) error {
-	// inactiveIds := make([]btree.UUID, 0, len(nodes))
-	// for _, n := range nodes {
-	// 	h, err := nr.transaction.virtualIdRegistry.Get(ctx, n.Id)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	inactiveId := h.GetInActiveId()
-	// 	inactiveIds = append(inactiveIds, inactiveId)
-	// 	if err := nr.transaction.redisCache.Delete(ctx, inactiveId.ToString()); err != nil {
-	// 		if !redis.KeyNotFound(err) {
-	// 			return err
-	// 		}
-	// 	}
-	// 	h.ClearInactiveId()
-	// 	if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
-	// 		return err
-	// 	}
-	// }
-	// if err := nr.transaction.nodeBlobStore.Remove(ctx, inactiveIds...); err != nil {
-	// 	return err
-	// }
+	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
+	nids := make([]btree.UUID, len(nodes))
+	for i := range nodes {
+		nids[i] = nodes[i].Id
+	}
+	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
+	if err != nil {
+		return err
+	}
+	iids := make([]btree.UUID, len(nodes))
+	for i, h := range handles {
+		iids[i] = h.GetInActiveId()
+		h.ClearInactiveId()
+		handles[i] = h
+	}
+	if err := nr.transaction.virtualIdRegistry.Update(ctx, handles...); err != nil {
+		return err
+	}
+	// 2nd pass, undo the nodes blobs to blob store and redis cache.
+	if err := nr.transaction.nodeBlobStore.Remove(ctx, iids...); err != nil {
+		return err
+	}
+	for _, iid := range iids {
+		if err := nr.transaction.redisCache.Delete(ctx, iid.ToString()); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) error {
-	// for _, n := range nodes {
-	// 	h, err := nr.transaction.virtualIdRegistry.Get(ctx, n.Id)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	// Mark Id as not deleted.
-	// 	h.IsDeleted = false
-	// 	if err := nr.transaction.virtualIdRegistry.Update(ctx, h); err != nil {
-	// 		return err
-	// 	}
-	// }
-	return nil
+	nids := make([]btree.UUID, 0, len(nodes))
+	for i := range nodes {
+		nids = append(nids, nodes[i].Id)
+	}
+	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
+	if err != nil {
+		return err
+	}
+	for i := range handles {
+		// Undo the deleted mark for Id.
+		handles[i].IsDeleted =false
+		handles[i].WorkInProgressTimestamp = 0
+	}
+
+	// Persist the handles changes.
+	return nr.transaction.virtualIdRegistry.Update(ctx, handles...)
 }
 
 // Set to active the inactive nodes. This is the last persistence step in transaction commit.
@@ -343,7 +378,7 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []*bt
 		handles[i].Timestamp = Now()
 	}
 	// All or nothing batch update.
-	return handles, nil //nr.transaction.virtualIdRegistry.Update(ctx, handles...)
+	return handles, nil
 }
 
 // Update upsert time of a given set of nodes.
@@ -362,5 +397,5 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []*btree.Node[in
 		handles[i].WorkInProgressTimestamp = 0
 	}
 	// All or nothing batch update.
-	return handles, nil // nr.transaction.virtualIdRegistry.Update(ctx, handles...)
+	return handles, nil
 }
