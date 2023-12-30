@@ -13,14 +13,12 @@ import (
 // StoreRepository interface specifies the store repository. Stores are readonly after creation, thus, no update method.
 type StoreRepository interface {
 	// Fetch from backend if not yet in the (local) cache list a given store info with name.
-	Get(ctx context.Context, name string) (btree.StoreInfo, error)
+	Get(context.Context, string) (btree.StoreInfo, error)
 	// Add store info to the (local) cache list.
-	Add(btree.StoreInfo) error
+	Add(context.Context, btree.StoreInfo) error
 	// Remove a store info with name from the (local) cache list. This should also remove all the
 	// data of the store(i.e. - B-Tree) with such name.
-	Remove(name string) error
-	// Commit(i.e. - merge) to the backend the changes done to the (local) cache list.
-	CommitChanges(ctx context.Context) error
+	Remove(context.Context, string) error
 }
 
 // storeRepository is a simple in-memory implementation of store repository to demonstrate
@@ -36,7 +34,7 @@ func NewStoreRepository() StoreRepository {
 	}
 }
 
-func (sr *storeRepository) Add(store btree.StoreInfo) error {
+func (sr *storeRepository) Add(ctx context.Context, store btree.StoreInfo) error {
 	sr.lookup[store.Name] = store
 	return nil
 }
@@ -46,12 +44,7 @@ func (sr *storeRepository) Get(ctx context.Context, name string) (btree.StoreInf
 	return v, nil
 }
 
-func (sr *storeRepository) Remove(name string) error {
+func (sr *storeRepository) Remove(ctx context.Context, name string) error {
 	delete(sr.lookup, name)
-	return nil
-}
-
-func (sr *storeRepository) CommitChanges(ctx context.Context) error {
-	// TODO: Persist to Cassandra table the changes done.
 	return nil
 }

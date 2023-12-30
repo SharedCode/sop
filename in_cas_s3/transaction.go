@@ -10,6 +10,7 @@ import (
 
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_cas_s3/cassandra"
+	"github.com/SharedCode/sop/in_cas_s3/kafka"
 	q "github.com/SharedCode/sop/in_cas_s3/kafka"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
 	"github.com/SharedCode/sop/in_cas_s3/s3"
@@ -25,6 +26,7 @@ type Transaction interface {
 	Rollback(ctx context.Context) error
 	// Returns true if transaction has begun, false otherwise.
 	HasBegun() bool
+
 }
 
 type transaction struct {
@@ -151,7 +153,8 @@ func (t *transaction) commit(ctx context.Context) error {
 	//   Collect each Node that are different in Redis(as updated by other transaction(s))
 	//   Gather all the items of these Nodes(using the lookup table)
 	//   Break if there are no more items different.
-	// - Re-fetch the Nodes of these items, re-create the lookup table consisting only of these items & their re-fetched Nodes
+	// - Re-fetch the Nodes of these items, re-create the lookup table consisting only of these items
+	//   & their re-fetched Nodes
 	// Repeat end.
 	// - Return error if loop timed out to trigger rollback.
 	successful := false
@@ -165,28 +168,33 @@ func (t *transaction) commit(ctx context.Context) error {
 		// has to do merging & conflict resolution. Add is simple upsert.
 		updatedNodes, removedNodes, addedNodes, fetchedNodes = t.classifyModifiedNodes()
 	
-		if ok, err := t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes); err != nil {
+		// Check for conflict on fetched nodes.
+		ok, err := t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes)
+		if err != nil {
 			return err
-		} else if ok {
+		}
+		if ok {
 			// Commit updated nodes.
 			t.logger.log(commitUpdatedNodes)
 			if ok, err := t.btreesBackend[0].backendNodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
 			} else if !ok {
 				successful = false
+				if err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
+					return err
+				}
 			}
 		} else {
 			successful = false
 		}
 
 		// Only do commit removed nodes if successful so far.
-		if successful {
+		if len(removedNodes) > 0 && successful {
 			// Commit removed nodes.
 			t.logger.log(commitRemovedNodes)
-			if ok, err := t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
+			successful, err = t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes)
+			if err != nil {
 				return err
-			} else if !ok {
-				successful = false
 			}
 		}
 		if !successful {
@@ -208,30 +216,26 @@ func (t *transaction) commit(ctx context.Context) error {
 		return err
 	}
 
-	// Commit Store repository changes.
-	t.logger.log(commitStoreRepositoryChanges)
-	if err := t.storeRepository.CommitChanges(ctx); err != nil {
-		return err
-	}
-
 	// Switch to active "state" the (inactive) updated Nodes so they will 
 	// get started to be "seen" in such state on succeeding fetch.
-	t.logger.log(activateInactiveNodes)
 	uh, err := t.btreesBackend[0].backendNodeRepository.activateInactiveNodes(ctx, updatedNodes)
 	if err != nil {
 		return err
 	}
 	// Update upsert time of removed nodes to signal that they are finalized.
-	t.logger.log(touchRemovedNodes)
 	rh, err := t.btreesBackend[0].backendNodeRepository.touchNodes(ctx, removedNodes)
 	if err != nil {
 		return err
 	}
 
 	// Finalize the commit, it is all or nothing action, thus, no partial failure/success.
+	t.logger.log(finalizeCommit)
 	if err := t.virtualIdRegistry.Update(ctx, append(uh, rh...)...); err != nil {
 		return err
 	}
+
+	// Enqueue the deleted Ids, 'should not fail.
+	t.enqueueRemovedIds(ctx, removedNodes)
 
 	// Unlock the items in Redis.
 	t.logger.log(unlockTrackedItems)
@@ -378,17 +382,42 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	return nil
 }
 
+func (t *transaction) enqueueRemovedIds(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) {
+	deletedItems := make([]kafka.DeletedItem, 0, len(nodes))
+	for i := range nodes {
+		deletedItems = append(deletedItems, kafka.DeletedItem{
+			ItemType: kafka.BtreeNode,
+			ItemId: nodes[i].Id,
+		})
+	}
+	// Enqueue to Kafka should not fail, but in any case, log as Error to log file as last resort.
+	if err := t.deletedItemsQueue.Enqueue(ctx, deletedItems...); err != nil {
+		log.Error(fmt.Sprintf("Failed to enqueue deleted nodes Ids: %v.", deletedItems))
+	}
+}
+
 func (t *transaction) rollback(ctx context.Context) error {
-	// TODO: Using transaction log, undo any changes to rollback.
-	// Implement transaction logging so we can implement rollback cleanly.
+	if t.logger.committedState == unlockTrackedItems {
+		return nil
+	}
 
-	// for cf := unlockTrackedItems; cf >= lockTrackedItems; cf-- {
-	// 	switch(cf) {
-	// 	case lockTrackedItems:
-	// 		t.
-	// 	}
+	// updatedNodes, removedNodes, addedNodes, fetchedNodes := t.classifyModifiedNodes()
+
+	// if t.logger.committedState == finalizeCommit {
+	// 	// t.storeRepository.
 	// }
-
+	// if t.logger.committedState > commitStoreRepositoryChanges {
+	// }
+	// if t.logger.committedState > commitAddedNodes {
+	// }
+	// if t.logger.committedState > commitRemovedNodes {
+	// }
+	// if t.logger.committedState > commitUpdatedNodes {
+		
+	// }
+	// if t.logger.committedState > lockTrackedItems {
+	// 	t.unlockTrackedItems(ctx)
+	// }
 	return t.cleanup(ctx)
 }
 

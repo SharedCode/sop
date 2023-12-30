@@ -6,7 +6,6 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_cas_s3/kafka"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
 )
 
@@ -201,8 +200,8 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree
 	if err := nr.transaction.nodeBlobStore.Add(ctx, nodes...); err != nil {
 		return false, err
 	}
-	for i, n := range nodes {
-		if err := nr.transaction.redisCache.SetStruct(ctx, handles[i].GetInActiveId().ToString(), n, -1); err != nil {
+	for i := range nodes {
+		if err := nr.transaction.redisCache.SetStruct(ctx, handles[i].GetInActiveId().ToString(), nodes[i], -1); err != nil {
 			return false, err
 		}
 	}
@@ -220,7 +219,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []*btree
 	if err != nil {
 		return false, err
 	}
-	deletedIds := make([]kafka.DeletedItem, 0, len(nodes))
+	deletedIds := make([]btree.UUID, 0, len(nodes))
 	for i := range handles {
 		// Node with such Id is already marked deleted, is in-flight change or had been updated since reading it,
 		// fail it for "refetch" & retry.
@@ -231,16 +230,10 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []*btree
 		handles[i].IsDeleted = true
 		handles[i].WorkInProgressTimestamp = Now()
 		// Include this node for physical delete servicing.
-		deletedIds = append(deletedIds, kafka.DeletedItem{
-			ItemType: kafka.BtreeNode,
-			ItemId:   handles[i].LogicalId,
-		})
+		deletedIds = append(deletedIds, handles[i].LogicalId)
 	}
+	// Persist the handles changes.
 	if err := nr.transaction.virtualIdRegistry.Update(ctx, handles...); err != nil {
-		return false, err
-	}
-	// Enqueue so deleted Ids' resources(nodes' or items values' blob) can get serviced for physical delete.
-	if err := nr.transaction.deletedItemsQueue.Enqueue(ctx, deletedIds...); err != nil {
 		return false, err
 	}
 	return true, nil

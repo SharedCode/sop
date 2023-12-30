@@ -11,14 +11,14 @@ import (
 func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	var t2 interface{} = t
 	trans := t2.(*transaction)
-	if s, err := trans.storeRepository.Get(ctx, name); s.IsEmpty() || err != nil {
+	s, err := trans.storeRepository.Get(ctx, name)
+	if s.IsEmpty() || err != nil {
 		if s.IsEmpty() {
 			return nil, fmt.Errorf("B-Tree '%s' does not exist, please use NewBtree to create an instance of it.", name)
 		}
 		return nil, err
-	} else {
-		return newBtree[TK, TV](&s, trans)
 	}
+	return newBtree[TK, TV](&s, trans)
 }
 
 // NewBtree will create a new B-Tree instance with data persisted in backend store,
@@ -29,10 +29,14 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 	var t2 interface{} = t
 	trans := t2.(*transaction)
 
-	if s, err := trans.storeRepository.Get(ctx, name); !s.IsEmpty() || err != nil {
+	s, err := trans.storeRepository.Get(ctx, name)
+	if !s.IsEmpty() || err != nil {
 		if !s.IsEmpty() {
 			return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it.", name)
 		}
+		return nil, err
+	}
+	if err := trans.storeRepository.Add(ctx, s); err != nil {
 		return nil, err
 	}
 	return newBtree[TK, TV](btree.NewStoreInfo(name, slotLength, isUnique, true), trans)
@@ -55,7 +59,6 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 	b3, _ := btree.New[interface{}, interface{}](s, &si.StoreInterface)
 	trans.btreesBackend = append(trans.btreesBackend, si)
 	trans.btrees = append(trans.btrees, b3)
-	trans.storeRepository.Add(*s)
 
 	return newBtreeWithTransaction[TK, TV](trans, b3), nil
 }
