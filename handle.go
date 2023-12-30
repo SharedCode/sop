@@ -11,7 +11,7 @@ import (
 // Node(s) of the trie.
 type Handle struct {
 	// LogicalId is the "functional" Id of the entity.
-	LogicalId   btree.UUID
+	LogicalId btree.UUID
 	// PhysicalIdA is one of the two physical Ids supported.
 	PhysicalIdA btree.UUID
 	// PhysicalIdB is the "other" physical Id supported.
@@ -41,6 +41,7 @@ func (h Handle) GetActiveId() btree.UUID {
 	}
 	return h.PhysicalIdA
 }
+
 // Returns the inactive phys. Id.
 func (h Handle) GetInActiveId() btree.UUID {
 	if h.IsActiveIdB {
@@ -77,7 +78,7 @@ func (h *Handle) IsExpiredInactive() bool {
 	// node update Id(inactive Id) is really beyond and over it(safe).
 	const maxDuration = 7
 	return h.WorkInProgressTimestamp > 0 &&
-		(time.Now().UnixMilli() - h.WorkInProgressTimestamp) > int64(time.Duration(maxDuration) * time.Hour)
+		(time.Now().UnixMilli()-h.WorkInProgressTimestamp) > int64(time.Duration(maxDuration)*time.Hour)
 }
 
 // Returns true if id is either physical Id A or B, false otherwise.

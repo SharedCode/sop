@@ -7,7 +7,7 @@ import (
 )
 
 // TODO: when need arise, move these interfaces to a common package, but keep them for now
-// in package where they are implemented, 'just because we wanted to keep changes minimal, 
+// in package where they are implemented, 'just because we wanted to keep changes minimal,
 // and driven by needs.
 
 // StoreRepository interface specifies the store repository. Stores are readonly after creation, thus, no update method.

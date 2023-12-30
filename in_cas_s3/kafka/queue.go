@@ -13,5 +13,4 @@ type Queue[T any] interface {
 	Dequeue(ctx context.Context, count int) ([]T, error)
 	// Enqueue add elements to the queue.
 	Enqueue(ctx context.Context, items ...T) error
-	
 }

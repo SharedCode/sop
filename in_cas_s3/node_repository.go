@@ -160,7 +160,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree
 	for i := range nodes {
 		nids = append(nids, nodes[i].Id)
 	}
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...);
+	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
 	if err != nil {
 		return false, err
 	}
@@ -215,7 +215,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []*btree
 	for i := range nodes {
 		nids = append(nids, nodes[i].Id)
 	}
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...);
+	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
 	if err != nil {
 		return false, err
 	}
@@ -332,7 +332,7 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []*bt
 	for i := range nodes {
 		nids = append(nids, nodes[i].Id)
 	}
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...);
+	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +343,7 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []*bt
 		handles[i].Timestamp = Now()
 	}
 	// All or nothing batch update.
-	return  handles, nil //nr.transaction.virtualIdRegistry.Update(ctx, handles...)
+	return handles, nil //nr.transaction.virtualIdRegistry.Update(ctx, handles...)
 }
 
 // Update upsert time of a given set of nodes.
@@ -352,7 +352,7 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []*btree.Node[in
 	for i := range nodes {
 		nids = append(nids, nodes[i].Id)
 	}
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...);
+	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
 	if err != nil {
 		return nil, err
 	}
@@ -362,5 +362,5 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []*btree.Node[in
 		handles[i].WorkInProgressTimestamp = 0
 	}
 	// All or nothing batch update.
-	return handles, nil	// nr.transaction.virtualIdRegistry.Update(ctx, handles...)
+	return handles, nil // nr.transaction.virtualIdRegistry.Update(ctx, handles...)
 }

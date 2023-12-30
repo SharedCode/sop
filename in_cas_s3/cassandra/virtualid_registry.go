@@ -19,7 +19,7 @@ type VirtualIdRegistry interface {
 	Remove(context.Context, ...btree.UUID) error
 }
 
-type vid_registry struct{
+type vid_registry struct {
 	lookup map[btree.UUID]sop.Handle
 }
 
@@ -46,7 +46,7 @@ func (v *vid_registry) Update(ctx context.Context, handles ...sop.Handle) error 
 func (v *vid_registry) Get(ctx context.Context, logicalIds ...btree.UUID) ([]sop.Handle, error) {
 	handles := make([]sop.Handle, 0, len(logicalIds))
 	for _, lid := range logicalIds {
-		h,_ := v.lookup[lid]
+		h, _ := v.lookup[lid]
 		handles = append(handles, h)
 	}
 	return handles, nil

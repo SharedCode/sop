@@ -7,7 +7,8 @@ import (
 )
 
 type ItemType int
-const(
+
+const (
 	Unknown = iota
 	BtreeNode
 	ItemValue
@@ -15,10 +16,10 @@ const(
 
 type DeletedItem struct {
 	ItemType ItemType
-	ItemId btree.UUID
+	ItemId   btree.UUID
 }
 
-type deletedItemsQueue struct{
+type deletedItemsQueue struct {
 	deletedItems []DeletedItem
 }
 

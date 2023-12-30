@@ -1,6 +1,7 @@
 package in_cas_s3
 
 type commitFunctions int
+
 // Transaction commit functions.
 const (
 	unknown = iota

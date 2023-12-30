@@ -26,7 +26,6 @@ type Transaction interface {
 	Rollback(ctx context.Context) error
 	// Returns true if transaction has begun, false otherwise.
 	HasBegun() bool
-
 }
 
 type transaction struct {
@@ -34,18 +33,18 @@ type transaction struct {
 	btreesBackend []StoreInterface[interface{}, interface{}]
 	btrees        []*btree.Btree[interface{}, interface{}]
 	// Needed by NodeRepository for Node data merging to the backend storage systems.
-	nodeBlobStore      s3.BlobStore
-	redisCache     redis.Cache
-	storeRepository    cas.StoreRepository
+	nodeBlobStore   s3.BlobStore
+	redisCache      redis.Cache
+	storeRepository cas.StoreRepository
 	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
 	virtualIdRegistry cas.VirtualIdRegistry
 	deletedItemsQueue q.Queue[q.DeletedItem]
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
-	forWriting        bool
-	hasBegun          bool
-	done              bool
-	maxTime           time.Duration
-	logger *transactionLog
+	forWriting bool
+	hasBegun   bool
+	done       bool
+	maxTime    time.Duration
+	logger     *transactionLog
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
@@ -63,12 +62,12 @@ func NewTransaction(forWriting bool, maxTime time.Duration) Transaction {
 		forWriting: forWriting,
 		maxTime:    maxTime,
 		// TODO: Allow caller to supply Redis & blob store settings.
-		storeRepository:    cas.NewStoreRepository(),
-		virtualIdRegistry:  cas.NewVirtualIdRegistry(),
-		redisCache: redis.NewClient(redis.DefaultOptions()),
-		nodeBlobStore:  s3.NewBlobStore(),
+		storeRepository:   cas.NewStoreRepository(),
+		virtualIdRegistry: cas.NewVirtualIdRegistry(),
+		redisCache:        redis.NewClient(redis.DefaultOptions()),
+		nodeBlobStore:     s3.NewBlobStore(),
 		deletedItemsQueue: q.NewDeletedItemsQueue(),
-		logger: newTransactionLogger(),
+		logger:            newTransactionLogger(),
 	}
 }
 
@@ -167,7 +166,7 @@ func (t *transaction) commit(ctx context.Context) error {
 		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
 		// has to do merging & conflict resolution. Add is simple upsert.
 		updatedNodes, removedNodes, addedNodes, fetchedNodes = t.classifyModifiedNodes()
-	
+
 		// Check for conflict on fetched nodes.
 		ok, err := t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes)
 		if err != nil {
@@ -216,7 +215,7 @@ func (t *transaction) commit(ctx context.Context) error {
 		return err
 	}
 
-	// Switch to active "state" the (inactive) updated Nodes so they will 
+	// Switch to active "state" the (inactive) updated Nodes so they will
 	// get started to be "seen" in such state on succeeding fetch.
 	uh, err := t.btreesBackend[0].backendNodeRepository.activateInactiveNodes(ctx, updatedNodes)
 	if err != nil {
@@ -387,7 +386,7 @@ func (t *transaction) enqueueRemovedIds(ctx context.Context, nodes []*btree.Node
 	for i := range nodes {
 		deletedItems = append(deletedItems, kafka.DeletedItem{
 			ItemType: kafka.BtreeNode,
-			ItemId: nodes[i].Id,
+			ItemId:   nodes[i].Id,
 		})
 	}
 	// Enqueue to Kafka should not fail, but in any case, log as Error to log file as last resort.
@@ -413,7 +412,7 @@ func (t *transaction) rollback(ctx context.Context) error {
 	// if t.logger.committedState > commitRemovedNodes {
 	// }
 	// if t.logger.committedState > commitUpdatedNodes {
-		
+
 	// }
 	// if t.logger.committedState > lockTrackedItems {
 	// 	t.unlockTrackedItems(ctx)
