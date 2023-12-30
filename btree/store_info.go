@@ -47,3 +47,10 @@ func (s StoreInfo) IsEmpty() bool {
 	var zero StoreInfo
 	return s == zero
 }
+
+// Returns true if another store is compatible with this one spec wise.
+func (s StoreInfo) IsCompatible(b StoreInfo) bool {
+	return s.SlotLength == b.SlotLength &&
+		s.IsUnique == b.IsUnique &&
+		s.IsValueDataInNodeSegment == b.IsValueDataInNodeSegment
+}

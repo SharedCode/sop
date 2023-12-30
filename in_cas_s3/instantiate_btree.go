@@ -35,13 +35,17 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 		return nil, err
 	}
 	ns := btree.NewStoreInfo(name, slotLength, isUnique, true)
-	// Check if store exists and is of a different specification.
-	if !s.IsEmpty() &&
-		(s.SlotLength != slotLength || s.IsUnique != isUnique || s.IsValueDataInNodeSegment != isValueDataInNodeSegment) {
-		return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it.", name)
+	if s.IsEmpty() {
+		// Add to store repository if store not found.
+		if err := trans.storeRepository.Add(ctx, *ns); err != nil {
+			return nil, err
+		}
+		s = *ns
 	}
-	if err := trans.storeRepository.Add(ctx, *ns); err != nil {
-		return nil, err
+	// Check if store retrieved is empty or of non-compatible specification.
+	if !ns.IsCompatible(s) {
+		// Recommend to use the OpenBtree function to open it.
+		return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it.", name)
 	}
 	return newBtree[TK, TV](ns, trans)
 }
