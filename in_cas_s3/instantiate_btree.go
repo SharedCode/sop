@@ -9,7 +9,7 @@ import (
 
 // OpenBtree will open an existing B-Tree instance it for use in a transaction.
 func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
-	var t2 interface{} = t
+	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
 	s, err := trans.storeRepository.Get(ctx, name)
 	if s.IsEmpty() || err != nil {
@@ -26,9 +26,9 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
 	isValueDataInNodeSegment bool, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 
-	var t2 interface{} = t
+	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
-
+	
 	s, err := trans.storeRepository.Get(ctx, name)
 	if !s.IsEmpty() || err != nil {
 		if !s.IsEmpty() {

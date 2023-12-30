@@ -16,33 +16,6 @@ type StoreInterface[TK btree.Comparable, TV any] struct {
 
 // TODO: uncomment and reuse anything below as needed. (initial design artifacts)
 
-// type TransactionRepository interface {
-// 	Get(transactionId btree.UUID) ([]TransactionEntry, error)
-// 	GetByStore(transactionId btree.UUID, storeName string) ([]TransactionEntry, error)
-// 	Add([]TransactionEntry) error
-// 	MarkDone([]TransactionEntry) error
-// }
-
-// // TransactionEntry contain info about each Store Item modified within a Transaction.
-// // NOTE: newly created Stores themselves don't get tracked within the Transaction Entry table.
-// // Their items do. New Stores are cached in-memory and get saved (conflict resolved)
-// // during Transaction Commit.
-// type TransactionEntry struct {
-// 	EntityLogicalId btree.UUID
-// 	EntityType      EntityType
-// 	Sequence        int
-// 	Action          TransactionActionType
-// 	IsDeleted       bool
-// }
-
-// type TransactionActionType uint
-// const (
-// 	Get = iota
-// 	Add
-// 	Update
-// 	Remove
-// )
-
 // type EntityType uint
 // const (
 // 	// BTreeNode is the entity type of the B-Tree Node.
