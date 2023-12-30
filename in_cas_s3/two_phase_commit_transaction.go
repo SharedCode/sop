@@ -43,7 +43,7 @@ type transaction struct {
 	deletedItemsQueue q.Queue[q.DeletedItem]
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
 	forWriting bool
-	// -1 = intial state, 0 = began, 1 = phase 1 commit done, 2 = phase 2 commit done.
+	// -1 = intial state, 0 = began, 1 = phase 1 commit done, 2 = phase 2 commit or rollback done.
 	phaseDone int
 	maxTime   time.Duration
 	logger    *transactionLog
@@ -436,14 +436,10 @@ func (t *transaction) rollback(ctx context.Context) error {
 		return nil
 	}
 
-	// TODO:
-
 	// updatedNodes, removedNodes, addedNodes, fetchedNodes := t.classifyModifiedNodes()
 
 	// if t.logger.committedState == finalizeCommit {
 	// 	// t.storeRepository.
-	// }
-	// if t.logger.committedState > commitStoreRepositoryChanges {
 	// }
 	// if t.logger.committedState > commitAddedNodes {
 	// }
@@ -455,5 +451,6 @@ func (t *transaction) rollback(ctx context.Context) error {
 	// if t.logger.committedState > lockTrackedItems {
 	// 	t.unlockTrackedItems(ctx)
 	// }
+
 	return nil
 }

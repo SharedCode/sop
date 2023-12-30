@@ -37,7 +37,15 @@ func NewTransaction(forWriting bool, maxTime time.Duration) Transaction {
 
 // Begin the transaction.
 func (t *singlePhaseTransaction) Begin() error {
-	return t.sopPhaseCommitTransaction.Begin()
+	if err := t.sopPhaseCommitTransaction.Begin(); err != nil {
+		return err
+	}
+	for _, t := range t.otherTransactions {
+		if err := t.Begin(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Commit the transaction. If multiple phase 1 commit erors are returned,

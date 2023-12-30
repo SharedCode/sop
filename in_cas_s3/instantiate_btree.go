@@ -22,24 +22,28 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 }
 
 // NewBtree will create a new B-Tree instance with data persisted in backend store,
-// e.g. - AWS storage services.
+// e.g. - AWS storage services. The created B-Tree is a permanent action, it is outside
+// of the transaction, thus, even if the passed in transaction rolls back, the created tree sticks.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
 	isValueDataInNodeSegment bool, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
-	
+
 	s, err := trans.storeRepository.Get(ctx, name)
-	if !s.IsEmpty() || err != nil {
-		if !s.IsEmpty() {
-			return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it.", name)
-		}
+	if err != nil {
 		return nil, err
 	}
-	if err := trans.storeRepository.Add(ctx, s); err != nil {
+	ns := btree.NewStoreInfo(name, slotLength, isUnique, true)
+	// Check if store exists and is of a different specification.
+	if !s.IsEmpty() &&
+		(s.SlotLength != slotLength || s.IsUnique != isUnique || s.IsValueDataInNodeSegment != isValueDataInNodeSegment) {
+		return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it.", name)
+	}
+	if err := trans.storeRepository.Add(ctx, *ns); err != nil {
 		return nil, err
 	}
-	return newBtree[TK, TV](btree.NewStoreInfo(name, slotLength, isUnique, true), trans)
+	return newBtree[TK, TV](ns, trans)
 }
 
 func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transaction) (btree.BtreeInterface[TK, TV], error) {
