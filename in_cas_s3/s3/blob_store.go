@@ -3,15 +3,9 @@ package s3
 import (
 	"context"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 )
-
-// KeyValuePair is a tuple, 'used in Blob Store to allow caller to specify a 
-// different Id(or key) for a given blob entry.
-type KeyValuePair[TK any, TV any] struct {
-	Key TK
-	Value TV
-}
 
 // BlobStore specifies the backend blob store interface used for storing & managing data blobs.
 // Blobs are data that can vary in size and is big enough that they can't be stored in database
@@ -19,8 +13,8 @@ type KeyValuePair[TK any, TV any] struct {
 // like AWS S3, or file system, etc...
 type BlobStore interface {
 	Get(ctx context.Context, blobId btree.UUID, target *btree.Node[interface{}, interface{}]) error
-	Add(ctx context.Context, blobs ...KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]) error
-	Update(ctx context.Context, blobs ...KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]) error
+	Add(ctx context.Context, blobs ...sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]) error
+	Update(ctx context.Context, blobs ...sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]) error
 	Remove(ctx context.Context, blobsIds ...btree.UUID) error
 }
 

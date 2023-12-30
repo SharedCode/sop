@@ -7,7 +7,6 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_cas_s3/redis"
-	"github.com/SharedCode/sop/in_cas_s3/s3"
 )
 
 type cacheNode struct {
@@ -165,7 +164,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree
 	if err != nil {
 		return false, err
 	}
-	blobs := make([]s3.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(nodes))
+	blobs := make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(nodes))
 	for i, h := range handles {
 		// Node with such Id is marked deleted or had been updated since reading it.
 		if h.IsDeleted || h.Timestamp != nodes[i].UpsertTime {
@@ -247,7 +246,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []*btree.N
 	*/
 
 	handles := make([]sop.Handle, len(nodes))
-	blobs := make([]s3.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(nodes))
+	blobs := make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(nodes))
 	for i := range nodes {
 		// Add node to blob store.
 		h := sop.NewHandle(nodes[i].Id)

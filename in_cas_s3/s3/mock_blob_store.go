@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 )
 
@@ -24,7 +25,7 @@ func (b *mockBlobStore) Get(ctx context.Context, blobId btree.UUID, target *btre
 	return nil
 }
 
-func (b *mockBlobStore) Add(ctx context.Context, blobs ...KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]) error {
+func (b *mockBlobStore) Add(ctx context.Context, blobs ...sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]) error {
 	for _, blob := range blobs {
 		ba, err := json.Marshal(blob.Value)
 		if err != nil {
@@ -35,7 +36,7 @@ func (b *mockBlobStore) Add(ctx context.Context, blobs ...KeyValuePair[btree.UUI
 	return nil
 }
 
-func (b *mockBlobStore) Update(ctx context.Context, blobs ...KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]) error {
+func (b *mockBlobStore) Update(ctx context.Context, blobs ...sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]) error {
 	for _, blob := range blobs {
 		ba, err := json.Marshal(blob.Value)
 		if err != nil {
