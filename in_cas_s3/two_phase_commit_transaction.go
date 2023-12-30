@@ -274,9 +274,13 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	for i := range t.updatedNodeHandles {
 		// Since we've flipped the inactive to active, the new inactive Id is to be deleted(unused).
 		deletedIds[i] = t.updatedNodeHandles[i].GetInActiveId()
+		t.updatedNodeHandles[i].ClearInactiveId()
+	}
+	if err := t.virtualIdRegistry.Update(ctx, t.updatedNodeHandles...); err != nil {
+		log.Warn(err.Error())
 	}
 	offset := len(t.updatedNodeHandles)
-	for i := range t.updatedNodeHandles {
+	for i := range t.removedNodeHandles {
 		// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
 		deletedIds[offset+i] = t.removedNodeHandles[i].GetActiveId()
 	}
