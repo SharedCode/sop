@@ -253,6 +253,11 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
+	t.logger.log(commitStoreInfo)
+	if err := t.commitStores(ctx); err != nil {
+		return err
+	}
+
 	// Switch to active "state" the (inactive) updated Nodes so they will
 	// get started to be "seen" in such state on succeeding fetch.
 	uh, err := t.btreesBackend[0].backendNodeRepository.activateInactiveNodes(ctx, updatedNodes)
@@ -431,6 +436,15 @@ func (t *transaction) classifyModifiedNodes() ([]*btree.Node[interface{}, interf
 	return updatedNodes, removedNodes, addedNodes, fetchedNodes
 }
 
+func (t *transaction) commitStores(ctx context.Context) error {
+	stores := make([]btree.StoreInfo, len(t.btrees))
+	for i := range t.btrees {
+		store := t.btrees[i].StoreInfo
+		stores[i] = *store
+	}
+	return t.storeRepository.Update(ctx, stores...)
+}
+
 func (t *transaction) lockTrackedItems(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
 		if err := s.backendItemActionTracker.lock(ctx, t.redisCache, t.maxTime); err != nil {
@@ -474,6 +488,9 @@ func (t *transaction) rollback(ctx context.Context) error {
 
 	var lastErr error
 	if t.logger.committedState == finalizeCommit {
+		// do nothing as the function failed, nothing to undo.
+	}
+	if t.logger.committedState > commitStoreInfo {
 		// do nothing as the function failed, nothing to undo.
 	}
 	if t.logger.committedState > commitAddedNodes {

@@ -9,6 +9,7 @@ const (
 	commitUpdatedNodes
 	commitRemovedNodes
 	commitAddedNodes
+	commitStoreInfo
 	finalizeCommit
 	unlockTrackedItems
 )
