@@ -17,6 +17,9 @@ type StoreRepository interface {
 	// Add store info. Add all or nothing.
 	Add(context.Context, ...btree.StoreInfo) error
 	// Update store info. Update all or nothing.
+	// Update should also merge the Count of items between the incoming store info
+	// and the target store info on the backend, as they may differ. It should use
+	// StoreInfo.CountDelta to reconcile the two.
 	Update(context.Context, ...btree.StoreInfo) error
 	// Remove store info with name. Remove all or nothing.
 	Remove(context.Context, ...string) error

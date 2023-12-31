@@ -357,12 +357,12 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 		t.btreesBackend[b3Index].backendItemActionTracker.items = make(map[btree.UUID]cacheItem)
 		t.btreesBackend[b3Index].backendNodeRepository.nodeLocalCache = make(map[btree.UUID]cacheNode)
 		// Reset StoreInfo of B-Tree in prep to replay the "actions".
-		if storeInfo, err := t.storeRepository.Get(ctx, b3.StoreInfo.Name); err != nil {
+		storeInfo, err := t.storeRepository.Get(ctx, b3.StoreInfo.Name)
+		if err != nil {
 			return err
-		} else {
-			b3.StoreInfo.Count = storeInfo[0].Count
-			b3.StoreInfo.RootNodeId = storeInfo[0].RootNodeId
 		}
+		b3.StoreInfo.Count = storeInfo[0].Count
+		b3.StoreInfo.RootNodeId = storeInfo[0].RootNodeId
 
 		for itemId, ci := range b3ModifiedItems {
 			if ci.Action == addAction {
@@ -440,6 +440,8 @@ func (t *transaction) commitStores(ctx context.Context) error {
 	stores := make([]btree.StoreInfo, len(t.btrees))
 	for i := range t.btrees {
 		store := t.btrees[i].StoreInfo
+		// Compute the count delta so Store Repository can reconcile.
+		store.CountDelta = store.Count - t.btreesBackend[i].backendNodeRepository.count
 		stores[i] = *store
 	}
 	return t.storeRepository.Update(ctx, stores...)

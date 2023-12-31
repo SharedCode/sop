@@ -37,6 +37,9 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 	ns := btree.NewStoreInfo(name, slotLength, isUnique, true)
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
+		if ns.RootNodeId.IsNil() {
+			ns.RootNodeId = btree.NewUUID()
+		}
 		if err := trans.storeRepository.Add(ctx, *ns); err != nil {
 			return nil, err
 		}
@@ -60,6 +63,7 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 
 	// Assign the node repository frontend and backend bits.
 	nrw := newNodeRepository[interface{}, interface{}](trans)
+	nrw.realNodeRepository.count = s.Count
 	si.NodeRepository = nrw
 	si.backendNodeRepository = nrw.realNodeRepository
 

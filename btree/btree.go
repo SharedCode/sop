@@ -436,11 +436,14 @@ func (btree *Btree[TK, TV]) getCurrentNode(ctx context.Context) (*Node[TK, TV], 
 }
 
 func (btree *Btree[TK, TV]) getRootNode(ctx context.Context) (*Node[TK, TV], error) {
-	if btree.StoreInfo.RootNodeId.IsNil() {
+	if btree.StoreInfo.RootNodeId.IsNil() || btree.StoreInfo.Count == 0 {
 		// Create new Root Node if nil, implied new btree.
 		var root = newNode[TK, TV](btree.getSlotLength())
-		root.newId(NilUUID)
-		btree.StoreInfo.RootNodeId = root.Id
+		root.Id = btree.StoreInfo.RootNodeId
+		if root.Id.IsNil() {
+			root.newId(NilUUID)
+			btree.StoreInfo.RootNodeId = root.Id
+		}
 		return root, nil
 	}
 	root, err := btree.getNode(ctx, btree.StoreInfo.RootNodeId)

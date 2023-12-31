@@ -14,6 +14,8 @@ type StoreInfo struct {
 	RootNodeId UUID
 	// Total count of items stored.
 	Count int64
+	// Used internally by SOP. Should be set to 0 when persisted in the backend.
+	CountDelta int64
 	// UpsertTime in milliseconds.
 	UpsertTime int64
 	// Is marked deleted or not.

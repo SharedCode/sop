@@ -55,6 +55,7 @@ type nodeRepository struct {
 	transaction *transaction
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
 	nodeLocalCache map[btree.UUID]cacheNode
+	count int64
 }
 
 // NewNodeRepository instantiates a NodeRepository.
