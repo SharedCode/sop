@@ -11,14 +11,14 @@ import (
 func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
-	s, err := trans.storeRepository.Get(ctx, name)
-	if s.IsEmpty() || err != nil {
-		if s.IsEmpty() {
+	stores, err := trans.storeRepository.Get(ctx, name)
+	if len(stores) == 0 || stores[0].IsEmpty() || err != nil {
+		if err == nil {
 			return nil, fmt.Errorf("B-Tree '%s' does not exist, please use NewBtree to create an instance of it.", name)
 		}
 		return nil, err
 	}
-	return newBtree[TK, TV](&s, trans)
+	return newBtree[TK, TV](&stores[0], trans)
 }
 
 // NewBtree will create a new B-Tree instance with data persisted in backend store,
@@ -30,20 +30,20 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
 
-	s, err := trans.storeRepository.Get(ctx, name)
+	stores, err := trans.storeRepository.Get(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	ns := btree.NewStoreInfo(name, slotLength, isUnique, true)
-	if s.IsEmpty() {
+	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if err := trans.storeRepository.Add(ctx, *ns); err != nil {
 			return nil, err
 		}
-		s = *ns
+		stores = []btree.StoreInfo{*ns}
 	}
 	// Check if store retrieved is empty or of non-compatible specification.
-	if !ns.IsCompatible(s) {
+	if !ns.IsCompatible(stores[0]) {
 		// Recommend to use the OpenBtree function to open it.
 		return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it.", name)
 	}

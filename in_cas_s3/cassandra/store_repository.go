@@ -13,7 +13,7 @@ import (
 // StoreRepository interface specifies the store repository. Stores are readonly after creation, thus, no update method.
 type StoreRepository interface {
 	// Fetch store info with name.
-	Get(context.Context, string) (btree.StoreInfo, error)
+	Get(context.Context, ...string) ([]btree.StoreInfo, error)
 	// Add store info. Add all or nothing.
 	Add(context.Context, ...btree.StoreInfo) error
 	// Update store info. Update all or nothing.
@@ -49,9 +49,13 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	return nil
 }
 
-func (sr *storeRepository) Get(ctx context.Context, name string) (btree.StoreInfo, error) {
-	v, _ := sr.lookup[name]
-	return v, nil
+func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.StoreInfo, error) {
+	stores := make([]btree.StoreInfo, len(names))
+	for i, name := range names {
+		v, _ := sr.lookup[name]
+		stores[i] = v
+	}
+	return stores, nil
 }
 
 func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {

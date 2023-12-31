@@ -360,8 +360,8 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 		if storeInfo, err := t.storeRepository.Get(ctx, b3.StoreInfo.Name); err != nil {
 			return err
 		} else {
-			b3.StoreInfo.Count = storeInfo.Count
-			b3.StoreInfo.RootNodeId = storeInfo.RootNodeId
+			b3.StoreInfo.Count = storeInfo[0].Count
+			b3.StoreInfo.RootNodeId = storeInfo[0].RootNodeId
 		}
 
 		for itemId, ci := range b3ModifiedItems {
