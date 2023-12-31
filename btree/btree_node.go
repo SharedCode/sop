@@ -19,7 +19,7 @@ type Item[TK Comparable, TV any] struct {
 	// otherwise it should point to the actual data and persisted in B-Tree Node segment together with the Key.
 	Value *TV
 	// Upsert time in milliseconds, is also used for conflict resolution among (in-flight) transactions.
-	UpsertTime      int64
+	Timestamp       int64
 	valueNeedsFetch bool
 }
 
@@ -37,7 +37,7 @@ type Node[TK Comparable, TV any] struct {
 	ParentId    UUID
 	Slots       []*Item[TK, TV]
 	Count       int
-	UpsertTime  int64
+	Timestamp   int64
 	indexOfNode int
 	childrenIds []UUID
 }

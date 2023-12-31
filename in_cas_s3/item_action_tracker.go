@@ -76,10 +76,10 @@ func (t *itemActionTracker) Add(item *btree.Item[interface{}, interface{}]) {
 			Action: addAction,
 		},
 		item:           item,
-		upsertTimeInDB: item.UpsertTime,
+		upsertTimeInDB: item.Timestamp,
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
-	item.UpsertTime = Now()
+	item.Timestamp = Now()
 }
 
 func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
@@ -92,10 +92,10 @@ func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
 			Action: updateAction,
 		},
 		item:           item,
-		upsertTimeInDB: item.UpsertTime,
+		upsertTimeInDB: item.Timestamp,
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
-	item.UpsertTime = Now()
+	item.Timestamp = Now()
 }
 
 func (t *itemActionTracker) Remove(item *btree.Item[interface{}, interface{}]) {

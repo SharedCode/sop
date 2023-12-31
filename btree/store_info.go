@@ -8,16 +8,20 @@ type StoreInfo struct {
 	SlotLength int
 	// IsUnique tells whether key/value pair (items) of this tree should be unique on key.
 	IsUnique  bool
-	KeyInfo   string
-	ValueInfo string
+	// (optional) Description of the Store.
+	Description string
+	// Virtual Id registry table name.
+	VirtualIdRegistryTableName string
+	// Blob Store path, e.g. bucket path/name, folder path.
+	BlobPath string
 	// RootNodeId is the root node's Id.
 	RootNodeId UUID
 	// Total count of items stored.
 	Count int64
 	// Used internally by SOP. Should be ignored when persisted in the backend.
 	CountDelta int64 `json:"-"`
-	// UpsertTime in milliseconds.
-	UpsertTime int64
+	// Timestamp in milliseconds.
+	Timestamp int64
 	// Is marked deleted or not.
 	IsDeleted bool
 	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's data segment.

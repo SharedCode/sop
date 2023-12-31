@@ -114,7 +114,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 		}
 		return target, nil
 	}
-	target.UpsertTime = h[0].Timestamp
+	target.Timestamp = h[0].Timestamp
 	nr.nodeLocalCache[logicalId] = cacheNode{
 		action: getAction,
 		node:   target,
@@ -172,7 +172,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree
 	blobs := make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(nodes))
 	for i := range handles {
 		// Node with such Id is marked deleted or had been updated since reading it.
-		if handles[i].IsDeleted || handles[i].Timestamp != nodes[i].UpsertTime {
+		if handles[i].IsDeleted || handles[i].Timestamp != nodes[i].Timestamp {
 			return false, nil
 		}
 		// Create new phys. UUID and auto-assign it to the available phys. Id(A or B) "Id slot".
@@ -227,7 +227,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []*btree
 	for i := range handles {
 		// Node with such Id is already marked deleted, is in-flight change or had been updated since reading it,
 		// fail it for "refetch" & retry.
-		if handles[i].IsDeleted || handles[i].IsAandBinUse() || handles[i].Timestamp != nodes[i].UpsertTime {
+		if handles[i].IsDeleted || handles[i].IsAandBinUse() || handles[i].Timestamp != nodes[i].Timestamp {
 			return false, nil
 		}
 		// Mark Id as deleted.
@@ -287,7 +287,7 @@ func (nr *nodeRepository) areFetchedNodesIntact(ctx context.Context, nodes []*bt
 	}
 	for i := range handles {
 		// Node with Id had been updated(or deleted) since reading it.
-		if handles[i].Timestamp != nodes[i].UpsertTime {
+		if handles[i].Timestamp != nodes[i].Timestamp {
 			return false, nil
 		}
 	}
