@@ -218,6 +218,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []*btree
 	if err != nil {
 		return false, err
 	}
+	rightNow := Now()
 	for i := range handles {
 		// Node with such Id is already marked deleted, is in-flight change or had been updated since reading it,
 		// fail it for "refetch" & retry.
@@ -226,7 +227,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []*btree
 		}
 		// Mark Id as deleted.
 		handles[i].IsDeleted = true
-		handles[i].WorkInProgressTimestamp = Now()
+		handles[i].WorkInProgressTimestamp = rightNow
 	}
 	// Persist the handles changes.
 	if err := nr.transaction.virtualIdRegistry.Update(ctx, handles...); err != nil {
@@ -245,11 +246,12 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []*btree.N
 	*/
 	handles := make([]sop.Handle, len(nodes))
 	blobs := make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(nodes))
+	rightNow := Now()
 	for i := range nodes {
 		// Add node to blob store.
 		h := sop.NewHandle(nodes[i].Id)
 		// Update upsert time.
-		h.Timestamp = Now()
+		h.Timestamp = rightNow
 		blobs[i].Key = nodes[i].Id
 		blobs[i].Value = nodes[i]
 		handles[i] = h
@@ -368,15 +370,16 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []*bt
 	if err != nil {
 		return nil, err
 	}
+	rightNow := Now()
 	for i := range nodes {
 		// Set the inactive as active Id.
 		handles[i].FlipActiveId()
 		// Update upsert time, we are finalizing the commit for the node.
-		handles[i].Timestamp = Now()
+		handles[i].Timestamp = rightNow
 		// Set work in progress timestamp to now as safety. After flipping inactive to active,
 		// the previously active Id if not "cleaned up" then this timestamp will allow future
 		// transactions to clean it up(self healing).
-		handles[i].WorkInProgressTimestamp = Now()
+		handles[i].WorkInProgressTimestamp = rightNow
 	}
 	// All or nothing batch update.
 	return handles, nil
@@ -392,9 +395,10 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []*btree.Node[in
 	if err != nil {
 		return nil, err
 	}
+	rightNow := Now()
 	for i := range handles {
 		// Update upsert time, we are finalizing the commit for the node.
-		handles[i].Timestamp = Now()
+		handles[i].Timestamp = rightNow
 		handles[i].WorkInProgressTimestamp = 0
 	}
 	// All or nothing batch update.
