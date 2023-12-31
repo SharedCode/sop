@@ -158,8 +158,49 @@ func (nr *nodeRepository) remove(nodeId btree.UUID) {
 	// Code should not reach this point, as B-tree will not issue a remove if node is not cached locally.
 }
 
+func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) (bool, error) {
+	if len(nodes) == 0 {
+		return true, nil
+	}
+	nids := make([]btree.UUID, len(nodes))
+	for i := range nodes {
+		nids[i] = nodes[i].Id
+	}
+	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
+	if err != nil {
+		return false, err
+	}
+	blobs := make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(nodes))
+	for i := range handles {
+		// Check if a non-empty root node was found, fail to cause "re-sync & merge".
+		if !handles[i].LogicalId.IsNil() {
+			return false, nil
+		}
+		handles[i] = sop.NewHandle(nids[i])
+		blobs[i].Key = handles[i].GetActiveId()
+		blobs[i].Value = nodes[i]
+	}
+	// Persist the nodes blobs to blob store and redis cache.
+	if err := nr.transaction.nodeBlobStore.Add(ctx, blobs...); err != nil {
+		return false, err
+	}
+	for i := range nodes {
+		if err := nr.transaction.redisCache.SetStruct(ctx, handles[i].GetActiveId().ToString(), nodes[i], -1); err != nil {
+			return false, err
+		}
+	}
+	// Add virtual Ids to registry.
+	if err := nr.transaction.virtualIdRegistry.Add(ctx, handles...); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // Save to blob store, save node Id to the alternate(inactive) physical Id(see virtual Id).
 func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) (bool, error) {
+	if len(nodes) == 0 {
+		return true, nil
+	}
 	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
 	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
@@ -215,6 +256,9 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree
 // Add the removed Node(s) and their Item(s) Data(if not in node segment) to the recycler
 // so they can get serviced for physical delete on schedule in the future.
 func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) (bool, error) {
+	if len(nodes) == 0 {
+		return true, nil
+	}
 	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
 		nids[i] = nodes[i].Id
@@ -249,6 +293,9 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []*btree.N
 	   - (on commit) On update, 'will save and register the node phys Id to the "inactive Id" part of the virtual Id.
 	   - On finalization of commit, inactive will be switched to active (node) Ids.
 	*/
+	if len(nodes) == 0 {
+		return nil
+	}
 	handles := make([]sop.Handle, len(nodes))
 	blobs := make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(nodes))
 	rightNow := Now()
@@ -265,7 +312,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []*btree.N
 			return err
 		}
 	}
-	// Register node Id as logical Id(handle).
+	// Register virtual Ids(a.k.a. handles).
 	if err := nr.transaction.virtualIdRegistry.Add(ctx, handles...); err != nil {
 		return err
 	}
@@ -277,6 +324,9 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []*btree.N
 }
 
 func (nr *nodeRepository) areFetchedNodesIntact(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) (bool, error) {
+	if len(nodes) == 0 {
+		return true, nil
+	}
 	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
 		nids[i] = nodes[i].Id
@@ -294,7 +344,31 @@ func (nr *nodeRepository) areFetchedNodesIntact(ctx context.Context, nodes []*bt
 	return true, nil
 }
 
+func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) error {
+	if len(nodes) == 0 {
+		return nil
+	}
+	nids := make([]btree.UUID, len(nodes))
+	for i := range nodes {
+		nids[i] = nodes[i].Id
+	}
+	// Undo on blob store & redis.
+	if err := nr.transaction.nodeBlobStore.Remove(ctx, nids...); err != nil {
+		return err
+	}
+	for i := range nodes {
+		if err := nr.transaction.redisCache.Delete(ctx, nids[i].ToString()); err != nil {
+			return err
+		}
+	}
+	// Nothing to undo in registry since that is all or nothing and done as last step.
+	return nil
+}
+
 func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) error {
+	if len(nodes) == 0 {
+		return nil
+	}
 	ids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
 		ids[i] = nodes[i].Id
@@ -317,6 +391,9 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []*btree
 }
 
 func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) error {
+	if len(nodes) == 0 {
+		return nil
+	}
 	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
 		nids[i] = nodes[i].Id
@@ -347,6 +424,9 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []*btr
 }
 
 func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) error {
+	if len(nodes) == 0 {
+		return nil
+	}
 	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
 		nids[i] = nodes[i].Id
@@ -367,6 +447,9 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []*btr
 
 // Set to active the inactive nodes. This is the last persistence step in transaction commit.
 func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) ([]sop.Handle, error) {
+	if len(nodes) == 0 {
+		return nil, nil
+	}
 	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
 		nids[i] = nodes[i].Id
@@ -392,6 +475,9 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []*bt
 
 // Update upsert time of a given set of nodes.
 func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []*btree.Node[interface{}, interface{}]) ([]sop.Handle, error) {
+	if len(nodes) == 0 {
+		return nil, nil
+	}
 	nids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
 		nids[i] = nodes[i].Id

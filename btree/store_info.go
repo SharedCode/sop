@@ -7,7 +7,7 @@ type StoreInfo struct {
 	// Count of items that can be stored on a given node.
 	SlotLength int
 	// IsUnique tells whether key/value pair (items) of this tree should be unique on key.
-	IsUnique  bool
+	IsUnique bool
 	// (optional) Description of the Store.
 	Description string
 	// Virtual Id registry table name.

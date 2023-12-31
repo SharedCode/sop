@@ -38,6 +38,11 @@ func TestBtree_FunctionalityTests(t *testing.T) {
 
 	const five001Value = "I am the value with 5001 key."
 
+	// Check get on empty tree, returns false always as is empty.
+	if b3.FindOne(1, false) {
+		t.Errorf("FindOne(1) failed, got true, want false.")
+	}
+
 	// Populate with some values.
 	b3.Add(5000, "I am the value with 5000 key.")
 	b3.Add(5001, five001Value)

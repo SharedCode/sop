@@ -6,6 +6,7 @@ type commitFunctions int
 const (
 	unknown = iota
 	lockTrackedItems
+	commitNewRootNodes
 	commitUpdatedNodes
 	commitRemovedNodes
 	commitAddedNodes

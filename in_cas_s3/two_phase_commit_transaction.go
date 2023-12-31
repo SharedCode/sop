@@ -174,7 +174,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
-	var updatedNodes, removedNodes, addedNodes, fetchedNodes []*btree.Node[interface{}, interface{}]
+	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []*btree.Node[interface{}, interface{}]
 	startTime := getCurrentTime()
 
 	// For writer transaction. Save the managed Node(s) as inactive:
@@ -198,37 +198,43 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	// - Return error if loop timed out to trigger rollback.
 	successful := false
 	for !successful {
-		if err := t.timedOut(startTime); err != nil {
+		var err error
+		if err = t.timedOut(startTime); err != nil {
 			return err
 		}
 
 		successful = true
 		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
 		// has to do merging & conflict resolution. Add is simple upsert.
-		updatedNodes, removedNodes, addedNodes, fetchedNodes = t.classifyModifiedNodes()
+		updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
+
+		// Commit new root nodes.
+		t.logger.log(commitNewRootNodes)
+		if len(rootNodes) > 0 {
+			if successful, err = t.btreesBackend[0].backendNodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
+				return err
+			}
+		}
 
 		// Check for conflict on fetched nodes.
-		ok, err := t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes)
+		successful, err = t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes)
 		if err != nil {
 			return err
 		}
-		if ok {
+		if successful {
 			// Commit updated nodes.
 			t.logger.log(commitUpdatedNodes)
-			if ok, err := t.btreesBackend[0].backendNodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
+			if successful, err = t.btreesBackend[0].backendNodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
-			} else if !ok {
-				successful = false
+			} else if !successful {
 				if err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
 					return err
 				}
 			}
-		} else {
-			successful = false
 		}
 
 		// Only do commit removed nodes if successful so far.
-		if len(removedNodes) > 0 && successful {
+		if successful {
 			// Commit removed nodes.
 			t.logger.log(commitRemovedNodes)
 			successful, err = t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes)
@@ -243,7 +249,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 
 			// Recreate the changes on latest committed nodes, if there is no conflict.
-			if err := t.refetchAndMergeModifications(ctx); err != nil {
+			if err = t.refetchAndMergeModifications(ctx); err != nil {
 				return err
 			}
 		}
@@ -333,7 +339,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 			return err
 		}
 		// Check items if have not changed since fetching.
-		_, _, _, fetchedNodes := t.classifyModifiedNodes()
+		_, _, _, fetchedNodes, _ := t.classifyModifiedNodes()
 		if ok, err := t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes); err != nil {
 			return err
 		} else if ok {
@@ -419,10 +425,16 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes.
-func (t *transaction) classifyModifiedNodes() ([]*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}]) {
-	var updatedNodes, removedNodes, addedNodes, fetchedNodes []*btree.Node[interface{}, interface{}]
-	for _, s := range t.btreesBackend {
+func (t *transaction) classifyModifiedNodes() ([]*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}]) {
+	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []*btree.Node[interface{}, interface{}]
+	for i, s := range t.btreesBackend {
 		for _, cacheNode := range s.backendNodeRepository.nodeLocalCache {
+			// Allow newly created root nodes to get merged between transactions.
+			if s.backendNodeRepository.count == 0 &&
+				cacheNode.action == addAction && t.btrees[i].StoreInfo.RootNodeId == cacheNode.node.Id {
+				rootNodes = append(rootNodes, cacheNode.node)
+				continue
+			}
 			switch cacheNode.action {
 			case updateAction:
 				updatedNodes = append(updatedNodes, cacheNode.node)
@@ -435,7 +447,7 @@ func (t *transaction) classifyModifiedNodes() ([]*btree.Node[interface{}, interf
 			}
 		}
 	}
-	return updatedNodes, removedNodes, addedNodes, fetchedNodes
+	return updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes
 }
 
 func (t *transaction) commitStores(ctx context.Context) error {
@@ -469,6 +481,9 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 
 // Enqueue the deleted node Ids for scheduled physical delete.
 func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds ...btree.UUID) {
+	if len(deletedNodeIds) == 0 {
+		return
+	}
 	deletedItems := make([]QueueItem, len(deletedNodeIds))
 	for _, did := range deletedNodeIds {
 		deletedItems = append(deletedItems, QueueItem{
@@ -488,7 +503,7 @@ func (t *transaction) rollback(ctx context.Context) error {
 		return fmt.Errorf("Transaction got committed, 'can't rollback it.")
 	}
 
-	updatedNodes, removedNodes, addedNodes, _ := t.classifyModifiedNodes()
+	updatedNodes, removedNodes, addedNodes, _, _ := t.classifyModifiedNodes()
 
 	var lastErr error
 	if t.logger.committedState == finalizeCommit {
@@ -509,6 +524,11 @@ func (t *transaction) rollback(ctx context.Context) error {
 	}
 	if t.logger.committedState > commitUpdatedNodes {
 		if err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
+			lastErr = err
+		}
+	}
+	if t.logger.committedState > commitNewRootNodes {
+		if err := t.btreesBackend[0].backendNodeRepository.rollbackNewRootNodes(ctx, updatedNodes); err != nil {
 			lastErr = err
 		}
 	}

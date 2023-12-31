@@ -38,6 +38,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeId.IsNil() {
+			// Pre-assign root node Id so B-Trees can merge newly created root nodes on commit.
 			ns.RootNodeId = btree.NewUUID()
 		}
 		if err := trans.storeRepository.Add(ctx, *ns); err != nil {
@@ -67,7 +68,7 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 	si.NodeRepository = nrw
 	si.backendNodeRepository = nrw.realNodeRepository
 
-	// Wire up the B-tree & its backend store interface of the transaction.
+	// Wire up the B-tree & add its backend interface to the transaction.
 	b3, _ := btree.New[interface{}, interface{}](s, &si.StoreInterface)
 	trans.btreesBackend = append(trans.btreesBackend, si)
 	trans.btrees = append(trans.btrees, b3)

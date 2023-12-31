@@ -9,8 +9,10 @@
 // This logic is cut, limited within a given sub-branch so as not to affect performance. If it is found
 // to affect performance on a given backend, it may get turned off(TODO).
 //
-// "leaf" sub-branch is the outermost node of the trie that only has 1 level children, that is, its
+// "leaf sub-branch" is the outermost node of the trie that only has 1 level children, that is, its
 // children has no children.
+//
+// "leaf" node is the edge node, it has no children.
 package btree
 
 import (
