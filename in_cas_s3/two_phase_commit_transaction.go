@@ -47,16 +47,18 @@ type transaction struct {
 	maxTime   time.Duration
 	logger    *transactionLog
 	// Phase 1 commit generated objects required for phase 2 commit.
-	updatedNodeHandles      []sop.Handle
-	removedNodeHandles      []sop.Handle
+	updatedNodeHandles []sop.Handle
+	removedNodeHandles []sop.Handle
 }
 
 type QueueItemType int
+
 const (
 	Unknown = iota
 	BtreeNode
 	ItemValue
 )
+
 type QueueItem struct {
 	ItemType QueueItemType
 	ItemId   btree.UUID
@@ -286,7 +288,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 
 	// Assemble & enqueue the deleted Ids, 'should not fail.
 	updatedNodesInactiveIds := make([]btree.UUID, len(t.updatedNodeHandles))
-	deletedIds := make([]btree.UUID, len(t.removedNodeHandles), len(t.updatedNodeHandles) + len(t.removedNodeHandles))
+	deletedIds := make([]btree.UUID, len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
 		// Since we've flipped the inactive to active, the new inactive Id is to be deleted(unused).
 		updatedNodesInactiveIds[i] = t.updatedNodeHandles[i].GetInActiveId()
@@ -469,7 +471,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds ...btree.UUID) {
 	deletedItems := make([]QueueItem, len(deletedNodeIds))
 	for _, did := range deletedNodeIds {
-		deletedItems = append(deletedItems, QueueItem {
+		deletedItems = append(deletedItems, QueueItem{
 			ItemType: BtreeNode,
 			ItemId:   did,
 		})

@@ -55,7 +55,7 @@ type nodeRepository struct {
 	transaction *transaction
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
 	nodeLocalCache map[btree.UUID]cacheNode
-	count int64
+	count          int64
 }
 
 // NewNodeRepository instantiates a NodeRepository.
@@ -332,7 +332,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []*btr
 	}
 	// Undo the nodes blobs to blob store and redis cache.
 	for _, iid := range iids {
-		if err = nr.transaction.redisCache.Delete(ctx, iid.ToString()); err != nil && !redis.KeyNotFound(err){
+		if err = nr.transaction.redisCache.Delete(ctx, iid.ToString()); err != nil && !redis.KeyNotFound(err) {
 			return err
 		}
 	}
