@@ -177,7 +177,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []*btree
 				iid := handles[i].GetInActiveId()
 				// For now, 'ignore any error while trying to cleanup the expired inactive phys Id.
 				if err := nr.transaction.nodeBlobStore.Remove(ctx, iid); err == nil {
-					if err := nr.transaction.redisCache.Delete(ctx, iid.ToString()); err == nil {
+					if err := nr.transaction.redisCache.Delete(ctx, iid.ToString()); err == nil || redis.KeyNotFound(err) {
 						handles[i].ClearInactiveId()
 						id = handles[i].AllocateId()
 					}
@@ -243,7 +243,6 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []*btree.N
 	   - (on commit) On update, 'will save and register the node phys Id to the "inactive Id" part of the virtual Id.
 	   - On finalization of commit, inactive will be switched to active (node) Ids.
 	*/
-
 	handles := make([]sop.Handle, len(nodes))
 	blobs := make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(nodes))
 	for i := range nodes {
@@ -292,8 +291,10 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []*btree
 	ids := make([]btree.UUID, len(nodes))
 	for i := range nodes {
 		ids[i] = nodes[i].Id
+	}
+	for _, id := range ids {
 		// Remove node from Redis cache.
-		if err := nr.transaction.redisCache.Delete(ctx, nodes[i].Id.ToString()); err != nil {
+		if err := nr.transaction.redisCache.Delete(ctx, id.ToString()); err != nil && !redis.KeyNotFound(err) {
 			return err
 		}
 	}
@@ -324,7 +325,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []*btr
 	}
 	// Undo the nodes blobs to blob store and redis cache.
 	for _, iid := range iids {
-		if err = nr.transaction.redisCache.Delete(ctx, iid.ToString()); err != nil {
+		if err = nr.transaction.redisCache.Delete(ctx, iid.ToString()); err != nil && !redis.KeyNotFound(err){
 			return err
 		}
 	}
@@ -349,7 +350,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []*btr
 	}
 	for i := range handles {
 		// Undo the deleted mark for Id.
-		handles[i].IsDeleted =false
+		handles[i].IsDeleted = false
 		handles[i].WorkInProgressTimestamp = 0
 	}
 
@@ -372,6 +373,10 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []*bt
 		handles[i].FlipActiveId()
 		// Update upsert time, we are finalizing the commit for the node.
 		handles[i].Timestamp = Now()
+		// Set work in progress timestamp to now as safety. After flipping inactive to active,
+		// the previously active Id if not "cleaned up" then this timestamp will allow future
+		// transactions to clean it up(self healing).
+		handles[i].WorkInProgressTimestamp = Now()
 	}
 	// All or nothing batch update.
 	return handles, nil

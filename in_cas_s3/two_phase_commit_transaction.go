@@ -39,7 +39,7 @@ type transaction struct {
 	storeRepository cas.StoreRepository
 	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
 	virtualIdRegistry cas.VirtualIdRegistry
-	deletedItemsQueue q.Queue[q.DeletedItem]
+	deletedItemsQueue q.Queue[QueueItem]
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
 	forWriting bool
 	// -1 = intial state, 0 = began, 1 = phase 1 commit done, 2 = phase 2 commit or rollback done.
@@ -49,6 +49,17 @@ type transaction struct {
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles      []sop.Handle
 	removedNodeHandles      []sop.Handle
+}
+
+type QueueItemType int
+const (
+	Unknown = iota
+	BtreeNode
+	ItemValue
+)
+type QueueItem struct {
+	ItemType QueueItemType
+	ItemId   btree.UUID
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
@@ -70,7 +81,7 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) TwoPha
 		virtualIdRegistry: cas.NewVirtualIdRegistry(),
 		redisCache:        redis.NewClient(redis.DefaultOptions()),
 		nodeBlobStore:     s3.NewBlobStore(),
-		deletedItemsQueue: q.NewDeletedItemsQueue(),
+		deletedItemsQueue: q.NewQueue[QueueItem](),
 		logger:            newTransactionLogger(),
 		phaseDone:         -1,
 	}
@@ -270,16 +281,19 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 
 	// Assemble & enqueue the deleted Ids, 'should not fail.
 	updatedNodesInactiveIds := make([]btree.UUID, len(t.updatedNodeHandles))
-	deletedIds := make([]btree.UUID, len(t.removedNodeHandles))
+	deletedIds := make([]btree.UUID, len(t.removedNodeHandles), len(t.updatedNodeHandles) + len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
 		// Since we've flipped the inactive to active, the new inactive Id is to be deleted(unused).
 		updatedNodesInactiveIds[i] = t.updatedNodeHandles[i].GetInActiveId()
+		if err := t.redisCache.Delete(ctx, updatedNodesInactiveIds[i].ToString()); err != nil && !redis.KeyNotFound(err) {
+			log.Warn(fmt.Sprintf("Failed to delete in Redis inactive node Id: %v, details: %v", updatedNodesInactiveIds[i], err.Error()))
+		}
 		t.updatedNodeHandles[i].ClearInactiveId()
 	}
 	if err := t.virtualIdRegistry.Update(ctx, t.updatedNodeHandles...); err != nil {
 		// Exclude the updated nodes inactive Ids for deletion because they failed getting cleared in registry.
 		updatedNodesInactiveIds = nil
-		log.Warn(err.Error())
+		log.Warn(fmt.Sprintf("Failed to clear in Registry inactive node Ids, details: %v", err.Error()))
 	}
 	for i := range t.removedNodeHandles {
 		// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
@@ -437,10 +451,10 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 
 // Enqueue the deleted node Ids for scheduled physical delete.
 func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds ...btree.UUID) {
-	deletedItems := make([]q.DeletedItem, len(deletedNodeIds))
+	deletedItems := make([]QueueItem, len(deletedNodeIds))
 	for _, did := range deletedNodeIds {
-		deletedItems = append(deletedItems, q.DeletedItem{
-			ItemType: q.BtreeNode,
+		deletedItems = append(deletedItems, QueueItem {
+			ItemType: BtreeNode,
 			ItemId:   did,
 		})
 	}

@@ -89,7 +89,6 @@ func (h *Handle) HasId(id btree.UUID) bool {
 // Make inactive physical Id as active.
 func (h *Handle) FlipActiveId() {
 	h.IsActiveIdB = !h.IsActiveIdB
-	h.WorkInProgressTimestamp = 0
 }
 
 // Reset to nil the inactive phys. Id.
