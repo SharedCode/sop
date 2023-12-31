@@ -286,14 +286,14 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		// Since we've flipped the inactive to active, the new inactive Id is to be deleted(unused).
 		updatedNodesInactiveIds[i] = t.updatedNodeHandles[i].GetInActiveId()
 		if err := t.redisCache.Delete(ctx, updatedNodesInactiveIds[i].ToString()); err != nil && !redis.KeyNotFound(err) {
-			log.Warn(fmt.Sprintf("Failed to delete in Redis inactive node Id: %v, details: %v", updatedNodesInactiveIds[i], err.Error()))
+			log.Warn(fmt.Sprintf("Failed to delete in Redis inactive node Id: %v, details: %v", updatedNodesInactiveIds[i], err))
 		}
 		t.updatedNodeHandles[i].ClearInactiveId()
 	}
 	if err := t.virtualIdRegistry.Update(ctx, t.updatedNodeHandles...); err != nil {
 		// Exclude the updated nodes inactive Ids for deletion because they failed getting cleared in registry.
 		updatedNodesInactiveIds = nil
-		log.Warn(fmt.Sprintf("Failed to clear in Registry inactive node Ids, details: %v", err.Error()))
+		log.Warn(fmt.Sprintf("Failed to clear in Registry inactive node Ids, details: %v", err))
 	}
 	for i := range t.removedNodeHandles {
 		// Removed nodes are marked deleted, thus, its active node Id can be safely removed.

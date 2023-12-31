@@ -2,6 +2,8 @@ package in_cas_s3
 
 import (
 	"context"
+	"fmt"
+	log "log/slog"
 	"time"
 
 	"github.com/SharedCode/sop"
@@ -95,19 +97,21 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 	// Use active physical Id if in case different.
 	nodeId := h[0].GetActiveId()
 	if err := nr.transaction.redisCache.GetStruct(ctx, nodeId.ToString(), target); err != nil {
-		if redis.KeyNotFound(err) {
-			// Fetch from blobStore and cache to Redis/local.
-			if err = nr.transaction.nodeBlobStore.Get(ctx, nodeId, target); err != nil {
-				return nil, err
-			}
-			nr.transaction.redisCache.SetStruct(ctx, nodeId.ToString(), target, -1)
-			nr.nodeLocalCache[logicalId] = cacheNode{
-				action: getAction,
-				node:   target,
-			}
-			return target, nil
+		if !redis.KeyNotFound(err) {
+			return nil, err
 		}
-		return nil, err
+		// Fetch from blobStore and cache to Redis/local.
+		if err = nr.transaction.nodeBlobStore.Get(ctx, nodeId, target); err != nil {
+			return nil, err
+		}
+		if err := nr.transaction.redisCache.SetStruct(ctx, nodeId.ToString(), target, -1); err != nil {
+			log.Warn(fmt.Sprintf("Failed to cache in Redis the newly fetched node with Id: %v, details: %v.", nodeId, err))
+		}
+		nr.nodeLocalCache[logicalId] = cacheNode{
+			action: getAction,
+			node:   target,
+		}
+		return target, nil
 	}
 	target.UpsertTime = h[0].Timestamp
 	nr.nodeLocalCache[logicalId] = cacheNode{
