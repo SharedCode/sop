@@ -39,6 +39,11 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 	if slotLength < 4 {
 		slotLength = 4
 	}
+	// Maximum slot length is 1,000. It may be ridiculously huge blob if too big.
+	// Even 1,000 may be too much, depending on key & value data size you'll store.
+	if slotLength > 1000 {
+		slotLength = 1000
+	}
 	return &StoreInfo{
 		Name:                     name,
 		SlotLength:               slotLength,
