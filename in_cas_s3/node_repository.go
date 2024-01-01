@@ -95,8 +95,11 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 	if err != nil {
 		return nil, err
 	}
-	// Use active physical Id if in case different.
-	nodeId := h[0].GetActiveId()
+	nodeId := logicalId
+	if !h[0].LogicalId.IsNil() {
+		// Use active physical Id if in case different.
+		nodeId = h[0].GetActiveId()
+	}
 	if err := nr.transaction.redisCache.GetStruct(ctx, nodeId.ToString(), target); err != nil {
 		if !redis.KeyNotFound(err) {
 			return nil, err
@@ -362,19 +365,8 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, nodes []*btr
 			return err
 		}
 	}
-	// Use the transaction log and each handle & node pair's timestamps to enforce whether we
-	// "own" the root nodes in registry and "undo" them if they are.
+	// If we're able to commit roots in registry then they are "ours", we need to unregister.
 	if nr.transaction.logger.committedState > commitNewRootNodes {
-		handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
-		if err != nil {
-			return err
-		}
-		for i := range handles {
-			if handles[i].LogicalId.IsNil() || handles[i].Timestamp != nodes[i].Timestamp {
-				return nil
-			}
-		}
-		// We know these root nodes are ours, thus, we can unregister them.
 		if err := nr.transaction.virtualIdRegistry.Remove(ctx, nids...); err != nil {
 			return err
 		}
