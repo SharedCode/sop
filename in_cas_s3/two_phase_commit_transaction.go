@@ -503,7 +503,7 @@ func (t *transaction) rollback(ctx context.Context) error {
 		return fmt.Errorf("Transaction got committed, 'can't rollback it.")
 	}
 
-	updatedNodes, removedNodes, addedNodes, _, _ := t.classifyModifiedNodes()
+	updatedNodes, removedNodes, addedNodes, _, rootNodes := t.classifyModifiedNodes()
 
 	var lastErr error
 	if t.logger.committedState == finalizeCommit {
@@ -528,7 +528,7 @@ func (t *transaction) rollback(ctx context.Context) error {
 		}
 	}
 	if t.logger.committedState > commitNewRootNodes {
-		if err := t.btreesBackend[0].backendNodeRepository.rollbackNewRootNodes(ctx, updatedNodes); err != nil {
+		if err := t.btreesBackend[0].backendNodeRepository.rollbackNewRootNodes(ctx, rootNodes); err != nil {
 			lastErr = err
 		}
 	}

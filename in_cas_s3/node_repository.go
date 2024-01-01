@@ -177,6 +177,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []*btree
 			return false, nil
 		}
 		handles[i] = sop.NewHandle(nids[i])
+		handles[i].Timestamp = nodes[i].Timestamp
 		blobs[i].Key = handles[i].GetActiveId()
 		blobs[i].Value = nodes[i]
 	}
@@ -361,7 +362,23 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, nodes []*btr
 			return err
 		}
 	}
-	// Nothing to undo in registry since that is all or nothing and done as last step.
+	// Use the transaction log and each handle & node pair's timestamps to enforce whether we
+	// "own" the root nodes in registry and "undo" them if they are.
+	if nr.transaction.logger.committedState > commitNewRootNodes {
+		handles, err := nr.transaction.virtualIdRegistry.Get(ctx, nids...)
+		if err != nil {
+			return err
+		}
+		for i := range handles {
+			if handles[i].LogicalId.IsNil() || handles[i].Timestamp != nodes[i].Timestamp {
+				return nil
+			}
+		}
+		// We know these root nodes are ours, thus, we can unregister them.
+		if err := nr.transaction.virtualIdRegistry.Remove(ctx, nids...); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
