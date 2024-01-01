@@ -1,6 +1,8 @@
 
 create keyspace btree with replication = {'class':'SimpleStrategy', 'replication_factor':1};
 
+use btree;
+
 create table store (
     -- name of the store.
     name text PRIMARY KEY,
@@ -13,12 +15,12 @@ create table store (
     -- unique specifies whether the store is unique(on key) or not.
     unique boolean,
     -- description (optional).
-    desc text,
+    des text,
     -- virtual id table name.
     vid_tbl text,
     -- blob store path, e.g. bucket path/name, folder path.
-    path
-    -- version number of the store.
+    path text,
+    -- timestamp of the store.
     ts bigint,
     -- is value data in node segment.
     vdins boolean,
