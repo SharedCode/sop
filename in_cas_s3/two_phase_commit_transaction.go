@@ -210,26 +210,27 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 		// Commit new root nodes.
 		t.logger.log(commitNewRootNodes)
-		if len(rootNodes) > 0 {
-			if successful, err = t.btreesBackend[0].backendNodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
-				return err
-			}
+		if successful, err = t.btreesBackend[0].backendNodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
+			return err
 		}
 
-		// Check for conflict on fetched nodes.
-		successful, err = t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes)
-		if err != nil {
-			return err
+		if successful {
+			// Check for conflict on fetched nodes.
+			successful, err = t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes)
+			if err != nil {
+				return err
+			}
 		}
 		if successful {
 			// Commit updated nodes.
 			t.logger.log(commitUpdatedNodes)
 			if successful, err = t.btreesBackend[0].backendNodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
-			} else if !successful {
-				if err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
-					return err
-				}
+			}
+		}
+		if !successful {
+			if err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
+				return err
 			}
 		}
 
@@ -266,13 +267,14 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
-	// Switch to active "state" the (inactive) updated Nodes so they will
-	// get started to be "seen" in such state on succeeding fetch.
+	// Prepare to switch to active "state" the (inactive) updated Nodes so they will
+	// get started to be "seen" in such state on succeeding fetch. See phase2Commit for actual change.
 	uh, err := t.btreesBackend[0].backendNodeRepository.activateInactiveNodes(ctx, updatedNodes)
 	if err != nil {
 		return err
 	}
-	// Update upsert time of removed nodes to signal that they are finalized.
+	// Prepare to update upsert time of removed nodes to signal that they are finalized.
+	// See phase2Commit for actual change.
 	rh, err := t.btreesBackend[0].backendNodeRepository.touchNodes(ctx, removedNodes)
 	if err != nil {
 		return err

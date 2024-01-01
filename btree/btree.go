@@ -361,7 +361,7 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 			return false, err
 		}
 		currentNode, err := btree.getCurrentNode(ctx)
-		if err != nil {
+		if err != nil || currentNode == nil {
 			return false, nil
 		}
 		// Replace the requested item for delete with the next item found on leaf node,

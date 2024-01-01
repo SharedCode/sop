@@ -180,7 +180,6 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []*btree
 			return false, nil
 		}
 		handles[i] = sop.NewHandle(nids[i])
-		handles[i].Timestamp = nodes[i].Timestamp
 		blobs[i].Key = handles[i].GetActiveId()
 		blobs[i].Value = nodes[i]
 	}
