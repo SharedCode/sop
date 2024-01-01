@@ -4,7 +4,7 @@ go 1.21.1
 
 require (
 	github.com/gocql/gocql v1.6.0
-	github.com/google/uuid v1.4.0
+	github.com/google/uuid v1.5.0
 	github.com/redis/go-redis/v9 v9.2.1
 	github.com/sirupsen/logrus v1.9.3
 )
