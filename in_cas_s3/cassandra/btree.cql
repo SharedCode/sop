@@ -16,7 +16,7 @@ create table store (
     desc text,
     -- virtual id table name.
     vid_tbl text,
-    -- store path, e.g. bucket path/name, folder path.
+    -- blob store path, e.g. bucket path/name, folder path.
     path
     -- version number of the store.
     ts bigint,
