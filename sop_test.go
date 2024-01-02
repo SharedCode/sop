@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	sop "sop/in_memory"
+	sop "github/sharedcode/sop/in_memory"
 )
 
 func TestBtree_HelloWorld(t *testing.T) {

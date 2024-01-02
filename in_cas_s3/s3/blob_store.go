@@ -3,8 +3,8 @@ package s3
 import (
 	"context"
 
-	"sop"
-	"sop/btree"
+	"github/sharedcode/sop"
+	"github/sharedcode/sop/btree"
 )
 
 // BlobStore specifies the backend blob store interface used for storing & managing data blobs.

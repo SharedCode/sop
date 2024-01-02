@@ -3,7 +3,7 @@ package in_memory
 import (
 	"context"
 
-	"sop/btree"
+	"github/sharedcode/sop/btree"
 )
 
 // in-memory implementation of NodeRepository. Uses a map to manage nodes in memory.

@@ -5,7 +5,7 @@ import (
 
 	"github.com/gocql/gocql"
 
-	cas "sop/in_cas_s3/cassandra"
+	cas "github.com/sharedcode/sop/in_cas_s3/cassandra"
 )
 
 var Session *gocql.Session

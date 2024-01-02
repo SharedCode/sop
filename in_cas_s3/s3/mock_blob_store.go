@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"sop"
-	"sop/btree"
+	"github/sharedcode/sop"
+	"github/sharedcode/sop/btree"
 )
 
 type mockBlobStore struct {

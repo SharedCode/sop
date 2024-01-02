@@ -7,12 +7,12 @@ import (
 	"math/rand"
 	"time"
 
-	"sop"
-	"sop/btree"
-	cas "sop/in_cas_s3/cassandra"
-	q "sop/in_cas_s3/kafka"
-	"sop/in_cas_s3/redis"
-	"sop/in_cas_s3/s3"
+	"github/sharedcode/sop"
+	"github/sharedcode/sop/btree"
+	cas "github/sharedcode/sop/in_cas_s3/cassandra"
+	q "github/sharedcode/sop/in_cas_s3/kafka"
+	"github/sharedcode/sop/in_cas_s3/redis"
+	"github/sharedcode/sop/in_cas_s3/s3"
 )
 
 // TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.
