@@ -18,7 +18,7 @@ func newMockBlobStore() BlobStore {
 	}
 }
 
-func (b *mockBlobStore) Get(ctx context.Context, blobId btree.UUID, target *btree.Node[interface{}, interface{}]) error {
+func (b *mockBlobStore) GetOne(ctx context.Context, blobId btree.UUID, target *btree.Node[interface{}, interface{}]) error {
 	if ba, ok := b.lookup[blobId]; ok {
 		return json.Unmarshal(ba, target)
 	}

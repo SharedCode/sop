@@ -105,7 +105,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 			return nil, err
 		}
 		// Fetch from blobStore and cache to Redis/local.
-		if err = nr.transaction.nodeBlobStore.Get(ctx, nodeId, target); err != nil {
+		if err = nr.transaction.nodeBlobStore.GetOne(ctx, nodeId, target); err != nil {
 			return nil, err
 		}
 		if err := nr.transaction.redisCache.SetStruct(ctx, nodeId.ToString(), target, -1); err != nil {

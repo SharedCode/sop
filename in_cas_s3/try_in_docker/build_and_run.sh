@@ -1,6 +1,2 @@
-
-To build docker image:
 docker build -t try_in_docker .
-
-To run docker image:
 docker run try_in_docker:latest

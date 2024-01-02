@@ -12,9 +12,13 @@ import (
 // as it will impose performance penalties. This kind of data are typically stored in blob stores
 // like AWS S3, or file system, etc...
 type BlobStore interface {
-	Get(ctx context.Context, blobId btree.UUID, target *btree.Node[interface{}, interface{}]) error
+	// Get or fetch a blob given an Id.
+	GetOne(ctx context.Context, blobId btree.UUID, target *btree.Node[interface{}, interface{}]) error
+	// Add blobs to store.
 	Add(ctx context.Context, blobs ...sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]) error
+	// Update blobs in store.
 	Update(ctx context.Context, blobs ...sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]) error
+	// Remove blobs in store with given Ids.
 	Remove(ctx context.Context, blobsIds ...btree.UUID) error
 }
 
