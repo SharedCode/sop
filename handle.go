@@ -3,7 +3,7 @@ package sop
 import (
 	"time"
 
-	"github.com/sharedcode/sop/btree"
+	"github.com/SharedCode/sop/btree"
 )
 
 // Handle is a structure that holds Logical Id and the underlying Physical Id it maps to.

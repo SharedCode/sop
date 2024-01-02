@@ -1,7 +1,7 @@
 package in_cas_s3
 
 import (
-	"github.com/sharedcode/sop/btree"
+	"github.com/SharedCode/sop/btree"
 )
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.

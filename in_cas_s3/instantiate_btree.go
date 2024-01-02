@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/sop/btree"
+	"github.com/SharedCode/sop/btree"
 )
 
 // OpenBtree will open an existing B-Tree instance it for use in a transaction.

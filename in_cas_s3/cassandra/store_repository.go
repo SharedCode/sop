@@ -3,7 +3,7 @@ package cassandra
 import (
 	"context"
 
-	"github.com/sharedcode/sop/btree"
+	"github.com/SharedCode/sop/btree"
 )
 
 // TODO: when need arise, move these interfaces to a common package, but keep them for now

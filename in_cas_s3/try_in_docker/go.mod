@@ -1,4 +1,4 @@
-module github/sharedcode/sop/try_in_docker
+module github.com/sharedcode/sop/try_in_docker
 
 go 1.21.5
 
