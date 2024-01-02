@@ -4,8 +4,8 @@ package cassandra
 import (
 	"context"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
+	"sop"
+	"sop/btree"
 )
 
 // Virtual Id registry is essential in our support for all or nothing (sub)feature,

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_cas_s3/redis"
+	"sop/btree"
+	"sop/in_cas_s3/redis"
 )
 
 type actionType int

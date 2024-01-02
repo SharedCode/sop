@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SharedCode/sop/btree"
+	"sop/btree"
 )
 
 type btreeWithTransaction[TK btree.Comparable, TV any] struct {

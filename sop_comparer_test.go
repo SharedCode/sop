@@ -4,7 +4,7 @@ import (
 	"cmp"
 	"testing"
 
-	sop "github.com/SharedCode/sop/in_memory"
+	sop "sop/in_memory"
 )
 
 type personKey struct {

@@ -7,6 +7,8 @@ type Config struct {
 	ClusterHosts []string
 	// Keyspace to be used when doing I/O to cassandra.
 	Keyspace string
+	// Consistency
+	Consistency gocql.Consistency
 }
 
 type Connection struct {
@@ -35,6 +37,7 @@ func GetConnection(config Config) (*Connection, error) {
 	}
 	cluster := gocql.NewCluster(config.ClusterHosts...)
 	cluster.Keyspace = config.Keyspace
+	cluster.Consistency = config.Consistency
 	var c = Connection{
 		Config: config,
 	}

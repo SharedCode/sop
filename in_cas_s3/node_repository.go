@@ -6,9 +6,9 @@ import (
 	log "log/slog"
 	"time"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_cas_s3/redis"
+	"sop"
+	"sop/btree"
+	"sop/in_cas_s3/redis"
 )
 
 type cacheNode struct {
