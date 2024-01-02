@@ -1,6 +1,6 @@
 package in_memory
 
-import "github/sharedcode/sop/btree"
+import "github.com/sharedcode/sop/btree"
 
 // BtreeInterface struct defines publicly callable methods of Btree in-memory.
 // NOTE: this is synonymous to the btree.BtreeInterface but with methods removed of error
