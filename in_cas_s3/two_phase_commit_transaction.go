@@ -75,17 +75,13 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 		m := 15
 		maxTime = time.Duration(m * int(time.Minute))
 	}
-	rc, err := redis.NewClient()
-	if err != nil {
-		return nil, err
-	}
 	return &transaction{
 		forWriting: forWriting,
 		maxTime:    maxTime,
 		// TODO: Allow caller to supply Redis & blob store settings.
 		storeRepository:   cas.NewMockStoreRepository(),
 		virtualIdRegistry: cas.NewMockVirtualIdRegistry(),
-		redisCache:        rc,
+		redisCache:        redis.NewClient(),
 		nodeBlobStore:     s3.NewBlobStore(),
 		deletedItemsQueue: q.NewQueue[QueueItem](),
 		logger:            newTransactionLogger(),

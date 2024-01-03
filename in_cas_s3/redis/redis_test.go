@@ -20,7 +20,7 @@ func TestBasicUse(t *testing.T) {
 	GetConnection(option)
 	defer CloseConnection()
 
-	c, _ := NewClient()
+	c := NewClient()
 
 	ctx := context.Background()
 	item, _ := c.Get(ctx, "key")

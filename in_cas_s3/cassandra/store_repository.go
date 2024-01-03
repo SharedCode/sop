@@ -2,6 +2,7 @@ package cassandra
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/SharedCode/sop/btree"
 )
@@ -33,18 +34,30 @@ func NewStoreRepository() StoreRepository {
 }
 
 func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) error {
+	if connection == nil {
+		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
+	}
 	return nil
 }
 
 func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo) error {
+	if connection == nil {
+		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
+	}
 	return nil
 }
 
 func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.StoreInfo, error) {
+	if connection == nil {
+		return nil, fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
+	}
 	stores := make([]btree.StoreInfo, len(names))
 	return stores, nil
 }
 
 func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
+	if connection == nil {
+		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
+	}
 	return nil
 }
