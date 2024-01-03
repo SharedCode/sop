@@ -30,10 +30,14 @@ type singlePhaseTransaction struct {
 }
 
 // NewTransaction creates an enduser facing transaction object.
-func NewTransaction(forWriting bool, maxTime time.Duration) Transaction {
-	return &singlePhaseTransaction{
-		sopPhaseCommitTransaction: NewTwoPhaseCommitTransaction(forWriting, maxTime),
+func NewTransaction(forWriting bool, maxTime time.Duration) (Transaction, error) {
+	twoPhase, err := NewTwoPhaseCommitTransaction(forWriting, maxTime)
+	if err != nil {
+		return nil, err
 	}
+	return &singlePhaseTransaction{
+		sopPhaseCommitTransaction: twoPhase,
+	}, nil
 }
 
 // Begin the transaction.

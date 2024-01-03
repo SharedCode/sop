@@ -3,12 +3,9 @@ package main
 import (
 	"context"
 
-	"github.com/gocql/gocql"
-
 	cas "github.com/SharedCode/sop/in_cas_s3/cassandra"
 )
 
-var Session *gocql.Session
 var ctx = context.Background()
 
 func main() {

@@ -17,7 +17,10 @@ type user struct {
 
 func TestBasicUse(t *testing.T) {
 	option := DefaultOptions()
-	c := NewClient(option)
+	GetConnection(option)
+	defer CloseConnection()
+
+	c, _ := NewClient()
 
 	ctx := context.Background()
 	item, _ := c.Get(ctx, "key")

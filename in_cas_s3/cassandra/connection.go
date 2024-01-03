@@ -49,3 +49,16 @@ func GetConnection(config Config) (*Connection, error) {
 	connection = &c
 	return connection, nil
 }
+
+// Close the singleton connection if open.
+func CloseConnection() {
+	if connection != nil {
+		mux.Lock()
+		defer mux.Unlock()
+		if connection == nil {
+			return
+		}
+		connection.Session.Close()
+		connection = nil
+	}
+}

@@ -24,3 +24,27 @@ type StoreRepository interface {
 	// Remove store info with name. Remove all or nothing.
 	Remove(context.Context, ...string) error
 }
+
+type storeRepository struct {}
+
+// NewStoreRepository manages the StoreInfo in Cassandra table.
+func NewStoreRepository() StoreRepository {
+	return &storeRepository{}
+}
+
+func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) error {
+	return nil
+}
+
+func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo) error {
+	return nil
+}
+
+func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.StoreInfo, error) {
+	stores := make([]btree.StoreInfo, len(names))
+	return stores, nil
+}
+
+func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
+	return nil
+}

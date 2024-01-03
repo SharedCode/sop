@@ -70,10 +70,14 @@ var getCurrentTime = time.Now
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes
 // of session duration.
-func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) TwoPhaseCommitTransaction {
+func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error) {
 	if maxTime <= 0 {
 		m := 15
 		maxTime = time.Duration(m * int(time.Minute))
+	}
+	rc, err := redis.NewClient()
+	if err != nil {
+		return nil, err
 	}
 	return &transaction{
 		forWriting: forWriting,
@@ -81,12 +85,12 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) TwoPha
 		// TODO: Allow caller to supply Redis & blob store settings.
 		storeRepository:   cas.NewMockStoreRepository(),
 		virtualIdRegistry: cas.NewMockVirtualIdRegistry(),
-		redisCache:        redis.NewClient(redis.DefaultOptions()),
+		redisCache:        rc,
 		nodeBlobStore:     s3.NewBlobStore(),
 		deletedItemsQueue: q.NewQueue[QueueItem](),
 		logger:            newTransactionLogger(),
 		phaseDone:         -1,
-	}
+	}, nil
 }
 
 func (t *transaction) Begin() error {

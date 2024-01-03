@@ -3,7 +3,19 @@ package in_cas_s3
 import (
 	"context"
 	"testing"
+
+	"github.com/SharedCode/sop/in_cas_s3/cassandra"
+	"github.com/SharedCode/sop/in_cas_s3/redis"
 )
+
+var cassConfig = cassandra.Config{
+	ClusterHosts: []string{"172.17.0.2"},
+	Keyspace:     "btree",
+}
+func init() {
+	// Initialize(cassConfig, redis.DefaultOptions())
+	redis.GetConnection(redis.DefaultOptions())
+}
 
 var ctx = context.Background()
 
@@ -18,9 +30,9 @@ var ctx = context.Background()
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	t.Logf("Transaction story test.\n")
-	trans := NewTransaction(true, -1)
+	trans, _ := NewTransaction(true, -1)
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, "", "", "", trans)
+	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, "", "foopath", "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		trans.Rollback(ctx)
@@ -38,9 +50,9 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans := NewTransaction(true, -1)
+	trans, _ := NewTransaction(true, -1)
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, "", "", "", trans)
+	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, "", "foopath", "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		trans.Rollback(ctx)
