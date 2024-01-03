@@ -70,7 +70,7 @@ var getCurrentTime = time.Now
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes
 // of session duration.
-func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) TwoPhaseCommitTransaction {
 	if maxTime <= 0 {
 		m := 15
 		maxTime = time.Duration(m * int(time.Minute))
@@ -86,7 +86,7 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 		deletedItemsQueue: q.NewQueue[QueueItem](),
 		logger:            newTransactionLogger(),
 		phaseDone:         -1,
-	}, nil
+	}
 }
 
 func (t *transaction) Begin() error {
