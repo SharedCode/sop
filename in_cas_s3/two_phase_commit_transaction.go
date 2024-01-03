@@ -302,7 +302,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		updatedNodesInactiveIds[i].IDs = make([]btree.UUID, len(t.updatedNodeHandles[i].IDs))
 		for ii := range t.updatedNodeHandles[i].IDs {
 			// Since we've flipped the inactive to active, the new inactive Id is to be deleted(unused).
-			updatedNodesInactiveIds[i].IDs[ii] =  t.updatedNodeHandles[i].IDs[ii].GetInActiveId()
+			updatedNodesInactiveIds[i].IDs[ii] = t.updatedNodeHandles[i].IDs[ii].GetInActiveId()
 			if err := t.redisCache.Delete(ctx, updatedNodesInactiveIds[i].IDs[ii].ToString()); err != nil && !redis.KeyNotFound(err) {
 				log.Warn(fmt.Sprintf("Failed to delete in Redis inactive node Id: %v, details: %v", updatedNodesInactiveIds[i], err))
 			}
@@ -319,7 +319,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		deletedIds[i].IDs = make([]btree.UUID, len(t.removedNodeHandles[i].IDs))
 		for ii := range t.removedNodeHandles[i].IDs {
 			// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
-			deletedIds[i].IDs[ii] =  t.removedNodeHandles[i].IDs[ii].GetActiveId()
+			deletedIds[i].IDs[ii] = t.removedNodeHandles[i].IDs[ii].GetActiveId()
 		}
 	}
 	if updatedNodesInactiveIds != nil {

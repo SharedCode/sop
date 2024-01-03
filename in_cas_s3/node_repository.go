@@ -96,9 +96,9 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 		}
 		return v.node, nil
 	}
-	h, err := nr.transaction.virtualIdRegistry.Get(ctx, cas.VirtualIdPayload[btree.UUID] {
+	h, err := nr.transaction.virtualIdRegistry.Get(ctx, cas.VirtualIdPayload[btree.UUID]{
 		RegistryName: nr.storeInfo.IdRegistryName,
-		IDs: []btree.UUID{logicalId},
+		IDs:          []btree.UUID{logicalId},
 	})
 	if err != nil {
 		return nil, err
@@ -173,15 +173,15 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 	if len(nodes) == 0 {
 		return true, nil
 	}
-	vids := make([] cas.VirtualIdPayload[btree.UUID], len(nodes))
+	vids := make([]cas.VirtualIdPayload[btree.UUID], len(nodes))
 	for i, storeNodes := range nodes {
 		ids := make([]btree.UUID, len(storeNodes.Value))
 		for ii := range storeNodes.Value {
 			ids[ii] = storeNodes.Value[ii].Id
 		}
-		vids[i] = cas.VirtualIdPayload[btree.UUID] {
+		vids[i] = cas.VirtualIdPayload[btree.UUID]{
 			RegistryName: storeNodes.Key.IdRegistryName,
-			IDs: ids,
+			IDs:          ids,
 		}
 	}
 	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, vids...)
@@ -200,7 +200,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 			blobs[i].BlobStorePath = nodes[i].Key.BlobPath
 			blobs[i].Blobs[ii].Key = handles[i].IDs[ii].GetActiveId()
 			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
-		}	
+		}
 	}
 	// Persist the nodes blobs to blob store and redis cache.
 	if err := nr.transaction.nodeBlobStore.Add(ctx, blobs...); err != nil {
@@ -248,7 +248,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 					// For now, 'ignore any error while trying to cleanup the expired inactive phys Id.
 					if err := nr.transaction.nodeBlobStore.Remove(ctx, s3.BlobsPayload[btree.UUID]{
 						BlobStorePath: nr.storeInfo.BlobPath,
-						Blobs: []btree.UUID{ iid }, }); err == nil {
+						Blobs:         []btree.UUID{iid}}); err == nil {
 						if err := nr.transaction.redisCache.Delete(ctx, iid.ToString()); err == nil || redis.KeyNotFound(err) {
 							handles[i].IDs[ii].ClearInactiveId()
 							id = handles[i].IDs[ii].AllocateId()
@@ -530,14 +530,14 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []sop.KeyValuePa
 	return handles, nil
 }
 
-func (nr *nodeRepository)convertToBlobRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) []s3.BlobsPayload[btree.UUID] {
+func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) []s3.BlobsPayload[btree.UUID] {
 	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
 	bibs := make([]s3.BlobsPayload[btree.UUID], len(nodes))
 	for i := range nodes {
-		bibs[i] = s3.BlobsPayload[btree.UUID] {
+		bibs[i] = s3.BlobsPayload[btree.UUID]{
 			BlobStorePath: nr.storeInfo.BlobPath,
-			Blobs: make([]btree.UUID, len(nodes[i].Value)),
-		} 
+			Blobs:         make([]btree.UUID, len(nodes[i].Value)),
+		}
 		for ii := range nodes[i].Value {
 			bibs[i].Blobs[ii] = nodes[i].Value[ii].Id
 		}
@@ -545,13 +545,13 @@ func (nr *nodeRepository)convertToBlobRequestPayload(nodes []sop.KeyValuePair[*b
 	return bibs
 }
 
-func (nr *nodeRepository)convertToVirtualIdRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) []cas.VirtualIdPayload[btree.UUID] {
+func (nr *nodeRepository) convertToVirtualIdRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) []cas.VirtualIdPayload[btree.UUID] {
 	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
 	vids := make([]cas.VirtualIdPayload[btree.UUID], len(nodes))
 	for i := range nodes {
 		vids[i] = cas.VirtualIdPayload[btree.UUID]{
 			RegistryName: nr.storeInfo.IdRegistryName,
-			IDs: make([]btree.UUID, len(nodes[i].Value)),
+			IDs:          make([]btree.UUID, len(nodes[i].Value)),
 		}
 		for ii := range nodes[i].Value {
 			vids[i].IDs[ii] = nodes[i].Value[ii].Id

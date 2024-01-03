@@ -73,5 +73,7 @@ func (s StoreInfo) IsEmpty() bool {
 func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 	return s.SlotLength == b.SlotLength &&
 		s.IsUnique == b.IsUnique &&
+		s.BlobPath == b.BlobPath &&
+		s.IdRegistryName == b.IdRegistryName &&
 		s.IsValueDataInNodeSegment == b.IsValueDataInNodeSegment
 }

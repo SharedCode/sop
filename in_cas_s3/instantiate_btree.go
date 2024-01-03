@@ -27,7 +27,9 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // slotLength - specifies the number of item slots per node of a b-tree.
 // isUnique - specifies whether the b-tree will enforce key uniqueness(true) or not(false).
 // isValueDataInNodeSegment - specifies whether the b-tree will store the "value" data in the tree's node segment together with
-//   the key, or store it in another (data) segment. Currently not implemented and always stores the data in the node segment.
+//
+//	the key, or store it in another (data) segment. Currently not implemented and always stores the data in the node segment.
+//
 // registryTableName - specifies the name of the Virtual ID registry. Defaults to "name" + "_vr" if not specified.
 // t - transaction that the instance will participate in.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
