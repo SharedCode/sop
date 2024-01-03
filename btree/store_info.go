@@ -1,8 +1,10 @@
 package btree
 
+import "fmt"
+
 // StoreInfo contains a given (B-Tree) store details.
 type StoreInfo struct {
-	// Name of this (B-Tree store).
+	// Short name of this (B-Tree store).
 	Name string
 	// Count of items that can be stored on a given node.
 	SlotLength int
@@ -11,7 +13,7 @@ type StoreInfo struct {
 	// (optional) Description of the Store.
 	Description string
 	// Virtual Id registry table name.
-	VirtualIdRegistryTableName string
+	IdRegistryName string
 	// Blob Store path, e.g. bucket path/name, folder path.
 	BlobPath string
 	// RootNodeId is the root node's Id.
@@ -30,7 +32,8 @@ type StoreInfo struct {
 }
 
 // NewStoreInfo instantiates a new Store.
-func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool) *StoreInfo {
+func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool,
+	registryTableName string, blobPath string, desciption string) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if slotLength%2 != 0 {
 		slotLength--
@@ -38,6 +41,10 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 	// Minimum slot length is 4, you lose gains if you use less than 4.
 	if slotLength < 4 {
 		slotLength = 4
+	}
+	if registryTableName == "" {
+		// If registry table name was not specified, use default name, e.g. "hello_vr" where "hello" is the store name.
+		registryTableName = fmt.Sprintf("%s_vr", name)
 	}
 	// Maximum slot length is 1,000. It may be ridiculously huge blob if too big.
 	// Even 1,000 may be too much, depending on key & value data size you'll store.
@@ -49,6 +56,9 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 		SlotLength:               slotLength,
 		IsUnique:                 isUnique,
 		IsValueDataInNodeSegment: isValueDataInNodeSegment,
+		IdRegistryName:           registryTableName,
+		BlobPath:                 blobPath,
+		Description:              desciption,
 	}
 }
 

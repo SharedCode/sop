@@ -21,11 +21,17 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 	return newBtree[TK, TV](&stores[0], trans)
 }
 
-// NewBtree will create a new B-Tree instance with data persisted in backend store,
-// e.g. - AWS storage services. The created B-Tree is a permanent action, it is outside
-// of the transaction, thus, even if the passed in transaction rolls back, the created tree sticks.
+// NewBtree will create a new B-Tree instance with data persisted to backend storage upon commit, e.g. - AWS storage services.
+// Parameters:
+// name - specifies the name of the store/b-tree.
+// slotLength - specifies the number of item slots per node of a b-tree.
+// isUnique - specifies whether the b-tree will enforce key uniqueness(true) or not(false).
+// isValueDataInNodeSegment - specifies whether the b-tree will store the "value" data in the tree's node segment together with
+//   the key, or store it in another (data) segment. Currently not implemented and always stores the data in the node segment.
+// registryTableName - specifies the name of the Virtual ID registry. Defaults to "name" + "_vr" if not specified.
+// t - transaction that the instance will participate in.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
-	isValueDataInNodeSegment bool, t Transaction) (btree.BtreeInterface[TK, TV], error) {
+	isValueDataInNodeSegment bool, registryTableName string, blobPath string, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
@@ -34,7 +40,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 	if err != nil {
 		return nil, err
 	}
-	ns := btree.NewStoreInfo(name, slotLength, isUnique, true)
+	ns := btree.NewStoreInfo(name, slotLength, isUnique, true, registryTableName, blobPath, desciption)
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeId.IsNil() {
@@ -64,8 +70,7 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 	si.backendItemActionTracker = iatw
 
 	// Assign the node repository frontend and backend bits.
-	nrw := newNodeRepository[interface{}, interface{}](trans)
-	nrw.realNodeRepository.count = s.Count
+	nrw := newNodeRepository[interface{}, interface{}](trans, s)
 	si.NodeRepository = nrw
 	si.backendNodeRepository = nrw.realNodeRepository
 

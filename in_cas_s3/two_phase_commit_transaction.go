@@ -47,8 +47,8 @@ type transaction struct {
 	maxTime   time.Duration
 	logger    *transactionLog
 	// Phase 1 commit generated objects required for phase 2 commit.
-	updatedNodeHandles []sop.Handle
-	removedNodeHandles []sop.Handle
+	updatedNodeHandles []cas.VirtualIdPayload[sop.Handle]
+	removedNodeHandles []cas.VirtualIdPayload[sop.Handle]
 }
 
 type QueueItemType int
@@ -61,7 +61,7 @@ const (
 
 type QueueItem struct {
 	ItemType QueueItemType
-	ItemId   btree.UUID
+	ItemId   cas.VirtualIdPayload[btree.UUID]
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
@@ -79,8 +79,8 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) TwoPha
 		forWriting: forWriting,
 		maxTime:    maxTime,
 		// TODO: Allow caller to supply Redis & blob store settings.
-		storeRepository:   cas.NewStoreRepository(),
-		virtualIdRegistry: cas.NewVirtualIdRegistry(),
+		storeRepository:   cas.NewMockStoreRepository(),
+		virtualIdRegistry: cas.NewMockVirtualIdRegistry(),
 		redisCache:        redis.NewClient(redis.DefaultOptions()),
 		nodeBlobStore:     s3.NewBlobStore(),
 		deletedItemsQueue: q.NewQueue[QueueItem](),
@@ -174,7 +174,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
-	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []*btree.Node[interface{}, interface{}]
+	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]
 	startTime := getCurrentTime()
 
 	// For writer transaction. Save the managed Node(s) as inactive:
@@ -295,15 +295,19 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	}
 
 	// Assemble & enqueue the deleted Ids, 'should not fail.
-	updatedNodesInactiveIds := make([]btree.UUID, len(t.updatedNodeHandles))
-	deletedIds := make([]btree.UUID, len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
+	updatedNodesInactiveIds := make([]cas.VirtualIdPayload[btree.UUID], len(t.updatedNodeHandles))
+	deletedIds := make([]cas.VirtualIdPayload[btree.UUID], len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
-		// Since we've flipped the inactive to active, the new inactive Id is to be deleted(unused).
-		updatedNodesInactiveIds[i] = t.updatedNodeHandles[i].GetInActiveId()
-		if err := t.redisCache.Delete(ctx, updatedNodesInactiveIds[i].ToString()); err != nil && !redis.KeyNotFound(err) {
-			log.Warn(fmt.Sprintf("Failed to delete in Redis inactive node Id: %v, details: %v", updatedNodesInactiveIds[i], err))
+		updatedNodesInactiveIds[i].RegistryName = t.updatedNodeHandles[i].RegistryName
+		updatedNodesInactiveIds[i].IDs = make([]btree.UUID, len(t.updatedNodeHandles[i].IDs))
+		for ii := range t.updatedNodeHandles[i].IDs {
+			// Since we've flipped the inactive to active, the new inactive Id is to be deleted(unused).
+			updatedNodesInactiveIds[i].IDs[ii] =  t.updatedNodeHandles[i].IDs[ii].GetInActiveId()
+			if err := t.redisCache.Delete(ctx, updatedNodesInactiveIds[i].IDs[ii].ToString()); err != nil && !redis.KeyNotFound(err) {
+				log.Warn(fmt.Sprintf("Failed to delete in Redis inactive node Id: %v, details: %v", updatedNodesInactiveIds[i], err))
+			}
+			t.updatedNodeHandles[i].IDs[ii].ClearInactiveId()
 		}
-		t.updatedNodeHandles[i].ClearInactiveId()
 	}
 	if err := t.virtualIdRegistry.Update(ctx, t.updatedNodeHandles...); err != nil {
 		// Exclude the updated nodes inactive Ids for deletion because they failed getting cleared in registry.
@@ -311,8 +315,12 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		log.Warn(fmt.Sprintf("Failed to clear in Registry inactive node Ids, details: %v", err))
 	}
 	for i := range t.removedNodeHandles {
-		// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
-		deletedIds[i] = t.removedNodeHandles[i].GetActiveId()
+		deletedIds[i].RegistryName = t.removedNodeHandles[i].RegistryName
+		deletedIds[i].IDs = make([]btree.UUID, len(t.removedNodeHandles[i].IDs))
+		for ii := range t.removedNodeHandles[i].IDs {
+			// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
+			deletedIds[i].IDs[ii] =  t.removedNodeHandles[i].IDs[ii].GetActiveId()
+		}
 	}
 	if updatedNodesInactiveIds != nil {
 		deletedIds = append(deletedIds, updatedNodesInactiveIds...)
@@ -427,9 +435,14 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes.
-func (t *transaction) classifyModifiedNodes() ([]*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}], []*btree.Node[interface{}, interface{}]) {
-	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []*btree.Node[interface{}, interface{}]
+func (t *transaction) classifyModifiedNodes() ([]sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]],
+	[]sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]],
+	[]sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]],
+	[]sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]],
+	[]sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) {
+	var storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]
 	for i, s := range t.btreesBackend {
+		var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []*btree.Node[interface{}, interface{}]
 		for _, cacheNode := range s.backendNodeRepository.nodeLocalCache {
 			// Allow newly created root nodes to get merged between transactions.
 			if s.backendNodeRepository.count == 0 &&
@@ -448,8 +461,38 @@ func (t *transaction) classifyModifiedNodes() ([]*btree.Node[interface{}, interf
 				fetchedNodes = append(fetchedNodes, cacheNode.node)
 			}
 		}
+		if len(addedNodes) > 0 {
+			storesAddedNodes = append(storesAddedNodes, sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]{
+				Key:   s.backendNodeRepository.storeInfo,
+				Value: addedNodes,
+			})
+		}
+		if len(removedNodes) > 0 {
+			storesRemovedNodes = append(storesRemovedNodes, sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]{
+				Key:   s.backendNodeRepository.storeInfo,
+				Value: removedNodes,
+			})
+		}
+		if len(addedNodes) > 0 {
+			storesAddedNodes = append(storesAddedNodes, sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]{
+				Key:   s.backendNodeRepository.storeInfo,
+				Value: addedNodes,
+			})
+		}
+		if len(fetchedNodes) > 0 {
+			storesFetchedNodes = append(storesFetchedNodes, sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]{
+				Key:   s.backendNodeRepository.storeInfo,
+				Value: fetchedNodes,
+			})
+		}
+		if len(rootNodes) > 0 {
+			storesRootNodes = append(storesRootNodes, sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]{
+				Key:   s.backendNodeRepository.storeInfo,
+				Value: rootNodes,
+			})
+		}
 	}
-	return updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes
+	return storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes
 }
 
 func (t *transaction) commitStores(ctx context.Context) error {
@@ -482,7 +525,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 }
 
 // Enqueue the deleted node Ids for scheduled physical delete.
-func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds ...btree.UUID) {
+func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds ...cas.VirtualIdPayload[btree.UUID]) {
 	if len(deletedNodeIds) == 0 {
 		return
 	}
