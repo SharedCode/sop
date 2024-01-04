@@ -50,20 +50,13 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // slotLength - specifies the number of item slots per node of a b-tree.
 // isUnique - specifies whether the b-tree will enforce key uniqueness(true) or not(false).
 // isValueDataInNodeSegment - specifies whether the b-tree will store the "value" data in the tree's node segment together with
-//
 //	the key, or store it in another (data) segment. Currently not implemented and always stores the data in the node segment.
-//
-// registryTableName - specifies the name of the Virtual ID registry. Defaults to "name" + "_vr" if not specified.
-// blobPath - blob store path, e.g. - bucket name/path, base folder path.
 // description - (optional) description about the store.
 // t - transaction that the instance will participate in.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
-	isValueDataInNodeSegment bool, registryTableName string, blobPath string, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
+	isValueDataInNodeSegment bool, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("Transaction 't' can't be nil.")
-	}
-	if blobPath == "" {
-		return nil, fmt.Errorf("blobPath can't be empty.")
 	}
 
 	var t2 interface{} = t.GetPhasedTransaction()
@@ -73,7 +66,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 	if err != nil {
 		return nil, err
 	}
-	ns := btree.NewStoreInfo(name, slotLength, isUnique, true, false, registryTableName, blobPath, desciption)
+	ns := btree.NewStoreInfo(name, slotLength, isUnique, true, false, desciption)
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeId.IsNil() {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/SharedCode/sop/btree"
-	// "github.com/gocql/gocql"
+	"github.com/gocql/gocql"
 )
 
 // TODO: when need arise, move these interfaces to a common package, but keep them for now
@@ -34,18 +34,30 @@ func NewStoreRepository() StoreRepository {
 	return &storeRepository{}
 }
 
+// Add a new store record, create a new Virtual ID registry and node blob tables.
 func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
 	}
-	// batch := connection.Session.NewBatch(gocql.CounterBatch)
-	// batch.Query("")
-	// for store := range stores {
-	// 	// Create a new Blob table.
-	// 	batch.Query("CREATE TABLE IF NOT EXISTS btree.%s (name text PRIMARY KEY, );").Exec()
-	// 	// Create a new Virtual ID registry table.
-	// }
-
+	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, llb) VALUES(?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
+	for _, s := range stores {
+		// Add a new store record.
+		if err := connection.Session.Query(insertStatement, s.Name, gocql.UUID(s.RootNodeId), s.SlotLength, s.Count, s.IsUnique, s.Description,
+			s.RegistryTable, s.BlobTable, s.Timestamp, s.IsValueDataInNodeSegment, s.LeafLoadBalancing).Exec(); err != nil {
+			return err
+		}
+		// Create a new Blob table.
+		createNewBlobTable := fmt.Sprintf("CREATE TABLE %s.%s(id UUID PRIMARY KEY, node blob);", connection.Config.Keyspace, s.BlobTable)
+		if err := connection.Session.Query(createNewBlobTable).Exec(); err != nil {
+			return err
+		}
+		// Create a new Virtual ID registry table.
+		createNewRegistry := fmt.Sprintf("CREATE TABLE %s.%s(lid UUID PRIMARY KEY, is_idb boolean, p_ida UUID, p_idb UUID, ts bigint, wip_ts bigint, is_del boolean);",
+			connection.Config.Keyspace, s.RegistryTable)
+		if err := connection.Session.Query(createNewRegistry).Exec(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

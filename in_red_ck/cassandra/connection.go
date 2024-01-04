@@ -45,7 +45,6 @@ func GetConnection(config Config) (*Connection, error) {
 		config.Keyspace = "btree"
 	}
 	cluster := gocql.NewCluster(config.ClusterHosts...)
-	cluster.Keyspace = config.Keyspace
 	cluster.Consistency = config.Consistency
 	if config.ReplicationClause == "" {
 		config.ReplicationClause = "{'class':'SimpleStrategy', 'replication_factor':1}"
@@ -66,13 +65,10 @@ func GetConnection(config Config) (*Connection, error) {
 		return nil, err
 	}
 
-	err = s.Query(fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS btree WITH REPLICATION = %s", config.ReplicationClause)).Exec()
-	if err != nil {
+	if err := s.Query(fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH REPLICATION = %s;", config.Keyspace, config.ReplicationClause)).Exec(); err != nil {
 		return nil, err
 	}
-
-	err = s.Query("CREATE TABLE IF NOT EXISTS btree.store (name text PRIMARY KEY, root_id UUID, slot_count int, count bigint, unique boolean, des text, vid_tbl text, blob_tbl text, ts bigint, vdins boolean, is_del boolean);").Exec()
-	if err != nil {
+	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.store (name text PRIMARY KEY, root_id UUID, slot_count int, count bigint, unique boolean, des text, reg_tbl text, blob_tbl text, ts bigint, vdins boolean, llb boolean, is_del boolean);", config.Keyspace)).Exec(); err != nil {
 		return nil, err
 	}
 

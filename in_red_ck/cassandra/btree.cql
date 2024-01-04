@@ -16,36 +16,27 @@ create table store (
     unique boolean,
     -- description (optional).
     des text,
-    -- virtual id table name.
-    vid_tbl text,
+    -- virtual id registry table name.
+    reg_tbl text,
     -- blob table name.
     blob_tbl text,
     -- timestamp of the store.
     ts bigint,
     -- is value data in node segment.
     vdins boolean,
+    -- leaf load balancing feature, defaults to false in Cassandra.
+    llb boolean,
     -- is_del true specifies this store had been marked logically deleted.
     is_del boolean);
 
 -- Node Blob demo table 1.
-create table nb_1(
+create table foo_b(
     id UUID PRIMARY KEY,
     node blob
 );
 
 -- Virtual Id Registry demo table 1.
-create table vid_1(
-    lid UUID PRIMARY KEY,
-    is_idb boolean,
-    p_ida UUID,
-    p_idb UUID,
-    ts bigint,
-    wip_ts bigint,
-    is_del boolean
-);
-
--- Virtual Id Registry demo table 2.
-create table vid_2(
+create table foo_r(
     lid UUID PRIMARY KEY,
     is_idb boolean,
     p_ida UUID,

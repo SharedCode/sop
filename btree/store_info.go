@@ -35,8 +35,7 @@ type StoreInfo struct {
 }
 
 // NewStoreInfo instantiates a new Store.
-func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool,
-	leafLoadBalancing bool, registryTableName string, blobPath string, desciption string) *StoreInfo {
+func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, leafLoadBalancing bool, desciption string) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if slotLength%2 != 0 {
 		slotLength--
@@ -45,10 +44,11 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 	if slotLength < 2 {
 		slotLength = 2
 	}
-	if registryTableName == "" {
-		// If registry table name was not specified, use default name, e.g. "hello_vr" where "hello" is the store name.
-		registryTableName = fmt.Sprintf("%s_vr", name)
-	}
+
+	// auto generate table names based off of store name.
+	registryTableName := fmt.Sprintf("%s_r", name)
+	blobTable := fmt.Sprintf("%s_b", name)
+
 	// Maximum slot length is 1,000. It may be ridiculously huge blob if too big.
 	// Even 1,000 may be too much, depending on key & value data size you'll store.
 	if slotLength > 1000 {
@@ -60,7 +60,7 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 		IsUnique:                 isUnique,
 		IsValueDataInNodeSegment: isValueDataInNodeSegment,
 		RegistryTable:            registryTableName,
-		BlobTable:                blobPath,
+		BlobTable:                blobTable,
 		Description:              desciption,
 		LeafLoadBalancing: leafLoadBalancing,
 	}
