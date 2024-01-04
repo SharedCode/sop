@@ -1,4 +1,4 @@
-package in_red_c
+package in_red_ck
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/in_red_c/cassandra"
-	q "github.com/SharedCode/sop/in_red_c/kafka"
-	"github.com/SharedCode/sop/in_red_c/redis"
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	q "github.com/SharedCode/sop/in_red_ck/kafka"
+	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
 // TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.

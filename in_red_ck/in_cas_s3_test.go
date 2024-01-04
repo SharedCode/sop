@@ -1,11 +1,11 @@
-package in_red_c
+package in_red_ck
 
 import (
 	"context"
 	"testing"
 
-	"github.com/SharedCode/sop/in_red_c/cassandra"
-	"github.com/SharedCode/sop/in_red_c/redis"
+	"github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
 var cassConfig = cassandra.Config{

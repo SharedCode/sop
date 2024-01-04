@@ -1,4 +1,4 @@
-package in_red_c
+package in_red_ck
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/in_red_c/cassandra"
-	"github.com/SharedCode/sop/in_red_c/redis"
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
 type cacheNode struct {

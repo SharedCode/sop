@@ -1,4 +1,5 @@
-package in_red_c
+// Package contains Redis, Cassandra & Kafka integration code.
+package in_red_ck
 
 import (
 	"context"

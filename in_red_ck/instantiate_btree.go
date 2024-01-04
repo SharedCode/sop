@@ -1,12 +1,12 @@
-package in_red_c
+package in_red_ck
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_red_c/redis"
-	cas "github.com/SharedCode/sop/in_red_c/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/redis"
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
 // Assign the configs & open connections to different sub-systems used by this package.

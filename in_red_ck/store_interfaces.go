@@ -1,4 +1,4 @@
-package in_red_c
+package in_red_ck
 
 import (
 	"github.com/SharedCode/sop/btree"
