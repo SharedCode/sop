@@ -3,7 +3,6 @@ module github.com/SharedCode/sop/try_in_docker
 go 1.21.5
 
 require (
-	github.com/SharedCode/sop v1.5.1
 	github.com/gocql/gocql v1.6.0
 )
 
