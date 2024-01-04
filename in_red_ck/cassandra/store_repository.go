@@ -27,7 +27,7 @@ type StoreRepository interface {
 	Remove(context.Context, ...string) error
 }
 
-type storeRepository struct {}
+type storeRepository struct{}
 
 // NewStoreRepository manages the StoreInfo in Cassandra table.
 func NewStoreRepository() StoreRepository {
@@ -61,6 +61,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 	return nil
 }
 
+// Update enforces so only the Store's Count can get updated.
 func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")

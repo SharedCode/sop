@@ -33,7 +33,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	t.Logf("Transaction story test.\n")
 	trans, _ := NewTransaction(true, -1)
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, "", "foopath", "", trans)
+	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		trans.Rollback(ctx)
@@ -53,7 +53,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 4. Commit Transaction
 	trans, _ := NewTransaction(true, -1)
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, "", "foopath", "", trans)
+	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		trans.Rollback(ctx)
