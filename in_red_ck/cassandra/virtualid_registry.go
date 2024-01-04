@@ -10,8 +10,8 @@ import (
 
 // Manage or fetch Virtual Id request/response payload.
 type VirtualIdPayload[T sop.Handle | btree.UUID] struct {
-	// Registry name where the Virtual Ids will be stored or fetched from.
-	RegistryName string
+	// Registry table (name) where the Virtual Ids will be stored or fetched from.
+	RegistryTable string
 	// IDs is an array containing the Virtual Ids details to be stored or to be fetched.
 	IDs []T
 }

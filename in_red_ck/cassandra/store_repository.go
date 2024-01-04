@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/SharedCode/sop/btree"
+	// "github.com/gocql/gocql"
 )
 
 // TODO: when need arise, move these interfaces to a common package, but keep them for now
@@ -37,6 +38,14 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
 	}
+	// batch := connection.Session.NewBatch(gocql.CounterBatch)
+	// batch.Query("")
+	// for store := range stores {
+	// 	// Create a new Blob table.
+	// 	batch.Query("CREATE TABLE IF NOT EXISTS btree.%s (name text PRIMARY KEY, );").Exec()
+	// 	// Create a new Virtual ID registry table.
+	// }
+
 	return nil
 }
 

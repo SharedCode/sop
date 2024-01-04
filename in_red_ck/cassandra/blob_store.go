@@ -9,8 +9,8 @@ import (
 
 // Manage or fetch node blobs request/response payload.
 type BlobsPayload[T btree.UUID | sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]] struct {
-	// Blob store path.
-	BlobStorePath string
+	// Blob store table name.
+	BlobTable string
 	// Blobs contains the blobs Ids and blobs data for upsert to the store or the blobs Ids to be removed.
 	Blobs []T
 }
@@ -21,7 +21,7 @@ type BlobsPayload[T btree.UUID | sop.KeyValuePair[btree.UUID, *btree.Node[interf
 // like AWS S3, or file system, etc...
 type BlobStore interface {
 	// Get or fetch a blob given an Id.
-	GetOne(ctx context.Context, blobStorePath string, blobId btree.UUID, target *btree.Node[interface{}, interface{}]) error
+	GetOne(ctx context.Context, blobStoreName string, blobId btree.UUID, target *btree.Node[interface{}, interface{}]) error
 	// Add blobs to store.
 	Add(ctx context.Context, blobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]]) error
 	// Update blobs in store.

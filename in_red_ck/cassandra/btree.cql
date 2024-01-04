@@ -18,14 +18,20 @@ create table store (
     des text,
     -- virtual id table name.
     vid_tbl text,
-    -- blob store path, e.g. bucket path/name, folder path.
-    path text,
+    -- blob table name.
+    blob_tbl text,
     -- timestamp of the store.
     ts bigint,
     -- is value data in node segment.
     vdins boolean,
     -- is_del true specifies this store had been marked logically deleted.
     is_del boolean);
+
+-- Node Blob demo table 1.
+create table nb_1(
+    id UUID PRIMARY KEY,
+    node blob
+);
 
 -- Virtual Id Registry demo table 1.
 create table vid_1(

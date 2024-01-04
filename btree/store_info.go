@@ -13,9 +13,9 @@ type StoreInfo struct {
 	// (optional) Description of the Store.
 	Description string
 	// Virtual Id registry table name.
-	IdRegistryName string
-	// Blob Store path, e.g. bucket path/name, folder path.
-	BlobPath string
+	RegistryTable string
+	// Blob table name.
+	BlobTable string
 	// RootNodeId is the root node's Id.
 	RootNodeId UUID
 	// Total count of items stored.
@@ -56,8 +56,8 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 		SlotLength:               slotLength,
 		IsUnique:                 isUnique,
 		IsValueDataInNodeSegment: isValueDataInNodeSegment,
-		IdRegistryName:           registryTableName,
-		BlobPath:                 blobPath,
+		RegistryTable:            registryTableName,
+		BlobTable:                blobPath,
 		Description:              desciption,
 	}
 }
@@ -73,7 +73,7 @@ func (s StoreInfo) IsEmpty() bool {
 func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 	return s.SlotLength == b.SlotLength &&
 		s.IsUnique == b.IsUnique &&
-		s.BlobPath == b.BlobPath &&
-		s.IdRegistryName == b.IdRegistryName &&
+		s.BlobTable == b.BlobTable &&
+		s.RegistryTable == b.RegistryTable &&
 		s.IsValueDataInNodeSegment == b.IsValueDataInNodeSegment
 }

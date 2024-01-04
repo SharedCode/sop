@@ -45,8 +45,8 @@ func (v *mock_vid_registry) Get(ctx context.Context, storesLids ...VirtualIdPayl
 			handles = append(handles, h)
 		}
 		storesHandles = append(storesHandles, VirtualIdPayload[sop.Handle]{
-			RegistryName: storeLids.RegistryName,
-			IDs:          handles,
+			RegistryTable: storeLids.RegistryTable,
+			IDs:           handles,
 		})
 	}
 	return storesHandles, nil

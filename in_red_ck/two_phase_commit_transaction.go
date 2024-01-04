@@ -297,7 +297,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	updatedNodesInactiveIds := make([]cas.VirtualIdPayload[btree.UUID], len(t.updatedNodeHandles))
 	deletedIds := make([]cas.VirtualIdPayload[btree.UUID], len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
-		updatedNodesInactiveIds[i].RegistryName = t.updatedNodeHandles[i].RegistryName
+		updatedNodesInactiveIds[i].RegistryTable = t.updatedNodeHandles[i].RegistryTable
 		updatedNodesInactiveIds[i].IDs = make([]btree.UUID, len(t.updatedNodeHandles[i].IDs))
 		for ii := range t.updatedNodeHandles[i].IDs {
 			// Since we've flipped the inactive to active, the new inactive Id is to be deleted(unused).
@@ -314,7 +314,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		log.Warn(fmt.Sprintf("Failed to clear in Registry inactive node Ids, details: %v", err))
 	}
 	for i := range t.removedNodeHandles {
-		deletedIds[i].RegistryName = t.removedNodeHandles[i].RegistryName
+		deletedIds[i].RegistryTable = t.removedNodeHandles[i].RegistryTable
 		deletedIds[i].IDs = make([]btree.UUID, len(t.removedNodeHandles[i].IDs))
 		for ii := range t.removedNodeHandles[i].IDs {
 			// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
@@ -460,10 +460,10 @@ func (t *transaction) classifyModifiedNodes() ([]sop.KeyValuePair[*btree.StoreIn
 				fetchedNodes = append(fetchedNodes, cacheNode.node)
 			}
 		}
-		if len(addedNodes) > 0 {
-			storesAddedNodes = append(storesAddedNodes, sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]{
+		if len(updatedNodes) > 0 {
+			storesUpdatedNodes = append(storesUpdatedNodes, sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]{
 				Key:   s.backendNodeRepository.storeInfo,
-				Value: addedNodes,
+				Value: updatedNodes,
 			})
 		}
 		if len(removedNodes) > 0 {

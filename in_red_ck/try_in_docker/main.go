@@ -2,10 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/in_red_ck"
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -21,6 +22,19 @@ func init() {
 
 func main() {
 	repo := cas.NewStoreRepository()
-	repo.Add(ctx, *btree.NewStoreInfo("", 4, true, true, "vid_1", "/Users/", ""))
+	if err := repo.Add(ctx, *btree.NewStoreInfo("foobar", 4, true, true, "vid_1", "/Users/", "")); err != nil {
+		writeAndExit("Cassandra repo Add failed, err: %v.", err)
+	}
+	if s, err := repo.Get(ctx, "foobar"); err != nil {
+		writeAndExit("Cassandra repo Get failed, err: %v.", err)
+	} else {
+		writeAndExit("Store got: %v.", s)
+	}
 	// conn.Session.ExecuteBatch()
+
+	writeAndExit("Our cool app completed! -from docker.")
+}
+
+func writeAndExit(template string, args ...interface{}) {
+	panic(fmt.Sprintf(template, args...))
 }

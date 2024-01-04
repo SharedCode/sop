@@ -96,8 +96,8 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 		return v.node, nil
 	}
 	h, err := nr.transaction.virtualIdRegistry.Get(ctx, cas.VirtualIdPayload[btree.UUID]{
-		RegistryName: nr.storeInfo.IdRegistryName,
-		IDs:          []btree.UUID{logicalId},
+		RegistryTable: nr.storeInfo.RegistryTable,
+		IDs:           []btree.UUID{logicalId},
 	})
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 			return nil, err
 		}
 		// Fetch from blobStore and cache to Redis/local.
-		if err = nr.transaction.nodeBlobStore.GetOne(ctx, nr.storeInfo.BlobPath, nodeId, target); err != nil {
+		if err = nr.transaction.nodeBlobStore.GetOne(ctx, nr.storeInfo.BlobTable, nodeId, target); err != nil {
 			return nil, err
 		}
 		if err := nr.transaction.redisCache.SetStruct(ctx, nodeId.ToString(), target, -1); err != nil {
@@ -172,17 +172,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 	if len(nodes) == 0 {
 		return true, nil
 	}
-	vids := make([]cas.VirtualIdPayload[btree.UUID], len(nodes))
-	for i, storeNodes := range nodes {
-		ids := make([]btree.UUID, len(storeNodes.Value))
-		for ii := range storeNodes.Value {
-			ids[ii] = storeNodes.Value[ii].Id
-		}
-		vids[i] = cas.VirtualIdPayload[btree.UUID]{
-			RegistryName: storeNodes.Key.IdRegistryName,
-			IDs:          ids,
-		}
-	}
+	vids := nr.convertToVirtualIdRequestPayload(nodes)
 	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, vids...)
 	if err != nil {
 		return false, err
@@ -190,13 +180,13 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
 	for i := range handles {
 		blobs[i].Blobs = make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(handles[i].IDs))
+		blobs[i].BlobTable = nodes[i].Key.BlobTable
 		for ii := range handles[i].IDs {
 			// Check if a non-empty root node was found, fail to cause "re-sync & merge".
 			if !handles[i].IDs[ii].LogicalId.IsNil() {
 				return false, nil
 			}
 			handles[i].IDs[ii] = sop.NewHandle(vids[i].IDs[ii])
-			blobs[i].BlobStorePath = nodes[i].Key.BlobPath
 			blobs[i].Blobs[ii].Key = handles[i].IDs[ii].GetActiveId()
 			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
 		}
@@ -233,7 +223,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 	}
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
 	for i := range handles {
-		blobs[i].BlobStorePath = nr.storeInfo.BlobPath
+		blobs[i].BlobTable = nodes[i].Key.BlobTable
 		for ii := range handles[i].IDs {
 			// Node with such Id is marked deleted or had been updated since reading it.
 			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Timestamp != nodes[i].Value[ii].Timestamp {
@@ -243,16 +233,9 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 			id := handles[i].IDs[ii].AllocateId()
 			if id == btree.NilUUID {
 				if handles[i].IDs[ii].IsExpiredInactive() {
-					iid := handles[i].IDs[ii].GetInActiveId()
-					// For now, 'ignore any error while trying to cleanup the expired inactive phys Id.
-					if err := nr.transaction.nodeBlobStore.Remove(ctx, cas.BlobsPayload[btree.UUID]{
-						BlobStorePath: nr.storeInfo.BlobPath,
-						Blobs:         []btree.UUID{iid}}); err == nil {
-						if err := nr.transaction.redisCache.Delete(ctx, iid.ToString()); err == nil || redis.KeyNotFound(err) {
-							handles[i].IDs[ii].ClearInactiveId()
-							id = handles[i].IDs[ii].AllocateId()
-						}
-					}
+					// Reuse the expired Inactive Id & blob row.
+					id = handles[i].IDs[ii].GetInActiveId()
+					handles[i].IDs[ii].WorkInProgressTimestamp = Now()
 				}
 			}
 			if id == btree.NilUUID {
@@ -327,8 +310,9 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
 	rightNow := Now()
 	for i := range nodes {
-		handles[i].RegistryName = nr.storeInfo.IdRegistryName
+		handles[i].RegistryTable = nodes[i].Key.RegistryTable
 		handles[i].IDs = make([]sop.Handle, len(nodes[i].Value))
+		blobs[i].BlobTable = nodes[i].Key.BlobTable
 		for ii := range nodes[i].Value {
 			// Add node to blob store.
 			h := sop.NewHandle(nodes[i].Value[ii].Id)
@@ -534,8 +518,8 @@ func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*
 	bibs := make([]cas.BlobsPayload[btree.UUID], len(nodes))
 	for i := range nodes {
 		bibs[i] = cas.BlobsPayload[btree.UUID]{
-			BlobStorePath: nr.storeInfo.BlobPath,
-			Blobs:         make([]btree.UUID, len(nodes[i].Value)),
+			BlobTable: nodes[i].Key.BlobTable,
+			Blobs:     make([]btree.UUID, len(nodes[i].Value)),
 		}
 		for ii := range nodes[i].Value {
 			bibs[i].Blobs[ii] = nodes[i].Value[ii].Id
@@ -549,8 +533,8 @@ func (nr *nodeRepository) convertToVirtualIdRequestPayload(nodes []sop.KeyValueP
 	vids := make([]cas.VirtualIdPayload[btree.UUID], len(nodes))
 	for i := range nodes {
 		vids[i] = cas.VirtualIdPayload[btree.UUID]{
-			RegistryName: nr.storeInfo.IdRegistryName,
-			IDs:          make([]btree.UUID, len(nodes[i].Value)),
+			RegistryTable: nodes[i].Key.RegistryTable,
+			IDs:           make([]btree.UUID, len(nodes[i].Value)),
 		}
 		for ii := range nodes[i].Value {
 			vids[i].IDs[ii] = nodes[i].Value[ii].Id
