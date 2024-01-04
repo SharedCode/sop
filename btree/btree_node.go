@@ -523,6 +523,10 @@ func (node *Node[TK, TV]) isNilChildren() bool {
 // Returns true if a slot is available in left side siblings of this node modified to suit possible unbalanced branch.
 func (node *Node[TK, TV]) isThereVacantSlotInLeft(ctx context.Context, btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
 	*isUnBalanced = false
+	if !btree.StoreInfo.LeafLoadBalancing {
+		*isUnBalanced = true
+		return false, nil
+	}
 	// Start from this node.
 	temp := node
 	for temp != nil {
@@ -548,6 +552,10 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(ctx context.Context, btree *Bt
 // Returns true if a slot is available in right side siblings of this node modified to suit possible unbalanced branch.
 func (node *Node[TK, TV]) isThereVacantSlotInRight(ctx context.Context, btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
 	*isUnBalanced = false
+	if !btree.StoreInfo.LeafLoadBalancing {
+		*isUnBalanced = true
+		return false, nil
+	}
 	// Start from this node.
 	temp := node
 	for temp != nil {

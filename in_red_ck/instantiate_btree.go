@@ -73,7 +73,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 	if err != nil {
 		return nil, err
 	}
-	ns := btree.NewStoreInfo(name, slotLength, isUnique, true, registryTableName, blobPath, desciption)
+	ns := btree.NewStoreInfo(name, slotLength, isUnique, true, false, registryTableName, blobPath, desciption)
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeId.IsNil() {

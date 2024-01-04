@@ -29,18 +29,21 @@ type StoreInfo struct {
 	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's data segment.
 	// Otherwise is false.
 	IsValueDataInNodeSegment bool
+	// If true, node load will be balanced by pushing items to sibling nodes if there are vacant slots,
+	// otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
+	LeafLoadBalancing bool
 }
 
 // NewStoreInfo instantiates a new Store.
 func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool,
-	registryTableName string, blobPath string, desciption string) *StoreInfo {
+	leafLoadBalancing bool, registryTableName string, blobPath string, desciption string) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if slotLength%2 != 0 {
 		slotLength--
 	}
-	// Minimum slot length is 4, you lose gains if you use less than 4.
-	if slotLength < 4 {
-		slotLength = 4
+	// Minimum slot length is 2.
+	if slotLength < 2 {
+		slotLength = 2
 	}
 	if registryTableName == "" {
 		// If registry table name was not specified, use default name, e.g. "hello_vr" where "hello" is the store name.
@@ -59,6 +62,7 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 		RegistryTable:            registryTableName,
 		BlobTable:                blobPath,
 		Description:              desciption,
+		LeafLoadBalancing: leafLoadBalancing,
 	}
 }
 
