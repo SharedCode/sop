@@ -1,4 +1,4 @@
-package in_cas_s3
+package in_red_c
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_cas_s3/redis"
+	"github.com/SharedCode/sop/in_red_c/redis"
 )
 
 type actionType int

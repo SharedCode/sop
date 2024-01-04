@@ -1,17 +1,18 @@
-package in_cas_s3
+package in_red_c
 
 import (
 	"context"
 	"testing"
 
-	"github.com/SharedCode/sop/in_cas_s3/cassandra"
-	"github.com/SharedCode/sop/in_cas_s3/redis"
+	"github.com/SharedCode/sop/in_red_c/cassandra"
+	"github.com/SharedCode/sop/in_red_c/redis"
 )
 
 var cassConfig = cassandra.Config{
 	ClusterHosts: []string{"172.17.0.2"},
 	Keyspace:     "btree",
 }
+
 func init() {
 	// Initialize(cassConfig, redis.DefaultOptions())
 	redis.GetConnection(redis.DefaultOptions())

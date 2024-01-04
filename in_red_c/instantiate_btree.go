@@ -1,12 +1,12 @@
-package in_cas_s3
+package in_red_c
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/in_cas_s3/cassandra"
-	"github.com/SharedCode/sop/in_cas_s3/redis"
+	"github.com/SharedCode/sop/in_red_c/redis"
+	cas "github.com/SharedCode/sop/in_red_c/cassandra"
 )
 
 // Assign the configs & open connections to different sub-systems used by this package.
@@ -30,7 +30,7 @@ func Shutdown() {
 // OpenBtree will open an existing B-Tree instance it for use in a transaction.
 func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
-		return nil, fmt.Errorf("Transaction 't' can't be nil.")		
+		return nil, fmt.Errorf("Transaction 't' can't be nil.")
 	}
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
@@ -50,7 +50,9 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // slotLength - specifies the number of item slots per node of a b-tree.
 // isUnique - specifies whether the b-tree will enforce key uniqueness(true) or not(false).
 // isValueDataInNodeSegment - specifies whether the b-tree will store the "value" data in the tree's node segment together with
+//
 //	the key, or store it in another (data) segment. Currently not implemented and always stores the data in the node segment.
+//
 // registryTableName - specifies the name of the Virtual ID registry. Defaults to "name" + "_vr" if not specified.
 // blobPath - blob store path, e.g. - bucket name/path, base folder path.
 // description - (optional) description about the store.
@@ -58,7 +60,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
 	isValueDataInNodeSegment bool, registryTableName string, blobPath string, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
-		return nil, fmt.Errorf("Transaction 't' can't be nil.")		
+		return nil, fmt.Errorf("Transaction 't' can't be nil.")
 	}
 	if blobPath == "" {
 		return nil, fmt.Errorf("blobPath can't be empty.")

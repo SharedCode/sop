@@ -1,4 +1,4 @@
-package in_cas_s3
+package in_red_c
 
 import (
 	"context"
@@ -9,10 +9,9 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/in_cas_s3/cassandra"
-	q "github.com/SharedCode/sop/in_cas_s3/kafka"
-	"github.com/SharedCode/sop/in_cas_s3/redis"
-	"github.com/SharedCode/sop/in_cas_s3/s3"
+	cas "github.com/SharedCode/sop/in_red_c/cassandra"
+	q "github.com/SharedCode/sop/in_red_c/kafka"
+	"github.com/SharedCode/sop/in_red_c/redis"
 )
 
 // TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.
@@ -34,7 +33,7 @@ type transaction struct {
 	btreesBackend []StoreInterface[interface{}, interface{}]
 	btrees        []*btree.Btree[interface{}, interface{}]
 	// Needed by NodeRepository for Node data merging to the backend storage systems.
-	nodeBlobStore   s3.BlobStore
+	nodeBlobStore   cas.BlobStore
 	redisCache      redis.Cache
 	storeRepository cas.StoreRepository
 	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
@@ -82,7 +81,7 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) TwoPha
 		storeRepository:   cas.NewMockStoreRepository(),
 		virtualIdRegistry: cas.NewMockVirtualIdRegistry(),
 		redisCache:        redis.NewClient(),
-		nodeBlobStore:     s3.NewBlobStore(),
+		nodeBlobStore:     cas.NewBlobStore(),
 		deletedItemsQueue: q.NewQueue[QueueItem](),
 		logger:            newTransactionLogger(),
 		phaseDone:         -1,

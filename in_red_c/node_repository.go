@@ -1,4 +1,4 @@
-package in_cas_s3
+package in_red_c
 
 import (
 	"context"
@@ -8,9 +8,8 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/in_cas_s3/cassandra"
-	"github.com/SharedCode/sop/in_cas_s3/redis"
-	"github.com/SharedCode/sop/in_cas_s3/s3"
+	cas "github.com/SharedCode/sop/in_red_c/cassandra"
+	"github.com/SharedCode/sop/in_red_c/redis"
 )
 
 type cacheNode struct {
@@ -188,7 +187,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 	if err != nil {
 		return false, err
 	}
-	blobs := make([]s3.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
+	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
 	for i := range handles {
 		blobs[i].Blobs = make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(handles[i].IDs))
 		for ii := range handles[i].IDs {
@@ -232,7 +231,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 	if err != nil {
 		return false, err
 	}
-	blobs := make([]s3.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
+	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
 	for i := range handles {
 		blobs[i].BlobStorePath = nr.storeInfo.BlobPath
 		for ii := range handles[i].IDs {
@@ -246,7 +245,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 				if handles[i].IDs[ii].IsExpiredInactive() {
 					iid := handles[i].IDs[ii].GetInActiveId()
 					// For now, 'ignore any error while trying to cleanup the expired inactive phys Id.
-					if err := nr.transaction.nodeBlobStore.Remove(ctx, s3.BlobsPayload[btree.UUID]{
+					if err := nr.transaction.nodeBlobStore.Remove(ctx, cas.BlobsPayload[btree.UUID]{
 						BlobStorePath: nr.storeInfo.BlobPath,
 						Blobs:         []btree.UUID{iid}}); err == nil {
 						if err := nr.transaction.redisCache.Delete(ctx, iid.ToString()); err == nil || redis.KeyNotFound(err) {
@@ -325,7 +324,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 		return nil
 	}
 	handles := make([]cas.VirtualIdPayload[sop.Handle], len(nodes))
-	blobs := make([]s3.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
+	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
 	rightNow := Now()
 	for i := range nodes {
 		handles[i].RegistryName = nr.storeInfo.IdRegistryName
@@ -435,7 +434,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 	if err != nil {
 		return err
 	}
-	blobsIds := make([]s3.BlobsPayload[btree.UUID], len(nodes))
+	blobsIds := make([]cas.BlobsPayload[btree.UUID], len(nodes))
 	for i := range handles {
 		for ii := range handles[i].IDs {
 			blobsIds[i].Blobs[ii] = handles[i].IDs[ii].GetInActiveId()
@@ -530,11 +529,11 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []sop.KeyValuePa
 	return handles, nil
 }
 
-func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) []s3.BlobsPayload[btree.UUID] {
+func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) []cas.BlobsPayload[btree.UUID] {
 	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
-	bibs := make([]s3.BlobsPayload[btree.UUID], len(nodes))
+	bibs := make([]cas.BlobsPayload[btree.UUID], len(nodes))
 	for i := range nodes {
-		bibs[i] = s3.BlobsPayload[btree.UUID]{
+		bibs[i] = cas.BlobsPayload[btree.UUID]{
 			BlobStorePath: nr.storeInfo.BlobPath,
 			Blobs:         make([]btree.UUID, len(nodes[i].Value)),
 		}
