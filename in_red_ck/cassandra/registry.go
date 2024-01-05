@@ -14,7 +14,7 @@ import (
 )
 
 // Manage or fetch Virtual Id request/response payload.
-type VirtualIdPayload[T sop.Handle | btree.UUID] struct {
+type RegistryPayload[T sop.Handle | btree.UUID] struct {
 	// Registry table (name) where the Virtual Ids will be stored or fetched from.
 	RegistryTable string
 	// IDs is an array containing the Virtual Ids details to be stored or to be fetched.
@@ -26,27 +26,27 @@ type VirtualIdPayload[T sop.Handle | btree.UUID] struct {
 //
 // All methods are taking in a set of items and need to be implemented to do
 // all or nothing feature, e.g. wrapped in transaction in Cassandra.
-type VirtualIdRegistry interface {
+type Registry interface {
 	// Get will fetch handles(given their Ids) from stores(given a store name).
 	// Supports an array of store names with a set of handle Ids each.
-	Get(context.Context, ...VirtualIdPayload[btree.UUID]) ([]VirtualIdPayload[sop.Handle], error)
+	Get(context.Context, ...RegistryPayload[btree.UUID]) ([]RegistryPayload[sop.Handle], error)
 	// Add will insert handles to stores(given a store name).
 	// Supports an array of store names with a set of handles each.
-	Add(context.Context, ...VirtualIdPayload[sop.Handle]) error
+	Add(context.Context, ...RegistryPayload[sop.Handle]) error
 	// Update will update handles of stores(given a store name).
 	// Supports an array of store names with a set of handle each.
-	Update(context.Context, ...VirtualIdPayload[sop.Handle]) error
+	Update(context.Context, ...RegistryPayload[sop.Handle]) error
 	// Remove will delete handles(given their Ids) from stores(given a store name).
 	// Supports an array of store names with a set of handle each.
-	Remove(context.Context, ...VirtualIdPayload[btree.UUID]) error
+	Remove(context.Context, ...RegistryPayload[btree.UUID]) error
 }
 
 type registry struct {
 	redisCache redis.Cache
 }
 
-// NewVirtualIdRegistry manages the Handle in the store's Cassandra registry table.
-func NewVirtualIdRegistry(rc redis.Cache) (VirtualIdRegistry, error) {
+// NewRegistry manages the Handle in the store's Cassandra registry table.
+func NewRegistry(rc redis.Cache) (Registry, error) {
 	if rc == nil {
 		return nil, fmt.Errorf("Redis cache is required.")
 	}
@@ -57,7 +57,7 @@ func NewVirtualIdRegistry(rc redis.Cache) (VirtualIdRegistry, error) {
 
 // TODO: finalize Consistency levels to use in below CRUD methods.
 
-func (v *registry) Add(ctx context.Context, storesHandles ...VirtualIdPayload[sop.Handle]) error {
+func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop.Handle]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
 	}
@@ -80,7 +80,7 @@ func (v *registry) Add(ctx context.Context, storesHandles ...VirtualIdPayload[so
 }
 
 // Update does an all or nothing update of the batch of handles, mapping them to respective registry table(s).
-func (v *registry) Update(ctx context.Context, storesHandles ...VirtualIdPayload[sop.Handle]) error {
+func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[sop.Handle]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
 	}
@@ -111,29 +111,29 @@ func (v *registry) Update(ctx context.Context, storesHandles ...VirtualIdPayload
 	return nil
 }
 
-func (v *registry) Get(ctx context.Context, storesLids ...VirtualIdPayload[btree.UUID]) ([]VirtualIdPayload[sop.Handle], error) {
+func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.UUID]) ([]RegistryPayload[sop.Handle], error) {
 	if connection == nil {
 		return nil, fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
 	}
 
-	storesHandles := make([]VirtualIdPayload[sop.Handle], 0, len(storesLids))
+	storesHandles := make([]RegistryPayload[sop.Handle], 0, len(storesLids))
 	for _, storeLids := range storesLids {
 		handles := make([]sop.Handle, 0, len(storeLids.IDs))
 		paramQ := make([]string, 0, len(storeLids.IDs))
 		lidsAsIntfs := make([]interface{}, 0, len(storeLids.IDs))
 		for i := range storeLids.IDs {
-			h := sop.Handle{}			
+			h := sop.Handle{}
 			if err := v.redisCache.GetStruct(ctx, formatKey(formatKey(storeLids.IDs[i].ToString())), &h); err != nil && !redis.KeyNotFound(err) {
 				log.Error("Registry update on get failed, details: %v.", err)
-					paramQ = append(paramQ, "?")
-					lidsAsIntfs = append(lidsAsIntfs, interface{}(storeLids.IDs[i]))
+				paramQ = append(paramQ, "?")
+				lidsAsIntfs = append(lidsAsIntfs, interface{}(storeLids.IDs[i]))
 				continue
 			}
 			handles = append(handles, h)
 		}
 
 		if len(paramQ) == 0 {
-			storesHandles = append(storesHandles, VirtualIdPayload[sop.Handle]{
+			storesHandles = append(storesHandles, RegistryPayload[sop.Handle]{
 				RegistryTable: storeLids.RegistryTable,
 				IDs:           handles,
 			})
@@ -158,7 +158,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...VirtualIdPayload[btree
 		if err := iter.Close(); err != nil {
 			return nil, err
 		}
-		storesHandles = append(storesHandles, VirtualIdPayload[sop.Handle]{
+		storesHandles = append(storesHandles, RegistryPayload[sop.Handle]{
 			RegistryTable: storeLids.RegistryTable,
 			IDs:           handles,
 		})
@@ -166,7 +166,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...VirtualIdPayload[btree
 	return storesHandles, nil
 }
 
-func (v *registry) Remove(ctx context.Context, storesLids ...VirtualIdPayload[btree.UUID]) error {
+func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btree.UUID]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
 	}

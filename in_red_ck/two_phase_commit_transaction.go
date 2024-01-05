@@ -37,7 +37,7 @@ type transaction struct {
 	redisCache      redis.Cache
 	storeRepository cas.StoreRepository
 	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
-	registry          cas.VirtualIdRegistry
+	registry          cas.Registry
 	deletedItemsQueue q.Queue[QueueItem]
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
 	forWriting bool
@@ -46,8 +46,8 @@ type transaction struct {
 	maxTime   time.Duration
 	logger    *transactionLog
 	// Phase 1 commit generated objects required for phase 2 commit.
-	updatedNodeHandles []cas.VirtualIdPayload[sop.Handle]
-	removedNodeHandles []cas.VirtualIdPayload[sop.Handle]
+	updatedNodeHandles []cas.RegistryPayload[sop.Handle]
+	removedNodeHandles []cas.RegistryPayload[sop.Handle]
 }
 
 type QueueItemType int
@@ -60,7 +60,7 @@ const (
 
 type QueueItem struct {
 	ItemType QueueItemType
-	ItemId   cas.VirtualIdPayload[btree.UUID]
+	ItemId   cas.RegistryPayload[btree.UUID]
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
@@ -295,8 +295,8 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	}
 
 	// Assemble & enqueue the deleted Ids, 'should not fail.
-	updatedNodesInactiveIds := make([]cas.VirtualIdPayload[btree.UUID], len(t.updatedNodeHandles))
-	deletedIds := make([]cas.VirtualIdPayload[btree.UUID], len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
+	updatedNodesInactiveIds := make([]cas.RegistryPayload[btree.UUID], len(t.updatedNodeHandles))
+	deletedIds := make([]cas.RegistryPayload[btree.UUID], len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
 		updatedNodesInactiveIds[i].RegistryTable = t.updatedNodeHandles[i].RegistryTable
 		updatedNodesInactiveIds[i].IDs = make([]btree.UUID, len(t.updatedNodeHandles[i].IDs))
@@ -525,7 +525,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 }
 
 // Enqueue the deleted node Ids for scheduled physical delete.
-func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds ...cas.VirtualIdPayload[btree.UUID]) {
+func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds ...cas.RegistryPayload[btree.UUID]) {
 	if len(deletedNodeIds) == 0 {
 		return
 	}

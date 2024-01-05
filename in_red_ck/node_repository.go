@@ -95,7 +95,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 		}
 		return v.node, nil
 	}
-	h, err := nr.transaction.registry.Get(ctx, cas.VirtualIdPayload[btree.UUID]{
+	h, err := nr.transaction.registry.Get(ctx, cas.RegistryPayload[btree.UUID]{
 		RegistryTable: nr.storeInfo.RegistryTable,
 		IDs:           []btree.UUID{logicalId},
 	})
@@ -306,7 +306,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 	if len(nodes) == 0 {
 		return nil
 	}
-	handles := make([]cas.VirtualIdPayload[sop.Handle], len(nodes))
+	handles := make([]cas.RegistryPayload[sop.Handle], len(nodes))
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
 	rightNow := Now()
 	for i := range nodes {
@@ -465,7 +465,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []sop.
 }
 
 // Set to active the inactive nodes. This is the last persistence step in transaction commit.
-func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) ([]cas.VirtualIdPayload[sop.Handle], error) {
+func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) ([]cas.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return nil, nil
 	}
@@ -492,7 +492,7 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []sop
 }
 
 // Update upsert time of a given set of nodes.
-func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) ([]cas.VirtualIdPayload[sop.Handle], error) {
+func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) ([]cas.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return nil, nil
 	}
@@ -528,11 +528,11 @@ func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*
 	return bibs
 }
 
-func (nr *nodeRepository) convertToVirtualIdRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) []cas.VirtualIdPayload[btree.UUID] {
+func (nr *nodeRepository) convertToVirtualIdRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []*btree.Node[interface{}, interface{}]]) []cas.RegistryPayload[btree.UUID] {
 	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
-	vids := make([]cas.VirtualIdPayload[btree.UUID], len(nodes))
+	vids := make([]cas.RegistryPayload[btree.UUID], len(nodes))
 	for i := range nodes {
-		vids[i] = cas.VirtualIdPayload[btree.UUID]{
+		vids[i] = cas.RegistryPayload[btree.UUID]{
 			RegistryTable: nodes[i].Key.RegistryTable,
 			IDs:           make([]btree.UUID, len(nodes[i].Value)),
 		}
