@@ -51,6 +51,7 @@ func GetConnection(config Config) (*Connection, error) {
 	cluster := gocql.NewCluster(config.ClusterHosts...)
 	cluster.Consistency = config.Consistency
 	if config.ReplicationClause == "" {
+		// Specify an appropriate replication feature.
 		config.ReplicationClause = "{'class':'SimpleStrategy', 'replication_factor':1}"
 	}
 	if config.ConnectionTimeout > 0 {
@@ -72,6 +73,7 @@ func GetConnection(config Config) (*Connection, error) {
 	if err := s.Query(fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH REPLICATION = %s;", config.Keyspace, config.ReplicationClause)).Exec(); err != nil {
 		return nil, err
 	}
+	// Auto create the "store" table if not yet.
 	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.store (name text PRIMARY KEY, root_id UUID, slot_count int, count bigint, unique boolean, des text, reg_tbl text, blob_tbl text, ts bigint, vdins boolean, llb boolean, is_del boolean);", config.Keyspace)).Exec(); err != nil {
 		return nil, err
 	}

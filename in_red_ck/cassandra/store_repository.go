@@ -99,6 +99,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.LeafLoadBalancing, &store.IsDeleted) {
 		store.RootNodeId = btree.UUID(id)
 		stores = append(stores, store)
+		store = btree.StoreInfo{}
 	}
 	if err := iter.Close(); err != nil {
 		return nil, err
