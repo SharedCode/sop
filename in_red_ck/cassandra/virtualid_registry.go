@@ -55,6 +55,7 @@ func NewVirtualIdRegistry(rc redis.Cache) (VirtualIdRegistry, error) {
 }
 
 // TODO: finalize Consistency levels to use in below CRUD methods.
+// TODO: add redis caching.
 
 func (v *registry) Add(ctx context.Context, storesHandles ...VirtualIdPayload[sop.Handle]) error {
 	if connection == nil {
