@@ -44,6 +44,10 @@ func GetConnection(config Config) (*Connection, error) {
 		// default keyspace
 		config.Keyspace = "btree"
 	}
+	if config.Consistency == gocql.Any {
+		// Defaults to One consistency. You should set it to an appropriate level.
+		config.Consistency = gocql.One
+	}
 	cluster := gocql.NewCluster(config.ClusterHosts...)
 	cluster.Consistency = config.Consistency
 	if config.ReplicationClause == "" {

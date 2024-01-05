@@ -46,8 +46,8 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 	}
 
 	// auto generate table names based off of store name.
-	registryTableName := fmt.Sprintf("%s_r", name)
-	blobTable := fmt.Sprintf("%s_b", name)
+	registryTableName := FormatRegistryTable(name)
+	blobTable := FormatBlobTable(name)
 
 	// Maximum slot length is 1,000. It may be ridiculously huge blob if too big.
 	// Even 1,000 may be too much, depending on key & value data size you'll store.
@@ -64,6 +64,13 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 		Description:              desciption,
 		LeafLoadBalancing: leafLoadBalancing,
 	}
+}
+
+func FormatBlobTable(name string) string {
+	return fmt.Sprintf("%s_b", name)
+}
+func FormatRegistryTable(name string) string {
+	return fmt.Sprintf("%s_r", name)
 }
 
 // Returns true if this StoreInfo is empty, false otherwise.
