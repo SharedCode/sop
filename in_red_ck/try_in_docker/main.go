@@ -23,6 +23,11 @@ func main() {
 		writeAndExit(err.Error())
 	}
 
+	red := redis.NewClient()
+	if err := red.Ping(ctx); err != nil {
+		writeAndExit(fmt.Sprintf("Ping failed, details: %v.", err))
+	}
+
 	storeInfo := *btree.NewStoreInfo("foobar", 4, true, true, true, "")
 	storeInfo.RootNodeId = btree.NewUUID()
 	repo := cas.NewStoreRepository()

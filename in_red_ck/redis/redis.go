@@ -17,6 +17,7 @@ type Cache interface {
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
 	GetStruct(ctx context.Context, key string, target interface{}) error
 	Delete(ctx context.Context, key string) error
+	Ping(ctx context.Context) error
 }
 
 type client struct {}
