@@ -30,8 +30,3 @@ type BlobStore interface {
 	Remove(ctx context.Context, blobsIds ...BlobsPayload[btree.UUID]) error
 }
 
-// NewBlobStore instantiates a new (mocked) blobstore.
-// TODO: implement a real blob store that either talks to S3 or to a file system to store/manage blobs.
-func NewBlobStore() BlobStore {
-	return newMockBlobStore()
-}

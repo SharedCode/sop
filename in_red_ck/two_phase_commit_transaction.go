@@ -37,7 +37,7 @@ type transaction struct {
 	redisCache      redis.Cache
 	storeRepository cas.StoreRepository
 	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
-	virtualIdRegistry cas.VirtualIdRegistry
+	registry          cas.VirtualIdRegistry
 	deletedItemsQueue q.Queue[QueueItem]
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
 	forWriting bool
@@ -79,9 +79,9 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) TwoPha
 		maxTime:    maxTime,
 		// TODO: Allow caller to supply Redis & blob store settings.
 		storeRepository:   cas.NewMockStoreRepository(),
-		virtualIdRegistry: cas.NewMockVirtualIdRegistry(),
+		registry:          cas.NewMockRegistry(),
 		redisCache:        redis.NewClient(),
-		nodeBlobStore:     cas.NewBlobStore(),
+		nodeBlobStore:     cas.NewMockBlobStore(),
 		deletedItemsQueue: q.NewQueue[QueueItem](),
 		logger:            newTransactionLogger(),
 		phaseDone:         -1,
@@ -290,7 +290,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	// Finalize the commit, it is the only all or nothing action in the commit,
 	// and on registry (very small) records only.
 	t.logger.log(finalizeCommit)
-	if err := t.virtualIdRegistry.Update(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
+	if err := t.registry.Update(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
 		return err
 	}
 
@@ -309,7 +309,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 			t.updatedNodeHandles[i].IDs[ii].ClearInactiveId()
 		}
 	}
-	if err := t.virtualIdRegistry.Update(ctx, t.updatedNodeHandles...); err != nil {
+	if err := t.registry.Update(ctx, t.updatedNodeHandles...); err != nil {
 		// Exclude the updated nodes inactive Ids for deletion because they failed getting cleared in registry.
 		updatedNodesInactiveIds = nil
 		log.Warn(fmt.Sprintf("Failed to clear in Registry inactive node Ids, details: %v", err))

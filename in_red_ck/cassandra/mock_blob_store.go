@@ -12,7 +12,8 @@ type mockBlobStore struct {
 	lookup map[btree.UUID][]byte
 }
 
-func newMockBlobStore() BlobStore {
+// NewBlobStore instantiates a new (mocked) blobstore.
+func NewMockBlobStore() BlobStore {
 	return &mockBlobStore{
 		lookup: make(map[btree.UUID][]byte),
 	}

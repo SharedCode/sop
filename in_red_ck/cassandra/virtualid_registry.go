@@ -125,8 +125,8 @@ func (v *registry) Get(ctx context.Context, storesLids ...VirtualIdPayload[btree
 			h := sop.Handle{}			
 			if err := v.redisCache.GetStruct(ctx, formatKey(formatKey(storeLids.IDs[i].ToString())), &h); err != nil && !redis.KeyNotFound(err) {
 				log.Error("Registry update on get failed, details: %v.", err)
-					paramQ[i] = "?"
-					lidsAsIntfs[i] = interface{}(storeLids.IDs[i])
+					paramQ = append(paramQ, "?")
+					lidsAsIntfs = append(lidsAsIntfs, interface{}(storeLids.IDs[i]))
 				continue
 			}
 			handles = append(handles, h)

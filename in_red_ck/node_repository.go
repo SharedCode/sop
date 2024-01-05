@@ -95,7 +95,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 		}
 		return v.node, nil
 	}
-	h, err := nr.transaction.virtualIdRegistry.Get(ctx, cas.VirtualIdPayload[btree.UUID]{
+	h, err := nr.transaction.registry.Get(ctx, cas.VirtualIdPayload[btree.UUID]{
 		RegistryTable: nr.storeInfo.RegistryTable,
 		IDs:           []btree.UUID{logicalId},
 	})
@@ -173,7 +173,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 		return true, nil
 	}
 	vids := nr.convertToVirtualIdRequestPayload(nodes)
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, err
 	}
@@ -204,7 +204,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 		}
 	}
 	// Add virtual Ids to registry.
-	if err := nr.transaction.virtualIdRegistry.Add(ctx, handles...); err != nil {
+	if err := nr.transaction.registry.Add(ctx, handles...); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -217,7 +217,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 	}
 	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
 	vids := nr.convertToVirtualIdRequestPayload(nodes)
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, err
 	}
@@ -246,7 +246,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
 		}
 	}
-	if err := nr.transaction.virtualIdRegistry.Update(ctx, handles...); err != nil {
+	if err := nr.transaction.registry.Update(ctx, handles...); err != nil {
 		return false, err
 	}
 
@@ -271,7 +271,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Ke
 		return true, nil
 	}
 	vids := nr.convertToVirtualIdRequestPayload(nodes)
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, err
 	}
@@ -289,7 +289,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Ke
 		}
 	}
 	// Persist the handles changes.
-	if err := nr.transaction.virtualIdRegistry.Update(ctx, handles...); err != nil {
+	if err := nr.transaction.registry.Update(ctx, handles...); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -328,7 +328,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 		}
 	}
 	// Register virtual Ids(a.k.a. handles).
-	if err := nr.transaction.virtualIdRegistry.Add(ctx, handles...); err != nil {
+	if err := nr.transaction.registry.Add(ctx, handles...); err != nil {
 		return err
 	}
 	// Add nodes to blob store.
@@ -343,7 +343,7 @@ func (nr *nodeRepository) areFetchedNodesIntact(ctx context.Context, nodes []sop
 		return true, nil
 	}
 	vids := nr.convertToVirtualIdRequestPayload(nodes)
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, err
 	}
@@ -377,7 +377,7 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, nodes []sop.
 	}
 	// If we're able to commit roots in registry then they are "ours", we need to unregister.
 	if nr.transaction.logger.committedState > commitNewRootNodes {
-		if err := nr.transaction.virtualIdRegistry.Remove(ctx, vids...); err != nil {
+		if err := nr.transaction.registry.Remove(ctx, vids...); err != nil {
 			return err
 		}
 	}
@@ -403,7 +403,7 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []sop.Ke
 		return err
 	}
 	// Unregister nodes Ids.
-	if err := nr.transaction.virtualIdRegistry.Remove(ctx, vids...); err != nil {
+	if err := nr.transaction.registry.Remove(ctx, vids...); err != nil {
 		return err
 	}
 	return nil
@@ -414,7 +414,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 		return nil
 	}
 	vids := nr.convertToVirtualIdRequestPayload(nodes)
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return err
 	}
@@ -437,7 +437,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 		return err
 	}
 	// Undo changes in virtual Id registry.
-	if err = nr.transaction.virtualIdRegistry.Update(ctx, handles...); err != nil {
+	if err = nr.transaction.registry.Update(ctx, handles...); err != nil {
 		return err
 	}
 	return nil
@@ -448,7 +448,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []sop.
 		return nil
 	}
 	vids := nr.convertToVirtualIdRequestPayload(nodes)
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return err
 	}
@@ -461,7 +461,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []sop.
 	}
 
 	// Persist the handles changes.
-	return nr.transaction.virtualIdRegistry.Update(ctx, handles...)
+	return nr.transaction.registry.Update(ctx, handles...)
 }
 
 // Set to active the inactive nodes. This is the last persistence step in transaction commit.
@@ -470,7 +470,7 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []sop
 		return nil, nil
 	}
 	vids := nr.convertToVirtualIdRequestPayload(nodes)
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return nil, err
 	}
@@ -497,7 +497,7 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []sop.KeyValuePa
 		return nil, nil
 	}
 	vids := nr.convertToVirtualIdRequestPayload(nodes)
-	handles, err := nr.transaction.virtualIdRegistry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return nil, err
 	}
