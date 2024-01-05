@@ -66,8 +66,8 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 			connection.Config.Keyspace, sh.RegistryTable)
 		for _, h := range sh.IDs {
 			// Add a new store record.
-			if err := connection.Session.Query(insertStatement, h.LogicalId, h.IsActiveIdB, h.PhysicalIdA, h.PhysicalIdB,
-				h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted).WithContext(ctx).Exec(); err != nil {
+			if err := connection.Session.Query(insertStatement, gocql.UUID(h.LogicalId), h.IsActiveIdB, gocql.UUID(h.PhysicalIdA),
+				gocql.UUID(h.PhysicalIdB), h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted).WithContext(ctx).Exec(); err != nil {
 				return err
 			}
 			// Tolerate Redis cache failure.
@@ -91,7 +91,7 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 			connection.Config.Keyspace, sh.RegistryTable)
 		for _, h := range sh.IDs {
 			// Add a new store record.
-			batch.Query(updateStatement, h.IsActiveIdB, h.PhysicalIdA, h.PhysicalIdB,
+			batch.Query(updateStatement, h.IsActiveIdB, gocql.UUID(h.PhysicalIdA), gocql.UUID(h.PhysicalIdB),
 				h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted)
 		}
 	}
@@ -126,7 +126,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 			if err := v.redisCache.GetStruct(ctx, formatKey(formatKey(storeLids.IDs[i].ToString())), &h); err != nil && !redis.KeyNotFound(err) {
 				log.Error("Registry update on get failed, details: %v.", err)
 				paramQ = append(paramQ, "?")
-				lidsAsIntfs = append(lidsAsIntfs, interface{}(storeLids.IDs[i]))
+				lidsAsIntfs = append(lidsAsIntfs, interface{}(gocql.UUID(storeLids.IDs[i])))
 				continue
 			}
 			handles = append(handles, h)

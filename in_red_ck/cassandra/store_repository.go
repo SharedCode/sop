@@ -94,10 +94,10 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 		connection.Config.Keyspace, strings.Join(paramQ, ", "))
 	iter := connection.Session.Query(selectStatement, namesAsIntf...).WithContext(ctx).Iter()
 	store := btree.StoreInfo{}
-	var id gocql.UUID
-	for iter.Scan(&store.Name, &id, &store.SlotLength, &store.Count, &store.IsUnique,
+	var rid gocql.UUID
+	for iter.Scan(&store.Name, &rid, &store.SlotLength, &store.Count, &store.IsUnique,
 		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.LeafLoadBalancing, &store.IsDeleted) {
-		store.RootNodeId = btree.UUID(id)
+		store.RootNodeId = btree.UUID(rid)
 		stores = append(stores, store)
 		store = btree.StoreInfo{}
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
@@ -25,15 +26,27 @@ func main() {
 	storeInfo := *btree.NewStoreInfo("foobar", 4, true, true, true, "")
 	storeInfo.RootNodeId = btree.NewUUID()
 	repo := cas.NewStoreRepository()
-	if err := repo.Add(ctx, storeInfo); err != nil {
-		writeAndExit("Cassandra repo Add failed, err: %v.", err)
-	}
-	if _, err := repo.Get(ctx, "foobar"); err != nil {
+	sis, err := repo.Get(ctx, "foobar")
+	if err != nil {
 		writeAndExit("Cassandra repo Get failed, err: %v.", err)
 	}
-	if err := repo.Remove(ctx, "foobar"); err != nil {
-		writeAndExit("Cassandra repo Remove failed, err: %v.", err)
+	if len(sis) == 0 {
+		if err := repo.Add(ctx, storeInfo); err != nil {
+			writeAndExit("Cassandra repo Add failed, err: %v.", err)
+		}
 	}
+
+	registry,_ := cas.NewRegistry(redis.NewClient())
+	if err := registry.Add(ctx, cas.RegistryPayload[sop.Handle]{
+		RegistryTable: storeInfo.RegistryTable,
+		IDs: []sop.Handle{ sop.NewHandle(btree.NewUUID()) },
+	}); err != nil {
+		writeAndExit("Cassandra registry Add failed, err: %v.", err)
+	}
+
+	// if err := repo.Remove(ctx, "foobar"); err != nil {
+	// 	writeAndExit("Cassandra repo Remove failed, err: %v.", err)
+	// }
 	writeAndExit("Our cool app completed! -from docker.")
 }
 
