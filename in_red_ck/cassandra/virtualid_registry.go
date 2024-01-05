@@ -193,6 +193,7 @@ func (v *registry) Remove(ctx context.Context, storesLids ...VirtualIdPayload[bt
 	return nil
 }
 
+// Virtual ID key in Redis is prefixed by V to differentiate from Node key.
 func formatKey(k string) string {
 	return fmt.Sprintf("V%s", k)
 }
