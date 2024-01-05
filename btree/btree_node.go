@@ -524,7 +524,6 @@ func (node *Node[TK, TV]) isNilChildren() bool {
 func (node *Node[TK, TV]) isThereVacantSlotInLeft(ctx context.Context, btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
 	*isUnBalanced = false
 	if !btree.StoreInfo.LeafLoadBalancing {
-		*isUnBalanced = true
 		return false, nil
 	}
 	// Start from this node.
@@ -553,7 +552,6 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(ctx context.Context, btree *Bt
 func (node *Node[TK, TV]) isThereVacantSlotInRight(ctx context.Context, btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
 	*isUnBalanced = false
 	if !btree.StoreInfo.LeafLoadBalancing {
-		*isUnBalanced = true
 		return false, nil
 	}
 	// Start from this node.
