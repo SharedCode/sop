@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"github.com/gocql/gocql"
 
 	"github.com/SharedCode/sop/btree"
-	"github.com/gocql/gocql"
 )
 
 // TODO: when need arise, move these interfaces to a common package, but keep them for now

@@ -1,4 +1,3 @@
-// Package Cassandra contains code for integration or inter-operation with Cassandra DB.
 package cassandra
 
 import (
