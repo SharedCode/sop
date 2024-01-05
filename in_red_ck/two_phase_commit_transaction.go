@@ -287,7 +287,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 }
 
 func (t *transaction) phase2Commit(ctx context.Context) error {
-	// Finalize the commit, it is all or nothing action, thus, no partial failure/success.
+	// Finalize the commit, it is the only all or nothing action in the commit,
+	// and on registry (very small) records only.
 	t.logger.log(finalizeCommit)
 	if err := t.virtualIdRegistry.Update(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
 		return err

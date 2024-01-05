@@ -16,14 +16,14 @@ import (
 type StoreRepository interface {
 	// Fetch store info with name.
 	Get(context.Context, ...string) ([]btree.StoreInfo, error)
-	// Add store info. Add all or nothing.
+	// Add store info.
 	Add(context.Context, ...btree.StoreInfo) error
-	// Update store info. Update all or nothing.
+	// Update store info.
 	// Update should also merge the Count of items between the incoming store info
 	// and the target store info on the backend, as they may differ. It should use
 	// StoreInfo.CountDelta to reconcile the two.
 	Update(context.Context, ...btree.StoreInfo) error
-	// Remove store info with name. Remove all or nothing.
+	// Remove store info with name.
 	Remove(context.Context, ...string) error
 }
 
@@ -61,12 +61,18 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 	return nil
 }
 
-// Update enforces so only the Store's Count can get updated.
+// Update enforces so only the Store's Count & timestamp can get updated.
 func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
 	}
-	return nil
+	updateStatement := fmt.Sprintf("UPDATE %s.store SET count = count + ?, ts = ? WHERE name = ?;", connection.Config.Keyspace)
+	batch := connection.Session.NewBatch(gocql.UnloggedBatch)
+	for _, s := range stores {
+		// Update store record.
+		batch.Query(updateStatement,  s.CountDelta, s.Timestamp, s.Name)
+	}
+	return connection.Session.ExecuteBatch(batch)
 }
 
 func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.StoreInfo, error) {
