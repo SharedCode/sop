@@ -4,6 +4,7 @@ package cassandra
 import (
 	"context"
 	"fmt"
+	log "log/slog"
 	"strings"
 
 	"github.com/SharedCode/sop"
@@ -55,7 +56,6 @@ func NewVirtualIdRegistry(rc redis.Cache) (VirtualIdRegistry, error) {
 }
 
 // TODO: finalize Consistency levels to use in below CRUD methods.
-// TODO: add redis caching.
 
 func (v *registry) Add(ctx context.Context, storesHandles ...VirtualIdPayload[sop.Handle]) error {
 	if connection == nil {
@@ -69,6 +69,10 @@ func (v *registry) Add(ctx context.Context, storesHandles ...VirtualIdPayload[so
 			if err := connection.Session.Query(insertStatement, h.LogicalId, h.IsActiveIdB, h.PhysicalIdA, h.PhysicalIdB,
 				h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted).WithContext(ctx).Exec(); err != nil {
 				return err
+			}
+			// Tolerate Redis cache failure.
+			if err := v.redisCache.SetStruct(ctx, formatKey(h.LogicalId.ToString()), &h, -1); err != nil {
+				log.Error("Registry Add failed, details: %v.", err)
 			}
 		}
 	}
@@ -91,7 +95,20 @@ func (v *registry) Update(ctx context.Context, storesHandles ...VirtualIdPayload
 				h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted)
 		}
 	}
-	return connection.Session.ExecuteBatch(batch)
+	if err := connection.Session.ExecuteBatch(batch); err != nil {
+		return err
+	}
+
+	// Update redis cache.
+	for _, sh := range storesHandles {
+		for _, h := range sh.IDs {
+			// Tolerate Redis cache failure.
+			if err := v.redisCache.SetStruct(ctx, formatKey(h.LogicalId.ToString()), &h, -1); err != nil {
+				log.Error("Registry Update failed, details: %v.", err)
+			}
+		}
+	}
+	return nil
 }
 
 func (v *registry) Get(ctx context.Context, storesLids ...VirtualIdPayload[btree.UUID]) ([]VirtualIdPayload[sop.Handle], error) {
@@ -102,11 +119,25 @@ func (v *registry) Get(ctx context.Context, storesLids ...VirtualIdPayload[btree
 	storesHandles := make([]VirtualIdPayload[sop.Handle], 0, len(storesLids))
 	for _, storeLids := range storesLids {
 		handles := make([]sop.Handle, 0, len(storeLids.IDs))
-		paramQ := make([]string, len(storeLids.IDs))
-		lidsAsIntfs := make([]interface{}, len(storeLids.IDs))
+		paramQ := make([]string, 0, len(storeLids.IDs))
+		lidsAsIntfs := make([]interface{}, 0, len(storeLids.IDs))
 		for i := range storeLids.IDs {
-			paramQ[i] = "?"
-			lidsAsIntfs[i] = interface{}(storeLids.IDs[i])
+			h := sop.Handle{}			
+			if err := v.redisCache.GetStruct(ctx, formatKey(formatKey(storeLids.IDs[i].ToString())), &h); err != nil && !redis.KeyNotFound(err) {
+				log.Error("Registry update on get failed, details: %v.", err)
+					paramQ[i] = "?"
+					lidsAsIntfs[i] = interface{}(storeLids.IDs[i])
+				continue
+			}
+			handles = append(handles, h)
+		}
+
+		if len(paramQ) == 0 {
+			storesHandles = append(storesHandles, VirtualIdPayload[sop.Handle]{
+				RegistryTable: storeLids.RegistryTable,
+				IDs:           handles,
+			})
+			continue
 		}
 		selectStatement := fmt.Sprintf("SELECT lid, is_idb, p_ida, p_idb, ts, wip_ts, is_del FROM %s.%s WHERE lid in (%v);",
 			connection.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
@@ -118,6 +149,10 @@ func (v *registry) Get(ctx context.Context, storesLids ...VirtualIdPayload[btree
 			handle.PhysicalIdA = btree.UUID(ida)
 			handle.PhysicalIdB = btree.UUID(idb)
 			handles = append(handles, handle)
+
+			if err := v.redisCache.SetStruct(ctx, formatKey(handle.LogicalId.ToString()), &handle, -1); err != nil {
+				log.Error("Registry update on Get failed, details: %v.", err)
+			}
 			handle = sop.Handle{}
 		}
 		if err := iter.Close(); err != nil {
@@ -148,7 +183,16 @@ func (v *registry) Remove(ctx context.Context, storesLids ...VirtualIdPayload[bt
 		if err := connection.Session.Query(deleteStatement, lidsAsIntfs...).WithContext(ctx).Exec(); err != nil {
 			return err
 		}
+		for _, id := range storeLids.IDs {
+			// Tolerate Redis cache failure.
+			if err := v.redisCache.Delete(ctx, formatKey(id.ToString())); err != nil && !redis.KeyNotFound(err) {
+				log.Error("Registry Delete failed, details: %v.", err)
+			}
+		}
 	}
-
 	return nil
+}
+
+func formatKey(k string) string {
+	return fmt.Sprintf("V%s", k)
 }
