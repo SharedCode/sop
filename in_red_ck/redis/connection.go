@@ -1,10 +1,12 @@
 package redis
 
 import (
+	"crypto/tls"
 	"sync"
 
-	"github.com/redis/go-redis/v9"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type Options struct {
@@ -12,6 +14,7 @@ type Options struct {
 	Password                 string
 	DB                       int
 	DefaultDurationInSeconds int
+	TLSConfig *tls.Config
 }
 
 func (opt *Options) GetDefaultDuration() time.Duration {
@@ -29,6 +32,9 @@ func DefaultOptions() Options {
 		Password:                 "", // no password set
 		DB:                       0,  // use default DB
 		DefaultDurationInSeconds: 24 * 60 * 60,
+		TLSConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
 	}
 }
 
@@ -48,6 +54,7 @@ func GetConnection(options Options) (*Connection, error) {
 	}
 
 	client := redis.NewClient(&redis.Options{
+		TLSConfig: options.TLSConfig,
 		Addr:     options.Address,
 		Password: options.Password,
 		DB:       options.DB})

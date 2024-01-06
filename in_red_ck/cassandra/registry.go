@@ -72,7 +72,7 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 			}
 			// Tolerate Redis cache failure.
 			if err := v.redisCache.SetStruct(ctx, formatKey(h.LogicalId.ToString()), &h, -1); err != nil {
-				log.Error("Registry Add failed, details: %v.", err)
+				log.Error("Registry Add (redis setstruct) failed, details: %v.", err)
 			}
 		}
 	}
@@ -104,7 +104,7 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 		for _, h := range sh.IDs {
 			// Tolerate Redis cache failure.
 			if err := v.redisCache.SetStruct(ctx, formatKey(h.LogicalId.ToString()), &h, -1); err != nil {
-				log.Error("Registry Update failed, details: %v.", err)
+				log.Error("Registry Update (redis setstruct) failed, details: %v.", err)
 			}
 		}
 	}
@@ -124,7 +124,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 		for i := range storeLids.IDs {
 			h := sop.Handle{}
 			if err := v.redisCache.GetStruct(ctx, formatKey(formatKey(storeLids.IDs[i].ToString())), &h); err != nil && !redis.KeyNotFound(err) {
-				log.Error("Registry update on get failed, details: %v.", err)
+				log.Error("Registry Get (redis getstruct) failed, details: %v.", err)
 				paramQ = append(paramQ, "?")
 				lidsAsIntfs = append(lidsAsIntfs, interface{}(gocql.UUID(storeLids.IDs[i])))
 				continue
@@ -151,7 +151,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 			handles = append(handles, handle)
 
 			if err := v.redisCache.SetStruct(ctx, formatKey(handle.LogicalId.ToString()), &handle, -1); err != nil {
-				log.Error("Registry update on Get failed, details: %v.", err)
+				log.Error("Registry Get (redis setstruct) failed, details: %v.", err)
 			}
 			handle = sop.Handle{}
 		}
@@ -186,7 +186,7 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 		for _, id := range storeLids.IDs {
 			// Tolerate Redis cache failure.
 			if err := v.redisCache.Delete(ctx, formatKey(id.ToString())); err != nil && !redis.KeyNotFound(err) {
-				log.Error("Registry Delete failed, details: %v.", err)
+				log.Error("Registry Delete (redis delete) failed, details: %v.", err)
 			}
 		}
 	}

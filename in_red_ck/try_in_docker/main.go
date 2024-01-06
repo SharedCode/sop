@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 
 	"github.com/SharedCode/sop"
@@ -19,14 +20,24 @@ var cassConfig = cas.Config{
 }
 
 func main() {
-	if err := in_red_ck.Initialize(cassConfig, redis.DefaultOptions()); err != nil {
+	redisConfig := redis.Options {
+		Address:                  "USLC02SGDPXG8WP:6379",
+		Password:                 "", // no password set
+		DB:                       0,  // use default DB
+		DefaultDurationInSeconds: 24 * 60 * 60,
+		TLSConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
+	}
+	if err := in_red_ck.Initialize(cassConfig, redisConfig); err != nil {
 		writeAndExit(err.Error())
 	}
-
 	red := redis.NewClient()
 	if err := red.Ping(ctx); err != nil {
 		writeAndExit(fmt.Sprintf("Ping failed, details: %v.", err))
 	}
+	writeAndExit("Exit,")
+
 
 	storeInfo := *btree.NewStoreInfo("foobar", 4, true, true, true, "")
 	storeInfo.RootNodeId = btree.NewUUID()
