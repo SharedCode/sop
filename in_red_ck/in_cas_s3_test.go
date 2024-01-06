@@ -14,8 +14,7 @@ var cassConfig = cassandra.Config{
 }
 
 func init() {
-	// Initialize(cassConfig, redis.DefaultOptions())
-	redis.GetConnection(redis.DefaultOptions())
+	Initialize(cassConfig, redis.DefaultOptions())
 }
 
 var ctx = context.Background()
@@ -31,7 +30,10 @@ var ctx = context.Background()
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	t.Logf("Transaction story test.\n")
-	trans, _ := NewTransaction(true, -1)
+	trans, err := NewTransaction(true, -1)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
 	trans.Begin()
 	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
@@ -51,7 +53,10 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans, _ := NewTransaction(true, -1)
+	trans, err := NewTransaction(true, -1)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
 	trans.Begin()
 	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {

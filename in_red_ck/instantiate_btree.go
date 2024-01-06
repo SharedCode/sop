@@ -21,6 +21,11 @@ func Initialize(cassandraConfig cas.Config, redisConfig redis.Options) error {
 	return nil
 }
 
+// Returns true if components required were initialized, false otherwise.
+func IsInitialized() bool {
+	return cas.IsConnectionInstantiated() && redis.IsConnectionInstantiated()
+}
+
 // Shutdown or closes all connections used in this package.
 func Shutdown() {
 	cas.CloseConnection()

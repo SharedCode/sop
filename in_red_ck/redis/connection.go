@@ -32,14 +32,16 @@ func DefaultOptions() Options {
 		Password:                 "", // no password set
 		DB:                       0,  // use default DB
 		DefaultDurationInSeconds: 24 * 60 * 60,
-		TLSConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-		},
 	}
 }
 
 var connection *Connection
 var mux sync.Mutex
+
+// Returns true if connection instance is valid.
+func IsConnectionInstantiated() bool {
+	return connection != nil
+}
 
 // Creates a singleton connection and returns it for every call.
 func GetConnection(options Options) (*Connection, error) {

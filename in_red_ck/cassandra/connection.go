@@ -28,6 +28,11 @@ type Connection struct {
 var connection *Connection
 var mux sync.Mutex
 
+// Returns true if connection instance is valid.
+func IsConnectionInstantiated() bool {
+	return connection != nil
+}
+
 // GetConnection will create(& return) a new Connection to Cassandra if there is not one yet,
 // otherwise, will just return existing singleton connection.
 func GetConnection(config Config) (*Connection, error) {
