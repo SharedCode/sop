@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/gocql/gocql"
 
 	"github.com/SharedCode/sop"
@@ -33,7 +34,7 @@ type BlobStore interface {
 	Remove(ctx context.Context, blobsIds ...BlobsPayload[btree.UUID]) error
 }
 
-type blobStore struct {}
+type blobStore struct{}
 
 func NewBlobStore() BlobStore {
 	return &blobStore{}
@@ -47,7 +48,8 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobId btree.U
 	selectStatement := fmt.Sprintf("SELECT node FROM %s.%s WHERE id in (?);", connection.Config.Keyspace, blobTable)
 	iter := connection.Session.Query(selectStatement, gocql.UUID(blobId)).WithContext(ctx).Iter()
 	var s string
-	for iter.Scan(&s) {}
+	for iter.Scan(&s) {
+	}
 	if err := iter.Close(); err != nil {
 		return err
 	}
@@ -58,15 +60,15 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.Key
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
-	for _, storeBlobs := range storesblobs {
-		for _, blob := range storeBlobs.Blobs {
-			ba, err := json.Marshal(blob.Value)
+	for i := range storesblobs {
+		for ii := range storesblobs[i].Blobs {
+			ba, err := json.Marshal(storesblobs[i].Blobs[ii].Value)
 			if err != nil {
 				return err
 			}
 			insertStatement := fmt.Sprintf("INSERT INTO %s.%s (id, node) VALUES(?,?);",
-				connection.Config.Keyspace, storeBlobs.BlobTable)
-			if err := connection.Session.Query(insertStatement, gocql.UUID(blob.Key), string(ba)).WithContext(ctx).Exec(); err != nil {
+				connection.Config.Keyspace, storesblobs[i].BlobTable)
+			if err := connection.Session.Query(insertStatement, gocql.UUID(storesblobs[i].Blobs[ii].Key), string(ba)).WithContext(ctx).Exec(); err != nil {
 				return err
 			}
 		}
@@ -78,14 +80,14 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
-	for _, storeBlobs := range storesblobs {
-		for _, blob := range storeBlobs.Blobs {
-			ba, err := json.Marshal(blob.Value)
+	for i := range storesblobs {
+		for ii := range storesblobs[i].Blobs {
+			ba, err := json.Marshal(storesblobs[i].Blobs[ii].Value)
 			if err != nil {
 				return err
 			}
-			updateStatement := fmt.Sprintf("UPDATE %s.%s SET node = ? WHERE id = ?;", connection.Config.Keyspace, storeBlobs.BlobTable)
-			if err := connection.Session.Query(updateStatement, string(ba), gocql.UUID(blob.Key)).WithContext(ctx).Exec(); err != nil {
+			updateStatement := fmt.Sprintf("UPDATE %s.%s SET node = ? WHERE id = ?;", connection.Config.Keyspace, storesblobs[i].BlobTable)
+			if err := connection.Session.Query(updateStatement, string(ba), gocql.UUID(storesblobs[i].Blobs[ii].Key)).WithContext(ctx).Exec(); err != nil {
 				return err
 			}
 		}

@@ -158,7 +158,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 		iter := connection.Session.Query(selectStatement, lidsAsIntfs...).WithContext(ctx).Iter()
 		handle := sop.Handle{}
 		var lid, ida, idb gocql.UUID
-		for iter.Scan(&lid, &handle.IsActiveIdB, &handle.PhysicalIdA, &handle.PhysicalIdB, &handle.Timestamp, &handle.WorkInProgressTimestamp, &handle.IsDeleted) {
+		for iter.Scan(&lid, &handle.IsActiveIdB, &ida, &idb, &handle.Timestamp, &handle.WorkInProgressTimestamp, &handle.IsDeleted) {
 			handle.LogicalId = btree.UUID(lid)
 			handle.PhysicalIdA = btree.UUID(ida)
 			handle.PhysicalIdB = btree.UUID(idb)
