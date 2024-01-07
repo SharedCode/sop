@@ -10,6 +10,7 @@ import (
 )
 
 type actionType int
+
 const (
 	getAction = iota
 	addAction
@@ -151,11 +152,12 @@ func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache
 func (t *itemActionTracker) unlock(ctx context.Context, itemRedisCache redis.Cache) error {
 	var lastErr error
 	for uuid, cachedItem := range t.items {
-		if cachedItem.isLockOwner {
-			if err := itemRedisCache.Delete(ctx,redis.FormatLockKey(uuid.ToString())); err != nil {
-				if !redis.KeyNotFound(err) {
-					lastErr = err
-				}
+		if !cachedItem.isLockOwner {
+			continue
+		}
+		if err := itemRedisCache.Delete(ctx, redis.FormatLockKey(uuid.ToString())); err != nil {
+			if !redis.KeyNotFound(err) {
+				lastErr = err
 			}
 		}
 	}

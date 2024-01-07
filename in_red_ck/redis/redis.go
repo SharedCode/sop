@@ -20,7 +20,7 @@ type Cache interface {
 	Ping(ctx context.Context) error
 }
 
-type client struct {}
+type client struct{}
 
 // Checks if Redis connection is open and returns the client interface if it is,
 // otherwise returns an error.

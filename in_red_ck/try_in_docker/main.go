@@ -15,9 +15,9 @@ import (
 var ctx = context.Background()
 var cassConfig = cas.Config{
 	ClusterHosts: []string{"172.17.0.2:9042"},
-	Consistency: gocql.Quorum,
+	Consistency:  gocql.Quorum,
 }
-var redisConfig = redis.Options {
+var redisConfig = redis.Options{
 	Address:                  "USLC02SGDPXG8WP:6379",
 	Password:                 "", // no password set
 	DB:                       0,  // use default DB
@@ -43,10 +43,10 @@ func main() {
 		}
 	}
 
-	registry,_ := cas.NewRegistry(redisCache)
+	registry, _ := cas.NewRegistry(redisCache)
 	if err := registry.Add(ctx, cas.RegistryPayload[sop.Handle]{
 		RegistryTable: storeInfo.RegistryTable,
-		IDs: []sop.Handle{ sop.NewHandle(btree.NewUUID()) },
+		IDs:           []sop.Handle{sop.NewHandle(btree.NewUUID())},
 	}); err != nil {
 		writeAndExit("Cassandra registry Add failed, err: %v.", err)
 	}

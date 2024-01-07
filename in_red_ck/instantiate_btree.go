@@ -56,7 +56,9 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // slotLength - specifies the number of item slots per node of a b-tree.
 // isUnique - specifies whether the b-tree will enforce key uniqueness(true) or not(false).
 // isValueDataInNodeSegment - specifies whether the b-tree will store the "value" data in the tree's node segment together with
+//
 //	the key, or store it in another (data) segment. Currently not implemented and always stores the data in the node segment.
+//
 // leafLoadBalancing - true means leaf load balancing feature is enabled, false otherwise.
 // description - (optional) description about the store.
 // t - transaction that the instance will participate in.

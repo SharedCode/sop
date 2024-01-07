@@ -5,10 +5,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-
 )
+
+// LockKeys contain fields to allow locking and unlocking of a set of redis keys.
+type LockKeys struct {
+	key         string
+	lockId      btree.UUID
+	isLockOwner bool
+}
 
 // Add prefix to the lock key so it becomes unique.
 func FormatLockKey(k string) string {
@@ -16,42 +21,44 @@ func FormatLockKey(k string) string {
 }
 
 // Create a set of lock records with given set of keys.
-func CreateLockRecords(keys []string) []sop.KeyValuePair[string, btree.UUID] {
-	lockRecords := make([]sop.KeyValuePair[string, btree.UUID], len(keys))
+func CreateLockKeys(keys []string) []*LockKeys {
+	lockKeys := make([]*LockKeys, len(keys))
 	for i := range keys {
-		lockRecords[i] = sop.KeyValuePair[string, btree.UUID]{
+		lockKeys[i] = &LockKeys{
 			// Prefix key with "L" to increase uniqueness.
-			Key: FormatLockKey(keys[i]),
-			Value: btree.NewUUID(),
+			key:    FormatLockKey(keys[i]),
+			lockId: btree.NewUUID(),
 		}
 	}
-	return lockRecords
+	return lockKeys
 }
 
 // Lock a set of records.
-func Lock(ctx context.Context, duration time.Duration, lockRecords ...sop.KeyValuePair[string, btree.UUID]) error {
+func Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKeys) error {
 	redisCache := NewClient()
-	for _, kvp := range lockRecords {
-		readItem, err := redisCache.Get(ctx, kvp.Key)
+	for _, lk := range lockKeys {
+		readItem, err := redisCache.Get(ctx, lk.key)
 		if err != nil {
 			if !KeyNotFound(err) {
 				return err
 			}
 			// Item does not exist, upsert it.
-			if err := redisCache.Set(ctx, kvp.Key, kvp.Value.ToString(), duration); err != nil {
+			if err := redisCache.Set(ctx, lk.key, lk.lockId.ToString(), duration); err != nil {
 				return err
 			}
 			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-			if readItem2, err := redisCache.Get(ctx, kvp.Key); err != nil {
+			if readItem2, err := redisCache.Get(ctx, lk.key); err != nil {
 				return err
-			} else if readItem2 != kvp.Value.ToString() {
-				return fmt.Errorf("lock(item: %v) call detected conflict", kvp.Key)
+			} else if readItem2 != lk.lockId.ToString() {
+				return fmt.Errorf("lock(item: %v) call detected conflict", lk.key)
 			}
+			// We got the item locked, ensure we can unlock it.
+			lk.isLockOwner = true
 			continue
 		}
 		// Item found in Redis.
-		if readItem != kvp.Value.ToString() {
-			return fmt.Errorf("lock(item: %v) call detected conflict", kvp.Key)
+		if readItem != lk.lockId.ToString() {
+			return fmt.Errorf("lock(item: %v) call detected conflict", lk.key)
 		}
 	}
 	// Successfully locked.
@@ -59,11 +66,15 @@ func Lock(ctx context.Context, duration time.Duration, lockRecords ...sop.KeyVal
 }
 
 // Unlock a set of records.
-func Unlock(ctx context.Context, lockRecords ...sop.KeyValuePair[string, btree.UUID]) error {
+func Unlock(ctx context.Context, lockKeys ...*LockKeys) error {
 	redisCache := NewClient()
 	var lastErr error
-	for _, kvp := range lockRecords {
-		if err := redisCache.Delete(ctx, kvp.Key); err != nil {
+	for _, lk := range lockKeys {
+		if !lk.isLockOwner {
+			continue
+		}
+		// Delete lock key if we own it.
+		if err := redisCache.Delete(ctx, lk.key); err != nil {
 			if !KeyNotFound(err) {
 				lastErr = err
 			}

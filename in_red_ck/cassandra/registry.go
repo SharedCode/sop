@@ -208,6 +208,6 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 }
 
 // Virtual ID key in Redis is prefixed by V to differentiate from Node key.
-func (v *registry)formatKey(k string) string {
+func (v *registry) formatKey(k string) string {
 	return k
 }

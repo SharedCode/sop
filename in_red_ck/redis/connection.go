@@ -14,7 +14,7 @@ type Options struct {
 	Password                 string
 	DB                       int
 	DefaultDurationInSeconds int
-	TLSConfig *tls.Config
+	TLSConfig                *tls.Config
 }
 
 func (opt *Options) GetDefaultDuration() time.Duration {
@@ -57,9 +57,9 @@ func GetConnection(options Options) (*Connection, error) {
 
 	client := redis.NewClient(&redis.Options{
 		TLSConfig: options.TLSConfig,
-		Addr:     options.Address,
-		Password: options.Password,
-		DB:       options.DB})
+		Addr:      options.Address,
+		Password:  options.Password,
+		DB:        options.DB})
 
 	c := Connection{
 		Client:  client,

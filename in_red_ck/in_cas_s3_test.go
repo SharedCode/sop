@@ -12,7 +12,7 @@ var cassConfig = cassandra.Config{
 	ClusterHosts: []string{"localhost:9042"},
 	Keyspace:     "btree",
 }
-var redisConfig = redis.Options {
+var redisConfig = redis.Options{
 	Address:                  "localhost:6379",
 	Password:                 "", // no password set
 	DB:                       0,  // use default DB

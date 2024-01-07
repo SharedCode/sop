@@ -32,7 +32,7 @@ type StoreRepository interface {
 	Remove(context.Context, ...string) error
 }
 
-type storeRepository struct{
+type storeRepository struct {
 	redisCache redis.Cache
 }
 
@@ -45,7 +45,7 @@ func NewStoreRepository(redisCache redis.Cache) StoreRepository {
 
 // TODO: finalize Consistency levels to use in below CRUD methods.
 
-const ttl = time.Duration(2*time.Hour)
+const ttl = time.Duration(2 * time.Hour)
 
 // Add a new store record, create a new Virtual ID registry and node blob tables.
 func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) error {
@@ -84,7 +84,8 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
 
-	// Sort the stores info so we can commit them in same sort order.
+	// Sort the stores info so we can commit them in same sort order across transactions,
+	// thus, reduced chance of deadlock.
 	b3 := in_memory.NewBtree[string, btree.StoreInfo](true)
 	for i := range stores {
 		b3.Add(stores[i].Name, stores[i])
@@ -102,33 +103,33 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	}
 
 	// Create lock Ids that we can use to logically lock and prevent other updates.
-	lockRecords := redis.CreateLockRecords(keys)
+	lockKeys := redis.CreateLockKeys(keys)
 
 	// 15 minutes to lock, merge/update details then unlock.
-	duration := time.Duration(15*time.Minute)
-	b := retry.NewFibonacci(1*time.Second)
+	duration := time.Duration(15 * time.Minute)
+	b := retry.NewFibonacci(1 * time.Second)
 
 	// Lock all keys.
-	if err := retry.Do(ctx, retry.WithMaxRetries(3, b), func (ctx context.Context) error {
-		return redis.Lock(ctx, duration, lockRecords...)
+	if err := retry.Do(ctx, retry.WithMaxRetries(3, b), func(ctx context.Context) error {
+		return redis.Lock(ctx, duration, lockKeys...)
 	}); err != nil {
 		// Unlock all keys since we failed locking them.
-		redis.Unlock(ctx, lockRecords...)
+		redis.Unlock(ctx, lockKeys...)
 		return err
 	}
 
 	updateStatement := fmt.Sprintf("UPDATE %s.store SET count = ?, ts = ? WHERE name = ?;", connection.Config.Keyspace)
-	undo := func (bus []btree.StoreInfo) {
+	undo := func(bus []btree.StoreInfo) {
 		// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
 		for ii := 0; ii < len(bus); ii++ {
 			connection.Session.Query(updateStatement, bus[ii].Count, bus[ii].Timestamp,
 				bus[ii].Name).Exec()
-		}		
+		}
 	}
 
 	beforeUpdateStores := make([]btree.StoreInfo, 0, len(stores))
 	// Unlock all keys before going out of scope.
-	defer redis.Unlock(ctx, lockRecords...)
+	defer redis.Unlock(ctx, lockKeys...)
 
 	for i := range stores {
 		sis, err := sr.Get(ctx, stores[i].Name)
@@ -137,7 +138,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 			return err
 		}
 		beforeUpdateStores = append(beforeUpdateStores, sis...)
-	
+
 		si := sis[0]
 		if si.Timestamp > stores[i].Timestamp {
 			// Merge or apply the "count delta".
@@ -249,6 +250,6 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	return nil
 }
 
-func (sr *storeRepository)formatKey(k string) string {
+func (sr *storeRepository) formatKey(k string) string {
 	return k
 }

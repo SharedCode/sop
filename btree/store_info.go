@@ -62,7 +62,7 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 		RegistryTable:            registryTableName,
 		BlobTable:                blobTable,
 		Description:              desciption,
-		LeafLoadBalancing: leafLoadBalancing,
+		LeafLoadBalancing:        leafLoadBalancing,
 	}
 }
 

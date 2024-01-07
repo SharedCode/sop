@@ -69,7 +69,7 @@ var getCurrentTime = time.Now
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes
 // of session duration.
-func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error){
+func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error) {
 	if maxTime <= 0 {
 		m := 15
 		maxTime = time.Duration(m * int(time.Minute))
@@ -120,7 +120,7 @@ func (t *transaction) Phase1Commit(ctx context.Context) error {
 	}
 	if err := t.phase1Commit(ctx); err != nil {
 		t.phaseDone = 2
-		if rerr := t.rollback(ctx); rerr != nil {
+		if rerr := t.rollback(ctx, false); rerr != nil {
 			return fmt.Errorf("Phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
 		return fmt.Errorf("Phase 1 commit failed, details: %v", err)
@@ -143,7 +143,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
-		if rerr := t.rollback(ctx); rerr != nil {
+		if rerr := t.rollback(ctx, false); rerr != nil {
 			return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
 		return fmt.Errorf("Phase 2 commit failed, details: %v", err)
@@ -167,7 +167,10 @@ func (t *transaction) HasBegun() bool {
 	return t.phaseDone >= 0
 }
 
-func (t *transaction) timedOut(startTime time.Time) error {
+func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("Context error")
+	}
 	if getCurrentTime().Sub(startTime).Minutes() > float64(t.maxTime) {
 		return fmt.Errorf("Transaction timed out(maxTime=%v)", t.maxTime)
 	}
@@ -206,7 +209,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	successful := false
 	for !successful {
 		var err error
-		if err = t.timedOut(startTime); err != nil {
+		if err = t.timedOut(ctx, startTime); err != nil {
 			return err
 		}
 
@@ -223,8 +226,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 		if successful {
 			// Check for conflict on fetched nodes.
-			successful, err = t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes)
-			if err != nil {
+			if successful, err = t.btreesBackend[0].backendNodeRepository.areFetchedNodesIntact(ctx, fetchedNodes); err != nil {
 				return err
 			}
 		}
@@ -239,14 +241,19 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		if successful {
 			// Commit removed nodes.
 			t.logger.log(commitRemovedNodes)
-			successful, err = t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes)
-			if err != nil {
+			if successful, err = t.btreesBackend[0].backendNodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
 				return err
 			}
 		}
 		if !successful {
 			// Rollback partial changes.
-			t.rollback(ctx)
+			t.rollback(ctx, true)
+
+			// Respect context before sleeping.
+			if ctx.Err() != nil {
+				return fmt.Errorf("Context error")
+			}
+
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
 			sleepTime := rand.Intn(4+1) + 5
@@ -350,7 +357,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 	// For a reader transaction, conflict check is enough.
 	startTime := getCurrentTime()
 	for {
-		if err := t.timedOut(startTime); err != nil {
+		if err := t.timedOut(ctx, startTime); err != nil {
 			return err
 		}
 		// Check items if have not changed since fetching.
@@ -548,7 +555,7 @@ func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds ...c
 	}
 }
 
-func (t *transaction) rollback(ctx context.Context) error {
+func (t *transaction) rollback(ctx context.Context, forRetry bool) error {
 	if t.logger.committedState == unlockTrackedItems {
 		// This state should not be reached and rollback invoked, but return an error about it, in case.
 		return fmt.Errorf("Transaction got committed, 'can't rollback it")
@@ -582,6 +589,12 @@ func (t *transaction) rollback(ctx context.Context) error {
 		if err := t.btreesBackend[0].backendNodeRepository.rollbackNewRootNodes(ctx, rootNodes); err != nil {
 			lastErr = err
 		}
+	}
+	// Don't unlock tracked item since rollback is for retry, inner scope of tracked items locking.
+	if forRetry {
+		// Rewind the transactoin log in case retry will check it.
+		t.logger.log(commitNewRootNodes)
+		return lastErr
 	}
 	if t.logger.committedState > lockTrackedItems {
 		if err := t.unlockTrackedItems(ctx); err != nil {

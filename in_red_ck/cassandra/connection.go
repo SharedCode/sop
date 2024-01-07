@@ -13,9 +13,9 @@ type Config struct {
 	// Keyspace to be used when doing I/O to cassandra.
 	Keyspace string
 	// Consistency
-	Consistency gocql.Consistency
+	Consistency       gocql.Consistency
 	ConnectionTimeout time.Duration
-	Authenticator gocql.Authenticator
+	Authenticator     gocql.Authenticator
 	// Defaults to simple strategy & replication factor of 1.
 	ReplicationClause string
 }
