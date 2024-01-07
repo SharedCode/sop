@@ -229,6 +229,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
 	for i := range handles {
 		blobs[i].BlobTable = nodes[i].Key.BlobTable
+		blobs[i].Blobs = make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			// Node with such Id is marked deleted or had been updated since reading it.
 			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Timestamp != nodes[i].Value[ii].Timestamp {
@@ -318,6 +319,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 		handles[i].RegistryTable = nodes[i].Key.RegistryTable
 		handles[i].IDs = make([]sop.Handle, len(nodes[i].Value))
 		blobs[i].BlobTable = nodes[i].Key.BlobTable
+		blobs[i].Blobs = make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(handles[i].IDs))
 		for ii := range nodes[i].Value {
 			// Add node to blob store.
 			h := sop.NewHandle(nodes[i].Value[ii].Id)
@@ -425,6 +427,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 	}
 	blobsIds := make([]cas.BlobsPayload[btree.UUID], len(nodes))
 	for i := range handles {
+		blobsIds[i].Blobs = make([]btree.UUID, len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			blobsIds[i].Blobs[ii] = handles[i].IDs[ii].GetInActiveId()
 			handles[i].IDs[ii].ClearInactiveId()

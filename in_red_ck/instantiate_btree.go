@@ -84,13 +84,14 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 		if err := trans.storeRepository.Add(ctx, *ns); err != nil {
 			return nil, err
 		}
-		stores = []btree.StoreInfo{*ns}
+		return newBtree[TK, TV](ns, trans)
 	}
 	// Check if store retrieved is empty or of non-compatible specification.
 	if !ns.IsCompatible(stores[0]) {
 		// Recommend to use the OpenBtree function to open it.
 		return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it", name)
 	}
+	ns = &stores[0]
 	return newBtree[TK, TV](ns, trans)
 }
 

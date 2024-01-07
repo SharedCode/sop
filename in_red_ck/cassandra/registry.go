@@ -98,12 +98,12 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 	// Logged batch will do all or nothing. This is the only one "all or nothing" operation in the Commit process.
 	batch := connection.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 	for _, sh := range storesHandles {
-		updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ts = ?, wip_ts = ?, is_del = ?;",
+		updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ts = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
 			connection.Config.Keyspace, sh.RegistryTable)
 		for _, h := range sh.IDs {
-			// Add a new store record.
+			// Update store record.
 			batch.Query(updateStatement, h.IsActiveIdB, gocql.UUID(h.PhysicalIdA), gocql.UUID(h.PhysicalIdB),
-				h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted)
+				h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId))
 		}
 	}
 	// Failed update all, thus, return err to cause rollback.
