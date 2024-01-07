@@ -235,12 +235,6 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 				return err
 			}
 		}
-		if !successful {
-			if err := t.btreesBackend[0].backendNodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
-				return err
-			}
-		}
-
 		// Only do commit removed nodes if successful so far.
 		if successful {
 			// Commit removed nodes.
@@ -251,6 +245,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			}
 		}
 		if !successful {
+			// Rollback partial changes.
+			t.rollback(ctx)
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
 			sleepTime := rand.Intn(4+1) + 5

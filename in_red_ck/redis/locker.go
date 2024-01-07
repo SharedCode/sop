@@ -10,13 +10,18 @@ import (
 
 )
 
+// Add prefix to the lock key so it becomes unique.
+func FormatLockKey(k string) string {
+	return fmt.Sprintf("L%s", k)
+}
+
 // Create a set of lock records with given set of keys.
 func CreateLockRecords(keys []string) []sop.KeyValuePair[string, btree.UUID] {
 	lockRecords := make([]sop.KeyValuePair[string, btree.UUID], len(keys))
 	for i := range keys {
 		lockRecords[i] = sop.KeyValuePair[string, btree.UUID]{
 			// Prefix key with "L" to increase uniqueness.
-			Key: fmt.Sprintf("L%s", keys[i]),
+			Key: FormatLockKey(keys[i]),
 			Value: btree.NewUUID(),
 		}
 	}

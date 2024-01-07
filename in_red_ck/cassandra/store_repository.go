@@ -11,6 +11,7 @@ import (
 	retry "github.com/sethvargo/go-retry"
 
 	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/in_memory"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -82,38 +83,57 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
-	b := retry.NewFibonacci(1*time.Second)
+
+	// Sort the stores info so we can commit them in same sort order.
+	b3 := in_memory.NewBtree[string, btree.StoreInfo](true)
+	for i := range stores {
+		b3.Add(stores[i].Name, stores[i])
+	}
+	b3.First()
+	keys := make([]string, len(stores))
+	i := 0
+	for {
+		keys[i] = b3.GetCurrentKey()
+		stores[i] = b3.GetCurrentValue()
+		if !b3.Next() {
+			break
+		}
+		i++
+	}
 
 	// Create lock Ids that we can use to logically lock and prevent other updates.
-	keys := make([]string, len(stores))
-	for i := range stores {
-		keys[i] = stores[i].Name
-	}
 	lockRecords := redis.CreateLockRecords(keys)
 
-	beforeUpdateStores := make([]btree.StoreInfo, 0, len(stores))
+	// 15 minutes to lock, merge/update details then unlock.
+	duration := time.Duration(15*time.Minute)
+	b := retry.NewFibonacci(1*time.Second)
+
+	// Lock all keys.
+	if err := retry.Do(ctx, retry.WithMaxRetries(3, b), func (ctx context.Context) error {
+		return redis.Lock(ctx, duration, lockRecords...)
+	}); err != nil {
+		// Unlock all keys since we failed locking them.
+		redis.Unlock(ctx, lockRecords...)
+		return err
+	}
+
 	updateStatement := fmt.Sprintf("UPDATE %s.store SET count = ?, ts = ? WHERE name = ?;", connection.Config.Keyspace)
-	// 60 seconds to lock & merge/update details.
-	duration := time.Duration(60*time.Second)
+	undo := func (bus []btree.StoreInfo) {
+		// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
+		for ii := 0; ii < len(bus); ii++ {
+			connection.Session.Query(updateStatement, bus[ii].Count, bus[ii].Timestamp,
+				bus[ii].Name).Exec()
+		}		
+	}
+
+	beforeUpdateStores := make([]btree.StoreInfo, 0, len(stores))
+	// Unlock all keys before going out of scope.
+	defer redis.Unlock(ctx, lockRecords...)
+
 	for i := range stores {
-		if err := retry.Do(ctx, retry.WithMaxRetries(3, b), func (ctx context.Context) error {
-			return redis.Lock(ctx, duration, lockRecords[i])
-		}); err != nil {
-			// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
-			for ii := 0; ii < len(beforeUpdateStores); ii++ {
-				connection.Session.Query(updateStatement, beforeUpdateStores[ii].Count, beforeUpdateStores[ii].Timestamp,
-					beforeUpdateStores[ii].Name).Exec()
-				redis.Unlock(ctx, lockRecords[ii])
-			}
-			return err
-		}
 		sis, err := sr.Get(ctx, stores[i].Name)
 		if len(sis) == 0 {
-			for ii := 0; ii < len(beforeUpdateStores); ii++ {
-				connection.Session.Query(updateStatement, beforeUpdateStores[ii].Count, beforeUpdateStores[ii].Timestamp,
-					beforeUpdateStores[ii].Name).Exec()
-				redis.Unlock(ctx, lockRecords[ii])
-			}
+			undo(beforeUpdateStores)
 			return err
 		}
 		beforeUpdateStores = append(beforeUpdateStores, sis...)
@@ -128,11 +148,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 		// Update store record.
 		if err := connection.Session.Query(updateStatement, stores[i].Count, stores[i].Timestamp, stores[i].Name).Exec(); err != nil {
 			// Undo changes.
-			for ii := 0; ii < len(beforeUpdateStores); ii++ {
-				connection.Session.Query(updateStatement, beforeUpdateStores[ii].Count, beforeUpdateStores[ii].Timestamp,
-					beforeUpdateStores[ii].Name).Exec()
-				redis.Unlock(ctx, lockRecords[ii])
-			}
+			undo(beforeUpdateStores)
 			return err
 		}
 	}
@@ -142,8 +158,8 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(stores[i].Name), &stores[i], ttl); err != nil {
 			log.Error("StoreRepository Update (redis setstruct) failed, details: %v", err)
 		}
-		redis.Unlock(ctx, lockRecords[i])
 	}
+
 	return nil
 }
 

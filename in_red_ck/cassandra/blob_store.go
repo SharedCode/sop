@@ -101,6 +101,9 @@ func (b *blobStore) Remove(ctx context.Context, storesBlobsIds ...BlobsPayload[b
 	}
 	for _, storeBlobIds := range storesBlobsIds {
 		for _, blobId := range storeBlobIds.Blobs {
+			if blobId.IsNil() {
+				continue
+			}
 			dropBlobTable := fmt.Sprintf("DELETE FROM %s.%s WHERE id = ?;", connection.Config.Keyspace, storeBlobIds.BlobTable)
 			if err := connection.Session.Query(dropBlobTable, gocql.UUID(blobId)).WithContext(ctx).Exec(); err != nil {
 				return err

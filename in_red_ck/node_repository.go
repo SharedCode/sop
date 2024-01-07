@@ -436,6 +436,9 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 	// Undo the nodes blobs to blob store and redis cache.
 	for i := range blobsIds {
 		for ii := range blobsIds[i].Blobs {
+			if blobsIds[i].Blobs[ii].IsNil() {
+				continue
+			}
 			if err = nr.transaction.redisCache.Delete(ctx, nr.formatKey(blobsIds[i].Blobs[ii].ToString())); err != nil && !redis.KeyNotFound(err) {
 				return err
 			}
