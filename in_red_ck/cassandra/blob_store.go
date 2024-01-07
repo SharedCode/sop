@@ -35,8 +35,8 @@ type BlobStore interface {
 
 type blobStore struct {}
 
-func NewBlobStore() blobStore {
-	return blobStore{}
+func NewBlobStore() BlobStore {
+	return &blobStore{}
 }
 
 // GetOne fetches a blob from blob table.
@@ -46,12 +46,12 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobId btree.U
 	}
 	selectStatement := fmt.Sprintf("SELECT node FROM %s.%s WHERE id in (?);", connection.Config.Keyspace, blobTable)
 	iter := connection.Session.Query(selectStatement, gocql.UUID(blobId)).WithContext(ctx).Iter()
-	var ba []byte
-	for iter.Scan(&ba) {}
+	var s string
+	for iter.Scan(&s) {}
 	if err := iter.Close(); err != nil {
 		return err
 	}
-	return json.Unmarshal(ba, target)
+	return json.Unmarshal([]byte(s), target)
 }
 
 func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]]) error {
@@ -66,7 +66,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.Key
 			}
 			insertStatement := fmt.Sprintf("INSERT INTO %s.%s (id, node) VALUES(?,?);",
 				connection.Config.Keyspace, storeBlobs.BlobTable)
-			if err := connection.Session.Query(insertStatement, gocql.UUID(blob.Key), ba).WithContext(ctx).Exec(); err != nil {
+			if err := connection.Session.Query(insertStatement, gocql.UUID(blob.Key), string(ba)).WithContext(ctx).Exec(); err != nil {
 				return err
 			}
 		}
@@ -85,7 +85,7 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.
 				return err
 			}
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET node = ? WHERE id = ?;", connection.Config.Keyspace, storeBlobs.BlobTable)
-			if err := connection.Session.Query(updateStatement, ba, gocql.UUID(blob.Key)).WithContext(ctx).Exec(); err != nil {
+			if err := connection.Session.Query(updateStatement, string(ba), gocql.UUID(blob.Key)).WithContext(ctx).Exec(); err != nil {
 				return err
 			}
 		}

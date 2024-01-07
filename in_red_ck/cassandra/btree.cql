@@ -32,7 +32,7 @@ create table store (
 -- Node Blob demo table 1.
 create table foo_b(
     id UUID PRIMARY KEY,
-    node blob
+    node text
 );
 
 -- Virtual Id Registry demo table 1.

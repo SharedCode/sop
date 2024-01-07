@@ -84,6 +84,9 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
+	if len(storesHandles) == 0 {
+		return nil
+	}
 
 	// TODO: in order to ensure 0 race condition, we need to use Redis to ensure exclusive update on the set of Handles.
 	// Logic: use a set of redis keys to enforce locks so only "winners"(using UUID) will be able to proceed, rest will return error
