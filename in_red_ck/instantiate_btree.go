@@ -3,10 +3,11 @@ package in_red_ck
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_red_ck/redis"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
 // Assign the configs & open connections to different sub-systems used by this package.
@@ -35,14 +36,14 @@ func Shutdown() {
 // OpenBtree will open an existing B-Tree instance it for use in a transaction.
 func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
-		return nil, fmt.Errorf("Transaction 't' can't be nil.")
+		return nil, fmt.Errorf("Transaction 't' can't be nil")
 	}
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
 	stores, err := trans.storeRepository.Get(ctx, name)
 	if len(stores) == 0 || stores[0].IsEmpty() || err != nil {
 		if err == nil {
-			return nil, fmt.Errorf("B-Tree '%s' does not exist, please use NewBtree to create an instance of it.", name)
+			return nil, fmt.Errorf("B-Tree '%s' does not exist, please use NewBtree to create an instance of it", name)
 		}
 		return nil, err
 	}
@@ -62,7 +63,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
 	isValueDataInNodeSegment bool, leafLoadBalancing bool, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
-		return nil, fmt.Errorf("Transaction 't' can't be nil.")
+		return nil, fmt.Errorf("Transaction 't' can't be nil")
 	}
 
 	var t2 interface{} = t.GetPhasedTransaction()
@@ -88,7 +89,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 	// Check if store retrieved is empty or of non-compatible specification.
 	if !ns.IsCompatible(stores[0]) {
 		// Recommend to use the OpenBtree function to open it.
-		return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it.", name)
+		return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it", name)
 	}
 	return newBtree[TK, TV](ns, trans)
 }
@@ -101,8 +102,8 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 	si.ItemActionTracker = iatw
 	si.backendItemActionTracker = iatw
 
-	// Assign the node repository frontend and backend bits.
-	nrw := newNodeRepository[interface{}, interface{}](trans, s)
+	// Assign the node repository frontend and backend bits. Node is cached in Redis at 7hr max.
+	nrw := newNodeRepository[interface{}, interface{}](trans, s, time.Duration(7)*time.Hour)
 	si.NodeRepository = nrw
 	si.backendNodeRepository = nrw.realNodeRepository
 

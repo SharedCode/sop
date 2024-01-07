@@ -48,7 +48,7 @@ type registry struct {
 // NewRegistry manages the Handle in the store's Cassandra registry table.
 func NewRegistry(rc redis.Cache) (Registry, error) {
 	if rc == nil {
-		return nil, fmt.Errorf("Redis cache is required.")
+		return nil, fmt.Errorf("Redis cache is required")
 	}
 	return &registry{
 		redisCache: rc,
@@ -59,7 +59,7 @@ func NewRegistry(rc redis.Cache) (Registry, error) {
 
 func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop.Handle]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
+		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
 	for _, sh := range storesHandles {
 		insertStatement := fmt.Sprintf("INSERT INTO %s.%s (lid, is_idb, p_ida, p_idb, ts, wip_ts, is_del) VALUES(?,?,?,?,?,?,?);",
@@ -71,8 +71,8 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 				return err
 			}
 			// Tolerate Redis cache failure.
-			if err := v.redisCache.SetStruct(ctx, formatKey(h.LogicalId.ToString()), &h, -1); err != nil {
-				log.Error("Registry Add (redis setstruct) failed, details: %v.", err)
+			if err := v.redisCache.SetStruct(ctx, v.formatKey(h.LogicalId.ToString()), &h, -1); err != nil {
+				log.Error("Registry Add (redis setstruct) failed, details: %v", err)
 			}
 		}
 	}
@@ -82,8 +82,16 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 // Update does an all or nothing update of the batch of handles, mapping them to respective registry table(s).
 func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[sop.Handle]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
+		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
+
+	// TODO: in order to ensure 0 race condition, we need to use Redis to ensure exclusive update on the set of Handles.
+	// Logic: use a set of redis keys to enforce locks so only "winners"(using UUID) will be able to proceed, rest will return error
+	// to cause rollback. See item_action_tracker.go "lockRecord" struct based locking.
+	//
+	// For now, keep it simple and rely on transaction commit's optimistic locking & multi-phase checks,
+	// together with the logged batch update as shown below.
+
 	// Logged batch will do all or nothing. This is the only one "all or nothing" operation in the Commit process.
 	batch := connection.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 	for _, sh := range storesHandles {
@@ -95,6 +103,7 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 				h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted)
 		}
 	}
+	// Failed update all, thus, return err to cause rollback.
 	if err := connection.Session.ExecuteBatch(batch); err != nil {
 		return err
 	}
@@ -103,8 +112,8 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
 			// Tolerate Redis cache failure.
-			if err := v.redisCache.SetStruct(ctx, formatKey(h.LogicalId.ToString()), &h, -1); err != nil {
-				log.Error("Registry Update (redis setstruct) failed, details: %v.", err)
+			if err := v.redisCache.SetStruct(ctx, v.formatKey(h.LogicalId.ToString()), &h, -1); err != nil {
+				log.Error("Registry Update (redis setstruct) failed, details: %v", err)
 			}
 		}
 	}
@@ -113,7 +122,7 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 
 func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.UUID]) ([]RegistryPayload[sop.Handle], error) {
 	if connection == nil {
-		return nil, fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
+		return nil, fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
 
 	storesHandles := make([]RegistryPayload[sop.Handle], 0, len(storesLids))
@@ -123,8 +132,10 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 		lidsAsIntfs := make([]interface{}, 0, len(storeLids.IDs))
 		for i := range storeLids.IDs {
 			h := sop.Handle{}
-			if err := v.redisCache.GetStruct(ctx, formatKey(formatKey(storeLids.IDs[i].ToString())), &h); err != nil && !redis.KeyNotFound(err) {
-				log.Error("Registry Get (redis getstruct) failed, details: %v.", err)
+			if err := v.redisCache.GetStruct(ctx, v.formatKey(storeLids.IDs[i].ToString()), &h); err != nil {
+				if !redis.KeyNotFound(err) {
+					log.Error("Registry Get (redis getstruct) failed, details: %v", err)
+				}
 				paramQ = append(paramQ, "?")
 				lidsAsIntfs = append(lidsAsIntfs, interface{}(gocql.UUID(storeLids.IDs[i])))
 				continue
@@ -150,8 +161,8 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 			handle.PhysicalIdB = btree.UUID(idb)
 			handles = append(handles, handle)
 
-			if err := v.redisCache.SetStruct(ctx, formatKey(handle.LogicalId.ToString()), &handle, -1); err != nil {
-				log.Error("Registry Get (redis setstruct) failed, details: %v.", err)
+			if err := v.redisCache.SetStruct(ctx, v.formatKey(handle.LogicalId.ToString()), &handle, -1); err != nil {
+				log.Error("Registry Get (redis setstruct) failed, details: %v", err)
 			}
 			handle = sop.Handle{}
 		}
@@ -168,7 +179,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 
 func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btree.UUID]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it.")
+		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
 
 	for _, storeLids := range storesLids {
@@ -176,7 +187,7 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 		lidsAsIntfs := make([]interface{}, len(storeLids.IDs))
 		for i := range storeLids.IDs {
 			paramQ[i] = "?"
-			lidsAsIntfs[i] = interface{}(storeLids.IDs[i])
+			lidsAsIntfs[i] = interface{}(gocql.UUID(storeLids.IDs[i]))
 		}
 		deleteStatement := fmt.Sprintf("DELETE FROM %s.%s WHERE lid in (%v);",
 			connection.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
@@ -185,8 +196,8 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 		}
 		for _, id := range storeLids.IDs {
 			// Tolerate Redis cache failure.
-			if err := v.redisCache.Delete(ctx, formatKey(id.ToString())); err != nil && !redis.KeyNotFound(err) {
-				log.Error("Registry Delete (redis delete) failed, details: %v.", err)
+			if err := v.redisCache.Delete(ctx, v.formatKey(id.ToString())); err != nil && !redis.KeyNotFound(err) {
+				log.Error("Registry Delete (redis delete) failed, details: %v", err)
 			}
 		}
 	}
@@ -194,6 +205,6 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 }
 
 // Virtual ID key in Redis is prefixed by V to differentiate from Node key.
-func formatKey(k string) string {
-	return fmt.Sprintf("V%s", k)
+func (v *registry)formatKey(k string) string {
+	return k	//fmt.Sprintf("V%s", k)
 }

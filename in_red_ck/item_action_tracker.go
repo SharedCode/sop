@@ -10,7 +10,6 @@ import (
 )
 
 type actionType int
-
 const (
 	getAction = iota
 	addAction
@@ -129,7 +128,7 @@ func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache
 			if err := itemRedisCache.GetStruct(ctx, uuid.ToString(), &readItem); err != nil {
 				return err
 			} else if readItem.LockId != cachedItem.LockId {
-				return fmt.Errorf("lock(item: %v) call detected conflict.", uuid)
+				return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
 			}
 			// We got the item locked, ensure we can unlock it.
 			cachedItem.isLockOwner = true
@@ -143,21 +142,22 @@ func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache
 		if readItem.Action == getAction && cachedItem.Action == getAction {
 			continue
 		}
-		return fmt.Errorf("lock(item: %v) call detected conflict.", uuid)
+		return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
 	}
 	return nil
 }
 
 // unlock will attempt to unlock or delete all tracked items from redis.
 func (t *itemActionTracker) unlock(ctx context.Context, itemRedisCache redis.Cache) error {
+	var lastErr error
 	for uuid, cachedItem := range t.items {
 		if cachedItem.isLockOwner {
 			if err := itemRedisCache.Delete(ctx, uuid.ToString()); err != nil {
 				if !redis.KeyNotFound(err) {
-					return err
+					lastErr = err
 				}
 			}
 		}
 	}
-	return nil
+	return lastErr
 }

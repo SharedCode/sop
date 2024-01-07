@@ -75,10 +75,10 @@ type promoteAction[TK Comparable, TV any] struct {
 func New[TK Comparable, TV any](storeInfo *StoreInfo, si *StoreInterface[TK, TV]) (*Btree[TK, TV], error) {
 	// Return nil B-Tree to signify failure if there is not enough info to create an instance.
 	if si == nil {
-		return nil, fmt.Errorf("Can't create a b-tree with nil StoreInterface parameter.")
+		return nil, fmt.Errorf("Can't create a b-tree with nil StoreInterface parameter")
 	}
 	if storeInfo.IsEmpty() {
-		return nil, fmt.Errorf("Can't create a b-tree with empty StoreInfo parameter.")
+		return nil, fmt.Errorf("Can't create a b-tree with empty StoreInfo parameter")
 	}
 	var b3 = Btree[TK, TV]{
 		StoreInfo:          storeInfo,
@@ -496,7 +496,7 @@ func (btree *Btree[TK, TV]) isCurrentItemSelected() bool {
 // pattern and avoids recursion.
 func (btree *Btree[TK, TV]) distribute(ctx context.Context) {
 	for btree.distributeAction.sourceNode != nil {
-		log.Debug(fmt.Sprintf("Distribute item with key(%v) of node Id(%v) to left(%v).",
+		log.Debug(fmt.Sprintf("Distribute item with key(%v) of node Id(%v) to left(%v)",
 			btree.distributeAction.item.Key, btree.distributeAction.sourceNode.Id, btree.distributeAction.distributeToLeft))
 		n := btree.distributeAction.sourceNode
 		btree.distributeAction.sourceNode = nil
@@ -517,7 +517,7 @@ func (btree *Btree[TK, TV]) distribute(ctx context.Context) {
 // promote allows a controller(btree.promote)-controllee(node.promote) pattern and avoid recursion.
 func (btree *Btree[TK, TV]) promote(ctx context.Context) {
 	for btree.promoteAction.targetNode != nil {
-		log.Debug(fmt.Sprintf("Promote will promote a Node with Id %v.", btree.promoteAction.targetNode.Id))
+		log.Debug(fmt.Sprintf("Promote will promote a Node with Id %v", btree.promoteAction.targetNode.Id))
 		n := btree.promoteAction.targetNode
 		i := btree.promoteAction.slotIndex
 		btree.promoteAction.targetNode = nil

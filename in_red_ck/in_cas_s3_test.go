@@ -9,12 +9,18 @@ import (
 )
 
 var cassConfig = cassandra.Config{
-	ClusterHosts: []string{"172.17.0.2"},
+	ClusterHosts: []string{"localhost"},
 	Keyspace:     "btree",
+}
+var redisConfig = redis.Options {
+	Address:                  "localhost:6379",
+	Password:                 "", // no password set
+	DB:                       0,  // use default DB
+	DefaultDurationInSeconds: 24 * 60 * 60,
 }
 
 func init() {
-	Initialize(cassConfig, redis.DefaultOptions())
+	Initialize(cassConfig, redisConfig)
 }
 
 var ctx = context.Background()

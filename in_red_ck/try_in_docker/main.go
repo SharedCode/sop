@@ -17,21 +17,22 @@ var cassConfig = cas.Config{
 	ClusterHosts: []string{"172.17.0.2"},
 	Consistency: gocql.Quorum,
 }
+var redisConfig = redis.Options {
+	Address:                  "USLC02SGDPXG8WP:6379",
+	Password:                 "", // no password set
+	DB:                       0,  // use default DB
+	DefaultDurationInSeconds: 24 * 60 * 60,
+}
 
 func main() {
-	redisConfig := redis.Options {
-		Address:                  "USLC02SGDPXG8WP:6379",
-		Password:                 "", // no password set
-		DB:                       0,  // use default DB
-		DefaultDurationInSeconds: 24 * 60 * 60,
-	}
 	if err := in_red_ck.Initialize(cassConfig, redisConfig); err != nil {
 		writeAndExit(err.Error())
 	}
+	redisCache := redis.NewClient()
 
 	storeInfo := *btree.NewStoreInfo("foobar", 4, true, true, true, "")
 	storeInfo.RootNodeId = btree.NewUUID()
-	repo := cas.NewStoreRepository()
+	repo := cas.NewStoreRepository(redisCache)
 	sis, err := repo.Get(ctx, "foobar")
 	if err != nil {
 		writeAndExit("Cassandra repo Get failed, err: %v.", err)
@@ -42,7 +43,7 @@ func main() {
 		}
 	}
 
-	registry,_ := cas.NewRegistry(redis.NewClient())
+	registry,_ := cas.NewRegistry(redisCache)
 	if err := registry.Add(ctx, cas.RegistryPayload[sop.Handle]{
 		RegistryTable: storeInfo.RegistryTable,
 		IDs: []sop.Handle{ sop.NewHandle(btree.NewUUID()) },

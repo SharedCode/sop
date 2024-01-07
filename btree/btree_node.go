@@ -223,7 +223,7 @@ func (node *Node[TK, TV]) addOnLeaf(ctx context.Context, btree *Btree[TK, TV], i
 			return err
 		}
 		if p == nil {
-			return fmt.Errorf("Can't get parent (Id='%v') of this Node.", node.ParentId)
+			return fmt.Errorf("Can't get parent (Id='%v') of this Node", node.ParentId)
 		}
 
 		//  Save this and Right Node.

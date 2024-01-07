@@ -36,7 +36,7 @@ func KeyNotFound(err error) bool {
 // Ping tests connectivity for redis (PONG should be returned)
 func (c client) Ping(ctx context.Context) error {
 	if connection == nil {
-		return fmt.Errorf("Redis connection is not open, 'can't create new client.")
+		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
 	pong, err := connection.Client.Ping(ctx).Result()
 	if err != nil {
@@ -51,7 +51,7 @@ func (c client) Ping(ctx context.Context) error {
 // Set executes the redis Set command
 func (c client) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	if connection == nil {
-		return fmt.Errorf("Redis connection is not open, 'can't create new client.")
+		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
 	if expiration < 0 {
 		expiration = connection.Options.GetDefaultDuration()
@@ -62,7 +62,7 @@ func (c client) Set(ctx context.Context, key string, value string, expiration ti
 // Get executes the redis Get command
 func (c client) Get(ctx context.Context, key string) (string, error) {
 	if connection == nil {
-		return "", fmt.Errorf("Redis connection is not open, 'can't create new client.")
+		return "", fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
 	return connection.Client.Get(ctx, key).Result()
 }
@@ -70,7 +70,7 @@ func (c client) Get(ctx context.Context, key string) (string, error) {
 // SetStruct executes the redis Set command
 func (c client) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	if connection == nil {
-		return fmt.Errorf("Redis connection is not open, 'can't create new client.")
+		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
 	// serialize User object to JSON
 	json, err := json.Marshal(value)
@@ -87,10 +87,10 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 // GetStruct executes the redis Get command
 func (c client) GetStruct(ctx context.Context, key string, target interface{}) error {
 	if connection == nil {
-		return fmt.Errorf("Redis connection is not open, 'can't create new client.")
+		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
 	if target == nil {
-		panic("target can't be nil.")
+		panic("target can't be nil")
 	}
 	s, err := connection.Client.Get(ctx, key).Result()
 	if err == nil {
@@ -105,7 +105,7 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) e
 // Delete executes the redis Del command
 func (c client) Delete(ctx context.Context, key string) error {
 	if connection == nil {
-		return fmt.Errorf("Redis connection is not open, 'can't create new client.")
+		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
 	var r = connection.Client.Del(ctx, key)
 	return r.Err()
