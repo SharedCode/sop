@@ -22,7 +22,7 @@ func CreateLockRecords(keys []string) []sop.KeyValuePair[string, btree.UUID] {
 	return lockRecords
 }
 
-// Lock as set of records.
+// Lock as\ set of records.
 func Lock(ctx context.Context, duration time.Duration, lockRecords ...sop.KeyValuePair[string, btree.UUID]) error {
 	redisCache := NewClient()
 	for _, kvp := range lockRecords {

@@ -100,7 +100,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 			return redis.Lock(ctx, duration, lockRecords[i])
 		}); err != nil {
 			// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
-			for ii := 0; ii <= len(beforeUpdateStores); ii++ {
+			for ii := 0; ii < len(beforeUpdateStores); ii++ {
 				connection.Session.Query(updateStatement, beforeUpdateStores[ii].Count, beforeUpdateStores[ii].Timestamp,
 					beforeUpdateStores[ii].Name).Exec()
 				redis.Unlock(ctx, lockRecords[ii])
@@ -109,7 +109,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 		}
 		sis, err := sr.Get(ctx, stores[i].Name)
 		if len(sis) == 0 {
-			for ii := 0; ii <= len(beforeUpdateStores); ii++ {
+			for ii := 0; ii < len(beforeUpdateStores); ii++ {
 				connection.Session.Query(updateStatement, beforeUpdateStores[ii].Count, beforeUpdateStores[ii].Timestamp,
 					beforeUpdateStores[ii].Name).Exec()
 				redis.Unlock(ctx, lockRecords[ii])
@@ -128,7 +128,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 		// Update store record.
 		if err := connection.Session.Query(updateStatement, stores[i].Count, stores[i].Timestamp, stores[i].Name).Exec(); err != nil {
 			// Undo changes.
-			for ii := 0; ii <= len(beforeUpdateStores); ii++ {
+			for ii := 0; ii < len(beforeUpdateStores); ii++ {
 				connection.Session.Query(updateStatement, beforeUpdateStores[ii].Count, beforeUpdateStores[ii].Timestamp,
 					beforeUpdateStores[ii].Name).Exec()
 				redis.Unlock(ctx, lockRecords[ii])
