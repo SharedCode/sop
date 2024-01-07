@@ -14,7 +14,7 @@ import (
 
 var ctx = context.Background()
 var cassConfig = cas.Config{
-	ClusterHosts: []string{"172.17.0.2"},
+	ClusterHosts: []string{"172.17.0.2:9042"},
 	Consistency: gocql.Quorum,
 }
 var redisConfig = redis.Options {

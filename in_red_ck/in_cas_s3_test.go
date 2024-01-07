@@ -9,7 +9,7 @@ import (
 )
 
 var cassConfig = cassandra.Config{
-	ClusterHosts: []string{"localhost"},
+	ClusterHosts: []string{"localhost:9042"},
 	Keyspace:     "btree",
 }
 var redisConfig = redis.Options {

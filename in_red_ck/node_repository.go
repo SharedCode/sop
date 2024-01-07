@@ -181,6 +181,9 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 	}
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]], len(nodes))
 	for i := range handles {
+		if len(handles[i].IDs) == 0 {
+			handles[i].IDs = make([]sop.Handle, len(vids[i].IDs))
+		}
 		blobs[i].Blobs = make([]sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]], len(handles[i].IDs))
 		blobs[i].BlobTable = nodes[i].Key.BlobTable
 		for ii := range handles[i].IDs {

@@ -41,6 +41,9 @@ func (v *mock_vid_registry) Get(ctx context.Context, storesLids ...RegistryPaylo
 		handles := make([]sop.Handle, 0, len(storeLids.IDs))
 		for _, lid := range storeLids.IDs {
 			h, _ := v.lookup[lid]
+			if h.LogicalId.IsNil() {
+				continue
+			}
 			handles = append(handles, h)
 		}
 		storesHandles = append(storesHandles, RegistryPayload[sop.Handle]{

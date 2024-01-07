@@ -15,14 +15,15 @@ func CreateLockRecords(keys []string) []sop.KeyValuePair[string, btree.UUID] {
 	lockRecords := make([]sop.KeyValuePair[string, btree.UUID], len(keys))
 	for i := range keys {
 		lockRecords[i] = sop.KeyValuePair[string, btree.UUID]{
-			Key: keys[i],
+			// Prefix key with "L" to increase uniqueness.
+			Key: fmt.Sprintf("L%s", keys[i]),
 			Value: btree.NewUUID(),
 		}
 	}
 	return lockRecords
 }
 
-// Lock as\ set of records.
+// Lock a set of records.
 func Lock(ctx context.Context, duration time.Duration, lockRecords ...sop.KeyValuePair[string, btree.UUID]) error {
 	redisCache := NewClient()
 	for _, kvp := range lockRecords {
