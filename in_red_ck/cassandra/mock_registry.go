@@ -27,7 +27,7 @@ func (v *mock_vid_registry) Add(ctx context.Context, storesHandles ...RegistryPa
 	return nil
 }
 
-func (v *mock_vid_registry) Update(ctx context.Context, storesHandles ...RegistryPayload[sop.Handle]) error {
+func (v *mock_vid_registry) Update(ctx context.Context, allorNothing bool, storesHandles ...RegistryPayload[sop.Handle]) error {
 	for _, storeHandles := range storesHandles {
 		for _, h := range storeHandles.IDs {
 			v.lookup[h.LogicalId] = h

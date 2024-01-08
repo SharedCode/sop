@@ -284,7 +284,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	// Finalize the commit, it is the only all or nothing action in the commit,
 	// and on registry (very small) records only.
 	t.logger.log(finalizeCommit)
-	if err := t.registry.Update(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
+	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
 		return err
 	}
 
@@ -300,7 +300,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 			t.updatedNodeHandles[i].IDs[ii].ClearInactiveId()
 		}
 	}
-	if err := t.registry.Update(ctx, t.updatedNodeHandles...); err != nil {
+	if err := t.registry.Update(ctx, false, t.updatedNodeHandles...); err != nil {
 		// Exclude the updated nodes inactive Ids for deletion because they failed getting cleared in registry.
 		updatedNodesInactiveIds = nil
 		log.Warn(fmt.Sprintf("Failed to clear in Registry inactive node Ids, details: %v", err))

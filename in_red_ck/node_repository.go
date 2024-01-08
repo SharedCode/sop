@@ -261,7 +261,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
 		}
 	}
-	if err := nr.transaction.registry.Update(ctx, handles...); err != nil {
+	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
 		return false, err
 	}
 
@@ -304,7 +304,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Ke
 		}
 	}
 	// Persist the handles changes.
-	if err := nr.transaction.registry.Update(ctx, handles...); err != nil {
+	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -457,7 +457,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 		return err
 	}
 	// Undo changes in virtual Id registry.
-	if err = nr.transaction.registry.Update(ctx, handles...); err != nil {
+	if err = nr.transaction.registry.Update(ctx, false, handles...); err != nil {
 		return err
 	}
 	return nil
@@ -481,7 +481,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []sop.
 	}
 
 	// Persist the handles changes.
-	return nr.transaction.registry.Update(ctx, handles...)
+	return nr.transaction.registry.Update(ctx, false, handles...)
 }
 
 // Set to active the inactive nodes. This is the last persistence step in transaction commit.

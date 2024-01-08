@@ -36,17 +36,13 @@ func GetRegistryPayloadCount[T btree.UUID](payloads []RegistryPayload[T]) int {
 // All methods are taking in a set of items and need to be implemented to do
 // all or nothing feature, e.g. wrapped in transaction in Cassandra.
 type Registry interface {
-	// Get will fetch handles(given their Ids) from stores(given a store name).
-	// Supports an array of store names with a set of handle Ids each.
+	// Get will fetch handles(given their Ids) from stores.
 	Get(context.Context, ...RegistryPayload[btree.UUID]) ([]RegistryPayload[sop.Handle], error)
-	// Add will insert handles to stores(given a store name).
-	// Supports an array of store names with a set of handles each.
+	// Add will insert handles to stores.
 	Add(context.Context, ...RegistryPayload[sop.Handle]) error
-	// Update will update handles of stores(given a store name).
-	// Supports an array of store names with a set of handle each.
-	Update(context.Context, ...RegistryPayload[sop.Handle]) error
-	// Remove will delete handles(given their Ids) from stores(given a store name).
-	// Supports an array of store names with a set of handle each.
+	// Update will update handles of stores.
+	Update(ctx context.Context, allOrNothing bool, handles ...RegistryPayload[sop.Handle]) error
+	// Remove will delete handles(given their Ids) from stores.
 	Remove(context.Context, ...RegistryPayload[btree.UUID]) error
 }
 
@@ -96,7 +92,7 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 }
 
 // Update does an all or nothing update of the batch of handles, mapping them to respective registry table(s).
-func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[sop.Handle]) error {
+func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles ...RegistryPayload[sop.Handle]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
@@ -112,19 +108,33 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 	// together with the logged batch update as shown below.
 
 	// Logged batch will do all or nothing. This is the only one "all or nothing" operation in the Commit process.
-	batch := connection.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
-	for _, sh := range storesHandles {
-		updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ts = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
-			connection.Config.Keyspace, sh.RegistryTable)
-		for _, h := range sh.IDs {
-			// Update store record.
-			batch.Query(updateStatement, h.IsActiveIdB, gocql.UUID(h.PhysicalIdA), gocql.UUID(h.PhysicalIdB),
-				h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId))
+	if allOrNothing {
+		batch := connection.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+		for _, sh := range storesHandles {
+			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ts = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
+				connection.Config.Keyspace, sh.RegistryTable)
+			for _, h := range sh.IDs {
+				// Update store record.
+				batch.Query(updateStatement, h.IsActiveIdB, gocql.UUID(h.PhysicalIdA), gocql.UUID(h.PhysicalIdB),
+					h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId))
+			}
 		}
-	}
-	// Failed update all, thus, return err to cause rollback.
-	if err := connection.Session.ExecuteBatch(batch); err != nil {
-		return err
+		// Failed update all, thus, return err to cause rollback.
+		if err := connection.Session.ExecuteBatch(batch); err != nil {
+			return err
+		}	
+	} else {
+		for _, sh := range storesHandles {
+			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ts = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
+				connection.Config.Keyspace, sh.RegistryTable)
+			for _, h := range sh.IDs {
+				// Update store record.
+				if err := connection.Session.Query(updateStatement, h.IsActiveIdB, gocql.UUID(h.PhysicalIdA), gocql.UUID(h.PhysicalIdB),
+					h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId)).Exec(); err != nil {
+						return err
+					}
+			}
+		}
 	}
 
 	// Update redis cache.
