@@ -86,5 +86,6 @@ func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 		s.IsUnique == b.IsUnique &&
 		s.BlobTable == b.BlobTable &&
 		s.RegistryTable == b.RegistryTable &&
-		s.IsValueDataInNodeSegment == b.IsValueDataInNodeSegment
+		s.IsValueDataInNodeSegment == b.IsValueDataInNodeSegment &&
+		s.LeafLoadBalancing == b.LeafLoadBalancing
 }
