@@ -122,18 +122,13 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		for _, sh := range storesHandles {
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ts = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
 				connection.Config.Keyspace, sh.RegistryTable)
-			var lastError error
-			// In case of error, at least try to update as much as we can. These fails will just cause the temp Id(inactive node Id) to expire
-			// in a later future time, so, it is ok.
+			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
 				// Update registry record.
 				if err := connection.Session.Query(updateStatement, h.IsActiveIdB, gocql.UUID(h.PhysicalIdA), gocql.UUID(h.PhysicalIdB),
-					h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId)).Exec(); err != nil {
-					lastError = err
+					h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId)).WithContext(ctx).Exec(); err != nil {
+					return err
 				}
-			}
-			if lastError != nil {
-				return lastError
 			}
 		}
 	}
