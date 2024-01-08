@@ -204,7 +204,7 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 			connection.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
 
 		// Flush out the failing records from cache.
-		deleteFromCache := func () {
+		deleteFromCache := func() {
 			for _, id := range storeLids.IDs {
 				if err := v.redisCache.Delete(ctx, v.formatKey(id.ToString())); err != nil && !redis.KeyNotFound(err) {
 					log.Error("Registry Delete (redis delete) failed, details: %v", err)
