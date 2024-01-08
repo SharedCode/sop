@@ -28,11 +28,9 @@ func main() {
 	if err := in_red_ck.Initialize(cassConfig, redisConfig); err != nil {
 		writeAndExit(err.Error())
 	}
-	redisCache := redis.NewClient()
-
 	storeInfo := *btree.NewStoreInfo("foobar", 4, true, true, true, "")
 	storeInfo.RootNodeId = btree.NewUUID()
-	repo := cas.NewStoreRepository(redisCache)
+	repo := cas.NewStoreRepository()
 	sis, err := repo.Get(ctx, "foobar")
 	if err != nil {
 		writeAndExit("Cassandra repo Get failed, err: %v.", err)
@@ -43,7 +41,7 @@ func main() {
 		}
 	}
 
-	registry, _ := cas.NewRegistry(redisCache)
+	registry := cas.NewRegistry()
 	if err := registry.Add(ctx, cas.RegistryPayload[sop.Handle]{
 		RegistryTable: storeInfo.RegistryTable,
 		IDs:           []sop.Handle{sop.NewHandle(btree.NewUUID())},

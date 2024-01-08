@@ -46,13 +46,10 @@ type registry struct {
 }
 
 // NewRegistry manages the Handle in the store's Cassandra registry table.
-func NewRegistry(rc redis.Cache) (Registry, error) {
-	if rc == nil {
-		return nil, fmt.Errorf("Redis cache is required")
-	}
+func NewRegistry() Registry {
 	return &registry{
-		redisCache: rc,
-	}, nil
+		redisCache: redis.NewClient(),
+	}
 }
 
 // TODO: finalize Consistency levels to use in below CRUD methods.
@@ -108,6 +105,17 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 	}
 	// Failed update all, thus, return err to cause rollback.
 	if err := connection.Session.ExecuteBatch(batch); err != nil {
+		// Ensure to flush the failing batch from redis cache.
+		for _, sh := range storesHandles {
+			for _, h := range sh.IDs {
+				// Tolerate Redis cache failure.
+				if err := v.redisCache.Delete(ctx, v.formatKey(h.LogicalId.ToString())); err != nil {
+					if !redis.KeyNotFound(err) {
+						log.Error("Registry Update (redis setstruct) failed, details: %v", err)
+					}
+				}
+			}
+		}
 		return err
 	}
 
@@ -194,15 +202,20 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 		}
 		deleteStatement := fmt.Sprintf("DELETE FROM %s.%s WHERE lid in (%v);",
 			connection.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
-		if err := connection.Session.Query(deleteStatement, lidsAsIntfs...).WithContext(ctx).Exec(); err != nil {
-			return err
-		}
-		for _, id := range storeLids.IDs {
-			// Tolerate Redis cache failure.
-			if err := v.redisCache.Delete(ctx, v.formatKey(id.ToString())); err != nil && !redis.KeyNotFound(err) {
-				log.Error("Registry Delete (redis delete) failed, details: %v", err)
+
+		// Flush out the failing records from cache.
+		deleteFromCache := func () {
+			for _, id := range storeLids.IDs {
+				if err := v.redisCache.Delete(ctx, v.formatKey(id.ToString())); err != nil && !redis.KeyNotFound(err) {
+					log.Error("Registry Delete (redis delete) failed, details: %v", err)
+				}
 			}
 		}
+		if err := connection.Session.Query(deleteStatement, lidsAsIntfs...).WithContext(ctx).Exec(); err != nil {
+			deleteFromCache()
+			return err
+		}
+		deleteFromCache()
 	}
 	return nil
 }

@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
-	"time"
 )
 
 // Cache interface specifies the methods implemented for Redis caching.
@@ -81,7 +81,7 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 	if expiration < 0 {
 		expiration = connection.Options.GetDefaultDuration()
 	}
-	return connection.Client.Set(ctx, key, json, expiration).Err()
+	return connection.Client.Set(ctx, key, string(json), expiration).Err()
 }
 
 // GetStruct executes the redis Get command
@@ -90,11 +90,11 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) e
 		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
 	if target == nil {
-		panic("target can't be nil")
+		return fmt.Errorf("target can't be nil")
 	}
-	s, err := connection.Client.Get(ctx, key).Result()
+	jsonString, err := connection.Client.Get(ctx, key).Result()
 	if err == nil {
-		err = json.Unmarshal([]byte(s), target)
+		err = json.Unmarshal([]byte(jsonString), target)
 	}
 	if err == redis.Nil {
 		return err

@@ -77,18 +77,13 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 	if !IsInitialized() {
 		return nil, fmt.Errorf("Redis and/or Cassandra bits were not initialized")
 	}
-	rc := redis.NewClient()
-	reg, err := cas.NewRegistry(rc)
-	if err != nil {
-		return nil, err
-	}
 	return &transaction{
 		forWriting: forWriting,
 		maxTime:    maxTime,
 		// TODO: Allow caller to supply Redis & blob store settings.
-		storeRepository:   cas.NewStoreRepository(rc),
-		registry:          reg,
-		redisCache:        rc,
+		storeRepository:   cas.NewStoreRepository(),
+		registry:          cas.NewRegistry(),
+		redisCache:        redis.NewClient(),
 		nodeBlobStore:     cas.NewBlobStore(),
 		deletedItemsQueue: q.NewQueue[QueueItem](),
 		logger:            newTransactionLogger(),

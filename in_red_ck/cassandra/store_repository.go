@@ -37,15 +37,16 @@ type storeRepository struct {
 }
 
 // NewStoreRepository manages the StoreInfo in Cassandra table.
-func NewStoreRepository(redisCache redis.Cache) StoreRepository {
+func NewStoreRepository() StoreRepository {
 	return &storeRepository{
-		redisCache: redisCache,
+		redisCache: redis.NewClient(),
 	}
 }
 
 // TODO: finalize Consistency levels to use in below CRUD methods.
 
-const ttl = time.Duration(2 * time.Hour)
+// TODO: Do we want this configurable?
+const cacheDuration = time.Duration(2 * time.Hour)
 
 // Add a new store record, create a new Virtual ID registry and node blob tables.
 func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) error {
@@ -71,7 +72,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 			return err
 		}
 		// Tolerate error in Redis caching.
-		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(s.Name), &s, ttl); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(s.Name), &s, cacheDuration); err != nil {
 			log.Error(fmt.Sprintf("StoreRepository Add failed (redis setstruct), details: %v", err))
 		}
 	}
@@ -156,7 +157,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	// Update redis since we've successfully updated Cassandra Store table.
 	for i := range stores {
 		// Tolerate redis error since we've successfully updated the master table.
-		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(stores[i].Name), &stores[i], ttl); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(stores[i].Name), &stores[i], cacheDuration); err != nil {
 			log.Error("StoreRepository Update (redis setstruct) failed, details: %v", err)
 		}
 	}
@@ -196,7 +197,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.LeafLoadBalancing, &store.IsDeleted) {
 		store.RootNodeId = btree.UUID(rid)
 
-		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(store.Name), &store, ttl); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(store.Name), &store, cacheDuration); err != nil {
 			log.Error(fmt.Sprintf("StoreRepository Get (redis setstruct) failed, details: %v", err))
 		}
 
