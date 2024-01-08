@@ -47,7 +47,7 @@ func NewStoreRepository() StoreRepository {
 
 var storeCacheDuration = time.Duration(2 * time.Hour)
 
-// SetStoreRepositoryCacheDuration allows store repository cache duration to get set globally.
+// SetStoreCacheDuration allows store repository cache duration to get set globally.
 func SetStoreCacheDuration(duration time.Duration) {
 	if duration < time.Minute {
 		duration = time.Duration(30 * time.Minute)
