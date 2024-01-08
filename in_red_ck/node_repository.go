@@ -24,6 +24,16 @@ type nodeRepositoryTyped[TK btree.Comparable, TV any] struct {
 // Now is a lambda expression that returns the current time in Unix milliseconds.
 var Now = time.Now().UnixMilli
 
+var nodeCacheDuration time.Duration = time.Duration(1 * time.Hour)
+
+// SetNodeCacheDuration allows node cache duration to get set globally.
+func SetNodeCacheDuration(duration time.Duration) {
+	if duration < time.Minute {
+		duration = time.Duration(20 * time.Minute)
+	}
+	nodeCacheDuration = duration
+}
+
 // Add will upsert node to the map.
 func (nr *nodeRepositoryTyped[TK, TV]) Add(n *btree.Node[TK, TV]) {
 	var intf interface{} = n
@@ -58,17 +68,15 @@ type nodeRepository struct {
 	nodeLocalCache map[btree.UUID]cacheNode
 	storeInfo      *btree.StoreInfo
 	count          int64
-	cacheDuration  time.Duration
 }
 
 // NewNodeRepository instantiates a NodeRepository.
-func newNodeRepository[TK btree.Comparable, TV any](t *transaction, storeInfo *btree.StoreInfo, cacheDuration time.Duration) *nodeRepositoryTyped[TK, TV] {
+func newNodeRepository[TK btree.Comparable, TV any](t *transaction, storeInfo *btree.StoreInfo) *nodeRepositoryTyped[TK, TV] {
 	nr := &nodeRepository{
 		transaction:    t,
 		nodeLocalCache: make(map[btree.UUID]cacheNode),
 		storeInfo:      storeInfo,
 		count:          storeInfo.Count,
-		cacheDuration:  cacheDuration,
 	}
 	return &nodeRepositoryTyped[TK, TV]{
 		realNodeRepository: nr,
@@ -118,7 +126,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 			return nil, err
 		}
 		target.Timestamp = h[0].IDs[0].Timestamp
-		if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(nodeId.ToString()), target, nr.cacheDuration); err != nil {
+		if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(nodeId.ToString()), target, nodeCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("Failed to cache in Redis the newly fetched node with Id: %v, details: %v", nodeId, err))
 		}
 		nr.nodeLocalCache[logicalId] = cacheNode{
@@ -204,7 +212,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 	for i := range nodes {
 		for ii := range nodes[i].Value {
 			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetActiveId().ToString()),
-				nodes[i].Value[ii], nr.cacheDuration); err != nil {
+				nodes[i].Value[ii], nodeCacheDuration); err != nil {
 				return false, err
 			}
 		}
@@ -263,7 +271,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Value {
-			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveId().ToString()), nodes[i].Value[ii], nr.cacheDuration); err != nil {
+			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveId().ToString()), nodes[i].Value[ii], nodeCacheDuration); err != nil {
 				return false, err
 			}
 		}
@@ -330,7 +338,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
 			handles[i].IDs[ii] = h
 			// Add node to Redis cache.
-			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(nodes[i].Value[ii].Id.ToString()), nodes[i].Value[ii], nr.cacheDuration); err != nil {
+			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(nodes[i].Value[ii].Id.ToString()), nodes[i].Value[ii], nodeCacheDuration); err != nil {
 				return err
 			}
 		}

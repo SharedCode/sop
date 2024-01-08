@@ -3,7 +3,6 @@ package in_red_ck
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
@@ -105,8 +104,8 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 	si.ItemActionTracker = iatw
 	si.backendItemActionTracker = iatw
 
-	// Assign the node repository frontend and backend bits. Node is cached in Redis at 7hr max.
-	nrw := newNodeRepository[interface{}, interface{}](trans, s, time.Duration(7)*time.Hour)
+	// Assign the node repository frontend and backend bits.
+	nrw := newNodeRepository[interface{}, interface{}](trans, s)
 	si.NodeRepository = nrw
 	si.backendNodeRepository = nrw.realNodeRepository
 

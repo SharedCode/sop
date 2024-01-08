@@ -45,8 +45,15 @@ func NewStoreRepository() StoreRepository {
 
 // TODO: finalize Consistency levels to use in below CRUD methods.
 
-// TODO: Do we want this configurable?
-const cacheDuration = time.Duration(2 * time.Hour)
+var storeRepositoryCacheDuration = time.Duration(2 * time.Hour)
+
+// SetStoreRepositoryCacheDuration allows store repository cache duration to get set globally.
+func SetStoreRepositoryCacheDuration(duration time.Duration) {
+	if duration < time.Minute {
+		duration = time.Duration(30 * time.Minute)
+	}
+	storeRepositoryCacheDuration = duration
+}
 
 // Add a new store record, create a new Virtual ID registry and node blob tables.
 func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) error {
@@ -72,7 +79,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 			return err
 		}
 		// Tolerate error in Redis caching.
-		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(s.Name), &s, cacheDuration); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(s.Name), &s, storeRepositoryCacheDuration); err != nil {
 			log.Error(fmt.Sprintf("StoreRepository Add failed (redis setstruct), details: %v", err))
 		}
 	}
@@ -157,7 +164,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	// Update redis since we've successfully updated Cassandra Store table.
 	for i := range stores {
 		// Tolerate redis error since we've successfully updated the master table.
-		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(stores[i].Name), &stores[i], cacheDuration); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(stores[i].Name), &stores[i], storeRepositoryCacheDuration); err != nil {
 			log.Error("StoreRepository Update (redis setstruct) failed, details: %v", err)
 		}
 	}
@@ -197,7 +204,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.LeafLoadBalancing, &store.IsDeleted) {
 		store.RootNodeId = btree.UUID(rid)
 
-		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(store.Name), &store, cacheDuration); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(store.Name), &store, storeRepositoryCacheDuration); err != nil {
 			log.Error(fmt.Sprintf("StoreRepository Get (redis setstruct) failed, details: %v", err))
 		}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"strings"
+	"time"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
@@ -45,6 +46,16 @@ type registry struct {
 	redisCache redis.Cache
 }
 
+var registryCacheDuration time.Duration = time.Duration(12 * time.Hour)
+
+// SetRegistryDuration allows registry cache duration to get set globally.
+func SetRegistryCacheDuration(duration time.Duration) {
+	if duration < time.Minute {
+		duration = time.Duration(1 * time.Hour)
+	}
+	registryCacheDuration = duration
+}
+
 // NewRegistry manages the Handle in the store's Cassandra registry table.
 func NewRegistry() Registry {
 	return &registry{
@@ -68,7 +79,7 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 				return err
 			}
 			// Tolerate Redis cache failure.
-			if err := v.redisCache.SetStruct(ctx, v.formatKey(h.LogicalId.ToString()), &h, -1); err != nil {
+			if err := v.redisCache.SetStruct(ctx, v.formatKey(h.LogicalId.ToString()), &h, registryCacheDuration); err != nil {
 				log.Error("Registry Add (redis setstruct) failed, details: %v", err)
 			}
 		}
@@ -105,17 +116,6 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 	}
 	// Failed update all, thus, return err to cause rollback.
 	if err := connection.Session.ExecuteBatch(batch); err != nil {
-		// Ensure to flush the failing batch from redis cache.
-		for _, sh := range storesHandles {
-			for _, h := range sh.IDs {
-				// Tolerate Redis cache failure.
-				if err := v.redisCache.Delete(ctx, v.formatKey(h.LogicalId.ToString())); err != nil {
-					if !redis.KeyNotFound(err) {
-						log.Error("Registry Update (redis setstruct) failed, details: %v", err)
-					}
-				}
-			}
-		}
 		return err
 	}
 
@@ -123,7 +123,7 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
 			// Tolerate Redis cache failure.
-			if err := v.redisCache.SetStruct(ctx, v.formatKey(h.LogicalId.ToString()), &h, -1); err != nil {
+			if err := v.redisCache.SetStruct(ctx, v.formatKey(h.LogicalId.ToString()), &h, registryCacheDuration); err != nil {
 				log.Error("Registry Update (redis setstruct) failed, details: %v", err)
 			}
 		}
@@ -172,7 +172,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 			handle.PhysicalIdB = btree.UUID(idb)
 			handles = append(handles, handle)
 
-			if err := v.redisCache.SetStruct(ctx, v.formatKey(handle.LogicalId.ToString()), &handle, -1); err != nil {
+			if err := v.redisCache.SetStruct(ctx, v.formatKey(handle.LogicalId.ToString()), &handle, registryCacheDuration); err != nil {
 				log.Error("Registry Get (redis setstruct) failed, details: %v", err)
 			}
 			handle = sop.Handle{}
