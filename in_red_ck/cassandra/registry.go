@@ -100,15 +100,10 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		return nil
 	}
 
-	// TODO: in order to ensure 0 race condition, we need to use Redis to ensure exclusive update on the set of Handles.
-	// Logic: use a set of redis keys to enforce locks so only "winners"(using UUID) will be able to proceed, rest will return error
-	// to cause rollback. See item_action_tracker.go "lockRecord" struct based locking.
-	//
-	// For now, keep it simple and rely on transaction commit's optimistic locking & multi-phase checks,
-	// together with the logged batch update as shown below.
-
 	// Logged batch will do all or nothing. This is the only one "all or nothing" operation in the Commit process.
 	if allOrNothing {
+		// For now, keep it simple and rely on transaction commit's optimistic locking & multi-phase checks,
+		// together with the logged batch update as shown below.
 		batch := connection.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 		for _, sh := range storesHandles {
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ts = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
