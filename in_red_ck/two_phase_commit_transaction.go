@@ -38,7 +38,7 @@ type transaction struct {
 	storeRepository cas.StoreRepository
 	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
 	registry          cas.Registry
-	deletedItemsQueue q.Queue[QueueItem]
+	deletedItemsQueue q.Queue[queueItem]
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
 	forWriting bool
 	// -1 = intial state, 0 = began, 1 = phase 1 commit done, 2 = phase 2 commit or rollback done.
@@ -48,19 +48,6 @@ type transaction struct {
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles []cas.RegistryPayload[sop.Handle]
 	removedNodeHandles []cas.RegistryPayload[sop.Handle]
-}
-
-type QueueItemType int
-
-const (
-	Unknown = iota
-	BtreeNode
-	ItemValue
-)
-
-type QueueItem struct {
-	ItemType QueueItemType
-	ItemId   cas.RegistryPayload[btree.UUID]
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
@@ -85,7 +72,7 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 		registry:          cas.NewRegistry(),
 		redisCache:        redis.NewClient(),
 		nodeBlobStore:     cas.NewBlobStore(),
-		deletedItemsQueue: q.NewQueue[QueueItem](),
+		deletedItemsQueue: q.NewQueue[queueItem](),
 		logger:            newTransactionLogger(),
 		phaseDone:         -1,
 	}, nil
@@ -302,17 +289,14 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	}
 
 	// Assemble & enqueue the deleted Ids, 'should not fail.
-	updatedNodesInactiveIds := make([]cas.RegistryPayload[btree.UUID], len(t.updatedNodeHandles))
+	updatedNodesInactiveIds := make([]cas.BlobsPayload[btree.UUID], len(t.updatedNodeHandles))
 	deletedIds := make([]cas.RegistryPayload[btree.UUID], len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
-		updatedNodesInactiveIds[i].RegistryTable = t.updatedNodeHandles[i].RegistryTable
-		updatedNodesInactiveIds[i].IDs = make([]btree.UUID, len(t.updatedNodeHandles[i].IDs))
+		updatedNodesInactiveIds[i].BlobTable = btree.ConvertToBlobTableName(t.updatedNodeHandles[i].RegistryTable)
+		updatedNodesInactiveIds[i].Blobs = make([]btree.UUID, len(t.updatedNodeHandles[i].IDs))
 		for ii := range t.updatedNodeHandles[i].IDs {
 			// Since we've flipped the inactive to active, the new inactive Id is to be deleted(unused).
-			updatedNodesInactiveIds[i].IDs[ii] = t.updatedNodeHandles[i].IDs[ii].GetInActiveId()
-			if err := t.redisCache.Delete(ctx, updatedNodesInactiveIds[i].IDs[ii].ToString()); err != nil && !redis.KeyNotFound(err) {
-				log.Warn(fmt.Sprintf("Failed to delete in Redis inactive node Id: %v, details: %v", updatedNodesInactiveIds[i], err))
-			}
+			updatedNodesInactiveIds[i].Blobs[ii] = t.updatedNodeHandles[i].IDs[ii].GetInActiveId()
 			t.updatedNodeHandles[i].IDs[ii].ClearInactiveId()
 		}
 	}
@@ -326,13 +310,10 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		deletedIds[i].IDs = make([]btree.UUID, len(t.removedNodeHandles[i].IDs))
 		for ii := range t.removedNodeHandles[i].IDs {
 			// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
-			deletedIds[i].IDs[ii] = t.removedNodeHandles[i].IDs[ii].GetActiveId()
+			deletedIds[i].IDs[ii] = t.removedNodeHandles[i].IDs[ii].LogicalId
 		}
 	}
-	if updatedNodesInactiveIds != nil {
-		deletedIds = append(deletedIds, updatedNodesInactiveIds...)
-	}
-	t.enqueueRemovedIds(ctx, deletedIds...)
+	t.enqueueRemovedIds(ctx, deletedIds, updatedNodesInactiveIds)
 
 	// Unlock the items in Redis.
 	t.logger.log(unlockTrackedItems)
@@ -532,21 +513,50 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	return lastErr
 }
 
+
+type queueItemType interface {
+	cas.BlobsPayload[btree.UUID] | cas.RegistryPayload[btree.UUID]
+}
+
+type queueItem struct {
+	BlobsIdBatch   []cas.BlobsPayload[btree.UUID]
+	RegistryIdBatch   []cas.RegistryPayload[btree.UUID]
+}
+
 // Enqueue the deleted node Ids for scheduled physical delete.
-func (t *transaction) enqueueRemovedIds(ctx context.Context, deletedNodeIds ...cas.RegistryPayload[btree.UUID]) {
-	if len(deletedNodeIds) == 0 {
+func (t *transaction) enqueueRemovedIds(ctx context.Context,
+	deletedRegistryIds []cas.RegistryPayload[btree.UUID], deletedBlobIds []cas.BlobsPayload[btree.UUID]) {
+	if len(deletedRegistryIds) == 0 && len(deletedBlobIds) == 0 {
 		return
 	}
-	deletedItems := make([]QueueItem, len(deletedNodeIds))
-	for _, did := range deletedNodeIds {
-		deletedItems = append(deletedItems, QueueItem{
-			ItemType: BtreeNode,
-			ItemId:   did,
-		})
+	qi := queueItem {
+		BlobsIdBatch: deletedBlobIds,
+		RegistryIdBatch: deletedRegistryIds,
 	}
+
+	// Delete from Redis entries of the items we're about to enqueue for future deletion.
+	deletedKeys := make([]string, cas.GetRegistryPayloadCount[btree.UUID](deletedRegistryIds) + cas.GetBlobPayloadCount[btree.UUID](deletedBlobIds))
+	ik := 0
+	for i := range deletedRegistryIds {
+		for ii := range deletedRegistryIds[i].IDs {
+			// Registry entries have no prefix or whatsoever.
+			deletedKeys[ik] =  deletedRegistryIds[i].IDs[ii].ToString()
+			ik++
+		}
+	}
+	for i := range deletedBlobIds {
+		for ii := range deletedBlobIds[i].Blobs {
+			deletedKeys[ik] =  t.btreesBackend[0].backendNodeRepository.formatKey(deletedBlobIds[i].Blobs[ii].ToString())
+			ik++
+		}
+	}
+	if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err){
+		log.Error("Redis Delete failed, details: %v", err)
+	}
+
 	// Enqueue to Kafka should not fail, but in any case, log as Error to log file as last resort.
-	if err := t.deletedItemsQueue.Enqueue(ctx, deletedItems...); err != nil {
-		log.Error(fmt.Sprintf("Failed to enqueue deleted nodes Ids: %v", deletedItems))
+	if err := t.deletedItemsQueue.Enqueue(ctx, qi); err != nil {
+		log.Error(fmt.Sprintf("Failed to enqueue deleted Ids: %v", qi))
 	}
 }
 

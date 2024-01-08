@@ -16,7 +16,7 @@ type Cache interface {
 	Get(ctx context.Context, key string) (string, error)
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
 	GetStruct(ctx context.Context, key string, target interface{}) error
-	Delete(ctx context.Context, key string) error
+	Delete(ctx context.Context, keys ...string) error
 	Ping(ctx context.Context) error
 }
 
@@ -103,10 +103,10 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) e
 }
 
 // Delete executes the redis Del command
-func (c client) Delete(ctx context.Context, key string) error {
+func (c client) Delete(ctx context.Context, keys ...string) error {
 	if connection == nil {
 		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
-	var r = connection.Client.Del(ctx, key)
+	var r = connection.Client.Del(ctx, keys...)
 	return r.Err()
 }

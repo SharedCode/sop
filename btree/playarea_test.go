@@ -28,3 +28,10 @@ func TestUUIDConversion(t *testing.T) {
 		t.Errorf("ToUUID(suuid) failed, got = %v, want = %v.", got, want)
 	}
 }
+
+func TestConvertToBlobTableName(t *testing.T) {
+	s := "foo_r"
+	if ConvertToBlobTableName(s) != "foo_b" {
+		t.Errorf("ConvertToBlobTableName(..) failed, got = %s, want = %s.", ConvertToBlobTableName(s), "foo_b")
+	}
+}

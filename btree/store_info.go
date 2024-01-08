@@ -73,6 +73,10 @@ func FormatRegistryTable(name string) string {
 	return fmt.Sprintf("%s_r", name)
 }
 
+func ConvertToBlobTableName(registryTableName string) string {
+	return FormatBlobTable(registryTableName[0:len(registryTableName)-2])
+}
+
 // Returns true if this StoreInfo is empty, false otherwise.
 // Empty StoreInfo signifies B-Tree does not exist yet.
 func (s StoreInfo) IsEmpty() bool {

@@ -18,6 +18,13 @@ type BlobsPayload[T btree.UUID | sop.KeyValuePair[btree.UUID, *btree.Node[interf
 	// Blobs contains the blobs Ids and blobs data for upsert to the store or the blobs Ids to be removed.
 	Blobs []T
 }
+func GetBlobPayloadCount[T btree.UUID](payloads []BlobsPayload[T]) int {
+	total := 0
+	for _, p := range payloads {
+		total = total + len(p.Blobs)
+	}
+	return total
+}
 
 // BlobStore specifies the backend blob store interface used for storing & managing data blobs.
 // Blobs are data that can vary in size and is big enough that they can't be stored in database

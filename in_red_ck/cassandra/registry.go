@@ -21,6 +21,13 @@ type RegistryPayload[T sop.Handle | btree.UUID] struct {
 	// IDs is an array containing the Virtual Ids details to be stored or to be fetched.
 	IDs []T
 }
+func GetRegistryPayloadCount[T btree.UUID](payloads []RegistryPayload[T]) int {
+	total := 0
+	for _, p := range payloads {
+		total = total + len(p.IDs)
+	}
+	return total
+}
 
 // Virtual Id registry is essential in our support for all or nothing (sub)feature,
 // which is essential in "fault tolerant" & "self healing" feature.
@@ -79,7 +86,7 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 				return err
 			}
 			// Tolerate Redis cache failure.
-			if err := v.redisCache.SetStruct(ctx, v.formatKey(h.LogicalId.ToString()), &h, registryCacheDuration); err != nil {
+			if err := v.redisCache.SetStruct(ctx, h.LogicalId.ToString(), &h, registryCacheDuration); err != nil {
 				log.Error("Registry Add (redis setstruct) failed, details: %v", err)
 			}
 		}
@@ -123,7 +130,7 @@ func (v *registry) Update(ctx context.Context, storesHandles ...RegistryPayload[
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
 			// Tolerate Redis cache failure.
-			if err := v.redisCache.SetStruct(ctx, v.formatKey(h.LogicalId.ToString()), &h, registryCacheDuration); err != nil {
+			if err := v.redisCache.SetStruct(ctx, h.LogicalId.ToString(), &h, registryCacheDuration); err != nil {
 				log.Error("Registry Update (redis setstruct) failed, details: %v", err)
 			}
 		}
@@ -143,7 +150,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 		lidsAsIntfs := make([]interface{}, 0, len(storeLids.IDs))
 		for i := range storeLids.IDs {
 			h := sop.Handle{}
-			if err := v.redisCache.GetStruct(ctx, v.formatKey(storeLids.IDs[i].ToString()), &h); err != nil {
+			if err := v.redisCache.GetStruct(ctx, storeLids.IDs[i].ToString(), &h); err != nil {
 				if !redis.KeyNotFound(err) {
 					log.Error("Registry Get (redis getstruct) failed, details: %v", err)
 				}
@@ -172,7 +179,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 			handle.PhysicalIdB = btree.UUID(idb)
 			handles = append(handles, handle)
 
-			if err := v.redisCache.SetStruct(ctx, v.formatKey(handle.LogicalId.ToString()), &handle, registryCacheDuration); err != nil {
+			if err := v.redisCache.SetStruct(ctx, handle.LogicalId.ToString(), &handle, registryCacheDuration); err != nil {
 				log.Error("Registry Get (redis setstruct) failed, details: %v", err)
 			}
 			handle = sop.Handle{}
@@ -206,7 +213,7 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 		// Flush out the failing records from cache.
 		deleteFromCache := func() {
 			for _, id := range storeLids.IDs {
-				if err := v.redisCache.Delete(ctx, v.formatKey(id.ToString())); err != nil && !redis.KeyNotFound(err) {
+				if err := v.redisCache.Delete(ctx, id.ToString()); err != nil && !redis.KeyNotFound(err) {
 					log.Error("Registry Delete (redis delete) failed, details: %v", err)
 				}
 			}
@@ -218,9 +225,4 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 		deleteFromCache()
 	}
 	return nil
-}
-
-// Virtual ID key in Redis is prefixed by V to differentiate from Node key.
-func (v *registry) formatKey(k string) string {
-	return k
 }
