@@ -20,7 +20,7 @@ func FormatLockKey(k string) string {
 	return fmt.Sprintf("L%s", k)
 }
 
-// Create a set of lock records with given set of keys.
+// Create a set of lock keys.
 func CreateLockKeys(keys []string) []*LockKeys {
 	lockKeys := make([]*LockKeys, len(keys))
 	for i := range keys {
@@ -33,7 +33,7 @@ func CreateLockKeys(keys []string) []*LockKeys {
 	return lockKeys
 }
 
-// Lock a set of records.
+// Lock a set of keys.
 func Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKeys) error {
 	redisCache := NewClient()
 	for _, lk := range lockKeys {
@@ -65,7 +65,7 @@ func Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKeys) er
 	return nil
 }
 
-// Unlock a set of records.
+// Unlock a set of keys.
 func Unlock(ctx context.Context, lockKeys ...*LockKeys) error {
 	redisCache := NewClient()
 	var lastErr error
