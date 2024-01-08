@@ -79,7 +79,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 			return err
 		}
 		// Tolerate error in Redis caching.
-		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(s.Name), &s, storeCacheDuration); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, s.Name, &s, storeCacheDuration); err != nil {
 			log.Error(fmt.Sprintf("StoreRepository Add failed (redis setstruct), details: %v", err))
 		}
 	}
@@ -164,7 +164,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	// Update redis since we've successfully updated Cassandra Store table.
 	for i := range stores {
 		// Tolerate redis error since we've successfully updated the master table.
-		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(stores[i].Name), &stores[i], storeCacheDuration); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, stores[i].Name, &stores[i], storeCacheDuration); err != nil {
 			log.Error("StoreRepository Update (redis setstruct) failed, details: %v", err)
 		}
 	}
@@ -182,7 +182,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 	paramQ := make([]string, 0, len(names))
 	for i := range names {
 		store := btree.StoreInfo{}
-		if err := sr.redisCache.GetStruct(ctx, sr.formatKey(names[i]), &store); err != nil {
+		if err := sr.redisCache.GetStruct(ctx, names[i], &store); err != nil {
 			if !redis.KeyNotFound(err) {
 				log.Error(fmt.Sprintf("StoreRepository Get (redis getstruct) failed, details: %v", err))
 			}
@@ -204,7 +204,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.LeafLoadBalancing, &store.IsDeleted) {
 		store.RootNodeId = btree.UUID(rid)
 
-		if err := sr.redisCache.SetStruct(ctx, sr.formatKey(store.Name), &store, storeCacheDuration); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, store.Name, &store, storeCacheDuration); err != nil {
 			log.Error(fmt.Sprintf("StoreRepository Get (redis setstruct) failed, details: %v", err))
 		}
 
@@ -237,7 +237,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	// Delete the store "count" in Redis.
 	for i := range names {
 		// Tolerate Redis cache failure.
-		if err := sr.redisCache.Delete(ctx, sr.formatKey(names[i])); err != nil {
+		if err := sr.redisCache.Delete(ctx, names[i]); err != nil {
 			log.Error("Registry Add (redis setstruct) failed, details: %v", err)
 		}
 	}
@@ -256,8 +256,4 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	}
 
 	return nil
-}
-
-func (sr *storeRepository) formatKey(k string) string {
-	return k
 }
