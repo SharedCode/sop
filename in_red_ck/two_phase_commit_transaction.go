@@ -343,12 +343,18 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 		} else if ok {
 			return nil
 		}
+
+		// Respect context before sleeping.
+		if ctx.Err() != nil {
+			return fmt.Errorf("Context error")
+		}
+
 		// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 		// (in-flight) to retry on different times.
 		sleepTime := rand.Intn(4+1) + 5
 		time.Sleep(time.Duration(sleepTime) * time.Second)
 
-		// Recreate the changes on latest committed nodes & check if fetched Nodes are unchanged.
+		// Recreate the fetches on latest committed nodes & check if fetched Items are unchanged.
 		if err := t.refetchAndMergeModifications(ctx); err != nil {
 			return err
 		}
@@ -533,24 +539,21 @@ func (t *transaction) enqueueRemovedIds(ctx context.Context,
 		RegistryIdBatch: deletedRegistryIds,
 	}
 
-	// Delete from Redis entries of the items we're about to enqueue for future deletion.
-	deletedKeys := make([]string, cas.GetRegistryPayloadCount[btree.UUID](deletedRegistryIds)+cas.GetBlobPayloadCount[btree.UUID](deletedBlobIds))
-	ik := 0
-	for i := range deletedRegistryIds {
-		for ii := range deletedRegistryIds[i].IDs {
-			// Registry entries have no prefix or whatsoever.
-			deletedKeys[ik] = deletedRegistryIds[i].IDs[ii].ToString()
-			ik++
+	if len(deletedBlobIds) > 0 {
+		// Delete from Redis the inactive nodes we're about to enqueue for future deletion.
+		// Leave the registry keys as there may be other in-flight transactions that need them
+		// for conflict resolution, to rollback or to fail their "reader" transaction.
+		deletedKeys := make([]string, cas.GetBlobPayloadCount[btree.UUID](deletedBlobIds))
+		ik := 0
+		for i := range deletedBlobIds {
+			for ii := range deletedBlobIds[i].Blobs {
+				deletedKeys[ik] = t.btreesBackend[0].backendNodeRepository.formatKey(deletedBlobIds[i].Blobs[ii].ToString())
+				ik++
+			}
 		}
-	}
-	for i := range deletedBlobIds {
-		for ii := range deletedBlobIds[i].Blobs {
-			deletedKeys[ik] = t.btreesBackend[0].backendNodeRepository.formatKey(deletedBlobIds[i].Blobs[ii].ToString())
-			ik++
+		if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
+			log.Error("Redis Delete failed, details: %v", err)
 		}
-	}
-	if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
-		log.Error("Redis Delete failed, details: %v", err)
 	}
 
 	// Enqueue to Kafka should not fail, but in any case, log as Error to log file as last resort.
