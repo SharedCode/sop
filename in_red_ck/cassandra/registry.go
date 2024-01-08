@@ -21,6 +21,7 @@ type RegistryPayload[T sop.Handle | btree.UUID] struct {
 	// IDs is an array containing the Virtual Ids details to be stored or to be fetched.
 	IDs []T
 }
+
 func GetRegistryPayloadCount[T btree.UUID](payloads []RegistryPayload[T]) int {
 	total := 0
 	for _, p := range payloads {

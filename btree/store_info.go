@@ -74,7 +74,7 @@ func FormatRegistryTable(name string) string {
 }
 
 func ConvertToBlobTableName(registryTableName string) string {
-	return FormatBlobTable(registryTableName[0:len(registryTableName)-2])
+	return FormatBlobTable(registryTableName[0 : len(registryTableName)-2])
 }
 
 // Returns true if this StoreInfo is empty, false otherwise.

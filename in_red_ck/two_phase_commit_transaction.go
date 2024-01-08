@@ -513,14 +513,13 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	return lastErr
 }
 
-
 type queueItemType interface {
 	cas.BlobsPayload[btree.UUID] | cas.RegistryPayload[btree.UUID]
 }
 
 type queueItem struct {
-	BlobsIdBatch   []cas.BlobsPayload[btree.UUID]
-	RegistryIdBatch   []cas.RegistryPayload[btree.UUID]
+	BlobsIdBatch    []cas.BlobsPayload[btree.UUID]
+	RegistryIdBatch []cas.RegistryPayload[btree.UUID]
 }
 
 // Enqueue the deleted node Ids for scheduled physical delete.
@@ -529,28 +528,28 @@ func (t *transaction) enqueueRemovedIds(ctx context.Context,
 	if len(deletedRegistryIds) == 0 && len(deletedBlobIds) == 0 {
 		return
 	}
-	qi := queueItem {
-		BlobsIdBatch: deletedBlobIds,
+	qi := queueItem{
+		BlobsIdBatch:    deletedBlobIds,
 		RegistryIdBatch: deletedRegistryIds,
 	}
 
 	// Delete from Redis entries of the items we're about to enqueue for future deletion.
-	deletedKeys := make([]string, cas.GetRegistryPayloadCount[btree.UUID](deletedRegistryIds) + cas.GetBlobPayloadCount[btree.UUID](deletedBlobIds))
+	deletedKeys := make([]string, cas.GetRegistryPayloadCount[btree.UUID](deletedRegistryIds)+cas.GetBlobPayloadCount[btree.UUID](deletedBlobIds))
 	ik := 0
 	for i := range deletedRegistryIds {
 		for ii := range deletedRegistryIds[i].IDs {
 			// Registry entries have no prefix or whatsoever.
-			deletedKeys[ik] =  deletedRegistryIds[i].IDs[ii].ToString()
+			deletedKeys[ik] = deletedRegistryIds[i].IDs[ii].ToString()
 			ik++
 		}
 	}
 	for i := range deletedBlobIds {
 		for ii := range deletedBlobIds[i].Blobs {
-			deletedKeys[ik] =  t.btreesBackend[0].backendNodeRepository.formatKey(deletedBlobIds[i].Blobs[ii].ToString())
+			deletedKeys[ik] = t.btreesBackend[0].backendNodeRepository.formatKey(deletedBlobIds[i].Blobs[ii].ToString())
 			ik++
 		}
 	}
-	if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err){
+	if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
 		log.Error("Redis Delete failed, details: %v", err)
 	}
 

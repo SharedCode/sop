@@ -18,6 +18,7 @@ type BlobsPayload[T btree.UUID | sop.KeyValuePair[btree.UUID, *btree.Node[interf
 	// Blobs contains the blobs Ids and blobs data for upsert to the store or the blobs Ids to be removed.
 	Blobs []T
 }
+
 func GetBlobPayloadCount[T btree.UUID](payloads []BlobsPayload[T]) int {
 	total := 0
 	for _, p := range payloads {
