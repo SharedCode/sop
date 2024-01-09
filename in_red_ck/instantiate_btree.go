@@ -112,11 +112,11 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 	// Wire up the B-tree & the backend bits required by the transaction.
 	b3, _ := btree.New[TK, TV](s, &si.StoreInterface)
 	b3b := btreeBackend{
-		nodeRepository:     nrw.realNodeRepository,
+		nodeRepository: nrw.realNodeRepository,
 		// Needed for auto-merging of Node contents.
-		refetchAndMerge:    refetchAndMergeClosure[TK, TV](&si, b3, trans.storeRepository),
+		refetchAndMerge: refetchAndMergeClosure[TK, TV](&si, b3, trans.storeRepository),
 		// Needed when applying the "delta" to the Store Count field.
-		getStoreInfo:       func() *btree.StoreInfo { return b3.StoreInfo },
+		getStoreInfo: func() *btree.StoreInfo { return b3.StoreInfo },
 
 		// Needed for tracked items' lock management.
 		lockTrackedItems:   iat.lock,
