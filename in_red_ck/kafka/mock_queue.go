@@ -2,6 +2,8 @@ package kafka
 
 import (
 	"context"
+
+	"github.com/SharedCode/sop"
 )
 
 type queue[T any] struct {
@@ -11,13 +13,13 @@ type queue[T any] struct {
 // TODO: NewQueue manages the deleted Items in Kafka or something similar/for simple enqueue/dequeue.
 // Below is just a mock so we can move forward prototyping the system. Finalize the API as well, e.g. perhaps
 // we can use one (generics) Queue implemented to talk to Kafka and can take in any struct type.
-func NewQueue[T any]() Queue[T] {
+func NewMockQueue[T any]() Queue[T] {
 	return &queue[T]{
 		items: make([]T, 0, 25),
 	}
 }
 
-func (q *queue[T]) Enqueue(ctx context.Context, items ...T) error {
+func (q *queue[T]) Enqueue(ctx context.Context, items ...T) []sop.KeyValuePair[string, error] {
 	q.items = append(q.items, items...)
 	return nil
 }

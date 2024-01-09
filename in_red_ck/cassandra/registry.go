@@ -33,14 +33,16 @@ func GetRegistryPayloadCount[T btree.UUID](payloads []RegistryPayload[T]) int {
 // Virtual Id registry is essential in our support for all or nothing (sub)feature,
 // which is essential in "fault tolerant" & "self healing" feature.
 //
-// All methods are taking in a set of items and need to be implemented to do
-// all or nothing feature, e.g. wrapped in transaction in Cassandra.
+// All methods are taking in a set of items.
 type Registry interface {
 	// Get will fetch handles(given their Ids) from stores.
 	Get(context.Context, ...RegistryPayload[btree.UUID]) ([]RegistryPayload[sop.Handle], error)
 	// Add will insert handles to stores.
 	Add(context.Context, ...RegistryPayload[sop.Handle]) error
 	// Update will update handles of stores.
+	// Set allOrNothing to true if Update operation is crucial for data consistency and
+	// wanting to do an all or nothing update for the entire batch of handles.
+	// False is recommended if such consistency is not significant.
 	Update(ctx context.Context, allOrNothing bool, handles ...RegistryPayload[sop.Handle]) error
 	// Remove will delete handles(given their Ids) from stores.
 	Remove(context.Context, ...RegistryPayload[btree.UUID]) error

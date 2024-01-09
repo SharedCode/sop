@@ -79,7 +79,7 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 		registry:          cas.NewRegistry(),
 		redisCache:        redis.NewClient(),
 		nodeBlobStore:     cas.NewBlobStore(),
-		deletedItemsQueue: q.NewQueue[queueItem](),
+		deletedItemsQueue: q.NewMockQueue[queueItem](),
 		logger:            newTransactionLogger(),
 		phaseDone:         -1,
 	}, nil

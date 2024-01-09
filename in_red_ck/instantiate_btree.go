@@ -6,16 +6,20 @@ import (
 
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
 // Assign the configs & open connections to different sub-systems used by this package.
 // Example, connection to Cassandra, Redis, etc...
-func Initialize(cassandraConfig cas.Config, redisConfig redis.Options) error {
+func Initialize(cassandraConfig cas.Config, redisConfig redis.Options, kafkaConfig kafka.Config) error {
 	if _, err := cas.GetConnection(cassandraConfig); err != nil {
 		return err
 	}
 	if _, err := redis.GetConnection(redisConfig); err != nil {
+		return err
+	}
+	if err := kafka.Initialize(kafkaConfig); err != nil {
 		return err
 	}
 	return nil
@@ -23,7 +27,7 @@ func Initialize(cassandraConfig cas.Config, redisConfig redis.Options) error {
 
 // Returns true if components required were initialized, false otherwise.
 func IsInitialized() bool {
-	return cas.IsConnectionInstantiated() && redis.IsConnectionInstantiated()
+	return cas.IsConnectionInstantiated() && redis.IsConnectionInstantiated() && kafka.IsInitialized()
 }
 
 // Shutdown or closes all connections used in this package.
@@ -110,8 +114,12 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 	si.backendNodeRepository = nrw.realNodeRepository
 
 	// Wire up the B-tree & the backend bits required by the transaction.
-	b3, _ := btree.New[TK, TV](s, &si.StoreInterface)
+	b3, err := btree.New[TK, TV](s, &si.StoreInterface)
+	if err != nil {
+		return nil, err
+	}
 	b3b := btreeBackend{
+		// Node blob repository.
 		nodeRepository: nrw.realNodeRepository,
 		// Needed for auto-merging of Node contents.
 		refetchAndMerge: refetchAndMergeClosure[TK, TV](&si, b3, trans.storeRepository),
