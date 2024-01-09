@@ -100,23 +100,27 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 	si := StoreInterface[TK, TV]{}
 
 	// Assign the item action tracker frontend and backend bits.
-	iatw := newItemActionTracker[TK, TV]()
-	si.ItemActionTracker = iatw
-	si.backendItemActionTracker = iatw
+	iat := newItemActionTracker[TK, TV]()
+	si.ItemActionTracker = iat
+	si.backendItemActionTracker = iat
 
 	// Assign the node repository frontend and backend bits.
 	nrw := newNodeRepository[TK, TV](trans, s)
 	si.NodeRepository = nrw
 	si.backendNodeRepository = nrw.realNodeRepository
 
-	// Wire up the B-tree & add its backend interface to the transaction.
+	// Wire up the B-tree & the backend bits required by the transaction.
 	b3, _ := btree.New[TK, TV](s, &si.StoreInterface)
 	b3b := btreeBackend{
 		nodeRepository:     nrw.realNodeRepository,
+		// Needed for auto-merging of Node contents.
 		refetchAndMerge:    refetchAndMergeClosure[TK, TV](b3, trans.storeRepository),
+		// Needed when applying the "delta" to the Store Count field.
 		getStoreInfo:       func() *btree.StoreInfo { return b3.StoreInfo },
-		lockTrackedItems:   iatw.lock,
-		unlockTrackedItems: iatw.unlock,
+
+		// Needed for tracked items' lock management.
+		lockTrackedItems:   iat.lock,
+		unlockTrackedItems: iat.unlock,
 	}
 	trans.btreesBackend = append(trans.btreesBackend, b3b)
 
