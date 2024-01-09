@@ -46,7 +46,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", 4, true, false, false, "", trans)
+	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", 4, false, false, false, "", trans)
 	if err != nil {
 		trans.Rollback(ctx)
 		t.Errorf("Error instantiating Btree, details: %v.", err)
