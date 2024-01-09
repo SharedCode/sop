@@ -18,14 +18,14 @@ type Person struct {
 
 func newPerson(fname string, lname string, gender string, email string, phone string) (PersonKey, Person) {
 	return PersonKey{
-		Firstname: fname,
-		Lastname:  lname,
-	},
-	Person{
-		Gender: gender,
-		Email:  email,
-		Phone:  phone,
-	}
+			Firstname: fname,
+			Lastname:  lname,
+		},
+		Person{
+			Gender: gender,
+			Email:  email,
+			Phone:  phone,
+		}
 }
 func (x PersonKey) Compare(other interface{}) int {
 	y := other.(PersonKey)
@@ -46,10 +46,15 @@ func Test_SimpleAddPerson(t *testing.T) {
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", 4, false, false, false, "", trans)
+	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", 4, true, false, false, "", trans)
+	if err != nil {
+		trans.Rollback(ctx)
+		t.Errorf("Error instantiating Btree, details: %v.", err)
+		t.Fail()
+	}
 	if ok, err := b3.Add(ctx, pk, p); !ok || err != nil {
-			t.Errorf("Add('joe') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
-			trans.Rollback(ctx)
+		t.Errorf("Add('joe') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		trans.Rollback(ctx)
 		return
 	}
 

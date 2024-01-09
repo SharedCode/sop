@@ -112,10 +112,10 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 	// Wire up the B-tree & add its backend interface to the transaction.
 	b3, _ := btree.New[TK, TV](s, &si.StoreInterface)
 	b3b := btreeBackend{
-		nodeRepository:  nrw.realNodeRepository,
-		refetchAndMerge: refetchAndMergeClosure[TK, TV](b3, trans.storeRepository),
-		getStoreInfo:    func() *btree.StoreInfo { return b3.StoreInfo },
-		lockTrackedItems: iatw.lock,
+		nodeRepository:     nrw.realNodeRepository,
+		refetchAndMerge:    refetchAndMergeClosure[TK, TV](b3, trans.storeRepository),
+		getStoreInfo:       func() *btree.StoreInfo { return b3.StoreInfo },
+		lockTrackedItems:   iatw.lock,
 		unlockTrackedItems: iatw.unlock,
 	}
 	trans.btreesBackend = append(trans.btreesBackend, b3b)
