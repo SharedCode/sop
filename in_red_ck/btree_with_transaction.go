@@ -9,11 +9,11 @@ import (
 
 type btreeWithTransaction[TK btree.Comparable, TV any] struct {
 	transaction *transaction
-	btree       *btree.Btree[interface{}, interface{}]
+	btree       *btree.Btree[TK, TV]
 }
 
 // Instantiate a B-Tree wrapper that enforces transaction session on each method(a.k.a. operation).
-func newBtreeWithTransaction[TK btree.Comparable, TV any](t *transaction, btree *btree.Btree[interface{}, interface{}]) *btreeWithTransaction[TK, TV] {
+func newBtreeWithTransaction[TK btree.Comparable, TV any](t *transaction, btree *btree.Btree[TK, TV]) *btreeWithTransaction[TK, TV] {
 	return &btreeWithTransaction[TK, TV]{
 		transaction: t,
 		btree:       btree,
@@ -114,7 +114,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentKey(ctx context.Context) (TK, 
 		return zero, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
 	}
 	k, err := b3.btree.GetCurrentKey(ctx)
-	return k.(TK), err
+	return k, err
 }
 
 // GetCurrentValue returns the current item's value.
@@ -124,7 +124,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValue(ctx context.Context) (TV
 		return zero, fmt.Errorf("Can't do operation on b-tree if transaction has not begun.")
 	}
 	v, err := b3.btree.GetCurrentValue(ctx)
-	return v.(TV), err
+	return v, err
 }
 
 // GetCurrentItem returns the current item.

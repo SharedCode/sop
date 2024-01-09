@@ -12,7 +12,7 @@ import (
 )
 
 // Manage or fetch node blobs request/response payload.
-type BlobsPayload[T btree.UUID | sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]] struct {
+type BlobsPayload[T btree.UUID | sop.KeyValuePair[btree.UUID, interface{}]] struct {
 	// Blob store table name.
 	BlobTable string
 	// Blobs contains the blobs Ids and blobs data for upsert to the store or the blobs Ids to be removed.
@@ -33,11 +33,11 @@ func GetBlobPayloadCount[T btree.UUID](payloads []BlobsPayload[T]) int {
 // like AWS S3, or file system, etc...
 type BlobStore interface {
 	// Get or fetch a blob given an Id.
-	GetOne(ctx context.Context, blobTable string, blobId btree.UUID, target *btree.Node[interface{}, interface{}]) error
+	GetOne(ctx context.Context, blobTable string, blobId btree.UUID, target interface{}) error
 	// Add blobs to store.
-	Add(ctx context.Context, blobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]]) error
+	Add(ctx context.Context, blobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]]) error
 	// Update blobs in store.
-	Update(ctx context.Context, blobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]]) error
+	Update(ctx context.Context, blobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]]) error
 	// Remove blobs in store with given Ids.
 	Remove(ctx context.Context, blobsIds ...BlobsPayload[btree.UUID]) error
 }
@@ -49,7 +49,7 @@ func NewBlobStore() BlobStore {
 }
 
 // GetOne fetches a blob from blob table.
-func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobId btree.UUID, target *btree.Node[interface{}, interface{}]) error {
+func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobId btree.UUID, target interface{}) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
@@ -64,7 +64,7 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobId btree.U
 	return json.Unmarshal([]byte(s), target)
 }
 
-func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]]) error {
+func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
@@ -84,7 +84,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.Key
 	return nil
 }
 
-func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, *btree.Node[interface{}, interface{}]]]) error {
+func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}

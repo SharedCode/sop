@@ -97,22 +97,96 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 }
 
 func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transaction) (btree.BtreeInterface[TK, TV], error) {
-	si := StoreInterface[interface{}, interface{}]{}
+	si := StoreInterface[TK, TV]{}
 
 	// Assign the item action tracker frontend and backend bits.
-	iatw := newItemActionTracker()
+	iatw := newItemActionTracker[TK, TV]()
 	si.ItemActionTracker = iatw
 	si.backendItemActionTracker = iatw
 
 	// Assign the node repository frontend and backend bits.
-	nrw := newNodeRepository[interface{}, interface{}](trans, s)
+	nrw := newNodeRepository[TK, TV](trans, s)
 	si.NodeRepository = nrw
 	si.backendNodeRepository = nrw.realNodeRepository
 
 	// Wire up the B-tree & add its backend interface to the transaction.
-	b3, _ := btree.New[interface{}, interface{}](s, &si.StoreInterface)
-	trans.btreesBackend = append(trans.btreesBackend, si)
-	trans.btrees = append(trans.btrees, b3)
+	b3, _ := btree.New[TK, TV](s, &si.StoreInterface)
+	b3b := btreeBackend{
+		nodeRepository:  nrw.realNodeRepository,
+		refetchAndMerge: refetchAndMergeClosure[TK, TV](b3, trans.storeRepository),
+		getStoreInfo:    func() *btree.StoreInfo { return b3.StoreInfo },
+		lockTrackedItems: iatw.lock,
+		unlockTrackedItems: iatw.unlock,
+	}
+	trans.btreesBackend = append(trans.btreesBackend, b3b)
 
 	return newBtreeWithTransaction[TK, TV](trans, b3), nil
+}
+
+// Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.
+func refetchAndMergeClosure[TK btree.Comparable, TV any](b3 *btree.Btree[TK, TV], sr cas.StoreRepository) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		var intf interface{} = b3.StoreInterface
+		si := intf.(*StoreInterface[TK, TV])
+		b3ModifiedItems := si.backendItemActionTracker.items
+		// Clear the backend "cache" so we can force B-Tree to re-fetch from Redis(or BlobStore).
+		si.backendItemActionTracker.items = make(map[btree.UUID]cacheItem[TK, TV])
+		si.backendNodeRepository.nodeLocalCache = make(map[btree.UUID]cacheNode)
+		// Reset StoreInfo of B-Tree in prep to replay the "actions".
+		storeInfo, err := sr.Get(ctx, b3.StoreInfo.Name)
+		if err != nil {
+			return err
+		}
+		b3.StoreInfo.Count = storeInfo[0].Count
+		b3.StoreInfo.RootNodeId = storeInfo[0].RootNodeId
+
+		for itemId, ci := range b3ModifiedItems {
+			if ci.Action == addAction {
+				if ok, err := b3.Add(ctx, ci.item.Key, *ci.item.Value); !ok || err != nil {
+					if err != nil {
+						return err
+					}
+					return fmt.Errorf("refetchAndMergeModifications failed to merge add item with key %v", ci.item.Key)
+				}
+				continue
+			}
+			if ok, err := b3.FindOneWithId(ctx, ci.item.Key, itemId); !ok || err != nil {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("refetchAndMergeModifications failed to find item with key %v", ci.item.Key)
+			}
+
+			// Check if the item read from backend has been updated since the time we read it.
+			if item, err := b3.GetCurrentItem(ctx); err != nil || item.Timestamp != ci.upsertTimeInDB {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("refetchAndMergeModifications detected a newer version of item with key %v", ci.item.Key)
+			}
+
+			if ci.Action == getAction {
+				// GetCurrentItem call above already "marked" the "get" (or fetch) done.
+				continue
+			}
+			if ci.Action == removeAction {
+				if ok, err := b3.RemoveCurrentItem(ctx); !ok || err != nil {
+					if err != nil {
+						return err
+					}
+					return fmt.Errorf("refetchAndMergeModifications failed to merge remove item with key %v", ci.item.Key)
+				}
+				continue
+			}
+			if ci.Action == updateAction {
+				if ok, err := b3.UpdateCurrentItem(ctx, *ci.item.Value); !ok || err != nil {
+					if err != nil {
+						return err
+					}
+					return fmt.Errorf("refetchAndMergeModifications failed to merge update item with key %v", ci.item.Key)
+				}
+			}
+		}
+		return nil
+	}
 }

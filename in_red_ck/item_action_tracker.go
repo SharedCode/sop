@@ -22,22 +22,22 @@ type lockRecord struct {
 	LockId btree.UUID
 	Action actionType
 }
-type cacheItem struct {
+type cacheItem[TK btree.Comparable, TV any] struct {
 	lockRecord
-	item *btree.Item[interface{}, interface{}]
+	item *btree.Item[TK, TV]
 	// upsert time in milliseconds.
 	upsertTimeInDB int64
 	isLockOwner    bool
 }
 
-type itemActionTracker struct {
-	items map[btree.UUID]cacheItem
+type itemActionTracker[TK btree.Comparable, TV any] struct {
+	items map[btree.UUID]cacheItem[TK, TV]
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
-func newItemActionTracker() *itemActionTracker {
-	return &itemActionTracker{
-		items: make(map[btree.UUID]cacheItem),
+func newItemActionTracker[TK btree.Comparable, TV any]() *itemActionTracker[TK, TV] {
+	return &itemActionTracker[TK, TV]{
+		items: make(map[btree.UUID]cacheItem[TK, TV]),
 	}
 }
 
@@ -57,9 +57,9 @@ func newItemActionTracker() *itemActionTracker {
 // Get			Remove		ForRemove
 // Get			Update		ForUpdate
 
-func (t *itemActionTracker) Get(item *btree.Item[interface{}, interface{}]) {
+func (t *itemActionTracker[TK, TV]) Get(item *btree.Item[TK, TV]) {
 	if _, ok := t.items[item.Id]; !ok {
-		t.items[item.Id] = cacheItem{
+		t.items[item.Id] = cacheItem[TK, TV]{
 			lockRecord: lockRecord{
 				LockId: btree.NewUUID(),
 				Action: getAction,
@@ -69,8 +69,8 @@ func (t *itemActionTracker) Get(item *btree.Item[interface{}, interface{}]) {
 	}
 }
 
-func (t *itemActionTracker) Add(item *btree.Item[interface{}, interface{}]) {
-	t.items[item.Id] = cacheItem{
+func (t *itemActionTracker[TK, TV]) Add(item *btree.Item[TK, TV]) {
+	t.items[item.Id] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
 			LockId: btree.NewUUID(),
 			Action: addAction,
@@ -82,11 +82,11 @@ func (t *itemActionTracker) Add(item *btree.Item[interface{}, interface{}]) {
 	item.Timestamp = Now()
 }
 
-func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
+func (t *itemActionTracker[TK, TV]) Update(item *btree.Item[TK, TV]) {
 	if v, ok := t.items[item.Id]; ok && v.Action == addAction {
 		return
 	}
-	t.items[item.Id] = cacheItem{
+	t.items[item.Id] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
 			LockId: btree.NewUUID(),
 			Action: updateAction,
@@ -98,12 +98,12 @@ func (t *itemActionTracker) Update(item *btree.Item[interface{}, interface{}]) {
 	item.Timestamp = Now()
 }
 
-func (t *itemActionTracker) Remove(item *btree.Item[interface{}, interface{}]) {
+func (t *itemActionTracker[TK, TV]) Remove(item *btree.Item[TK, TV]) {
 	if v, ok := t.items[item.Id]; ok && v.Action == addAction {
 		delete(t.items, item.Id)
 		return
 	}
-	t.items[item.Id] = cacheItem{
+	t.items[item.Id] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
 			LockId: btree.NewUUID(),
 			Action: removeAction,
@@ -114,7 +114,7 @@ func (t *itemActionTracker) Remove(item *btree.Item[interface{}, interface{}]) {
 
 // lock the tracked items in Redis in preparation to finalize the transaction commit.
 // This should work in combination of optimistic locking implemented by hasConflict above.
-func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error {
+func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error {
 	for uuid, cachedItem := range t.items {
 		var readItem lockRecord
 		if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.ToString()), &readItem); err != nil {
@@ -149,7 +149,7 @@ func (t *itemActionTracker) lock(ctx context.Context, itemRedisCache redis.Cache
 }
 
 // unlock will attempt to unlock or delete all tracked items from redis.
-func (t *itemActionTracker) unlock(ctx context.Context, itemRedisCache redis.Cache) error {
+func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context, itemRedisCache redis.Cache) error {
 	var lastErr error
 	for uuid, cachedItem := range t.items {
 		if !cachedItem.isLockOwner {

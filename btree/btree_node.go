@@ -6,6 +6,13 @@ import (
 	"sort"
 )
 
+// MetaDataType specifies that an object has meta data such as Id & Timestamp fields.
+type MetaDataType interface {
+	GetId() UUID
+	GetTimestamp() int64
+	SetTimestamp(ts int64)
+}
+
 // Item contains key & value pair, plus the version number.
 type Item[TK Comparable, TV any] struct {
 	// (Internal) Id is the Item's UUID. Id is needed for two reasons:
@@ -40,6 +47,16 @@ type Node[TK Comparable, TV any] struct {
 	Timestamp   int64
 	indexOfNode int
 	childrenIds []UUID
+}
+
+func (n *Node[TK, TV]) GetId() UUID {
+	return n.Id
+}
+func (n *Node[TK, TV]) GetTimestamp() int64 {
+	return n.Timestamp
+}
+func (n *Node[TK, TV]) SetTimestamp(ts int64) {
+	n.Timestamp = ts
 }
 
 // newNode creates a new node.
