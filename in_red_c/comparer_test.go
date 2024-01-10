@@ -1,4 +1,4 @@
-package in_red_ck
+package in_red_c
 
 import (
 	"cmp"

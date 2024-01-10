@@ -1,4 +1,4 @@
-package in_red_ck
+package in_red_c
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/SharedCode/sop/in_red_c/redis"
 )
 
 type actionType int

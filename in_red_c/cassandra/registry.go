@@ -10,7 +10,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/SharedCode/sop/in_red_c/redis"
 	"github.com/gocql/gocql"
 )
 
