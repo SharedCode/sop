@@ -155,12 +155,19 @@ func (t *transaction) HasBegun() bool {
 
 func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 	if ctx.Err() != nil {
-		return fmt.Errorf("Context error")
+		return ctx.Err()
 	}
 	if getCurrentTime().Sub(startTime).Minutes() > float64(t.maxTime) {
 		return fmt.Errorf("Transaction timed out(maxTime=%v)", t.maxTime)
 	}
 	return nil
+}
+
+// sleep with context.
+func sleep(ctx context.Context, sleepTime int) {
+	sleep, cancel := context.WithTimeout(ctx, time.Second*time.Duration(sleepTime))
+	defer cancel()
+	<-sleep.Done()	
 }
 
 func (t *transaction) phase1Commit(ctx context.Context) error {
@@ -243,7 +250,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
 			sleepTime := rand.Intn(4+1) + 5
-			time.Sleep(time.Duration(sleepTime) * time.Second)
+			sleep(ctx, sleepTime)
 
 			// Recreate the changes on latest committed nodes, if there is no conflict.
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
@@ -351,7 +358,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 		// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 		// (in-flight) to retry on different times.
 		sleepTime := rand.Intn(4+1) + 5
-		time.Sleep(time.Duration(sleepTime) * time.Second)
+		sleep(ctx, sleepTime)
 
 		// Recreate the fetches on latest committed nodes & check if fetched Items are unchanged.
 		if err := t.refetchAndMergeModifications(ctx); err != nil {
