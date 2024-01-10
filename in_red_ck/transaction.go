@@ -1,5 +1,5 @@
 // Package contains SOP in Redis, Cassandra & Kafka(in_red_c) integration code.
-package in_red_c
+package in_red_ck
 
 import (
 	"context"

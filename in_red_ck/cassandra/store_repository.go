@@ -12,7 +12,7 @@ import (
 
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_memory"
-	"github.com/SharedCode/sop/in_red_c/redis"
+	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
 // TODO: when need arise, move these interfaces to a common package, but keep them for now

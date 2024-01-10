@@ -1,4 +1,4 @@
-package in_red_c
+package in_red_ck
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/in_red_c/cassandra"
-	"github.com/SharedCode/sop/in_red_c/redis"
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
 // TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.
@@ -43,7 +43,7 @@ type transaction struct {
 	redisCache      redis.Cache
 	storeRepository cas.StoreRepository
 	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
-	registry          cas.Registry
+	registry cas.Registry
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
 	forWriting bool
 	// -1 = intial state, 0 = began, 1 = phase 1 commit done, 2 = phase 2 commit or rollback done.
@@ -73,12 +73,12 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 		forWriting: forWriting,
 		maxTime:    maxTime,
 		// TODO: Allow caller to supply Redis & blob store settings.
-		storeRepository:   cas.NewStoreRepository(),
-		registry:          cas.NewRegistry(),
-		redisCache:        redis.NewClient(),
-		nodeBlobStore:     cas.NewBlobStore(),
-		logger:            newTransactionLogger(),
-		phaseDone:         -1,
+		storeRepository: cas.NewStoreRepository(),
+		registry:        cas.NewRegistry(),
+		redisCache:      redis.NewClient(),
+		nodeBlobStore:   cas.NewBlobStore(),
+		logger:          newTransactionLogger(),
+		phaseDone:       -1,
 	}, nil
 }
 
@@ -167,7 +167,7 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 func sleep(ctx context.Context, sleepTime int) {
 	sleep, cancel := context.WithTimeout(ctx, time.Second*time.Duration(sleepTime))
 	defer cancel()
-	<-sleep.Done()	
+	<-sleep.Done()
 }
 
 func (t *transaction) phase1Commit(ctx context.Context) error {
@@ -506,9 +506,9 @@ func (t *transaction) deleteEntries(ctx context.Context,
 	// Create the delete blobs payload request.
 	blobsIdsForDelete := make([]cas.BlobsPayload[btree.UUID], len(deletedRegistryIds))
 	for i := range deletedRegistryIds {
-		blobsIdsForDelete[i] = cas.BlobsPayload[btree.UUID] {
+		blobsIdsForDelete[i] = cas.BlobsPayload[btree.UUID]{
 			BlobTable: btree.ConvertToBlobTableName(deletedRegistryIds[i].RegistryTable),
-			Blobs: make([]btree.UUID, len(deletedRegistryIds[i].IDs)),
+			Blobs:     make([]btree.UUID, len(deletedRegistryIds[i].IDs)),
 		}
 		for ii := range deletedRegistryIds[i].IDs {
 			blobsIdsForDelete[i].Blobs[ii] = deletedRegistryIds[i].IDs[ii]
