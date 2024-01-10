@@ -296,7 +296,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	// and on registry (very small) records only.
 	t.logger.log(finalizeCommit)
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
-		return err
+		return fmt.Errorf("Updated & removed nodes commit failed, details: %v", err)
 	}
 
 	updatedNodesInactiveIds := make([]cas.BlobsPayload[btree.UUID], len(t.updatedNodeHandles))
@@ -306,10 +306,17 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		for ii := range t.updatedNodeHandles[i].IDs {
 			// Since we've flipped the inactive to active, the new inactive Id is to be flushed out of Redis cache.
 			updatedNodesInactiveIds[i].Blobs[ii] = t.updatedNodeHandles[i].IDs[ii].GetInActiveId()
+			// And set timestamp to 0 so they get reused ASAP.
+			t.updatedNodeHandles[i].IDs[ii].WorkInProgressTimestamp = 0
 		}
 	}
 
-	// Assemble & enqueue the deleted Ids, 'should not fail.
+	// Update registry so updated nodes' inactive Ids(and their node blobs) can get recycled ASAP.
+	if err := t.registry.Update(ctx, true, t.updatedNodeHandles...); err != nil {
+		log.Warn(fmt.Sprintf("Updated nodes' registry entries' WIP timestamps failed to get set to 0, details: %v", err))
+	}
+
+	// Package the logically deleted Ids for actual physical deletes.
 	deletedIds := make([]cas.RegistryPayload[btree.UUID], len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.removedNodeHandles {
 		deletedIds[i].RegistryTable = t.removedNodeHandles[i].RegistryTable
@@ -319,7 +326,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 			deletedIds[i].IDs[ii] = t.removedNodeHandles[i].IDs[ii].LogicalId
 		}
 	}
-	t.deleteRemovedIds(ctx, deletedIds, updatedNodesInactiveIds)
+	t.deleteEntries(ctx, deletedIds, updatedNodesInactiveIds)
 
 	// Unlock the items in Redis.
 	t.logger.log(unlockTrackedItems)
@@ -472,7 +479,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 // Delete the registry entries and their node blobs. These type of deletes will be rare as trie nodes don't
 // get deleted unless entire set of items in it were deleted.
 // The second parameter(inactiveBlobIds), their nodes will just be flushed out of Redis.
-func (t *transaction) deleteRemovedIds(ctx context.Context,
+func (t *transaction) deleteEntries(ctx context.Context,
 	deletedRegistryIds []cas.RegistryPayload[btree.UUID], inactiveBlobIds []cas.BlobsPayload[btree.UUID]) {
 	if len(deletedRegistryIds) == 0 && len(inactiveBlobIds) == 0 {
 		return
@@ -493,8 +500,8 @@ func (t *transaction) deleteRemovedIds(ctx context.Context,
 			log.Error("Redis Delete failed, details: %v", err)
 		}
 	}
+
 	// Delete the registry entries & their referenced node blobs.
-	t.registry.Remove(ctx, deletedRegistryIds...)
 
 	// Create the delete blobs payload request.
 	blobsIdsForDelete := make([]cas.BlobsPayload[btree.UUID], len(deletedRegistryIds))
@@ -508,6 +515,7 @@ func (t *transaction) deleteRemovedIds(ctx context.Context,
 		}
 	}
 	t.nodeBlobStore.Remove(ctx, blobsIdsForDelete...)
+	t.registry.Remove(ctx, deletedRegistryIds...)
 }
 
 func (t *transaction) rollback(ctx context.Context, forRetry bool) error {
