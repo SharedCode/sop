@@ -1,23 +1,22 @@
 package kafka
 
-import(
+import (
+	"fmt"
+	"context"
+	"encoding/json"
+	"sync"
+
 	"github.com/Shopify/sarama"
 )
 
-// This sarama kafka producer/consumer code is based off of the sample code in:
-// https://github.com/0sc/sarama-example/tree/master
-
-func NewProducer() (sarama.SyncProducer, error) {
-	config := sarama.NewConfig()
-	config.Producer.Partitioner = sarama.NewRandomPartitioner
-	config.Producer.RequiredAcks = sarama.WaitForAll
-	config.Producer.Return.Successes = true
-	producer, err := sarama.NewSyncProducer(globalConfig.Brokers, config)
-
-	return producer, err
+type QueueProducer struct {
+	producer sarama.SyncProducer
 }
+// Package global producer.
+var producer *QueueProducer
+var mux sync.Mutex
 
-func PrepareMessage(topic, message string) *sarama.ProducerMessage {
+func prepareMessage(topic, message string) *sarama.ProducerMessage {
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Partition: -1,
@@ -25,4 +24,71 @@ func PrepareMessage(topic, message string) *sarama.ProducerMessage {
 	}
 
 	return msg
+}
+
+// GetProducer will return the singleton instance of the producer.
+func GetProducer(config *sarama.Config) (*QueueProducer, error) {
+	if producer != nil {
+		return producer, nil
+	}
+	mux.Lock()
+	defer mux.Unlock()
+	if producer != nil {
+		return producer, nil
+	}
+	if config == nil {
+		config = sarama.NewConfig()
+		config.Producer.Partitioner = sarama.NewRandomPartitioner
+		config.Producer.RequiredAcks = sarama.WaitForAll
+		config.Producer.Return.Successes = true
+		// Default 1 MB buffer size on producer.
+		config.Producer.Flush.Bytes = 2 * 1024 * 1024
+	}
+	p, err := sarama.NewSyncProducer(globalConfig.Brokers, config)
+	if err != nil {
+		return nil, err
+	}
+	producer = &QueueProducer{producer: p}
+	return producer, nil
+}
+
+// Close the singleton instance producer.
+func CloseProducer() {
+	if producer != nil {
+		mux.Lock()
+		defer mux.Unlock()
+		if producer == nil {
+			return
+		}
+		producer.producer.Close()
+		producer = nil
+	}
+}
+
+// Enqueue will send message to the Kafka queue of the configured topic.
+func Enqueue[T any](ctx context.Context, items ...T) ([]string, []error) {
+	var err error
+	if producer == nil {
+		producer, err = GetProducer(nil)
+		if err != nil {
+			return nil, []error{err}
+		}
+	}
+	errors := make([]error, 0, len(items))
+	results := make([]string, 0, len(items))
+	for i := range items {
+		ba, err := json.Marshal(items[i])
+		if err != nil {
+			errors = append(errors, fmt.Errorf("Item #%d. Error detected marhaling item, detail: %v", i, err))
+			continue
+		}
+		msg := prepareMessage(globalConfig.Topic, string(ba))
+		partition, offset, err := producer.producer.SendMessage(msg)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("Item #%d. Error detected sending item, detail: %v", i, err))
+			continue
+		}
+		results = append(results, fmt.Sprintf("Item %d. Message was saved to partion: %d, offset is: %d", i, partition, offset))
+	}
+	return results, errors
 }
