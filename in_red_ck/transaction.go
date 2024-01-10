@@ -51,6 +51,7 @@ func (t *singlePhaseTransaction) Begin() error {
 			return err
 		}
 	}
+
 	return nil
 }
 

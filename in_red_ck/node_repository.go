@@ -180,7 +180,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 	if len(nodes) == 0 {
 		return true, nil
 	}
-	vids := nr.convertToVirtualIdRequestPayload(nodes)
+	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, err
@@ -227,7 +227,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 		return true, nil
 	}
 	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
-	vids := nr.convertToVirtualIdRequestPayload(nodes)
+	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, err
@@ -282,7 +282,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Ke
 	if len(nodes) == 0 {
 		return true, nil
 	}
-	vids := nr.convertToVirtualIdRequestPayload(nodes)
+	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, err
@@ -356,7 +356,7 @@ func (nr *nodeRepository) areFetchedNodesIntact(ctx context.Context, nodes []sop
 	if len(nodes) == 0 {
 		return true, nil
 	}
-	vids := nr.convertToVirtualIdRequestPayload(nodes)
+	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, err
@@ -377,7 +377,7 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, nodes []sop.
 		return nil
 	}
 	bibs := nr.convertToBlobRequestPayload(nodes)
-	vids := nr.convertToVirtualIdRequestPayload(nodes)
+	vids := nr.convertToRegistryRequestPayload(nodes)
 	// Undo on blob store & redis.
 	if err := nr.transaction.nodeBlobStore.Remove(ctx, bibs...); err != nil {
 		return err
@@ -402,7 +402,7 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []sop.Ke
 	if len(nodes) == 0 {
 		return nil
 	}
-	vids := nr.convertToVirtualIdRequestPayload(nodes)
+	vids := nr.convertToRegistryRequestPayload(nodes)
 	for i := range vids {
 		for ii := range vids[i].IDs {
 			// Remove node from Redis cache.
@@ -427,7 +427,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 	if len(nodes) == 0 {
 		return nil
 	}
-	vids := nr.convertToVirtualIdRequestPayload(nodes)
+	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return err
@@ -465,7 +465,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []sop.
 	if len(nodes) == 0 {
 		return nil
 	}
-	vids := nr.convertToVirtualIdRequestPayload(nodes)
+	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return err
@@ -487,7 +487,7 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []sop
 	if len(nodes) == 0 {
 		return nil, nil
 	}
-	vids := nr.convertToVirtualIdRequestPayload(nodes)
+	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return nil, err
@@ -514,7 +514,7 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []sop.KeyValuePa
 	if len(nodes) == 0 {
 		return nil, nil
 	}
-	vids := nr.convertToVirtualIdRequestPayload(nodes)
+	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return nil, err
@@ -546,7 +546,7 @@ func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*
 	return bibs
 }
 
-func (nr *nodeRepository) convertToVirtualIdRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) []cas.RegistryPayload[btree.UUID] {
+func (nr *nodeRepository) convertToRegistryRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) []cas.RegistryPayload[btree.UUID] {
 	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
 	vids := make([]cas.RegistryPayload[btree.UUID], len(nodes))
 	for i := range nodes {

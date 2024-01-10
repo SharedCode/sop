@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/gocql/gocql"
 
@@ -107,15 +108,18 @@ func (b *blobStore) Remove(ctx context.Context, storesBlobsIds ...BlobsPayload[b
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
+	// Delete per blob table the Node "blobs".
 	for _, storeBlobIds := range storesBlobsIds {
-		for _, blobId := range storeBlobIds.Blobs {
-			if blobId.IsNil() {
-				continue
-			}
-			dropBlobTable := fmt.Sprintf("DELETE FROM %s.%s WHERE id = ?;", connection.Config.Keyspace, storeBlobIds.BlobTable)
-			if err := connection.Session.Query(dropBlobTable, gocql.UUID(blobId)).WithContext(ctx).Exec(); err != nil {
-				return err
-			}
+		paramQ := make([]string, len(storeBlobIds.Blobs))
+		idsAsIntfs := make([]interface{}, len(storeBlobIds.Blobs))
+		for i := range storeBlobIds.Blobs {
+			paramQ[i] = "?"
+			idsAsIntfs[i] = interface{}(gocql.UUID(storeBlobIds.Blobs[i]))
+		}
+		deleteStatement := fmt.Sprintf("DELETE FROM %s.%s WHERE id in (%v);",
+			connection.Config.Keyspace, storeBlobIds.BlobTable, strings.Join(paramQ, ", "))
+		if err := connection.Session.Query(deleteStatement, idsAsIntfs...).WithContext(ctx).Exec(); err != nil {
+			return err
 		}
 	}
 	return nil

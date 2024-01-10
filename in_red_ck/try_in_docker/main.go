@@ -8,7 +8,6 @@ import (
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 	"github.com/gocql/gocql"
 )
@@ -26,7 +25,7 @@ var redisConfig = redis.Options{
 }
 
 func main() {
-	if err := in_red_ck.Initialize(cassConfig, redisConfig, kafka.DefaultConfig); err != nil {
+	if err := in_red_ck.Initialize(cassConfig, redisConfig); err != nil {
 		writeAndExit(err.Error())
 	}
 	storeInfo := *btree.NewStoreInfo("foobar", 4, true, true, true, "")

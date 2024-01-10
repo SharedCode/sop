@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -21,7 +20,7 @@ var redisConfig = redis.Options{
 }
 
 func init() {
-	Initialize(cassConfig, redisConfig, kafka.DefaultConfig)
+	Initialize(cassConfig, redisConfig)
 }
 
 var ctx = context.Background()
