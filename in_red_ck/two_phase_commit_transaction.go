@@ -483,13 +483,16 @@ func (t *transaction) deleteEntries(ctx context.Context,
 		if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
 			log.Error("Redis Delete failed, details: %v", err)
 		}
-		_, err := kafka.Enqueue[[]cas.BlobsPayload[btree.UUID]](ctx, inactiveBlobIds)
-		if err != nil {
-			log.Error("Kafka Enqueue faied, details: %v", err)
+		// Only attempt to send the delete message to Kafka if the delete service is enabled.
+		if IsDeleteServiceEnabled {
+			_, err := kafka.Enqueue[[]cas.BlobsPayload[btree.UUID]](ctx, inactiveBlobIds)
+			if err != nil {
+				log.Error("Kafka Enqueue failed, details: %v", err)
+			}
+		} else {
+			log.Warn("DeleteService is not enabled, skipping send of delete message to Kafka")
 		}
 	}
-
-	// Delete the registry entries & their referenced node blobs.
 
 	// Create the delete blobs payload request.
 	blobsIdsForDelete := make([]cas.BlobsPayload[btree.UUID], len(deletedRegistryIds))
@@ -502,6 +505,7 @@ func (t *transaction) deleteEntries(ctx context.Context,
 			blobsIdsForDelete[i].Blobs[ii] = deletedRegistryIds[i].IDs[ii]
 		}
 	}
+	// Delete the registry entries & their referenced node blobs.
 	t.nodeBlobStore.Remove(ctx, blobsIdsForDelete...)
 	t.registry.Remove(ctx, deletedRegistryIds...)
 }
