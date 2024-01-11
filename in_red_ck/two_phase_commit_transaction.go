@@ -302,14 +302,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		for ii := range t.updatedNodeHandles[i].IDs {
 			// Since we've flipped the inactive to active, the new inactive Id is to be flushed out of Redis cache.
 			updatedNodesInactiveIds[i].Blobs[ii] = t.updatedNodeHandles[i].IDs[ii].GetInActiveId()
-			// And set timestamp to 1 so they get reused ASAP.
-			t.updatedNodeHandles[i].IDs[ii].WorkInProgressTimestamp = 1
 		}
-	}
-
-	// Update registry so updated nodes' inactive Ids(and their node blobs) can get recycled ASAP.
-	if err := t.registry.Update(ctx, true, t.updatedNodeHandles...); err != nil {
-		log.Warn(fmt.Sprintf("Updated nodes' registry entries' WIP timestamps failed to get set to 0, details: %v", err))
 	}
 
 	// Package the logically deleted Ids for actual physical deletes.

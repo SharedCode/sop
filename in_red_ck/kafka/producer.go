@@ -65,15 +65,23 @@ func CloseProducer() {
 	}
 }
 
+var lastEngueueSucceeded bool
+// Returns true if it is known that last Enqueue to Kafka succeeded or not.
+func LastEnqueueSucceeded() bool {
+	return lastEngueueSucceeded
+}
+
 // Enqueue will send message to the Kafka queue of the configured topic.
 func Enqueue[T any](ctx context.Context, items ...T) ([]string, error) {
 	var err error
 	if producer == nil {
 		if !IsInitialized() {
+			lastEngueueSucceeded = false
 			return nil, fmt.Errorf("Kafka is not initialized, please set kafka package's brokers & topic config")
 		}
 		producer, err = GetProducer(nil)
 		if err != nil {
+			lastEngueueSucceeded = false
 			return nil, err
 		}
 	}
@@ -93,5 +101,6 @@ func Enqueue[T any](ctx context.Context, items ...T) ([]string, error) {
 		}
 		results = append(results, fmt.Sprintf("Item %d. Message was saved to partion: %d, offset is: %d", i, partition, offset))
 	}
+	lastEngueueSucceeded = lastErr == nil
 	return results, lastErr
 }

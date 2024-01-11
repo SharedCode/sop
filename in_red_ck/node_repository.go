@@ -9,6 +9,7 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -264,9 +265,15 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
 		}
 	}
-	// Deleting blobs is a tolerable error, 'just log the error if there is.
-	if err := nr.transaction.nodeBlobStore.Remove(ctx, inactiveBlobIds...); err != nil {
-		log.Error(fmt.Sprintf("Error encountered deleting blobs(%v), details: %v", inactiveBlobIds, err))
+	// If it is known that Kafka enqueuing is succeeding then we don't have to issue a delete,
+	// as the "delete service" which fetch messages from Kafka will ensure inactive Nodes are deleted.
+	// But if such is not working or known not to work then we will issue deletes here in the main path
+	// to prevent unusual data growth due to unused Node records.
+	if !kafka.LastEnqueueSucceeded() {
+		// Deleting blobs is a tolerable error, 'just log the error if there is.
+		if err := nr.transaction.nodeBlobStore.Remove(ctx, inactiveBlobIds...); err != nil {
+			log.Error(fmt.Sprintf("Error encountered deleting blobs(%v), details: %v", inactiveBlobIds, err))
+		}
 	}
 	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
 		return false, err
@@ -512,7 +519,7 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []sop
 			// Set work in progress timestamp to now as safety. After flipping inactive to active,
 			// the previously active Id if not "cleaned up" then this timestamp will allow future
 			// transactions to clean it up(self healing).
-			handles[i].IDs[ii].WorkInProgressTimestamp = rightNow
+			handles[i].IDs[ii].WorkInProgressTimestamp = 1
 		}
 	}
 	// All or nothing batch update.
