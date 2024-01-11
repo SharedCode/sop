@@ -10,6 +10,7 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -244,7 +245,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 			// Respect context before sleeping.
 			if ctx.Err() != nil {
-				return fmt.Errorf("Context error")
+				return ctx.Err()
 			}
 
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
@@ -498,6 +499,10 @@ func (t *transaction) deleteEntries(ctx context.Context,
 		}
 		if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
 			log.Error("Redis Delete failed, details: %v", err)
+		}
+		_, err := kafka.Enqueue[[]cas.BlobsPayload[btree.UUID]](ctx, inactiveBlobIds)
+		if err != nil {
+			log.Error("Kafka Enqueue faied, details: %v", err)
 		}
 	}
 

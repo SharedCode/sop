@@ -53,9 +53,9 @@ func CloseConsumer() {
 }
 
 // Dequeue fetches count number of messages from kafka queue on the configured topic.
-func Dequeue[T any](ctx context.Context, count int) ([]T, []error) {
+func Dequeue[T any](ctx context.Context, count int) ([]T, error) {
 	if consumer == nil {
-		return nil, []error{fmt.Errorf("Can't fetch %d messages as Consumer is not open", count) }
+		return nil, fmt.Errorf("Can't fetch %d messages as Consumer is not open", count)
 	}
 
 	messages := make([]T, 0, count)
@@ -63,19 +63,19 @@ func Dequeue[T any](ctx context.Context, count int) ([]T, []error) {
 	var wg sync.WaitGroup
 	
 	if err := Subscribe(globalConfig.Topic, consumer.consumer, count, receiverChannel, &wg); err != nil {
-		return nil, []error{err}
+		return nil, err
 	}
-	errors := make([]error, 0, count)
+	var lastErr error
 	for msg := range receiverChannel {
 		var o T
 		if err := json.Unmarshal([]byte(msg), &o); err != nil {
-			errors = append(errors, err)
+			lastErr = err
 			continue
 		}
 		messages = append(messages, o)
 	}
 	wg.Wait()
-	return messages, errors
+	return messages, lastErr
 }
 
 // Subscribe to a kafka topic and send messages received via a dispatcher.

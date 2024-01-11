@@ -59,6 +59,10 @@ func (t *singlePhaseTransaction) Begin() error {
 // this will return the sop phase 1 commit error or
 // your other transactions phase 1 commits' last error.
 func (t *singlePhaseTransaction) Commit(ctx context.Context) error {
+
+	// Ping the Delete servicer to allow Kafka based dequeue and deletion of unused Node blobs.
+	DeleteService(ctx)
+
 	var lastErr error
 	// Phase 1 commit.
 	if err := t.sopPhaseCommitTransaction.Phase1Commit(ctx); err != nil {

@@ -66,29 +66,29 @@ func CloseProducer() {
 }
 
 // Enqueue will send message to the Kafka queue of the configured topic.
-func Enqueue[T any](ctx context.Context, items ...T) ([]string, []error) {
+func Enqueue[T any](ctx context.Context, items ...T) ([]string, error) {
 	var err error
 	if producer == nil {
 		producer, err = GetProducer(nil)
 		if err != nil {
-			return nil, []error{err}
+			return nil, err
 		}
 	}
-	errors := make([]error, 0, len(items))
+	var lastErr error
 	results := make([]string, 0, len(items))
 	for i := range items {
 		ba, err := json.Marshal(items[i])
 		if err != nil {
-			errors = append(errors, fmt.Errorf("Item #%d. Error detected marhaling item, detail: %v", i, err))
+			lastErr = fmt.Errorf("Item #%d. Error detected marhaling item, detail: %v", i, err)
 			continue
 		}
 		msg := prepareMessage(globalConfig.Topic, string(ba))
 		partition, offset, err := producer.producer.SendMessage(msg)
 		if err != nil {
-			errors = append(errors, fmt.Errorf("Item #%d. Error detected sending item, detail: %v", i, err))
+			lastErr = fmt.Errorf("Item #%d. Error detected sending item, detail: %v", i, err)
 			continue
 		}
 		results = append(results, fmt.Sprintf("Item %d. Message was saved to partion: %d, offset is: %d", i, partition, offset))
 	}
-	return results, errors
+	return results, lastErr
 }
