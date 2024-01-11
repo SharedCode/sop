@@ -419,25 +419,32 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []sop.Ke
 	if len(nodes) == 0 {
 		return nil
 	}
+	var lastErr error
 	vids := nr.convertToRegistryRequestPayload(nodes)
-	for i := range vids {
-		for ii := range vids[i].IDs {
-			// Remove node from Redis cache.
-			if err := nr.transaction.redisCache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].ToString())); err != nil && !redis.KeyNotFound(err) {
-				return err
-			}
-		}
-	}
 	// Remove nodes from blob store.
 	bibs := nr.convertToBlobRequestPayload(nodes)
 	if err := nr.transaction.nodeBlobStore.Remove(ctx, bibs...); err != nil {
-		return err
+		lastErr = fmt.Errorf("Unable to undo added nodes, %v, error: %v", bibs, err)
+		log.Error(lastErr.Error())
 	}
 	// Unregister nodes Ids.
 	if err := nr.transaction.registry.Remove(ctx, vids...); err != nil {
-		return err
+		lastErr = fmt.Errorf("Unable to undo added nodes registration, %v, error: %v", vids, err)
+		log.Error(lastErr.Error())
 	}
-	return nil
+	// Remove nodes from Redis cache.
+	for i := range vids {
+		for ii := range vids[i].IDs {
+			if err := nr.transaction.redisCache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].ToString())); err != nil && !redis.KeyNotFound(err) {
+				err = fmt.Errorf("Unable to undo added nodes in redis, error: %v", err)
+				if lastErr == nil {
+					lastErr = err
+				}
+				log.Warn(err.Error())
+			}
+		}
+	}
+	return lastErr
 }
 
 func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) error {
@@ -457,25 +464,33 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 			handles[i].IDs[ii].ClearInactiveId()
 		}
 	}
-	// Undo the nodes blobs to blob store and redis cache.
+	var lastErr error
+	// Undo the nodes blobs to blob store.
+	if err = nr.transaction.nodeBlobStore.Remove(ctx, blobsIds...); err != nil {
+		lastErr = fmt.Errorf("Unable to undo updated nodes, %v, error: %v", blobsIds, err)
+		log.Error(lastErr.Error())
+	}
+	// Undo changes in virtual Id registry.
+	if err = nr.transaction.registry.Update(ctx, false, handles...); err != nil {
+		lastErr = fmt.Errorf("Unable to undo updated nodes registration, %v, error: %v", handles, err)
+		log.Error(lastErr.Error())
+	}
+	// Undo changes in redis.
 	for i := range blobsIds {
 		for ii := range blobsIds[i].Blobs {
 			if blobsIds[i].Blobs[ii].IsNil() {
 				continue
 			}
 			if err = nr.transaction.redisCache.Delete(ctx, nr.formatKey(blobsIds[i].Blobs[ii].ToString())); err != nil && !redis.KeyNotFound(err) {
-				return err
+				err = fmt.Errorf("Unable to undo updated nodes in redis, error: %v", err)
+				if lastErr == nil {
+					lastErr = err
+				}
+				log.Warn(err.Error())
 			}
 		}
 	}
-	if err = nr.transaction.nodeBlobStore.Remove(ctx, blobsIds...); err != nil {
-		return err
-	}
-	// Undo changes in virtual Id registry.
-	if err = nr.transaction.registry.Update(ctx, false, handles...); err != nil {
-		return err
-	}
-	return nil
+	return lastErr
 }
 
 func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) error {

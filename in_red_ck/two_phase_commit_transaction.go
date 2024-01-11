@@ -460,6 +460,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	return lastErr
 }
 
+var warnDeleteServiceMissing bool = true
 // Delete the registry entries and their node blobs. These type of deletes will be rare as trie nodes don't
 // get deleted unless entire set of items in it were deleted.
 // The second parameter(inactiveBlobIds), their nodes will just be flushed out of Redis.
@@ -490,7 +491,11 @@ func (t *transaction) deleteEntries(ctx context.Context,
 				log.Error("Kafka Enqueue failed, details: %v", err)
 			}
 		} else {
-			log.Warn("DeleteService is not enabled, skipping send of delete message to Kafka")
+			if warnDeleteServiceMissing {
+				// Warn only once per instance lifetime.
+				log.Warn("DeleteService is not enabled, skipping send of delete message to Kafka")
+				warnDeleteServiceMissing = false
+			}
 		}
 	}
 
