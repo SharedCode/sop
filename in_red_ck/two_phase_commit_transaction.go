@@ -243,11 +243,6 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			// Rollback partial changes.
 			t.rollback(ctx, true)
 
-			// Respect context before sleeping.
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
 			sleepTime := rand.Intn(4+1) + 5
@@ -356,11 +351,6 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 			return err
 		} else if ok {
 			return nil
-		}
-
-		// Respect context before sleeping.
-		if ctx.Err() != nil {
-			return fmt.Errorf("Context error")
 		}
 
 		// Sleep in random seconds to allow different conflicting (Node modifying) transactions

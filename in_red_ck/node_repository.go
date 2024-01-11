@@ -233,9 +233,12 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 		return false, err
 	}
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]], len(nodes))
+	inactiveBlobIds := make([]cas.BlobsPayload[btree.UUID], len(nodes))
 	for i := range handles {
 		blobs[i].BlobTable = nodes[i].Key.BlobTable
+		inactiveBlobIds[i].BlobTable = nodes[i].Key.BlobTable
 		blobs[i].Blobs = make([]sop.KeyValuePair[btree.UUID, interface{}], len(handles[i].IDs))
+		inactiveBlobIds[i].Blobs = make([]btree.UUID, 0, len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			// Node with such Id is marked deleted or had been updated since reading it.
 			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Timestamp != nodes[i].Value[ii].(btree.MetaDataType).GetTimestamp() {
@@ -245,18 +248,25 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 			id := handles[i].IDs[ii].AllocateId()
 			if id == btree.NilUUID {
 				if handles[i].IDs[ii].IsExpiredInactive() {
-					// Reuse the expired Inactive Id & blob row.
-					id = handles[i].IDs[ii].GetInActiveId()
-					handles[i].IDs[ii].WorkInProgressTimestamp = Now()
+					// Collect the inactive Blob Ids so we can issue a delete for them to ensure they will be gone.
+					// Kafka based delete service should delete them, but in case that is not running.
+					inactiveBlobIds[i].Blobs = append(inactiveBlobIds[i].Blobs, handles[i].IDs[ii].GetInActiveId())
+					handles[i].IDs[ii].ClearInactiveId()
+					// Allocate a new Id after clearing the unused inactive Id.
+					id = handles[i].IDs[ii].AllocateId()
 				}
 			}
 			if id == btree.NilUUID {
 				// Return false as there is an ongoing update on node by another transaction.
 				return false, nil
 			}
-			blobs[i].Blobs[ii].Key = handles[i].IDs[ii].GetInActiveId()
+			blobs[i].Blobs[ii].Key = id
 			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
 		}
+	}
+	// Deleting blobs is a tolerable error, 'just log the error if there is.
+	if err := nr.transaction.nodeBlobStore.Remove(ctx, inactiveBlobIds...); err != nil {
+		log.Error(fmt.Sprintf("Error encountered deleting blobs(%v), details: %v", inactiveBlobIds, err))
 	}
 	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
 		return false, err

@@ -3,6 +3,8 @@ package in_red_ck
 import (
 	"cmp"
 	"testing"
+
+	"github.com/SharedCode/sop/in_red_ck/kafka"
 )
 
 type PersonKey struct {
@@ -37,6 +39,7 @@ func (x PersonKey) Compare(other interface{}) int {
 }
 
 func Test_SimpleAddPerson(t *testing.T) {
+	kafka.Initialize(kafka.DefaultConfig)
 	t.Logf("Transaction story, single b-tree, person record test.\n")
 	trans, err := NewTransaction(true, -1)
 	if err != nil {

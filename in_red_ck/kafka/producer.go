@@ -69,6 +69,9 @@ func CloseProducer() {
 func Enqueue[T any](ctx context.Context, items ...T) ([]string, error) {
 	var err error
 	if producer == nil {
+		if !IsInitialized() {
+			return nil, fmt.Errorf("Kafka is not initialized, please set kafka package's brokers & topic config")
+		}
 		producer, err = GetProducer(nil)
 		if err != nil {
 			return nil, err
