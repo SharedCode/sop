@@ -81,3 +81,47 @@ func Test_SimpleAddPerson(t *testing.T) {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}
 }
+
+func Test_Person(t *testing.T) {
+	kafka.Initialize(kafka.DefaultConfig)
+	t.Logf("Transaction story, single b-tree, person record test.\n")
+	trans, err := NewTransaction(true, -1)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	trans.Begin()
+
+	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
+
+	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", 4, false, false, false, "", trans)
+	if err != nil {
+		trans.Rollback(ctx)
+		t.Errorf("Error instantiating Btree, details: %v.", err)
+		t.Fail()
+	}
+	if ok, err := b3.Add(ctx, pk, p); !ok || err != nil {
+		t.Errorf("Add('joe') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		trans.Rollback(ctx)
+		return
+	}
+
+	if ok, err := b3.FindOne(ctx, pk, false); !ok || err != nil {
+		t.Errorf("FindOne('joe',false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		trans.Rollback(ctx)
+		return
+	}
+	if k, err := b3.GetCurrentKey(ctx); k.Firstname != pk.Firstname || err != nil {
+		t.Errorf("GetCurrentKey() failed, got = %v, %v, want = 1, nil.", k, err)
+		trans.Rollback(ctx)
+		return
+	}
+	if v, err := b3.GetCurrentValue(ctx); v.Phone != p.Phone || err != nil {
+		t.Errorf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
+		trans.Rollback(ctx)
+		return
+	}
+	t.Logf("Successfully added & found item with key 'joe'.")
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+}
