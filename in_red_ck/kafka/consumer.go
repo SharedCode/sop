@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"sync"
 	"sync/atomic"
 	"encoding/json"
 
@@ -60,9 +59,8 @@ func Dequeue[T any](ctx context.Context, count int) ([]T, error) {
 
 	messages := make([]T, 0, count)
 	receiverChannel := make(chan string, 1)
-	var wg sync.WaitGroup
 	
-	if err := Subscribe(globalConfig.Topic, consumer.consumer, count, receiverChannel, &wg); err != nil {
+	if err := Subscribe(globalConfig.Topic, consumer.consumer, count, receiverChannel); err != nil {
 		return nil, err
 	}
 	var lastErr error
@@ -74,12 +72,11 @@ func Dequeue[T any](ctx context.Context, count int) ([]T, error) {
 		}
 		messages = append(messages, o)
 	}
-	wg.Wait()
 	return messages, lastErr
 }
 
 // Subscribe to a kafka topic and send messages received via a dispatcher.
-func Subscribe(topic string, consumer sarama.Consumer, fetchCount int, dispatcher chan<- string, wg *sync.WaitGroup) error {
+func Subscribe(topic string, consumer sarama.Consumer, fetchCount int, dispatcher chan<- string) error {
 	partitionList, err := consumer.Partitions(topic) //get all partitions on the given topic
 	if err != nil {
 		return fmt.Errorf("Error retrieving partitionList, details: %v", err)
@@ -94,7 +91,7 @@ func Subscribe(topic string, consumer sarama.Consumer, fetchCount int, dispatche
 			for message := range pc.Messages() {
 				dispatcher <- string(message.Value)
 				if i.Add(1) >= int32(fetchCount) {
-					wg.Done()
+					close(dispatcher)
 					return
 				}
 			}

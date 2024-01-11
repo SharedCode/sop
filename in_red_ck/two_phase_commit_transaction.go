@@ -302,8 +302,8 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		for ii := range t.updatedNodeHandles[i].IDs {
 			// Since we've flipped the inactive to active, the new inactive Id is to be flushed out of Redis cache.
 			updatedNodesInactiveIds[i].Blobs[ii] = t.updatedNodeHandles[i].IDs[ii].GetInActiveId()
-			// And set timestamp to 0 so they get reused ASAP.
-			t.updatedNodeHandles[i].IDs[ii].WorkInProgressTimestamp = 0
+			// And set timestamp to 1 so they get reused ASAP.
+			t.updatedNodeHandles[i].IDs[ii].WorkInProgressTimestamp = 1
 		}
 	}
 

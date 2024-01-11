@@ -77,9 +77,8 @@ func (h *Handle) IsExpiredInactive() bool {
 	// Transactions are encouraged to be around 15 mins max, thus, 7 hrs for expiration of failed
 	// node update Id(inactive Id) is really beyond and over it(safe).
 	const maxDuration = 2
-	now := time.Now().UnixMilli()
-	return h.WorkInProgressTimestamp > 0 &&
-		h.WorkInProgressTimestamp > now - int64(time.Duration(maxDuration)*time.Hour)
+	expiryTime := time.Now().Add(time.Duration(-maxDuration)*time.Hour).UnixMilli()
+	return h.WorkInProgressTimestamp > 0 && h.WorkInProgressTimestamp < expiryTime
 }
 
 // Returns true if id is either physical Id A or B, false otherwise.
