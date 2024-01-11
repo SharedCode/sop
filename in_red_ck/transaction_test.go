@@ -82,7 +82,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 	}
 }
 
-func Test_TwoTransactionsWithConflict(t *testing.T) {
+func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	t.Logf("Transaction story, single b-tree, person record test.\n")
 
 	trans, err := NewTransaction(true, -1)
