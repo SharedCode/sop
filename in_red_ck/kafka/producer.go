@@ -22,7 +22,6 @@ func prepareMessage(topic, message string) *sarama.ProducerMessage {
 		Partition: -1,
 		Value:     sarama.StringEncoder(message),
 	}
-
 	return msg
 }
 
@@ -38,6 +37,7 @@ func GetProducer(config *sarama.Config) (*QueueProducer, error) {
 	}
 	if config == nil {
 		config = sarama.NewConfig()
+		config.Version = sarama.V2_6_0_0
 		config.Producer.Partitioner = sarama.NewRandomPartitioner
 		config.Producer.RequiredAcks = sarama.WaitForAll
 		config.Producer.Return.Successes = true
@@ -82,7 +82,7 @@ func Enqueue[T any](ctx context.Context, items ...T) ([]string, error) {
 		producer, err = GetProducer(nil)
 		if err != nil {
 			lastEngueueSucceeded = false
-			return nil, err
+			return nil, fmt.Errorf("Can't send %d messages as can't open a Producer, details: %v", len(items), err)
 		}
 	}
 	var lastErr error

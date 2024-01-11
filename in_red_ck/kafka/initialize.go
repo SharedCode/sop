@@ -10,7 +10,7 @@ type Config struct {
 }
 
 var DefaultConfig Config = Config {
-	Brokers: []string{"127.0.0.1:9092"},
+	Brokers: []string{"127.0.0.1:9093"},
 	Topic: "sop-deleted-data",
 }
 

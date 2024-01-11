@@ -16,8 +16,21 @@ var lastDeleteTime int64
 // Service interval defaults to 2 hours. That is, process deleted items every two hours.
 var ServiceIntervalInHour int = 2
 
+// Enable the delete service(defaults to false) if you want this host to poll every periodically to process
+// deleted unused Nodes leftover of transaction, the Inactive nodes used as "for merging" node(s).
+var IsDeleteServiceEnabled bool
+
+// Sets the Delete Service to enabled(yes = true) or disabled(yes = false).
+func EnableDeleteService(yes bool) {
+	IsDeleteServiceEnabled = yes
+}
+
 // DeleteService runs the DoDeleteItemsProcessing function below periodically, like every 2 hours(default).
 func DeleteService(ctx context.Context) {
+	// Do nothing if delete service is disabled.
+	if !IsDeleteServiceEnabled {
+		return
+	}
 	// Enfore minimum of hourly interval, as deletes processing is not a priority operation.
 	// SOP can do without it. It just prevents DB growth size, & nothing critical.
 	if ServiceIntervalInHour < 1 {
