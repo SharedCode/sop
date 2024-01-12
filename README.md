@@ -61,8 +61,29 @@ Requirements
   * Golang version that supports generics
   * Internet access to github
 
+SOP V2 Requirements
+  * Cassandra
+  * Redis
+  * Kafka if wanting to enable the Delete Service
 
-Below discussions are for the "next version", V2.
+Blob storage was implemented in Cassandra, thus, there is no need for AWS S3. Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_ck".
+SOP in Redis, Cassandra & Kafka(in_red_ck). Or fashionably, SOP in "red Calvin Klein", hehe.
+
+V2 is in POC status but there is no known issue. Unit tests is very important at this point and it is being worked on to increase coverage.
+
+But yeah, V2 is showing very good results. ACID, two phase commit transaction, and impressive performance as Redis is baked in. SOP V2 actually succeeded in turning M-Way Trie a native "resident" of the cluster. Each of the host running SOP, be it an application or a micro-service, is turned into a high performance database server. Each, a master, or shall I say, master-less. And, of course, it is object persistence, thus, you just author your golang struct and SOP takes care of fast storage & ultra fast searches and in the order you specified. No need to worry whether you are hitting an index, because each SOP "store"(or B-Tree) is the index itself! :)
+
+Check out the unit tests under "in_red_ck" folder to get idea how to specify the configuration for Cassandra and Redis. Also, if you want to specify the Cassandra consistency level per API, you can take a look at the "ConsistencyBook" field of the Cassandra Config struct. Each of the Repository/Store API CRUD operation has Consistency level settable under the "ConsistencyBook", or you can just leave it and default for the session is, "local quorum".
+
+Cache Duration
+You can specify the Redis cache duration by using the following API:
+  * in_red_ck/cassandra/SetRegistryCacheDuration(duration) - defaults to 12 hrs, but you can specify if needs to cache the registry "virtual Ids" differently.
+  * in_red_ck/cassandra/SetStoreCacheDuration(duration) - defaults to 2 hrs.
+  * in_red_ck/SetNodeCacheDuration(duration) - defaults to 1 hr. Definitely please do change if wanting different cache duration.
+
+The Redis cache is minimally used because our primary is Cassandra DB, which is a very fast DB. BUT yeah, please do change if wanting to benefit with bigger Redis caching. :)
+
+Below discussions are mostly achieved in this SOP V2 POC, I will update and move what ever details did not make it, e.g. the data driver for support of huge blobs to a future, V3 release section.
 
 SOP is a modern database engine within a code library. It is categorized as a NoSql engine, but which because of its scale-ability, is considered to be an enabler, coo-petition/player in the Big Data space.
 
