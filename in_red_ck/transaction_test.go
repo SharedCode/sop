@@ -129,7 +129,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	}
 }
 
-func Test_AddManyPersons(t *testing.T) {
+func Test_AddAndSearchManyPersons(t *testing.T) {
 	trans, err := NewTransaction(true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -181,68 +181,10 @@ func Test_AddManyPersons(t *testing.T) {
 	for i := start; i < end; i++ {
 		pk, _ := newPerson(fmt.Sprintf("tracy%d", i), "swift", "female", "email", "phone")
 		if ok, err := b3.FindOne(ctx, pk, true); !ok || err != nil {
-			t.Errorf("b3.Add('tracy') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+			t.Errorf("b3.FIndOne('%s') failed, got(ok, err) = %v, %v, want = true, nil.", pk.Firstname, ok, err)
 			return
 		}
 	}
 
 	trans.Commit(ctx)
-}
-
-func Test_ManageAndSearchManyPersons(t *testing.T) {
-	// trans, err := NewTransaction(true, -1)
-	// if err != nil {
-	// 	t.Fatalf(err.Error())
-	// }
-
-	// trans.Begin()
-	// b3, err := OpenBtree[PersonKey, Person](ctx, "persondb", trans)
-	// if err != nil {
-	// 	trans.Rollback(ctx)
-	// 	t.Errorf("Error instantiating Btree, details: %v.", err)
-	// 	t.Fail()
-	// }
-
-	// for i := 0; i < 500; i++ {
-	// 	pk, p := newPerson(fmt.Sprintf("tracy%d", i), "swift", "female", "email", "phone")
-	// 	if ok, err := b3.Add(ctx, pk, p); !ok || err != nil {
-	// 		t.Errorf("b3.Add('tracy') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
-	// 		trans.Rollback(ctx)
-	// 		return
-	// 	}
-	// }
-	// trans.Commit(ctx)
-
-	// Now, create a new transaction for reading.
-	trans, err := NewTransaction(false, -1)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-
-	trans.Begin()
-	b3, err := OpenBtree[PersonKey, Person](ctx, "persondb", trans)
-	if err != nil {
-		trans.Rollback(ctx)
-		t.Errorf("Error instantiating Btree, details: %v.", err)
-		t.Fail()
-	}
-
-	for i := 0; i < 500; i++ {
-		pk, p := newPerson(fmt.Sprintf("tracy%d", i), "swift", "female", "email", "phone")
-		if ok, err := b3.FindOne(ctx, pk, true); !ok || err != nil {
-			t.Errorf("b3.FindOne('%s') failed, got(ok, err) = %v, %v, want = true, nil.", pk.Firstname, ok, err)
-			trans.Rollback(ctx)
-			return
-		}
-		pgot, err := b3.GetCurrentValue(ctx)
-		if err != nil {
-			t.Errorf("Error on GetCurrentValue, details: %v", err)
-		}
-		if p.Email != pgot.Email || p.Gender != pgot.Gender || p.Phone != pgot.Phone {
-			t.Errorf("Error on GetCurrentValue, 'didn't get expected person, details: %v", pgot)
-		}
-	}
-	if err := trans.Commit(ctx); err != nil {
-		t.Errorf("Commit failed, details: %v", err)
-	}
 }
