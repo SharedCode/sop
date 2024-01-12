@@ -61,8 +61,6 @@ func NewRegistry() Registry {
 	}
 }
 
-// TODO: finalize Consistency levels to use in below CRUD methods.
-
 func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop.Handle]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")

@@ -43,8 +43,6 @@ func NewStoreRepository() StoreRepository {
 	}
 }
 
-// TODO: finalize Consistency levels to use in below CRUD methods.
-
 var storeCacheDuration = time.Duration(2 * time.Hour)
 
 // SetStoreCacheDuration allows store repository cache duration to get set globally.
