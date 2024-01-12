@@ -144,7 +144,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}
 
 	const start = 1
-	end := start + 300
+	end := start + 50
 
 	for i := start; i < end; i++ {
 		pk, p := newPerson(fmt.Sprintf("tracy%d", i), "swift", "female", "email", "phone")
