@@ -39,6 +39,8 @@ func (x PersonKey) Compare(other interface{}) int {
 	return cmp.Compare[string](x.Firstname, y.Firstname)
 }
 
+const nodeSlotLength = 50
+
 func Test_SimpleAddPerson(t *testing.T) {
 	kafka.Initialize(kafka.DefaultConfig)
 	t.Logf("Transaction story, single b-tree, person record test.\n")
@@ -50,7 +52,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", 4, false, false, false, "", trans)
+	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
 	if err != nil {
 		trans.Rollback(ctx)
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -136,7 +138,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}
 
 	trans.Begin()
-	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", 4, false, false, false, "", trans)
+	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
 	if err != nil {
 		trans.Rollback(ctx)
 		t.Errorf("Error instantiating Btree, details: %v.", err)
