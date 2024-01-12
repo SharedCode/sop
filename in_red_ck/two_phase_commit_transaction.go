@@ -474,9 +474,6 @@ var warnDeleteServiceMissing bool = true
 // Delete the registry entries and unused node blobs.
 func (t *transaction) deleteEntries(ctx context.Context,
 	deletedRegistryIds []cas.RegistryPayload[btree.UUID], unusedNodeIds []cas.BlobsPayload[btree.UUID]) {
-	if len(deletedRegistryIds) == 0 && len(unusedNodeIds) == 0 {
-		return
-	}
 	if len(unusedNodeIds) > 0 {
 		// Delete from Redis the inactive nodes.
 		// Leave the registry keys as there may be other in-flight transactions that need them
@@ -496,7 +493,8 @@ func (t *transaction) deleteEntries(ctx context.Context,
 		if IsDeleteServiceEnabled {
 			_, err := kafka.Enqueue[[]cas.BlobsPayload[btree.UUID]](ctx, unusedNodeIds)
 			if err != nil {
-				log.Error("Kafka Enqueue failed, details: %v", err)
+				log.Error("Kafka Enqueue failed, details: %v, deleting the leftover unused nodes.", err)
+				t.nodeBlobStore.Remove(ctx, unusedNodeIds...)
 			}
 		} else {
 			if warnDeleteServiceMissing {
