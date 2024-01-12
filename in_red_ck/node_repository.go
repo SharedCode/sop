@@ -564,7 +564,6 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []sop.KeyValuePa
 }
 
 func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) []cas.BlobsPayload[btree.UUID] {
-	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
 	bibs := make([]cas.BlobsPayload[btree.UUID], len(nodes))
 	for i := range nodes {
 		bibs[i] = cas.BlobsPayload[btree.UUID]{
@@ -579,7 +578,6 @@ func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*
 }
 
 func (nr *nodeRepository) convertToRegistryRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) []cas.RegistryPayload[btree.UUID] {
-	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
 	vids := make([]cas.RegistryPayload[btree.UUID], len(nodes))
 	for i := range nodes {
 		vids[i] = cas.RegistryPayload[btree.UUID]{

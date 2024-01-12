@@ -136,15 +136,15 @@ func Test_AddManyPersons(t *testing.T) {
 	}
 
 	trans.Begin()
-	b3, err := OpenBtree[PersonKey, Person](ctx, "persondb", trans)
+	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", 4, false, false, false, "", trans)
 	if err != nil {
 		trans.Rollback(ctx)
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
 	}
 
-	const start = 1600
-	end := start + 3
+	const start = 1
+	end := start + 300
 
 	for i := start; i < end; i++ {
 		pk, p := newPerson(fmt.Sprintf("tracy%d", i), "swift", "female", "email", "phone")
@@ -160,14 +160,18 @@ func Test_AddManyPersons(t *testing.T) {
 		return
 	}
 
-	trans, err = NewTransaction(true, -1)
+	trans, err = NewTransaction(false, -1)
 	if err != nil {
 		t.Errorf(err.Error())
 		t.Fail()
 		return
 	}
 
-	trans.Begin()
+	if err := trans.Begin(); err != nil {
+		t.Errorf(err.Error())
+		t.Fail()
+		return
+	}
 
 	b3, err = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
 	if err != nil {
