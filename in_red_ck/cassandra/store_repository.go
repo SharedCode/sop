@@ -130,8 +130,12 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	undo := func(bus []btree.StoreInfo) {
 		// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
 		for ii := 0; ii < len(bus); ii++ {
-			connection.Session.Query(updateStatement, bus[ii].Count, bus[ii].Timestamp,
-				bus[ii].Name).Exec()
+			qry := connection.Session.Query(updateStatement, bus[ii].Count, bus[ii].Timestamp,
+				bus[ii].Name)
+			if connection.Config.ConsistencyBook.StoreUpdate > gocql.Any {
+				qry.Consistency(connection.Config.ConsistencyBook.StoreUpdate)
+			}
+			qry.Exec()
 		}
 	}
 
@@ -154,8 +158,13 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 			stores[i].Timestamp = si.Timestamp
 		}
 
+		qry := connection.Session.Query(updateStatement, stores[i].Count, stores[i].Timestamp, stores[i].Name)
+		if connection.Config.ConsistencyBook.StoreUpdate > gocql.Any {
+			qry.Consistency(connection.Config.ConsistencyBook.StoreUpdate)
+		}
+
 		// Update store record.
-		if err := connection.Session.Query(updateStatement, stores[i].Count, stores[i].Timestamp, stores[i].Name).Exec(); err != nil {
+		if err := qry.Exec(); err != nil {
 			// Undo changes.
 			undo(beforeUpdateStores)
 			return err
@@ -197,7 +206,13 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 	}
 	selectStatement := fmt.Sprintf("SELECT name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, llb, is_del FROM %s.store  WHERE name in (%v);",
 		connection.Config.Keyspace, strings.Join(paramQ, ", "))
-	iter := connection.Session.Query(selectStatement, namesAsIntf...).WithContext(ctx).Iter()
+
+	qry := connection.Session.Query(selectStatement, namesAsIntf...).WithContext(ctx)
+	if connection.Config.ConsistencyBook.StoreGet > gocql.Any {
+		qry.Consistency(connection.Config.ConsistencyBook.StoreGet)
+	}
+
+	iter := qry.Iter()
 	store := btree.StoreInfo{}
 	var rid gocql.UUID
 	for iter.Scan(&store.Name, &rid, &store.SlotLength, &store.Count, &store.IsUnique,

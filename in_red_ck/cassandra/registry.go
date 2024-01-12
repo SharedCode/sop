@@ -22,14 +22,6 @@ type RegistryPayload[T sop.Handle | btree.UUID] struct {
 	IDs []T
 }
 
-func GetRegistryPayloadCount[T btree.UUID](payloads []RegistryPayload[T]) int {
-	total := 0
-	for _, p := range payloads {
-		total = total + len(p.IDs)
-	}
-	return total
-}
-
 // Virtual Id registry is essential in our support for all or nothing (sub)feature,
 // which is essential in "fault tolerant" & "self healing" feature.
 //
@@ -79,9 +71,15 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 		insertStatement := fmt.Sprintf("INSERT INTO %s.%s (lid, is_idb, p_ida, p_idb, ts, wip_ts, is_del) VALUES(?,?,?,?,?,?,?);",
 			connection.Config.Keyspace, sh.RegistryTable)
 		for _, h := range sh.IDs {
+
+			qry := connection.Session.Query(insertStatement, gocql.UUID(h.LogicalId), h.IsActiveIdB, gocql.UUID(h.PhysicalIdA),
+			gocql.UUID(h.PhysicalIdB), h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted).WithContext(ctx)
+			if connection.Config.ConsistencyBook.RegistryAdd > gocql.Any {
+				qry.Consistency(connection.Config.ConsistencyBook.RegistryAdd)
+			}
+
 			// Add a new store record.
-			if err := connection.Session.Query(insertStatement, gocql.UUID(h.LogicalId), h.IsActiveIdB, gocql.UUID(h.PhysicalIdA),
-				gocql.UUID(h.PhysicalIdB), h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted).WithContext(ctx).Exec(); err != nil {
+			if err := qry.Exec(); err != nil {
 				return err
 			}
 			// Tolerate Redis cache failure.
@@ -107,6 +105,10 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		// For now, keep it simple and rely on transaction commit's optimistic locking & multi-phase checks,
 		// together with the logged batch update as shown below.
 		batch := connection.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+		if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
+			batch.SetConsistency(connection.Config.ConsistencyBook.RegistryUpdate)
+		}
+
 		for _, sh := range storesHandles {
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ts = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
 				connection.Config.Keyspace, sh.RegistryTable)
@@ -126,9 +128,15 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				connection.Config.Keyspace, sh.RegistryTable)
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
+
+				qry := connection.Session.Query(updateStatement, h.IsActiveIdB, gocql.UUID(h.PhysicalIdA), gocql.UUID(h.PhysicalIdB),
+				h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId)).WithContext(ctx)
+				if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
+					qry.Consistency(connection.Config.ConsistencyBook.RegistryUpdate)
+				}
+
 				// Update registry record.
-				if err := connection.Session.Query(updateStatement, h.IsActiveIdB, gocql.UUID(h.PhysicalIdA), gocql.UUID(h.PhysicalIdB),
-					h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId)).WithContext(ctx).Exec(); err != nil {
+				if err := qry.Exec(); err != nil {
 					return err
 				}
 			}
@@ -179,7 +187,13 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 		}
 		selectStatement := fmt.Sprintf("SELECT lid, is_idb, p_ida, p_idb, ts, wip_ts, is_del FROM %s.%s WHERE lid in (%v);",
 			connection.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
-		iter := connection.Session.Query(selectStatement, lidsAsIntfs...).WithContext(ctx).Iter()
+
+		qry := connection.Session.Query(selectStatement, lidsAsIntfs...).WithContext(ctx)
+		if connection.Config.ConsistencyBook.RegistryGet > gocql.Any {
+			qry.Consistency(connection.Config.ConsistencyBook.RegistryGet)
+		}
+
+		iter := qry.Iter()
 		handle := sop.Handle{}
 		var lid, ida, idb gocql.UUID
 		for iter.Scan(&lid, &handle.IsActiveIdB, &ida, &idb, &handle.Timestamp, &handle.WorkInProgressTimestamp, &handle.IsDeleted) {
@@ -227,7 +241,13 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 				}
 			}
 		}
-		if err := connection.Session.Query(deleteStatement, lidsAsIntfs...).WithContext(ctx).Exec(); err != nil {
+
+		qry := connection.Session.Query(deleteStatement, lidsAsIntfs...).WithContext(ctx)
+		if connection.Config.ConsistencyBook.RegistryRemove > gocql.Any {
+			qry.Consistency(connection.Config.ConsistencyBook.RegistryRemove)
+		}
+
+		if err := qry.Exec(); err != nil {
 			deleteFromCache()
 			return err
 		}

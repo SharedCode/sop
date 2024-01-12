@@ -12,10 +12,10 @@ import (
 // Assign the configs & open connections to different sub-systems used by this package.
 // Example, connection to Cassandra, Redis.
 func Initialize(cassandraConfig cas.Config, redisConfig redis.Options) error {
-	if _, err := cas.GetConnection(cassandraConfig); err != nil {
+	if _, err := cas.OpenConnection(cassandraConfig); err != nil {
 		return err
 	}
-	if _, err := redis.GetConnection(redisConfig); err != nil {
+	if _, err := redis.OpenConnection(redisConfig); err != nil {
 		return err
 	}
 	return nil

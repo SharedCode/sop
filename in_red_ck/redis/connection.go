@@ -44,7 +44,7 @@ func IsConnectionInstantiated() bool {
 }
 
 // Creates a singleton connection and returns it for every call.
-func GetConnection(options Options) (*Connection, error) {
+func OpenConnection(options Options) (*Connection, error) {
 	if connection != nil {
 		return connection, nil
 	}

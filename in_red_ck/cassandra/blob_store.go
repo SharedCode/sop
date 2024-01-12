@@ -20,6 +20,7 @@ type BlobsPayload[T btree.UUID | sop.KeyValuePair[btree.UUID, interface{}]] stru
 	Blobs []T
 }
 
+// Returns the total number of UUIDs given a set of blobs (Id) payload.
 func GetBlobPayloadCount[T btree.UUID](payloads []BlobsPayload[T]) int {
 	total := 0
 	for _, p := range payloads {
@@ -55,7 +56,11 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobId btree.U
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
 	selectStatement := fmt.Sprintf("SELECT node FROM %s.%s WHERE id in (?);", connection.Config.Keyspace, blobTable)
-	iter := connection.Session.Query(selectStatement, gocql.UUID(blobId)).WithContext(ctx).Iter()
+	qry := connection.Session.Query(selectStatement, gocql.UUID(blobId)).WithContext(ctx)
+	if connection.Config.ConsistencyBook.BlobStoreGet > gocql.Any {
+		qry.Consistency(connection.Config.ConsistencyBook.BlobStoreGet)
+	}
+	iter := qry.Iter()
 	var s string
 	for iter.Scan(&s) {
 	}
@@ -77,7 +82,11 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.Key
 			}
 			insertStatement := fmt.Sprintf("INSERT INTO %s.%s (id, node) VALUES(?,?);",
 				connection.Config.Keyspace, storesblobs[i].BlobTable)
-			if err := connection.Session.Query(insertStatement, gocql.UUID(storesblobs[i].Blobs[ii].Key), string(ba)).WithContext(ctx).Exec(); err != nil {
+			qry := connection.Session.Query(insertStatement, gocql.UUID(storesblobs[i].Blobs[ii].Key), string(ba)).WithContext(ctx)
+			if connection.Config.ConsistencyBook.BlobStoreAdd > gocql.Any {
+				qry.Consistency(connection.Config.ConsistencyBook.BlobStoreAdd)
+			}
+			if err := qry.Exec(); err != nil {
 				return err
 			}
 		}
@@ -96,7 +105,11 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.
 				return err
 			}
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET node = ? WHERE id = ?;", connection.Config.Keyspace, storesblobs[i].BlobTable)
-			if err := connection.Session.Query(updateStatement, string(ba), gocql.UUID(storesblobs[i].Blobs[ii].Key)).WithContext(ctx).Exec(); err != nil {
+			qry := connection.Session.Query(updateStatement, string(ba), gocql.UUID(storesblobs[i].Blobs[ii].Key)).WithContext(ctx)
+			if connection.Config.ConsistencyBook.BlobStoreUpdate > gocql.Any {
+				qry.Consistency(connection.Config.ConsistencyBook.BlobStoreUpdate)
+			}
+			if err := qry.Exec(); err != nil {
 				return err
 			}
 		}
@@ -119,7 +132,11 @@ func (b *blobStore) Remove(ctx context.Context, storesBlobsIds ...BlobsPayload[b
 		}
 		deleteStatement := fmt.Sprintf("DELETE FROM %s.%s WHERE id in (%v);",
 			connection.Config.Keyspace, storeBlobIds.BlobTable, strings.Join(paramQ, ", "))
-		if err := connection.Session.Query(deleteStatement, idsAsIntfs...).WithContext(ctx).Exec(); err != nil {
+		qry := connection.Session.Query(deleteStatement, idsAsIntfs...).WithContext(ctx)
+		if connection.Config.ConsistencyBook.BlobStoreRemove > gocql.Any {
+			qry.Consistency(connection.Config.ConsistencyBook.BlobStoreRemove)
+		}
+		if err := qry.Exec(); err != nil {
 			return err
 		}
 	}

@@ -17,7 +17,7 @@ type user struct {
 
 func TestBasicUse(t *testing.T) {
 	option := DefaultOptions()
-	GetConnection(option)
+	OpenConnection(option)
 	defer CloseConnection()
 
 	c := NewClient()

@@ -8,18 +8,44 @@ import (
 	"github.com/gocql/gocql"
 )
 
+// Config contains the this Cassandra package configuration or configurable variables.
 type Config struct {
+	// Cassandra hosts cluster. 
 	ClusterHosts []string
 	// Keyspace to be used when doing I/O to cassandra.
 	Keyspace string
-	// Consistency
+	// Default Consistency level.
 	Consistency       gocql.Consistency
+	// Connection Timeout.
 	ConnectionTimeout time.Duration
+	// Authenticator.
 	Authenticator     gocql.Authenticator
-	// Defaults to simple strategy & replication factor of 1.
+	// Defaults to "simple strategy & replication factor of 1".
 	ReplicationClause string
+
+	// ConsistencyBook should be used to specify consistency level to use for a given
+	// API, e.g. one for RegistryAdd, another for StoreAdd, etc... if you so choose to.
+	//
+	// You can leave it default and the API will use the default Consistency level
+	// for the cluster (defaults to local quorum).
+	ConsistencyBook ConsistencyBook
 }
 
+// Lists all the available API's consistency level that are settable in this package.
+type ConsistencyBook struct {
+	RegistryAdd gocql.Consistency
+	RegistryUpdate gocql.Consistency
+	RegistryGet gocql.Consistency
+	RegistryRemove gocql.Consistency
+	StoreGet gocql.Consistency
+	StoreUpdate gocql.Consistency
+	BlobStoreAdd gocql.Consistency
+	BlobStoreGet gocql.Consistency
+	BlobStoreUpdate gocql.Consistency
+	BlobStoreRemove gocql.Consistency
+}
+
+// Connection has the Session and the config used to open/create a session.
 type Connection struct {
 	Session *gocql.Session
 	Config
@@ -33,9 +59,9 @@ func IsConnectionInstantiated() bool {
 	return connection != nil
 }
 
-// GetConnection will create(& return) a new Connection to Cassandra if there is not one yet,
+// OpenConnection will create(& return) a new Connection to Cassandra if there is not one yet,
 // otherwise, will just return existing singleton connection.
-func GetConnection(config Config) (*Connection, error) {
+func OpenConnection(config Config) (*Connection, error) {
 	if connection != nil {
 		return connection, nil
 	}
@@ -50,8 +76,8 @@ func GetConnection(config Config) (*Connection, error) {
 		config.Keyspace = "btree"
 	}
 	if config.Consistency == gocql.Any {
-		// Defaults to One consistency. You should set it to an appropriate level.
-		config.Consistency = gocql.One
+		// Defaults to LocalQuorum consistency. You should set it to an appropriate level.
+		config.Consistency = gocql.LocalQuorum
 	}
 	cluster := gocql.NewCluster(config.ClusterHosts...)
 	cluster.Consistency = config.Consistency
