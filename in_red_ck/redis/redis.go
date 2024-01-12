@@ -73,7 +73,7 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
 	// serialize User object to JSON
-	json, err := json.Marshal(value)
+	ba, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 	if expiration < 0 {
 		expiration = connection.Options.GetDefaultDuration()
 	}
-	return connection.Client.Set(ctx, key, string(json), expiration).Err()
+	return connection.Client.Set(ctx, key, ba, expiration).Err()
 }
 
 // GetStruct executes the redis Get command
@@ -92,9 +92,9 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) e
 	if target == nil {
 		return fmt.Errorf("target can't be nil")
 	}
-	jsonString, err := connection.Client.Get(ctx, key).Result()
+	ba, err := connection.Client.Get(ctx, key).Bytes()
 	if err == nil {
-		err = json.Unmarshal([]byte(jsonString), target)
+		err = json.Unmarshal(ba, target)
 	}
 	if err == redis.Nil {
 		return err

@@ -68,7 +68,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 			return err
 		}
 		// Create a new Blob table.
-		createNewBlobTable := fmt.Sprintf("CREATE TABLE %s.%s(id UUID PRIMARY KEY, node text);", connection.Config.Keyspace, s.BlobTable)
+		createNewBlobTable := fmt.Sprintf("CREATE TABLE %s.%s(id UUID PRIMARY KEY, node blob);", connection.Config.Keyspace, s.BlobTable)
 		if err := connection.Session.Query(createNewBlobTable).WithContext(ctx).Exec(); err != nil {
 			return err
 		}

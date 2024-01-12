@@ -61,13 +61,13 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobId btree.U
 		qry.Consistency(connection.Config.ConsistencyBook.BlobStoreGet)
 	}
 	iter := qry.Iter()
-	var s string
-	for iter.Scan(&s) {
+	var ba []byte
+	for iter.Scan(&ba) {
 	}
 	if err := iter.Close(); err != nil {
 		return err
 	}
-	return json.Unmarshal([]byte(s), target)
+	return json.Unmarshal(ba, target)
 }
 
 func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]]) error {
@@ -82,7 +82,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.Key
 			}
 			insertStatement := fmt.Sprintf("INSERT INTO %s.%s (id, node) VALUES(?,?);",
 				connection.Config.Keyspace, storesblobs[i].BlobTable)
-			qry := connection.Session.Query(insertStatement, gocql.UUID(storesblobs[i].Blobs[ii].Key), string(ba)).WithContext(ctx)
+			qry := connection.Session.Query(insertStatement, gocql.UUID(storesblobs[i].Blobs[ii].Key), ba).WithContext(ctx)
 			if connection.Config.ConsistencyBook.BlobStoreAdd > gocql.Any {
 				qry.Consistency(connection.Config.ConsistencyBook.BlobStoreAdd)
 			}
@@ -105,7 +105,7 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.
 				return err
 			}
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET node = ? WHERE id = ?;", connection.Config.Keyspace, storesblobs[i].BlobTable)
-			qry := connection.Session.Query(updateStatement, string(ba), gocql.UUID(storesblobs[i].Blobs[ii].Key)).WithContext(ctx)
+			qry := connection.Session.Query(updateStatement, ba, gocql.UUID(storesblobs[i].Blobs[ii].Key)).WithContext(ctx)
 			if connection.Config.ConsistencyBook.BlobStoreUpdate > gocql.Any {
 				qry.Consistency(connection.Config.ConsistencyBook.BlobStoreUpdate)
 			}
