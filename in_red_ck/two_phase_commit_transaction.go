@@ -107,7 +107,7 @@ func (t *transaction) Phase1Commit(ctx context.Context) error {
 	}
 	if err := t.phase1Commit(ctx); err != nil {
 		t.phaseDone = 2
-		if rerr := t.rollback(ctx, false); rerr != nil {
+		if rerr := t.rollback(ctx); rerr != nil {
 			return fmt.Errorf("Phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
 		return fmt.Errorf("Phase 1 commit failed, details: %v", err)
@@ -130,7 +130,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
-		if rerr := t.rollback(ctx, false); rerr != nil {
+		if rerr := t.rollback(ctx); rerr != nil {
 			return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
 		return fmt.Errorf("Phase 2 commit failed, details: %v", err)
@@ -150,8 +150,9 @@ func (t *transaction) Rollback(ctx context.Context) error {
 	return nil
 }
 
+// Transaction has begun if it is has begun & not yet committed/rolled back.
 func (t *transaction) HasBegun() bool {
-	return t.phaseDone >= 0
+	return t.phaseDone >= 0 && t.phaseDone < 2
 }
 
 func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
@@ -241,15 +242,17 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 		if !successful {
 			// Rollback partial changes.
-			t.rollback(ctx, true)
+			t.rollback(ctx)
 
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
 			sleepTime := rand.Intn(4+1) + 5
 			sleep(ctx, sleepTime)
 
-			// Recreate the changes on latest committed nodes, if there is no conflict.
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
+				return err
+			}
+			if err = t.lockTrackedItems(ctx); err != nil {
 				return err
 			}
 		}
@@ -509,7 +512,7 @@ func (t *transaction) deleteEntries(ctx context.Context,
 	t.registry.Remove(ctx, deletedRegistryIds...)
 }
 
-func (t *transaction) rollback(ctx context.Context, forRetry bool) error {
+func (t *transaction) rollback(ctx context.Context) error {
 	if t.logger.committedState == unlockTrackedItems {
 		// This state should not be reached and rollback invoked, but return an error about it, in case.
 		return fmt.Errorf("Transaction got committed, 'can't rollback it")
@@ -544,17 +547,13 @@ func (t *transaction) rollback(ctx context.Context, forRetry bool) error {
 			lastErr = err
 		}
 	}
-	// Don't unlock tracked item since rollback is for retry, inner scope of tracked items locking.
-	if forRetry {
-		// Rewind the transactoin log in case retry will check it.
-		t.logger.log(commitNewRootNodes)
-		return lastErr
-	}
-	if t.logger.committedState > lockTrackedItems {
+	if t.logger.committedState >= lockTrackedItems {
 		if err := t.unlockTrackedItems(ctx); err != nil {
 			lastErr = err
 		}
 	}
+	// Rewind the transactoin log in case retry will check it.
+	t.logger.log(unknown)
 
 	return lastErr
 }
