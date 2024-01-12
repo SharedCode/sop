@@ -458,6 +458,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 	}
 	blobsIds := make([]cas.BlobsPayload[btree.UUID], len(nodes))
 	for i := range handles {
+		blobsIds[i].BlobTable = btree.ConvertToBlobTableName(vids[i].RegistryTable)
 		blobsIds[i].Blobs = make([]btree.UUID, len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			blobsIds[i].Blobs[ii] = handles[i].IDs[ii].GetInActiveId()
