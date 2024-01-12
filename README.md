@@ -80,6 +80,7 @@ You can specify the Redis cache duration by using the following API:
   * in_red_ck/cassandra/SetRegistryCacheDuration(duration) - defaults to 12 hrs, but you can specify if needs to cache the registry "virtual Ids" differently.
   * in_red_ck/cassandra/SetStoreCacheDuration(duration) - defaults to 2 hrs.
   * in_red_ck/SetNodeCacheDuration(duration) - defaults to 1 hr. Definitely please do change if wanting different cache duration.
+
 The Redis cache is minimally used because our primary is Cassandra DB, which is a very fast DB. BUT yeah, please do change if wanting to benefit with bigger Redis caching. :)
 
 Below discussions are mostly achieved in this SOP V2 POC, I will update and move what ever details did not make it, e.g. the data driver for support of huge blobs to a future, V3 release section.
