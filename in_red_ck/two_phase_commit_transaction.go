@@ -372,6 +372,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.
 func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
+	log.Info("Same Node(s) are being modified elsewhere, 'will refetch and re-merge changes in...")
 	for i := range t.btreesBackend {
 		if err := t.btreesBackend[i].refetchAndMerge(ctx); err != nil {
 			return err
