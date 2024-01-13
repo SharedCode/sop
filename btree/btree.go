@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	log "log/slog"
-	"time"
 )
 
 // Btree manages items using B-tree data structure and algorithm.
@@ -448,7 +447,7 @@ func (btree *Btree[TK, TV]) getRootNode(ctx context.Context) (*Node[TK, TV], err
 			return root, nil
 		}
 		root.Id = btree.StoreInfo.RootNodeId
-		root.Timestamp = time.Now().UnixMilli()
+		root.Version = 1
 		return root, nil
 	}
 	root, err := btree.getNode(ctx, btree.StoreInfo.RootNodeId)

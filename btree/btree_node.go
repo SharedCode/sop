@@ -9,8 +9,8 @@ import (
 // MetaDataType specifies that an object has meta data such as Id & Timestamp fields.
 type MetaDataType interface {
 	GetId() UUID
-	GetTimestamp() int64
-	SetTimestamp(ts int64)
+	GetVersion() int
+	SetVersion(v int)
 }
 
 // Item contains key & value pair, plus the version number.
@@ -25,8 +25,8 @@ type Item[TK Comparable, TV any] struct {
 	// Value is saved nil if data is to be persisted in the "data segment"(& ValueId set to a valid UUID),
 	// otherwise it should point to the actual data and persisted in B-Tree Node segment together with the Key.
 	Value *TV
-	// Upsert time in milliseconds, is also used for conflict resolution among (in-flight) transactions.
-	Timestamp       int64
+	// Version is used for conflict resolution among (in-flight) transactions.
+	Version         int
 	valueNeedsFetch bool
 }
 
@@ -44,7 +44,7 @@ type Node[TK Comparable, TV any] struct {
 	ParentId    UUID
 	Slots       []*Item[TK, TV]
 	Count       int
-	Timestamp   int64
+	Version     int
 	indexOfNode int
 	ChildrenIds []UUID
 }
@@ -52,11 +52,11 @@ type Node[TK Comparable, TV any] struct {
 func (n *Node[TK, TV]) GetId() UUID {
 	return n.Id
 }
-func (n *Node[TK, TV]) GetTimestamp() int64 {
-	return n.Timestamp
+func (n *Node[TK, TV]) GetVersion() int {
+	return n.Version
 }
-func (n *Node[TK, TV]) SetTimestamp(ts int64) {
-	n.Timestamp = ts
+func (n *Node[TK, TV]) SetVersion(v int) {
+	n.Version = v
 }
 
 // newNode creates a new node.

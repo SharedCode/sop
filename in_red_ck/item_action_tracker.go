@@ -25,9 +25,9 @@ type lockRecord struct {
 type cacheItem[TK btree.Comparable, TV any] struct {
 	lockRecord
 	item *btree.Item[TK, TV]
-	// upsert time in milliseconds.
-	timestampInDB int64
-	isLockOwner   bool
+	// Version of the item as read from DB.
+	versionInDB int
+	isLockOwner bool
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
@@ -64,8 +64,8 @@ func (t *itemActionTracker[TK, TV]) Get(item *btree.Item[TK, TV]) {
 				LockId: btree.NewUUID(),
 				Action: getAction,
 			},
-			item: item,
-			timestampInDB: item.Timestamp,
+			item:        item,
+			versionInDB: item.Version,
 		}
 	}
 }
@@ -76,15 +76,22 @@ func (t *itemActionTracker[TK, TV]) Add(item *btree.Item[TK, TV]) {
 			LockId: btree.NewUUID(),
 			Action: addAction,
 		},
-		item:          item,
-		timestampInDB: item.Timestamp,
+		item:        item,
+		versionInDB: item.Version,
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
-	item.Timestamp = Now()
+	item.Version++
 }
 
 func (t *itemActionTracker[TK, TV]) Update(item *btree.Item[TK, TV]) {
-	if v, ok := t.items[item.Id]; ok && v.Action == addAction {
+	v, ok := t.items[item.Id]
+	if ok {
+		if v.Action == addAction {
+			return
+		}
+		v.lockRecord.Action = updateAction
+		v.item = item
+		t.items[item.Id] = v
 		return
 	}
 	t.items[item.Id] = cacheItem[TK, TV]{
@@ -92,11 +99,11 @@ func (t *itemActionTracker[TK, TV]) Update(item *btree.Item[TK, TV]) {
 			LockId: btree.NewUUID(),
 			Action: updateAction,
 		},
-		item:          item,
-		timestampInDB: item.Timestamp,
+		item:        item,
+		versionInDB: item.Version,
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
-	item.Timestamp = Now()
+	item.Version++
 }
 
 func (t *itemActionTracker[TK, TV]) Remove(item *btree.Item[TK, TV]) {
@@ -110,11 +117,12 @@ func (t *itemActionTracker[TK, TV]) Remove(item *btree.Item[TK, TV]) {
 			Action: removeAction,
 		},
 		item: item,
+		versionInDB: item.Version,
 	}
 }
 
 // lock the tracked items in Redis in preparation to finalize the transaction commit.
-// This should work in combination of optimistic locking implemented by hasConflict above.
+// This should work in combination of optimistic locking.
 func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error {
 	for uuid, cachedItem := range t.items {
 		var readItem lockRecord
@@ -130,6 +138,9 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, itemRedisCache red
 			if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.ToString()), &readItem); err != nil {
 				return err
 			} else if readItem.LockId != cachedItem.LockId {
+				if readItem.LockId.IsNil() {
+					return fmt.Errorf("lock(item: %v) call can't attain a lock in Redis", uuid)
+				}
 				return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
 			}
 			// We got the item locked, ensure we can unlock it.
@@ -157,9 +168,7 @@ func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context, itemRedisCache r
 			continue
 		}
 		if err := itemRedisCache.Delete(ctx, redis.FormatLockKey(uuid.ToString())); err != nil {
-			if !redis.KeyNotFound(err) {
-				lastErr = err
-			}
+			lastErr = err
 		}
 	}
 	return lastErr

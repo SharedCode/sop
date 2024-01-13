@@ -47,7 +47,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		trans.Rollback(ctx)
 		return
 	}
-	if _, err := OpenBtree[int, string](ctx, "fooStore", trans); err == nil {
+	if _, err := OpenBtree[int, string](ctx, "fooStore22", trans); err == nil {
 		t.Logf("OpenBtree('fooStore', trans) failed, got nil want error.")
 		trans.Rollback(ctx)
 	}

@@ -123,7 +123,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 		if err = nr.transaction.nodeBlobStore.GetOne(ctx, nr.storeInfo.BlobTable, nodeId, target); err != nil {
 			return nil, err
 		}
-		target.(btree.MetaDataType).SetTimestamp(h[0].IDs[0].Timestamp)
+		target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
 		if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(nodeId.ToString()), target, nodeCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("Failed to cache in Redis the newly fetched node with Id: %v, details: %v", nodeId, err))
 		}
@@ -133,7 +133,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 		}
 		return target, nil
 	}
-	target.(btree.MetaDataType).SetTimestamp(h[0].IDs[0].Timestamp)
+	target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
 	nr.nodeLocalCache[logicalId] = cacheNode{
 		action: getAction,
 		node:   target,
@@ -242,7 +242,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 		inactiveBlobIds[i].Blobs = make([]btree.UUID, 0, len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			// Node with such Id is marked deleted or had been updated since reading it.
-			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Timestamp != nodes[i].Value[ii].(btree.MetaDataType).GetTimestamp() {
+			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
 				return false, nil
 			}
 			// Create new phys. UUID and auto-assign it to the available phys. Id(A or B) "Id slot".
@@ -309,7 +309,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Ke
 		for ii := range handles[i].IDs {
 			// Node with such Id is already marked deleted, is in-flight change or had been updated since reading it,
 			// fail it for "refetch" & retry.
-			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].IsAandBinUse() || handles[i].IDs[ii].Timestamp != nodes[i].Value[ii].(btree.MetaDataType).GetTimestamp() {
+			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].IsAandBinUse() || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
 				return false, nil
 			}
 			// Mark Id as deleted.
@@ -337,7 +337,6 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 	}
 	handles := make([]cas.RegistryPayload[sop.Handle], len(nodes))
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]], len(nodes))
-	rightNow := Now()
 	for i := range nodes {
 		handles[i].RegistryTable = nodes[i].Key.RegistryTable
 		handles[i].IDs = make([]sop.Handle, len(nodes[i].Value))
@@ -347,8 +346,8 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 			metaData := nodes[i].Value[ii].(btree.MetaDataType)
 			// Add node to blob store.
 			h := sop.NewHandle(metaData.GetId())
-			// Update upsert time.
-			h.Timestamp = rightNow
+			// Increment version.
+			h.Version++
 			blobs[i].Blobs[ii].Key = metaData.GetId()
 			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
 			handles[i].IDs[ii] = h
@@ -381,7 +380,7 @@ func (nr *nodeRepository) areFetchedNodesIntact(ctx context.Context, nodes []sop
 	for i := range handles {
 		for ii := range handles[i].IDs {
 			// Node with Id had been updated(or deleted) since reading it.
-			if handles[i].IDs[ii].Timestamp != nodes[i].Value[ii].(btree.MetaDataType).GetTimestamp() {
+			if handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
 				return false, nil
 			}
 		}
@@ -539,13 +538,12 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []sop
 	if err != nil {
 		return nil, err
 	}
-	rightNow := Now()
 	for i := range nodes {
 		for ii := range nodes[i].Value {
 			// Set the inactive as active Id.
 			handles[i].IDs[ii].FlipActiveId()
-			// Update upsert time, we are finalizing the commit for the node.
-			handles[i].IDs[ii].Timestamp = rightNow
+			// Increment version, we are finalizing the commit for the node.
+			handles[i].IDs[ii].Version++
 			// Set work in progress timestamp to now as safety. After flipping inactive to active,
 			// the previously active Id if not "cleaned up" then this timestamp will allow future
 			// transactions to clean it up(self healing).
@@ -566,11 +564,10 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []sop.KeyValuePa
 	if err != nil {
 		return nil, err
 	}
-	rightNow := Now()
 	for i := range handles {
 		for ii := range handles[i].IDs {
 			// Update upsert time, we are finalizing the commit for the node.
-			handles[i].IDs[ii].Timestamp = rightNow
+			handles[i].IDs[ii].Version++
 			handles[i].IDs[ii].WorkInProgressTimestamp = 0
 		}
 	}

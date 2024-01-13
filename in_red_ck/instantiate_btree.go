@@ -164,7 +164,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 			}
 
 			// Check if the item read from backend has been updated since the time we read it.
-			if item, err := b3.GetCurrentItem(ctx); err != nil || item.Timestamp != ci.timestampInDB {
+			if item, err := b3.GetCurrentItem(ctx); err != nil || item.Version != ci.versionInDB {
 				if err != nil {
 					return err
 				}

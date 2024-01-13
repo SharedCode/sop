@@ -135,7 +135,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (btr
 	if !b3.transaction.HasBegun() {
 		return zero, fmt.Errorf(transHasNotBegunErrorMsg)
 	}
-	return b3.GetCurrentItem(ctx)
+	return b3.btree.GetCurrentItem(ctx)
 }
 
 // First positions the "cursor" to the first item as per key ordering.

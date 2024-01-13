@@ -71,7 +71,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 			return err
 		}
 		// Create a new Virtual ID registry table.
-		createNewRegistry := fmt.Sprintf("CREATE TABLE %s.%s(lid UUID PRIMARY KEY, is_idb boolean, p_ida UUID, p_idb UUID, ts bigint, wip_ts bigint, is_del boolean);",
+		createNewRegistry := fmt.Sprintf("CREATE TABLE %s.%s(lid UUID PRIMARY KEY, is_idb boolean, p_ida UUID, p_idb UUID, ver int, wip_ts bigint, is_del boolean);",
 			connection.Config.Keyspace, s.RegistryTable)
 		if err := connection.Session.Query(createNewRegistry).WithContext(ctx).Exec(); err != nil {
 			return err

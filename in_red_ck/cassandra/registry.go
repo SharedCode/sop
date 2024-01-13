@@ -66,12 +66,12 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
 	for _, sh := range storesHandles {
-		insertStatement := fmt.Sprintf("INSERT INTO %s.%s (lid, is_idb, p_ida, p_idb, ts, wip_ts, is_del) VALUES(?,?,?,?,?,?,?);",
+		insertStatement := fmt.Sprintf("INSERT INTO %s.%s (lid, is_idb, p_ida, p_idb, ver, wip_ts, is_del) VALUES(?,?,?,?,?,?,?);",
 			connection.Config.Keyspace, sh.RegistryTable)
 		for _, h := range sh.IDs {
 
 			qry := connection.Session.Query(insertStatement, gocql.UUID(h.LogicalId), h.IsActiveIdB, gocql.UUID(h.PhysicalIdA),
-			gocql.UUID(h.PhysicalIdB), h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted).WithContext(ctx)
+				gocql.UUID(h.PhysicalIdB), h.Version, h.WorkInProgressTimestamp, h.IsDeleted).WithContext(ctx)
 			if connection.Config.ConsistencyBook.RegistryAdd > gocql.Any {
 				qry.Consistency(connection.Config.ConsistencyBook.RegistryAdd)
 			}
@@ -108,12 +108,12 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		}
 
 		for _, sh := range storesHandles {
-			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ts = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
+			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
 				connection.Config.Keyspace, sh.RegistryTable)
 			for _, h := range sh.IDs {
 				// Update registry record.
 				batch.Query(updateStatement, h.IsActiveIdB, gocql.UUID(h.PhysicalIdA), gocql.UUID(h.PhysicalIdB),
-					h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId))
+					h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId))
 			}
 		}
 		// Failed update all, thus, return err to cause rollback.
@@ -122,13 +122,13 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		}
 	} else {
 		for _, sh := range storesHandles {
-			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ts = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
+			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
 				connection.Config.Keyspace, sh.RegistryTable)
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
 
 				qry := connection.Session.Query(updateStatement, h.IsActiveIdB, gocql.UUID(h.PhysicalIdA), gocql.UUID(h.PhysicalIdB),
-				h.Timestamp, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId)).WithContext(ctx)
+					h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalId)).WithContext(ctx)
 				if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
 					qry.Consistency(connection.Config.ConsistencyBook.RegistryUpdate)
 				}
@@ -183,7 +183,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 			})
 			continue
 		}
-		selectStatement := fmt.Sprintf("SELECT lid, is_idb, p_ida, p_idb, ts, wip_ts, is_del FROM %s.%s WHERE lid in (%v);",
+		selectStatement := fmt.Sprintf("SELECT lid, is_idb, p_ida, p_idb, ver, wip_ts, is_del FROM %s.%s WHERE lid in (%v);",
 			connection.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
 
 		qry := connection.Session.Query(selectStatement, lidsAsIntfs...).WithContext(ctx)
@@ -194,7 +194,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 		iter := qry.Iter()
 		handle := sop.Handle{}
 		var lid, ida, idb gocql.UUID
-		for iter.Scan(&lid, &handle.IsActiveIdB, &ida, &idb, &handle.Timestamp, &handle.WorkInProgressTimestamp, &handle.IsDeleted) {
+		for iter.Scan(&lid, &handle.IsActiveIdB, &ida, &idb, &handle.Version, &handle.WorkInProgressTimestamp, &handle.IsDeleted) {
 			handle.LogicalId = btree.UUID(lid)
 			handle.PhysicalIdA = btree.UUID(ida)
 			handle.PhysicalIdB = btree.UUID(idb)

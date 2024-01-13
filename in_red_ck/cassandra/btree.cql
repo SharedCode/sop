@@ -41,7 +41,7 @@ create table foo_r(
     is_idb boolean,
     p_ida UUID,
     p_idb UUID,
-    ts bigint,
+    ver int,
     wip_ts bigint,
     is_del boolean
 );
