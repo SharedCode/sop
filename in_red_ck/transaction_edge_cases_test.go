@@ -5,17 +5,16 @@ import (
 )
 
 /*
-  - Two transactions updating different items with collision on 1 item.
-  - Two transactions updating different items with no collision but items' keys are sequential/contiguous between the two.
   - One transaction updates a colliding item in 1st and a 2nd trans, updates the colliding item as last.
-  - Transaction rolls back, new transaction is fine.
-  - Transactions roll back, new completes fine.
   - Reader transaction succeeds.
   - Reader transaction fails commit when an item read was modified by another transaction in-flight.
   - [add more test cases here...]
 */
 
+// Covers both of these cases:
 // Two transactions updating same item.
+// Two transactions updating different items with collision on 1 item.
+// Transaction rolls back, new completes fine.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t.Logf("Transaction story, single b-tree, person record test.\n")
 
@@ -47,6 +46,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	b32, _ := OpenBtree[PersonKey, Person](ctx, "persondb", t2)
 
   // edit "peter parker" in both btrees.
+  pk3, p3 := newPerson("gokue", "kakarot", "male", "email", "phone")
+  b3.Add(ctx, pk3, p3)
   b3.FindOne(ctx, pk2, false)
   p2.SSN = "789"
   b3.UpdateCurrentItem(ctx, p2)
@@ -58,11 +59,11 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
   // Commit t1 & t2.
 	err1 := t1.Commit(ctx)
 	err2 := t2.Commit(ctx)
-  if err1 == nil && err2 == nil {
-    t.Error("Expecting 1 or 2 commit(s) to fail but both succeeded.")
+  if err1 != nil {
+    t.Error("Commit #1, got = fail, want = success.")
   }
-  if err1 != nil && err2 != nil {
-    t.Error("Expecting 1 or 2 commit(s) to succeed but both failed.")
+  if err2 == nil {
+    t.Error("Commit #2, got = succeess, want = fail.")
   }
   t1,_ = NewTransaction(false, -1)
   t1.Begin()
@@ -85,7 +86,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
   }
 }
 
-// Two transactions updating different items with no collision but items' keys are sequential/contiguous between the two.
+// Two transactions updating different items with no collision but items'
+// keys are sequential/contiguous between the two.
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	t.Logf("Transaction story, single b-tree, person record test.\n")
 
