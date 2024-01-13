@@ -166,8 +166,8 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 }
 
 // sleep with context.
-func sleep(ctx context.Context, sleepTime int) {
-	sleep, cancel := context.WithTimeout(ctx, time.Second*time.Duration(sleepTime))
+func sleep(ctx context.Context, sleepTime time.Duration) {
+	sleep, cancel := context.WithTimeout(ctx, sleepTime)
 	defer cancel()
 	<-sleep.Done()
 }
@@ -246,8 +246,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
-			sleepTime := rand.Intn(3) + 1
-			sleep(ctx, sleepTime)
+			sleepTime := 300 + (1+rand.Intn(7))*100
+			sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
 				return err
@@ -360,8 +360,8 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 
 		// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 		// (in-flight) to retry on different times.
-		sleepTime := rand.Intn(3) + 1
-		sleep(ctx, sleepTime)
+		sleepTime := 300 + (1+rand.Intn(7))*100
+		sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 
 		// Recreate the fetches on latest committed nodes & check if fetched Items are unchanged.
 		if err := t.refetchAndMergeModifications(ctx); err != nil {
