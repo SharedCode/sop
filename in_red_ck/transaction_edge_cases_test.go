@@ -6,7 +6,6 @@ import (
 
 /*
   - One transaction updates a colliding item in 1st and a 2nd trans, updates the colliding item as last.
-  - Reader transaction succeeds.
   - Reader transaction fails commit when an item read was modified by another transaction in-flight.
   - [add more test cases here...]
 */
@@ -15,6 +14,7 @@ import (
 // Two transactions updating same item.
 // Two transactions updating different items with collision on 1 item.
 // Transaction rolls back, new completes fine.
+// Reader transaction succeeds.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t.Logf("Transaction story, single b-tree, person record test.\n")
 

@@ -395,24 +395,31 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, nodes []sop.
 	}
 	bibs := nr.convertToBlobRequestPayload(nodes)
 	vids := nr.convertToRegistryRequestPayload(nodes)
+	var lastErr error
 	// Undo on blob store & redis.
 	if err := nr.transaction.nodeBlobStore.Remove(ctx, bibs...); err != nil {
-		return err
+		lastErr = fmt.Errorf("Unable to undo new root nodes, %v, error: %v", bibs, err)
+		log.Error(lastErr.Error())
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Value {
-			if err := nr.transaction.redisCache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].ToString())); err != nil {
-				return err
+			if err := nr.transaction.redisCache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].ToString())); err != nil && !redis.KeyNotFound(err) {
+				err = fmt.Errorf("Unable to undo new root nodes in redis, error: %v", err)
+				if lastErr == nil {
+					lastErr = err
+				}
+				log.Warn(err.Error())
 			}
 		}
 	}
 	// If we're able to commit roots in registry then they are "ours", we need to unregister.
 	if nr.transaction.logger.committedState > commitNewRootNodes {
 		if err := nr.transaction.registry.Remove(ctx, vids...); err != nil {
-			return err
+			lastErr = fmt.Errorf("Unable to undo new root nodes registration, %v, error: %v", vids, err)
+			log.Error(lastErr.Error())
 		}
 	}
-	return nil
+	return lastErr
 }
 
 func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) error {
@@ -501,6 +508,8 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []sop.
 	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
+		err = fmt.Errorf("Unable to fetch removed nodes from registry, %v, error: %v", vids, err)
+		log.Error(err.Error())
 		return err
 	}
 	for i := range handles {
@@ -512,7 +521,12 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []sop.
 	}
 
 	// Persist the handles changes.
-	return nr.transaction.registry.Update(ctx, false, handles...)
+	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
+		err = fmt.Errorf("Unable to undo removed nodes in registry, %v, error: %v", handles, err)
+		log.Error(err.Error())
+		return err
+	}
+	return nil
 }
 
 // Set to active the inactive nodes. This is the last persistence step in transaction commit.

@@ -246,7 +246,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
-			sleepTime := rand.Intn(4+1) + 1
+			sleepTime := rand.Intn(3) + 1
 			sleep(ctx, sleepTime)
 
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
@@ -360,7 +360,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 
 		// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 		// (in-flight) to retry on different times.
-		sleepTime := rand.Intn(4+1) + 1
+		sleepTime := rand.Intn(3) + 1
 		sleep(ctx, sleepTime)
 
 		// Recreate the fetches on latest committed nodes & check if fetched Items are unchanged.
