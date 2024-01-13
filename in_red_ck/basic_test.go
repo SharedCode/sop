@@ -2,6 +2,7 @@ package in_red_ck
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/SharedCode/sop/in_red_ck/cassandra"
@@ -35,7 +36,6 @@ var ctx = context.Background()
 // come/volunteer then the approach will change.
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	t.Logf("Transaction story test.\n")
 	trans, err := NewTransaction(true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -54,7 +54,6 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 }
 
 func Test_TransactionStory_SingleBTree(t *testing.T) {
-	t.Logf("Transaction story test.\n")
 	// 1. Open a transaction
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
@@ -94,22 +93,53 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	}
 }
 
-func Test_TransactionStory_ManyBTree(t *testing.T) {
-	t.Logf("Transaction story test.\n")
-	// 1. Open a transaction
-	// 2. Instantiate a BTree
-	// 3. Instantiate a BTree2
-	// 3. Do CRUD on BTree & BTree2
-	// 4. Commit Transaction
-}
+func Test_VolumeAddThenSearch(t *testing.T) {
 
-func Test_TransactionManagerStory(t *testing.T) {
-	t.Logf("Transaction Manager story test.\n")
-	// 1. Instantiate transaction manager
-	// 2. All BTrees should now be "transactional" implicitly, i.e. - BTree will create/commit
-	//    transaction if there is not one, or explicitly, i.e. - user invoked begin/commit transaction.
-	// 3. All BTrees should be registered/accounted for in the active Transaction where they got instantiated/CRUDs.
-	//    - On Commit, transaction will persist all changes in all BTrees it accounted for.
-	//    - On Rollback, transaction will undo or not save the canged done in all BTree it accounted for.
-	//
+	start := 9001
+	end := 100000
+	batchSize := 100
+
+	t1, _ := NewTransaction(true, -1)
+	t1.Begin()
+	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	pk, _ := newPerson("jack", fmt.Sprintf("reepper%d", start), "male", "email very very long long long", "phone123")
+
+	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
+	// for scheduled batch deletes.
+	if found,_  := b3.FindOne(ctx, pk, false); !found {
+		for i := start; i <= end; i++ {
+			pk, p := newPerson("jack", fmt.Sprintf("reepper%d", i), "male", "email very very long long long", "phone123")
+			b3.Add(ctx, pk, p)
+			if i % batchSize == 0 {
+				t1.Commit(ctx)
+				t1, _ = NewTransaction(true, -1)
+				t1.Begin()
+				b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+			}
+		}
+	}
+
+	// Search them all. Searching 90,000 items just took few seconds in my laptop.
+	for i := start; i <= end; i++ {
+		lname := fmt.Sprintf("reepper%d", i)
+		pk, _ := newPerson("jack", lname, "male", "email very very long long long", "phone123")
+		if found, err := b3.FindOne(ctx, pk, false); !found || err != nil {
+			t.Error(err.Error())
+			t.Fail()
+		}
+		ci, _ := b3.GetCurrentItem(ctx)
+		if ci.Value.Phone != "phone123" || ci.Key.Lastname != lname {
+			t.Error(fmt.Errorf("Did not find the correct person with phone123 & lname %s", lname))
+			t.Fail()
+		}
+		if i % batchSize == 0 {
+			if err := t1.Commit(ctx); err != nil {
+				t.Error(err.Error())
+				t.Fail()
+			}
+			t1, _ = NewTransaction(false, -1)
+			t1.Begin()
+			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+		}
+	}
 }
