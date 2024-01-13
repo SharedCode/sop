@@ -26,8 +26,8 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 	lockRecord
 	item *btree.Item[TK, TV]
 	// upsert time in milliseconds.
-	upsertTimeInDB int64
-	isLockOwner    bool
+	timestampInDB int64
+	isLockOwner   bool
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
@@ -65,6 +65,7 @@ func (t *itemActionTracker[TK, TV]) Get(item *btree.Item[TK, TV]) {
 				Action: getAction,
 			},
 			item: item,
+			timestampInDB: item.Timestamp,
 		}
 	}
 }
@@ -75,8 +76,8 @@ func (t *itemActionTracker[TK, TV]) Add(item *btree.Item[TK, TV]) {
 			LockId: btree.NewUUID(),
 			Action: addAction,
 		},
-		item:           item,
-		upsertTimeInDB: item.Timestamp,
+		item:          item,
+		timestampInDB: item.Timestamp,
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
 	item.Timestamp = Now()
@@ -91,8 +92,8 @@ func (t *itemActionTracker[TK, TV]) Update(item *btree.Item[TK, TV]) {
 			LockId: btree.NewUUID(),
 			Action: updateAction,
 		},
-		item:           item,
-		upsertTimeInDB: item.Timestamp,
+		item:          item,
+		timestampInDB: item.Timestamp,
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
 	item.Timestamp = Now()

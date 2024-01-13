@@ -6,7 +6,6 @@ import (
 
 /*
   - One transaction updates a colliding item in 1st and a 2nd trans, updates the colliding item as last.
-  - Reader transaction fails commit when an item read was modified by another transaction in-flight.
   - [add more test cases here...]
 */
 
@@ -16,8 +15,6 @@ import (
 // Transaction rolls back, new completes fine.
 // Reader transaction succeeds.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
-	t.Logf("Transaction story, single b-tree, person record test.\n")
-
 	t1, err := NewTransaction(true, -1)
 	t2, err := NewTransaction(true, -1)
 
@@ -89,8 +86,6 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 // Two transactions updating different items with no collision but items'
 // keys are sequential/contiguous between the two.
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
-	t.Logf("Transaction story, single b-tree, person record test.\n")
-
 	t1, err := NewTransaction(true, -1)
 	t2, err := NewTransaction(true, -1)
 
@@ -132,5 +127,106 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	err2 := t2.Commit(ctx)
   if err1 != nil || err2 != nil {
     t.Error("got = commit failure, want = both commit success.")
+  }
+}
+
+// Reader transaction fails commit when an item read was modified by another transaction in-flight.
+func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
+	t1, err := NewTransaction(true, -1)
+	t2, err := NewTransaction(false, -1)
+
+	t1.Begin()
+	t2.Begin()
+
+	b3, err := OpenBtree[PersonKey, Person](ctx, "persondb", t1)
+  if err != nil {
+    t.Error(err.Error())  // most likely, the "persondb" b-tree store has not been created yet.
+    t.Fail()
+  }
+
+  pk, p := newPerson("joe", "zoey", "male", "email", "phone")
+  pk2, p2 := newPerson("joe2", "zoey", "male", "email", "phone")
+
+  found, err := b3.FindOne(ctx, pk, false)
+  if !found {
+    b3.Add(ctx, pk, p)
+    b3.Add(ctx, pk2, p2)
+    t1.Commit(ctx)
+    t1, _ = NewTransaction(true, -1)
+    t1.Begin()
+    b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", t1)
+  }
+
+	b32, _ := OpenBtree[PersonKey, Person](ctx, "persondb", t2)
+
+  // Read both records.
+  b32.FindOne(ctx, pk2, false)
+  b32.GetCurrentValue(ctx)
+  b32.FindOne(ctx, pk, false)
+  b32.GetCurrentValue(ctx)
+
+  // update one of the two records read on the reader transaction.
+  b3.FindOne(ctx, pk, false)
+  p.SSN = "789"
+  b3.UpdateCurrentItem(ctx, p)
+
+  // Commit t1 & t2.
+	if err := t1.Commit(ctx); err != nil {
+    t.Errorf("t1 writer Commit got error, want success, details: %v.", err)
+  }
+	if err := t2.Commit(ctx); err == nil {
+    t.Errorf("t2 reader Commit got success, want error.")
+  }
+}
+
+// Node merging and row(or item) level conflict detection.
+// Case: Reader transaction succeeds commit, while another item in same Node got updated by another transaction.
+func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T) {
+	t1, err := NewTransaction(true, -1)
+	t2, err := NewTransaction(false, -1)
+
+	t1.Begin()
+	t2.Begin()
+
+	b3, err := OpenBtree[PersonKey, Person](ctx, "persondb", t1)
+  if err != nil {
+    t.Error(err.Error())  // most likely, the "persondb" b-tree store has not been created yet.
+    t.Fail()
+  }
+
+  pk, p := newPerson("joe", "zoeya", "male", "email", "phone")
+  pk2, p2 := newPerson("joe2", "zoeya", "male", "email", "phone")
+  pk3, p3 := newPerson("joe3", "zoeya", "male", "email", "phone")
+
+  found, err := b3.FindOne(ctx, pk, false)
+  if !found {
+    b3.Add(ctx, pk, p)
+    b3.Add(ctx, pk2, p2)
+    b3.Add(ctx, pk3, p3)
+    t1.Commit(ctx)
+    t1, _ = NewTransaction(true, -1)
+    t1.Begin()
+    b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", t1)
+  }
+
+	b32, _ := OpenBtree[PersonKey, Person](ctx, "persondb", t2)
+
+  // Read both records.
+  b32.FindOne(ctx, pk2, false)
+  b32.GetCurrentValue(ctx)
+  b32.FindOne(ctx, pk, false)
+  b32.GetCurrentValue(ctx)
+
+  // update item #3 that should be on same node.
+  b3.FindOne(ctx, pk3, false)
+  p.SSN = "789"
+  b3.UpdateCurrentItem(ctx, p3)
+
+  // Commit t1 & t2.
+	if err := t1.Commit(ctx); err != nil {
+    t.Errorf("t1 writer Commit got error, want success, details: %v.", err)
+  }
+	if err := t2.Commit(ctx); err != nil {
+    t.Errorf("t2 reader Commit got error, want success, details: %v.", err)
   }
 }
