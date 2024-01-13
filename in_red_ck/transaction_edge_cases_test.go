@@ -11,7 +11,7 @@ import (
   - [add more test cases here...]
 */
 
-// Covers both of these cases:
+// Covers all of these cases:
 // Two transactions updating same item.
 // Two transactions updating different items with collision on 1 item.
 // Transaction rolls back, new completes fine.
