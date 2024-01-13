@@ -6,7 +6,7 @@ import (
 	"sort"
 )
 
-// MetaDataType specifies that an object has meta data such as Id & Timestamp fields.
+// MetaDataType specifies that an object has meta data such as Id & Version fields.
 type MetaDataType interface {
 	GetId() UUID
 	GetVersion() int
