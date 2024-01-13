@@ -226,8 +226,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
   }
 }
 
-// One transaction updates a colliding item in 1st and a 2nd trans, updates 
-// the colliding item as last resulting in rollback for either or both.
+// One transaction updates a colliding item in 1st and a 2nd trans.
 func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	t1, err := NewTransaction(true, -1)
 	t2, err := NewTransaction(true, -1)
@@ -298,7 +297,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	err2 := t2.Commit(ctx)
 
   if err1 == nil && err2 == nil {
-    t.Errorf("T1 & T2 Commits got success, want fail.")
+    t.Errorf("T1 & T2 Commits got 2 success, want 1 fail.")
   }
   if err1 != nil {
     t.Logf(err1.Error())
