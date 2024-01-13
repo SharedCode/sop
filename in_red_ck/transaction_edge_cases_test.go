@@ -84,3 +84,51 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
     t.Error(err.Error())
   }
 }
+
+// Two transactions updating different items with no collision but items' keys are sequential/contiguous between the two.
+func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
+	t.Logf("Transaction story, single b-tree, person record test.\n")
+
+	t1, err := NewTransaction(true, -1)
+	t2, err := NewTransaction(true, -1)
+
+	t1.Begin()
+	t2.Begin()
+
+	b3, err := OpenBtree[PersonKey, Person](ctx, "persondb", t1)
+  if err != nil {
+    t.Error(err.Error())  // most likely, the "persondb" b-tree store has not been created yet.
+    t.Fail()
+  }
+
+  pk, p := newPerson("joe", "pirelli", "male", "email", "phone")
+  pk2, p2 := newPerson("joe2", "pirelli", "male", "email", "phone")
+
+  found, err := b3.FindOne(ctx, pk, false)
+  if !found {
+    b3.Add(ctx, pk, p)
+    b3.Add(ctx, pk2, p2)
+    t1.Commit(ctx)
+    t1, _ = NewTransaction(true, -1)
+    t1.Begin()
+    b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", t1)
+  }
+
+	b32, _ := OpenBtree[PersonKey, Person](ctx, "persondb", t2)
+
+  // edit both "pirellis" in both btrees, one each.
+  b3.FindOne(ctx, pk, false)
+  p.SSN = "789"
+  b3.UpdateCurrentItem(ctx, p)
+
+  b32.FindOne(ctx, pk2, false)
+  p2.SSN = "abc"
+  b32.UpdateCurrentItem(ctx, p2)
+
+  // Commit t1 & t2.
+	err1 := t1.Commit(ctx)
+	err2 := t2.Commit(ctx)
+  if err1 != nil || err2 != nil {
+    t.Error("got = commit failure, want = both commit success.")
+  }
+}
