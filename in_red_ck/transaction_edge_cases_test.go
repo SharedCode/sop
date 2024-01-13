@@ -4,11 +4,6 @@ import (
 	"testing"
 )
 
-/*
-  - One transaction updates a colliding item in 1st and a 2nd trans, updates the colliding item as last.
-  - [add more test cases here...]
-*/
-
 // Covers all of these cases:
 // Two transactions updating same item.
 // Two transactions updating different items with collision on 1 item.
@@ -220,7 +215,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
   // update item #3 that should be on same node.
   b3.FindOne(ctx, pk3, false)
   p.SSN = "789"
-  b3.UpdateCurrentItem(ctx, p3)
+  b3.UpdateCurrentItem(ctx, p)
 
   // Commit t1 & t2.
 	if err := t1.Commit(ctx); err != nil {
@@ -228,5 +223,84 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
   }
 	if err := t2.Commit(ctx); err != nil {
     t.Errorf("t2 reader Commit got error, want success, details: %v.", err)
+  }
+}
+
+// One transaction updates a colliding item in 1st and a 2nd trans, updates 
+// the colliding item as last resulting in rollback for either or both.
+func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
+	t1, err := NewTransaction(true, -1)
+	t2, err := NewTransaction(true, -1)
+
+	t1.Begin()
+	t2.Begin()
+
+	b3, err := OpenBtree[PersonKey, Person](ctx, "persondb", t1)
+  if err != nil {
+    t.Error(err.Error())  // most likely, the "persondb" b-tree store has not been created yet.
+    t.Fail()
+  }
+
+  pk, p := newPerson("joe", "zoeyb", "male", "email", "phone")
+  pk2, p2 := newPerson("joe2", "zoeyb", "male", "email", "phone")
+  pk3, p3 := newPerson("joe3", "zoeyb", "male", "email", "phone")
+  pk4, p4 := newPerson("joe4", "zoeyb", "male", "email", "phone")
+  pk5, p5 := newPerson("joe5", "zoeyb", "male", "email", "phone")
+
+  found, err := b3.FindOne(ctx, pk, false)
+  if !found {
+    b3.Add(ctx, pk, p)
+    b3.Add(ctx, pk2, p2)
+    b3.Add(ctx, pk3, p3)
+    b3.Add(ctx, pk4, p4)
+    b3.Add(ctx, pk5, p5)
+    t1.Commit(ctx)
+    t1, _ = NewTransaction(true, -1)
+    t1.Begin()
+    b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", t1)
+  }
+
+	b32, _ := OpenBtree[PersonKey, Person](ctx, "persondb", t2)
+
+  b3.FindOne(ctx, pk, false)
+  p.SSN = "789"
+  b3.UpdateCurrentItem(ctx, p)
+
+  b3.FindOne(ctx, pk2, false)
+  b3.GetCurrentValue(ctx)
+  b3.FindOne(ctx, pk3, false)
+  b3.GetCurrentValue(ctx)
+  b3.FindOne(ctx, pk4, false)
+  b3.GetCurrentValue(ctx)
+  b3.FindOne(ctx, pk5, false)
+  b3.GetCurrentValue(ctx)
+
+  b32.FindOne(ctx, pk5, false)
+  p.SSN = "789"
+  b32.UpdateCurrentItem(ctx, p)
+
+  b32.FindOne(ctx, pk4, false)
+  b32.GetCurrentValue(ctx)
+  b32.FindOne(ctx, pk3, false)
+  b32.GetCurrentValue(ctx)
+  b32.FindOne(ctx, pk2, false)
+  b32.GetCurrentValue(ctx)
+
+  b32.FindOne(ctx, pk, false)
+  p.SSN = "555"
+  b32.UpdateCurrentItem(ctx, p)
+
+  // Commit t1 & t2.
+	err1 := t1.Commit(ctx)
+	err2 := t2.Commit(ctx)
+
+  if err1 == nil && err2 == nil {
+    t.Errorf("T1 & T2 Commits got success, want fail.")
+  }
+  if err1 != nil {
+    t.Logf(err1.Error())
+  }
+  if err2 != nil {
+    t.Logf(err2.Error())
   }
 }
