@@ -232,7 +232,7 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 			connection.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
 
 		// Flush out the failing records from cache.
-		deleteFromCache := func() {
+		deleteFromCache := func(storeLids RegistryPayload[btree.UUID]) {
 			for _, id := range storeLids.IDs {
 				if err := v.redisCache.Delete(ctx, id.ToString()); err != nil && !redis.KeyNotFound(err) {
 					log.Error("Registry Delete (redis delete) failed, details: %v", err)
@@ -246,10 +246,10 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 		}
 
 		if err := qry.Exec(); err != nil {
-			deleteFromCache()
+			deleteFromCache(storeLids)
 			return err
 		}
-		deleteFromCache()
+		deleteFromCache(storeLids)
 	}
 	return nil
 }

@@ -317,7 +317,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Ke
 		for ii := range handles[i].IDs {
 			// Node with such Id is already marked deleted, is in-flight change or had been updated since reading it,
 			// fail it for "refetch" & retry.
-			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].IsAandBinUse() || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
+			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
 				return false, nil
 			}
 			// Mark Id as deleted.
