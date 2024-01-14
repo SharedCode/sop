@@ -441,18 +441,27 @@ func (btree *Btree[TK, TV]) getCurrentNode(ctx context.Context) (*Node[TK, TV], 
 }
 
 func (btree *Btree[TK, TV]) getRootNode(ctx context.Context) (*Node[TK, TV], error) {
+	// If Store items were all deleted(Count = 0) then just fetch the root node.
+	if !btree.StoreInfo.RootNodeId.IsNil() && btree.StoreInfo.Count == 0 {
+		root, _ := btree.getNode(ctx, btree.StoreInfo.RootNodeId)
+		if root != nil {
+			return root, nil
+		}
+	}
+	// Create a new root node as store is empty and has no root node yet.
 	if btree.StoreInfo.RootNodeId.IsNil() || btree.StoreInfo.Count == 0 {
-		// Create new Root Node if nil, implied new btree.
 		var root = newNode[TK, TV](btree.getSlotLength())
 		if btree.StoreInfo.RootNodeId.IsNil() {
 			root.newId(NilUUID)
 			btree.StoreInfo.RootNodeId = root.Id
+			root.Version = 1
 			return root, nil
 		}
 		root.Id = btree.StoreInfo.RootNodeId
 		root.Version = 1
 		return root, nil
 	}
+	// Fetch the root node from blob store.
 	root, err := btree.getNode(ctx, btree.StoreInfo.RootNodeId)
 	if err != nil {
 		return nil, err

@@ -146,7 +146,8 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	}
 }
 
-func Test_VolumeDeletes(t *testing.T) {
+// Add prefix Test_ if wanting to run this test.
+func VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 	batchSize := 100

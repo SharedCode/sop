@@ -49,6 +49,9 @@ func (nr *nodeRepositoryTyped[TK, TV]) Update(n *btree.Node[TK, TV]) {
 func (nr *nodeRepositoryTyped[TK, TV]) Get(ctx context.Context, nodeId btree.UUID) (*btree.Node[TK, TV], error) {
 	var target btree.Node[TK, TV]
 	n, err := nr.realNodeRepository.get(ctx, nodeId, &target)
+	if n == nil {
+		return nil, err
+	}
 	return n.(*btree.Node[TK, TV]), err
 }
 
@@ -117,6 +120,9 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 	})
 	if err != nil {
 		return nil, err
+	}
+	if len(h) == 0 || len(h[0].IDs) == 0 {
+		return nil, nil
 	}
 	nodeId := logicalId
 	if !h[0].IDs[0].LogicalId.IsNil() {
