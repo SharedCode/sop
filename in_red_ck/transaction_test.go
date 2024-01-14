@@ -277,11 +277,11 @@ func VolumeDeletes(t *testing.T) {
 	}
 }
 
-// Mixed Create, Update, Delete(CUD) operations then Search(R).
+// Mixed CRUD operations.
 // Add prefix Test_ if wanting to run this test.
-func MixedOperationsThenSearch(t *testing.T) {
+func MixedOperations(t *testing.T) {
 	start := 9000
-	end := 10000
+	end := 14000
 	batchSize := 100
 
 	t1, _ := NewTransaction(true, -1)
