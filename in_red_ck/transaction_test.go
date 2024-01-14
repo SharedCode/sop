@@ -278,7 +278,8 @@ func VolumeDeletes(t *testing.T) {
 }
 
 // Mixed Create, Update, Delete(CUD) operations then Search(R).
-func Test_MixedOperationsThenSearch(t *testing.T) {
+// Add prefix Test_ if wanting to run this test.
+func MixedOperationsThenSearch(t *testing.T) {
 	start := 9000
 	end := 10000
 	batchSize := 100
@@ -324,21 +325,27 @@ func Test_MixedOperationsThenSearch(t *testing.T) {
 
 	// Do Read, Delete & Update mix.
 	for i := start+100; i <= end; i++ {
-		pk, p := newPerson("jack", fmt.Sprintf("zoltan%d", i-100), "male", "email very very long long long", "phone123")
+		pk, p := newPerson(firstName, fmt.Sprintf("%s%d", lastNamePrefix, i), "male", "email very very long long long", "phone123")
 		n := i % 3
 		switch n {
 		// Read on 0.
 		case 0:
-			b3.FindOne(ctx, pk, false)
-			// b3.G
+			if ok,_ := b3.FindOne(ctx, pk, false); !ok || b3.GetCurrentKey().Lastname != pk.Lastname {
+				t.Errorf("FindOne failed, got = %v, want = %v.", b3.GetCurrentKey(), pk)
+				t.Fail()
+			}
 		// Delete on 1.
 		case 1:
-
+			if ok,_ := b3.Remove(ctx, pk); !ok {
+				t.Errorf("Remove %v failed.", pk)
+				t.Fail()
+			}
 		// Update on 2.
 		case 2:
-		}
-		if ok, _ := b3.AddIfNotExist(ctx, pk, p); ok {
-			t.Logf("%v inserted", pk)
+			if ok,_ := b3.Update(ctx, pk, p); !ok {
+				t.Errorf("Update %v failed.", pk)
+				t.Fail()
+			}
 		}
 
 		if i % batchSize == 0 {
