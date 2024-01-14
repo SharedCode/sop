@@ -19,6 +19,7 @@ func NewBtree[TK btree.Comparable, TV any](isUnique bool) BtreeInterface[TK, TV]
 	s := btree.NewStoreInfo("", itemsPerNode, isUnique, true, true, "")
 	si := btree.StoreInterface[TK, TV]{
 		NodeRepository: newNodeRepository[TK, TV](),
+		ItemActionTracker: newDumbItemActionTracker[TK, TV](),
 	}
 	b3, _ := btree.New[TK, TV](s, &si)
 	return BtreeInterface[TK, TV]{
