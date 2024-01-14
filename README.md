@@ -61,7 +61,7 @@ Requirements
   * Golang version that supports generics
   * Internet access to github
 
-SOP V2 Requirements
+# SOP V2 Requirements
   * Cassandra
   * Redis
   * Kafka if wanting to enable the Delete Service
@@ -75,13 +75,33 @@ But yeah, V2 is showing very good results. ACID, two phase commit transaction, a
 
 Check out the unit tests under "in_red_ck" folder to get idea how to specify the configuration for Cassandra and Redis. Also, if you want to specify the Cassandra consistency level per API, you can take a look at the "ConsistencyBook" field of the Cassandra Config struct. Each of the Repository/Store API CRUD operation has Consistency level settable under the "ConsistencyBook", or you can just leave it and default for the session is, "local quorum".
 
-Cache Duration
+## Cache Duration
 You can specify the Redis cache duration by using the following API:
   * in_red_ck/cassandra/SetRegistryCacheDuration(duration) - defaults to 12 hrs, but you can specify if needs to cache the registry "virtual Ids" differently.
   * in_red_ck/cassandra/SetStoreCacheDuration(duration) - defaults to 2 hrs.
   * in_red_ck/SetNodeCacheDuration(duration) - defaults to 1 hr. Definitely please do change if wanting different cache duration.
 
 The Redis cache is minimally used because our primary is Cassandra DB, which is a very fast DB. BUT yeah, please do change if wanting to benefit with bigger Redis caching. :)
+
+## Sample Configuration
+```
+var cassConfig = cassandra.Config{
+	ClusterHosts: []string{"localhost:9042"},
+	Keyspace:     "btree",
+}
+var redisConfig = redis.Options{
+	Address:                  "localhost:6379",
+	Password:                 "", // no password set
+	DB:                       0,  // use default DB
+	DefaultDurationInSeconds: 24 * 60 * 60,
+}
+
+func init() {
+	Initialize(cassConfig, redisConfig)
+}
+```
+Above illustrates sample configuration for Cassandra & Redis bits, and how to initialize (via in_red_ck.Initialize(..) function) the "system". You specify that and call Initialize one time(e.g. in init() like as shown) in your app or microservice and that is it.
+
 
 Below discussions are mostly achieved in this SOP V2 POC, I will update and move what ever details did not make it, e.g. the data driver for support of huge blobs to a future, V3 release section.
 
