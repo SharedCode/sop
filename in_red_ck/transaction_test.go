@@ -210,7 +210,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 		if ok, _ := b3.AddIfNotExist(ctx, pk, p); ok {
 			t.Logf("%v inserted", pk)
 		}
-		if i % batchSize == 0 {
+		if i%batchSize == 0 {
 			if err := t1.Commit(ctx); err != nil {
 				t.Error(err)
 				t.Fail()
@@ -234,7 +234,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			t.Error(fmt.Errorf("Did not find the correct person with phone123 & lname %s", lname))
 			t.Fail()
 		}
-		if i % batchSize == 0 {
+		if i%batchSize == 0 {
 			if err := t1.Commit(ctx); err != nil {
 				t.Error(err)
 				t.Fail()
@@ -265,7 +265,7 @@ func VolumeDeletes(t *testing.T) {
 			}
 			// Ignore not found as item could had been deleted in previous run.
 		}
-		if i % batchSize == 0 {
+		if i%batchSize == 0 {
 			if err := t1.Commit(ctx); err != nil {
 				t.Error(err)
 				t.Fail()
@@ -298,7 +298,7 @@ func MixedOperations(t *testing.T) {
 			t.Logf("%v inserted", pk)
 		}
 
-		if i > start + 100 {
+		if i > start+100 {
 			pk2, _ := newPerson(firstName, fmt.Sprintf("%s%d", lastNamePrefix, i-99), "male", "email very very long long long", "phone123")
 			ok, err := b3.FindOne(ctx, pk2, false)
 			if err != nil {
@@ -312,7 +312,7 @@ func MixedOperations(t *testing.T) {
 			}
 		}
 
-		if i % batchSize == 0 {
+		if i%batchSize == 0 {
 			if err := t1.Commit(ctx); err != nil {
 				t.Error(err)
 				t.Fail()
@@ -324,31 +324,31 @@ func MixedOperations(t *testing.T) {
 	}
 
 	// Do Read, Delete & Update mix.
-	for i := start+100; i <= end; i++ {
+	for i := start + 100; i <= end; i++ {
 		pk, p := newPerson(firstName, fmt.Sprintf("%s%d", lastNamePrefix, i), "male", "email very very long long long", "phone123")
 		n := i % 3
 		switch n {
 		// Read on 0.
 		case 0:
-			if ok,_ := b3.FindOne(ctx, pk, false); !ok || b3.GetCurrentKey().Lastname != pk.Lastname {
+			if ok, _ := b3.FindOne(ctx, pk, false); !ok || b3.GetCurrentKey().Lastname != pk.Lastname {
 				t.Errorf("FindOne failed, got = %v, want = %v.", b3.GetCurrentKey(), pk)
 				t.Fail()
 			}
 		// Delete on 1.
 		case 1:
-			if ok,_ := b3.Remove(ctx, pk); !ok {
+			if ok, _ := b3.Remove(ctx, pk); !ok {
 				t.Errorf("Remove %v failed.", pk)
 				t.Fail()
 			}
 		// Update on 2.
 		case 2:
-			if ok,_ := b3.Update(ctx, pk, p); !ok {
+			if ok, _ := b3.Update(ctx, pk, p); !ok {
 				t.Errorf("Update %v failed.", pk)
 				t.Fail()
 			}
 		}
 
-		if i % batchSize == 0 {
+		if i%batchSize == 0 {
 			if err := t1.Commit(ctx); err != nil {
 				t.Error(err)
 				t.Fail()

@@ -141,7 +141,7 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 	if err != nil {
 		return false, err
 	}
-	r,err := node.find(ctx, btree, key, firstItemWithKey)
+	r, err := node.find(ctx, btree, key, firstItemWithKey)
 	btree.getCurrentItem(ctx)
 	return r, err
 }
