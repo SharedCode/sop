@@ -10,9 +10,9 @@ import (
 )
 
 type actionType int
-
 const (
-	getAction = iota
+	defaultAction = iota
+	getAction
 	addAction
 	updateAction
 	removeAction
@@ -119,6 +119,10 @@ func (t *itemActionTracker[TK, TV]) Remove(item *btree.Item[TK, TV]) {
 		item: item,
 		versionInDB: item.Version,
 	}
+}
+
+func (t *itemActionTracker[TK, TV]) hasTrackedItems() bool {
+	return len(t.items) > 0
 }
 
 // lock the tracked items in Redis in preparation to finalize the transaction commit.

@@ -26,6 +26,7 @@ func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeId UUID) (*Node[T
 	v, _ := nr.lookup[nodeId]
 	return v, nil
 }
+func (nr *nodeRepository[TK, TV]) Fetched(nodeId UUID) {}
 func (nr *nodeRepository[TK, TV]) Remove(nodeId UUID) {
 	delete(nr.lookup, nodeId)
 }

@@ -2,7 +2,6 @@ package in_red_ck
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/SharedCode/sop/in_red_ck/cassandra"
@@ -93,53 +92,84 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	}
 }
 
-func Test_VolumeAddThenSearch(t *testing.T) {
+// func Test_VolumeAddThenSearch(t *testing.T) {
 
-	start := 9001
-	end := 100000
-	batchSize := 100
+// 	start := 9001
+// 	end := 100000
+// 	batchSize := 100
 
-	t1, _ := NewTransaction(true, -1)
-	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
-	pk, _ := newPerson("jack", fmt.Sprintf("reepper%d", start), "male", "email very very long long long", "phone123")
+// 	t1, _ := NewTransaction(true, -1)
+// 	t1.Begin()
+// 	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+// 	pk, _ := newPerson("jack", fmt.Sprintf("reepper%d", start), "male", "email very very long long long", "phone123")
 
-	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
-	// for scheduled batch deletes.
-	if found,_  := b3.FindOne(ctx, pk, false); !found {
-		for i := start; i <= end; i++ {
-			pk, p := newPerson("jack", fmt.Sprintf("reepper%d", i), "male", "email very very long long long", "phone123")
-			b3.Add(ctx, pk, p)
-			if i % batchSize == 0 {
-				t1.Commit(ctx)
-				t1, _ = NewTransaction(true, -1)
-				t1.Begin()
-				b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
-			}
-		}
-	}
+// 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
+// 	// for scheduled batch deletes.
+// 	if found,_  := b3.FindOne(ctx, pk, false); !found {
+// 		for i := start; i <= end; i++ {
+// 			pk, p := newPerson("jack", fmt.Sprintf("reepper%d", i), "male", "email very very long long long", "phone123")
+// 			b3.Add(ctx, pk, p)
+// 			if i % batchSize == 0 {
+// 				t1.Commit(ctx)
+// 				t1, _ = NewTransaction(true, -1)
+// 				t1.Begin()
+// 				b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+// 			}
+// 		}
+// 	}
 
-	// Search them all. Searching 90,000 items just took few seconds in my laptop.
-	for i := start; i <= end; i++ {
-		lname := fmt.Sprintf("reepper%d", i)
-		pk, _ := newPerson("jack", lname, "male", "email very very long long long", "phone123")
-		if found, err := b3.FindOne(ctx, pk, false); !found || err != nil {
-			t.Error(err.Error())
-			t.Fail()
-		}
-		ci, _ := b3.GetCurrentItem(ctx)
-		if ci.Value.Phone != "phone123" || ci.Key.Lastname != lname {
-			t.Error(fmt.Errorf("Did not find the correct person with phone123 & lname %s", lname))
-			t.Fail()
-		}
-		if i % batchSize == 0 {
-			if err := t1.Commit(ctx); err != nil {
-				t.Error(err.Error())
-				t.Fail()
-			}
-			t1, _ = NewTransaction(false, -1)
-			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
-		}
-	}
-}
+// 	// Search them all. Searching 90,000 items just took few seconds in my laptop.
+// 	for i := start; i <= end; i++ {
+// 		lname := fmt.Sprintf("reepper%d", i)
+// 		pk, _ := newPerson("jack", lname, "male", "email very very long long long", "phone123")
+// 		if found, err := b3.FindOne(ctx, pk, false); !found || err != nil {
+// 			t.Error(err)
+// 			t.Fail()
+// 		}
+// 		ci, _ := b3.GetCurrentItem(ctx)
+// 		if ci.Value.Phone != "phone123" || ci.Key.Lastname != lname {
+// 			t.Error(fmt.Errorf("Did not find the correct person with phone123 & lname %s", lname))
+// 			t.Fail()
+// 		}
+// 		if i % batchSize == 0 {
+// 			if err := t1.Commit(ctx); err != nil {
+// 				t.Error(err)
+// 				t.Fail()
+// 			}
+// 			t1, _ = NewTransaction(false, -1)
+// 			t1.Begin()
+// 			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+// 		}
+// 	}
+// }
+
+// func Test_VolumeDeletes(t *testing.T) {
+// 	start := 9001
+// 	end := 100000
+// 	batchSize := 100
+
+// 	t1, _ := NewTransaction(true, -1)
+// 	t1.Begin()
+// 	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+
+// 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
+// 	// for scheduled batch deletes.
+// 	for i := start; i <= end; i++ {
+// 		pk, _ := newPerson("jack", fmt.Sprintf("reepper%d", i), "male", "email very very long long long", "phone123")
+// 		if found,_  := b3.FindOne(ctx, pk, false); found {
+// 			if ok, err := b3.Remove(ctx, pk); !ok || err != nil {
+// 				t.Errorf("Did not find %s", pk.Lastname)
+// 				t.Error(err)
+// 			}
+// 		}
+// 		if i % batchSize == 0 {
+// 			if err := t1.Commit(ctx); err != nil {
+// 				t.Error(err)
+// 				t.Fail()
+// 			}
+// 			t1, _ = NewTransaction(true, -1)
+// 			t1.Begin()
+// 			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+// 		}
+// 	}
+// }

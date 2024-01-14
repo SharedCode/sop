@@ -52,6 +52,15 @@ func (nr *nodeRepositoryTyped[TK, TV]) Get(ctx context.Context, nodeId btree.UUI
 	return n.(*btree.Node[TK, TV]), err
 }
 
+func (nr *nodeRepositoryTyped[TK, TV]) Fetched(nodeId btree.UUID) {
+	c := nr.realNodeRepository.nodeLocalCache[nodeId]
+	if c.action != defaultAction {
+		return
+	}
+	c.action = getAction
+	nr.realNodeRepository.nodeLocalCache[nodeId] = c
+}
+
 // Remove will remove a node with nodeId from the map.
 func (nr *nodeRepositoryTyped[TK, TV]) Remove(nodeId btree.UUID) {
 	nr.realNodeRepository.remove(nodeId)
@@ -128,14 +137,14 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 			log.Warn(fmt.Sprintf("Failed to cache in Redis the newly fetched node with Id: %v, details: %v", nodeId, err))
 		}
 		nr.nodeLocalCache[logicalId] = cacheNode{
-			action: getAction,
+			action: defaultAction,
 			node:   target,
 		}
 		return target, nil
 	}
 	target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
 	nr.nodeLocalCache[logicalId] = cacheNode{
-		action: getAction,
+		action: defaultAction,
 		node:   target,
 	}
 	return target, nil
@@ -368,10 +377,11 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 	return nil
 }
 
-func (nr *nodeRepository) areFetchedNodesIntact(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) (bool, error) {
+func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) (bool, error) {
 	if len(nodes) == 0 {
 		return true, nil
 	}
+	// Check if the Items read for each fetchedNode are intact.
 	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {

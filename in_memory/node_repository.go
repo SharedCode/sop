@@ -34,6 +34,9 @@ func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeId btree.UUID) (*
 	return v, nil
 }
 
+// Fetched does nothing for in-memory.
+func (nr *nodeRepository[TK, TV]) Fetched(nodeId btree.UUID) {}
+
 // Remove will remove a node with nodeId from the map.
 func (nr *nodeRepository[TK, TV]) Remove(nodeId btree.UUID) {
 	delete(nr.lookup, nodeId)

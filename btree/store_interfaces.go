@@ -67,6 +67,8 @@ type NodeRepository[TK Comparable, TV any] interface {
 	Add(node *Node[TK, TV])
 	// Get fetches from backend(or from cache if exists) & returns the Node with a given nodeId.
 	Get(ctx context.Context, nodeId UUID) (*Node[TK, TV], error)
+	// Mark Node with nodeId as fetched, so, it will get checked for version conflict during commit.
+	Fetched(nodeId UUID)
 	// Update will just cache the item, "update" action for resolve on transaction commit as appropriate.
 	Update(node *Node[TK, TV])
 	// Remove will just cache the item, "remove" action for resolve on transaction commit as appropriate.

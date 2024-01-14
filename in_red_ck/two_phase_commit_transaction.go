@@ -32,6 +32,7 @@ type btreeBackend struct {
 	nodeRepository     *nodeRepository
 	refetchAndMerge    func(ctx context.Context) error
 	getStoreInfo       func() *btree.StoreInfo
+	hasTrackedItems    func() bool
 	lockTrackedItems   func(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error
 	unlockTrackedItems func(ctx context.Context, itemRedisCache redis.Cache) error
 }
@@ -172,7 +173,12 @@ func sleep(ctx context.Context, sleepTime time.Duration) {
 	<-sleep.Done()
 }
 
+const sleepBeforeRefetchBase = 100
+
 func (t *transaction) phase1Commit(ctx context.Context) error {
+	if !t.hasTrackedItems() {
+		return nil
+	}
 	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
 	t.logger.log(lockTrackedItems)
 	if err := t.lockTrackedItems(ctx); err != nil {
@@ -220,8 +226,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 
 		if successful {
-			// Check for conflict on fetched nodes.
-			if successful, err = t.btreesBackend[0].nodeRepository.areFetchedNodesIntact(ctx, fetchedNodes); err != nil {
+			// Check for conflict on fetched items.
+			if successful, err = t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
 				return err
 			}
 		}
@@ -246,7 +252,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
-			sleepTime := 300 + (1+rand.Intn(7))*100
+			sleepTime := sleepBeforeRefetchBase + (1+rand.Intn(5))*100
 			sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
@@ -291,6 +297,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 }
 
 func (t *transaction) phase2Commit(ctx context.Context) error {
+	if !t.hasTrackedItems() {
+		return nil
+	}
 	// Finalize the commit, it is the only all or nothing action in the commit,
 	// and on registry (very small) records only.
 	t.logger.log(finalizeCommit)
@@ -298,11 +307,11 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		return fmt.Errorf("Updated & removed nodes commit failed, details: %v", err)
 	}
 
-	unusedNodeIds := make([]cas.BlobsPayload[btree.UUID], 0, len(t.updatedNodeHandles) + len(t.removedNodeHandles))
+	unusedNodeIds := make([]cas.BlobsPayload[btree.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
 		blobsIds := cas.BlobsPayload[btree.UUID]{
 			BlobTable: btree.ConvertToBlobTableName(t.updatedNodeHandles[i].RegistryTable),
-			Blobs: make([]btree.UUID, len(t.updatedNodeHandles[i].IDs)),
+			Blobs:     make([]btree.UUID, len(t.updatedNodeHandles[i].IDs)),
 		}
 		for ii := range t.updatedNodeHandles[i].IDs {
 			// Since we've flipped the inactive to active, the new inactive Id is to be flushed out of Redis cache.
@@ -318,7 +327,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		deletedIds[i].IDs = make([]btree.UUID, len(t.removedNodeHandles[i].IDs))
 		blobsIds := cas.BlobsPayload[btree.UUID]{
 			BlobTable: btree.ConvertToBlobTableName(t.removedNodeHandles[i].RegistryTable),
-			Blobs: make([]btree.UUID, len(t.removedNodeHandles[i].IDs)),
+			Blobs:     make([]btree.UUID, len(t.removedNodeHandles[i].IDs)),
 		}
 		for ii := range t.removedNodeHandles[i].IDs {
 			// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
@@ -344,6 +353,9 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 	if t.forWriting {
 		return nil
 	}
+	if !t.hasTrackedItems() {
+		return nil
+	}
 	// For a reader transaction, conflict check is enough.
 	startTime := getCurrentTime()
 	for {
@@ -352,7 +364,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 		}
 		// Check items if have not changed since fetching.
 		_, _, _, fetchedNodes, _ := t.classifyModifiedNodes()
-		if ok, err := t.btreesBackend[0].nodeRepository.areFetchedNodesIntact(ctx, fetchedNodes); err != nil {
+		if ok, err := t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
 			return err
 		} else if ok {
 			return nil
@@ -360,7 +372,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 
 		// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 		// (in-flight) to retry on different times.
-		sleepTime := 300 + (1+rand.Intn(7))*100
+		sleepTime := sleepBeforeRefetchBase + (1+rand.Intn(5))*100
 		sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 
 		// Recreate the fetches on latest committed nodes & check if fetched Items are unchanged.
@@ -452,6 +464,15 @@ func (t *transaction) commitStores(ctx context.Context) error {
 		stores[i] = *store
 	}
 	return t.storeRepository.Update(ctx, stores...)
+}
+
+func (t *transaction) hasTrackedItems() bool {
+	for _, s := range t.btreesBackend {
+		if s.hasTrackedItems() {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *transaction) lockTrackedItems(ctx context.Context) error {

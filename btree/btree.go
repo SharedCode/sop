@@ -181,6 +181,7 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 		// Register to local cache the "item get" for submit/resolution on Commit.
 		if btree.storeInterface.ItemActionTracker != nil {
 			btree.storeInterface.ItemActionTracker.Get(item)
+			btree.storeInterface.NodeRepository.Fetched(btree.currentItemRef.nodeId)
 		}
 		// TODO: in V2, we need to fetch Value if btree is set to save Value in another "data segment"
 		// and it is not yet fetched. That fetch action can error thus, need to be able to return an error.

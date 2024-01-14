@@ -102,7 +102,6 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 	// Assign the item action tracker frontend and backend bits.
 	iat := newItemActionTracker[TK, TV]()
 	si.ItemActionTracker = iat
-	si.backendItemActionTracker = iat
 
 	// Assign the node repository frontend and backend bits.
 	nrw := newNodeRepository[TK, TV](trans, s)
@@ -123,6 +122,7 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 		getStoreInfo: func() *btree.StoreInfo { return b3.StoreInfo },
 
 		// Needed for tracked items' lock management.
+		hasTrackedItems: iat.hasTrackedItems,
 		lockTrackedItems:   iat.lock,
 		unlockTrackedItems: iat.unlock,
 	}
@@ -134,9 +134,9 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.
 func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, TV], b3 *btree.Btree[TK, TV], sr cas.StoreRepository) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
-		b3ModifiedItems := si.backendItemActionTracker.items
+		b3ModifiedItems := si.ItemActionTracker.(*itemActionTracker[TK, TV]).items
 		// Clear the backend "cache" so we can force B-Tree to re-fetch from Redis(or BlobStore).
-		si.backendItemActionTracker.items = make(map[btree.UUID]cacheItem[TK, TV])
+		si.ItemActionTracker.(*itemActionTracker[TK, TV]).items = make(map[btree.UUID]cacheItem[TK, TV])
 		si.backendNodeRepository.nodeLocalCache = make(map[btree.UUID]cacheNode)
 		// Reset StoreInfo of B-Tree in prep to replay the "actions".
 		storeInfo, err := sr.Get(ctx, b3.StoreInfo.Name)
