@@ -1,1 +1,1 @@
-Code files in this directory are under development for V2.
+Code files in this directory are under development for V2. The tests under this package require real Cassandra & Redis connections.
