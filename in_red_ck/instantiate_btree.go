@@ -122,7 +122,7 @@ func newBtree[TK btree.Comparable, TV any](s *btree.StoreInfo, trans *transactio
 		getStoreInfo: func() *btree.StoreInfo { return b3.StoreInfo },
 
 		// Needed for tracked items' lock management.
-		hasTrackedItems: iat.hasTrackedItems,
+		hasTrackedItems:    iat.hasTrackedItems,
 		lockTrackedItems:   iat.lock,
 		unlockTrackedItems: iat.unlock,
 	}

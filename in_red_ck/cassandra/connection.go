@@ -10,16 +10,16 @@ import (
 
 // Config contains the this Cassandra package configuration or configurable variables.
 type Config struct {
-	// Cassandra hosts cluster. 
+	// Cassandra hosts cluster.
 	ClusterHosts []string
 	// Keyspace to be used when doing I/O to cassandra.
 	Keyspace string
 	// Default Consistency level.
-	Consistency       gocql.Consistency
+	Consistency gocql.Consistency
 	// Connection Timeout.
 	ConnectionTimeout time.Duration
 	// Authenticator.
-	Authenticator     gocql.Authenticator
+	Authenticator gocql.Authenticator
 	// Defaults to "simple strategy & replication factor of 1".
 	ReplicationClause string
 
@@ -33,14 +33,14 @@ type Config struct {
 
 // Lists all the available API's consistency level that are settable in this package.
 type ConsistencyBook struct {
-	RegistryAdd gocql.Consistency
-	RegistryUpdate gocql.Consistency
-	RegistryGet gocql.Consistency
-	RegistryRemove gocql.Consistency
-	StoreGet gocql.Consistency
-	StoreUpdate gocql.Consistency
-	BlobStoreAdd gocql.Consistency
-	BlobStoreGet gocql.Consistency
+	RegistryAdd     gocql.Consistency
+	RegistryUpdate  gocql.Consistency
+	RegistryGet     gocql.Consistency
+	RegistryRemove  gocql.Consistency
+	StoreGet        gocql.Consistency
+	StoreUpdate     gocql.Consistency
+	BlobStoreAdd    gocql.Consistency
+	BlobStoreGet    gocql.Consistency
 	BlobStoreUpdate gocql.Consistency
 	BlobStoreRemove gocql.Consistency
 }

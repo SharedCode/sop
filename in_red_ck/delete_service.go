@@ -16,7 +16,7 @@ var lastDeleteTime int64
 // Service interval defaults to 2 hours. That is, process deleted items every two hours.
 var ServiceIntervalInHour int = 2
 
-// Enable the delete service(defaults to false) if you want this host to (enqueue &) poll kafka 
+// Enable the delete service(defaults to false) if you want this host to (enqueue &) poll kafka
 // periodically to send/process deleted unused Nodes leftover of transaction.
 var IsDeleteServiceEnabled bool
 

@@ -2,11 +2,11 @@ package kafka
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"time"
 	"sync"
 	"sync/atomic"
-	"encoding/json"
+	"time"
 
 	"github.com/Shopify/sarama"
 )
@@ -23,7 +23,7 @@ import (
 //
 // See the kafka DefaultConfig & Initialize function how to setup the kafka
 // brokers & the topic.
-// 
+//
 // See the kafka producer.go "Enqueue" function for details how SOP sends the
 // deleted Nodes' IDs and tables. BUT you only need to set the "brokers" & "topic"
 // variables and the producer should start to "sense" that kafka sendmessage

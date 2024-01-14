@@ -17,7 +17,7 @@ type Person struct {
 	Gender string
 	Email  string
 	Phone  string
-	SSN string
+	SSN    string
 }
 
 func newPerson(fname string, lname string, gender string, email string, phone string) (PersonKey, Person) {
@@ -29,7 +29,7 @@ func newPerson(fname string, lname string, gender string, email string, phone st
 			Gender: gender,
 			Email:  email,
 			Phone:  phone,
-			SSN: "1234",
+			SSN:    "1234",
 		}
 }
 func (x PersonKey) Compare(other interface{}) int {

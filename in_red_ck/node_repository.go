@@ -54,11 +54,10 @@ func (nr *nodeRepositoryTyped[TK, TV]) Get(ctx context.Context, nodeId btree.UUI
 
 func (nr *nodeRepositoryTyped[TK, TV]) Fetched(nodeId btree.UUID) {
 	c := nr.realNodeRepository.nodeLocalCache[nodeId]
-	if c.action != defaultAction {
-		return
+	if c.action == defaultAction {
+		c.action = getAction
+		nr.realNodeRepository.nodeLocalCache[nodeId] = c
 	}
-	c.action = getAction
-	nr.realNodeRepository.nodeLocalCache[nodeId] = c
 }
 
 // Remove will remove a node with nodeId from the map.

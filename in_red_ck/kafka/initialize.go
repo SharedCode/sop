@@ -6,12 +6,12 @@ import (
 
 type Config struct {
 	Brokers []string
-	Topic string
+	Topic   string
 }
 
-var DefaultConfig Config = Config {
+var DefaultConfig Config = Config{
 	Brokers: []string{"127.0.0.1:9093"},
-	Topic: "sop-deleted-data",
+	Topic:   "sop-deleted-data",
 }
 
 var globalConfig Config = DefaultConfig

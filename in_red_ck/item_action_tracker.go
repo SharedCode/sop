@@ -10,6 +10,7 @@ import (
 )
 
 type actionType int
+
 const (
 	defaultAction = iota
 	getAction
@@ -116,7 +117,7 @@ func (t *itemActionTracker[TK, TV]) Remove(item *btree.Item[TK, TV]) {
 			LockId: btree.NewUUID(),
 			Action: removeAction,
 		},
-		item: item,
+		item:        item,
 		versionInDB: item.Version,
 	}
 }

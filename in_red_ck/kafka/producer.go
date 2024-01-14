@@ -1,9 +1,9 @@
 package kafka
 
 import (
-	"fmt"
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/Shopify/sarama"
@@ -12,6 +12,7 @@ import (
 type QueueProducer struct {
 	producer sarama.SyncProducer
 }
+
 // Package global producer.
 var producer *QueueProducer
 var mux sync.Mutex
@@ -66,6 +67,7 @@ func CloseProducer() {
 }
 
 var lastEngueueSucceeded bool
+
 // Returns true if it is known that last Enqueue to Kafka succeeded or not.
 func LastEnqueueSucceeded() bool {
 	return lastEngueueSucceeded
