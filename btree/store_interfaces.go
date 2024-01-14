@@ -32,7 +32,7 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// differentiate duplicated keys via the unique Id(UUID).
 	FindOneWithId(ctx context.Context, key TK, id UUID) (bool, error)
 	// GetCurrentKey returns the current item's key.
-	GetCurrentKey(ctx context.Context) (TK, error)
+	GetCurrentKey() TK
 	// GetCurrentValue returns the current item's value.
 	GetCurrentValue(ctx context.Context) (TV, error)
 	// GetCurrentItem returns the current item.

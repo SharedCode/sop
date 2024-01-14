@@ -141,7 +141,9 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 	if err != nil {
 		return false, err
 	}
-	return node.find(ctx, btree, key, firstItemWithKey)
+	r,err := node.find(ctx, btree, key, firstItemWithKey)
+	btree.getCurrentItem(ctx)
+	return r, err
 }
 
 // FindOneWithId is synonymous to FindOne but allows code to supply the Item's Id to identify it.
@@ -163,13 +165,12 @@ func (btree *Btree[TK, TV]) FindOneWithId(ctx context.Context, key TK, id UUID) 
 }
 
 // GetCurrentKey returns the current item's key part.
-func (btree *Btree[TK, TV]) GetCurrentKey(ctx context.Context) (TK, error) {
-	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
-		var zero TK
-		return zero, nil
-	} else {
-		return item.Key, nil
+func (btree *Btree[TK, TV]) GetCurrentKey() TK {
+	var zero TK
+	if btree.currentItem == nil {
+		return zero
 	}
+	return btree.currentItem.Key
 }
 
 // GetCurrentValue returns the current item's value part.
@@ -236,7 +237,9 @@ func (btree *Btree[TK, TV]) First(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return node.moveToFirst(ctx, btree)
+	r, err := node.moveToFirst(ctx, btree)
+	btree.getCurrentItem(ctx)
+	return r, err
 }
 
 func (btree *Btree[TK, TV]) Last(ctx context.Context) (bool, error) {
@@ -248,7 +251,9 @@ func (btree *Btree[TK, TV]) Last(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return node.moveToLast(ctx, btree)
+	r, err := node.moveToLast(ctx, btree)
+	btree.getCurrentItem(ctx)
+	return r, err
 }
 
 func (btree *Btree[TK, TV]) Next(ctx context.Context) (bool, error) {
@@ -263,7 +268,9 @@ func (btree *Btree[TK, TV]) Next(ctx context.Context) (bool, error) {
 	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
 		return false, nil
 	}
-	return node.moveToNext(ctx, btree)
+	r, err := node.moveToNext(ctx, btree)
+	btree.getCurrentItem(ctx)
+	return r, err
 }
 
 func (btree *Btree[TK, TV]) Previous(ctx context.Context) (bool, error) {
@@ -278,7 +285,9 @@ func (btree *Btree[TK, TV]) Previous(ctx context.Context) (bool, error) {
 	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
 		return false, nil
 	}
-	return node.moveToPrevious(ctx, btree)
+	r, err := node.moveToPrevious(ctx, btree)
+	btree.getCurrentItem(ctx)
+	return r, err
 }
 
 // Update will find the item with matching key as the key parameter & update its value

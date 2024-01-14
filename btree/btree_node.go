@@ -500,7 +500,9 @@ func (node *Node[TK, TV]) moveToPrevious(ctx context.Context, btree *Btree[TK, T
 func (node *Node[TK, TV]) fixVacatedSlot(ctx context.Context, btree *Btree[TK, TV]) error {
 	position := btree.currentItemRef.getNodeItemIndex()
 	deletedItem := node.Slots[position]
-	btree.storeInterface.ItemActionTracker.Remove(deletedItem)
+	if btree.storeInterface.ItemActionTracker != nil {
+		btree.storeInterface.ItemActionTracker.Remove(deletedItem)
+	}
 	// If there are more than 1 items in slot then we move the items 1 slot to omit deleted item slot.
 	if node.Count > 1 {
 		if position < node.Count-1 {

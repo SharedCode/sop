@@ -71,7 +71,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 		trans.Rollback(ctx)
 		return
 	}
-	if k, err := b3.GetCurrentKey(ctx); k.Firstname != pk.Firstname || err != nil {
+	if k := b3.GetCurrentKey(); k.Firstname != pk.Firstname {
 		t.Errorf("GetCurrentKey() failed, got = %v, %v, want = 1, nil.", k, err)
 		trans.Rollback(ctx)
 		return
@@ -265,6 +265,82 @@ func VolumeDeletes(t *testing.T) {
 			}
 			// Ignore not found as item could had been deleted in previous run.
 		}
+		if i % batchSize == 0 {
+			if err := t1.Commit(ctx); err != nil {
+				t.Error(err)
+				t.Fail()
+			}
+			t1, _ = NewTransaction(true, -1)
+			t1.Begin()
+			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+		}
+	}
+}
+
+// Mixed Create, Update, Delete(CUD) operations then Search(R).
+func Test_MixedOperationsThenSearch(t *testing.T) {
+	start := 9000
+	end := 10000
+	batchSize := 100
+
+	t1, _ := NewTransaction(true, -1)
+	t1.Begin()
+	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+
+	lastNamePrefix := "zoltan"
+	firstName := "jack"
+
+	// Seed the DB with test items. And mix it up with Search/Fetch.
+	for i := start; i <= end; i++ {
+		pk, p := newPerson(firstName, fmt.Sprintf("%s%d", lastNamePrefix, i), "male", "email very very long long long", "phone123")
+		if ok, _ := b3.AddIfNotExist(ctx, pk, p); ok {
+			t.Logf("%v inserted", pk)
+		}
+
+		if i > start + 100 {
+			pk2, _ := newPerson(firstName, fmt.Sprintf("%s%d", lastNamePrefix, i-99), "male", "email very very long long long", "phone123")
+			ok, err := b3.FindOne(ctx, pk2, false)
+			if err != nil {
+				t.Log(err)
+				t.Fail()
+			}
+			item, _ := b3.GetCurrentItem(ctx)
+			if !ok || item.Key.Firstname != pk2.Firstname || item.Key.Lastname != pk2.Lastname {
+				t.Logf("Failed to find %v, found %v instead.", pk2, item.Key)
+				t.Fail()
+			}
+		}
+
+		if i % batchSize == 0 {
+			if err := t1.Commit(ctx); err != nil {
+				t.Error(err)
+				t.Fail()
+			}
+			t1, _ = NewTransaction(true, -1)
+			t1.Begin()
+			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+		}
+	}
+
+	// Do Read, Delete & Update mix.
+	for i := start+100; i <= end; i++ {
+		pk, p := newPerson("jack", fmt.Sprintf("zoltan%d", i-100), "male", "email very very long long long", "phone123")
+		n := i % 3
+		switch n {
+		// Read on 0.
+		case 0:
+			b3.FindOne(ctx, pk, false)
+			// b3.G
+		// Delete on 1.
+		case 1:
+
+		// Update on 2.
+		case 2:
+		}
+		if ok, _ := b3.AddIfNotExist(ctx, pk, p); ok {
+			t.Logf("%v inserted", pk)
+		}
+
 		if i % batchSize == 0 {
 			if err := t1.Commit(ctx); err != nil {
 				t.Error(err)

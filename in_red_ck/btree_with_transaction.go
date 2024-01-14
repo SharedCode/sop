@@ -110,13 +110,12 @@ func (b3 *btreeWithTransaction[TK, TV]) FindOneWithId(ctx context.Context, key T
 }
 
 // GetCurrentKey returns the current item's key.
-func (b3 *btreeWithTransaction[TK, TV]) GetCurrentKey(ctx context.Context) (TK, error) {
+func (b3 *btreeWithTransaction[TK, TV]) GetCurrentKey() TK {
 	var zero TK
 	if !b3.transaction.HasBegun() {
-		return zero, fmt.Errorf(transHasNotBegunErrorMsg)
+		return zero
 	}
-	k, err := b3.btree.GetCurrentKey(ctx)
-	return k, err
+	return b3.btree.GetCurrentKey()
 }
 
 // GetCurrentValue returns the current item's value.
