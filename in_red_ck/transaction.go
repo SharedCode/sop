@@ -31,6 +31,11 @@ type singlePhaseTransaction struct {
 }
 
 // NewTransaction creates an enduser facing transaction object.
+// forWriting - if true will create a transaction that allows create, update, delete operations on B-Tree(s)
+// created or opened in the transaction. Otherwise it will be for read-only operations.
+// maxTime - specify the maximum "commit" time of the transaction. That is, upon call to commit, it is given
+// this amount of time to conclude, otherwise, it will time out and rollback.
+// If -1 is specified, 15 minute commit time will be assigned.
 func NewTransaction(forWriting bool, maxTime time.Duration) (Transaction, error) {
 	twoPhase, err := NewTwoPhaseCommitTransaction(forWriting, maxTime)
 	if err != nil {
