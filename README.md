@@ -129,6 +129,9 @@ Reduce or increase the "slot length" and see what is fit with your application d
 In the tests that comes with SOP(under "in_red_ck" folder), the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
 But 500 is decent, so, it was used as the test's slot length.
 
+You specify the slot length, one time, during B-Tree creation, see NewBtree(..) call in link below for example.
+Here: https://github.com/SharedCode/sop/blob/800e7e23e9e2dce42f708db9fe9a90f3e9bbe988/in_red_ck/transaction_test.go#L57C13-L57C22
+
 ## Delete Service
 The system leaves out unused Nodes from time to time after you do a management action(Create, Update or Delete), an aftermath of ACID transactions. I.e. - so transaction(s) that fetch current versions of Nodes will not be interrupted and continue to fetch them, not until the system (elsewhere) commits new versions in an "instantaneous" super quick action, thus making current ones "obsolete". These leftover "obsolete" Nodes need to be deleted and there are two options in place to do that:
   * Deletes on commit - SOP will, by default, delete these unused or leftover Nodes
