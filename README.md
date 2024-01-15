@@ -125,10 +125,9 @@ Reduce or increase the "slot length" and see what is fit with your application d
 In the tests that comes with SOP(under in_red_ck folder), the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
 But 500 is decent, so, it was used as the test's slot length.
 
+## General Discussion of SOP V2
 
-## Initial General Discussion of SOP V2
-
-Below discussions are mostly achieved in this SOP V2 POC, I will update and move what ever details did not make it, e.g. the data driver for support of huge blobs to a future, V3 release section.
+Below features are mostly achieved in this SOP V2 POC, only two features did not make it, i.e. - the data driver for support of huge blobs & its companion feature, streaming to support extremely huge data.
 
 SOP is a modern database engine within a code library. It is categorized as a NoSql engine, but which because of its scale-ability, is considered to be an enabler, coo-petition/player in the Big Data space.
 
@@ -151,7 +150,6 @@ Via usage of SOP API, your application will experience low latency, very high pe
 Here are the prerequisites for doing a local run:
 * Redis running locally using default Port
 * Cassandra running locally using default Port
-* Access & permission to an AWS S3 bucket
 
 ## How to Build & Run
 Nothing special here, just issue a "go build" in the folder where you have the go.mod file and it will build the code libraries. Issue a "go test" to run the unit test on test files, to see they pass. You can debug, step-through the test files to learn how to use the code library.
@@ -171,7 +169,7 @@ Cassandra will be used as data Registry & as the data blob store. Redis will pro
 Blobs is stored in Cassandra, thus, benefitting from its built-in features like "replication" across regions, etc...
 
 ## Item Serialization
-Will use Golang's built-in marshaller for serialization for simplicity and support for "streaming".
+Uses Golang's built-in marshaller for serialization for simplicity and support for "streaming".
 
 ## Transaction
 SOP will sport ACID, two phase commit transactions with two modes:
