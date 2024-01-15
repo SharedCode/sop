@@ -126,7 +126,7 @@ In the tests that comes with SOP(under in_red_ck folder), the node slot length i
 But 500 is decent, so, it was used as the test's slot length.
 
 ## Delete Service
-The system leaves out unused Nodes from time to time, an aftermath of ACID transactions. I.e. - so transaction(s) that fetch current versions of Nodes will not be interrupted and continue to be able to fetch those versioned Node(s), not until the system commits a new version in an "instantaneous" super quick action. These leftover Nodes need to be deleted and there are two options in place to do that:
+The system leaves out unused Nodes from time to time after you do a management action(Create, Update or Delete), an aftermath of ACID transactions. I.e. - so transaction(s) that fetch current versions of Nodes will not be interrupted and continue to fetch current versions, not until the system commits a new version in an "instantaneous" super quick action. These "leftover" Nodes need to be deleted and there are two options in place to do that:
   * Deletes on commit - SOP will, by default, delete these unused or leftover Nodes
   * Deletes via Kafka route - if DeleteService is enabled, SOP will enqueue to Kafka and let your application to take messages from Kafka and do the deletes, on your desired schedule or interval
 
