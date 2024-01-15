@@ -112,5 +112,4 @@ func (b3 b3WithInducedErrors[TK, TV]) Previous(ctx context.Context) (bool, error
 }
 
 func (b3 b3WithInducedErrors[TK, TV])IsValueDataInNodeSegment() bool{ return true }
-
 func (b3 b3WithInducedErrors[TK, TV])IsUnique() bool {return true}

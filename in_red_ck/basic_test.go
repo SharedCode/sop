@@ -80,8 +80,6 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		return
 	}
 	t.Logf("Successfully added & found item with key 1.")
-	// TODO: add more unit tests to exercise/verify commit's conflict detection, lightweight locking
-	// and Nodes upserts, i.e. - save updated nodes, save removed nodes & save added nodes.
 	if err := trans.Commit(ctx); err != nil {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}
