@@ -1,4 +1,4 @@
-# M-Way Trie algorithms for Scaleable Object Persistence (SOP)
+# M-Way Trie algorithms for Scaleable Objects Persistence (SOP)
 
 Scaleable Objects Persistence (SOP) Framework
 
