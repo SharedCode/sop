@@ -112,6 +112,18 @@ SOP transaction achieves each of these ACID transaction attributes by moving the
 
 It has nifty algorithms controlling/talking to Redis & Cassandra(in behalf of your CRUD operations) in order to ensure each ACID attribute is enforced by the transaction. If ACID attributes spells mission critical for your system, then look no further. SOP provides all that and a whole lot more, e.g. built-in data caching via Redis. So, all of your data are "cached" out of process, and since SOP transaction also caches your data within the host memory, then you get a L1/L2 caching for free, just by using SOP code library.
 
+## Fine Tuning
+There are two primary ingredients affecting performance and I/O via SOP. They are:
+  * Slot Length - typical values are 100, 500, 1,000 and so... depends on your application data requirements & usage scenario
+  * Batch Size - typically aligns with Slot Length, i.e. - set the batch size to the same amount/value as the Slot Length
+Base on your data structure size and the amount you intend to store using SOP, there is an opportunity to optimize for I/O and performance. Small to medium size data, will typically fit well with a bigger node size. For typical structure size scenarios, slot length anywhere from 100 to 1,000 may be ideal. You can match the batch size with the slot length. In this case, it means that you are potentially filling in a node with your entire batch. This is faster for example, as compared to your batch requiring multiple nodes, which will require more "virtual Ids" (or handles) in the registry table.
+
+But of course, you have to consider memory requirements, i.e. - how many bytes of data per Key/Value pair(item) that you will store. In this version, the data is persisted together with the other data including meta data of the node. Thus, it is a straight up one node(one partition in Cassandra) that will contain your entire batch's items. Not bad really, but of course, you may have to do fine tuning, try a combination of "slot length"(and batch size) and see how that affects the I/O throughput. Fetches will always be very very fast, and the bigger node size(bigger slot length!), the better for fetches(reads). BUT in trade off with memory. As one node will occupy bigger memory, thus, you will have to checkout the Cassandra size, Redis caching and your application cluster, to see how the overall setup performs.
+
+Reduce or increase the "slot length" and see what is fit with your application data requirementes scenario.
+In the tests that comes with SOP(under in_red_ck folder), the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
+But 500 is decent, so, it was used as the test's slot length.
+
 
 ## Initial General Discussion of SOP V2
 
