@@ -118,7 +118,7 @@ It has nifty algorithms controlling/talking to Redis & Cassandra(in behalf of yo
 
 ## Fine Tuning
 There are two primary ingredients affecting performance and I/O via SOP. They are:
-  * Slot Length - typical values are 100, 500, 1,000 and so... depends on your application data requirements & usage scenario
+  * Slot Length - typical values are 100, 500, 1,000 and so on... depends on your application data requirements & usage scenario
   * Batch Size - typically aligns with Slot Length, i.e. - set the batch size to the same amount/value as the Slot Length
 
 Base on your data structure size and the amount you intend to store using SOP, there is an opportunity to optimize for I/O and performance. Small to medium size data, will typically fit well with a bigger node size. For typical structure size scenarios, slot length anywhere from 100 to 1,000 may be ideal. You can match the batch size with the slot length. In this case, it means that you are potentially filling in a node with your entire batch. This is faster for example, as compared to your batch requiring multiple nodes, which will require more "virtual Ids" (or handles) in the registry table.
