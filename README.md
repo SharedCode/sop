@@ -126,7 +126,7 @@ Base on your data structure size and the amount you intend to store using SOP, t
 But of course, you have to consider memory requirements, i.e. - how many bytes of data per Key/Value pair(item) that you will store. In this version, the data is persisted together with the other data including meta data of the node. Thus, it is a straight up one node(one partition in Cassandra) that will contain your entire batch's items. Not bad really, but of course, you may have to do fine tuning, try a combination of "slot length"(and batch size) and see how that affects the I/O throughput. Fetches will always be very very fast, and the bigger node size(bigger slot length!), the better for fetches(reads). BUT in trade off with memory. As one node will occupy bigger memory, thus, you will have to checkout the Cassandra "size"(perf of VMs & hot spots), Redis caching and your application cluster, to see how the overall setup performs.
 
 Reduce or increase the "slot length" and see what is fit with your application data requirementes scenario.
-In the tests that comes with SOP(under in_red_ck folder), the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
+In the tests that comes with SOP(under "in_red_ck" folder), the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
 But 500 is decent, so, it was used as the test's slot length.
 
 ## Delete Service
@@ -139,7 +139,11 @@ Here: https://github.com/SharedCode/sop/blob/3b3b574bb97905ca38d761dedd8af95a7fb
 
 ## General Discussion of SOP V2
 
-Below features are mostly achieved in this SOP V2 POC, only three features did not make it, i.e. - the data driver for support of huge blobs & its companion feature, streaming to support extremely huge data. And the "long lived" transaction that will use "transaction sandbox" storage. This last feature may not make it, not until V4 or probably even later, as the market for such is not big enough.
+Below features are mostly achieved in this SOP V2 POC, only three features did not make it:
+  * Data driver for support of huge blobs,
+  * its companion feature, "data streaming" to support extremely huge data. And,
+  * "long lived" transaction that will use "transaction sandbox" storage
+This last feature may not make it, not until V4 or probably even later, as the market for such is not big enough.
 
 SOP is a modern database engine within a code library. It is categorized as a NoSql engine, but which because of its scale-ability, is considered to be an enabler, coo-petition/player in the Big Data space.
 
@@ -177,20 +181,12 @@ SOP is written in Go and is a full re-implementation of the c# version. A lot of
 * Cassandra, etc... as backend Stores.
 Support for additional backends other than Cassandra will be done on per request basis, or as time permits.
 
-Cassandra will be used as data Registry & as the data blob store. Redis will provide the necessary out of process "caching" needs to accelerate I/O.
-
-## Very Large Blob Layout
-Blobs is stored in Cassandra, thus, benefitting from its built-in features like "replication" across regions, etc...
+Cassandra is used as data Registry & as the data blob store. Redis provides the necessary out of process "caching" needs to accelerate I/O.
 
 ## Item Serialization
 Uses Golang's built-in marshaller for serialization for simplicity and support for "streaming"(future feature, perhaps in V3).
 
-## Transaction
-SOP sports ACID, two phase commit transactions with two modes:
-* in-memory transaction sandbox - short lived and changes are persisted only during transaction commit. Initial implementation will support (out of process, e.g. in redis) in-memory, short lived transactions as will be more optimal I/O wise.
-* on-disk transaction sandbox - long lived and changes persisted to a Transaction Sandbox table and committed to their final Btree store destinations during commit. Future next will support long lived transactions which are geared for special types of use-cases(future feature, perhaps in V4?).
-
 ### Two Phase Commit
 Two phase commit is required so SOP can offer "seamless" integration with your App's other DB backend(s)' transactions. On Phase 1 commit, SOP will commit all transaction session changes onto respective new (but geared for permanence) Btree transaction nodes. Your App will then be allowed to commit any other DB(s) transactions it use. Your app is allowed to Rollback any of these transactions and just relay the Rollback to SOP ongoing transaction if needed.
 On successful commit on Phase 1, SOP will then commit Phase 2, which is, to tell all Btrees affected in the transaction to finalize the committed Nodes and make them available on succeeding Btree I/O.
-Phase 2 commit will be a very fast, quick action as changes and Nodes are already resident on the Btree storage, it is just a matter of finalizing the Virtual ID registry with the new Nodes' physicall addresses to swap the old with the new ones.
+Phase 2 commit is a very fast, quick action as changes and Nodes are already resident on the Btree storage, it is just a matter of finalizing the Virtual ID registry with the new Nodes' physicall addresses to swap the old with the new ones.
