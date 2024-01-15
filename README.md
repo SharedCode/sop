@@ -2,7 +2,8 @@
 
 Scaleable Object Persistence (SOP) Framework
 
-SOP Version 1(beta) is an in-memory implementation. It was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithms that will work irrespective of backend, be it in-memory or others, such as that geared for V2.
+## SOP In-Memory
+SOP in-memory was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithms that will work irrespective of backend, be it in-memory or others, such as the "in Cassandra & Redis" implementation(see discussion below for details).
 
 SOP in-memory, is a full implementation. It has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your app. No need to have impedance mismatch.
 
@@ -61,7 +62,9 @@ Requirements
   * Golang version that supports generics
   * Internet access to github
 
-# SOP V2 Requirements
+# SOP in Cassandra & Redis
+
+Requirements:
   * Cassandra
   * Redis
   * Kafka if wanting to enable the Delete Service
