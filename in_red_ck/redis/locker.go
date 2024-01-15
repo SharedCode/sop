@@ -75,9 +75,7 @@ func Unlock(ctx context.Context, lockKeys ...*LockKeys) error {
 		}
 		// Delete lock key if we own it.
 		if err := redisCache.Delete(ctx, lk.key); err != nil {
-			if !KeyNotFound(err) {
-				lastErr = err
-			}
+			lastErr = err
 		}
 	}
 	return lastErr

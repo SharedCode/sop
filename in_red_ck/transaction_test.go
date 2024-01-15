@@ -57,29 +57,24 @@ func Test_SimpleAddPerson(t *testing.T) {
 
 	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
 	if err != nil {
-		trans.Rollback(ctx)
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
 	}
 	if ok, err := b3.Add(ctx, pk, p); !ok || err != nil {
 		t.Errorf("Add('joe') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
-		trans.Rollback(ctx)
 		return
 	}
 
 	if ok, err := b3.FindOne(ctx, pk, false); !ok || err != nil {
 		t.Errorf("FindOne('joe',false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
-		trans.Rollback(ctx)
 		return
 	}
 	if k := b3.GetCurrentKey(); k.Firstname != pk.Firstname {
 		t.Errorf("GetCurrentKey() failed, got = %v, %v, want = 1, nil.", k, err)
-		trans.Rollback(ctx)
 		return
 	}
 	if v, err := b3.GetCurrentValue(ctx); v.Phone != p.Phone || err != nil {
 		t.Errorf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
-		trans.Rollback(ctx)
 		return
 	}
 	t.Logf("Successfully added & found item with key 'joe'.")
@@ -104,25 +99,21 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
 	b3, err := OpenBtree[PersonKey, Person](ctx, "persondb", trans)
 	if err != nil {
-		trans.Rollback(ctx)
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
 	}
 	if ok, err := b3.Add(ctx, pk, p); !ok || err != nil {
 		t.Errorf("b3.Add('tracy') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
-		trans.Rollback(ctx)
 		return
 	}
 
 	b32, err := OpenBtree[PersonKey, Person](ctx, "persondb", trans2)
 	if err != nil {
-		trans2.Rollback(ctx)
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
 	}
 	if ok, err := b32.Add(ctx, pk, p); !ok || err != nil {
 		t.Errorf("b32.Add('tracy') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
-		trans.Rollback(ctx)
 		return
 	}
 
@@ -143,7 +134,6 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	trans.Begin()
 	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
 	if err != nil {
-		trans.Rollback(ctx)
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
 	}
@@ -155,7 +145,6 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		pk, p := newPerson(fmt.Sprintf("tracy%d", i), "swift", "female", "email", "phone")
 		if ok, err := b3.Add(ctx, pk, p); !ok || err != nil {
 			t.Errorf("b3.Add('tracy') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
-			trans.Rollback(ctx)
 			return
 		}
 	}
