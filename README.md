@@ -125,6 +125,14 @@ Reduce or increase the "slot length" and see what is fit with your application d
 In the tests that comes with SOP(under in_red_ck folder), the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
 But 500 is decent, so, it was used as the test's slot length.
 
+## Delete Service
+The system leaves out unused Nodes from time to time, an aftermath of ACID transactions. I.e. - so transaction(s) that fetch current versions of Nodes will not be interrupted and continue to be able to fetch those versioned Node(s), not until the system commits a new version in an "instantaneous" super quick action. These leftover Nodes need to be deleted and there are two options in place to do that:
+  * Deletes on commit - SOP will, by default, delete these unused or leftover Nodes
+  * Deletes via Kafka route - if DeleteService is enabled, SOP will enqueue to Kafka and let your application to take messages from Kafka and do the deletes, on your desired schedule or interval
+
+The optimal choice is the latter. For example, you can setup a Kafka consumer which takes from Kafka queue, enable the "delete service" in SOP(see "EnableDeleteSevice") and uses SOP's BlobStore API to delete these Nodes, at your schedule or interval, like once every day or every hour. For sample code how to do this, pls. feel free to reuse/pattern it with the "in_red_ck/delete_service.go" code.
+Here: https://github.com/SharedCode/sop/blob/3b3b574bb97905ca38d761dedd8af95a7fbce4e2/in_red_ck/delete_service.go#L24C11-L24C11
+
 ## General Discussion of SOP V2
 
 Below features are mostly achieved in this SOP V2 POC, only three features did not make it, i.e. - the data driver for support of huge blobs & its companion feature, streaming to support extremely huge data. And the "long lived" transaction that will use "transaction sandbox" storage. This last feature may not make it, not until V4 or probably even later, as the market for such is not big enough.
