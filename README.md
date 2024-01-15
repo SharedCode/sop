@@ -161,11 +161,11 @@ SOP written in Go will be a full re-implementation. A lot of key technical featu
 
 ## Component Layout
 * SOP code library for managing key/value pair of any data type using Go's generics.
-* redis for clustered, out of process data caching.
-* Cassandra, AWS S3, etc... as backend Stores.
-Support for additional backends other than Cassandra & AWS S3 will be done on per request basis, or as time permits.
+* Redis for clustered, out of process data caching.
+* Cassandra, etc... as backend Stores.
+Support for additional backends other than Cassandra will be done on per request basis, or as time permits.
 
-Cassandra will be used as data Registry & AWS S3 as the data blob store. Redis will provide the necessary out of process "caching" needs to accelerate I/O.
+Cassandra will be used as data Registry & as the data blob store. Redis will provide the necessary out of process "caching" needs to accelerate I/O.
 
 ## Very Large Blob Layout
 Blobs will be stored in AWS S3, thus, benefitting from its built-in features like "replication" across regions, etc...
