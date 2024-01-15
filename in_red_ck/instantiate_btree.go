@@ -32,7 +32,7 @@ func Shutdown() {
 	redis.CloseConnection()
 }
 
-// OpenBtree will open an existing B-Tree instance it for use in a transaction.
+// OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
 func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("Transaction 't' parameter can't be nil")
@@ -55,7 +55,11 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 	return newBtree[TK, TV](ctx, &stores[0], trans)
 }
 
-// NewBtree will create a new B-Tree instance with data persisted to backend storage upon commit, e.g. - AWS storage services.
+// NewBtree will create a new B-Tree instance with data persisted to backend storage upon commit.
+// If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
+// and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
+// the OpenBtree function.
+//
 // Parameters:
 // name - specifies the name of the store/b-tree.
 // slotLength - specifies the number of item slots per node of a b-tree.
