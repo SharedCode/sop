@@ -105,17 +105,29 @@ Above illustrates sample configuration for Cassandra & Redis bits, and how to in
 ## Transaction Batching
 You read that right, in SOP, all your actions within a transaction becomes the batch that gets submitted to the backend. Thus, you can just focus on your data mining and/or application logic and let the SOP transaction to take care of submitting all your changes for commit. Even items you've fetched are checked for consistency during commit. And yes, there is a "reader" transaction where you just do fetches or item reads, then on commit, SOP will ensure the items you read did not change while in the middle or up to the time you submitted or committed the transaction.
 
-Recommended size of a transaction is about 100 items, more or less, depending on your data structure sizes. That is, you can fetch(Read) and/or do management actions such as Create, Update, Delete for around 100 items more or less and do commit to finalize the transaction. Commit will error(and rollback internally) if there is a conflict elsewhere, or just succeed if there is none.
+Recommended size of a transaction is about 500 items(and should typically match the "slot length" of the node), more or less, depending on your data structure sizes. That is, you can fetch(Read) and/or do management actions such as Create, Update, Delete for around 500 items more or less and do commit to finalize the transaction.
 
 ## Atomicity, Consistency, Isolation and Durability
 SOP transaction achieves each of these ACID transaction attributes by moving the M-Way Trie(B-Tree for short) within the SOP code library. B-Tree is the heart of database systems. It enables fast storage and searches, a.k.a. - indexing engine. But more than that, by SOP's design, the B-Tree is used as part of the "controller logic" to provide two phase commit, ACID transactions.
 
 It has nifty algorithms controlling/talking to Redis & Cassandra(in behalf of your CRUD operations) in order to ensure each ACID attribute is enforced by the transaction. If ACID attributes spells mission critical for your system, then look no further. SOP provides all that and a whole lot more, e.g. built-in data caching via Redis. So, all of your data are "cached" out of process, and since SOP transaction also caches your data within the host memory, then you get a L1/L2 caching for free, just by using SOP code library.
 
+## Fine Tuning
+There are two primary ingredients affecting performance and I/O via SOP. They are:
+  * Slot Length - typical values are 100, 500, 1,000 and so... depends on your application data requirements & usage scenario
+  * Batch Size - typically aligns with Slot Length, i.e. - set the batch size to the same amount/value as the Slot Length
 
-## Initial General Discussion of SOP V2
+Base on your data structure size and the amount you intend to store using SOP, there is an opportunity to optimize for I/O and performance. Small to medium size data, will typically fit well with a bigger node size. For typical structure size scenarios, slot length anywhere from 100 to 1,000 may be ideal. You can match the batch size with the slot length. In this case, it means that you are potentially filling in a node with your entire batch. This is faster for example, as compared to your batch requiring multiple nodes, which will require more "virtual Ids" (or handles) in the registry table.
 
-Below discussions are mostly achieved in this SOP V2 POC, I will update and move what ever details did not make it, e.g. the data driver for support of huge blobs to a future, V3 release section.
+But of course, you have to consider memory requirements, i.e. - how many bytes of data per Key/Value pair(item) that you will store. In this version, the data is persisted together with the other data including meta data of the node. Thus, it is a straight up one node(one partition in Cassandra) that will contain your entire batch's items. Not bad really, but of course, you may have to do fine tuning, try a combination of "slot length"(and batch size) and see how that affects the I/O throughput. Fetches will always be very very fast, and the bigger node size(bigger slot length!), the better for fetches(reads). BUT in trade off with memory. As one node will occupy bigger memory, thus, you will have to checkout the Cassandra "size"(perf of VMs & hot spots), Redis caching and your application cluster, to see how the overall setup performs.
+
+Reduce or increase the "slot length" and see what is fit with your application data requirementes scenario.
+In the tests that comes with SOP(under in_red_ck folder), the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
+But 500 is decent, so, it was used as the test's slot length.
+
+## General Discussion of SOP V2
+
+Below features are mostly achieved in this SOP V2 POC, only three features did not make it, i.e. - the data driver for support of huge blobs & its companion feature, streaming to support extremely huge data. And the "long lived" transaction that will use "transaction sandbox" storage. This last feature may not make it, not until V4 or probably even later, as the market for such is not big enough.
 
 SOP is a modern database engine within a code library. It is categorized as a NoSql engine, but which because of its scale-ability, is considered to be an enabler, coo-petition/player in the Big Data space.
 
@@ -123,9 +135,9 @@ Integration is one of SOP's primary goals, its ease of use, API, being part/clos
 
 Code uses the Store API to store & manage key/value pairs of data. Internal Store implementation uses an enhanced, modernized M-Way Tree(which we will simply call B-Tree for brevity), implementation that virtualizes RAM & Disk storage. Few of key enhancements to this B-Tree as compared to traditional implementations are:
 
-* node load optimization keeps it at around 62%-75% full average load of inner & leaf nodes. Traditional B-Trees only achieve about half-full (50%) average load. This translates to a more compressed or more dense data Stores saving IT shops from costly storage hardware.
+* node load optimization keeps it at around 62%-75+% full average load of inner & leaf nodes. Traditional B-Trees only achieve about half-full (50%) at most, average load. This translates to a more compressed or more dense data Stores saving IT shops from costly storage hardware.
 * leaf nodes' height in a particular case is tolerated not to be perfectly balanced to favor speed of deletion at zero/minimal cost in exchange. Also, the height disparity due to deletion tends to get repaired during inserts due to the node load optimization feature discussed above.
-* virtualization of RAM and Disk due to the seamless-ness & effectivity of handling Btree Nodes and their app data. There is  no context switch, thus no unnecessary latency, between handling a Node in RAM and on disk.
+* virtualization of RAM and Disk due to the seamless-ness & effectivity of handling Btree Nodes and their app data. There is no context switch, thus no unnecessary latency, between handling a Node in RAM and on disk.
 * data block technology enables support for "very large blob" (vlblob) efficient storage and access without requiring "data streaming" concept. Backend stores that traditionally are not recommended for storage of vlblob can be enabled for such. E.g. - Cassandra will not feel the "vlblobs" as SOP will store manage-able data chunk size to Cassandra store.
 * etc... a lot more enhancements waiting to be documented/cited as time permits.
 
@@ -138,32 +150,33 @@ Via usage of SOP API, your application will experience low latency, very high pe
 Here are the prerequisites for doing a local run:
 * Redis running locally using default Port
 * Cassandra running locally using default Port
-* Access & permission to an AWS S3 bucket
+* Golang that supports generics, currently set to 1.21.5 and higher
 
 ## How to Build & Run
 Nothing special here, just issue a "go build" in the folder where you have the go.mod file and it will build the code libraries. Issue a "go test" to run the unit test on test files, to see they pass. You can debug, step-through the test files to learn how to use the code library.
+The Enterprise version V2 is in package "in_red_ck", thus, you can peruse through the "integration" tests in this folder & run them selectively. It requires setting up Cassandra & Redis and providing configuration for the two. Which is also illustrated by the mentioned tests, and also briefly discussed above.
 
 # Technical Details
-SOP written in Go will be a full re-implementation. A lot of key technical features of SOP will be carried over and few more will be added in order to support a master-less implementation. That is, backend Stores such as Cassandra, AWS S3 bucket will be utilized and SOP library will be master-less in order to offer a complete, 100% horizontal scaling with no hot-spotting or any application instance bottlenecks.
+SOP is written in Go and is a full re-implementation of the c# version. A lot of key technical features of SOP got carried over and few more added that supported a master-less implementation. That is, backend Stores such as Cassandra, is utilized and SOP library will be master-less in order to offer a complete, 100% horizontal scaling with no hot-spotting or any application instance bottlenecks.
 
 ## Component Layout
 * SOP code library for managing key/value pair of any data type using Go's generics.
-* redis for clustered, out of process data caching.
-* Cassandra, AWS S3, etc... as backend Stores.
-Support for additional backends other than Cassandra & AWS S3 will be done on per request basis, or as time permits.
+* Redis for clustered, out of process data caching.
+* Cassandra, etc... as backend Stores.
+Support for additional backends other than Cassandra will be done on per request basis, or as time permits.
 
-Cassandra will be used as data Registry & AWS S3 as the data blob store. Redis will provide the necessary out of process "caching" needs to accelerate I/O.
+Cassandra will be used as data Registry & as the data blob store. Redis will provide the necessary out of process "caching" needs to accelerate I/O.
 
 ## Very Large Blob Layout
-Blobs will be stored in AWS S3, thus, benefitting from its built-in features like "replication" across regions, etc...
+Blobs is stored in Cassandra, thus, benefitting from its built-in features like "replication" across regions, etc...
 
 ## Item Serialization
-Will use Golang's built-in marshaller for serialization for simplicity and support for "streaming".
+Uses Golang's built-in marshaller for serialization for simplicity and support for "streaming"(future feature, perhaps in V3).
 
 ## Transaction
-SOP will sport ACID, two phase commit transactions with two modes:
+SOP sports ACID, two phase commit transactions with two modes:
 * in-memory transaction sandbox - short lived and changes are persisted only during transaction commit. Initial implementation will support (out of process, e.g. in redis) in-memory, short lived transactions as will be more optimal I/O wise.
-* on-disk transaction sandbox - long lived and changes persisted to a Transaction Sandbox table and committed to their final Btree store destinations during commit. Future next will support long lived transactions which are geared for special types of use-cases.
+* on-disk transaction sandbox - long lived and changes persisted to a Transaction Sandbox table and committed to their final Btree store destinations during commit. Future next will support long lived transactions which are geared for special types of use-cases(future feature, perhaps in V4?).
 
 ### Two Phase Commit
 Two phase commit is required so SOP can offer "seamless" integration with your App's other DB backend(s)' transactions. On Phase 1 commit, SOP will commit all transaction session changes onto respective new (but geared for permanence) Btree transaction nodes. Your App will then be allowed to commit any other DB(s) transactions it use. Your app is allowed to Rollback any of these transactions and just relay the Rollback to SOP ongoing transaction if needed.
