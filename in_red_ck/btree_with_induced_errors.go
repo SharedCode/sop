@@ -1,0 +1,116 @@
+package in_red_ck
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/SharedCode/sop/btree"
+)
+
+type b3WithInducedErrors[TK btree.Comparable, TV any] struct{
+	induceErrorOnMethod int
+}
+
+func newBTreeWithInducedErrors[TK btree.Comparable, TV any]() *b3WithInducedErrors[TK, TV] {
+	return &b3WithInducedErrors[TK, TV]{}
+}
+
+func (b3 b3WithInducedErrors[TK, TV])Add(ctx context.Context, key TK, value TV) (bool, error) {
+	if b3.induceErrorOnMethod == 1 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+func (b3 b3WithInducedErrors[TK, TV])AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error) {
+	if b3.induceErrorOnMethod == 2 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV])Update(ctx context.Context, key TK, value TV) (bool, error) {
+	if b3.induceErrorOnMethod == 3 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+func (b3 b3WithInducedErrors[TK, TV])UpdateCurrentItem(ctx context.Context, newValue TV) (bool, error) {
+	if b3.induceErrorOnMethod == 4 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV])Remove(ctx context.Context, key TK) (bool, error) {
+	if b3.induceErrorOnMethod == 5 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+func (b3 b3WithInducedErrors[TK, TV])RemoveCurrentItem(ctx context.Context) (bool, error) {
+	if b3.induceErrorOnMethod == 6 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+func (b3 b3WithInducedErrors[TK, TV])FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
+	if b3.induceErrorOnMethod == 7 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+func (b3 b3WithInducedErrors[TK, TV])FindOneWithId(ctx context.Context, key TK, id btree.UUID) (bool, error) {
+	if b3.induceErrorOnMethod == 8 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+func (b3 b3WithInducedErrors[TK, TV]) GetCurrentKey() TK {
+	var zero TK
+	return zero
+}
+func (b3 b3WithInducedErrors[TK, TV])GetCurrentValue(ctx context.Context) (TV, error) {
+	var zero TV
+	if b3.induceErrorOnMethod == 9 {
+		return zero, fmt.Errorf("foobar")
+	}
+	return zero, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV])GetCurrentItem(ctx context.Context) (btree.Item[TK, TV], error) {
+	if b3.induceErrorOnMethod == 10 {
+		return btree.Item[TK, TV]{}, fmt.Errorf("foobar")
+	}
+	return btree.Item[TK, TV]{}, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV])First(ctx context.Context) (bool, error) {
+	if b3.induceErrorOnMethod == 11 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV])Last(ctx context.Context) (bool, error) {
+	if b3.induceErrorOnMethod == 12 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+func (b3 b3WithInducedErrors[TK, TV])Next(ctx context.Context) (bool, error) {
+	if b3.induceErrorOnMethod == 13 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV]) Previous(ctx context.Context) (bool, error) {
+	if b3.induceErrorOnMethod == 14 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV])IsValueDataInNodeSegment() bool{ return true }
+
+func (b3 b3WithInducedErrors[TK, TV])IsUnique() bool {return true}
