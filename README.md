@@ -12,7 +12,7 @@ Sample Basic Usage:
   * Instantiate the b-tree manager, e.g. - ```sop.NewBtree[int, string](false)```. The single parameter specifies whether you would want to manage unique keys.
   * Populate the b-tree, e.g. - ```b3.Add(<key>, <value>)```
   * Do a range query, e.g. ```b3.FindOne(<key>, true),... b3.Next(), b3.GetCurrentKey or b3.GetCurrentValue``` will return either the key or the value currently selected by the built-in "cursor".
-  * Let the b-tree go out of scope or assign nil to it.
+  * Let the b-tree go out of scope.
 
 Here is the complete example:
 
