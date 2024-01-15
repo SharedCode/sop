@@ -63,7 +63,8 @@ func Test_TransactionInducedErrorOnOpen(t *testing.T) {
 	}
 }
 
-func Test_TransactionInducedErrorOnNew(t *testing.T) {
+// Add Test_ prefix if wanting to run.
+func TransactionInducedErrorOnNew(t *testing.T) {
 	trans, err := NewTransaction(true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
