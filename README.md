@@ -102,6 +102,18 @@ func init() {
 ```
 Above illustrates sample configuration for Cassandra & Redis bits, and how to initialize (via in_red_ck.Initialize(..) function) the "system". You specify that and call Initialize one time(e.g. in init() like as shown) in your app or microservice and that is it.
 
+## Transaction Batching
+You read that right, in SOP, all your actions within a transaction becomes the batch that gets submitted to the backend. Thus, you can just focus on your data mining and/or application logic and let the SOP transaction to take care of submitting all your changes for commit. Even items you've fetched are checked for consistency during commit. And yes, there is a "reader" transaction where you just do fetches or item reads, then on commit, SOP will ensure the items you read did not change while in the middle or up to the time you submitted or committed the transaction.
+
+Recommended size of a transaction is about 100 items, more or less, depending on your data structure sizes. That is, you can fetch(Read) and/or do management actions such as Create, Update, Delete for around 100 items more or less and do commit to finalize the transaction. Commit will error(and rollback internally) if there is a conflict elsewhere, or just succeed if there is none.
+
+## Atomicity, Consistency, Isolation and Durability
+SOP transaction achieves each of these ACID transaction attributes by moving the M-Way Trie(B-Tree for short) within the SOP code library. B-Tree is the heart of database systems. It enables fast storage and searches, a.k.a. - indexing engine. But more than that, by SOP's design, the B-Tree is used as part of the "controller logic" to provide two phase commit, ACID transactions.
+
+It has nifty algorithms controlling/talking to Redis & Cassandra(in behalf of your CRUD operations) in order to ensure each ACID attribute is enforced by the transaction. If ACID attributes spells mission critical for your system, then look no further. SOP provides all that and a whole lot more, e.g. built-in data caching via Redis. So, all of your data are "cached" out of process, and since SOP transaction also caches your data within the host memory, then you get a L1/L2 caching for free, just by using SOP code library.
+
+
+## Initial General Discussion of SOP V2
 
 Below discussions are mostly achieved in this SOP V2 POC, I will update and move what ever details did not make it, e.g. the data driver for support of huge blobs to a future, V3 release section.
 
