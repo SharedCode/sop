@@ -247,7 +247,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 		return err
 	}
 
-	// Delete the store "count" in Redis.
+	// Delete the store records in Redis.
 	for i := range names {
 		// Tolerate Redis cache failure.
 		if err := sr.redisCache.Delete(ctx, names[i]); err != nil {
