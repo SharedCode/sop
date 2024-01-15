@@ -76,6 +76,9 @@ func New[TK Comparable, TV any](storeInfo *StoreInfo, si *StoreInterface[TK, TV]
 	if si == nil {
 		return nil, fmt.Errorf("Can't create a b-tree with nil StoreInterface parameter")
 	}
+	if si.NodeRepository == nil {
+		return nil, fmt.Errorf("Can't create a b-tree with nil si.NodeRepository parameter")
+	}
 	if si.ItemActionTracker == nil {
 		return nil, fmt.Errorf("Can't create a b-tree with nil si.ItemActionTracker parameter")
 	}
