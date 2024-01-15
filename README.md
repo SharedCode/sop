@@ -168,7 +168,7 @@ Support for additional backends other than Cassandra will be done on per request
 Cassandra will be used as data Registry & as the data blob store. Redis will provide the necessary out of process "caching" needs to accelerate I/O.
 
 ## Very Large Blob Layout
-Blobs will be stored in AWS S3, thus, benefitting from its built-in features like "replication" across regions, etc...
+Blobs is stored in Cassandra, thus, benefitting from its built-in features like "replication" across regions, etc...
 
 ## Item Serialization
 Will use Golang's built-in marshaller for serialization for simplicity and support for "streaming".
