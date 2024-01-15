@@ -70,6 +70,8 @@ func Test_SimpleAddPerson(t *testing.T) {
 		return
 	}
 	if k := b3.GetCurrentKey(); k.Firstname != pk.Firstname {
+		// Rollback before generating an error.
+		trans.Rollback(ctx)
 		t.Errorf("GetCurrentKey() failed, got = %v, %v, want = 1, nil.", k, err)
 		return
 	}

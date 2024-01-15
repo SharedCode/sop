@@ -98,6 +98,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	}
 	if k := b3.GetCurrentKey(); k != 1 {
 		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
+		trans.Rollback(ctx)
 		return
 	}
 	if v, err := b3.GetCurrentValue(ctx); v != "hello world" || err != nil {
