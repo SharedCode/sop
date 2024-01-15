@@ -41,7 +41,8 @@ func (x PersonKey) Compare(other interface{}) int {
 	return cmp.Compare[string](x.Firstname, y.Firstname)
 }
 
-const nodeSlotLength = 50
+const nodeSlotLength = 500
+const batchSize = nodeSlotLength
 
 func Test_SimpleAddPerson(t *testing.T) {
 	kafka.Initialize(kafka.DefaultConfig)
@@ -148,7 +149,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}
 
 	const start = 1
-	end := start + 50
+	end := start + batchSize
 
 	for i := start; i < end; i++ {
 		pk, p := newPerson(fmt.Sprintf("tracy%d", i), "swift", "female", "email", "phone")
@@ -197,7 +198,6 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 func Test_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 100000
-	batchSize := 100
 
 	t1, _ := NewTransaction(true, -1)
 	t1.Begin()
@@ -250,7 +250,6 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 func VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
-	batchSize := 100
 
 	t1, _ := NewTransaction(true, -1)
 	t1.Begin()
@@ -282,7 +281,6 @@ func VolumeDeletes(t *testing.T) {
 func MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
-	batchSize := 100
 
 	t1, _ := NewTransaction(true, -1)
 	t1.Begin()

@@ -49,10 +49,12 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 	registryTableName := FormatRegistryTable(name)
 	blobTable := FormatBlobTable(name)
 
-	// Maximum slot length is 1,000. It may be ridiculously huge blob if too big.
-	// Even 1,000 may be too much, depending on key & value data size you'll store.
-	if slotLength > 1000 {
-		slotLength = 1000
+	const maxSlotLength = 10000
+
+	// Maximum slot length is 10,000. It may be ridiculously huge blob if too big.
+	// Even 10,000 may be too much, depending on key & value data size you'll store.
+	if slotLength > maxSlotLength {
+		slotLength = maxSlotLength
 	}
 	return &StoreInfo{
 		Name:                     name,
