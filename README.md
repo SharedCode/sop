@@ -127,7 +127,7 @@ But 500 is decent, so, it was used as the test's slot length.
 
 ## General Discussion of SOP V2
 
-Below features are mostly achieved in this SOP V2 POC, only two features did not make it, i.e. - the data driver for support of huge blobs & its companion feature, streaming to support extremely huge data.
+Below features are mostly achieved in this SOP V2 POC, only three features did not make it, i.e. - the data driver for support of huge blobs & its companion feature, streaming to support extremely huge data. And the "long lived" transaction that will use "transaction sandbox" storage. This last feature may not make it, not until V4 or probably even later, as the market for such is not big enough.
 
 SOP is a modern database engine within a code library. It is categorized as a NoSql engine, but which because of its scale-ability, is considered to be an enabler, coo-petition/player in the Big Data space.
 
@@ -135,9 +135,9 @@ Integration is one of SOP's primary goals, its ease of use, API, being part/clos
 
 Code uses the Store API to store & manage key/value pairs of data. Internal Store implementation uses an enhanced, modernized M-Way Tree(which we will simply call B-Tree for brevity), implementation that virtualizes RAM & Disk storage. Few of key enhancements to this B-Tree as compared to traditional implementations are:
 
-* node load optimization keeps it at around 62%-75% full average load of inner & leaf nodes. Traditional B-Trees only achieve about half-full (50%) average load. This translates to a more compressed or more dense data Stores saving IT shops from costly storage hardware.
+* node load optimization keeps it at around 62%-75+% full average load of inner & leaf nodes. Traditional B-Trees only achieve about half-full (50%) at most, average load. This translates to a more compressed or more dense data Stores saving IT shops from costly storage hardware.
 * leaf nodes' height in a particular case is tolerated not to be perfectly balanced to favor speed of deletion at zero/minimal cost in exchange. Also, the height disparity due to deletion tends to get repaired during inserts due to the node load optimization feature discussed above.
-* virtualization of RAM and Disk due to the seamless-ness & effectivity of handling Btree Nodes and their app data. There is  no context switch, thus no unnecessary latency, between handling a Node in RAM and on disk.
+* virtualization of RAM and Disk due to the seamless-ness & effectivity of handling Btree Nodes and their app data. There is no context switch, thus no unnecessary latency, between handling a Node in RAM and on disk.
 * data block technology enables support for "very large blob" (vlblob) efficient storage and access without requiring "data streaming" concept. Backend stores that traditionally are not recommended for storage of vlblob can be enabled for such. E.g. - Cassandra will not feel the "vlblobs" as SOP will store manage-able data chunk size to Cassandra store.
 * etc... a lot more enhancements waiting to be documented/cited as time permits.
 
@@ -150,12 +150,14 @@ Via usage of SOP API, your application will experience low latency, very high pe
 Here are the prerequisites for doing a local run:
 * Redis running locally using default Port
 * Cassandra running locally using default Port
+* Golang that supports generics, currently set to 1.21.5 and higher
 
 ## How to Build & Run
 Nothing special here, just issue a "go build" in the folder where you have the go.mod file and it will build the code libraries. Issue a "go test" to run the unit test on test files, to see they pass. You can debug, step-through the test files to learn how to use the code library.
+The Enterprise version V2 is in package "in_red_ck", thus, you can peruse through the "integration" tests in this folder & run them selectively. It requires setting up Cassandra & Redis and providing configuration for the two. Which is also illustrated by the mentioned tests, and also briefly discussed above.
 
 # Technical Details
-SOP written in Go will be a full re-implementation. A lot of key technical features of SOP will be carried over and few more will be added in order to support a master-less implementation. That is, backend Stores such as Cassandra, AWS S3 bucket will be utilized and SOP library will be master-less in order to offer a complete, 100% horizontal scaling with no hot-spotting or any application instance bottlenecks.
+SOP is written in Go and is a full re-implementation of the c# version. A lot of key technical features of SOP got carried over and few more added that supported a master-less implementation. That is, backend Stores such as Cassandra, is utilized and SOP library will be master-less in order to offer a complete, 100% horizontal scaling with no hot-spotting or any application instance bottlenecks.
 
 ## Component Layout
 * SOP code library for managing key/value pair of any data type using Go's generics.
@@ -169,12 +171,12 @@ Cassandra will be used as data Registry & as the data blob store. Redis will pro
 Blobs is stored in Cassandra, thus, benefitting from its built-in features like "replication" across regions, etc...
 
 ## Item Serialization
-Uses Golang's built-in marshaller for serialization for simplicity and support for "streaming".
+Uses Golang's built-in marshaller for serialization for simplicity and support for "streaming"(future feature, perhaps in V3).
 
 ## Transaction
-SOP will sport ACID, two phase commit transactions with two modes:
+SOP sports ACID, two phase commit transactions with two modes:
 * in-memory transaction sandbox - short lived and changes are persisted only during transaction commit. Initial implementation will support (out of process, e.g. in redis) in-memory, short lived transactions as will be more optimal I/O wise.
-* on-disk transaction sandbox - long lived and changes persisted to a Transaction Sandbox table and committed to their final Btree store destinations during commit. Future next will support long lived transactions which are geared for special types of use-cases.
+* on-disk transaction sandbox - long lived and changes persisted to a Transaction Sandbox table and committed to their final Btree store destinations during commit. Future next will support long lived transactions which are geared for special types of use-cases(future feature, perhaps in V4?).
 
 ### Two Phase Commit
 Two phase commit is required so SOP can offer "seamless" integration with your App's other DB backend(s)' transactions. On Phase 1 commit, SOP will commit all transaction session changes onto respective new (but geared for permanence) Btree transaction nodes. Your App will then be allowed to commit any other DB(s) transactions it use. Your app is allowed to Rollback any of these transactions and just relay the Rollback to SOP ongoing transaction if needed.
