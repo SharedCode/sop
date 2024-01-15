@@ -37,6 +37,7 @@ func Shutdown() {
 //
 // So, be careful calling this API as you will lose your data.
 func RemoveBtree(ctx context.Context, name string, t Transaction) error {
+	// TODO: add tests to exercise this and to illustrate usage.
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
 	return trans.storeRepository.Remove(ctx, name)
