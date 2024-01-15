@@ -51,6 +51,30 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	}
 }
 
+func Test_TransactionInducedErrorOnOpen(t *testing.T) {
+	trans, err := NewTransaction(true, -1)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	trans.Begin()
+	OpenBtree[int, string](ctx, "fooStore33", trans)
+	if trans.HasBegun() {
+		t.Error("Transaction is not rolled back after an error on OpenBtree")
+	}
+}
+
+func Test_TransactionInducedErrorOnNew(t *testing.T) {
+	trans, err := NewTransaction(true, -1)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	trans.Begin()
+	NewBtree[int, string](ctx, "fooStore", 99, false, false, true, "", trans)
+	if trans.HasBegun() {
+		t.Error("Transaction is not rolled back after an error on NewBtree")
+	}
+}
+
 func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 1. Open a transaction
 	// 2. Instantiate a BTree
