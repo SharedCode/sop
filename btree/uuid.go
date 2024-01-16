@@ -16,7 +16,7 @@ func NewUUID() UUID {
 	// In the case of generating new UUID errored, we just need to retry because
 	// generating UUID is a must.
 	var err error
-	for i :=0; i < 10; i++ {
+	for i := 0; i < 10; i++ {
 		var id uuid.UUID
 		id, err = uuid.NewRandom()
 		if err == nil {
