@@ -84,10 +84,10 @@ See here for code details: https://github.com/SharedCode/sop/blob/d473b66f294582
 ## Cache Duration
 You can specify the Redis cache duration by using the following API:
   * in_red_ck/cassandra/SetRegistryCacheDuration(duration) - defaults to 12 hrs, but you can specify if needs to cache the registry "virtual Ids" differently.
-  * in_red_ck/cassandra/SetStoreCacheDuration(duration) - defaults to 2 hrs.
-  * in_red_ck/SetNodeCacheDuration(duration) - defaults to 1 hr. Definitely please do change if wanting different cache duration.
+  * in_red_ck/cassandra/SetStoreCacheDuration(duration) - defaults to 2 hrs caching of the "store" metadata record.
+  * in_red_ck/SetNodeCacheDuration(duration) - defaults to 1 hr caching of the B-Tree Nodes that contains the Key/Value pairs application data.
 
-The Redis cache is minimally used because our primary is Cassandra DB, which is a very fast DB. BUT yeah, please do change if wanting to benefit with bigger Redis caching. :)
+The Redis cache is minimally used because our primary is Cassandra DB, which is a very fast DB. BUT yeah, please do change if wanting to benefit with bigger Redis caching. Virtual Ids were set to 12 hrs by default but may need a shorter duration and instead, the Nodes where your application data resides needs a longer duration, for example.
 
 ## Sample Configuration
 ```
@@ -119,11 +119,12 @@ SOP transaction achieves each of these ACID transaction attributes by moving the
 It has nifty algorithms controlling/talking to Redis & Cassandra(in behalf of your CRUD operations) in order to ensure each ACID attribute is enforced by the transaction. If ACID attributes spells mission critical for your system, then look no further. SOP provides all that and a whole lot more, e.g. built-in data caching via Redis. So, your data are "cached" in Redis and since SOP transaction also caches your data within the host memory, then you get a L1/L2 caching for free, just by using SOP code library.
 
 ## Fine Tuning
-There are two primary ingredients affecting performance and I/O via SOP. They are:
-  * Slot Length - typical values are 100, 500, 1,000 and so on... depends on your application data requirements & usage scenario
+There are three primary ingredients affecting performance and I/O via SOP. They are:
+  * Slot Length - typical values are 100, 500, 1,000 and so on... up to 10,000, depends on your application data requirements & usage scenario
   * Batch Size - typically aligns with Slot Length, i.e. - set the batch size to the same amount/value as the Slot Length
+  * Cache Duration - see respective section above for details about cache duration
 
-Base on your data structure size and the amount you intend to store using SOP, there is an opportunity to optimize for I/O and performance. Small to medium size data, will typically fit well with a bigger node size. For typical structure size scenarios, slot length anywhere from 100 to 1,000 may be ideal. You can match the batch size with the slot length. In this case, it means that you are potentially filling in a node with your entire batch. This is faster for example, as compared to your batch requiring multiple nodes, which will require more "virtual Ids" (or handles) in the registry table, thus, will (potentially) require more reads from registry & the node blob table.
+Base on your data structure size and the amount you intend to store using SOP, there is an opportunity to optimize for I/O and performance. Small to medium size data, will typically fit well with a bigger node size. For typical structure size scenarios, slot length anywhere from 100 to 5,000 may be ideal. You can match the batch size with the slot length. In this case, it means that you are potentially filling in a node with your entire batch. This is faster for example, as compared to your batch requiring multiple nodes, which will require more "virtual Ids" (or handles) in the registry table, thus, will (potentially) require more reads from registry & the node blob table. And more importantly, during commit, the lesser the number of nodes(thus, lesser "virtual Ids") used, the leaner & faster the "logged transaction" performs, which is the deciding step in the commit process, the one that makes your changes available to other transactions/machines, or triggers rollback due to conflict. It is best to keep that (virtual Ids) volume as minimal as possible.
 
 But of course, you have to consider memory requirements, i.e. - how many bytes of data per Key/Value pair(item) that you will store. In this version, the data is persisted together with the other data including meta data of the node. Thus, it is a straight up one node(one partition in Cassandra) that will contain your entire batch's items. Not bad really, but of course, you may have to do fine tuning, try a combination of "slot length"(and batch size) and see how that affects the I/O throughput. Fetches will always be very very fast, and the bigger node size(bigger slot length!), the better for fetches(reads). BUT in trade off with memory. As one node will occupy bigger memory, thus, you will have to checkout the Cassandra "size"(perf of VMs & hot spots), Redis caching and your application cluster, to see how the overall setup performs.
 
@@ -171,4 +172,4 @@ Nothing special here, just issue a "go build" in the folder where you have the g
 The Enterprise version V2 is in package "in_red_ck", thus, you can peruse through the "integration" tests in this folder & run them selectively. It requires setting up Cassandra & Redis and providing configuration for the two. Which is also illustrated by the mentioned tests, and also briefly discussed above.
 
 ## Brief Background
-SOP is written in Go and is a full re-implementation of the c# version. A lot of key technical features of SOP got carried over and a lot more added. V2 support ACID transactions and turn any application using it into a high performance database server itself. If deployed in a cluster, turns the entire cluster into a well oiled application & database server combo that is masterless and thus, hot-spot free, horizontally scalable.
+SOP is written in Go and is a full re-implementation of the c# version. A lot of key technical features of SOP got carried over and a lot more added. V2 support ACID transactions and turn any application using it into a high performance database server itself. If deployed in a cluster, turns the entire cluster into a well oiled application & database server combo cluster that is masterless and thus, hot-spot free & horizontally scalable.
