@@ -10,7 +10,7 @@ func newDumbItemActionTracker[TK btree.Comparable, TV any]() btree.ItemActionTra
 
 // in-memory SOP does not track item actions, thus, do nothing for its ItemActionTracker.
 
-func (iat mt[TK, TV])Add(item *btree.Item[TK, TV]) {}
-func (iat mt[TK, TV])Get(item *btree.Item[TK, TV]) {}
-func (iat mt[TK, TV])Update(item *btree.Item[TK, TV]) {}
-func (iat mt[TK, TV])Remove(item *btree.Item[TK, TV]){}
+func (iat mt[TK, TV]) Add(item *btree.Item[TK, TV])    {}
+func (iat mt[TK, TV]) Get(item *btree.Item[TK, TV])    {}
+func (iat mt[TK, TV]) Update(item *btree.Item[TK, TV]) {}
+func (iat mt[TK, TV]) Remove(item *btree.Item[TK, TV]) {}

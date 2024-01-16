@@ -21,7 +21,7 @@ func NewUUID() UUID {
 			return UUID(id)
 		}
 		// Sleep 1 millisecond then retry to generate new UUID.
-		time.Sleep(time.Duration(1*time.Millisecond))
+		time.Sleep(time.Duration(1 * time.Millisecond))
 	}
 }
 

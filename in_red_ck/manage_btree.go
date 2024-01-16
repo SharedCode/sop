@@ -8,7 +8,6 @@ import (
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
-
 // Removes B-Tree with a given name from the backend storage. This involves dropping tables
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
