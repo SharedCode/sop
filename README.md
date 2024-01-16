@@ -84,10 +84,10 @@ See here for code details: https://github.com/SharedCode/sop/blob/d473b66f294582
 ## Cache Duration
 You can specify the Redis cache duration by using the following API:
   * in_red_ck/cassandra/SetRegistryCacheDuration(duration) - defaults to 12 hrs, but you can specify if needs to cache the registry "virtual Ids" differently.
-  * in_red_ck/cassandra/SetStoreCacheDuration(duration) - defaults to 2 hrs.
-  * in_red_ck/SetNodeCacheDuration(duration) - defaults to 1 hr. Definitely please do change if wanting different cache duration.
+  * in_red_ck/cassandra/SetStoreCacheDuration(duration) - defaults to 2 hrs caching of the "store" metadata record.
+  * in_red_ck/SetNodeCacheDuration(duration) - defaults to 1 hr caching of the B-Tree Nodes that contains the Key/Value pairs application data.
 
-The Redis cache is minimally used because our primary is Cassandra DB, which is a very fast DB. BUT yeah, please do change if wanting to benefit with bigger Redis caching. :)
+The Redis cache is minimally used because our primary is Cassandra DB, which is a very fast DB. BUT yeah, please do change if wanting to benefit with bigger Redis caching. Virtual Ids were set to 12 hrs by default but may need a shorter duration and instead, the Nodes where your application data resides needs a longer duration, for example.
 
 ## Sample Configuration
 ```
