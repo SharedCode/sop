@@ -15,4 +15,7 @@ func DeleteBTree(t *testing.T) {
 	if err := RemoveBtree(ctx, "fooStore", trans); err != nil {
 		t.Error(err)
 	}
+	// No need to call transaction commit since RemoveBtree is a permanent action.
+	// It can't get rolled back. But droping tables is a very rare action, thus, it's fine
+	// not being able to roll it back.
 }
