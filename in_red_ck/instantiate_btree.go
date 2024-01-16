@@ -32,10 +32,10 @@ func Shutdown() {
 	redis.CloseConnection()
 }
 
-// Removes B-Tree from the backend storage. This involves dropping tables
-// that are permanent action and thus, 'can't get rolled back.
+// Removes B-Tree with a given name from the backend storage. This involves dropping tables
+// (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
-// So, be careful calling this API as you will lose your data.
+// Use with care and only when you are sure to delete the tables.
 func RemoveBtree(ctx context.Context, name string, t Transaction) error {
 	// TODO: add tests to exercise this and to illustrate usage.
 	var t2 interface{} = t.GetPhasedTransaction()
