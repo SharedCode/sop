@@ -11,6 +11,7 @@ import (
 type UUID uuid.UUID
 
 // NewUUID returns a new UUID. Will retry after sleep of 1 milli if an error occurs.
+// Guaranteed no panic by sleeping/retry.
 func NewUUID() UUID {
 	// In the case of generating new UUID errored, we just need to retry because
 	// generating UUID is a must.
