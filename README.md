@@ -2,7 +2,7 @@
 
 Scaleable Objects Persistence (SOP) Framework
 
-## SOP In-Memory
+## SOP in Memory
 SOP in-memory was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithms that will work irrespective of backend, be it in-memory or others, such as the "in Cassandra & Redis" implementation(see discussion below for details).
 
 SOP in-memory, is a full implementation. It has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your app. No need to have impedance mismatch.
@@ -63,11 +63,13 @@ Requirements
   * Internet access to github
 
 # SOP in Cassandra & Redis
+Same M-Way Trie but "persisted", using Cassandra as backend storage & Redis for caching, orchestration & node/data merging.
 
 Requirements:
   * Cassandra
   * Redis
   * Kafka if wanting to enable the Delete Service
+  * Golang that supports generics, currently set to 1.21.5 and higher
 
 Blob storage was implemented in Cassandra, thus, there is no need for AWS S3. Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_ck".
 SOP in Redis, Cassandra & Kafka(in_red_ck). Or fashionably, SOP in "red Calvin Klein", hehe.
@@ -140,7 +142,18 @@ The system leaves out unused Nodes from time to time after you do a management a
 The optimal choice is the latter. For example, you can setup a Kafka consumer which takes from Kafka queue, enable the "delete service" in SOP(see "EnableDeleteSevice") and uses SOP's BlobStore API to delete these Nodes, at your schedule or interval, like once every day or every hour. For sample code how to do this, pls. feel free to reuse/pattern it with the "in_red_ck/delete_service.go" code.
 See here for code details: https://github.com/SharedCode/sop/blob/3b3b574bb97905ca38d761dedd8af95a7fbce4e2/in_red_ck/delete_service.go#L24C11-L24C11
 
-## General Discussion of SOP V2
+## Item Serialization
+Uses Golang's built-in marshaller for serialization for simplicity and support for "streaming"(future feature, perhaps in V3).
+
+## Two Phase Commit
+Two phase commit is required so SOP can offer "seamless" integration with your App's other DB backend(s)' transactions. On Phase 1 commit, SOP will commit all transaction session changes onto respective new (but geared for permanence) Btree transaction nodes. Your App will then be allowed to commit any other DB(s) transactions it use. Your app is allowed to Rollback any of these transactions and just relay the Rollback to SOP ongoing transaction if needed.
+
+On successful commit on Phase 1, SOP will then commit Phase 2, which is, to tell all Btrees affected in the transaction to finalize the committed Nodes and make them available on succeeding Btree I/O.
+Phase 2 commit is a very fast, quick action as changes and Nodes are already resident on the Btree storage, it is just a matter of finalizing the Virtual ID registry with the new Nodes' physicall addresses to swap the old with the new ones.
+
+See here for more details on two phase commit & how to access it for your application transaction integration: https://github.com/SharedCode/sop/blob/21f1a1b35ef71327882d3ab5bfee0b9d744345fa/in_red_ck/transaction.go#L23a
+
+## Tid Bits
 
 SOP is an object persistence based, modern database engine within a code library. Portability & integration is one of SOP's primary strengths. Code uses the Store API to store & manage key/value pairs of data.
 
@@ -153,35 +166,9 @@ Internal Store implementation uses an enhanced, modernized M-Way Tree, implement
 
 Via usage of SOP API, your application will experience low latency, very high performance scalability.
 
-# Build Instructions
-## Prerequisite
-Here are the prerequisites for doing a local run:
-* Redis running locally using default Port
-* Cassandra running locally using default Port
-* Golang that supports generics, currently set to 1.21.5 and higher
-
 ## How to Build & Run
 Nothing special here, just issue a "go build" in the folder where you have the go.mod file and it will build the code libraries. Issue a "go test" to run the unit test on test files, to see they pass. You can debug, step-through the test files to learn how to use the code library.
 The Enterprise version V2 is in package "in_red_ck", thus, you can peruse through the "integration" tests in this folder & run them selectively. It requires setting up Cassandra & Redis and providing configuration for the two. Which is also illustrated by the mentioned tests, and also briefly discussed above.
 
-# Technical Details
-SOP is written in Go and is a full re-implementation of the c# version. A lot of key technical features of SOP got carried over and few more added that supported a master-less implementation. That is, backend Stores such as Cassandra, is utilized and SOP library will be master-less in order to offer a complete, 100% horizontal scaling with no hot-spotting or any application instance bottlenecks.
-
-## Component Layout
-* SOP code library for managing key/value pair of any data type using Go's generics.
-* Redis for clustered, out of process data caching.
-* Cassandra, etc... as backend Stores.
-Support for additional backends other than Cassandra will be done on per request basis, or as time permits.
-
-Cassandra is used as data Registry & as the data blob store. Redis provides the necessary out of process "caching" needs to accelerate I/O.
-
-## Item Serialization
-Uses Golang's built-in marshaller for serialization for simplicity and support for "streaming"(future feature, perhaps in V3).
-
-### Two Phase Commit
-Two phase commit is required so SOP can offer "seamless" integration with your App's other DB backend(s)' transactions. On Phase 1 commit, SOP will commit all transaction session changes onto respective new (but geared for permanence) Btree transaction nodes. Your App will then be allowed to commit any other DB(s) transactions it use. Your app is allowed to Rollback any of these transactions and just relay the Rollback to SOP ongoing transaction if needed.
-
-On successful commit on Phase 1, SOP will then commit Phase 2, which is, to tell all Btrees affected in the transaction to finalize the committed Nodes and make them available on succeeding Btree I/O.
-Phase 2 commit is a very fast, quick action as changes and Nodes are already resident on the Btree storage, it is just a matter of finalizing the Virtual ID registry with the new Nodes' physicall addresses to swap the old with the new ones.
-
-See here for more details on two phase commit & how to access it for your application transaction integration: https://github.com/SharedCode/sop/blob/21f1a1b35ef71327882d3ab5bfee0b9d744345fa/in_red_ck/transaction.go#L23a
+# Brief Background
+SOP is written in Go and is a full re-implementation of the c# version. A lot of key technical features of SOP got carried over and a lot more added. V2 support ACID transactions and turn any application using it into a high performance database server itself. If deployed in a cluster, turns the entire cluster into a well oiled application & database server combo that is masterless and thus, hot-spot free, horizontally scalable.
