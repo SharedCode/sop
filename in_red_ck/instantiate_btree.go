@@ -37,7 +37,6 @@ func Shutdown() {
 //
 // Use with care and only when you are sure to delete the tables.
 func RemoveBtree(ctx context.Context, name string, t Transaction) error {
-	// TODO: add tests to exercise this and to illustrate usage.
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
 	return trans.storeRepository.Remove(ctx, name)
