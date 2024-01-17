@@ -524,6 +524,8 @@ func (t *transaction) deleteEntries(ctx context.Context,
 					log.Info("Kafka Enqueue is still being sampled, deleting the leftover unused nodes.")
 				}
 				t.nodeBlobStore.Remove(ctx, unusedNodeIds...)
+			} else {
+				log.Info(fmt.Sprintf("Kafka Enqueue passed sampling, expecting consumer(@topic:%s) to delete the leftover unused nodes.", kafka.GetConfig().Topic))
 			}
 		} else {
 			if warnDeleteServiceMissing {

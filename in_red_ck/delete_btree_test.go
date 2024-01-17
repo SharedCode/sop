@@ -10,4 +10,7 @@ func DeleteBTree(t *testing.T) {
 	if err := RemoveBtree(ctx, "fooStore"); err != nil {
 		t.Error(err)
 	}
+	if err := RemoveBtree(ctx, "persondb"); err != nil {
+		t.Error(err)
+	}
 }

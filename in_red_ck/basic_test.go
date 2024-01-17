@@ -25,7 +25,7 @@ func init() {
 	Initialize(cassConfig, redisConfig)
 	kafka.Initialize(kafka.DefaultConfig)
 	// Don't want to fill the kafka queue, so, this is commented out.
-	// EnableDeleteService(true)
+	//EnableDeleteService(true)
 }
 
 var ctx = context.Background()

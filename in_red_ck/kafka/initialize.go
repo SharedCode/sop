@@ -39,3 +39,8 @@ func Initialize(config Config) error {
 func IsInitialized() bool {
 	return len(globalConfig.Brokers) > 0 && globalConfig.Topic != ""
 }
+
+// Returns this package's global config.
+func GetConfig() Config {
+	return globalConfig
+}

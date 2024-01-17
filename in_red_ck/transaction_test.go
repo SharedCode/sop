@@ -40,7 +40,7 @@ func (x PersonKey) Compare(other interface{}) int {
 }
 
 const nodeSlotLength = 500
-const batchSize = nodeSlotLength
+const batchSize = 200
 
 func Test_SimpleAddPerson(t *testing.T) {
 	trans, err := NewTransaction(true, -1)
