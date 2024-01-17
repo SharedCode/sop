@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	log "log/slog"
 
 	"github.com/Shopify/sarama"
 )
@@ -52,7 +53,10 @@ func GetProducer(config *sarama.Config) (*QueueProducer, error) {
 	if err != nil {
 		return nil, err
 	}
-	producer = &QueueProducer{producer: p}
+	producer = &QueueProducer{
+		producer: p,
+		quit: make(chan struct{}),
+	}
 	return producer, nil
 }
 
@@ -65,10 +69,10 @@ func CloseProducer() {
 			return
 		}
 		// Signal producer error listener to quit.
-		producer.quit <- struct{}{}
-		producer.producer.Close()
+		producer.producer.AsyncClose()
 		producer.quit <- struct{}{}
 		producer = nil
+		log.Debug("Successful CloseProducer.")
 	}
 }
 
@@ -101,6 +105,7 @@ func Enqueue[T any](ctx context.Context, items ...T) (bool, error) {
 					producer.errorsReceived = append(producer.errorsReceived, err)
 					producer.successfulSendCount = 0
 				case <-producer.quit:
+					log.Debug("Exiting the AsyncProducer error listener.")
 					return
 				}
 			}
@@ -117,7 +122,7 @@ func Enqueue[T any](ctx context.Context, items ...T) (bool, error) {
 		producer.producer.Input() <- msg
 	}
 
-	if lastErr == nil {
+	if lastErr == nil && producer.successfulSendCount <= successfulSendCountSamplerCount {
 		producer.successfulSendCount++
 	}
 
