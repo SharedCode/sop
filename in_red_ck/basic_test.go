@@ -6,6 +6,7 @@ import (
 
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -22,7 +23,8 @@ var redisConfig = redis.Options{
 
 func init() {
 	Initialize(cassConfig, redisConfig)
-	EnableDeleteService(true)
+	kafka.Initialize(kafka.DefaultConfig)
+	// EnableDeleteService(true)
 }
 
 var ctx = context.Background()

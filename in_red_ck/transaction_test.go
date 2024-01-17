@@ -4,8 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"testing"
-
-	"github.com/SharedCode/sop/in_red_ck/kafka"
 )
 
 type PersonKey struct {
@@ -45,7 +43,6 @@ const nodeSlotLength = 500
 const batchSize = nodeSlotLength
 
 func Test_SimpleAddPerson(t *testing.T) {
-	kafka.Initialize(kafka.DefaultConfig)
 	trans, err := NewTransaction(true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
