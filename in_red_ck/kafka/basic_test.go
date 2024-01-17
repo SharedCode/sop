@@ -12,4 +12,7 @@ func ProducerQuit(t *testing.T) {
 	Initialize(DefaultConfig)
 	Enqueue[string](ctx, []string{"foo"}...)
 	CloseProducer()
+	if producer != nil {
+		t.Errorf("Singleton producer instance is still available after CloseProducer call, expected nil.")
+	}
 }
