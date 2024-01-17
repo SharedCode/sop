@@ -125,5 +125,10 @@ func Enqueue[T any](ctx context.Context, items ...T) (bool, error) {
 	lastEngueueSucceeded = lastErr == nil && producer.successfulSendCount >= successfulSendCountSamplerCount &&
 		len(producer.errorsReceived) == 0
 
+	if len(producer.errorsReceived) > 0 && lastErr == nil {
+		// Return the last known error if there is one detected by the kafka Error listener.
+		lastErr = producer.errorsReceived[len(producer.errorsReceived)-1]
+	}
+
 	return lastEngueueSucceeded, lastErr
 }
