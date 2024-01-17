@@ -516,9 +516,13 @@ func (t *transaction) deleteEntries(ctx context.Context,
 		}
 		// Only attempt to send the delete message to Kafka if the delete service is enabled.
 		if IsDeleteServiceEnabled {
-			_, err := kafka.Enqueue[[]cas.BlobsPayload[btree.UUID]](ctx, unusedNodeIds)
-			if err != nil {
-				log.Error("Kafka Enqueue failed, details: %v, deleting the leftover unused nodes.", err)
+			if ok, err := kafka.Enqueue[[]cas.BlobsPayload[btree.UUID]](ctx, unusedNodeIds); !ok || err != nil {
+				if err != nil {
+					log.Error("Kafka Enqueue failed, details: %v, deleting the leftover unused nodes.", err)
+				}
+				if !ok {
+					log.Info("Kafka Enqueue is still being sampled, deleting the leftover unused nodes.")
+				}
 				t.nodeBlobStore.Remove(ctx, unusedNodeIds...)
 			}
 		} else {

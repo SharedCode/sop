@@ -4,13 +4,17 @@ import (
 	"fmt"
 )
 
+// Config contains the global config for this kafka package.
 type Config struct {
+	// Kafka Brokers.
 	Brokers []string
-	Topic   string
+	// Kafka topic.
+	Topic string
 }
 
+// DefaultConfig contains the default config for this package.
 var DefaultConfig Config = Config{
-	Brokers: []string{"127.0.0.1:9093"},
+	Brokers: []string{"localhost:9093"},
 	Topic:   "sop-deleted-data",
 }
 

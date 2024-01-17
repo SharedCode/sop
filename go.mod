@@ -1,6 +1,6 @@
 module github.com/SharedCode/sop
 
-go 1.21.5
+go 1.21.6
 
 require (
 	github.com/Shopify/sarama v1.38.1

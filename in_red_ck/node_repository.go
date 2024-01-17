@@ -22,8 +22,8 @@ type nodeRepositoryTyped[TK btree.Comparable, TV any] struct {
 	realNodeRepository *nodeRepository
 }
 
-// Now is a lambda expression that returns the current time in Unix milliseconds.
-var Now = time.Now().UnixMilli
+// now is a lambda expression that returns the current time in Unix milliseconds.
+var now = time.Now().UnixMilli
 
 var nodeCacheDuration time.Duration = time.Duration(1 * time.Hour)
 
@@ -318,7 +318,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Ke
 	if err != nil {
 		return false, err
 	}
-	rightNow := Now()
+	rightNow := now()
 	for i := range handles {
 		for ii := range handles[i].IDs {
 			// Node with such Id is already marked deleted, is in-flight change or had been updated since reading it,

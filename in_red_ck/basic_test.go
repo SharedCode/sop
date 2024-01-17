@@ -22,6 +22,7 @@ var redisConfig = redis.Options{
 
 func init() {
 	Initialize(cassConfig, redisConfig)
+	EnableDeleteService(true)
 }
 
 var ctx = context.Background()

@@ -9,8 +9,16 @@ import (
 	"github.com/Shopify/sarama"
 )
 
+// Kafka send will be sampled
+const successfulSendCountSamplerCount = 5
+
+// QueueProducer struct contains the sarama producer instance & other necessary artifacts
+// required to achieve our producer functionalities, e.g. - error tracking, successful send sampling...
 type QueueProducer struct {
-	producer sarama.SyncProducer
+	producer            sarama.AsyncProducer
+	errorsReceived      []error
+	quit                chan struct{}
+	successfulSendCount int
 }
 
 // Package global producer.
@@ -39,13 +47,8 @@ func GetProducer(config *sarama.Config) (*QueueProducer, error) {
 	if config == nil {
 		config = sarama.NewConfig()
 		config.Version = sarama.V2_6_0_0
-		config.Producer.Partitioner = sarama.NewRandomPartitioner
-		config.Producer.RequiredAcks = sarama.WaitForAll
-		config.Producer.Return.Successes = true
-		// Default 1 MB buffer size on producer.
-		config.Producer.Flush.Bytes = 2 * 1024 * 1024
 	}
-	p, err := sarama.NewSyncProducer(globalConfig.Brokers, config)
+	p, err := sarama.NewAsyncProducer(globalConfig.Brokers, config)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +64,10 @@ func CloseProducer() {
 		if producer == nil {
 			return
 		}
+		// Signal producer error listener to quit.
+		producer.quit <- struct{}{}
 		producer.producer.Close()
+		producer.quit <- struct{}{}
 		producer = nil
 	}
 }
@@ -74,21 +80,33 @@ func LastEnqueueSucceeded() bool {
 }
 
 // Enqueue will send message to the Kafka queue of the configured topic.
-func Enqueue[T any](ctx context.Context, items ...T) ([]string, error) {
+func Enqueue[T any](ctx context.Context, items ...T) (bool, error) {
 	var err error
+	var lastErr error
 	if producer == nil {
 		if !IsInitialized() {
 			lastEngueueSucceeded = false
-			return nil, fmt.Errorf("Kafka is not initialized, please set kafka package's brokers & topic config")
+			return false, fmt.Errorf("Kafka is not initialized, please set kafka package's brokers & topic config")
 		}
 		producer, err = GetProducer(nil)
 		if err != nil {
 			lastEngueueSucceeded = false
-			return nil, fmt.Errorf("Can't send %d messages as can't open a Producer, details: %v", len(items), err)
+			return false, fmt.Errorf("Can't send %d messages as can't open a Producer, details: %v", len(items), err)
 		}
+		// Setup the error channel listener to collect errors from Kafka brokers.
+		go func() {
+			for {
+				select {
+				case err := <-producer.producer.Errors():
+					producer.errorsReceived = append(producer.errorsReceived, err)
+					producer.successfulSendCount = 0
+				case <-producer.quit:
+					return
+				}
+			}
+		}()
 	}
-	var lastErr error
-	results := make([]string, 0, len(items))
+	// Send the messages to Kafka topic.
 	for i := range items {
 		ba, err := json.Marshal(items[i])
 		if err != nil {
@@ -96,13 +114,16 @@ func Enqueue[T any](ctx context.Context, items ...T) ([]string, error) {
 			continue
 		}
 		msg := prepareMessage(globalConfig.Topic, string(ba))
-		partition, offset, err := producer.producer.SendMessage(msg)
-		if err != nil {
-			lastErr = fmt.Errorf("Item #%d. Error detected sending item, detail: %v", i, err)
-			continue
-		}
-		results = append(results, fmt.Sprintf("Item %d. Message was saved to partion: %d, offset is: %d", i, partition, offset))
+		producer.producer.Input() <- msg
 	}
-	lastEngueueSucceeded = lastErr == nil
-	return results, lastErr
+
+	if lastErr == nil {
+		producer.successfulSendCount++
+	}
+
+	// Only tell SOP transaction that Kafka producer is ready if successfully sending messages surpassing sampler count.
+	lastEngueueSucceeded = lastErr == nil && producer.successfulSendCount >= successfulSendCountSamplerCount &&
+		len(producer.errorsReceived) == 0
+
+	return lastEngueueSucceeded, lastErr
 }
