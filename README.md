@@ -130,7 +130,7 @@ But of course, you have to consider memory requirements, i.e. - how many bytes o
 
 Reduce or increase the "slot length" and see what is fit with your application data requirementes scenario.
 In the tests that comes with SOP(under "in_red_ck" folder), the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
-But 500 is decent, so, it was used as the test's slot length.
+But 500 is decent, so, it was used as the test's slot length. In case you get failure on commit with an error of (or due to) "batch size is too big", you can reduce the batch size so you won't reach your configured Cassandra's "logged transaction" batch size ceiling. In the SOP test's case, this error was seen after many re-runs and changes, thus, it was reduced down to 200, from 500(but no change in slot length). This is a good example of fine tuning to match with Cassandra's limit.
 
 You specify the slot length, one time, during B-Tree creation, see NewBtree(..) call in link below for example.
 Here: https://github.com/SharedCode/sop/blob/800e7e23e9e2dce42f708db9fe9a90f3e9bbe988/in_red_ck/transaction_test.go#L57C13-L57C22
