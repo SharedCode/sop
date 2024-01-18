@@ -36,15 +36,7 @@ func (id UUID) IsNil() bool {
 	return bytes.Compare(id[:], NilUUID[:]) == 0
 }
 
-// ToString converts UUID to its string representation.
-func (id UUID) ToString() string {
+// String converts UUID to its string representation.
+func (id UUID) String() string {
 	return string(id[:])
-}
-
-// ToUUID converts UUID string to its UUID representation.
-func ToUUID(id string) UUID {
-	var bid = []byte(id)
-	var nid UUID
-	copy(nid[:], bid)
-	return nid
 }

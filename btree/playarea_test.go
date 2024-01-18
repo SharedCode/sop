@@ -3,8 +3,6 @@ package btree
 import (
 	"sort"
 	"testing"
-
-	"github.com/SharedCode/sop"
 )
 
 func TestSearch(t *testing.T) {
@@ -20,14 +18,6 @@ func TestSearch(t *testing.T) {
 	})
 	if found || i != 3 {
 		t.Fail()
-	}
-}
-
-func TestUUIDConversion(t *testing.T) {
-	want := sop.NewUUID()
-	suuid := want.ToString()
-	if got := sop.ToUUID(suuid); got != want {
-		t.Errorf("ToUUID(suuid) failed, got = %v, want = %v.", got, want)
 	}
 }
 

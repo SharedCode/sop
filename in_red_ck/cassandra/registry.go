@@ -80,7 +80,7 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 				return err
 			}
 			// Tolerate Redis cache failure.
-			if err := v.redisCache.SetStruct(ctx, h.LogicalId.ToString(), &h, registryCacheDuration); err != nil {
+			if err := v.redisCache.SetStruct(ctx, h.LogicalId.String(), &h, registryCacheDuration); err != nil {
 				log.Error("Registry Add (redis setstruct) failed, details: %v", err)
 			}
 		}
@@ -144,7 +144,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
 			// Tolerate Redis cache failure.
-			if err := v.redisCache.SetStruct(ctx, h.LogicalId.ToString(), &h, registryCacheDuration); err != nil {
+			if err := v.redisCache.SetStruct(ctx, h.LogicalId.String(), &h, registryCacheDuration); err != nil {
 				log.Error("Registry Update (redis setstruct) failed, details: %v", err)
 			}
 		}
@@ -164,7 +164,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[sop.UU
 		lidsAsIntfs := make([]interface{}, 0, len(storeLids.IDs))
 		for i := range storeLids.IDs {
 			h := sop.Handle{}
-			if err := v.redisCache.GetStruct(ctx, storeLids.IDs[i].ToString(), &h); err != nil {
+			if err := v.redisCache.GetStruct(ctx, storeLids.IDs[i].String(), &h); err != nil {
 				if !redis.KeyNotFound(err) {
 					log.Error("Registry Get (redis getstruct) failed, details: %v", err)
 				}
@@ -199,7 +199,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[sop.UU
 			handle.PhysicalIdB = sop.UUID(idb)
 			handles = append(handles, handle)
 
-			if err := v.redisCache.SetStruct(ctx, handle.LogicalId.ToString(), &handle, registryCacheDuration); err != nil {
+			if err := v.redisCache.SetStruct(ctx, handle.LogicalId.String(), &handle, registryCacheDuration); err != nil {
 				log.Error("Registry Get (redis setstruct) failed, details: %v", err)
 			}
 			handle = sop.Handle{}
@@ -233,7 +233,7 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[sop
 		// Flush out the failing records from cache.
 		deleteFromCache := func(storeLids RegistryPayload[sop.UUID]) {
 			for _, id := range storeLids.IDs {
-				if err := v.redisCache.Delete(ctx, id.ToString()); err != nil && !redis.KeyNotFound(err) {
+				if err := v.redisCache.Delete(ctx, id.String()); err != nil && !redis.KeyNotFound(err) {
 					log.Error("Registry Delete (redis delete) failed, details: %v", err)
 				}
 			}

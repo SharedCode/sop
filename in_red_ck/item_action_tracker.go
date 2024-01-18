@@ -132,16 +132,16 @@ func (t *itemActionTracker[TK, TV]) hasTrackedItems() bool {
 func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error {
 	for uuid, cachedItem := range t.items {
 		var readItem lockRecord
-		if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.ToString()), &readItem); err != nil {
+		if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
 			if !redis.KeyNotFound(err) {
 				return err
 			}
 			// Item does not exist, upsert it.
-			if err := itemRedisCache.SetStruct(ctx, redis.FormatLockKey(uuid.ToString()), &(cachedItem.lockRecord), duration); err != nil {
+			if err := itemRedisCache.SetStruct(ctx, redis.FormatLockKey(uuid.String()), &(cachedItem.lockRecord), duration); err != nil {
 				return err
 			}
 			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-			if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.ToString()), &readItem); err != nil {
+			if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
 				return err
 			} else if readItem.LockId != cachedItem.LockId {
 				if readItem.LockId.IsNil() {
@@ -173,7 +173,7 @@ func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context, itemRedisCache r
 		if !cachedItem.isLockOwner {
 			continue
 		}
-		if err := itemRedisCache.Delete(ctx, redis.FormatLockKey(uuid.ToString())); err != nil {
+		if err := itemRedisCache.Delete(ctx, redis.FormatLockKey(uuid.String())); err != nil {
 			lastErr = err
 		}
 	}

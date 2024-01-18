@@ -507,7 +507,7 @@ func (t *transaction) deleteEntries(ctx context.Context,
 		ik := 0
 		for i := range unusedNodeIds {
 			for ii := range unusedNodeIds[i].Blobs {
-				deletedKeys[ik] = t.btreesBackend[0].nodeRepository.formatKey(unusedNodeIds[i].Blobs[ii].ToString())
+				deletedKeys[ik] = t.btreesBackend[0].nodeRepository.formatKey(unusedNodeIds[i].Blobs[ii].String())
 				ik++
 			}
 		}
