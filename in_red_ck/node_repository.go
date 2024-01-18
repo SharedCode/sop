@@ -9,7 +9,6 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -248,12 +247,12 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 		return false, err
 	}
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
-	inactiveBlobIds := make([]cas.BlobsPayload[sop.UUID], len(nodes))
+	// inactiveBlobIds := make([]cas.BlobsPayload[sop.UUID], len(nodes))
 	for i := range handles {
 		blobs[i].BlobTable = nodes[i].Key.BlobTable
-		inactiveBlobIds[i].BlobTable = nodes[i].Key.BlobTable
+		// inactiveBlobIds[i].BlobTable = nodes[i].Key.BlobTable
+		// inactiveBlobIds[i].Blobs = make([]sop.UUID, 0, len(handles[i].IDs))
 		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
-		inactiveBlobIds[i].Blobs = make([]sop.UUID, 0, len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			// Node with such Id is marked deleted or had been updated since reading it.
 			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
@@ -263,9 +262,9 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 			id := handles[i].IDs[ii].AllocateId()
 			if id == sop.NilUUID {
 				if handles[i].IDs[ii].IsExpiredInactive() {
-					// Collect the inactive Blob Ids so we can issue a delete for them to ensure they will be gone.
-					// Kafka based delete service should delete them, but in case that is not running.
-					inactiveBlobIds[i].Blobs = append(inactiveBlobIds[i].Blobs, handles[i].IDs[ii].GetInActiveId())
+					// // Collect the inactive Blob Ids so we can issue a delete for them to ensure they will be gone.
+					// // Kafka based delete service should delete them, but in case that is not running.
+					// inactiveBlobIds[i].Blobs = append(inactiveBlobIds[i].Blobs, handles[i].IDs[ii].GetInActiveId())
 					handles[i].IDs[ii].ClearInactiveId()
 					// Allocate a new Id after clearing the unused inactive Id.
 					id = handles[i].IDs[ii].AllocateId()
@@ -279,16 +278,16 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
 		}
 	}
-	// If it is known that Kafka enqueuing is succeeding then we don't have to issue a delete,
-	// as the "delete service" which fetch messages from Kafka will ensure inactive Nodes are deleted.
-	// But if such is not working or known not to work then we will issue deletes here in the main path
-	// to prevent unusual data growth due to unused Node records.
-	if !kafka.LastEnqueueSucceeded() {
-		// Deleting blobs is a tolerable error, 'just log the error if there is.
-		if err := nr.transaction.nodeBlobStore.Remove(ctx, inactiveBlobIds...); err != nil {
-			log.Error(fmt.Sprintf("Error encountered deleting blobs(%v), details: %v", inactiveBlobIds, err))
-		}
-	}
+	// // If it is known that Kafka enqueuing is succeeding then we don't have to issue a delete,
+	// // as the "delete service" which fetch messages from Kafka will ensure inactive Nodes are deleted.
+	// // But if such is not working or known not to work then we will issue deletes here in the main path
+	// // to prevent unusual data growth due to unused Node records.
+	// if !kafka.LastEnqueueSucceeded() {
+	// 	// Deleting blobs is a tolerable error, 'just log the error if there is.
+	// 	if err := nr.transaction.nodeBlobStore.Remove(ctx, inactiveBlobIds...); err != nil {
+	// 		log.Error(fmt.Sprintf("Error encountered deleting blobs(%v), details: %v", inactiveBlobIds, err))
+	// 	}
+	// }
 	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
 		return false, err
 	}
