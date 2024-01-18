@@ -89,16 +89,3 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}
 }
-
-// Add Test_ prefix if wanting to run.
-func TransactionInducedErrorOnNew(t *testing.T) {
-	trans, err := in_red_ck.NewTransaction(true, -1)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	trans.Begin()
-	in_red_ck.NewBtree[int, string](ctx, "fooStore", 99, false, false, true, "", trans)
-	if trans.HasBegun() {
-		t.Error("Transaction is not rolled back after an error on NewBtree")
-	}
-}

@@ -5,9 +5,28 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/btree"
 )
 
 var ctx = context.Background()
+
+func Test_TransactionInducedErrorOnNew(t *testing.T) {
+	t2, err := newMockTransaction(true, -1)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	t2.Begin()
+	var t3 interface{} = t2.GetPhasedTransaction()
+	trans := t3.(*transaction)
+
+	// Simulate having an existing fooStore store in the backend.
+	trans.storeRepository.Add(ctx, *btree.NewStoreInfo("fooStore", 5, false, false, true, ""))
+
+	NewBtree[int, string](ctx, "fooStore", 99, false, false, true, "", t2)
+	if trans.HasBegun() {
+		t.Error("Transaction is not rolled back after an error on NewBtree")
+	}
+}
 
 func Test_TransactionInducedErrorOnOpen(t *testing.T) {
 	trans, err := newMockTransaction(true, -1)

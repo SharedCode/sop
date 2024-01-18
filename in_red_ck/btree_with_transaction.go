@@ -13,6 +13,8 @@ type btreeWithTransaction[TK btree.Comparable, TV any] struct {
 	btree       btree.BtreeInterface[TK, TV]
 }
 
+const transHasNotBegunErrorMsg = "Can't do operation on b-tree if transaction has not begun."
+
 // Instantiate a B-Tree wrapper that enforces transaction session on each method(a.k.a. operation).
 func newBtreeWithTransaction[TK btree.Comparable, TV any](t *transaction, btree btree.BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
 	return &btreeWithTransaction[TK, TV]{
@@ -20,8 +22,6 @@ func newBtreeWithTransaction[TK btree.Comparable, TV any](t *transaction, btree 
 		btree:       btree,
 	}
 }
-
-const transHasNotBegunErrorMsg = "Can't do operation on b-tree if transaction has not begun."
 
 // Add adds an item to the b-tree and does not check for duplicates.
 func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {
