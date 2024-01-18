@@ -15,6 +15,11 @@ type Marshaler interface {
 type defaultMarshaller struct {}
 
 // Returns the default marshaller which uses the golang's json package.
+// Json encoding was chose as default because it support "streaming" feature,
+// which will be an enabler on future releases, for example when the B-Tree
+// supports persistence of an item value's data to a separate segment(than the node's)
+// and it is huge, B-Tree may support "streaming" access to this data and it may use
+// Json's streaming feature.
 func NewMarshaler() Marshaler {
 	return &defaultMarshaller{}
 }
