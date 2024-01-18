@@ -80,7 +80,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 		if ns.RootNodeId.IsNil() {
 			// Pre-assign root node Id so B-Trees can merge newly created root nodes on commit.
 			ns.RootNodeId = sop.NewUUID()
-			ns.Timestamp = now()
+			ns.Timestamp = nowUnixMilli()
 		}
 		if err := trans.storeRepository.Add(ctx, *ns); err != nil {
 			trans.Rollback(ctx)

@@ -58,11 +58,10 @@ type transaction struct {
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
-var getCurrentTime = time.Now
+var now = time.Now
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
-// or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes
-// of session duration.
+// or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
 func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error) {
 	if maxTime <= 0 {
 		m := 15
@@ -74,7 +73,6 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 	return &transaction{
 		forWriting: forWriting,
 		maxTime:    maxTime,
-		// TODO: Allow caller to supply Redis & blob store settings.
 		storeRepository: cas.NewStoreRepository(),
 		registry:        cas.NewRegistry(),
 		redisCache:      redis.NewClient(),
@@ -160,7 +158,7 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if getCurrentTime().Sub(startTime).Minutes() > float64(t.maxTime) {
+	if now().Sub(startTime).Minutes() > float64(t.maxTime) {
 		return fmt.Errorf("Transaction timed out(maxTime=%v)", t.maxTime)
 	}
 	return nil
@@ -186,7 +184,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]
-	startTime := getCurrentTime()
+	startTime := now()
 
 	// For writer transaction. Save the managed Node(s) as inactive:
 	// NOTE: a transaction Commit can timeout and thus, rollback if it exceeds the maximum time(defaults to 30 mins).
@@ -357,7 +355,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 		return nil
 	}
 	// For a reader transaction, conflict check is enough.
-	startTime := getCurrentTime()
+	startTime := now()
 	for {
 		if err := t.timedOut(ctx, startTime); err != nil {
 			return err
