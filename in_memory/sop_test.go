@@ -1,15 +1,13 @@
-package sop
+package in_memory
 
 import (
 	"fmt"
 	"testing"
-
-	sop "github.com/SharedCode/sop/in_memory"
 )
 
 func TestBtree_HelloWorld(t *testing.T) {
 	fmt.Printf("Btree hello world.\n")
-	b3 := sop.NewBtree[int, string](false)
+	b3 := NewBtree[int, string](false)
 
 	b3.Add(5000, "I am the value with 5000 key.")
 	b3.Add(5001, "I am the value with 5001 key.")
@@ -34,7 +32,7 @@ func TestBtree_HelloWorld(t *testing.T) {
 
 func TestBtree_FunctionalityTests(t *testing.T) {
 	fmt.Printf("Btree functionality tests.\n")
-	b3 := sop.NewBtree[int, string](false)
+	b3 := NewBtree[int, string](false)
 
 	const five001Value = "I am the value with 5001 key."
 
@@ -111,7 +109,7 @@ func TestBtree_FunctionalityTests(t *testing.T) {
 func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 	max := 100000
 	fmt.Printf("Btree complex data mgmt tests started(%d items).\n", max)
-	b3 := sop.NewBtree[int, string](true)
+	b3 := NewBtree[int, string](true)
 
 	// Simple IsUnique check.
 	if !b3.IsUnique() {
@@ -293,7 +291,7 @@ func TestBtree_ComplexDataMgmtCases(t *testing.T) {
 func TestBtree_SimpleDataMgmtCases(t *testing.T) {
 	max := 100000
 	fmt.Printf("Btree simple data mgmt tests started(%d items).\n", max)
-	b3 := sop.NewBtree[string, string](false)
+	b3 := NewBtree[string, string](false)
 
 	tests := []struct {
 		name       string

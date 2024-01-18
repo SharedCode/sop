@@ -1,10 +1,8 @@
-package sop
+package in_memory
 
 import (
 	"cmp"
 	"testing"
-
-	sop "github.com/SharedCode/sop/in_memory"
 )
 
 type personKey struct {
@@ -43,7 +41,7 @@ func Test_PersonLookup(t *testing.T) {
 	t.Log("Btree demo, used as a person struct lookup.\n")
 
 	p := newPerson("joe", "krueger", "male", "email", "phone")
-	b3 := sop.NewBtree[personKey, person](false)
+	b3 := NewBtree[personKey, person](false)
 	b3.Add(p.personKey, p)
 
 	if b3.FindOne(p.personKey, false) {
@@ -57,7 +55,7 @@ func Test_PersonLookup(t *testing.T) {
 	t.Log("Btree demo, used as a person struct lookup end.\n")
 }
 
-func passBtreeAround(b3 sop.BtreeInterface[personKey, person]) bool {
+func passBtreeAround(b3 BtreeInterface[personKey, person]) bool {
 	key := personKey{firstname: "joe", lastname: "krueger"}
 	return b3.FindOne(key, false)
 }
