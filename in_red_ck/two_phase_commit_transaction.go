@@ -307,11 +307,11 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		return fmt.Errorf("Updated & removed nodes commit failed, details: %v", err)
 	}
 
-	unusedNodeIds := make([]cas.BlobsPayload[btree.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
+	unusedNodeIds := make([]cas.BlobsPayload[sop.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
-		blobsIds := cas.BlobsPayload[btree.UUID]{
+		blobsIds := cas.BlobsPayload[sop.UUID]{
 			BlobTable: btree.ConvertToBlobTableName(t.updatedNodeHandles[i].RegistryTable),
-			Blobs:     make([]btree.UUID, len(t.updatedNodeHandles[i].IDs)),
+			Blobs:     make([]sop.UUID, len(t.updatedNodeHandles[i].IDs)),
 		}
 		for ii := range t.updatedNodeHandles[i].IDs {
 			// Since we've flipped the inactive to active, the new inactive Id is to be flushed out of Redis cache.
@@ -321,13 +321,13 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	}
 
 	// Package the logically deleted Ids for actual physical deletes.
-	deletedIds := make([]cas.RegistryPayload[btree.UUID], len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
+	deletedIds := make([]cas.RegistryPayload[sop.UUID], len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.removedNodeHandles {
 		deletedIds[i].RegistryTable = t.removedNodeHandles[i].RegistryTable
-		deletedIds[i].IDs = make([]btree.UUID, len(t.removedNodeHandles[i].IDs))
-		blobsIds := cas.BlobsPayload[btree.UUID]{
+		deletedIds[i].IDs = make([]sop.UUID, len(t.removedNodeHandles[i].IDs))
+		blobsIds := cas.BlobsPayload[sop.UUID]{
 			BlobTable: btree.ConvertToBlobTableName(t.removedNodeHandles[i].RegistryTable),
-			Blobs:     make([]btree.UUID, len(t.removedNodeHandles[i].IDs)),
+			Blobs:     make([]sop.UUID, len(t.removedNodeHandles[i].IDs)),
 		}
 		for ii := range t.removedNodeHandles[i].IDs {
 			// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
@@ -498,12 +498,12 @@ var warnDeleteServiceMissing bool = true
 
 // Delete the registry entries and unused node blobs.
 func (t *transaction) deleteEntries(ctx context.Context,
-	deletedRegistryIds []cas.RegistryPayload[btree.UUID], unusedNodeIds []cas.BlobsPayload[btree.UUID]) {
+	deletedRegistryIds []cas.RegistryPayload[sop.UUID], unusedNodeIds []cas.BlobsPayload[sop.UUID]) {
 	if len(unusedNodeIds) > 0 {
 		// Delete from Redis the inactive nodes.
 		// Leave the registry keys as there may be other in-flight transactions that need them
 		// for conflict resolution, to rollback or to fail their "reader" transaction.
-		deletedKeys := make([]string, cas.GetBlobPayloadCount[btree.UUID](unusedNodeIds))
+		deletedKeys := make([]string, cas.GetBlobPayloadCount[sop.UUID](unusedNodeIds))
 		ik := 0
 		for i := range unusedNodeIds {
 			for ii := range unusedNodeIds[i].Blobs {
@@ -516,7 +516,7 @@ func (t *transaction) deleteEntries(ctx context.Context,
 		}
 		// Only attempt to send the delete message to Kafka if the delete service is enabled.
 		if IsDeleteServiceEnabled {
-			if ok, err := kafka.Enqueue[[]cas.BlobsPayload[btree.UUID]](ctx, unusedNodeIds); !ok || err != nil {
+			if ok, err := kafka.Enqueue[[]cas.BlobsPayload[sop.UUID]](ctx, unusedNodeIds); !ok || err != nil {
 				if err != nil {
 					log.Error("Kafka Enqueue failed, details: %v, deleting the leftover unused nodes.", err)
 				}

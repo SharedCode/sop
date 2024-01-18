@@ -9,13 +9,12 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 	"github.com/gocql/gocql"
 )
 
 // Manage or fetch Virtual Id request/response payload.
-type RegistryPayload[T sop.Handle | btree.UUID] struct {
+type RegistryPayload[T sop.Handle | sop.UUID] struct {
 	// Registry table (name) where the Virtual Ids will be stored or fetched from.
 	RegistryTable string
 	// IDs is an array containing the Virtual Ids details to be stored or to be fetched.
@@ -28,7 +27,7 @@ type RegistryPayload[T sop.Handle | btree.UUID] struct {
 // All methods are taking in a set of items.
 type Registry interface {
 	// Get will fetch handles(given their Ids) from stores.
-	Get(context.Context, ...RegistryPayload[btree.UUID]) ([]RegistryPayload[sop.Handle], error)
+	Get(context.Context, ...RegistryPayload[sop.UUID]) ([]RegistryPayload[sop.Handle], error)
 	// Add will insert handles to stores.
 	Add(context.Context, ...RegistryPayload[sop.Handle]) error
 	// Update will update handles of stores.
@@ -37,7 +36,7 @@ type Registry interface {
 	// False is recommended if such consistency is not significant.
 	Update(ctx context.Context, allOrNothing bool, handles ...RegistryPayload[sop.Handle]) error
 	// Remove will delete handles(given their Ids) from stores.
-	Remove(context.Context, ...RegistryPayload[btree.UUID]) error
+	Remove(context.Context, ...RegistryPayload[sop.UUID]) error
 }
 
 type registry struct {
@@ -153,7 +152,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 	return nil
 }
 
-func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.UUID]) ([]RegistryPayload[sop.Handle], error) {
+func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[sop.UUID]) ([]RegistryPayload[sop.Handle], error) {
 	if connection == nil {
 		return nil, fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
@@ -195,9 +194,9 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 		handle := sop.Handle{}
 		var lid, ida, idb gocql.UUID
 		for iter.Scan(&lid, &handle.IsActiveIdB, &ida, &idb, &handle.Version, &handle.WorkInProgressTimestamp, &handle.IsDeleted) {
-			handle.LogicalId = btree.UUID(lid)
-			handle.PhysicalIdA = btree.UUID(ida)
-			handle.PhysicalIdB = btree.UUID(idb)
+			handle.LogicalId = sop.UUID(lid)
+			handle.PhysicalIdA = sop.UUID(ida)
+			handle.PhysicalIdB = sop.UUID(idb)
 			handles = append(handles, handle)
 
 			if err := v.redisCache.SetStruct(ctx, handle.LogicalId.ToString(), &handle, registryCacheDuration); err != nil {
@@ -216,7 +215,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.
 	return storesHandles, nil
 }
 
-func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btree.UUID]) error {
+func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[sop.UUID]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
@@ -232,7 +231,7 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btr
 			connection.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
 
 		// Flush out the failing records from cache.
-		deleteFromCache := func(storeLids RegistryPayload[btree.UUID]) {
+		deleteFromCache := func(storeLids RegistryPayload[sop.UUID]) {
 			for _, id := range storeLids.IDs {
 				if err := v.redisCache.Delete(ctx, id.ToString()); err != nil && !redis.KeyNotFound(err) {
 					log.Error("Registry Delete (redis delete) failed, details: %v", err)

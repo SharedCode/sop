@@ -1,6 +1,10 @@
 package btree
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/SharedCode/sop"
+)
 
 // StoreInfo contains a given (B-Tree) store details.
 type StoreInfo struct {
@@ -17,7 +21,7 @@ type StoreInfo struct {
 	// Blob table name.
 	BlobTable string
 	// RootNodeId is the root node's Id.
-	RootNodeId UUID
+	RootNodeId sop.UUID
 	// Total count of items stored.
 	Count int64
 	// Used internally by SOP. Should be ignored when persisted in the backend.

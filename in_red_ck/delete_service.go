@@ -6,7 +6,7 @@ import (
 
 	log "log/slog"
 
-	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/in_red_ck/kafka"
 )
@@ -49,7 +49,7 @@ func DoDeletedItemsProcessing(ctx context.Context) {
 		log.Warn("Kafka is not initialized, please set valid brokers & topic to initialize.")
 		return
 	}
-	blobsIds, err := kafka.Dequeue[[]cas.BlobsPayload[btree.UUID]](ctx, 5)
+	blobsIds, err := kafka.Dequeue[[]cas.BlobsPayload[sop.UUID]](ctx, 5)
 	if err != nil {
 		log.Error("Error kafka dequeue, details: %v", err)
 		if len(blobsIds) == 0 {

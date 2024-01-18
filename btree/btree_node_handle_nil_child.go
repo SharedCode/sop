@@ -3,6 +3,8 @@ package btree
 import (
 	"context"
 	"fmt"
+
+	"github.com/SharedCode/sop"
 )
 
 // removeItemOnNodeWithNilChild will manage these remove item cases.
@@ -10,16 +12,16 @@ import (
 // - remove item on a node slot with nil right child
 // - remove item on the right edge node slot with nil right child
 func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], index int) (bool, error) {
-	if !node.hasChildren() || (node.ChildrenIds[index] != NilUUID && node.ChildrenIds[index+1] != NilUUID) {
+	if !node.hasChildren() || (node.ChildrenIds[index] != sop.NilUUID && node.ChildrenIds[index+1] != sop.NilUUID) {
 		return false, nil
 	}
-	if node.ChildrenIds[index] == NilUUID {
+	if node.ChildrenIds[index] == sop.NilUUID {
 		if index < node.Count {
 			itemsToMove := node.Count - index
 			moveArrayElements(node.Slots, index, index+1, itemsToMove)
 			moveArrayElements(node.ChildrenIds, index, index+1, itemsToMove+1)
 		}
-	} else if node.ChildrenIds[index+1] == NilUUID {
+	} else if node.ChildrenIds[index+1] == sop.NilUUID {
 		if index < node.Count {
 			itemsToMove := node.Count - index
 			moveArrayElements(node.Slots, index, index+1, itemsToMove)
@@ -28,10 +30,10 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(ctx context.Context, btre
 	}
 	// Set to nil the last item & its child.
 	node.Slots[node.Count-1] = nil
-	node.ChildrenIds[node.Count] = NilUUID
+	node.ChildrenIds[node.Count] = sop.NilUUID
 	node.Count--
 
-	if node.Count == 0 && node.ChildrenIds[0] != NilUUID {
+	if node.Count == 0 && node.ChildrenIds[0] != sop.NilUUID {
 		if node.isRootNode() {
 			// Copy contents of the child to this root node.
 			nc, err := node.getChild(ctx, btree, 0)
@@ -50,7 +52,7 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(ctx context.Context, btre
 				}
 			} else {
 				// Nilify the child because we've merged its contents to root node.
-				node.ChildrenIds[0] = NilUUID
+				node.ChildrenIds[0] = sop.NilUUID
 				if node.isNilChildren() {
 					node.ChildrenIds = nil
 				}
@@ -108,7 +110,7 @@ func (node *Node[TK, TV]) promoteSingleChildAsParentChild(ctx context.Context, b
 
 // addItemOnNodeWithNilChild handles insert/distribute item on a full node with a nil child, 'should occupy nil child.
 func (node *Node[TK, TV]) addItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], item *Item[TK, TV], index int) (bool, error) {
-	if node.ChildrenIds[index] != NilUUID {
+	if node.ChildrenIds[index] != sop.NilUUID {
 		return false, nil
 	}
 	// Create a new Child node & populate it with the item.
@@ -125,14 +127,14 @@ func (node *Node[TK, TV]) addItemOnNodeWithNilChild(ctx context.Context, btree *
 // goRightUpItemOnNodeWithNilChild will point the current item ref to the item to the right or up a parent.
 // Applicable when child at index position is nil.
 func (node *Node[TK, TV]) goRightUpItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], index int) (bool, error) {
-	if node.ChildrenIds[index] != NilUUID {
+	if node.ChildrenIds[index] != sop.NilUUID {
 		return false, nil
 	}
 	n := node
 	i := index
 	for {
 		if n == nil {
-			btree.setCurrentItemId(NilUUID, 0)
+			btree.setCurrentItemId(sop.NilUUID, 0)
 			return false, nil
 		}
 		// Check if there is an item on the right slot.
@@ -143,7 +145,7 @@ func (node *Node[TK, TV]) goRightUpItemOnNodeWithNilChild(ctx context.Context, b
 		// Check if this is not the root node. (Root nodes don't have parent node).
 		if n.isRootNode() {
 			// this is root node. set to null the current item(End of Btree is reached).
-			btree.setCurrentItemId(NilUUID, 0)
+			btree.setCurrentItemId(sop.NilUUID, 0)
 			return false, nil
 		}
 		p, err := n.getParent(ctx, btree)
@@ -158,7 +160,7 @@ func (node *Node[TK, TV]) goRightUpItemOnNodeWithNilChild(ctx context.Context, b
 // goLeftUpItemOnNodeWithNilChild will point the current item ref to the item to the left or up a parent.
 // Applicable when child at index position is nil.
 func (node *Node[TK, TV]) goLeftUpItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], index int) (bool, error) {
-	if node.ChildrenIds[index] != NilUUID {
+	if node.ChildrenIds[index] != sop.NilUUID {
 		return false, nil
 	}
 	n := node
@@ -171,7 +173,7 @@ func (node *Node[TK, TV]) goLeftUpItemOnNodeWithNilChild(ctx context.Context, bt
 		}
 		if n.isRootNode() {
 			// Set to null the current item, end of Btree is reached.
-			btree.setCurrentItemId(NilUUID, 0)
+			btree.setCurrentItemId(sop.NilUUID, 0)
 			return false, nil
 		}
 		p, err := n.getParent(ctx, btree)
@@ -189,7 +191,7 @@ func (node *Node[TK, TV]) nodeHasNilChild(btree *Btree[TK, TV]) bool {
 		return false
 	}
 	for i := 0; i <= node.Count; i++ {
-		if node.ChildrenIds[i] == NilUUID {
+		if node.ChildrenIds[i] == sop.NilUUID {
 			return true
 		}
 	}
@@ -203,7 +205,7 @@ func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(btree *Btree[TK, TV],
 	}
 	i := 0
 	for ; i <= node.Count; i++ {
-		if node.ChildrenIds[i] == NilUUID {
+		if node.ChildrenIds[i] == sop.NilUUID {
 			break
 		}
 	}

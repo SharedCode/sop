@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop"
 )
 
 // LockKeys contain fields to allow locking and unlocking of a set of redis keys.
 type LockKeys struct {
 	key         string
-	lockId      btree.UUID
+	lockId      sop.UUID
 	isLockOwner bool
 }
 
@@ -27,7 +27,7 @@ func CreateLockKeys(keys []string) []*LockKeys {
 		lockKeys[i] = &LockKeys{
 			// Prefix key with "L" to increase uniqueness.
 			key:    FormatLockKey(keys[i]),
-			lockId: btree.NewUUID(),
+			lockId: sop.NewUUID(),
 		}
 	}
 	return lockKeys

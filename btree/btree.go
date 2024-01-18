@@ -19,6 +19,8 @@ import (
 	"context"
 	"fmt"
 	log "log/slog"
+
+	"github.com/SharedCode/sop"
 )
 
 // Btree manages items using B-tree data structure and algorithm.
@@ -27,8 +29,8 @@ type Btree[TK Comparable, TV any] struct {
 	storeInterface     *StoreInterface[TK, TV]
 	tempSlots          []*Item[TK, TV]
 	tempParent         *Item[TK, TV]
-	tempChildren       []UUID
-	tempParentChildren []UUID
+	tempChildren       []sop.UUID
+	tempParentChildren []sop.UUID
 	currentItemRef     currentItemRef
 	currentItem        *Item[TK, TV]
 	distributeAction   distributeAction[TK, TV]
@@ -39,14 +41,14 @@ type Btree[TK Comparable, TV any] struct {
 // SOP B-Tree has a "cursor" like feature to allow navigation & fetch of the items
 // for most complicated querying scenario possible, or as needed by the business.
 type currentItemRef struct {
-	nodeId        UUID
+	nodeId        sop.UUID
 	nodeItemIndex int
 }
 
 func (c currentItemRef) getNodeItemIndex() int {
 	return c.nodeItemIndex
 }
-func (c currentItemRef) getNodeId() UUID {
+func (c currentItemRef) getNodeId() sop.UUID {
 	return c.nodeId
 }
 
@@ -89,8 +91,8 @@ func New[TK Comparable, TV any](storeInfo *StoreInfo, si *StoreInterface[TK, TV]
 		StoreInfo:          storeInfo,
 		storeInterface:     si,
 		tempSlots:          make([]*Item[TK, TV], storeInfo.SlotLength+1),
-		tempChildren:       make([]UUID, storeInfo.SlotLength+2),
-		tempParentChildren: make([]UUID, 2),
+		tempChildren:       make([]sop.UUID, storeInfo.SlotLength+2),
+		tempParentChildren: make([]sop.UUID, 2),
 	}
 	return &b3, nil
 }
@@ -151,7 +153,7 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 }
 
 // FindOneWithId is synonymous to FindOne but allows code to supply the Item's Id to identify it.
-func (btree *Btree[TK, TV]) FindOneWithId(ctx context.Context, key TK, id UUID) (bool, error) {
+func (btree *Btree[TK, TV]) FindOneWithId(ctx context.Context, key TK, id sop.UUID) (bool, error) {
 	if ok, err := btree.FindOne(ctx, key, true); ok && err == nil {
 		for {
 			if item, err := btree.getCurrentItem(ctx); err != nil {
@@ -306,7 +308,7 @@ func (btree *Btree[TK, TV]) Update(ctx context.Context, key TK, newValue TV) (bo
 }
 
 func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) (bool, error) {
-	if btree.currentItemRef.getNodeId() == NilUUID {
+	if btree.currentItemRef.getNodeId() == sop.NilUUID {
 		return false, nil
 	}
 	node, err := btree.getNode(ctx, btree.currentItemRef.getNodeId())
@@ -339,7 +341,7 @@ func (btree *Btree[TK, TV]) Remove(ctx context.Context, key TK) (bool, error) {
 
 // RemoveCurrentItem will remove the current item, i.e. - referenced by CurrentItemRef.
 func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error) {
-	if btree.currentItemRef.getNodeId() == NilUUID {
+	if btree.currentItemRef.getNodeId() == sop.NilUUID {
 		return false, nil
 	}
 	node, err := btree.getNode(ctx, btree.currentItemRef.getNodeId())
@@ -358,7 +360,7 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 				// Register to local cache the "item remove" for submit/resolution on Commit.
 				btree.storeInterface.ItemActionTracker.Remove(deletedItem)
 				// Make the current item pointer point to null since we just deleted the current item.
-				btree.setCurrentItemId(NilUUID, 0)
+				btree.setCurrentItemId(sop.NilUUID, 0)
 				btree.StoreInfo.Count--
 			}
 			return ok, err
@@ -383,7 +385,7 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 				// Register to local cache the "item remove" for submit/resolution on Commit.
 				btree.storeInterface.ItemActionTracker.Remove(deletedItem)
 				// Make the current item pointer point to null since we just deleted the current item.
-				btree.setCurrentItemId(NilUUID, 0)
+				btree.setCurrentItemId(sop.NilUUID, 0)
 				btree.StoreInfo.Count--
 			}
 			return ok, err
@@ -395,7 +397,7 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 		return false, err
 	}
 	// Make the current item pointer point to null since we just deleted the current item.
-	btree.setCurrentItemId(NilUUID, 0)
+	btree.setCurrentItemId(sop.NilUUID, 0)
 	// TODO: Register StoreInfo change to transaction manager (on V2) so it can get persisted.
 	// Not needed in in-memory (V1) version.
 	btree.StoreInfo.Count--
@@ -421,7 +423,7 @@ func (btree *Btree[TK, TV]) IsUnique() bool {
 // so it can get persisted on tranaction commit.
 func (btree *Btree[TK, TV]) saveNode(node *Node[TK, TV]) {
 	if node.Id.IsNil() {
-		node.Id = NewUUID()
+		node.Id = sop.NewUUID()
 		btree.storeInterface.NodeRepository.Add(node)
 		return
 	}
@@ -457,7 +459,7 @@ func (btree *Btree[TK, TV]) getRootNode(ctx context.Context) (*Node[TK, TV], err
 	if btree.StoreInfo.RootNodeId.IsNil() || btree.StoreInfo.Count == 0 {
 		var root = newNode[TK, TV](btree.getSlotLength())
 		if btree.StoreInfo.RootNodeId.IsNil() {
-			root.newId(NilUUID)
+			root.newId(sop.NilUUID)
 			btree.StoreInfo.RootNodeId = root.Id
 			root.Version = 1
 			return root, nil
@@ -477,7 +479,7 @@ func (btree *Btree[TK, TV]) getRootNode(ctx context.Context) (*Node[TK, TV], err
 	return root, nil
 }
 
-func (btree *Btree[TK, TV]) getNode(ctx context.Context, id UUID) (*Node[TK, TV], error) {
+func (btree *Btree[TK, TV]) getNode(ctx context.Context, id sop.UUID) (*Node[TK, TV], error) {
 	n, e := btree.storeInterface.NodeRepository.Get(ctx, id)
 	if e != nil {
 		return nil, e
@@ -485,7 +487,7 @@ func (btree *Btree[TK, TV]) getNode(ctx context.Context, id UUID) (*Node[TK, TV]
 	return n, nil
 }
 
-func (btree *Btree[TK, TV]) setCurrentItemId(nodeId UUID, itemIndex int) {
+func (btree *Btree[TK, TV]) setCurrentItemId(nodeId sop.UUID, itemIndex int) {
 	btree.currentItem = nil
 	if btree.currentItemRef.nodeId == nodeId && btree.currentItemRef.getNodeItemIndex() == itemIndex {
 		return
@@ -503,7 +505,7 @@ func (btree *Btree[TK, TV]) getSlotLength() int {
 }
 
 func (btree *Btree[TK, TV]) isCurrentItemSelected() bool {
-	return btree.currentItemRef.getNodeId() != NilUUID
+	return btree.currentItemRef.getNodeId() != sop.NilUUID
 }
 
 // distribute function allows B-Tree to avoid using recursion. I.e. - instead of the node calling

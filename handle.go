@@ -2,8 +2,6 @@ package sop
 
 import (
 	"time"
-
-	"github.com/SharedCode/sop/btree"
 )
 
 // Handle is a structure that holds Logical Id and the underlying Physical Id it maps to.
@@ -11,11 +9,11 @@ import (
 // Node(s) of the trie.
 type Handle struct {
 	// LogicalId is the "functional" Id of the entity.
-	LogicalId btree.UUID
+	LogicalId UUID
 	// PhysicalIdA is one of the two physical Ids supported.
-	PhysicalIdA btree.UUID
+	PhysicalIdA UUID
 	// PhysicalIdB is the "other" physical Id supported.
-	PhysicalIdB btree.UUID
+	PhysicalIdB UUID
 	// true if active Id is physicalIdB, otherwise false.
 	IsActiveIdB bool
 	// Current state(active Id, final deleted state) version.
@@ -27,7 +25,7 @@ type Handle struct {
 }
 
 // NewHandle creates a new Handle given a logical Id.
-func NewHandle(id btree.UUID) Handle {
+func NewHandle(id UUID) Handle {
 	return Handle{
 		LogicalId:   id,
 		PhysicalIdA: id,
@@ -35,7 +33,7 @@ func NewHandle(id btree.UUID) Handle {
 }
 
 // GetActiveId returns the currently active (if there is) UUID of a given Handle.
-func (h Handle) GetActiveId() btree.UUID {
+func (h Handle) GetActiveId() UUID {
 	if h.IsActiveIdB {
 		return h.PhysicalIdB
 	}
@@ -43,7 +41,7 @@ func (h Handle) GetActiveId() btree.UUID {
 }
 
 // Returns the inactive phys. Id.
-func (h Handle) GetInActiveId() btree.UUID {
+func (h Handle) GetInActiveId() UUID {
 	if h.IsActiveIdB {
 		return h.PhysicalIdA
 	}
@@ -57,11 +55,11 @@ func (h Handle) IsAandBinUse() bool {
 
 // AllocateId will create a new UUID and auto-assign it to the available phys. A or B slot.
 // Will return nil UUID if there is no slot left.
-func (h *Handle) AllocateId() btree.UUID {
+func (h *Handle) AllocateId() UUID {
 	if h.IsAandBinUse() {
-		return btree.NilUUID
+		return NilUUID
 	}
-	id := btree.NewUUID()
+	id := NewUUID()
 	h.WorkInProgressTimestamp = time.Now().UnixMilli()
 	if h.IsActiveIdB {
 		h.PhysicalIdA = id
@@ -82,7 +80,7 @@ func (h *Handle) IsExpiredInactive() bool {
 }
 
 // Returns true if id is either physical Id A or B, false otherwise.
-func (h *Handle) HasId(id btree.UUID) bool {
+func (h *Handle) HasId(id UUID) bool {
 	return h.PhysicalIdA == id || h.PhysicalIdB == id
 }
 
@@ -94,9 +92,9 @@ func (h *Handle) FlipActiveId() {
 // Reset to nil the inactive phys. Id.
 func (h *Handle) ClearInactiveId() {
 	if h.IsActiveIdB {
-		h.PhysicalIdA = btree.NilUUID
+		h.PhysicalIdA = NilUUID
 	} else {
-		h.PhysicalIdB = btree.NilUUID
+		h.PhysicalIdB = NilUUID
 	}
 	h.WorkInProgressTimestamp = 0
 }

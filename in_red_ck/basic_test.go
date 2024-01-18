@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
@@ -237,7 +237,7 @@ func Test_TransactionWithInducedErrorOnFindOneWithId(t *testing.T) {
 	b3 := newBTreeWithInducedErrors[int, string]()
 	b3t := newBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 8
-	b3t.FindOneWithId(ctx, 1, btree.NewUUID())
+	b3t.FindOneWithId(ctx, 1, sop.NewUUID())
 	if trans.HasBegun() {
 		t.Error("Transaction is not rolled back.")
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
@@ -78,7 +79,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 		// Add to store repository if store not found.
 		if ns.RootNodeId.IsNil() {
 			// Pre-assign root node Id so B-Trees can merge newly created root nodes on commit.
-			ns.RootNodeId = btree.NewUUID()
+			ns.RootNodeId = sop.NewUUID()
 			ns.Timestamp = now()
 		}
 		if err := trans.storeRepository.Add(ctx, *ns); err != nil {
@@ -138,8 +139,8 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 	return func(ctx context.Context) error {
 		b3ModifiedItems := si.ItemActionTracker.(*itemActionTracker[TK, TV]).items
 		// Clear the backend "cache" so we can force B-Tree to re-fetch from Redis(or BlobStore).
-		si.ItemActionTracker.(*itemActionTracker[TK, TV]).items = make(map[btree.UUID]cacheItem[TK, TV])
-		si.backendNodeRepository.nodeLocalCache = make(map[btree.UUID]cacheNode)
+		si.ItemActionTracker.(*itemActionTracker[TK, TV]).items = make(map[sop.UUID]cacheItem[TK, TV])
+		si.backendNodeRepository.nodeLocalCache = make(map[sop.UUID]cacheNode)
 		// Reset StoreInfo of B-Tree in prep to replay the "actions".
 		storeInfo, err := sr.Get(ctx, b3.StoreInfo.Name)
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 )
 
@@ -137,7 +138,7 @@ func (b3 *btreeWithTransaction[TK, TV]) FindOne(ctx context.Context, key TK, fir
 	}
 	return r, err
 }
-func (b3 *btreeWithTransaction[TK, TV]) FindOneWithId(ctx context.Context, key TK, id btree.UUID) (bool, error) {
+func (b3 *btreeWithTransaction[TK, TV]) FindOneWithId(ctx context.Context, key TK, id sop.UUID) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf(transHasNotBegunErrorMsg)

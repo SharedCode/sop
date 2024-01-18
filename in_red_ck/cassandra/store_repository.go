@@ -10,6 +10,7 @@ import (
 	"github.com/gocql/gocql"
 	retry "github.com/sethvargo/go-retry"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_memory"
 	"github.com/SharedCode/sop/in_red_ck/redis"
@@ -215,7 +216,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 	var rid gocql.UUID
 	for iter.Scan(&store.Name, &rid, &store.SlotLength, &store.Count, &store.IsUnique,
 		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.LeafLoadBalancing, &store.IsDeleted) {
-		store.RootNodeId = btree.UUID(rid)
+		store.RootNodeId = sop.UUID(rid)
 
 		if err := sr.redisCache.SetStruct(ctx, store.Name, &store, storeCacheDuration); err != nil {
 			log.Error(fmt.Sprintf("StoreRepository Get (redis setstruct) failed, details: %v", err))

@@ -5,28 +5,27 @@ import (
 	"encoding/json"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
 )
 
 type mockBlobStore struct {
-	lookup map[btree.UUID][]byte
+	lookup map[sop.UUID][]byte
 }
 
 // NewBlobStore instantiates a new (mocked) blobstore.
 func NewMockBlobStore() BlobStore {
 	return &mockBlobStore{
-		lookup: make(map[btree.UUID][]byte),
+		lookup: make(map[sop.UUID][]byte),
 	}
 }
 
-func (b *mockBlobStore) GetOne(ctx context.Context, blobName string, blobId btree.UUID, target interface{}) error {
+func (b *mockBlobStore) GetOne(ctx context.Context, blobName string, blobId sop.UUID, target interface{}) error {
 	if ba, ok := b.lookup[blobId]; ok {
 		return json.Unmarshal(ba, target)
 	}
 	return nil
 }
 
-func (b *mockBlobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]]) error {
+func (b *mockBlobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
 			ba, err := json.Marshal(blob.Value)
@@ -39,7 +38,7 @@ func (b *mockBlobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop
 	return nil
 }
 
-func (b *mockBlobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]]) error {
+func (b *mockBlobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
 			ba, err := json.Marshal(blob.Value)
@@ -52,7 +51,7 @@ func (b *mockBlobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[
 	return nil
 }
 
-func (b *mockBlobStore) Remove(ctx context.Context, storesBlobsIds ...BlobsPayload[btree.UUID]) error {
+func (b *mockBlobStore) Remove(ctx context.Context, storesBlobsIds ...BlobsPayload[sop.UUID]) error {
 	for _, storeBlobIds := range storesBlobsIds {
 		for _, blobId := range storeBlobIds.Blobs {
 			delete(b.lookup, blobId)

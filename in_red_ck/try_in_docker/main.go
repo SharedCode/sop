@@ -29,7 +29,7 @@ func main() {
 		writeAndExit(err.Error())
 	}
 	storeInfo := *btree.NewStoreInfo("foobar", 4, true, true, true, "")
-	storeInfo.RootNodeId = btree.NewUUID()
+	storeInfo.RootNodeId = sop.NewUUID()
 	repo := cas.NewStoreRepository()
 	sis, err := repo.Get(ctx, "foobar")
 	if err != nil {
@@ -44,7 +44,7 @@ func main() {
 	registry := cas.NewRegistry()
 	if err := registry.Add(ctx, cas.RegistryPayload[sop.Handle]{
 		RegistryTable: storeInfo.RegistryTable,
-		IDs:           []sop.Handle{sop.NewHandle(btree.NewUUID())},
+		IDs:           []sop.Handle{sop.NewHandle(sop.NewUUID())},
 	}); err != nil {
 		writeAndExit("Cassandra registry Add failed, err: %v.", err)
 	}

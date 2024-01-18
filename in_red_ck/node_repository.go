@@ -46,7 +46,7 @@ func (nr *nodeRepositoryTyped[TK, TV]) Update(n *btree.Node[TK, TV]) {
 }
 
 // Get will retrieve a node with nodeId from the map.
-func (nr *nodeRepositoryTyped[TK, TV]) Get(ctx context.Context, nodeId btree.UUID) (*btree.Node[TK, TV], error) {
+func (nr *nodeRepositoryTyped[TK, TV]) Get(ctx context.Context, nodeId sop.UUID) (*btree.Node[TK, TV], error) {
 	var target btree.Node[TK, TV]
 	n, err := nr.realNodeRepository.get(ctx, nodeId, &target)
 	if n == nil {
@@ -55,7 +55,7 @@ func (nr *nodeRepositoryTyped[TK, TV]) Get(ctx context.Context, nodeId btree.UUI
 	return n.(*btree.Node[TK, TV]), err
 }
 
-func (nr *nodeRepositoryTyped[TK, TV]) Fetched(nodeId btree.UUID) {
+func (nr *nodeRepositoryTyped[TK, TV]) Fetched(nodeId sop.UUID) {
 	c := nr.realNodeRepository.nodeLocalCache[nodeId]
 	if c.action == defaultAction {
 		c.action = getAction
@@ -64,7 +64,7 @@ func (nr *nodeRepositoryTyped[TK, TV]) Fetched(nodeId btree.UUID) {
 }
 
 // Remove will remove a node with nodeId from the map.
-func (nr *nodeRepositoryTyped[TK, TV]) Remove(nodeId btree.UUID) {
+func (nr *nodeRepositoryTyped[TK, TV]) Remove(nodeId sop.UUID) {
 	nr.realNodeRepository.remove(nodeId)
 }
 
@@ -74,7 +74,7 @@ func (nr *nodeRepositoryTyped[TK, TV]) Remove(nodeId btree.UUID) {
 type nodeRepository struct {
 	transaction *transaction
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
-	nodeLocalCache map[btree.UUID]cacheNode
+	nodeLocalCache map[sop.UUID]cacheNode
 	storeInfo      *btree.StoreInfo
 	count          int64
 }
@@ -83,7 +83,7 @@ type nodeRepository struct {
 func newNodeRepository[TK btree.Comparable, TV any](t *transaction, storeInfo *btree.StoreInfo) *nodeRepositoryTyped[TK, TV] {
 	nr := &nodeRepository{
 		transaction:    t,
-		nodeLocalCache: make(map[btree.UUID]cacheNode),
+		nodeLocalCache: make(map[sop.UUID]cacheNode),
 		storeInfo:      storeInfo,
 		count:          storeInfo.Count,
 	}
@@ -107,16 +107,16 @@ func newNodeRepository[TK btree.Comparable, TV any](t *transaction, storeInfo *b
 // - Otherwise, mark data as removed, for actual remove from blobStore(& redis) on transaction commit.
 
 // Get will retrieve a node with nodeId from the map.
-func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target interface{}) (interface{}, error) {
+func (nr *nodeRepository) get(ctx context.Context, logicalId sop.UUID, target interface{}) (interface{}, error) {
 	if v, ok := nr.nodeLocalCache[logicalId]; ok {
 		if v.action == removeAction {
 			return nil, nil
 		}
 		return v.node, nil
 	}
-	h, err := nr.transaction.registry.Get(ctx, cas.RegistryPayload[btree.UUID]{
+	h, err := nr.transaction.registry.Get(ctx, cas.RegistryPayload[sop.UUID]{
 		RegistryTable: nr.storeInfo.RegistryTable,
-		IDs:           []btree.UUID{logicalId},
+		IDs:           []sop.UUID{logicalId},
 	})
 	if err != nil {
 		return nil, err
@@ -155,14 +155,14 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId btree.UUID, target 
 	return target, nil
 }
 
-func (nr *nodeRepository) add(nodeId btree.UUID, node interface{}) {
+func (nr *nodeRepository) add(nodeId sop.UUID, node interface{}) {
 	nr.nodeLocalCache[nodeId] = cacheNode{
 		action: addAction,
 		node:   node,
 	}
 }
 
-func (nr *nodeRepository) update(nodeId btree.UUID, node interface{}) {
+func (nr *nodeRepository) update(nodeId sop.UUID, node interface{}) {
 	if v, ok := nr.nodeLocalCache[nodeId]; ok {
 		// Update the node and keep the "action" marker if new, otherwise update to "update" action.
 		v.node = node
@@ -179,7 +179,7 @@ func (nr *nodeRepository) update(nodeId btree.UUID, node interface{}) {
 	}
 }
 
-func (nr *nodeRepository) remove(nodeId btree.UUID) {
+func (nr *nodeRepository) remove(nodeId sop.UUID) {
 	if v, ok := nr.nodeLocalCache[nodeId]; ok {
 		if v.action == addAction {
 			delete(nr.nodeLocalCache, nodeId)
@@ -200,12 +200,12 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 	if err != nil {
 		return false, err
 	}
-	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]], len(nodes))
+	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
 	for i := range handles {
 		if len(handles[i].IDs) == 0 {
 			handles[i].IDs = make([]sop.Handle, len(vids[i].IDs))
 		}
-		blobs[i].Blobs = make([]sop.KeyValuePair[btree.UUID, interface{}], len(handles[i].IDs))
+		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
 		blobs[i].BlobTable = nodes[i].Key.BlobTable
 		for ii := range handles[i].IDs {
 			// Check if a non-empty root node was found, fail to cause "re-sync & merge".
@@ -247,13 +247,13 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 	if err != nil {
 		return false, err
 	}
-	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]], len(nodes))
-	inactiveBlobIds := make([]cas.BlobsPayload[btree.UUID], len(nodes))
+	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
+	inactiveBlobIds := make([]cas.BlobsPayload[sop.UUID], len(nodes))
 	for i := range handles {
 		blobs[i].BlobTable = nodes[i].Key.BlobTable
 		inactiveBlobIds[i].BlobTable = nodes[i].Key.BlobTable
-		blobs[i].Blobs = make([]sop.KeyValuePair[btree.UUID, interface{}], len(handles[i].IDs))
-		inactiveBlobIds[i].Blobs = make([]btree.UUID, 0, len(handles[i].IDs))
+		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
+		inactiveBlobIds[i].Blobs = make([]sop.UUID, 0, len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			// Node with such Id is marked deleted or had been updated since reading it.
 			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
@@ -261,7 +261,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 			}
 			// Create new phys. UUID and auto-assign it to the available phys. Id(A or B) "Id slot".
 			id := handles[i].IDs[ii].AllocateId()
-			if id == btree.NilUUID {
+			if id == sop.NilUUID {
 				if handles[i].IDs[ii].IsExpiredInactive() {
 					// Collect the inactive Blob Ids so we can issue a delete for them to ensure they will be gone.
 					// Kafka based delete service should delete them, but in case that is not running.
@@ -271,7 +271,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 					id = handles[i].IDs[ii].AllocateId()
 				}
 			}
-			if id == btree.NilUUID {
+			if id == sop.NilUUID {
 				// Return false as there is an ongoing update on node by another transaction.
 				return false, nil
 			}
@@ -350,12 +350,12 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 		return nil
 	}
 	handles := make([]cas.RegistryPayload[sop.Handle], len(nodes))
-	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[btree.UUID, interface{}]], len(nodes))
+	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
 	for i := range nodes {
 		handles[i].RegistryTable = nodes[i].Key.RegistryTable
 		handles[i].IDs = make([]sop.Handle, len(nodes[i].Value))
 		blobs[i].BlobTable = nodes[i].Key.BlobTable
-		blobs[i].Blobs = make([]sop.KeyValuePair[btree.UUID, interface{}], len(handles[i].IDs))
+		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
 		for ii := range nodes[i].Value {
 			metaData := nodes[i].Value[ii].(btree.MetaDataType)
 			// Add node to blob store.
@@ -477,10 +477,10 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 	if err != nil {
 		return err
 	}
-	blobsIds := make([]cas.BlobsPayload[btree.UUID], len(nodes))
+	blobsIds := make([]cas.BlobsPayload[sop.UUID], len(nodes))
 	for i := range handles {
 		blobsIds[i].BlobTable = btree.ConvertToBlobTableName(vids[i].RegistryTable)
-		blobsIds[i].Blobs = make([]btree.UUID, len(handles[i].IDs))
+		blobsIds[i].Blobs = make([]sop.UUID, len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			blobsIds[i].Blobs[ii] = handles[i].IDs[ii].GetInActiveId()
 			handles[i].IDs[ii].ClearInactiveId()
@@ -590,12 +590,12 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []sop.KeyValuePa
 	return handles, nil
 }
 
-func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) []cas.BlobsPayload[btree.UUID] {
-	bibs := make([]cas.BlobsPayload[btree.UUID], len(nodes))
+func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) []cas.BlobsPayload[sop.UUID] {
+	bibs := make([]cas.BlobsPayload[sop.UUID], len(nodes))
 	for i := range nodes {
-		bibs[i] = cas.BlobsPayload[btree.UUID]{
+		bibs[i] = cas.BlobsPayload[sop.UUID]{
 			BlobTable: nodes[i].Key.BlobTable,
-			Blobs:     make([]btree.UUID, len(nodes[i].Value)),
+			Blobs:     make([]sop.UUID, len(nodes[i].Value)),
 		}
 		for ii := range nodes[i].Value {
 			bibs[i].Blobs[ii] = nodes[i].Value[ii].(btree.MetaDataType).GetId()
@@ -604,12 +604,12 @@ func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*
 	return bibs
 }
 
-func (nr *nodeRepository) convertToRegistryRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) []cas.RegistryPayload[btree.UUID] {
-	vids := make([]cas.RegistryPayload[btree.UUID], len(nodes))
+func (nr *nodeRepository) convertToRegistryRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) []cas.RegistryPayload[sop.UUID] {
+	vids := make([]cas.RegistryPayload[sop.UUID], len(nodes))
 	for i := range nodes {
-		vids[i] = cas.RegistryPayload[btree.UUID]{
+		vids[i] = cas.RegistryPayload[sop.UUID]{
 			RegistryTable: nodes[i].Key.RegistryTable,
-			IDs:           make([]btree.UUID, len(nodes[i].Value)),
+			IDs:           make([]sop.UUID, len(nodes[i].Value)),
 		}
 		for ii := range nodes[i].Value {
 			vids[i].IDs[ii] = nodes[i].Value[ii].(btree.MetaDataType).GetId()

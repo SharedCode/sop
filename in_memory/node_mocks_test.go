@@ -1,47 +1,25 @@
-package btree
+package in_memory
 
 import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/SharedCode/sop/btree"
 )
-
-// in-memory mockup implementation of NodeRepository. Uses a map to manage nodes in memory.
-type nodeRepository[TK Comparable, TV any] struct {
-	lookup map[UUID]*Node[TK, TV]
-}
-
-func newNodeRepository[TK Comparable, TV any]() NodeRepository[TK, TV] {
-	return &nodeRepository[TK, TV]{
-		lookup: make(map[UUID]*Node[TK, TV]),
-	}
-}
-func (nr *nodeRepository[TK, TV]) Add(n *Node[TK, TV]) {
-	nr.lookup[n.Id] = n
-}
-func (nr *nodeRepository[TK, TV]) Update(n *Node[TK, TV]) {
-	nr.lookup[n.Id] = n
-}
-func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeId UUID) (*Node[TK, TV], error) {
-	v, _ := nr.lookup[nodeId]
-	return v, nil
-}
-func (nr *nodeRepository[TK, TV]) Fetched(nodeId UUID) {}
-func (nr *nodeRepository[TK, TV]) Remove(nodeId UUID) {
-	delete(nr.lookup, nodeId)
-}
 
 var ctx = context.Background()
 
 func Test_MockNodeWithLeftNilChild(t *testing.T) {
 	t.Log("Mock MockNodeWithLeftNilChild.\n")
-	store := StoreInfo{
+	store := btree.StoreInfo{
 		SlotLength: 4,
 	}
-	si := StoreInterface[int, string]{
+	si := btree.StoreInterface[int, string]{
 		NodeRepository: newNodeRepository[int, string](),
+		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si)
 
 	for i := 0; i < 25; i++ {
 		x := i * 5
@@ -111,13 +89,14 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 
 func Test_MockNodeWithRightNilChild(t *testing.T) {
 	t.Log("Mock MockNodeWithRightNilChild.\n")
-	store := StoreInfo{
+	store := btree.StoreInfo{
 		SlotLength: 4,
 	}
-	si := StoreInterface[int, string]{
+	si := btree.StoreInterface[int, string]{
 		NodeRepository: newNodeRepository[int, string](),
+		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si)
 
 	for i := 0; i < 25; i++ {
 		x := i * 5
@@ -187,13 +166,14 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 
 func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	t.Log("Mock DistributeItemOnNodeWithRightNilChild.\n")
-	store := StoreInfo{
+	store := btree.StoreInfo{
 		SlotLength: 4,
 	}
-	si := StoreInterface[int, string]{
+	si := btree.StoreInterface[int, string]{
 		NodeRepository: newNodeRepository[int, string](),
+		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si)
 
 	for i := 0; i < 25; i++ {
 		x := i * 5

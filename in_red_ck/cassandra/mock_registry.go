@@ -4,17 +4,16 @@ import (
 	"context"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
 )
 
 type mock_vid_registry struct {
-	lookup map[btree.UUID]sop.Handle
+	lookup map[sop.UUID]sop.Handle
 }
 
 // NewMockRegistry manages the Handle in memory for mocking.
 func NewMockRegistry() Registry {
 	return &mock_vid_registry{
-		lookup: make(map[btree.UUID]sop.Handle),
+		lookup: make(map[sop.UUID]sop.Handle),
 	}
 }
 
@@ -35,7 +34,7 @@ func (v *mock_vid_registry) Update(ctx context.Context, allorNothing bool, store
 	}
 	return nil
 }
-func (v *mock_vid_registry) Get(ctx context.Context, storesLids ...RegistryPayload[btree.UUID]) ([]RegistryPayload[sop.Handle], error) {
+func (v *mock_vid_registry) Get(ctx context.Context, storesLids ...RegistryPayload[sop.UUID]) ([]RegistryPayload[sop.Handle], error) {
 	var storesHandles []RegistryPayload[sop.Handle]
 	for _, storeLids := range storesLids {
 		handles := make([]sop.Handle, 0, len(storeLids.IDs))
@@ -53,7 +52,7 @@ func (v *mock_vid_registry) Get(ctx context.Context, storesLids ...RegistryPaylo
 	}
 	return storesHandles, nil
 }
-func (v *mock_vid_registry) Remove(ctx context.Context, storesLids ...RegistryPayload[btree.UUID]) error {
+func (v *mock_vid_registry) Remove(ctx context.Context, storesLids ...RegistryPayload[sop.UUID]) error {
 	for _, storeLids := range storesLids {
 		for _, lid := range storeLids.IDs {
 			delete(v.lookup, lid)

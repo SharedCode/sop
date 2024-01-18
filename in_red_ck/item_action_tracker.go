@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
@@ -20,7 +21,7 @@ const (
 )
 
 type lockRecord struct {
-	LockId btree.UUID
+	LockId sop.UUID
 	Action actionType
 }
 type cacheItem[TK btree.Comparable, TV any] struct {
@@ -32,13 +33,13 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
-	items map[btree.UUID]cacheItem[TK, TV]
+	items map[sop.UUID]cacheItem[TK, TV]
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
 func newItemActionTracker[TK btree.Comparable, TV any]() *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
-		items: make(map[btree.UUID]cacheItem[TK, TV]),
+		items: make(map[sop.UUID]cacheItem[TK, TV]),
 	}
 }
 
@@ -62,7 +63,7 @@ func (t *itemActionTracker[TK, TV]) Get(item *btree.Item[TK, TV]) {
 	if _, ok := t.items[item.Id]; !ok {
 		t.items[item.Id] = cacheItem[TK, TV]{
 			lockRecord: lockRecord{
-				LockId: btree.NewUUID(),
+				LockId: sop.NewUUID(),
 				Action: getAction,
 			},
 			item:        item,
@@ -74,7 +75,7 @@ func (t *itemActionTracker[TK, TV]) Get(item *btree.Item[TK, TV]) {
 func (t *itemActionTracker[TK, TV]) Add(item *btree.Item[TK, TV]) {
 	t.items[item.Id] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
-			LockId: btree.NewUUID(),
+			LockId: sop.NewUUID(),
 			Action: addAction,
 		},
 		item:        item,
@@ -97,7 +98,7 @@ func (t *itemActionTracker[TK, TV]) Update(item *btree.Item[TK, TV]) {
 	}
 	t.items[item.Id] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
-			LockId: btree.NewUUID(),
+			LockId: sop.NewUUID(),
 			Action: updateAction,
 		},
 		item:        item,
@@ -114,7 +115,7 @@ func (t *itemActionTracker[TK, TV]) Remove(item *btree.Item[TK, TV]) {
 	}
 	t.items[item.Id] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
-			LockId: btree.NewUUID(),
+			LockId: sop.NewUUID(),
 			Action: removeAction,
 		},
 		item:        item,
