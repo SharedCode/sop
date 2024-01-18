@@ -3,6 +3,8 @@ package redis
 import (
 	"context"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 type mockRedis struct {
@@ -11,7 +13,9 @@ type mockRedis struct {
 
 // Returns a new Redis mock client.
 func NewMockClient() Cache {
-	return &mockRedis{}
+	return &mockRedis{
+		lookup: make(map[string][]byte),
+	}
 }
 
 // Unused in SOP in_red_ck package, 'stubs only for now.
@@ -38,14 +42,20 @@ func (m *mockRedis) SetStruct(ctx context.Context, key string, value interface{}
 
 func (m *mockRedis) GetStruct(ctx context.Context, key string, target interface{}) error {
 	ba, ok := m.lookup[key]
-	if ok {
-		Marshaler.Unmarshal(ba, target)
+	if !ok {
+		return redis.Nil
 	}
+	Marshaler.Unmarshal(ba, target)
 	return nil
 }
 func (m *mockRedis) Delete(ctx context.Context, keys ...string) error {
+	var lastErr error
 	for _, k := range keys {
+		if _, ok := m.lookup[k]; !ok {
+			lastErr = redis.Nil
+			continue
+		}
 		delete(m.lookup, k)
 	}
-	return nil
+	return lastErr
 }
