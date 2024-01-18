@@ -2,7 +2,6 @@ package cassandra
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -43,8 +42,12 @@ type BlobStore interface {
 	Remove(ctx context.Context, blobsIds ...BlobsPayload[sop.UUID]) error
 }
 
+// Marshaler allows you to specify custom marshaler if needed. Defaults to the SOP default marshaler.
+var Marshaler sop.Marshaler = sop.NewMarshaler()
+
 type blobStore struct{}
 
+// NewBlobStore instantiates a new BlobStore instance.
 func NewBlobStore() BlobStore {
 	return &blobStore{}
 }
@@ -66,7 +69,7 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobId sop.UUI
 	if err := iter.Close(); err != nil {
 		return err
 	}
-	return json.Unmarshal(ba, target)
+	return Marshaler.Unmarshal(ba, target)
 }
 
 func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
@@ -75,7 +78,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.Key
 	}
 	for i := range storesblobs {
 		for ii := range storesblobs[i].Blobs {
-			ba, err := json.Marshal(storesblobs[i].Blobs[ii].Value)
+			ba, err := Marshaler.Marshal(storesblobs[i].Blobs[ii].Value)
 			if err != nil {
 				return err
 			}
@@ -99,7 +102,7 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.
 	}
 	for i := range storesblobs {
 		for ii := range storesblobs[i].Blobs {
-			ba, err := json.Marshal(storesblobs[i].Blobs[ii].Value)
+			ba, err := Marshaler.Marshal(storesblobs[i].Blobs[ii].Value)
 			if err != nil {
 				return err
 			}
