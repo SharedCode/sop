@@ -5,31 +5,12 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/kafka"
-	"github.com/SharedCode/sop/in_red_ck/redis"
 )
-
-var cassConfig = cassandra.Config{
-	ClusterHosts: []string{"localhost:9042"},
-	Keyspace:     "btree",
-}
-var redisConfig = redis.Options{
-	Address:                  "localhost:6379",
-	Password:                 "", // no password set
-	DB:                       0,  // use default DB
-	DefaultDurationInSeconds: 24 * 60 * 60,
-}
-
-func init() {
-	Initialize(cassConfig, redisConfig)
-	kafka.Initialize(kafka.DefaultConfig)
-}
 
 var ctx = context.Background()
 
 func Test_TransactionInducedErrorOnOpen(t *testing.T) {
-	trans, err := NewTransaction(true, -1)
+	trans, err := newMockTransaction(true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -41,7 +22,7 @@ func Test_TransactionInducedErrorOnOpen(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnAdd(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -57,7 +38,7 @@ func Test_TransactionWithInducedErrorOnAdd(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnAddIfNotExist(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -73,7 +54,7 @@ func Test_TransactionWithInducedErrorOnAddIfNotExist(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnUpdate(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -89,7 +70,7 @@ func Test_TransactionWithInducedErrorOnUpdate(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnUpdateCurrentItem(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -105,7 +86,7 @@ func Test_TransactionWithInducedErrorOnUpdateCurrentItem(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnRemove(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -121,7 +102,7 @@ func Test_TransactionWithInducedErrorOnRemove(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnRemoveCurrentItem(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -137,7 +118,7 @@ func Test_TransactionWithInducedErrorOnRemoveCurrentItem(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnFindOne(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -153,7 +134,7 @@ func Test_TransactionWithInducedErrorOnFindOne(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnFindOneWithId(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -169,7 +150,7 @@ func Test_TransactionWithInducedErrorOnFindOneWithId(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnGetCurrentValue(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -185,7 +166,7 @@ func Test_TransactionWithInducedErrorOnGetCurrentValue(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnGetCurrentItem(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -201,7 +182,7 @@ func Test_TransactionWithInducedErrorOnGetCurrentItem(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnFirst(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -217,7 +198,7 @@ func Test_TransactionWithInducedErrorOnFirst(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnLast(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -233,7 +214,7 @@ func Test_TransactionWithInducedErrorOnLast(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnNext(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -249,7 +230,7 @@ func Test_TransactionWithInducedErrorOnNext(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnPrevious(t *testing.T) {
-	t2, _ := NewTransaction(true, -1)
+	t2, _ := newMockTransaction(true, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
