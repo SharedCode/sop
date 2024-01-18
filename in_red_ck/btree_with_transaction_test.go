@@ -1,10 +1,32 @@
 package in_red_ck
 
 import (
+	"context"
 	"testing"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/kafka"
+	"github.com/SharedCode/sop/in_red_ck/redis"
 )
+
+var cassConfig = cassandra.Config{
+	ClusterHosts: []string{"localhost:9042"},
+	Keyspace:     "btree",
+}
+var redisConfig = redis.Options{
+	Address:                  "localhost:6379",
+	Password:                 "", // no password set
+	DB:                       0,  // use default DB
+	DefaultDurationInSeconds: 24 * 60 * 60,
+}
+
+func init() {
+	Initialize(cassConfig, redisConfig)
+	kafka.Initialize(kafka.DefaultConfig)
+}
+
+var ctx = context.Background()
 
 func Test_TransactionInducedErrorOnOpen(t *testing.T) {
 	trans, err := NewTransaction(true, -1)

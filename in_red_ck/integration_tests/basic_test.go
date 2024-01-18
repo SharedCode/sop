@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/SharedCode/sop/in_red_ck"
 	"github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
@@ -21,7 +22,7 @@ var redisConfig = redis.Options{
 }
 
 func init() {
-	Initialize(cassConfig, redisConfig)
+	in_red_ck.Initialize(cassConfig, redisConfig)
 	kafka.Initialize(kafka.DefaultConfig)
 	// Don't want to fill the kafka queue, so, this is commented out.
 	//EnableDeleteService(true)
@@ -39,17 +40,17 @@ var ctx = context.Background()
 // come/volunteer then the approach will change.
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	trans, err := NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
-	if _, err := OpenBtree[int, string](ctx, "fooStore22", trans); err == nil {
+	if _, err := in_red_ck.OpenBtree[int, string](ctx, "fooStore22", trans); err == nil {
 		t.Logf("OpenBtree('fooStore', trans) failed, got nil want error.")
 	}
 }
@@ -59,12 +60,12 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans, err := NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
@@ -91,12 +92,12 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 
 // Add Test_ prefix if wanting to run.
 func TransactionInducedErrorOnNew(t *testing.T) {
-	trans, err := NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	NewBtree[int, string](ctx, "fooStore", 99, false, false, true, "", trans)
+	in_red_ck.NewBtree[int, string](ctx, "fooStore", 99, false, false, true, "", trans)
 	if trans.HasBegun() {
 		t.Error("Transaction is not rolled back after an error on NewBtree")
 	}

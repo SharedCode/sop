@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"fmt"
 	"testing"
+
+	"github.com/SharedCode/sop/in_red_ck"
 )
 
 type PersonKey struct {
@@ -43,7 +45,7 @@ const nodeSlotLength = 500
 const batchSize = 200
 
 func Test_SimpleAddPerson(t *testing.T) {
-	trans, err := NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -51,7 +53,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -82,18 +84,18 @@ func Test_SimpleAddPerson(t *testing.T) {
 }
 
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
-	trans, err := NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
-	trans2, err := NewTransaction(true, -1)
+	trans2, err := in_red_ck.NewTransaction(true, -1)
 
 	trans.Begin()
 	trans2.Begin()
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
-	b3, err := OpenBtree[PersonKey, Person](ctx, "persondb", trans)
+	b3, err := in_red_ck.OpenBtree[PersonKey, Person](ctx, "persondb", trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -103,7 +105,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		return
 	}
 
-	b32, err := OpenBtree[PersonKey, Person](ctx, "persondb", trans2)
+	b32, err := in_red_ck.OpenBtree[PersonKey, Person](ctx, "persondb", trans2)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -122,13 +124,13 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 }
 
 func Test_AddAndSearchManyPersons(t *testing.T) {
-	trans, err := NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
 	trans.Begin()
-	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -150,7 +152,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	trans, err = NewTransaction(false, -1)
+	trans, err = in_red_ck.NewTransaction(false, -1)
 	if err != nil {
 		t.Errorf(err.Error())
 		t.Fail()
@@ -163,7 +165,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	b3, err = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
+	b3, err = in_red_ck.OpenBtree[PersonKey, Person](ctx, "persondb", trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -184,9 +186,9 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := NewTransaction(true, -1)
+	t1, _ := in_red_ck.NewTransaction(true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
 
 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
 	// for scheduled batch deletes.
@@ -200,9 +202,9 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = NewTransaction(true, -1)
+			t1, _ = in_red_ck.NewTransaction(true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
 		}
 	}
 
@@ -224,9 +226,9 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = NewTransaction(false, -1)
+			t1, _ = in_red_ck.NewTransaction(false, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
 		}
 	}
 }
@@ -236,9 +238,9 @@ func VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := NewTransaction(true, -1)
+	t1, _ := in_red_ck.NewTransaction(true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
 
 	// Populating 90,000 items took about few minutes, did not use Kafka based delete service.
 	for i := start; i <= end; i++ {
@@ -254,9 +256,9 @@ func VolumeDeletes(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = NewTransaction(true, -1)
+			t1, _ = in_red_ck.NewTransaction(true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
 		}
 	}
 }
@@ -267,9 +269,9 @@ func MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
 
-	t1, _ := NewTransaction(true, -1)
+	t1, _ := in_red_ck.NewTransaction(true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
 
 	lastNamePrefix := "zoltan"
 	firstName := "jack"
@@ -300,9 +302,9 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = NewTransaction(true, -1)
+			t1, _ = in_red_ck.NewTransaction(true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
 		}
 	}
 
@@ -336,9 +338,9 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = NewTransaction(true, -1)
+			t1, _ = in_red_ck.NewTransaction(true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
 		}
 	}
 }
