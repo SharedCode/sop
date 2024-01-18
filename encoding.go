@@ -12,19 +12,19 @@ type Marshaler interface {
 	Unmarshal(data []byte, v any) error
 }
 
-type defaultMardhaller struct {}
+type defaultMarshaller struct {}
 
 // Returns the default marshaller which uses the golang's json package.
 func NewMarshaler() Marshaler {
-	return &defaultMardhaller{}
+	return &defaultMarshaller{}
 }
 
 // Encodes any object to a byte array.
-func (m defaultMardhaller)Marshal(v any) ([]byte, error) {
+func (m defaultMarshaller)Marshal(v any) ([]byte, error) {
 	return json.Marshal(v)
 }
 
 // Decodes a byte array back to its Object type.
-func (m defaultMardhaller)Unmarshal(data []byte, v any) error {
+func (m defaultMarshaller)Unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
 }
