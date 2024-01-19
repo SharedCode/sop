@@ -72,6 +72,7 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobId sop.UUI
 	return Marshaler.Unmarshal(ba, target)
 }
 
+// Add blob(s) to the Blob store.
 func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
@@ -96,6 +97,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.Key
 	return nil
 }
 
+// Update blob(s) in the Blob store.
 func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
@@ -119,7 +121,7 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.
 	return nil
 }
 
-// Remove will delete(non-logged & non-transactional) node records from different node tables.
+// Remove will delete(non-logged) node records from different Blob stores(node tables).
 func (b *blobStore) Remove(ctx context.Context, storesBlobsIds ...BlobsPayload[sop.UUID]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
