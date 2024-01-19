@@ -71,6 +71,115 @@ Requirements:
   * Kafka if wanting to enable the Delete Service
   * Golang that supports generics, currently set to 1.21.5 and higher
 
+## Sample Code
+Below is a sample code, edited for brevity and to show the important parts.
+
+```
+import (
+	"github.com/SharedCode/sop/in_red_ck"
+	"github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/redis"
+)
+
+var cassConfig = cassandra.Config{
+	ClusterHosts: []string{"localhost:9042"},
+	Keyspace:     "btree",
+}
+var redisConfig = redis.Options{
+	Address:                  "localhost:6379",
+	Password:                 "", // no password set
+	DB:                       0,  // use default DB
+	DefaultDurationInSeconds: 24 * 60 * 60,
+}
+
+// Initialize Cassandra & Redis.
+func init() {
+	in_red_ck.Initialize(cassConfig, redisConfig)
+}
+
+var ctx = context.Background()
+...
+
+func main() {
+	trans, _ := in_red_ck.NewTransaction(true, -1)
+	trans.Begin()
+
+	// Create/instantiate a new B-Tree named "fooStore" w/ 500 slots & other parameters
+	// including the "transaction" that it will participate in.
+	//
+	// Key is of type "int" & Value is of type "string".
+	b3, _ := NewBtree[int, string](ctx, "fooStore", 500, false, false, true, "", trans)
+
+	b3.Add(ctx, 1, "hello world")
+
+	...
+
+	// Once you are done with the management, call transaction commit to finalize changes, save to backend.
+	trans.Commit(ctx)
+}
+```
+
+And, yet another example showing user-defined structs both as Key & Value pair. Other bits were omitted for brevity.
+```
+// Sample Key struct.
+type PersonKey struct {
+	Firstname string
+	Lastname  string
+}
+
+// Sample Value struct.
+type Person struct {
+	Gender string
+	Email  string
+	Phone  string
+	SSN    string
+}
+
+// Helper function to create Key & Value pair.
+func newPerson(fname string, lname string, gender string, email string, phone string, ssn string) (PersonKey, Person) {
+	return PersonKey{fname, lname}, Person{gender, email, phone, ssn}
+}
+
+// The Comparer function that defines sort order.
+func (x PersonKey) Compare(other interface{}) int {
+	y := other.(PersonKey)
+
+	// Sort by Lastname followed by Firstname.
+	i := cmp.Compare[string](x.Lastname, y.Lastname)
+	if i != 0 {
+		return i
+	}
+	return cmp.Compare[string](x.Firstname, y.Firstname)
+}
+
+const nodeSlotLength = 500
+
+func main() {
+
+	// Create and start a transaction session.
+	trans, err := NewTransaction(true, -1)
+	trans.Begin()
+
+	// Create the B-Tree (store) instance.
+	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+
+	// Add a person record w/ details.
+	pk, p := newPerson("joe", "krueger", "male", "email", "phone", "mySSN123")
+	b3.Add(ctx, pk, p)
+
+	...
+	// To illustrate the Find & Get Value methods.
+	if ok, _ := b3.FindOne(ctx, pk, false); ok {
+		v, _ := b3.GetCurrentValue(ctx)
+		// Do whatever with the fetched value, "v".
+		...
+	}
+
+	// And lastly, to commit the changes done within the transaction.
+	trans.Commit(ctx)
+}
+```
+
 Blob storage was implemented in Cassandra, thus, there is no need for AWS S3. Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_ck".
 SOP in Redis, Cassandra & Kafka(in_red_ck). Or fashionably, SOP in "red Calvin Klein", hehe.
 
