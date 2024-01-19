@@ -10,7 +10,7 @@ import (
 // Global mock repositories will allow us to simulate repositories that persists state
 // between transaction(commit).
 var storeRepository = cas.NewMockStoreRepository()
-var registry = cas.NewMockRegistry()
+var registry = cas.NewMockRegistry(false)
 var redisCache = redis.NewMockClient()
 var nodeBlobStore = cas.NewMockBlobStore()
 

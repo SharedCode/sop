@@ -2,6 +2,8 @@ package in_red_ck
 
 import (
 	"testing"
+
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
 // Covers all of these cases:
@@ -304,5 +306,74 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	}
 	if err2 != nil {
 		t.Logf(err2.Error())
+	}
+}
+
+func Test_CommitThrowsException(t *testing.T) {
+	// Commit successfully 1st so we can create a good data set that we can check if restored on commit failed.
+	trans, _ := newMockTransaction(true, -1)
+	trans.Begin()
+	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
+	b3.Add(ctx, pk, p)
+	trans.Commit(ctx)
+
+	// Preserve the good, nicely populated repositories.
+	t2 := trans.GetPhasedTransaction().(*transaction)
+
+	goodStoreRepository := t2.storeRepository
+	goodRegistry := t2.registry
+	goodRedisCache := t2.redisCache
+	goodBlobStore := t2.nodeBlobStore
+
+	trans, _ = newMockTransaction(true, -1)
+	t2 = trans.GetPhasedTransaction().(*transaction)
+
+	// Restore the populated repos.
+	t2.storeRepository = goodStoreRepository
+	t2.redisCache = goodRedisCache
+	t2.nodeBlobStore = goodBlobStore
+	t2.registry = cas.NewMockRegistry(true)
+	t2.registry.(*cas.Mock_vid_registry).Lookup = goodRegistry.(*cas.Mock_vid_registry).Lookup
+
+
+	// Create an update & a Commit that fails.
+	trans.Begin()
+
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
+
+	pk, p = newPerson("joe", "shroeger", "male2", "email2", "phone2")
+	b3.Add(ctx, pk, p)
+
+	if err := trans.Commit(ctx); err == nil {
+		t.Error("Expected Commit to fail, but succeeded.")
+	}
+
+	// Capture the repos' state which we will check for validity.
+	goodStoreRepository = t2.storeRepository
+	goodRegistry = t2.registry
+	goodRegistry.(*cas.Mock_vid_registry).InducedErrorOnUpdateAllOrNothing = false
+	goodRedisCache = t2.redisCache
+	goodBlobStore = t2.nodeBlobStore
+
+	trans, _ = newMockTransaction(false, -1)
+	t2 = trans.GetPhasedTransaction().(*transaction)
+	t2.storeRepository = goodStoreRepository
+	t2.registry = goodRegistry
+	t2.redisCache = goodRedisCache
+	t2.nodeBlobStore = goodBlobStore
+
+	trans.Begin()
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
+	if ok, _ := b3.FindOne(ctx, pk, false); !ok {
+		t.Errorf("FindOne(%v) failed, got 'not found', want 'found'.", pk)
+		t.Fail()
+	}
+	if v, _ := b3.GetCurrentValue(ctx); v.Email != "email" || v.Phone != "phone" {
+		t.Errorf("GetCurrentValue failed, got (%s, %s), want ('email', 'phone').", v.Email, v.Phone)
+		t.Fail()
+	}
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Commit failed, error got %v, want nil.", err)
 	}
 }
