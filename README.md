@@ -98,10 +98,12 @@ func init() {
 }
 
 var ctx = context.Background()
-
 ...
+
+func main() {
 	trans, _ := in_red_ck.NewTransaction(true, -1)
 	trans.Begin()
+	// Instantiate a new B-Tree named "fooStore" w/ 500 slots & other parameters including "transaction" it will participate in.
 	b3, _ := NewBtree[int, string](ctx, "fooStore", 500, false, false, true, "", trans)
 	b3.Add(ctx, 1, "hello world")
 
@@ -109,6 +111,7 @@ var ctx = context.Background()
 
 	// Once you are done with the management, call transaction commit to finalize changes, save to backend.
 	trans.Commit(ctx)
+}
 ```
 
 Blob storage was implemented in Cassandra, thus, there is no need for AWS S3. Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_ck".
