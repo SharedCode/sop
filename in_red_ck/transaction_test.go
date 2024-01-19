@@ -19,17 +19,9 @@ type Person struct {
 }
 
 func newPerson(fname string, lname string, gender string, email string, phone string) (PersonKey, Person) {
-	return PersonKey{
-			Firstname: fname,
-			Lastname:  lname,
-		},
-		Person{
-			Gender: gender,
-			Email:  email,
-			Phone:  phone,
-			SSN:    "1234",
-		}
+	return PersonKey{fname, lname}, Person{gender, email, phone, "1234"}
 }
+
 func (x PersonKey) Compare(other interface{}) int {
 	y := other.(PersonKey)
 	i := cmp.Compare[string](x.Lastname, y.Lastname)
@@ -41,6 +33,35 @@ func (x PersonKey) Compare(other interface{}) int {
 
 const nodeSlotLength = 500
 const batchSize = 200
+
+func Test_Rollback(t *testing.T) {
+	trans, _ := newMockTransaction(true, -1)
+	trans.Begin()
+
+	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+
+	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
+	b3.Add(ctx, pk, p)
+
+	trans.Commit(ctx)
+
+	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
+	b3.Update(ctx, pk, p)
+
+	trans.Rollback(ctx)
+
+	trans, _ = newMockTransaction(true, -1)
+	trans.Begin()
+	b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	pk, p = newPerson("joe", "shroeger", "male", "email", "phone")
+
+	b3.FindOne(ctx, pk, false)
+	v, _ := b3.GetCurrentValue(ctx)
+
+	if v.Email != "email" {
+		t.Errorf("Rollback did not restore person record, email got = %s, want = 'email'.", v.Email)
+	}
+}
 
 func Test_SimpleAddPerson(t *testing.T) {
 	trans, err := newMockTransaction(true, -1)

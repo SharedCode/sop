@@ -71,8 +71,8 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 		return nil, fmt.Errorf("Redis and/or Cassandra bits were not initialized")
 	}
 	return &transaction{
-		forWriting: forWriting,
-		maxTime:    maxTime,
+		forWriting:      forWriting,
+		maxTime:         maxTime,
 		storeRepository: cas.NewStoreRepository(),
 		registry:        cas.NewRegistry(),
 		redisCache:      redis.NewClient(),

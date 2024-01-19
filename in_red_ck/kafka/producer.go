@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 	log "log/slog"
+	"sync"
 
 	"github.com/Shopify/sarama"
 )
@@ -55,7 +55,7 @@ func GetProducer(config *sarama.Config) (*QueueProducer, error) {
 	}
 	producer = &QueueProducer{
 		producer: p,
-		quit: make(chan struct{}),
+		quit:     make(chan struct{}),
 	}
 	return producer, nil
 }

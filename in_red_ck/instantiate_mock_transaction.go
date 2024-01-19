@@ -1,6 +1,6 @@
 package in_red_ck
 
-import(
+import (
 	"time"
 
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
@@ -10,9 +10,9 @@ import(
 // Global mock repositories will allow us to simulate repositories that persists state
 // between transaction(commit).
 var storeRepository = cas.NewMockStoreRepository()
-var registry =       cas.NewMockRegistry()
-var redisCache =      redis.NewMockClient()
-var nodeBlobStore =   cas.NewMockBlobStore()
+var registry = cas.NewMockRegistry()
+var redisCache = redis.NewMockClient()
+var nodeBlobStore = cas.NewMockBlobStore()
 
 func newMockTransaction(forWriting bool, maxTime time.Duration) (Transaction, error) {
 	twoPhase, err := newMockTwoPhaseCommitTransaction(forWriting, maxTime)
@@ -30,8 +30,8 @@ func newMockTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (T
 		maxTime = time.Duration(m * int(time.Minute))
 	}
 	return &transaction{
-		forWriting: forWriting,
-		maxTime:    maxTime,
+		forWriting:      forWriting,
+		maxTime:         maxTime,
 		storeRepository: storeRepository,
 		registry:        registry,
 		redisCache:      redisCache,

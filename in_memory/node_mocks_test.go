@@ -16,7 +16,7 @@ func Test_MockNodeWithLeftNilChild(t *testing.T) {
 		SlotLength: 4,
 	}
 	si := btree.StoreInterface[int, string]{
-		NodeRepository: newNodeRepository[int, string](),
+		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
 	b3, _ := btree.New[int, string](&store, &si)
@@ -93,7 +93,7 @@ func Test_MockNodeWithRightNilChild(t *testing.T) {
 		SlotLength: 4,
 	}
 	si := btree.StoreInterface[int, string]{
-		NodeRepository: newNodeRepository[int, string](),
+		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
 	b3, _ := btree.New[int, string](&store, &si)
@@ -170,7 +170,7 @@ func Test_MockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 		SlotLength: 4,
 	}
 	si := btree.StoreInterface[int, string]{
-		NodeRepository: newNodeRepository[int, string](),
+		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
 	b3, _ := btree.New[int, string](&store, &si)
