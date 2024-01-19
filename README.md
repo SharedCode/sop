@@ -71,6 +71,46 @@ Requirements:
   * Kafka if wanting to enable the Delete Service
   * Golang that supports generics, currently set to 1.21.5 and higher
 
+## Sample Code
+Below is a sample code, edited for brevity and to show the important parts.
+
+```
+	import (
+		"github.com/SharedCode/sop/in_red_ck"
+		"github.com/SharedCode/sop/in_red_ck/cassandra"
+		"github.com/SharedCode/sop/in_red_ck/redis"
+	)
+
+	var cassConfig = cassandra.Config{
+		ClusterHosts: []string{"localhost:9042"},
+		Keyspace:     "btree",
+	}
+	var redisConfig = redis.Options{
+		Address:                  "localhost:6379",
+		Password:                 "", // no password set
+		DB:                       0,  // use default DB
+		DefaultDurationInSeconds: 24 * 60 * 60,
+	}
+
+	// Initialize Cassandra & Redis.
+	func init() {
+		in_red_ck.Initialize(cassConfig, redisConfig)
+	}
+
+	var ctx = context.Background()
+
+	...
+	trans, _ := in_red_ck.NewTransaction(true, -1)
+	trans.Begin()
+	b3, _ := NewBtree[int, string](ctx, "fooStore", 500, false, false, true, "", trans)
+	b3.Add(ctx, 1, "hello world")
+
+	...
+
+	// Once you are done with the management, call transaction commit to finalize changes, save to backend.
+	trans.Commit(ctx)
+```
+
 Blob storage was implemented in Cassandra, thus, there is no need for AWS S3. Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_ck".
 SOP in Redis, Cassandra & Kafka(in_red_ck). Or fashionably, SOP in "red Calvin Klein", hehe.
 
