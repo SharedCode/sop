@@ -45,12 +45,15 @@ func Test_Rollback(t *testing.T) {
 
 	trans.Commit(ctx)
 
+	trans, _ = newMockTransaction(true, -1)
+	trans.Begin()
+
 	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
 	b3.Update(ctx, pk, p)
 
 	trans.Rollback(ctx)
 
-	trans, _ = newMockTransaction(true, -1)
+	trans, _ = newMockTransaction(false, -1)
 	trans.Begin()
 	b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
 	pk, p = newPerson("joe", "shroeger", "male", "email", "phone")
@@ -61,6 +64,7 @@ func Test_Rollback(t *testing.T) {
 	if v.Email != "email" {
 		t.Errorf("Rollback did not restore person record, email got = %s, want = 'email'.", v.Email)
 	}
+	trans.Commit(ctx)
 }
 
 func Test_SimpleAddPerson(t *testing.T) {

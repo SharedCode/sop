@@ -314,7 +314,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	trans, _ := newMockTransaction(true, -1)
 	trans.Begin()
 	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
-	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
+	pk, p := newPerson("joe", "zhroeger", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
 	trans.Commit(ctx)
 
@@ -342,7 +342,7 @@ func Test_CommitThrowsException(t *testing.T) {
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
 
-	pk, p = newPerson("joe", "shroeger", "male2", "email2", "phone2")
+	pk, p = newPerson("joe", "zhroeger", "male2", "email2", "phone2")
 	b3.Add(ctx, pk, p)
 
 	if err := trans.Commit(ctx); err == nil {
