@@ -7,6 +7,13 @@ import(
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
+// Global mock repositories will allow us to simulate repositories that persiste state
+// between transactions.
+var storeRepository = cas.NewMockStoreRepository()
+var registry =       cas.NewMockRegistry()
+var redisCache =      redis.NewMockClient()
+var nodeBlobStore =   cas.NewMockBlobStore()
+
 func newMockTransaction(forWriting bool, maxTime time.Duration) (Transaction, error) {
 	twoPhase, err := newMockTwoPhaseCommitTransaction(forWriting, maxTime)
 	if err != nil {
@@ -25,10 +32,10 @@ func newMockTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (T
 	return &transaction{
 		forWriting: forWriting,
 		maxTime:    maxTime,
-		storeRepository: cas.NewMockStoreRepository(),
-		registry:        cas.NewMockRegistry(),
-		redisCache:      redis.NewMockClient(),
-		nodeBlobStore:   cas.NewMockBlobStore(),
+		storeRepository: storeRepository,
+		registry:        registry,
+		redisCache:      redisCache,
+		nodeBlobStore:   nodeBlobStore,
 		logger:          newTransactionLogger(),
 		phaseDone:       -1,
 	}, nil
