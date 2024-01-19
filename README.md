@@ -75,31 +75,31 @@ Requirements:
 Below is a sample code, edited for brevity and to show the important parts.
 
 ```
-	import (
-		"github.com/SharedCode/sop/in_red_ck"
-		"github.com/SharedCode/sop/in_red_ck/cassandra"
-		"github.com/SharedCode/sop/in_red_ck/redis"
-	)
+import (
+	"github.com/SharedCode/sop/in_red_ck"
+	"github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/redis"
+)
 
-	var cassConfig = cassandra.Config{
-		ClusterHosts: []string{"localhost:9042"},
-		Keyspace:     "btree",
-	}
-	var redisConfig = redis.Options{
-		Address:                  "localhost:6379",
-		Password:                 "", // no password set
-		DB:                       0,  // use default DB
-		DefaultDurationInSeconds: 24 * 60 * 60,
-	}
+var cassConfig = cassandra.Config{
+	ClusterHosts: []string{"localhost:9042"},
+	Keyspace:     "btree",
+}
+var redisConfig = redis.Options{
+	Address:                  "localhost:6379",
+	Password:                 "", // no password set
+	DB:                       0,  // use default DB
+	DefaultDurationInSeconds: 24 * 60 * 60,
+}
 
-	// Initialize Cassandra & Redis.
-	func init() {
-		in_red_ck.Initialize(cassConfig, redisConfig)
-	}
+// Initialize Cassandra & Redis.
+func init() {
+	in_red_ck.Initialize(cassConfig, redisConfig)
+}
 
-	var ctx = context.Background()
+var ctx = context.Background()
 
-	...
+...
 	trans, _ := in_red_ck.NewTransaction(true, -1)
 	trans.Begin()
 	b3, _ := NewBtree[int, string](ctx, "fooStore", 500, false, false, true, "", trans)
