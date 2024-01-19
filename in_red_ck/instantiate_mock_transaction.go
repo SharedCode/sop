@@ -7,8 +7,8 @@ import(
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
-// Global mock repositories will allow us to simulate repositories that persiste state
-// between transactions.
+// Global mock repositories will allow us to simulate repositories that persists state
+// between transaction(commit).
 var storeRepository = cas.NewMockStoreRepository()
 var registry =       cas.NewMockRegistry()
 var redisCache =      redis.NewMockClient()
