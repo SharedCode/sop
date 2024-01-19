@@ -103,7 +103,8 @@ var ctx = context.Background()
 func main() {
 	trans, _ := in_red_ck.NewTransaction(true, -1)
 	trans.Begin()
-	// Instantiate a new B-Tree named "fooStore" w/ 500 slots & other parameters including "transaction" it will participate in.
+	// Create/instantiate a new B-Tree named "fooStore" w/ 500 slots & other parameters
+	// including the "transaction" that it will participate in.
 	b3, _ := NewBtree[int, string](ctx, "fooStore", 500, false, false, true, "", trans)
 	b3.Add(ctx, 1, "hello world")
 
