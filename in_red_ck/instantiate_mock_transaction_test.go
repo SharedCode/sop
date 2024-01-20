@@ -17,10 +17,7 @@ var mockNodeBlobStore = cas.NewMockBlobStore()
 
 func newMockTransaction(t testing.TB, forWriting bool, maxTime time.Duration) (Transaction, error) {
 	t.Helper()
-	twoPhase, err := newMockTwoPhaseCommitTransaction(t, forWriting, maxTime)
-	if err != nil {
-		return nil, err
-	}
+	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, forWriting, maxTime)
 	return &singlePhaseTransaction{
 		sopPhaseCommitTransaction: twoPhase,
 	}, nil
