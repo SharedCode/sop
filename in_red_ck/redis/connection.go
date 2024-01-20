@@ -9,23 +9,32 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// Redis configurable options.
 type Options struct {
+	// Redis server(cluster) address.
 	Address                  string
+	// Password required when connecting to the Redis server.
 	Password                 string
+	// DB to connect to.
 	DB                       int
+	// DefaultDurationInSeconds specifies the default caching time to use if not specified on call.
 	DefaultDurationInSeconds int
+	// TLS config.
 	TLSConfig                *tls.Config
 }
 
+// Returns the default duration.
 func (opt *Options) GetDefaultDuration() time.Duration {
 	return time.Duration(opt.DefaultDurationInSeconds) * time.Second
 }
 
+// Connection contains Redis client connection object and the Options used to connect.
 type Connection struct {
 	Client  *redis.Client
 	Options Options
 }
 
+// DefaultOptions.
 func DefaultOptions() Options {
 	return Options{
 		Address:                  "localhost:6379",

@@ -16,20 +16,18 @@ import (
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
-// TODO: when need arise, move these interfaces to a common package, but keep them for now
-// in package where they are implemented, 'just because we wanted to keep changes minimal,
-// and driven by needs.
+// Keep these common interfaces where they are implemented, if there will be a need, it is easy to move them to common folder.
 
 // StoreRepository interface specifies the store repository.
 type StoreRepository interface {
 	// Fetch store info with name.
 	Get(context.Context, ...string) ([]btree.StoreInfo, error)
-	// Add store info.
+	// Add store info & create related tables like for registry & for node blob.
 	Add(context.Context, ...btree.StoreInfo) error
 	// Update store info. Update should also merge the Count of items between the incoming store info
 	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
 	Update(context.Context, ...btree.StoreInfo) error
-	// Remove store info with name.
+	// Remove store info with name & drop related tables like for registry & for node blob.
 	Remove(context.Context, ...string) error
 }
 

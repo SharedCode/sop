@@ -2,8 +2,6 @@
 -- when we implement "data driver" that uses Cassandra, more likely not to happen. :)
 -- Will delete below items and this file soon enough.
 
-create keyspace btree with replication = {'class':'SimpleStrategy', 'replication_factor':1};
-
 create table data_blocks (
     n_id UUID,
     db_id int,

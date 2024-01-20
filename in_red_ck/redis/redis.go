@@ -15,9 +15,13 @@ import (
 type Cache interface {
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
 	Get(ctx context.Context, key string) (string, error)
+	// SetStruct upserts a given object with a key to it.
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
+	// GetStruct fetches a given object given a key.
 	GetStruct(ctx context.Context, key string, target interface{}) error
+	// Delete removes the object given a key.
 	Delete(ctx context.Context, keys ...string) error
+	// Ping is a utility function to check if connection is good.
 	Ping(ctx context.Context) error
 }
 
