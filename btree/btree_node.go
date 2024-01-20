@@ -8,10 +8,13 @@ import (
 	"github.com/SharedCode/sop"
 )
 
-// MetaDataType specifies that an object has meta data such as Id & Version fields.
+// MetaDataType specifies object meta data fields such as Id & Version.
 type MetaDataType interface {
+	// Returns the object's Id.
 	GetId() sop.UUID
+	// Rerurns the object's version.
 	GetVersion() int
+	// Applies a version to the object.
 	SetVersion(v int)
 }
 
@@ -44,11 +47,15 @@ func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
 type Node[TK Comparable, TV any] struct {
 	Id          sop.UUID
 	ParentId    sop.UUID
+	// Slots is an array where the Items get stored in.
 	Slots       []*Item[TK, TV]
+	// Count of items in this node.
 	Count       int
+	// Version of this node.
 	Version     int
-	indexOfNode int
+	// Children IDs of this node.
 	ChildrenIds []sop.UUID
+	indexOfNode int
 }
 
 func (n *Node[TK, TV]) GetId() sop.UUID {

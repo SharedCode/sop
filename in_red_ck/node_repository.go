@@ -12,6 +12,9 @@ import (
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
+// nodeRepository implements both frontend and backend facing methods of the NodeRepository.
+// Part of where the magic happens.
+
 type cacheNode struct {
 	node   interface{}
 	action actionType
