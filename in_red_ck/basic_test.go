@@ -5,7 +5,7 @@ import (
 )
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	trans, _ := newMockTransaction(true, -1)
+	trans, _ := newMockTransaction(t, true, -1)
 	trans.Begin()
 	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
@@ -18,7 +18,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 }
 
 func Test_TransactionStory_SingleBTree(t *testing.T) {
-	trans, _ := newMockTransaction(true, -1)
+	trans, _ := newMockTransaction(t, true, -1)
 	trans.Begin()
 	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
