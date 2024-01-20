@@ -333,13 +333,12 @@ func Test_CommitThrowsException(t *testing.T) {
 	t2.storeRepository = goodStoreRepository
 	t2.redisCache = goodRedisCache
 	t2.nodeBlobStore = goodBlobStore
+
+	// Create an update & a Commit that fails. Pass true param to Mock Registry will induce error on Commit.
 	t2.registry = cas.NewMockRegistry(true)
 	t2.registry.(*cas.Mock_vid_registry).Lookup = goodRegistry.(*cas.Mock_vid_registry).Lookup
 
-
-	// Create an update & a Commit that fails.
 	trans.Begin()
-
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
 
 	pk, p = newPerson("joe", "zhroeger", "male2", "email2", "phone2")
