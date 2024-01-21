@@ -297,6 +297,28 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 	}
 
 	t1.Commit(ctx)
+
+	t1, _ = newMockTransaction(t, false, -1)
+	t1.Begin()
+	b3, _ = OpenBtree[int, string](ctx, "inmymemory2", t1)
+
+	// Find those items populated in previous transaction.
+	for _, test := range tests {
+		for i := test.startRange; i <= test.endRange; i++ {
+			k = i
+
+			switch test.action {
+			case 2:
+				if ok, _ := b3.FindOne(ctx, k, true); !ok {
+					t.Errorf("Failed FindOne item with key %d.\n", k)
+				}
+			}
+		}
+	}
+
+	if err := t1.Commit(ctx); err != nil {
+		t.Error(err)
+	}
 }
 
 func Test_SimpleDataMgmtCases(t *testing.T) {
@@ -384,6 +406,28 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 		}
 		t.Logf("Test %s ended.", test.name)
 	}
-
 	t1.Commit(ctx)
+
+	t1, _ = newMockTransaction(t, false, -1)
+	t1.Begin()
+	b3, _ = OpenBtree[string, string](ctx, "inmymemory3", t1)
+
+	for _, test := range tests {
+		t.Logf("Test %s started.", test.name)
+		for i := test.startRange; i < test.endRange; i++ {
+			k := fmt.Sprintf("foo%d", i)
+
+			switch test.action {
+			case 2:
+				if ok, _ := b3.FindOne(ctx, k, true); !ok {
+					t.Errorf("Failed FindOne item with key %s.\n", k)
+				}
+			}
+		}
+		t.Logf("Test %s ended.", test.name)
+	}
+
+	if err := t1.Commit(ctx); err != nil {
+		t.Error(err)
+	}
 }
