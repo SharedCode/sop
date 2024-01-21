@@ -76,7 +76,8 @@ func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 
 	t2, _ := newMockTransaction(t, true, -1)
 	t2.Begin()
-	b32, _ := NewBtree[int, string](ctx, "fooWorld", 8, true, false, true, "", t2)
+	// Open the same trie created above.
+	b32, _ := OpenBtree[int, string](ctx, "fooWorld", t2)
 	if ok, _ := b32.Add(ctx, 1, "hello world"); ok {
 		t.Errorf("Add(1) failed, got true, want false, as key 1 exists.")
 	}
@@ -96,14 +97,15 @@ func Test_UniqueKeyBTreeOnMultipleCommits(t *testing.T) {
 
 	t2, _ := newMockTransaction(t, true, -1)
 	t2.Begin()
-	b32, _ := NewBtree[int, string](ctx, "fooWorld", 8, true, false, true, "", t2)
+	// Open the same trie created above.
+	b32, _ := OpenBtree[int, string](ctx, "fooWorld", t2)
 	b32.Add(ctx, 1, "hello world")
 
 	if err := t1.Commit(ctx); err != nil {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}
 	if err := t2.Commit(ctx); err == nil {
-		t.Errorf("Commit got nil, want err.")
+		t.Errorf("Commit got nil, want error.")
 	} else {
 		t.Log(err)
 	}
