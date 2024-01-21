@@ -1,115 +1,125 @@
-package in_memory
+package in_red_ck
 
 import (
 	"fmt"
+
 	"testing"
 )
 
+// Tests were copied from in_memory package, refactored to work for in_red_ck.
+
 func Test_HelloWorld(t *testing.T) {
-	fmt.Printf("Btree hello world.\n")
-	b3 := NewBtree[int, string](false)
+	t1, _ := newMockTransaction(t, true, -1)
+	t1.Begin()
 
-	b3.Add(5000, "I am the value with 5000 key.")
-	b3.Add(5001, "I am the value with 5001 key.")
-	b3.Add(5000, "I am also a value with 5000 key.")
+	b3, _ := NewBtree[int, string](ctx, "inmymemory", 8, false, true, true, "", t1)
+	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 
-	if !b3.FindOne(5000, true) || b3.GetCurrentKey() != 5000 {
+	b3.Add(ctx, 5001, "I am the value with 5001 key.")
+	b3.Add(ctx, 5000, "I am also a value with 5000 key.")
+
+	if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey() != 5000 {
 		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
-	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
-
-	if !b3.Next() || b3.GetCurrentKey() != 5000 {
+	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5000 {
 		t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
-	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
-
-	if !b3.Next() || b3.GetCurrentKey() != 5001 {
+	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5001 {
 		t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey())
 	}
-	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
-	fmt.Printf("Btree hello world ended.\n\n")
+
+	t1.Commit(ctx)
 }
 
 func Test_FunctionalityTests(t *testing.T) {
-	fmt.Printf("Btree functionality tests.\n")
-	b3 := NewBtree[int, string](false)
+	t1, _ := newMockTransaction(t, true, -1)
+	t1.Begin()
+
+	b3, _ := NewBtree[int, string](ctx, "inmymemory1", 8, false, true, true, "", t1)
 
 	const five001Value = "I am the value with 5001 key."
 
 	// Check get on empty tree, returns false always as is empty.
-	if b3.FindOne(1, false) {
+	if ok, _ := b3.FindOne(ctx, 1, false); ok {
 		t.Errorf("FindOne(1) failed, got true, want false.")
 	}
 
 	// Populate with some values.
-	b3.Add(5000, "I am the value with 5000 key.")
-	b3.Add(5001, five001Value)
+	b3.Add(ctx, 5000, "I am the value with 5000 key.")
+	b3.Add(ctx, 5001, five001Value)
 
 	// Test AddIfNotExist method #1.
-	if b3.AddIfNotExist(5000, "foobar") {
+	if ok, _ := b3.AddIfNotExist(ctx, 5000, "foobar"); ok {
 		t.Errorf("AddIfNotExist(5000, 'foobar') got success, want fail.")
 	}
 
-	b3.Add(5000, "I am also a value with 5000 key.")
+	b3.Add(ctx, 5000, "I am also a value with 5000 key.")
 
 	// Test AddIfNotExist method #2.
-	if b3.AddIfNotExist(5000, "foobar") {
+	if ok, _ := b3.AddIfNotExist(ctx, 5000, "foobar"); ok {
 		t.Errorf("AddIfNotExist(5000, 'foobar') got success, want fail.")
 	}
 	// Add more checks here as needed..
 
 	// Check if B-Tree items are intact.
-	if !b3.FindOne(5000, true) || b3.GetCurrentKey() != 5000 {
+	if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey() != 5000 {
 		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
-	if !b3.Next() || b3.GetCurrentKey() != 5000 {
+	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5000 {
 		t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
-	if !b3.Next() || b3.GetCurrentKey() != 5001 {
+	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5001 {
 		t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey())
 	}
 
 	// Test Next on EOF.
-	if b3.Next() {
+	if ok, _ := b3.Next(ctx);ok {
 		t.Errorf("Next() on EOF failed, got = true, want = false")
 	}
 
 	// Test UpdateCurrentItem.
-	b3.FindOne(5000, true)
+	b3.FindOne(ctx, 5000, true)
 	newVal := "Updated with new Value."
-	if !b3.UpdateCurrentItem(newVal) || b3.GetCurrentValue() != newVal {
-		t.Errorf("UpdateCurrentItem() failed, got = %s, want = %s", b3.GetCurrentValue(), newVal)
+	if ok, _ := b3.UpdateCurrentItem(ctx, newVal); !ok {
+		t.Errorf("UpdateCurrentItem() failed, got = false, want = true")
+	}
+	if  v, _ := b3.GetCurrentValue(ctx); v != newVal {
+		t.Errorf("UpdateCurrentItem() failed, got = %s, want = %s", v, newVal)
 	}
 
-	if !b3.FindOne(5000, true) || b3.GetCurrentValue() != newVal {
-		t.Errorf("UpdateCurrentItem(<k>) succeeded but FindOne(<k>, true) failed, got = %s, want = %s", b3.GetCurrentValue(), newVal)
+	if ok, _ := b3.FindOne(ctx, 5000, true); !ok {
+		t.Errorf("UpdateCurrentItem(<k>) succeeded but FindOne(<k>, true) failed, got = false, want = true")
+	}
+	if v, _ := b3.GetCurrentValue(ctx); v != newVal {
+		t.Errorf("UpdateCurrentItem(<k>) succeeded but FindOne(<k>, true) failed, got = %s, want = %s", v, newVal)
 	}
 
 	// Test RemoveCurrentItem
-	b3.FindOne(5000, true)
-	if !b3.RemoveCurrentItem() {
+	b3.FindOne(ctx, 5000, true)
+	if ok, _ := b3.RemoveCurrentItem(ctx); !ok {
 		t.Errorf("RemoveCurrentItem() failed.")
 	}
-	b3.FindOne(5000, true)
-	if !b3.Next() || b3.GetCurrentKey() != 5001 {
+	b3.FindOne(ctx, 5000, true)
+	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5001 {
 		t.Errorf("Next() after RemoveCurrentItem failed, expected item(5001) not found.")
 	}
-	if b3.GetCurrentValue() != five001Value {
-		t.Errorf("Next() after RemoveCurrentItem failed, got = %s, want = %s.", b3.GetCurrentValue(), five001Value)
+	if v, _ := b3.GetCurrentValue(ctx); v != five001Value {
+		t.Errorf("Next() after RemoveCurrentItem failed, got = %s, want = %s.", v, five001Value)
 	}
 
 	// Test Next on EOF.
-	if b3.Next() {
+	if ok, _ := b3.Next(ctx); ok {
 		t.Errorf("Next() on EOF failed, got = true, want = false")
 	}
 
-	fmt.Printf("Btree functionality tests ended.\n\n")
+	t1.Commit(ctx)
 }
 
 func Test_ComplexDataMgmtCases(t *testing.T) {
 	max := 100000
-	fmt.Printf("Btree complex data mgmt tests started(%d items).\n", max)
-	b3 := NewBtree[int, string](true)
+	t1, _ := newMockTransaction(t, true, -1)
+	t1.Begin()
+	b3, _ := NewBtree[int, string](ctx, "inmymemory2", 8, true, true, true, "", t1)
 
 	// Simple IsUnique check.
 	if !b3.IsUnique() {
@@ -226,7 +236,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 			itemsFoundCount := 0
 			for i := test.startRange; i <= test.endRange; i++ {
 				k = i
-				if b3.FindOne(k, true) {
+				if ok, _ := b3.FindOne(ctx, k, true); ok {
 					itemsFoundCount++
 				}
 			}
@@ -240,12 +250,12 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 		if test.action == 5 {
 			itemsFoundCount := 0
 			k = test.startRange
-			if b3.FindOne(k, true) {
+			if ok, _ := b3.FindOne(ctx, k, true); ok {
 				itemsFoundCount++
 			}
 			for i := test.startRange + 1; i <= test.endRange; i++ {
 				k = i
-				if b3.Next() {
+				if ok, _ := b3.Next(ctx); ok {
 					if b3.GetCurrentKey() == k {
 						itemsFoundCount++
 						continue
@@ -266,11 +276,11 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 
 			switch test.action {
 			case 1:
-				if !b3.Add(k, v) {
+				if ok, _ := b3.Add(ctx, k, v); !ok {
 					t.Errorf("Failed Add item with key %d.\n", k)
 				}
 			case 2:
-				if !b3.FindOne(k, true) {
+				if ok, _ := b3.FindOne(ctx, k, true); !ok {
 					t.Errorf("Failed FindOne item with key %d.\n", k)
 				}
 			case 3:
@@ -278,20 +288,22 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 					i := 90
 					i++
 				}
-				if !b3.Remove(k) {
+				if ok, _ := b3.Remove(ctx, k); !ok {
 					t.Errorf("Failed Remove item with key %d.\n", k)
 				}
 			}
 		}
 		t.Logf("Test %s ended.", test.name)
 	}
-	fmt.Printf("Btree complex data mgmt tests ended.\n\n")
+
+	t1.Commit(ctx)
 }
 
 func Test_SimpleDataMgmtCases(t *testing.T) {
 	max := 100000
-	fmt.Printf("Btree simple data mgmt tests started(%d items).\n", max)
-	b3 := NewBtree[string, string](false)
+	t1, _ := newMockTransaction(t, true, -1)
+	t1.Begin()
+	b3, _ := NewBtree[string, string](ctx, "inmymemory3", 8, false, true, true, "", t1)
 
 	tests := []struct {
 		name       string
@@ -357,20 +369,21 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 
 			switch test.action {
 			case 1:
-				if !b3.Add(k, v) {
+				if ok, _ := b3.Add(ctx, k, v); !ok {
 					t.Errorf("Failed Add item with key %s.\n", k)
 				}
 			case 2:
-				if !b3.FindOne(k, true) {
+				if ok, _ := b3.FindOne(ctx, k, true); !ok {
 					t.Errorf("Failed FindOne item with key %s.\n", k)
 				}
 			case 3:
-				if !b3.Remove(k) {
+				if ok, _ := b3.Remove(ctx, k); !ok {
 					t.Errorf("Failed Delete item with key %s.\n", k)
 				}
 			}
 		}
 		t.Logf("Test %s ended.", test.name)
 	}
-	fmt.Printf("Btree simple data mgmt tests ended.\n\n")
+
+	t1.Commit(ctx)
 }
