@@ -25,9 +25,10 @@ import (
 // brokers & the topic.
 //
 // See the kafka producer.go "Enqueue" function for details how SOP sends the
-// deleted Nodes' IDs and tables. BUT you only need to set the "brokers" & "topic"
-// variables and the producer should start to "sense" that kafka sendmessage
-// is working and then will start to skip issuing deletes for succeeding commits.
+// deleted Nodes' IDs and tables names. BUT you only need to set the "brokers" & "topic"
+// variables and, if delete service is enabled, the producer should start to "sense"
+// that kafka sendmessage is working and then will start to skip issuing deletes
+// for succeeding commits.
 //
 // ** Then make sure to setup the kafka consumer side, so you can schedule deletes
 // on your desired intervals, and using your application to do that.
