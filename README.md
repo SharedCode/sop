@@ -1,7 +1,6 @@
 # M-Way Trie algorithms for Scaleable Objects Persistence (SOP)
 
-Scaleable Objects Persistence (SOP) Framework
-Golang V2
+Scaleable Objects Persistence (SOP) Framework - Golang V2
 
 ## SOP in Memory
 SOP in-memory was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithms that will work irrespective of backend, be it in-memory or others, such as the "in Cassandra & Redis" implementation(see discussion below for details).
