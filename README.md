@@ -124,7 +124,8 @@ func main() {
 You can store or manage any data type in Golang. From native types like int, string, long, etc... to custom structs for either or both Key & Value pair. For custom structs as Key, all you need to do is to implement the "Compare" function. This is required by SOP so then you can specify how the items will be sorted. You can define however you like the sorting to happen. Compare has int return type which follows standard "comparable" interface. The return int value is as follows:
   * Returns ```0``` means both keys being compared are equal
   * ```> 1``` means that the current key(x) is greater than the other key(y) being compared
-  * ```< 1``` means that the current key(x) is lesser than the other key(y) being compared 
+  * ```< 1``` means that the current key(x) is lesser than the other key(y) being compared
+You can also create or open one or many B-Trees within a transaction. And you can have/or manage one or many transactions within your application. Of course, it is a full-fledged ACID transaction implementation.
 
 Blob storage was implemented in Cassandra, thus, there is no need for AWS S3. Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_ck".
 SOP in Redis, Cassandra & Kafka(in_red_ck). Or fashionably, SOP in "red Calvin Klein", hehe.
