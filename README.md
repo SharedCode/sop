@@ -125,6 +125,7 @@ You can store or manage any data type in Golang. From native types like int, str
   * Returns ```0``` means both keys being compared are equal
   * ```> 1``` means that the current key(x) is greater than the other key(y) being compared
   * ```< 1``` means that the current key(x) is lesser than the other key(y) being compared
+
 You can also create or open one or many B-Trees within a transaction. And you can have/or manage one or many transactions within your application. Of course, it is a full-fledged ACID transaction implementation.
 
 Blob storage was implemented in Cassandra, thus, there is no need for AWS S3. Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_ck".
