@@ -78,7 +78,6 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 	b3, _ := NewBtree[int, string](ctx, "2phase2", 8, true, true, true, "", t1)
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
-	b3.Add(ctx, 5000, "I am also a value with 5000 key.")
 
 	twoPhase := t1.GetPhasedTransaction()
 
