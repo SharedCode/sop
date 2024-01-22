@@ -108,7 +108,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 				t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey())
 			}
 
-			// Call the two phase committers just for demo, but t1.Commit(..) will work fine too.
+			// Call 1st phase commit.
 			if err = twoPhase.Phase1Commit(ctx); err != nil {
 				t.Error(err)
 			}
