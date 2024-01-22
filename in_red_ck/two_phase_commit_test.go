@@ -83,6 +83,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 	twoPhase := t1.GetPhasedTransaction()
 
 	if err := twoPhase.Phase1Commit(ctx); err == nil {
+		// Call 3rd party DB integration, failure.
 		if err2 := my3rdPartyDBlogic(true); err2 != nil {
 			twoPhase.Rollback(ctx)
 
