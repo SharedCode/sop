@@ -5,6 +5,8 @@ Scaleable Objects Persistence (SOP) Framework - Golang V2
 # SOP in Cassandra & Redis
 M-Way Trie data structures & algorithms based Objects persistence, using Cassandra as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration.
 
+SOP has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your app. No need to have impedance mismatch.
+
 Requirements:
   * Cassandra
   * Redis
@@ -122,7 +124,9 @@ func main() {
 You can store or manage any data type in Golang. From native types like int, string, long, etc... to custom structs for either or both Key & Value pair. For custom structs as Key, all you need to do is to implement the "Compare" function. This is required by SOP so then you can specify how the items will be sorted. You can define however you like the sorting to happen. Compare has int return type which follows standard "comparable" interface. The return int value is as follows:
   * Returns ```0``` means both keys being compared are equal
   * ```> 1``` means that the current key(x) is greater than the other key(y) being compared
-  * ```< 1``` means that the current key(x) is lesser than the other key(y) being compared 
+  * ```< 1``` means that the current key(x) is lesser than the other key(y) being compared
+
+You can also create or open one or many B-Trees within a transaction. And you can have/or manage one or many transactions within your application. Of course, it is a full-fledged ACID transaction implementation.
 
 Blob storage was implemented in Cassandra, thus, there is no need for AWS S3. Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_ck".
 SOP in Redis, Cassandra & Kafka(in_red_ck). Or fashionably, SOP in "red Calvin Klein", hehe.
@@ -164,7 +168,7 @@ Above illustrates sample configuration for Cassandra & Redis bits, and how to in
 ## Transaction Batching
 You read that right, in SOP, all your actions within a transaction becomes the batch that gets submitted to the backend. Thus, you can just focus on your data mining and/or application logic and let the SOP transaction to take care of submitting all your changes for commit. Even items you've fetched are checked for consistency during commit. And yes, there is a "reader" transaction where you just do fetches or item reads, then on commit, SOP will ensure the items you read did not change while in the middle or up to the time you submitted or committed the transaction.
 
-Recommended size of a transaction is about 500 items(and should typically match the "slot length" of the node), more or less, depending on your data structure sizes. That is, you can fetch(Read) and/or do management actions such as Create, Update, Delete for around 500 items more or less and do commit to finalize the transaction.
+Recommended size of a transaction is about 500 items(and should typically match the "slot length" of the node, without going over the Cassandra "logged transaction" ceiling), more or less, depending on your data structure sizes. That is, you can fetch(Read) and/or do management actions such as Create, Update, Delete for around 500 items more or less and do commit to finalize the transaction.
 
 ## Atomicity, Consistency, Isolation and Durability
 SOP transaction achieves each of these ACID transaction attributes by moving the M-Way Trie(B-Tree for short) within the SOP code library. B-Tree is the heart of database systems. It enables fast storage and searches, a.k.a. - indexing engine. But more than that, by SOP's design, the B-Tree is used as part of the "controller logic" to provide two phase commit, ACID transactions.
@@ -233,7 +237,7 @@ SOP is written in Go and is a full re-implementation of the c# version. A lot of
 ## SOP in Memory
 SOP in-memory was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithms that will work irrespective of backend, be it in-memory or others, such as the "in Cassandra & Redis" implementation, as discussed above.
 
-SOP in-memory, is a full implementation. It has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your app. No need to have impedance mismatch.
+SOP in-memory is a full implementation and you can use it if it fits the needs, i.e. - no persistence, map + sorted "range" queries/updates.
 
 Sample Basic Usage:
   * Import the sop/in_memory, e.g. ```import sop "github.com/SharedCode/sop/in_memory"```
