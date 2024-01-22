@@ -235,7 +235,7 @@ SOP is written in Go and is a full re-implementation of the c# version. A lot of
 ## SOP in Memory
 SOP in-memory was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithms that will work irrespective of backend, be it in-memory or others, such as the "in Cassandra & Redis" implementation, as discussed above.
 
-SOP in-memory is a full implementation and you can use it if it fits the needs, i.e. - no persistence.
+SOP in-memory is a full implementation and you can use it if it fits the needs, i.e. - no persistence, map + sorted "range" queries/updates.
 
 Sample Basic Usage:
   * Import the sop/in_memory, e.g. ```import sop "github.com/SharedCode/sop/in_memory"```
