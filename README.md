@@ -259,7 +259,8 @@ The optimal choice is the latter. For example, you can setup a Kafka consumer wh
 See here for code details: https://github.com/SharedCode/sop/blob/3b3b574bb97905ca38d761dedd8af95a7fbce4e2/in_red_ck/delete_service.go#L24C11-L24C11
 
 ## Item Serialization
-Uses Golang's built-in marshaller for serialization for simplicity and support for "streaming"(future feature, perhaps in V3).
+By default, uses Golang's built-in JSON marshaller for serialization for simplicity and support for "streaming"(future feature, perhaps in V3). But you can override this by assigning your own "Marshaler" interface implementation to ```../in_red_ck/cassandra``` & ```../in_red_ck/redis``` packages.
+See here for details about the "Marshaler" interface: https://github.com/SharedCode/sop/blob/c6d8a1716b1ab7550df7e1d57503fdb7e041f00f/encoding.go#L8C1-L8C27
 
 ## Two Phase Commit
 Two phase commit is required so SOP can offer "seamless" integration with your App's other DB backend(s)' transactions. On Phase 1 commit, SOP will commit all transaction session changes onto respective new (but geared for permanence) Btree transaction nodes. Your App will then be allowed to commit any other DB(s) transactions it use. Your app is allowed to Rollback any of these transactions and just relay the Rollback to SOP ongoing transaction if needed.
