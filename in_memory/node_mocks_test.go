@@ -398,6 +398,52 @@ func TestMockNodeWithRightNilChildAnd3LevelsMoveNext(t *testing.T) {
 	t.Log("Mock TestMockNodeWithRightNilChildAnd3LevelsMoveNext end.\n\n")
 }
 
+func TestMockNodeHasNilChild(t *testing.T) {
+	t.Log("Mock TestMockNodeHasNilChild.\n")
+	store := btree.StoreInfo{
+		SlotLength: 2,
+		LeafLoadBalancing: true,
+	}
+	si := btree.StoreInterface[int, string]{
+		NodeRepository:    newNodeRepository[int, string](),
+		ItemActionTracker: newDumbItemActionTracker[int, string](),
+	}
+	b3, _ := btree.New[int, string](&store, &si)
+
+	for i := 1; i <= 7; i++ {
+		x := i * 5
+		b3.Add(ctx, x, fmt.Sprintf("foo%d", x))
+	}
+	// node illustration:
+	//      20
+	//   10     30
+	// 5  15  25  35
+
+	// Remove node 11 to create nil child(leftmost child) on node1.
+	b3.Remove(ctx, 35)
+	// node illustration after deleting 15:
+	//      20
+	//   10     30
+	// 5  15  25  _
+
+	t.Log("\nMock TestMockNodeHasNilChild Next test.\n")
+	b3.First(ctx)
+	ctr := 0
+	for {
+		ctr++
+		k := b3.GetCurrentKey()
+		t.Logf("key: %d", k)
+		if ok, _ := b3.Next(ctx); !ok {
+			break
+		}
+	}
+	if ctr != 6 {
+		t.Errorf("Mock TestMockNodeHasNilChild Next failed, got = %d, want = 6 items found.", ctr)
+	}
+
+	t.Log("Mock TestMockNodeHasNilChild end.\n\n")
+}
+
 func TestMockNodeWithLeftNilChildMovePrevious(t *testing.T) {
 	t.Log("Mock TestMockNodeWithLeftNilChildMovePrevious.\n")
 	store := btree.StoreInfo{
