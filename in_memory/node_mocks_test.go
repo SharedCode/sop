@@ -410,21 +410,23 @@ func TestMockNodeHasNilChild(t *testing.T) {
 	}
 	b3, _ := btree.New[int, string](&store, &si)
 
-	for i := 1; i <= 7; i++ {
+	for i := 1; i <= 9; i++ {
 		x := i * 5
 		b3.Add(ctx, x, fmt.Sprintf("foo%d", x))
 	}
-	// node illustration:
-	//      20
-	//   10     30
-	// 5  15  25  35
 
-	// Remove node 11 to create nil child(leftmost child) on node1.
-	b3.Remove(ctx, 35)
-	// node illustration after deleting 15:
-	//      20
-	//   10     30
-	// 5  15  25  _
+	// node illustration:
+	//          30
+	//      15    40
+	// 5,10  20,25   35, 45
+	b3.Remove(ctx, 5)
+	b3.Remove(ctx, 10)
+
+	// node illustration:
+	//          30
+	//      15    40
+	//  _    20,25   35, 45
+	b3.Add(ctx, 21, "foo")
 
 	t.Log("\nMock TestMockNodeHasNilChild Next test.\n")
 	b3.First(ctx)
@@ -437,7 +439,7 @@ func TestMockNodeHasNilChild(t *testing.T) {
 			break
 		}
 	}
-	if ctr != 6 {
+	if ctr != 8 {
 		t.Errorf("Mock TestMockNodeHasNilChild Next failed, got = %d, want = 6 items found.", ctr)
 	}
 
