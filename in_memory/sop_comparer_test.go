@@ -59,3 +59,61 @@ func passBtreeAround(b3 BtreeInterface[personKey, person]) bool {
 	key := personKey{firstname: "joe", lastname: "krueger"}
 	return b3.FindOne(key, false)
 }
+
+func Test_TypesInCompare(t *testing.T) {
+	b3Int := NewBtree[int, int](true)
+	b3Int.Add(1, 1)
+	b3Int.FindOne(1, false)
+
+	b3Int8 := NewBtree[int8, int8](true)
+	b3Int8.Add(1, 1)
+	b3Int8.FindOne(1, false)
+
+	b3Int16 := NewBtree[int16, int16](true)
+	b3Int16.Add(1, 1)
+	b3Int16.FindOne(1, false)
+
+	b3Int32 := NewBtree[int32, int32](true)
+	b3Int32.Add(1, 1)
+	b3Int32.FindOne(1, false)
+
+	b3Int64 := NewBtree[int64, int64](true)
+	b3Int64.Add(1, 1)
+	b3Int64.FindOne(1, false)
+
+	b3UInt := NewBtree[uint, uint](true)
+	b3UInt.Add(1, 1)
+	b3UInt.FindOne(1, false)
+
+	b3UInt8 := NewBtree[uint8, uint8](true)
+	b3UInt8.Add(1, 1)
+	b3UInt8.FindOne(1, false)
+
+	b3UInt16 := NewBtree[uint16, uint16](true)
+	b3UInt16.Add(1, 1)
+	b3UInt16.FindOne(1, false)
+
+	b3UInt32 := NewBtree[uint32, uint32](true)
+	b3UInt32.Add(1, 1)
+	b3UInt32.FindOne(1, false)
+
+	b3UInt64 := NewBtree[uint64, uint64](true)
+	b3UInt64.Add(1, 1)
+	b3UInt64.FindOne(1, false)
+
+	b3uintptr := NewBtree[uintptr, uintptr](true)
+	b3uintptr.Add(1, 1)
+	b3uintptr.FindOne(1, false)
+
+	b3float32 := NewBtree[float32, float32](true)
+	b3float32.Add(1, 1)
+	b3float32.FindOne(1, false)
+
+	b3float64 := NewBtree[float64, float64](true)
+	b3float64.Add(1, 1)
+	b3float64.FindOne(1, false)
+
+	b3str := NewBtree[string, string](true)
+	b3str.Add("1", "1")
+	b3str.FindOne("1", false)
+}
