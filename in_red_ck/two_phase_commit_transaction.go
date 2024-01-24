@@ -63,9 +63,14 @@ var now = time.Now
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
 func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error) {
+	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
 		m := 15
 		maxTime = time.Duration(m * int(time.Minute))
+	}
+	// Maximum transaction commit time is 1 hour.
+	if maxTime > time.Duration(1*time.Hour) {
+		maxTime = time.Duration(1*time.Hour)
 	}
 	if !IsInitialized() {
 		return nil, fmt.Errorf("Redis and/or Cassandra bits were not initialized")
