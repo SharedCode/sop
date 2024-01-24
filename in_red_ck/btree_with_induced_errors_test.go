@@ -3,6 +3,7 @@ package in_red_ck
 import (
 	"context"
 	"fmt"
+	"testing"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
@@ -12,7 +13,8 @@ type b3WithInducedErrors[TK btree.Comparable, TV any] struct {
 	induceErrorOnMethod int
 }
 
-func newBTreeWithInducedErrors[TK btree.Comparable, TV any]() *b3WithInducedErrors[TK, TV] {
+func newBTreeWithInducedErrors[TK btree.Comparable, TV any](t testing.TB) *b3WithInducedErrors[TK, TV] {
+	t.Helper()
 	return &b3WithInducedErrors[TK, TV]{}
 }
 
