@@ -2,7 +2,7 @@
 
 Scaleable Objects Persistence (SOP) Framework - Golang V2
 
-https://app.codecov.io/github/SharedCode/sop
+Code Coverage: https://app.codecov.io/github/SharedCode/sop
 
 # SOP in Cassandra & Redis
 M-Way Trie data structures & algorithms based Objects persistence, using Cassandra as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration.
