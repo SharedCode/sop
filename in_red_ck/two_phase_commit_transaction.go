@@ -65,8 +65,7 @@ var now = time.Now
 func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
-		m := 15
-		maxTime = time.Duration(m * int(time.Minute))
+		maxTime = time.Duration(15 * time.Minute)
 	}
 	// Maximum transaction commit time is 1 hour.
 	if maxTime > time.Duration(1*time.Hour) {
