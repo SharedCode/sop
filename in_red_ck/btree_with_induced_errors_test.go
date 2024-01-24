@@ -11,20 +11,23 @@ import (
 
 type b3WithInducedErrors[TK btree.Comparable, TV any] struct {
 	induceErrorOnMethod int
+	t *testing.T
 }
 
-func newBTreeWithInducedErrors[TK btree.Comparable, TV any](t testing.TB) *b3WithInducedErrors[TK, TV] {
+func newBTreeWithInducedErrors[TK btree.Comparable, TV any](t *testing.T) *b3WithInducedErrors[TK, TV] {
 	t.Helper()
-	return &b3WithInducedErrors[TK, TV]{}
+	return &b3WithInducedErrors[TK, TV]{ t: t }
 }
 
 func (b3 b3WithInducedErrors[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 1 {
 		return false, fmt.Errorf("foobar")
 	}
 	return true, nil
 }
 func (b3 b3WithInducedErrors[TK, TV]) AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 2 {
 		return false, fmt.Errorf("foobar")
 	}
@@ -32,12 +35,14 @@ func (b3 b3WithInducedErrors[TK, TV]) AddIfNotExist(ctx context.Context, key TK,
 }
 
 func (b3 b3WithInducedErrors[TK, TV]) Update(ctx context.Context, key TK, value TV) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 3 {
 		return false, fmt.Errorf("foobar")
 	}
 	return true, nil
 }
 func (b3 b3WithInducedErrors[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 4 {
 		return false, fmt.Errorf("foobar")
 	}
@@ -45,34 +50,40 @@ func (b3 b3WithInducedErrors[TK, TV]) UpdateCurrentItem(ctx context.Context, new
 }
 
 func (b3 b3WithInducedErrors[TK, TV]) Remove(ctx context.Context, key TK) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 5 {
 		return false, fmt.Errorf("foobar")
 	}
 	return true, nil
 }
 func (b3 b3WithInducedErrors[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 6 {
 		return false, fmt.Errorf("foobar")
 	}
 	return true, nil
 }
 func (b3 b3WithInducedErrors[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 7 {
 		return false, fmt.Errorf("foobar")
 	}
 	return true, nil
 }
 func (b3 b3WithInducedErrors[TK, TV]) FindOneWithId(ctx context.Context, key TK, id sop.UUID) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 8 {
 		return false, fmt.Errorf("foobar")
 	}
 	return true, nil
 }
 func (b3 b3WithInducedErrors[TK, TV]) GetCurrentKey() TK {
+	b3.t.Helper()
 	var zero TK
 	return zero
 }
 func (b3 b3WithInducedErrors[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
+	b3.t.Helper()
 	var zero TV
 	if b3.induceErrorOnMethod == 9 {
 		return zero, fmt.Errorf("foobar")
@@ -81,6 +92,7 @@ func (b3 b3WithInducedErrors[TK, TV]) GetCurrentValue(ctx context.Context) (TV, 
 }
 
 func (b3 b3WithInducedErrors[TK, TV]) GetCurrentItem(ctx context.Context) (btree.Item[TK, TV], error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 10 {
 		return btree.Item[TK, TV]{}, fmt.Errorf("foobar")
 	}
@@ -88,6 +100,7 @@ func (b3 b3WithInducedErrors[TK, TV]) GetCurrentItem(ctx context.Context) (btree
 }
 
 func (b3 b3WithInducedErrors[TK, TV]) First(ctx context.Context) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 11 {
 		return false, fmt.Errorf("foobar")
 	}
@@ -95,12 +108,14 @@ func (b3 b3WithInducedErrors[TK, TV]) First(ctx context.Context) (bool, error) {
 }
 
 func (b3 b3WithInducedErrors[TK, TV]) Last(ctx context.Context) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 12 {
 		return false, fmt.Errorf("foobar")
 	}
 	return true, nil
 }
 func (b3 b3WithInducedErrors[TK, TV]) Next(ctx context.Context) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 13 {
 		return false, fmt.Errorf("foobar")
 	}
@@ -108,6 +123,7 @@ func (b3 b3WithInducedErrors[TK, TV]) Next(ctx context.Context) (bool, error) {
 }
 
 func (b3 b3WithInducedErrors[TK, TV]) Previous(ctx context.Context) (bool, error) {
+	b3.t.Helper()
 	if b3.induceErrorOnMethod == 14 {
 		return false, fmt.Errorf("foobar")
 	}

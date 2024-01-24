@@ -15,7 +15,7 @@ var mockRegistry = cas.NewMockRegistry(false)
 var mockRedisCache = redis.NewMockClient()
 var mockNodeBlobStore = cas.NewMockBlobStore()
 
-func newMockTransaction(t testing.TB, forWriting bool, maxTime time.Duration) (Transaction, error) {
+func newMockTransaction(t *testing.T, forWriting bool, maxTime time.Duration) (Transaction, error) {
 	t.Helper()
 	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, forWriting, maxTime)
 	return &singlePhaseTransaction{
@@ -23,7 +23,7 @@ func newMockTransaction(t testing.TB, forWriting bool, maxTime time.Duration) (T
 	}, nil
 }
 
-func newMockTwoPhaseCommitTransaction(t testing.TB, forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error) {
+func newMockTwoPhaseCommitTransaction(t *testing.T, forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error) {
 	t.Helper()
 	if maxTime <= 0 {
 		m := 15
