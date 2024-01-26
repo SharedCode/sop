@@ -101,7 +101,7 @@ const nodeSlotLength = 500
 func main() {
 
 	// Create and start a transaction session.
-	trans, err := NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1)
 	trans.Begin()
 
 	// Create the B-Tree (store) instance.
