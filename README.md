@@ -52,7 +52,7 @@ func main() {
 	// including the "transaction" that it will participate in.
 	//
 	// Key is of type "int" & Value is of type "string".
-	b3, _ := NewBtree[int, string](ctx, "fooStore", 500, false, false, true, "", trans)
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, "fooStore", 500, false, false, true, "", trans)
 
 	b3.Add(ctx, 1, "hello world")
 
@@ -105,7 +105,7 @@ func main() {
 	trans.Begin()
 
 	// Create the B-Tree (store) instance.
-	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
 
 	// Add a person record w/ details.
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone", "mySSN123")
