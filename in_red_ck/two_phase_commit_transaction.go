@@ -296,15 +296,17 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	t.updatedNodeHandles = uh
 	t.removedNodeHandles = rh
 
+	// In case race condition exists, we remove it here by checking our tracked items' lock integrity.
+	if err := t.checkTrackedItems(ctx); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (t *transaction) phase2Commit(ctx context.Context) error {
 	if !t.hasTrackedItems() {
 		return nil
-	}
-	if err := t.checkTrackedItems(ctx); err != nil {
-		return err
 	}
 	// Finalize the commit, it is the only all or nothing action in the commit,
 	// and on registry (very small) records only.
