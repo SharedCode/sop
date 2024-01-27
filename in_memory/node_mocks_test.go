@@ -401,7 +401,7 @@ func TestMockNodeWithRightNilChildAnd3LevelsMoveNext(t *testing.T) {
 func TestMockNodeHasNilChild(t *testing.T) {
 	t.Log("Mock TestMockNodeHasNilChild.\n")
 	store := btree.StoreInfo{
-		SlotLength: 2,
+		SlotLength:        2,
 		LeafLoadBalancing: true,
 	}
 	si := btree.StoreInterface[int, string]{

@@ -73,7 +73,7 @@ func Test_FunctionalityTests(t *testing.T) {
 	}
 
 	// Test Next on EOF.
-	if ok, _ := b3.Next(ctx);ok {
+	if ok, _ := b3.Next(ctx); ok {
 		t.Errorf("Next() on EOF failed, got = true, want = false")
 	}
 
@@ -83,7 +83,7 @@ func Test_FunctionalityTests(t *testing.T) {
 	if ok, _ := b3.UpdateCurrentItem(ctx, newVal); !ok {
 		t.Errorf("UpdateCurrentItem() failed, got = false, want = true")
 	}
-	if  v, _ := b3.GetCurrentValue(ctx); v != newVal {
+	if v, _ := b3.GetCurrentValue(ctx); v != newVal {
 		t.Errorf("UpdateCurrentItem() failed, got = %s, want = %s", v, newVal)
 	}
 

@@ -1,8 +1,8 @@
 package in_red_ck
 
 import (
-	"time"
 	"testing"
+	"time"
 
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/in_red_ck/redis"

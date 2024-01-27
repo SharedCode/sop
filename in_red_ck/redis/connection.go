@@ -12,15 +12,15 @@ import (
 // Redis configurable options.
 type Options struct {
 	// Redis server(cluster) address.
-	Address                  string
+	Address string
 	// Password required when connecting to the Redis server.
-	Password                 string
+	Password string
 	// DB to connect to.
-	DB                       int
+	DB int
 	// DefaultDurationInSeconds specifies the default caching time to use if not specified on call.
 	DefaultDurationInSeconds int
 	// TLS config.
-	TLSConfig                *tls.Config
+	TLSConfig *tls.Config
 }
 
 // Returns the default duration.

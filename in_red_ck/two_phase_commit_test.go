@@ -100,7 +100,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 
 			b3.Add(ctx, 5000, "I am the value with 5000 key.")
 			b3.Add(ctx, 5001, "I am the value with 5001 key.")
-			
+
 			if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey() != 5000 {
 				t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
 			}

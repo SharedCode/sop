@@ -8,7 +8,7 @@ import (
 )
 
 type Mock_vid_registry struct {
-	Lookup map[sop.UUID]sop.Handle
+	Lookup                           map[sop.UUID]sop.Handle
 	InducedErrorOnUpdateAllOrNothing bool
 }
 

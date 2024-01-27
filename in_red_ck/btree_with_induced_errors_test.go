@@ -11,12 +11,12 @@ import (
 
 type b3WithInducedErrors[TK btree.Comparable, TV any] struct {
 	induceErrorOnMethod int
-	t *testing.T
+	t                   *testing.T
 }
 
 func newBTreeWithInducedErrors[TK btree.Comparable, TV any](t *testing.T) *b3WithInducedErrors[TK, TV] {
 	t.Helper()
-	return &b3WithInducedErrors[TK, TV]{ t: t }
+	return &b3WithInducedErrors[TK, TV]{t: t}
 }
 
 func (b3 b3WithInducedErrors[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {

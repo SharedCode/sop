@@ -45,14 +45,14 @@ func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
 
 // Node contains a B-Tree node's data.
 type Node[TK Comparable, TV any] struct {
-	Id          sop.UUID
-	ParentId    sop.UUID
+	Id       sop.UUID
+	ParentId sop.UUID
 	// Slots is an array where the Items get stored in.
-	Slots       []*Item[TK, TV]
+	Slots []*Item[TK, TV]
 	// Count of items in this node.
-	Count       int
+	Count int
 	// Version of this node.
-	Version     int
+	Version int
 	// Children IDs of this node.
 	ChildrenIds []sop.UUID
 	indexOfNode int

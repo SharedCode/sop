@@ -32,7 +32,7 @@ type btreeBackend struct {
 	nodeRepository     *nodeRepository
 	refetchAndMerge    func(ctx context.Context) error
 	getStoreInfo       func() *btree.StoreInfo
-	hasTrackedItems func() bool
+	hasTrackedItems    func() bool
 	checkTrackedItems  func(ctx context.Context, itemRedisCache redis.Cache) error
 	lockTrackedItems   func(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error
 	unlockTrackedItems func(ctx context.Context, itemRedisCache redis.Cache) error
