@@ -32,7 +32,8 @@ type btreeBackend struct {
 	nodeRepository     *nodeRepository
 	refetchAndMerge    func(ctx context.Context) error
 	getStoreInfo       func() *btree.StoreInfo
-	hasTrackedItems    func() bool
+	hasTrackedItems func() bool
+	checkTrackedItems  func(ctx context.Context, itemRedisCache redis.Cache) error
 	lockTrackedItems   func(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error
 	unlockTrackedItems func(ctx context.Context, itemRedisCache redis.Cache) error
 }
@@ -69,7 +70,7 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 	}
 	// Maximum transaction commit time is 1 hour.
 	if maxTime > time.Duration(1*time.Hour) {
-		maxTime = time.Duration(1*time.Hour)
+		maxTime = time.Duration(1 * time.Hour)
 	}
 	if !IsInitialized() {
 		return nil, fmt.Errorf("Redis and/or Cassandra bits were not initialized")
@@ -302,6 +303,9 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	if !t.hasTrackedItems() {
 		return nil
 	}
+	if err := t.checkTrackedItems(ctx); err != nil {
+		return err
+	}
 	// Finalize the commit, it is the only all or nothing action in the commit,
 	// and on registry (very small) records only.
 	t.logger.log(finalizeCommit)
@@ -475,6 +479,16 @@ func (t *transaction) hasTrackedItems() bool {
 		}
 	}
 	return false
+}
+
+// Check Tracked items for conflict, this pass is to remove any race condition.
+func (t *transaction) checkTrackedItems(ctx context.Context) error {
+	for _, s := range t.btreesBackend {
+		if err := s.checkTrackedItems(ctx, t.redisCache); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (t *transaction) lockTrackedItems(ctx context.Context) error {

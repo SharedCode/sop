@@ -127,6 +127,27 @@ func (t *itemActionTracker[TK, TV]) hasTrackedItems() bool {
 	return len(t.items) > 0
 }
 
+// checkTrackedItems for conflict so we can remove "race condition" caused issue.
+// Returns nil if there are no tracked items or no conflict, otherwise returns an error.
+func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context, itemRedisCache redis.Cache) error {
+	for uuid, cachedItem := range t.items {
+		var readItem lockRecord
+		if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
+			return err
+		}
+		// Item found in Redis.
+		if readItem.LockId == cachedItem.LockId {
+			continue
+		}
+		// Lock compatibility check.
+		if readItem.Action == getAction && cachedItem.Action == getAction {
+			continue
+		}
+		return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
+	}
+	return nil
+}
+
 // lock the tracked items in Redis in preparation to finalize the transaction commit.
 // This should work in combination of optimistic locking.
 func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error {
