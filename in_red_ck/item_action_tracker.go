@@ -173,6 +173,7 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, itemRedisCache red
 			// We got the item locked, ensure we can unlock it.
 			cachedItem.isLockOwner = true
 			t.items[uuid] = cachedItem
+			continue
 		}
 		// Item found in Redis.
 		if readItem.LockId == cachedItem.LockId {
