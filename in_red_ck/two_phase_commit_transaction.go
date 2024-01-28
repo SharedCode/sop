@@ -190,6 +190,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]
 	startTime := now()
+	var updatedNodesHandles, removedNodesHandles []cas.RegistryPayload[sop.Handle]
 
 	// For writer transaction. Save the managed Node(s) as inactive:
 	// NOTE: a transaction Commit can timeout and thus, rollback if it exceeds the maximum time(defaults to 30 mins).
@@ -222,6 +223,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// has to do merging & conflict resolution. Add is simple upsert.
 		updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
 
+		// TODO: parallelize these tasks.
 		// Commit new root nodes.
 		t.logger.log(commitNewRootNodes)
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
@@ -237,7 +239,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		if successful {
 			// Commit updated nodes.
 			t.logger.log(commitUpdatedNodes)
-			if successful, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
+			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
 			}
 		}
@@ -245,7 +247,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		if successful {
 			// Commit removed nodes.
 			t.logger.log(commitRemovedNodes)
-			if successful, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
+			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
 				return err
 			}
 		}
@@ -267,6 +269,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 	}
 
+	// TODO: parallelize these tasks as well.
 	// Commit added nodes.
 	t.logger.log(commitAddedNodes)
 	if err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
@@ -281,13 +284,13 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes so they will
 	// get started to be "seen" in such state on succeeding fetch. See phase2Commit for actual change.
-	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(ctx, updatedNodes)
+	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(ctx, updatedNodes, updatedNodesHandles)
 	if err != nil {
 		return err
 	}
 	// Prepare to update upsert time of removed nodes to signal that they are finalized.
 	// See phase2Commit for actual change.
-	rh, err := t.btreesBackend[0].nodeRepository.touchNodes(ctx, removedNodes)
+	rh, err := t.btreesBackend[0].nodeRepository.touchNodes(ctx, removedNodes, removedNodesHandles)
 	if err != nil {
 		return err
 	}
@@ -344,6 +347,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		}
 		unusedNodeIds = append(unusedNodeIds, blobsIds)
 	}
+	// TODO: parallelize deleteEntries & unlockTrackeditems.
 	t.deleteEntries(ctx, deletedIds, unusedNodeIds)
 
 	// Unlock the items in Redis.
