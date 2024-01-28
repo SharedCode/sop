@@ -545,7 +545,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []sop.
 	return nil
 }
 
-// Set to active the inactive nodes. This is the last persistence step in transaction commit.
+// Set to active the inactive nodes.
 func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, handles []cas.RegistryPayload[sop.Handle]) ([]cas.RegistryPayload[sop.Handle], error) {
 	if len(handles) == 0 {
 		return nil, nil

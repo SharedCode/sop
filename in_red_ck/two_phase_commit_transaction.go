@@ -282,8 +282,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
-	// Prepare to switch to active "state" the (inactive) updated Nodes so they will
-	// get started to be "seen" in such state on succeeding fetch. See phase2Commit for actual change.
+	// Prepare to switch to active "state" the (inactive) updated Nodes. See phase2Commit for actual change.
 	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(ctx, updatedNodesHandles)
 	if err != nil {
 		return err
