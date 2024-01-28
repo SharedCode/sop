@@ -131,6 +131,9 @@ func (t *itemActionTracker[TK, TV]) hasTrackedItems() bool {
 // Returns nil if there are no tracked items or no conflict, otherwise returns an error.
 func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context, itemRedisCache redis.Cache) error {
 	for uuid, cachedItem := range t.items {
+		if cachedItem.Action == addAction {
+			continue
+		}
 		var readItem lockRecord
 		if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
 			return err
@@ -152,6 +155,9 @@ func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context, itemR
 // This should work in combination of optimistic locking.
 func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error {
 	for uuid, cachedItem := range t.items {
+		if cachedItem.Action == addAction {
+			continue
+		}
 		var readItem lockRecord
 		if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
 			if !redis.KeyNotFound(err) {
@@ -165,6 +171,9 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, itemRedisCache red
 			if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
 				return err
 			} else if readItem.LockId != cachedItem.LockId {
+				if readItem.Action == getAction && cachedItem.Action == getAction {
+					continue
+				}
 				if readItem.LockId.IsNil() {
 					return fmt.Errorf("lock(item: %v) call can't attain a lock in Redis", uuid)
 				}
@@ -192,6 +201,9 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, itemRedisCache red
 func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context, itemRedisCache redis.Cache) error {
 	var lastErr error
 	for uuid, cachedItem := range t.items {
+		if cachedItem.Action == addAction {
+			continue
+		}
 		if !cachedItem.isLockOwner {
 			continue
 		}

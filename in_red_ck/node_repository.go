@@ -239,15 +239,15 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 }
 
 // Save to blob store, save node Id to the alternate(inactive) physical Id(see virtual Id).
-func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) (bool, error) {
+func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) (bool, []cas.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
-		return true, nil
+		return true, nil, nil
 	}
 	// 1st pass, update the virtual Id registry ensuring the set of nodes are only being modified by us.
 	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
 	// inactiveBlobIds := make([]cas.BlobsPayload[sop.UUID], len(nodes))
@@ -259,7 +259,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 		for ii := range handles[i].IDs {
 			// Node with such Id is marked deleted or had been updated since reading it.
 			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
-				return false, nil
+				return false, nil, nil
 			}
 			// Create new phys. UUID and auto-assign it to the available phys. Id(A or B) "Id slot".
 			id := handles[i].IDs[ii].AllocateId()
@@ -275,7 +275,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 			}
 			if id == sop.NilUUID {
 				// Return false as there is an ongoing update on node by another transaction.
-				return false, nil
+				return false, nil, nil
 			}
 			blobs[i].Blobs[ii].Key = id
 			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
@@ -292,33 +292,33 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 	// 	}
 	// }
 	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
-		return false, err
+		return false, nil, err
 	}
 
 	// 2nd pass, persist the nodes blobs to blob store and redis cache.
 	if err := nr.transaction.nodeBlobStore.Add(ctx, blobs...); err != nil {
-		return false, err
+		return false, nil, err
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Value {
 			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveId().String()), nodes[i].Value[ii], nodeCacheDuration); err != nil {
-				return false, err
+				return false, nil, err
 			}
 		}
 	}
-	return true, nil
+	return true, handles, nil
 }
 
 // Add the removed Node(s) and their Item(s) Data(if not in node segment) to the recycler
 // so they can get serviced for physical delete on schedule in the future.
-func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) (bool, error) {
+func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) (bool, []cas.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
-		return true, nil
+		return true, nil, nil
 	}
 	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	rightNow := nowUnixMilli()
 	for i := range handles {
@@ -326,7 +326,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Ke
 			// Node with such Id is already marked deleted, is in-flight change or had been updated since reading it,
 			// fail it for "refetch" & retry.
 			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
-				return false, nil
+				return false, nil, nil
 			}
 			// Mark Id as deleted.
 			handles[i].IDs[ii].IsDeleted = true
@@ -335,9 +335,9 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Ke
 	}
 	// Persist the handles changes.
 	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
-		return false, err
+		return false, nil, err
 	}
-	return true, nil
+	return true, handles, nil
 }
 
 func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) error {
@@ -546,17 +546,12 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []sop.
 }
 
 // Set to active the inactive nodes. This is the last persistence step in transaction commit.
-func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) ([]cas.RegistryPayload[sop.Handle], error) {
-	if len(nodes) == 0 {
+func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, handles []cas.RegistryPayload[sop.Handle]) ([]cas.RegistryPayload[sop.Handle], error) {
+	if len(handles) == 0 {
 		return nil, nil
 	}
-	vids := nr.convertToRegistryRequestPayload(nodes)
-	handles, err := nr.transaction.registry.Get(ctx, vids...)
-	if err != nil {
-		return nil, err
-	}
-	for i := range nodes {
-		for ii := range nodes[i].Value {
+	for i := range handles {
+		for ii := range handles[i].IDs {
 			// Set the inactive as active Id.
 			handles[i].IDs[ii].FlipActiveId()
 			// Increment version, we are finalizing the commit for the node.
@@ -572,14 +567,9 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, nodes []sop
 }
 
 // Update upsert time of a given set of nodes.
-func (nr *nodeRepository) touchNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) ([]cas.RegistryPayload[sop.Handle], error) {
-	if len(nodes) == 0 {
+func (nr *nodeRepository) touchNodes(ctx context.Context, handles []cas.RegistryPayload[sop.Handle]) ([]cas.RegistryPayload[sop.Handle], error) {
+	if len(handles) == 0 {
 		return nil, nil
-	}
-	vids := nr.convertToRegistryRequestPayload(nodes)
-	handles, err := nr.transaction.registry.Get(ctx, vids...)
-	if err != nil {
-		return nil, err
 	}
 	for i := range handles {
 		for ii := range handles[i].IDs {
