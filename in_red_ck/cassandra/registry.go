@@ -30,7 +30,7 @@ type Registry interface {
 	Get(context.Context, ...RegistryPayload[sop.UUID]) ([]RegistryPayload[sop.Handle], error)
 	// Add will insert handles to stores.
 	Add(context.Context, ...RegistryPayload[sop.Handle]) error
-	// Update will update handles of stores.
+	// Update will update handles potentially spanning across stores.
 	// Set allOrNothing to true if Update operation is crucial for data consistency and
 	// wanting to do an all or nothing update for the entire batch of handles.
 	// False is recommended if such consistency is not significant.
