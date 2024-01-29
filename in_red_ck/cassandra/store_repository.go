@@ -254,12 +254,12 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 
 	for _, n := range names {
 		// Drop Blob table.
-		dropBlobTable := fmt.Sprintf("DROP TABLE %s.%s;", connection.Config.Keyspace, btree.FormatBlobTable(n))
+		dropBlobTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, btree.FormatBlobTable(n))
 		if err := connection.Session.Query(dropBlobTable).WithContext(ctx).Exec(); err != nil {
 			return err
 		}
 		// Drop Virtual ID registry table.
-		dropRegistryTable := fmt.Sprintf("DROP TABLE %s.%s;", connection.Config.Keyspace, btree.FormatRegistryTable(n))
+		dropRegistryTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, btree.FormatRegistryTable(n))
 		if err := connection.Session.Query(dropRegistryTable).WithContext(ctx).Exec(); err != nil {
 			return err
 		}
