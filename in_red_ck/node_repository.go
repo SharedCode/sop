@@ -554,8 +554,6 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, handles []c
 		for ii := range handles[i].IDs {
 			// Set the inactive as active Id.
 			handles[i].IDs[ii].FlipActiveId()
-
-			handles[i].IDs[ii].VersionInDB = handles[i].IDs[ii].Version
 			// Increment version, we are finalizing the commit for the node.
 			handles[i].IDs[ii].Version++
 			// Set work in progress timestamp to now as safety. After flipping inactive to active,
@@ -575,7 +573,6 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, handles []cas.Registry
 	}
 	for i := range handles {
 		for ii := range handles[i].IDs {
-			handles[i].IDs[ii].VersionInDB = handles[i].IDs[ii].Version
 			// Update upsert time, we are finalizing the commit for the node.
 			handles[i].IDs[ii].Version++
 			handles[i].IDs[ii].WorkInProgressTimestamp = 0

@@ -109,8 +109,11 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				if err := v.redisCache.GetStruct(ctx, h.LogicalId.String(), &h2); err != nil {
 					return err
 				}
-				if h.VersionInDB != h2.Version {
-					return fmt.Errorf("Update failed, logical Id(%v) version conflict detected", h.LogicalId)
+				newVersion := h.Version
+				// Version Id is incremental, 'thus we can compare with -1 the previous.
+				newVersion--
+				if newVersion != h2.Version || !h.IsEqual(&h2) {
+					return fmt.Errorf("Update failed, handle logical Id(%v) version conflict detected", h.LogicalId)
 				}
 			}
 		}

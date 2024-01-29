@@ -18,8 +18,6 @@ type Handle struct {
 	IsActiveIdB bool
 	// Current state(active Id, final deleted state) version.
 	Version int
-	// VersionInDB contains the expected version # as last read from DB.
-	VersionInDB int `json:"-"`
 	// Work in progress(inactive Id, non final deleted state) timestamp in milliseconds.
 	WorkInProgressTimestamp int64
 	// IsDeleted is used for "logical" deletes.
@@ -99,4 +97,12 @@ func (h *Handle) ClearInactiveId() {
 		h.PhysicalIdB = NilUUID
 	}
 	h.WorkInProgressTimestamp = 0
+}
+
+// Checks if this Handle instance has the same attributes' values as another Handle, except version #.
+func (x *Handle) IsEqual(y *Handle) bool {
+	return x.LogicalId == y.LogicalId &&
+		   x.IsDeleted == y.IsDeleted &&
+		   x.PhysicalIdA == y.PhysicalIdA &&
+		   x.PhysicalIdB == y.PhysicalIdB
 }
