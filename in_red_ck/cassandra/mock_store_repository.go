@@ -28,7 +28,10 @@ func (sr *mockStoreRepository) Add(ctx context.Context, stores ...btree.StoreInf
 
 func (sr *mockStoreRepository) Update(ctx context.Context, stores ...btree.StoreInfo) error {
 	for _, store := range stores {
-		sr.lookup[store.Name] = store
+		s2 := store
+		// Merge or apply the "count delta".
+		s2.Count = s2.Count + s2.CountDelta
+		sr.lookup[store.Name] = s2
 	}
 	return nil
 }

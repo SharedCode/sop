@@ -9,7 +9,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	t1, _ := newMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, "2phase", 8, false, true, true, "", t1)
+	b3, _ := NewBtree[int, string](ctx, "twophase", 8, false, true, true, "", t1)
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
 	b3.Add(ctx, 5000, "I am also a value with 5000 key.")
@@ -31,7 +31,7 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 	t1, _ := newMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, "2phase1", 8, false, true, true, "", t1)
+	b3, _ := NewBtree[int, string](ctx, "twophase1", 8, false, true, true, "", t1)
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
 	b3.Add(ctx, 5000, "I am also a value with 5000 key.")
@@ -47,7 +47,7 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 
 		t1, _ = newMockTransaction(t, false, -1)
 		t1.Begin()
-		b3, _ = OpenBtree[int, string](ctx, "2phase1", t1)
+		b3, _ = OpenBtree[int, string](ctx, "twophase1", t1)
 		twoPhase = t1.GetPhasedTransaction()
 
 		if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey() != 5000 {
@@ -75,7 +75,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 	t1, _ := newMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, "2phase2", 8, true, true, true, "", t1)
+	b3, _ := NewBtree[int, string](ctx, "twophase2", 8, true, true, true, "", t1)
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
 
@@ -90,14 +90,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 			t1.Begin()
 			twoPhase := t1.GetPhasedTransaction()
 
-			// NewBtree is not part of the transaction, a trie created will not rollback.
-			// Thus, OpenBtree call should succeed.
-			b3, err := OpenBtree[int, string](ctx, "2phase2", t1)
-			if err != nil {
-				t.Errorf("OpenBtree('2phase2') failed, got %v, want nil.", err)
-				t.FailNow()
-			}
-
+			b3, _ := NewBtree[int, string](ctx, "twophase2", 8, true, true, true, "", t1)
 			b3.Add(ctx, 5000, "I am the value with 5000 key.")
 			b3.Add(ctx, 5001, "I am the value with 5001 key.")
 
