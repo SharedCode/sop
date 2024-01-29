@@ -11,6 +11,7 @@ const (
 	commitRemovedNodes
 	commitAddedNodes
 	commitStoreInfo
+	beforeFinalize
 	finalizeCommit
 	unlockTrackedItems
 )

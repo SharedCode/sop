@@ -47,7 +47,8 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // the OpenBtree function.
 //
 // Parameters:
-// name - specifies the name of the store/b-tree.
+// name - specifies the name of the store/b-tree. This has to follow valid Cassandra table name, e.g. - it should start
+// with a letter, etc... as we generate Cassandra tables on the back, one for blob(_b) & one for registry(_r).
 // slotLength - specifies the number of item slots per node of a b-tree.
 // isUnique - specifies whether the b-tree will enforce key uniqueness(true) or not(false).
 // isValueDataInNodeSegment - specifies whether the b-tree will store the "value" data in the tree's node segment together with
@@ -83,6 +84,8 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 			ns.Timestamp = nowUnixMilli()
 		}
 		if err := trans.storeRepository.Add(ctx, *ns); err != nil {
+			// Cleanup the store if there was anything added in backend.
+			trans.storeRepository.Remove(ctx, ns.Name)
 			trans.Rollback(ctx)
 			return nil, err
 		}

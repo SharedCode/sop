@@ -23,6 +23,11 @@ func newBtreeWithTransaction[TK btree.Comparable, TV any](t *transaction, btree 
 	}
 }
 
+// Returns the count of items in the btree.
+func (b3 *btreeWithTransaction[TK, TV]) Count() int64 {
+	return b3.btree.Count()
+}
+
 // Add adds an item to the b-tree and does not check for duplicates.
 func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {

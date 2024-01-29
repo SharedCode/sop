@@ -151,6 +151,9 @@ func (t *transaction) Rollback(ctx context.Context) error {
 	}
 	// Reset transaction status and mark done to end it without persisting any change.
 	t.phaseDone = 2
+	if err := t.rollback(ctx); err != nil {
+		return fmt.Errorf("Rollback failed, details: %v", err)
+	}
 	return nil
 }
 
@@ -281,6 +284,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	if err := t.commitStores(ctx); err != nil {
 		return err
 	}
+
+	// Mark that store info commit succeeded, so it can get rolled back if rollback occurs.
+	t.logger.log(beforeFinalize)
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes. See phase2Commit for actual change.
 	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(ctx, updatedNodesHandles)
@@ -470,9 +476,21 @@ func (t *transaction) commitStores(ctx context.Context) error {
 	stores := make([]btree.StoreInfo, len(t.btreesBackend))
 	for i := range t.btreesBackend {
 		store := t.btreesBackend[i].getStoreInfo()
-		// Compute the count delta so Store Repository can reconcile.
-		store.CountDelta = store.Count - t.btreesBackend[i].nodeRepository.count
-		stores[i] = *store
+		s2 := *store
+		// Compute the count delta so Store Repository can reconcile for commit.
+		s2.CountDelta = s2.Count - t.btreesBackend[i].nodeRepository.count
+		stores[i] = s2
+	}
+	return t.storeRepository.Update(ctx, stores...)
+}
+func (t *transaction) rollbackStores(ctx context.Context) error {
+	stores := make([]btree.StoreInfo, len(t.btreesBackend))
+	for i := range t.btreesBackend {
+		store := t.btreesBackend[i].getStoreInfo()
+		s2 := *store
+		// Compute the count delta so Store Repository can reconcile for rollback.
+		s2.CountDelta = t.btreesBackend[i].nodeRepository.count - s2.Count
+		stores[i] = s2
 	}
 	return t.storeRepository.Update(ctx, stores...)
 }
@@ -574,7 +592,9 @@ func (t *transaction) rollback(ctx context.Context) error {
 		// do nothing as the function failed, nothing to undo.
 	}
 	if t.logger.committedState > commitStoreInfo {
-		// do nothing as the function failed, nothing to undo.
+		if err := t.rollbackStores(ctx); err != nil {
+			lastErr = err
+		}
 	}
 	if t.logger.committedState > commitAddedNodes {
 		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, addedNodes); err != nil {
@@ -601,7 +621,7 @@ func (t *transaction) rollback(ctx context.Context) error {
 			lastErr = err
 		}
 	}
-	// Rewind the transactoin log in case retry will check it.
+	// Rewind the transaction log in case retry will check it.
 	t.logger.log(unknown)
 
 	return lastErr

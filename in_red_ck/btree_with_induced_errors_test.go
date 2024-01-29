@@ -19,6 +19,10 @@ func newBTreeWithInducedErrors[TK btree.Comparable, TV any](t *testing.T) *b3Wit
 	return &b3WithInducedErrors[TK, TV]{t: t}
 }
 
+func (b3 b3WithInducedErrors[TK, TV]) Count() int64 {
+	return 0
+}
+
 func (b3 b3WithInducedErrors[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {
 	b3.t.Helper()
 	if b3.induceErrorOnMethod == 1 {

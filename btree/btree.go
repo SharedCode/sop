@@ -97,6 +97,11 @@ func New[TK Comparable, TV any](storeInfo *StoreInfo, si *StoreInterface[TK, TV]
 	return &b3, nil
 }
 
+// Returns the number of items in this B-Tree.
+func (btree *Btree[TK, TV]) Count() int64 {
+	return btree.StoreInfo.Count
+}
+
 // Add a key/value pair item to the tree.
 func (btree *Btree[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {
 	var item = newItem[TK, TV](key, value)

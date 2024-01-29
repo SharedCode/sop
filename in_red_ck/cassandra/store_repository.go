@@ -149,11 +149,9 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 		beforeUpdateStores = append(beforeUpdateStores, sis...)
 
 		si := sis[0]
-		if si.Timestamp > stores[i].Timestamp {
-			// Merge or apply the "count delta".
-			stores[i].Count = si.Count + stores[i].CountDelta
-			stores[i].Timestamp = si.Timestamp
-		}
+		// Merge or apply the "count delta".
+		stores[i].Count = si.Count + stores[i].CountDelta
+		stores[i].Timestamp = si.Timestamp
 
 		qry := connection.Session.Query(updateStatement, stores[i].Count, stores[i].Timestamp, stores[i].Name)
 		if connection.Config.ConsistencyBook.StoreUpdate > gocql.Any {

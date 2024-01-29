@@ -63,6 +63,9 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// Specifying uniqueness base on key makes the B-Tree permanently set. If you want just a temporary
 	// unique check during Add of an item, then you can use AddIfNotExist method for that.
 	IsUnique() bool
+
+	// Returns the number of items in this B-Tree.
+	Count() int64
 }
 
 // NodeRepository interface specifies the node repository.
