@@ -22,20 +22,20 @@ type RegistryPayload[T sop.Handle | sop.UUID] struct {
 }
 
 // Virtual Id registry is essential in our support for all or nothing (sub)feature,
-// which is essential in "fault tolerant" & "self healing" feature.
+// which is essential for fault tolerance.
 //
 // All methods are taking in a set of items.
 type Registry interface {
-	// Get will fetch handles(given their Ids) from stores.
+	// Get will fetch handles(given their Ids) from registry table(s).
 	Get(context.Context, ...RegistryPayload[sop.UUID]) ([]RegistryPayload[sop.Handle], error)
-	// Add will insert handles to stores.
+	// Add will insert handles to registry table(s).
 	Add(context.Context, ...RegistryPayload[sop.Handle]) error
-	// Update will update handles potentially spanning across stores.
+	// Update will update handles potentially spanning across registry table(s).
 	// Set allOrNothing to true if Update operation is crucial for data consistency and
 	// wanting to do an all or nothing update for the entire batch of handles.
 	// False is recommended if such consistency is not significant.
 	Update(ctx context.Context, allOrNothing bool, handles ...RegistryPayload[sop.Handle]) error
-	// Remove will delete handles(given their Ids) from stores.
+	// Remove will delete handles(given their Ids) from registry table(s).
 	Remove(context.Context, ...RegistryPayload[sop.UUID]) error
 }
 
