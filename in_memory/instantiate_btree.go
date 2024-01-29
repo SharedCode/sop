@@ -27,6 +27,11 @@ func NewBtree[TK btree.Comparable, TV any](isUnique bool) BtreeInterface[TK, TV]
 	}
 }
 
+// Returns the Count of items in the B-Tree.
+func (b3 BtreeInterface[TK, TV]) Count() int {
+	return int(b3.btree.Count())
+}
+
 // Add adds an item to the b-tree and does not check for duplicates.
 func (b3 BtreeInterface[TK, TV]) Add(key TK, value TV) bool {
 	ok, _ := b3.btree.Add(nil, key, value)

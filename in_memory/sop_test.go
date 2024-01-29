@@ -13,6 +13,10 @@ func Test_HelloWorld(t *testing.T) {
 	b3.Add(5001, "I am the value with 5001 key.")
 	b3.Add(5000, "I am also a value with 5000 key.")
 
+	if b3.Count() != 3 {
+		t.Errorf("Count() failed, got = %d, want = 3.", b3.Count())
+	}
+
 	if !b3.FindOne(5000, true) || b3.GetCurrentKey() != 5000 {
 		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
