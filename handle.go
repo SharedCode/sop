@@ -18,6 +18,8 @@ type Handle struct {
 	IsActiveIdB bool
 	// Current state(active Id, final deleted state) version.
 	Version int
+	// VersionInDB contains the expected version # as last read from DB.
+	VersionInDB int `json:"-"`
 	// Work in progress(inactive Id, non final deleted state) timestamp in milliseconds.
 	WorkInProgressTimestamp int64
 	// IsDeleted is used for "logical" deletes.

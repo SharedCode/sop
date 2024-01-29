@@ -101,6 +101,21 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 	if allOrNothing {
 		// For now, keep it simple and rely on transaction commit's optimistic locking & multi-phase checks,
 		// together with the logged batch update as shown below.
+
+		// Enforce a Redis based version check as Cassandra logged transaction does not allow "conditional" check across partitions.
+		for _, sh := range storesHandles {
+			for _, h := range sh.IDs {
+				var h2 sop.Handle
+				if err := v.redisCache.GetStruct(ctx, h.LogicalId.String(), &h2); err != nil {
+					return err
+				}
+				if h.VersionInDB != h2.Version {
+					return fmt.Errorf("Update failed, logical Id(%v) version conflict detected", h.LogicalId)
+				}
+			}
+		}
+
+		// Do the actual batch logged transaction update in Cassandra.
 		batch := connection.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 		if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
 			batch.SetConsistency(connection.Config.ConsistencyBook.RegistryUpdate)

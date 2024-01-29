@@ -294,14 +294,14 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
-	// Populate the phase 2 commit required objects.
-	t.updatedNodeHandles = uh
-	t.removedNodeHandles = rh
-
 	// In case race condition exists, we remove it here by checking our tracked items' lock integrity.
 	if err := t.checkTrackedItems(ctx); err != nil {
 		return err
 	}
+
+	// Populate the phase 2 commit required objects.
+	t.updatedNodeHandles = uh
+	t.removedNodeHandles = rh
 
 	return nil
 }
