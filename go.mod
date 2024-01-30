@@ -38,5 +38,6 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/sethvargo/go-retry v0.2.4
+	golang.org/x/sync v0.6.0
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )

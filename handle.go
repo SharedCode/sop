@@ -102,7 +102,7 @@ func (h *Handle) ClearInactiveId() {
 // Checks if this Handle instance has the same attributes' values as another Handle, except version #.
 func (x *Handle) IsEqual(y *Handle) bool {
 	return x.LogicalId == y.LogicalId &&
-		   x.IsDeleted == y.IsDeleted &&
-		   x.PhysicalIdA == y.PhysicalIdA &&
-		   x.PhysicalIdB == y.PhysicalIdB
+		x.IsDeleted == y.IsDeleted &&
+		x.PhysicalIdA == y.PhysicalIdA &&
+		x.PhysicalIdB == y.PhysicalIdB
 }

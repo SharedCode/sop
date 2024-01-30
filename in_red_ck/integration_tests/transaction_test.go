@@ -354,8 +354,8 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
 	b3.Add(ctx, 5000, "I am also a value with 5000 key.")
-	if b3.Count() != originalCount + 3 {
-		t.Errorf("Count() failed, got %v, want %v", b3.Count(), originalCount + 3)
+	if b3.Count() != originalCount+3 {
+		t.Errorf("Count() failed, got %v, want %v", b3.Count(), originalCount+3)
 	}
 
 	twoPhase := t1.GetPhasedTransaction()
@@ -365,7 +365,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 
 		t1, _ = in_red_ck.NewTransaction(true, -1)
 		t1.Begin()
-	
+
 		b3, _ = in_red_ck.OpenBtree[int, string](ctx, "twophase", t1)
 		if b3.Count() != originalCount {
 			t.Errorf("Rollback Count() failed, got %v, want %v", b3.Count(), originalCount)

@@ -18,4 +18,7 @@ func DeleteBTree(t *testing.T) {
 	if err := in_red_ck.RemoveBtree(ctx, "twophase"); err != nil {
 		t.Error(err)
 	}
+	if err := in_red_ck.RemoveBtree(ctx, "twophase2"); err != nil {
+		t.Error(err)
+	}
 }

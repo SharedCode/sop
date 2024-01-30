@@ -115,8 +115,12 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	b := retry.NewFibonacci(1 * time.Second)
 
 	// Lock all keys.
-	if err := retry.Do(ctx, retry.WithMaxRetries(3, b), func(ctx context.Context) error {
-		return redis.Lock(ctx, duration, lockKeys...)
+	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
+		if err := redis.Lock(ctx, duration, lockKeys...); err != nil {
+			log.Error(err.Error() + " will retry")
+			return retry.RetryableError(err)
+		}
+		return nil
 	}); err != nil {
 		// Unlock all keys since we failed locking them.
 		redis.Unlock(ctx, lockKeys...)
@@ -254,12 +258,12 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 
 	for _, n := range names {
 		// Drop Blob table.
-		dropBlobTable := fmt.Sprintf("DROP TABLE %s.%s;", connection.Config.Keyspace, btree.FormatBlobTable(n))
+		dropBlobTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, btree.FormatBlobTable(n))
 		if err := connection.Session.Query(dropBlobTable).WithContext(ctx).Exec(); err != nil {
 			return err
 		}
 		// Drop Virtual ID registry table.
-		dropRegistryTable := fmt.Sprintf("DROP TABLE %s.%s;", connection.Config.Keyspace, btree.FormatRegistryTable(n))
+		dropRegistryTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, btree.FormatRegistryTable(n))
 		if err := connection.Session.Query(dropRegistryTable).WithContext(ctx).Exec(); err != nil {
 			return err
 		}

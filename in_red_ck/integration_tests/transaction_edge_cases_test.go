@@ -3,7 +3,10 @@ package integration_tests
 import (
 	"testing"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/SharedCode/sop/in_red_ck"
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
 // Covers all of these cases:
@@ -308,3 +311,72 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		t.Logf(err2.Error())
 	}
 }
+
+func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
+	sr := cas.NewStoreRepository()
+	sr.Remove(ctx, "twophase2")
+
+	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1.Begin()
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, "twophase2", 8, false, true, true, "", t1)
+	// Add a single item so we persist "root node".
+	b3.Add(ctx, 500, "I am the value with 500 key.")
+	t1.Commit(ctx)
+
+	eg, ctx2 := errgroup.WithContext(ctx)
+
+	f1 := func() error {
+		t1, _ := in_red_ck.NewTransaction(true, -1)
+		t1.Begin()
+		b3, _ := in_red_ck.NewBtree[int, string](ctx2, "twophase2", 8, false, true, true, "", t1)
+		b3.Add(ctx2, 5000, "I am the value with 5000 key.")
+		b3.Add(ctx2, 5001, "I am the value with 5001 key.")
+		b3.Add(ctx2, 5002, "I am also a value with 5000 key.")
+		return t1.Commit(ctx2)
+	}
+
+	f2 := func() error {
+		t2, _ := in_red_ck.NewTransaction(true, -1)
+		t2.Begin()
+		b32, _ := in_red_ck.NewBtree[int, string](ctx2, "twophase2", 8, false, true, true, "", t2)
+		b32.Add(ctx2, 5500, "I am the value with 5000 key.")
+		b32.Add(ctx2, 5501, "I am the value with 5001 key.")
+		b32.Add(ctx2, 5502, "I am also a value with 5000 key.")
+		return t2.Commit(ctx2)
+	}
+
+	eg.Go(f1)
+	eg.Go(f2)
+
+	if err := eg.Wait(); err != nil {
+		t.Error(err)
+		return
+	}
+
+	t1, _ = in_red_ck.NewTransaction(false, -1)
+	t1.Begin()
+
+	b3, _ = in_red_ck.OpenBtree[int, string](ctx, "twophase2", t1)
+
+	b3.First(ctx)
+	i := 1
+	for {
+		if ok, err := b3.Next(ctx); err != nil {
+			t.Error(err)
+		} else if !ok {
+			break
+		}
+		i++
+	}
+	if i < 6 {
+		t.Errorf("Failed, traversing/counting all records, got %d, want 6.", i)
+	}
+}
+
+/* TODO:
+- A commit with no conflict, #1.
+- A commit with partial conflict, on key 1.
+- A commit with full conflict, #1.
+- A commit with partial conflict, on key 2.
+- A commit with partial conflict, on key 3.
+*/

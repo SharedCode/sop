@@ -466,11 +466,9 @@ func (btree *Btree[TK, TV]) getRootNode(ctx context.Context) (*Node[TK, TV], err
 		if btree.StoreInfo.RootNodeId.IsNil() {
 			root.newId(sop.NilUUID)
 			btree.StoreInfo.RootNodeId = root.Id
-			root.Version = 1
 			return root, nil
 		}
 		root.Id = btree.StoreInfo.RootNodeId
-		root.Version = 1
 		return root, nil
 	}
 	// Fetch the root node from blob store.

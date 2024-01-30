@@ -470,6 +470,7 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []sop.Ke
 	return lastErr
 }
 
+// rollback updated Nodes including new root nodes.
 func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) error {
 	if len(nodes) == 0 {
 		return nil
