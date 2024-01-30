@@ -217,6 +217,53 @@ Phase 2 commit is a very fast, quick action as changes and Nodes are already res
 
 See here for more details on two phase commit & how to access it for your application transaction integration: https://github.com/SharedCode/sop/blob/21f1a1b35ef71327882d3ab5bfee0b9d744345fa/in_red_ck/transaction.go#L23a
 
+## Concurrent or Parallel Commits
+SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s). However, the magic can only happen once you've seeded the B-Tree with at least a record. One record will do, 'this will allow for the B-Tree to have a "root node". Having such, enables a lot of the "cool commits merging" features.
+
+Sample code to illustrate this:
+```
+t1, _ := in_red_ck.NewTransaction(true, -1)
+t1.Begin()
+b3, _ := in_red_ck.NewBtree[int, string](ctx, "twophase2", 8, false, true, true, "", t1)
+
+// *** Add a single item then commit so we persist "root node".
+b3.Add(ctx, 500, "I am the value with 500 key.")
+t1.Commit(ctx)
+// ***
+
+eg, ctx2 := errgroup.WithContext(ctx)
+
+f1 := func() error {
+	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1.Begin()
+	b3, _ := in_red_ck.NewBtree[int, string](ctx2, "twophase2", 8, false, true, true, "", t1)
+	b3.Add(ctx2, 5000, "I am the value with 5000 key.")
+	b3.Add(ctx2, 5001, "I am the value with 5001 key.")
+	b3.Add(ctx2, 5002, "I am also a value with 5000 key.")
+	return t1.Commit(ctx2)
+}
+
+f2 := func() error {
+	t2, _ := in_red_ck.NewTransaction(true, -1)
+	t2.Begin()
+	b32, _ := in_red_ck.NewBtree[int, string](ctx2, "twophase2", 8, false, true, true, "", t2)
+	b32.Add(ctx2, 5500, "I am the value with 5000 key.")
+	b32.Add(ctx2, 5501, "I am the value with 5001 key.")
+	b32.Add(ctx2, 5502, "I am also a value with 5000 key.")
+	return t2.Commit(ctx2)
+}
+
+eg.Go(f1)
+eg.Go(f2)
+
+if err := eg.Wait(); err != nil {
+	t.Error(err)
+	return
+}
+```
+
+Check out the integration test that demonstrate this, here: https://github.com/SharedCode/sop/blob/493fba2d6d1ed810bfb4edc9ce568a1c98e159ff/in_red_ck/integration_tests/transaction_edge_cases_test.go#L315C6-L315C41
+
 ## Tid Bits
 
 SOP is an object persistence based, modern database engine within a code library. Portability & integration is one of SOP's primary strengths. Code uses the Store API to store & manage key/value pairs of data.
