@@ -236,20 +236,20 @@ eg, ctx2 := errgroup.WithContext(ctx)
 f1 := func() error {
 	t1, _ := in_red_ck.NewTransaction(true, -1)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[int, string](ctx2, "twophase2", 8, false, true, true, "", t1)
+	b3, _ := in_red_ck.OpenBtree[int, string](ctx2, "twophase2", t1)
 	b3.Add(ctx2, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx2, 5001, "I am the value with 5001 key.")
-	b3.Add(ctx2, 5002, "I am also a value with 5000 key.")
+	b3.Add(ctx2, 5002, "I am the value with 5002 key.")
 	return t1.Commit(ctx2)
 }
 
 f2 := func() error {
 	t2, _ := in_red_ck.NewTransaction(true, -1)
 	t2.Begin()
-	b32, _ := in_red_ck.NewBtree[int, string](ctx2, "twophase2", 8, false, true, true, "", t2)
-	b32.Add(ctx2, 5500, "I am the value with 5000 key.")
-	b32.Add(ctx2, 5501, "I am the value with 5001 key.")
-	b32.Add(ctx2, 5502, "I am also a value with 5000 key.")
+	b32, _ := in_red_ck.NewBtree[int, string](ctx2, "twophase2", t2)
+	b32.Add(ctx2, 5500, "I am the value with 5500 key.")
+	b32.Add(ctx2, 5501, "I am the value with 5501 key.")
+	b32.Add(ctx2, 5502, "I am the value with 5502 key.")
 	return t2.Commit(ctx2)
 }
 
