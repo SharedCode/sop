@@ -218,7 +218,7 @@ Phase 2 commit is a very fast, quick action as changes and Nodes are already res
 See here for more details on two phase commit & how to access it for your application transaction integration: https://github.com/SharedCode/sop/blob/21f1a1b35ef71327882d3ab5bfee0b9d744345fa/in_red_ck/transaction.go#L23a
 
 ## Concurrent or Parallel Commits
-SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record level "locking". The magic will start to happen after adding(and committing) your 1st record/batch. One record will do, 'this will allow for the B-Tree to have a "root node". Having such enables a lot of the "cool commits merging" features. Typically, you should have "initializer" code block or function somewhere in your app/microservice where you instantiate the B-Tree stores and "seed" them with record(s).
+SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record level "locking", if not then it means your transaction has conflicting change with another in-flight transaction commit elsewhere in the  cluster. The magic will start to happen after adding(and committing) your 1st record/batch. One record will do, 'this will allow for the B-Tree to have a "root node". Having such enables a lot of the "cool commits merging" features. Typically, you should have "initializer" code block or function somewhere in your app/microservice where you instantiate the B-Tree stores and "seed" them with record(s).
 
 Sample code to illustrate this:
 ```
@@ -261,6 +261,8 @@ if err := eg.Wait(); err != nil {
 	return
 }
 ```
+
+And yes, there is no resource locking in above code & it is able to merge just fine those records added across different transaction commits that ran concurrently. :)
 
 Check out the integration test that demonstrate this, here: https://github.com/SharedCode/sop/blob/493fba2d6d1ed810bfb4edc9ce568a1c98e159ff/in_red_ck/integration_tests/transaction_edge_cases_test.go#L315C6-L315C41
 
