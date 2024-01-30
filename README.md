@@ -246,7 +246,7 @@ f1 := func() error {
 f2 := func() error {
 	t2, _ := in_red_ck.NewTransaction(true, -1)
 	t2.Begin()
-	b32, _ := in_red_ck.NewBtree[int, string](ctx2, "twophase2", t2)
+	b32, _ := in_red_ck.OpenBtree[int, string](ctx2, "twophase2", t2)
 	b32.Add(ctx2, 5500, "I am the value with 5500 key.")
 	b32.Add(ctx2, 5501, "I am the value with 5501 key.")
 	b32.Add(ctx2, 5502, "I am the value with 5502 key.")
