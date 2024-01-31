@@ -60,6 +60,11 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 	if slotLength > maxSlotLength {
 		slotLength = maxSlotLength
 	}
+
+	// This line will be removed when value data persistence on a separate partition(a.k.a. segment) is supported.
+	// For now, always set to true as it is saved in the node segment always, in this version release.
+	isValueDataInNodeSegment = true
+
 	return &StoreInfo{
 		Name:                     name,
 		SlotLength:               slotLength,
