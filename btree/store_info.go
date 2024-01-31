@@ -51,7 +51,7 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 
 	// auto generate table names based off of store name.
 	registryTableName := FormatRegistryTable(name)
-	blobTable := FormatBlobTable(name)
+	blobTableName := FormatBlobTable(name)
 
 	const maxSlotLength = 10000
 
@@ -61,17 +61,13 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 		slotLength = maxSlotLength
 	}
 
-	// This line will be removed when value data persistence on a separate partition(a.k.a. segment) is supported.
-	// For now, always set to true as it is saved in the node segment always, in this version release.
-	isValueDataInNodeSegment = true
-
 	return &StoreInfo{
 		Name:                     name,
 		SlotLength:               slotLength,
 		IsUnique:                 isUnique,
 		IsValueDataInNodeSegment: isValueDataInNodeSegment,
 		RegistryTable:            registryTableName,
-		BlobTable:                blobTable,
+		BlobTable:                blobTableName,
 		Description:              desciption,
 		LeafLoadBalancing:        leafLoadBalancing,
 	}

@@ -324,7 +324,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	goodStoreRepository := t2.storeRepository
 	goodRegistry := t2.registry
 	goodRedisCache := t2.redisCache
-	goodBlobStore := t2.nodeBlobStore
+	goodBlobStore := t2.blobStore
 
 	trans, _ = newMockTransaction(t, true, -1)
 	t2 = trans.GetPhasedTransaction().(*transaction)
@@ -332,7 +332,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	// Restore the populated repos.
 	t2.storeRepository = goodStoreRepository
 	t2.redisCache = goodRedisCache
-	t2.nodeBlobStore = goodBlobStore
+	t2.blobStore = goodBlobStore
 
 	// Create an update & a Commit that fails. Pass true param to Mock Registry will induce error on Commit.
 	t2.registry = cas.NewMockRegistry(true)
@@ -353,14 +353,14 @@ func Test_CommitThrowsException(t *testing.T) {
 	goodRegistry = t2.registry
 	goodRegistry.(*cas.Mock_vid_registry).InducedErrorOnUpdateAllOrNothing = false
 	goodRedisCache = t2.redisCache
-	goodBlobStore = t2.nodeBlobStore
+	goodBlobStore = t2.blobStore
 
 	trans, _ = newMockTransaction(t, false, -1)
 	t2 = trans.GetPhasedTransaction().(*transaction)
 	t2.storeRepository = goodStoreRepository
 	t2.registry = goodRegistry
 	t2.redisCache = goodRedisCache
-	t2.nodeBlobStore = goodBlobStore
+	t2.blobStore = goodBlobStore
 
 	trans.Begin()
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans)

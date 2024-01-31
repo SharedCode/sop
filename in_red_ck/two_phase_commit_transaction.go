@@ -41,8 +41,8 @@ type btreeBackend struct {
 type transaction struct {
 	// B-Tree instances, & their backend bits, managed within the transaction session.
 	btreesBackend []btreeBackend
-	// Needed by NodeRepository for Node data merging to the backend storage systems.
-	nodeBlobStore   cas.BlobStore
+	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
+	blobStore       cas.BlobStore
 	redisCache      redis.Cache
 	storeRepository cas.StoreRepository
 	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
@@ -81,7 +81,7 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 		storeRepository: cas.NewStoreRepository(),
 		registry:        cas.NewRegistry(),
 		redisCache:      redis.NewClient(),
-		nodeBlobStore:   cas.NewBlobStore(),
+		blobStore:       cas.NewBlobStore(),
 		logger:          newTransactionLogger(),
 		phaseDone:       -1,
 	}, nil
@@ -562,7 +562,7 @@ func (t *transaction) deleteEntries(ctx context.Context,
 				if !ok {
 					log.Info("Kafka Enqueue is still being sampled, deleting the leftover unused nodes.")
 				}
-				t.nodeBlobStore.Remove(ctx, unusedNodeIds...)
+				t.blobStore.Remove(ctx, unusedNodeIds...)
 			} else {
 				log.Info(fmt.Sprintf("Kafka Enqueue passed sampling, expecting consumer(@topic:%s) to delete the leftover unused nodes.", kafka.GetConfig().Topic))
 			}
@@ -572,7 +572,7 @@ func (t *transaction) deleteEntries(ctx context.Context,
 				log.Warn("DeleteService is not enabled, deleting the leftover unused nodes.")
 				warnDeleteServiceMissing = false
 			}
-			t.nodeBlobStore.Remove(ctx, unusedNodeIds...)
+			t.blobStore.Remove(ctx, unusedNodeIds...)
 		}
 	}
 	// Delete from registry the requested entries.

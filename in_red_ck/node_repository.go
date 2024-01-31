@@ -136,7 +136,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalId sop.UUID, target in
 			return nil, err
 		}
 		// Fetch from blobStore and cache to Redis/local.
-		if err = nr.transaction.nodeBlobStore.GetOne(ctx, nr.storeInfo.BlobTable, nodeId, target); err != nil {
+		if err = nr.transaction.blobStore.GetOne(ctx, nr.storeInfo.BlobTable, nodeId, target); err != nil {
 			return nil, err
 		}
 		target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
@@ -220,7 +220,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 		}
 	}
 	// Persist the nodes blobs to blob store and redis cache.
-	if err := nr.transaction.nodeBlobStore.Add(ctx, blobs...); err != nil {
+	if err := nr.transaction.blobStore.Add(ctx, blobs...); err != nil {
 		return false, err
 	}
 	for i := range nodes {
@@ -296,7 +296,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 	}
 
 	// 2nd pass, persist the nodes blobs to blob store and redis cache.
-	if err := nr.transaction.nodeBlobStore.Add(ctx, blobs...); err != nil {
+	if err := nr.transaction.blobStore.Add(ctx, blobs...); err != nil {
 		return false, nil, err
 	}
 	for i := range nodes {
@@ -378,7 +378,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 		return err
 	}
 	// Add nodes to blob store.
-	if err := nr.transaction.nodeBlobStore.Add(ctx, blobs...); err != nil {
+	if err := nr.transaction.blobStore.Add(ctx, blobs...); err != nil {
 		return err
 	}
 	return nil
@@ -413,7 +413,7 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, nodes []sop.
 	vids := nr.convertToRegistryRequestPayload(nodes)
 	var lastErr error
 	// Undo on blob store & redis.
-	if err := nr.transaction.nodeBlobStore.Remove(ctx, bibs...); err != nil {
+	if err := nr.transaction.blobStore.Remove(ctx, bibs...); err != nil {
 		lastErr = fmt.Errorf("Unable to undo new root nodes, %v, error: %v", bibs, err)
 		log.Error(lastErr.Error())
 	}
@@ -446,7 +446,7 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []sop.Ke
 	vids := nr.convertToRegistryRequestPayload(nodes)
 	// Remove nodes from blob store.
 	bibs := nr.convertToBlobRequestPayload(nodes)
-	if err := nr.transaction.nodeBlobStore.Remove(ctx, bibs...); err != nil {
+	if err := nr.transaction.blobStore.Remove(ctx, bibs...); err != nil {
 		lastErr = fmt.Errorf("Unable to undo added nodes, %v, error: %v", bibs, err)
 		log.Error(lastErr.Error())
 	}
@@ -470,7 +470,7 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []sop.Ke
 	return lastErr
 }
 
-// rollback updated Nodes including new root nodes.
+// rollback updated Nodes.
 func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) error {
 	if len(nodes) == 0 {
 		return nil
@@ -491,7 +491,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 	}
 	var lastErr error
 	// Undo the nodes blobs to blob store.
-	if err = nr.transaction.nodeBlobStore.Remove(ctx, blobsIds...); err != nil {
+	if err = nr.transaction.blobStore.Remove(ctx, blobsIds...); err != nil {
 		lastErr = fmt.Errorf("Unable to undo updated nodes, %v, error: %v", blobsIds, err)
 		log.Error(lastErr.Error())
 	}
