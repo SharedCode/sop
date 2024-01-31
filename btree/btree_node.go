@@ -12,7 +12,7 @@ import (
 type MetaDataType interface {
 	// Returns the object's Id.
 	GetId() sop.UUID
-	// Rerurns the object's version.
+	// Returns the object's version.
 	GetVersion() int
 	// Applies a version to the object.
 	SetVersion(v int)

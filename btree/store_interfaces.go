@@ -82,6 +82,19 @@ type NodeRepository[TK Comparable, TV any] interface {
 	Remove(nodeId sop.UUID)
 }
 
+// ValueDataRepository interface specifies the value data repository. This is used if "IsValueDataInNodeSegment"
+// field in BTree.StoreInfo is set to false. BTree will store the value data using this repository.
+type ValueDataRepository[TV any] interface {
+	// Add will just cache the value, "add" action for submit on transaction commit as appropriate.
+	Add(id sop.UUID, value *TV)
+	// Get fetches from backend(or from cache if exists) & returns the Node with a given nodeId.
+	Get(ctx context.Context, id sop.UUID) (*TV, error)
+	// Update will just cache the item, "update" action for resolve on transaction commit as appropriate.
+	Update(id sop.UUID, value *TV)
+	// Remove will just cache the item, "remove" action for resolve on transaction commit as appropriate.
+	Remove(id sop.UUID)
+}
+
 // ItemActionTracker specifies the CRUD action methods that can be done to manage Items.
 // These action methods can be implemented to allow the backend to resolve and submit
 // these changes to the backend storage during transaction commit.
