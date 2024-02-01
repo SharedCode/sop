@@ -251,7 +251,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	// Delete the store records in Redis.
 	for i := range names {
 		// Tolerate Redis cache failure.
-		if err := sr.redisCache.Delete(ctx, names[i]); err != nil {
+		if err := sr.redisCache.Delete(ctx, names[i]); err != nil && !redis.KeyNotFound(err) {
 			log.Error("Registry Add (redis setstruct) failed, details: %v", err)
 		}
 	}

@@ -36,6 +36,11 @@ type StoreInfo struct {
 	// If true, node load will be balanced by pushing items to sibling nodes if there are vacant slots,
 	// otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
 	LeafLoadBalancing bool
+
+	// If true, each Add(..) method call will persist the item value's data to another partition, then on commit,
+	// it will then be a very quick action as item(s) values' data were already saved.
+	// This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
+	IsValueDataActivelyPersisted bool
 }
 
 // NewStoreInfo instantiates a new Store.

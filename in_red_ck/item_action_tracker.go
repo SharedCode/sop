@@ -132,49 +132,6 @@ func (t *itemActionTracker[TK, TV]) hasTrackedItems() bool {
 	return len(t.items) > 0
 }
 
-func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx context.Context) error {
-	// for uuid, cachedItem := range t.items {
-	// 	if cachedItem.Action == addAction {
-	// 		continue
-	// 	}
-	// 	var readItem lockRecord
-	// 	if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
-	// 		return err
-	// 	}
-	// 	// Item found in Redis.
-	// 	if readItem.LockId == cachedItem.LockId {
-	// 		continue
-	// 	}
-	// 	// Lock compatibility check.
-	// 	if readItem.Action == getAction && cachedItem.Action == getAction {
-	// 		continue
-	// 	}
-	// 	return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
-	// }
-	return nil
-}
-func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx context.Context) error {
-	// for uuid, cachedItem := range t.items {
-	// 	if cachedItem.Action == addAction {
-	// 		continue
-	// 	}
-	// 	var readItem lockRecord
-	// 	if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
-	// 		return err
-	// 	}
-	// 	// Item found in Redis.
-	// 	if readItem.LockId == cachedItem.LockId {
-	// 		continue
-	// 	}
-	// 	// Lock compatibility check.
-	// 	if readItem.Action == getAction && cachedItem.Action == getAction {
-	// 		continue
-	// 	}
-	// 	return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
-	// }
-	return nil
-}
-
 // checkTrackedItems for conflict so we can remove "race condition" caused issue.
 // Returns nil if there are no tracked items or no conflict, otherwise returns an error.
 func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context) error {
@@ -260,4 +217,8 @@ func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context) error {
 		}
 	}
 	return lastErr
+}
+
+func (t *itemActionTracker[TK, TV]) formatKey(k string) string {
+	return fmt.Sprintf("V%s", k)
 }

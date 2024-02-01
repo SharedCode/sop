@@ -30,6 +30,8 @@ type TwoPhaseCommitTransaction interface {
 
 type btreeBackend struct {
 	nodeRepository     *nodeRepository
+	// Following are function pointers because BTree is generic typed for Key & Value,
+	// and these functions being pointers allow the backend to deal without requiring knowing data types.
 	refetchAndMerge    func(ctx context.Context) error
 	getStoreInfo       func() *btree.StoreInfo
 	hasTrackedItems    func() bool
@@ -409,7 +411,7 @@ func (t *transaction) rollback(ctx context.Context) error {
 			lastErr = err
 		}
 	}
-	if t.logger.committedState >= commitNewRootNodes {
+	if t.logger.committedState >= commitTrackedItemsValues {
 		if err := t.btreesBackend[0].rollbackTrackedItemsValues(ctx); err != nil {
 			lastErr = err
 		}
@@ -427,6 +429,9 @@ func (t *transaction) rollback(ctx context.Context) error {
 
 func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
 	for i := range t.btreesBackend {
+		if t.btreesBackend[i].getStoreInfo().IsValueDataInNodeSegment || t.btreesBackend[i].getStoreInfo().IsValueDataActivelyPersisted {
+			continue
+		}
 		if err := t.btreesBackend[i].commitTrackedItemsValues(ctx); err != nil {
 			return err
 		}
@@ -435,6 +440,9 @@ func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
 }
 func (t *transaction) rollbackTrackedItemsValues(ctx context.Context) error {
 	for i := range t.btreesBackend {
+		if t.btreesBackend[i].getStoreInfo().IsValueDataInNodeSegment || t.btreesBackend[i].getStoreInfo().IsValueDataActivelyPersisted {
+			continue
+		}
 		if err := t.btreesBackend[i].rollbackTrackedItemsValues(ctx); err != nil {
 			return err
 		}
