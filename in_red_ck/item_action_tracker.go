@@ -7,6 +7,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -34,12 +35,16 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
 	items map[sop.UUID]cacheItem[TK, TV]
+	redisCache redis.Cache
+	blobStore cas.BlobStore
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
-func newItemActionTracker[TK btree.Comparable, TV any]() *itemActionTracker[TK, TV] {
+func newItemActionTracker[TK btree.Comparable, TV any](redisCache redis.Cache, blobStore cas.BlobStore) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
 		items: make(map[sop.UUID]cacheItem[TK, TV]),
+		redisCache: redisCache,
+		blobStore: blobStore,
 	}
 }
 
@@ -127,15 +132,58 @@ func (t *itemActionTracker[TK, TV]) hasTrackedItems() bool {
 	return len(t.items) > 0
 }
 
+func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx context.Context) error {
+	// for uuid, cachedItem := range t.items {
+	// 	if cachedItem.Action == addAction {
+	// 		continue
+	// 	}
+	// 	var readItem lockRecord
+	// 	if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
+	// 		return err
+	// 	}
+	// 	// Item found in Redis.
+	// 	if readItem.LockId == cachedItem.LockId {
+	// 		continue
+	// 	}
+	// 	// Lock compatibility check.
+	// 	if readItem.Action == getAction && cachedItem.Action == getAction {
+	// 		continue
+	// 	}
+	// 	return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
+	// }
+	return nil
+}
+func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx context.Context) error {
+	// for uuid, cachedItem := range t.items {
+	// 	if cachedItem.Action == addAction {
+	// 		continue
+	// 	}
+	// 	var readItem lockRecord
+	// 	if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
+	// 		return err
+	// 	}
+	// 	// Item found in Redis.
+	// 	if readItem.LockId == cachedItem.LockId {
+	// 		continue
+	// 	}
+	// 	// Lock compatibility check.
+	// 	if readItem.Action == getAction && cachedItem.Action == getAction {
+	// 		continue
+	// 	}
+	// 	return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
+	// }
+	return nil
+}
+
 // checkTrackedItems for conflict so we can remove "race condition" caused issue.
 // Returns nil if there are no tracked items or no conflict, otherwise returns an error.
-func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context, itemRedisCache redis.Cache) error {
+func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context) error {
 	for uuid, cachedItem := range t.items {
 		if cachedItem.Action == addAction {
 			continue
 		}
 		var readItem lockRecord
-		if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
+		if err := t.redisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
 			return err
 		}
 		// Item found in Redis.
@@ -153,22 +201,22 @@ func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context, itemR
 
 // lock the tracked items in Redis in preparation to finalize the transaction commit.
 // This should work in combination of optimistic locking.
-func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error {
+func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Duration) error {
 	for uuid, cachedItem := range t.items {
 		if cachedItem.Action == addAction {
 			continue
 		}
 		var readItem lockRecord
-		if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
+		if err := t.redisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
 			if !redis.KeyNotFound(err) {
 				return err
 			}
 			// Item does not exist, upsert it.
-			if err := itemRedisCache.SetStruct(ctx, redis.FormatLockKey(uuid.String()), &(cachedItem.lockRecord), duration); err != nil {
+			if err := t.redisCache.SetStruct(ctx, redis.FormatLockKey(uuid.String()), &(cachedItem.lockRecord), duration); err != nil {
 				return err
 			}
 			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-			if err := itemRedisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
+			if err := t.redisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
 				return err
 			} else if readItem.LockId != cachedItem.LockId {
 				if readItem.Action == getAction && cachedItem.Action == getAction {
@@ -198,7 +246,7 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, itemRedisCache red
 }
 
 // unlock will attempt to unlock or delete all tracked items from redis.
-func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context, itemRedisCache redis.Cache) error {
+func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context) error {
 	var lastErr error
 	for uuid, cachedItem := range t.items {
 		if cachedItem.Action == addAction {
@@ -207,7 +255,7 @@ func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context, itemRedisCache r
 		if !cachedItem.isLockOwner {
 			continue
 		}
-		if err := itemRedisCache.Delete(ctx, redis.FormatLockKey(uuid.String())); err != nil {
+		if err := t.redisCache.Delete(ctx, redis.FormatLockKey(uuid.String())); err != nil {
 			lastErr = err
 		}
 	}

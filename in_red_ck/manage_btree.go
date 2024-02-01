@@ -105,7 +105,7 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreIn
 	si := StoreInterface[TK, TV]{}
 
 	// Assign the item action tracker frontend and backend bits.
-	iat := newItemActionTracker[TK, TV]()
+	iat := newItemActionTracker[TK, TV](trans.redisCache, trans.blobStore)
 	si.ItemActionTracker = iat
 
 	// Assign the node repository frontend and backend bits.
@@ -119,6 +119,8 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreIn
 		trans.Rollback(ctx)
 		return nil, err
 	}
+
+	// B-Tree backend processing(of commit & rollback) required objects.
 	b3b := btreeBackend{
 		// Node blob repository.
 		nodeRepository: nrw.realNodeRepository,
@@ -127,7 +129,9 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreIn
 		// Needed when applying the "delta" to the Store Count field.
 		getStoreInfo: func() *btree.StoreInfo { return b3.StoreInfo },
 
-		// Needed for tracked items' lock management.
+		// Needed for tracked items' lock & "value data" in separate segments management.
+		commitTrackedItemsValues: iat.commitTrackedValuesToSeparateSegments,
+		rollbackTrackedItemsValues: iat.rollbackTrackedValuesInSeparateSegments,
 		hasTrackedItems:    iat.hasTrackedItems,
 		checkTrackedItems:  iat.checkTrackedItems,
 		lockTrackedItems:   iat.lock,
