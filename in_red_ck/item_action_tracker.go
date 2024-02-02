@@ -35,6 +35,7 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
 	items map[sop.UUID]cacheItem[TK, TV]
+	transaction *transaction
 	redisCache redis.Cache
 	blobStore cas.BlobStore
 }

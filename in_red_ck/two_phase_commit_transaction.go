@@ -88,7 +88,7 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 		registry:        cas.NewRegistry(),
 		redisCache:      redis.NewClient(),
 		blobStore:       cas.NewBlobStore(),
-		logger:          newTransactionLogger(),
+		logger:          newTransactionLogger(nil),
 		phaseDone:       -1,
 	}, nil
 }
@@ -192,7 +192,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return nil
 	}
 	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
-	t.logger.log(lockTrackedItems)
+	t.logger.log(ctx, lockTrackedItems, nil)
 	if err := t.lockTrackedItems(ctx); err != nil {
 		return err
 	}
@@ -227,7 +227,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 
-		t.logger.log(commitTrackedItemsValues)
+		t.logger.enqueue(commitTrackedItemsValues, nil)
 		if err := t.commitTrackedItemsValues(ctx); err != nil {
 			return err
 		}
@@ -240,20 +240,21 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 		// TODO: parallelize these tasks.
 		// Commit new root nodes.
-		t.logger.log(commitNewRootNodes)
+		t.logger.enqueue(commitNewRootNodes, nil)
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
 			return err
 		}
 
 		if successful {
 			// Check for conflict on fetched items.
+			t.logger.enqueue(areFetchedItemsIntact, nil)
 			if successful, err = t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
 				return err
 			}
 		}
 		if successful {
 			// Commit updated nodes.
-			t.logger.log(commitUpdatedNodes)
+			t.logger.enqueue(commitUpdatedNodes, nil)
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
 			}
@@ -261,7 +262,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Only do commit removed nodes if successful so far.
 		if successful {
 			// Commit removed nodes.
-			t.logger.log(commitRemovedNodes)
+			t.logger.enqueue(commitRemovedNodes, nil)
 			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
 				return err
 			}
@@ -269,6 +270,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		if !successful {
 			// Rollback partial changes.
 			t.rollback(ctx)
+			// Clear enqueued logs as we rolled back.
+			t.logger.clearQueue()
 
 			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
 			// (in-flight) to retry on different times.
@@ -284,21 +287,24 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 	}
 
+	// Persist logs in the queue.
+	t.logger.logQueue(ctx)
+
 	// TODO: parallelize these tasks as well.
 	// Commit added nodes.
-	t.logger.log(commitAddedNodes)
+	t.logger.log(ctx, commitAddedNodes, nil)
 	if err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
 		return err
 	}
 
 	// Commit stores update(CountDelta apply).
-	t.logger.log(commitStoreInfo)
+	t.logger.log(ctx, commitStoreInfo, nil)
 	if err := t.commitStores(ctx); err != nil {
 		return err
 	}
 
 	// Mark that store info commit succeeded, so it can get rolled back if rollback occurs.
-	t.logger.log(beforeFinalize)
+	t.logger.log(ctx, beforeFinalize, nil)
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes. See phase2Commit for actual change.
 	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(ctx, updatedNodesHandles)
@@ -327,7 +333,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 func (t *transaction) phase2Commit(ctx context.Context) error {
 	// Finalize the commit, it is the only all or nothing action in the commit,
 	// and on registry (very small) records only.
-	t.logger.log(finalizeCommit)
+	t.logger.log(ctx, finalizeCommit, nil)
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
 		return fmt.Errorf("Updated & removed nodes commit failed, details: %v", err)
 	}
@@ -362,10 +368,12 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		unusedNodeIds = append(unusedNodeIds, blobsIds)
 	}
 	// TODO: parallelize deleteEntries & unlockTrackeditems.
+	t.logger.log(ctx, deleteEntries, []interface{}{deletedIds, unusedNodeIds})
 	t.deleteEntries(ctx, deletedIds, unusedNodeIds)
 
+	// Commit is considered completed and the logs are not needed anymore.
+	t.logger.removeLogs(ctx)
 	// Unlock the items in Redis.
-	t.logger.log(unlockTrackedItems)
 	if err := t.unlockTrackedItems(ctx); err != nil {
 		// Just log as warning any error as at this point, commit is already finalized.
 		// Any partial changes before failure in unlock tracked items will just expire in Redis.
@@ -421,8 +429,10 @@ func (t *transaction) rollback(ctx context.Context) error {
 			lastErr = err
 		}
 	}
+	// Transaction got rolled back, no need for the logs.
+	t.logger.removeLogs(ctx)
 	// Rewind the transaction log in case retry will check it.
-	t.logger.log(unknown)
+	t.logger.log(ctx, unknown, nil)
 
 	return lastErr
 }
