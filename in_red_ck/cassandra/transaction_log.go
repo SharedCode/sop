@@ -9,6 +9,10 @@ import (
 
 
 type TransactionLog interface {
+	// Initiate is invoked to signal start of transaction logging & to add the 1st transaction log.
+	// In Cassandra backend, this should translate into adding a new transaction by day
+	// record(see t_by_day table), and a call to Add method to add the 1st log.
+	Initiate(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error
 	// Add a transaction log.
 	Add(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error
 	// Remove all logs of a given transaciton.
@@ -46,8 +50,19 @@ func (b *transactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePa
 	return sop.NilUUID, nil, nil
 }
 
+func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunctionName string, blobsIds interface{}) error {
+	if connection == nil {
+		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+	}
+	if tid.IsNil() {
+		return nil
+	}
+	// TODO:
+	return nil
+}
+
 // Add blob(s) to the Blob store.
-func (b *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunctionName string, blobsIds interface{}) error {
+func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunctionName string, blobsIds interface{}) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
@@ -72,7 +87,7 @@ func (b *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunctionNa
 }
 
 // Remove will delete(non-logged) node records from different Blob stores(node tables).
-func (b *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
+func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}

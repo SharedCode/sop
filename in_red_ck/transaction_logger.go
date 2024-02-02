@@ -23,43 +23,46 @@ const (
 	beforeFinalize
 	finalizeCommit
 	deleteEntries
+	deleteTrackedItemsValues
 	unlockTrackedItems
 )
 
 var commitFunctionsStringLookup map[commitFunctions]string = map[commitFunctions]string{
-	lockTrackedItems: "lockTrackedItems",
+	lockTrackedItems:         "lockTrackedItems",
 	commitTrackedItemsValues: "commitTrackedItemsValues",
-	commitNewRootNodes: "commitNewRootNodes",
-	areFetchedItemsIntact: "areFetchedItemsIntact",
-	commitUpdatedNodes: "commitUpdatedNodes",
-	commitRemovedNodes: "commitRemovedNodes",
-	commitAddedNodes: "commitAddedNodes",
-	commitStoreInfo: "commitStoreInfo",
-	beforeFinalize: "beforeFinalize",
-	finalizeCommit: "finalizeCommit",
-	deleteEntries: "deleteEntries",
-	unlockTrackedItems: "unlockTrackedItems",
+	commitNewRootNodes:       "commitNewRootNodes",
+	areFetchedItemsIntact:    "areFetchedItemsIntact",
+	commitUpdatedNodes:       "commitUpdatedNodes",
+	commitRemovedNodes:       "commitRemovedNodes",
+	commitAddedNodes:         "commitAddedNodes",
+	commitStoreInfo:          "commitStoreInfo",
+	beforeFinalize:           "beforeFinalize",
+	finalizeCommit:           "finalizeCommit",
+	deleteEntries:            "deleteEntries",
+	deleteTrackedItemsValues: "deleteTrackedItemsValues",
+	unlockTrackedItems:       "unlockTrackedItems",
 }
 var commitFunctionsLookup map[string]commitFunctions = map[string]commitFunctions{
-	"lockTrackedItems": lockTrackedItems,
+	"lockTrackedItems":         lockTrackedItems,
 	"commitTrackedItemsValues": commitTrackedItemsValues,
-	"commitNewRootNodes": commitNewRootNodes,
-	"areFetchedItemsIntact": areFetchedItemsIntact,
-	"commitUpdatedNodes": commitUpdatedNodes,
-	"commitRemovedNodes": commitRemovedNodes,
-	"commitAddedNodes": commitAddedNodes,
-	"commitStoreInfo": commitStoreInfo,
-	"beforeFinalize": beforeFinalize,
-	"finalizeCommit": finalizeCommit,
-	"deleteEntries": deleteEntries,
-	"unlockTrackedItems": unlockTrackedItems,
+	"commitNewRootNodes":       commitNewRootNodes,
+	"areFetchedItemsIntact":    areFetchedItemsIntact,
+	"commitUpdatedNodes":       commitUpdatedNodes,
+	"commitRemovedNodes":       commitRemovedNodes,
+	"commitAddedNodes":         commitAddedNodes,
+	"commitStoreInfo":          commitStoreInfo,
+	"beforeFinalize":           beforeFinalize,
+	"finalizeCommit":           finalizeCommit,
+	"deleteEntries":            deleteEntries,
+	"deleteTrackedItemsValues": deleteTrackedItemsValues,
+	"unlockTrackedItems":       unlockTrackedItems,
 }
 
 type transactionLog struct {
 	committedState commitFunctions
-	logger cas.TransactionLog
-	transactionId sop.UUID
-	queuedLogs []sop.KeyValuePair[commitFunctions, interface{}]
+	logger         cas.TransactionLog
+	transactionId  sop.UUID
+	queuedLogs     []sop.KeyValuePair[commitFunctions, interface{}]
 }
 
 // Instantiate a transaction logger.
@@ -69,11 +72,10 @@ func newTransactionLogger(logger cas.TransactionLog) *transactionLog {
 	}
 	return &transactionLog{
 		logger: logger,
-		transactionId: sop.NewUUID(),
 	}
 }
 
-// enqueue log will put in a queue, which can be persisted calling saveQueue.
+// enqueue will add a log to the queue, which can be persisted calling saveQueue.
 func (tl *transactionLog) enqueue(f commitFunctions, payload interface{}) {
 	tl.committedState = f
 	if payload == nil {
@@ -86,7 +88,7 @@ func (tl *transactionLog) clearQueue() {
 }
 
 // save the enqueued logs to backend.
-func (tl *transactionLog) logQueue(ctx context.Context) error {
+func (tl *transactionLog) saveQueue(ctx context.Context) error {
 	for i := range tl.queuedLogs {
 		if err := tl.log(ctx, tl.queuedLogs[i].Key, tl.queuedLogs[i].Value); err != nil {
 			return err
@@ -98,6 +100,11 @@ func (tl *transactionLog) logQueue(ctx context.Context) error {
 // Log the committed function state.
 func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload interface{}) error {
 	tl.committedState = f
+	if tl.transactionId.IsNil() {
+		tl.logger.Initiate(ctx, sop.NilUUID, "", nil)
+		tl.transactionId = sop.NewUUID()
+		return nil
+	}
 	if payload == nil {
 		return nil
 	}

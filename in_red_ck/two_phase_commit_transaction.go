@@ -29,7 +29,7 @@ type TwoPhaseCommitTransaction interface {
 }
 
 type btreeBackend struct {
-	nodeRepository     *nodeRepository
+	nodeRepository *nodeRepository
 	// Following are function pointers because BTree is generic typed for Key & Value,
 	// and these functions being pointers allow the backend to deal without requiring knowing data types.
 	refetchAndMerge    func(ctx context.Context) error
@@ -40,8 +40,9 @@ type btreeBackend struct {
 	unlockTrackedItems func(ctx context.Context) error
 
 	// Manage tracked items' values in separate segments.
-	commitTrackedItemsValues func(ctx context.Context) error
+	commitTrackedItemsValues   func(ctx context.Context) error
 	rollbackTrackedItemsValues func(ctx context.Context) error
+	deleteInactiveTrackedItemsValues func(ctx context.Context) error
 }
 
 type transaction struct {
@@ -288,7 +289,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	// Persist logs in the queue.
-	t.logger.logQueue(ctx)
+	t.logger.saveQueue(ctx)
 
 	// TODO: parallelize these tasks as well.
 	// Commit added nodes.
@@ -333,7 +334,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 func (t *transaction) phase2Commit(ctx context.Context) error {
 	// Finalize the commit, it is the only all or nothing action in the commit,
 	// and on registry (very small) records only.
-	t.logger.log(ctx, finalizeCommit, nil)
+	if err := t.logger.log(ctx, finalizeCommit, nil); err != nil {
+		return err
+	}
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
 		return fmt.Errorf("Updated & removed nodes commit failed, details: %v", err)
 	}
@@ -352,7 +355,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	}
 
 	// Package the logically deleted Ids for actual physical deletes.
-	deletedIds := make([]cas.RegistryPayload[sop.UUID], len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
+	deletedIds := make([]cas.RegistryPayload[sop.UUID], len(t.removedNodeHandles))
 	for i := range t.removedNodeHandles {
 		deletedIds[i].RegistryTable = t.removedNodeHandles[i].RegistryTable
 		deletedIds[i].IDs = make([]sop.UUID, len(t.removedNodeHandles[i].IDs))
@@ -367,9 +370,14 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		}
 		unusedNodeIds = append(unusedNodeIds, blobsIds)
 	}
-	// TODO: parallelize deleteEntries & unlockTrackeditems.
+
+	// TODO: finalize error handling, e.g. - if err occurred, don't remove logs.
+
 	t.logger.log(ctx, deleteEntries, []interface{}{deletedIds, unusedNodeIds})
 	t.deleteEntries(ctx, deletedIds, unusedNodeIds)
+
+	t.logger.log(ctx, deleteTrackedItemsValues, nil)
+	t.deleteTrackedItemsValues(ctx)
 
 	// Commit is considered completed and the logs are not needed anymore.
 	t.logger.removeLogs(ctx)
@@ -454,6 +462,17 @@ func (t *transaction) rollbackTrackedItemsValues(ctx context.Context) error {
 			continue
 		}
 		if err := t.btreesBackend[i].rollbackTrackedItemsValues(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (t *transaction) deleteTrackedItemsValues(ctx context.Context) error {
+	for i := range t.btreesBackend {
+		if t.btreesBackend[i].getStoreInfo().IsValueDataInNodeSegment || t.btreesBackend[i].getStoreInfo().IsValueDataActivelyPersisted {
+			continue
+		}
+		if err := t.btreesBackend[i].deleteInactiveTrackedItemsValues(ctx); err != nil {
 			return err
 		}
 	}

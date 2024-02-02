@@ -37,8 +37,8 @@ type StoreInfo struct {
 	// otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
 	LeafLoadBalancing bool
 
-	// If true, each Add(..) method call will persist the item value's data to another partition, then on commit,
-	// it will then be a very quick action as item(s) values' data were already saved.
+	// If true, each Btree Add(..) method call will persist the item value's data to another partition, then on commit,
+	// it will then be a very quick action as item(s) values' data were already saved on backend.
 	// This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
 	IsValueDataActivelyPersisted bool
 }

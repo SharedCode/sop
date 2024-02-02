@@ -34,15 +34,16 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
+	blobTableName string
 	items map[sop.UUID]cacheItem[TK, TV]
-	transaction *transaction
 	redisCache redis.Cache
 	blobStore cas.BlobStore
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
-func newItemActionTracker[TK btree.Comparable, TV any](redisCache redis.Cache, blobStore cas.BlobStore) *itemActionTracker[TK, TV] {
+func newItemActionTracker[TK btree.Comparable, TV any](blobTableName string, redisCache redis.Cache, blobStore cas.BlobStore) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
+		blobTableName: blobTableName,
 		items: make(map[sop.UUID]cacheItem[TK, TV]),
 		redisCache: redisCache,
 		blobStore: blobStore,
@@ -218,8 +219,4 @@ func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context) error {
 		}
 	}
 	return lastErr
-}
-
-func (t *itemActionTracker[TK, TV]) formatKey(k string) string {
-	return fmt.Sprintf("V%s", k)
 }

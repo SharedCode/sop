@@ -2,19 +2,43 @@ package in_red_ck
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/SharedCode/sop"
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
 func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx context.Context) error {
+		/*
+			getAction
+			addAction
+			updateAction
+			removeAction
+		*/
+	itemsForAdd := make([]cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], 0, 5)
+	// itemsForDelete := make([]cas.BlobsPayload[sop.UUID], 0, 5)
 	for _, cachedItem := range t.items {
-		if cachedItem.item.Value == nil {
+		if cachedItem.Action == addAction || cachedItem.Action == updateAction {
+			itemsForAdd = append(itemsForAdd,
+				cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
+					BlobTable: t.blobTableName,
+					Blobs: []sop.KeyValuePair[sop.UUID, interface{}]{{
+							Key: cachedItem.item.Id,
+							Value: cachedItem.item.Value,
+						},
+					},
+				})
 			continue
 		}
-		if err := t.manageItemValueData(ctx, cachedItem); err != nil {
-			return err
+		if cachedItem.Action == getAction {
+			continue
+		}
+		if cachedItem.Action == removeAction {
 		}
 	}
 	return nil
 }
+
 func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx context.Context) error {
 	// for uuid, cachedItem := range t.items {
 	// 	if cachedItem.Action == addAction {
@@ -37,26 +61,11 @@ func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx 
 	return nil
 }
 
-func  (t *itemActionTracker[TK, TV])manageItemValueData(ctx context.Context, cachedItem cacheItem[TK, TV]) error {
-		/*
-			getAction
-			addAction
-			updateAction
-			removeAction
-		*/
-		// if cachedItem.Action == addAction || cachedItem.Action == updateAction {
+func (t *itemActionTracker[TK, TV]) deleteInactiveTrackedValuesInSeparateSegments(ctx context.Context) error {
 
-		// 	continue
-		// }
-		// if cachedItem.Action == getAction {
-
-		// 	continue
-		// }
-		// if cachedItem.Action == removeAction {
-		// 	if err := t.redisCache.Delete(ctx, t.formatKey(uuid.String())); err != nil && !redis.KeyNotFound(err) {
-		// 		return err
-		// 	}
-
-		// }
 	return nil
+}
+
+func (t *itemActionTracker[TK, TV]) formatKey(k string) string {
+	return fmt.Sprintf("V%s", k)
 }
