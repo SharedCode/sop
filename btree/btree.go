@@ -206,9 +206,13 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 // getCurrentItem returns the current item containing key/value pair.
 func (btree *Btree[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], error) {
 	var zero Item[TK, TV]
-	if item, err := btree.getCurrentItem(ctx); err != nil {
+	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
 		return zero, err
 	} else {
+		if err := btree.storeInterface.ItemActionTracker.Get(ctx, item); err != nil {
+			return zero, err
+		}
+		btree.storeInterface.NodeRepository.Fetched(btree.currentItemRef.nodeId)
 		return *item, nil
 	}
 }

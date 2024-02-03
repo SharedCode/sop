@@ -58,8 +58,14 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // leafLoadBalancing - true means leaf load balancing feature is enabled, false otherwise.
 // description - (optional) description about the store.
 // t - transaction that the instance will participate in.
+
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
 	isValueDataInNodeSegment bool, leafLoadBalancing bool, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
+	s := btree.NewStoreInfo(name, slotLength, isUnique, isValueDataInNodeSegment, leafLoadBalancing, desciption)
+	return NewBtreeExt[TK, TV](ctx, s.Name, s.SlotLength, s.IsUnique, s.IsValueDataInNodeSegment,
+		s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached, s.LeafLoadBalancing, s.Description, t)
+}
+func NewBtreeExt[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("Transaction 't' parameter can't be nil")
 	}
@@ -75,7 +81,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 		trans.Rollback(ctx)
 		return nil, err
 	}
-	ns := btree.NewStoreInfo(name, slotLength, isUnique, true, leafLoadBalancing, desciption)
+	ns := btree.NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption)
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeId.IsNil() {
@@ -159,7 +165,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 		b3.StoreInfo.Count = storeInfo[0].Count
 		b3.StoreInfo.RootNodeId = storeInfo[0].RootNodeId
 
-		for itemId, ci := range b3ModifiedItems {
+		for _, ci := range b3ModifiedItems {
 			if ci.Action == addAction {
 				if ok, err := b3.Add(ctx, ci.item.Key, *ci.item.Value); !ok || err != nil {
 					if err != nil {
@@ -169,7 +175,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 				}
 				continue
 			}
-			if ok, err := b3.FindOneWithId(ctx, ci.item.Key, itemId); !ok || err != nil {
+			if ok, err := b3.FindOneWithId(ctx, ci.item.Key, ci.item.Id); !ok || err != nil {
 				if err != nil {
 					return err
 				}

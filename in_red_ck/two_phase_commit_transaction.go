@@ -149,10 +149,12 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 				if err := t.timedOut(ctx, startTime); err != nil {
 					break
 				}
-				log.Warn(err.Error() + ", will retry")
 				if rerr := t.rollback(ctx); rerr != nil {
 					return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 				}
+				log.Warn(err.Error() + ", will retry")
+
+				randomSleep(ctx)
 				if err = t.phase1Commit(ctx); err != nil {
 					break
 				}
@@ -170,6 +172,8 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 	}
 	return nil
 }
+
+
 
 func (t *transaction) Rollback(ctx context.Context) error {
 	if t.phaseDone == 2 {
@@ -199,6 +203,13 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 		return fmt.Errorf("Transaction timed out(maxTime=%v)", t.maxTime)
 	}
 	return nil
+}
+
+// Sleep in random milli-seconds to allow different conflicting (Node modifying) transactions
+// to retry on different times, thus, increasing chance to succeed one after the other.
+func randomSleep(ctx context.Context) {
+	sleepTime := sleepBeforeRefetchBase + (1+rand.Intn(5))*100
+	sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 }
 
 // sleep with context.
@@ -296,10 +307,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			// Clear enqueued logs as we rolled back.
 			t.logger.clearQueue()
 
-			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
-			// (in-flight) to retry on different times.
-			sleepTime := sleepBeforeRefetchBase + (1+rand.Intn(5))*100
-			sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
+			randomSleep(ctx)
 
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
 				return err
@@ -514,11 +522,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 			return nil
 		}
 
-		// Sleep in random seconds to allow different conflicting (Node modifying) transactions
-		// (in-flight) to retry on different times.
-		sleepTime := sleepBeforeRefetchBase + (1+rand.Intn(5))*100
-		sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
-
+		randomSleep(ctx)
 		// Recreate the fetches on latest committed nodes & check if fetched Items are unchanged.
 		if err := t.refetchAndMergeModifications(ctx); err != nil {
 			return err

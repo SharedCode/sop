@@ -26,7 +26,7 @@ type StoreInfo struct {
 	Count int64
 	// Used internally by SOP. Should be ignored when persisted in the backend.
 	CountDelta int64 `json:"-"`
-	// Timestamp in milliseconds.
+	// Add or update timestamp in milliseconds.
 	Timestamp int64
 	// Is marked deleted or not.
 	IsDeleted bool
@@ -55,11 +55,11 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 	if !isValueDataInNodeSegment {
 		isValueDataGloballyCached = true
 	}
-	return NewStoreInfoExtended(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption)
+	return NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption)
 }
 
-// NewStoreInfoExtended instantiates a new Store and offers more parameters configurable to your desire.
-func NewStoreInfoExtended(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string) *StoreInfo {
+// NewStoreInfoExt instantiates a new Store and offers more parameters configurable to your desire.
+func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if slotLength%2 != 0 {
 		slotLength--
@@ -120,5 +120,7 @@ func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 		s.BlobTable == b.BlobTable &&
 		s.RegistryTable == b.RegistryTable &&
 		s.IsValueDataInNodeSegment == b.IsValueDataInNodeSegment &&
+		s.IsValueDataActivelyPersisted == b.IsValueDataActivelyPersisted &&
+		s.IsValueDataGloballyCached == b.IsValueDataGloballyCached &&
 		s.LeafLoadBalancing == b.LeafLoadBalancing
 }

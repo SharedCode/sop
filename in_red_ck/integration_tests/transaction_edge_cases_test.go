@@ -21,9 +21,9 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t1)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -37,10 +37,10 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = in_red_ck.NewTransaction(true, -1)
 		t1.Begin()
-		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t1)
 	}
 
-	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t2)
+	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t2)
 
 	// edit "peter parker" in both btrees.
 	pk3, p3 := newPerson("gokue", "kakarot", "male", "email", "phone")
@@ -64,7 +64,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	}
 	t1, _ = in_red_ck.NewTransaction(false, -1)
 	t1.Begin()
-	b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t1)
 	var person Person
 	b3.FindOne(ctx, pk2, false)
 	person, _ = b3.GetCurrentValue(ctx)
@@ -92,9 +92,9 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t1)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -108,10 +108,10 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = in_red_ck.NewTransaction(true, -1)
 		t1.Begin()
-		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t1)
 	}
 
-	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t2)
+	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t2)
 
 	// edit both "pirellis" in both btrees, one each.
 	b3.FindOne(ctx, pk, false)
@@ -138,9 +138,9 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t1)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -154,10 +154,10 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = in_red_ck.NewTransaction(true, -1)
 		t1.Begin()
-		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t1)
 	}
 
-	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t2)
+	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t2)
 
 	// Read both records.
 	b32.FindOne(ctx, pk2, false)
@@ -188,9 +188,9 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t1)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -206,10 +206,10 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		t1.Commit(ctx)
 		t1, _ = in_red_ck.NewTransaction(true, -1)
 		t1.Begin()
-		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t1)
 	}
 
-	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t2)
+	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t2)
 
 	// Read both records.
 	b32.FindOne(ctx, pk2, false)
@@ -239,9 +239,9 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t1)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -261,10 +261,10 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = in_red_ck.NewTransaction(true, -1)
 		t1.Begin()
-		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t1)
 	}
 
-	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t2)
+	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, "", t2)
 
 	b3.FindOne(ctx, pk, false)
 	ci, _ := b3.GetCurrentItem(ctx)

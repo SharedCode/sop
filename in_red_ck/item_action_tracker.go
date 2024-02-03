@@ -32,6 +32,7 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 	// Version of the item as read from DB.
 	versionInDB int
 	isLockOwner bool
+	inflightItemValue *TV
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
@@ -69,31 +70,32 @@ func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *btree.StoreInf
 // Get			Update		ForUpdate
 
 func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK, TV]) error {
-	if _, ok := t.items[item.Id]; !ok {
-		if !t.storeInfo.IsValueDataInNodeSegment {
-			if item.Value == nil && item.ValueNeedsFetch {
-				var v TV
-				if t.storeInfo.IsValueDataGloballyCached {
-					if err := t.redisCache.GetStruct(ctx, t.formatKey(item.Id.String()), &v); err != nil {
-						if !redis.KeyNotFound(err) {
-							log.Error(err.Error())
-						}
-						// If item not found in Redis or an error fetching it, fetch from Blob store.
-						if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.Id, &v); err != nil {
-							return err
-						}
-						// Just log Redis error since it is just secondary.
-						if err := t.redisCache.SetStruct(ctx, t.formatKey(item.Id.String()), &v, nodeCacheDuration); err != nil {
-							log.Error(err.Error())
-						}
+	if v, ok := t.items[item.Id]; !ok || v.item.ValueNeedsFetch {
+		if item.Value == nil && item.ValueNeedsFetch {
+			var v TV
+			if t.storeInfo.IsValueDataGloballyCached {
+				if err := t.redisCache.GetStruct(ctx, t.formatKey(item.Id.String()), &v); err != nil {
+					if !redis.KeyNotFound(err) {
+						log.Error(err.Error())
 					}
-				} else {
+					// If item not found in Redis or an error fetching it, fetch from Blob store.
 					if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.Id, &v); err != nil {
 						return err
 					}
+					// Just log Redis error since it is just secondary.
+					if err := t.redisCache.SetStruct(ctx, t.formatKey(item.Id.String()), &v, nodeCacheDuration); err != nil {
+						log.Error(err.Error())
+					}
 				}
-				item.Value = &v
-				item.ValueNeedsFetch = false
+			} else {
+				if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.Id, &v); err != nil {
+					return err
+				}
+			}
+			item.Value = &v
+			item.ValueNeedsFetch = false
+			if ok {
+				return nil
 			}
 		}
 		t.items[item.Id] = cacheItem[TK, TV]{

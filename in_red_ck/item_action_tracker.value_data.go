@@ -17,18 +17,15 @@ func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx co
 		Blobs: make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 5),
 	}
 	for uuid, cachedItem := range t.items {
-		// Nothing to save to separate segment/partition if value is nil.
-		if cachedItem.item.Value == nil {
-			cachedItem.item.ValueNeedsFetch = false
-			t.items[uuid] = cachedItem
-			continue
-		}
 		if cachedItem.Action == updateAction || cachedItem.Action == removeAction{
 			t.forDeletionItems = append(t.forDeletionItems, cachedItem.item.Id)
 			if cachedItem.Action == updateAction {
 				// Replace the Item ID so we can persist a new one and not touching current one that
 				// could be fetched in other transactions.
-				cachedItem.item.Id = sop.NewUUID()
+				if cachedItem.item.Value != nil {
+					cachedItem.item.Id = sop.NewUUID()
+				}
+				cachedItem.item.ValueNeedsFetch = false
 				t.items[uuid] = cachedItem
 			}
 		}
@@ -39,8 +36,11 @@ func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx co
 							Value: cachedItem.item.Value,
 						})
 			// nullify Value since we are saving it to a separate partition.
-			cachedItem.item.Value = nil
-			cachedItem.item.ValueNeedsFetch = true
+			if cachedItem.item.Value != nil {
+				cachedItem.inflightItemValue = cachedItem.item.Value
+				cachedItem.item.Value = nil
+				cachedItem.item.ValueNeedsFetch = true
+			}
 			t.items[uuid] = cachedItem
 		}
 	}
@@ -67,8 +67,13 @@ func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx 
 		BlobTable: t.storeInfo.BlobTable,
 		Blobs: make([]sop.UUID, 0, 5),
 	}
-	for _, cachedItem := range t.items {
+	for itemId, cachedItem := range t.items {
 		if cachedItem.Action == addAction || cachedItem.Action == updateAction {
+			cachedItem.item.Value = cachedItem.inflightItemValue
+			cachedItem.inflightItemValue = nil
+			cachedItem.item.ValueNeedsFetch = false
+			cachedItem.item.Id = itemId
+			t.items[itemId] = cachedItem
 			if t.storeInfo.IsValueDataGloballyCached {
 				t.redisCache.Delete(ctx, t.formatKey(cachedItem.item.Id.String()))
 			}
