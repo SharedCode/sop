@@ -9,11 +9,11 @@ import (
 )
 
 func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx context.Context) error {
-	if t.isValueDataInNodeSegment || t.isValueDataActivelyPersisted {
+	if t.storeInfo.IsValueDataInNodeSegment || t.storeInfo.IsValueDataActivelyPersisted {
 		return nil
 	}
 	itemsForAdd := cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
-		BlobTable: t.blobTableName,
+		BlobTable: t.storeInfo.BlobTable,
 		Blobs: make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 5),
 	}
 	for uuid, cachedItem := range t.items {
@@ -50,25 +50,28 @@ func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx co
 		}
 	}
 
-	// TODO: support caching large data ? 'for now, don't.
-	// // Add to cache since succeeded to add to the blob store.
-	// for _, kvp := range itemsForAdd.Blobs {
-	// 	t.redisCache.SetStruct(ctx, t.formatKey(kvp.Key.String()), kvp.Value, nodeCacheDuration)
-	// }
+	// Add to cache since succeeded to add to the blob store.
+	if t.storeInfo.IsValueDataGloballyCached {
+		for _, kvp := range itemsForAdd.Blobs {
+			t.redisCache.SetStruct(ctx, t.formatKey(kvp.Key.String()), kvp.Value, nodeCacheDuration)
+		}
+	}
 	return nil
 }
 
 func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx context.Context) error {
-	if t.isValueDataInNodeSegment || t.isValueDataActivelyPersisted {
+	if t.storeInfo.IsValueDataInNodeSegment || t.storeInfo.IsValueDataActivelyPersisted {
 		return nil
 	}
 	itemsForDelete := cas.BlobsPayload[sop.UUID] {
-		BlobTable: t.blobTableName,
+		BlobTable: t.storeInfo.BlobTable,
 		Blobs: make([]sop.UUID, 0, 5),
 	}
 	for _, cachedItem := range t.items {
 		if cachedItem.Action == addAction || cachedItem.Action == updateAction {
-			t.redisCache.Delete(ctx, t.formatKey(cachedItem.item.Id.String()))
+			if t.storeInfo.IsValueDataGloballyCached {
+				t.redisCache.Delete(ctx, t.formatKey(cachedItem.item.Id.String()))
+			}
 			itemsForDelete.Blobs = append(itemsForDelete.Blobs, cachedItem.item.Id)
 			continue
 		}
@@ -81,15 +84,17 @@ func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx 
 }
 
 func (t *itemActionTracker[TK, TV]) deleteInactiveTrackedValuesInSeparateSegments(ctx context.Context) error {
-	if t.isValueDataInNodeSegment || t.isValueDataActivelyPersisted {
+	if t.storeInfo.IsValueDataInNodeSegment || t.storeInfo.IsValueDataActivelyPersisted {
 		return nil
 	}
 	itemsForDelete := cas.BlobsPayload[sop.UUID] {
-		BlobTable: t.blobTableName,
+		BlobTable: t.storeInfo.BlobTable,
 		Blobs: make([]sop.UUID, 0, 5),
 	}
 	for _, forDeleteId := range t.forDeletionItems {
-		t.redisCache.Delete(ctx, t.formatKey(forDeleteId.String()))
+		if t.storeInfo.IsValueDataGloballyCached {
+			t.redisCache.Delete(ctx, t.formatKey(forDeleteId.String()))
+		}
 		itemsForDelete.Blobs = append(itemsForDelete.Blobs, forDeleteId)
 	}
 	if len(itemsForDelete.Blobs) > 0 {

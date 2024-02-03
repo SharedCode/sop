@@ -41,10 +41,25 @@ type StoreInfo struct {
 	// it will then be a very quick action as item(s) values' data were already saved on backend.
 	// This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
 	IsValueDataActivelyPersisted bool
+	// If true, the Value data will be cached in Redis, otherwise not. This is used when 'IsValueDataInNodeSegment'
+	// is set to false. Typically set to false if 'IsValueDataActivelyPersisted' is true, as value data is expected 
+	// to be huge rendering caching it in Redis to affect Redis performance due to the drastic size of data per item.
+	IsValueDataGloballyCached bool
 }
 
-// NewStoreInfo instantiates a new Store.
+// NewStoreInfo instantiates a new Store, defaults extended parameters to typical use-case values. Please use NewStoreInfoExtended(..) function
+// below for option to set including the extended parameters.
 func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, leafLoadBalancing bool, desciption string) *StoreInfo {
+	isValueDataActivelyPersisted := false
+	isValueDataGloballyCached := false
+	if !isValueDataInNodeSegment {
+		isValueDataGloballyCached = true
+	}
+	return NewStoreInfoExtended(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption)
+}
+
+// NewStoreInfoExtended instantiates a new Store and offers more parameters configurable to your desire.
+func NewStoreInfoExtended(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if slotLength%2 != 0 {
 		slotLength--
@@ -71,6 +86,8 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 		SlotLength:               slotLength,
 		IsUnique:                 isUnique,
 		IsValueDataInNodeSegment: isValueDataInNodeSegment,
+		IsValueDataActivelyPersisted: isValueDataActivelyPersisted,
+		IsValueDataGloballyCached: isValueDataGloballyCached,
 		RegistryTable:            registryTableName,
 		BlobTable:                blobTableName,
 		Description:              desciption,

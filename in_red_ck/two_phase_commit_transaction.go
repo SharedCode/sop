@@ -141,6 +141,28 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
+		if _, ok := err.(*cas.UpdateAllOrNothingError); ok {
+			startTime := now()
+			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
+			// until it succeeds or timeout.
+			for {
+				if err := t.timedOut(ctx, startTime); err != nil {
+					break
+				}
+				log.Warn(err.Error() + ", will retry")
+				if rerr := t.rollback(ctx); rerr != nil {
+					return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
+				}
+				if err = t.phase1Commit(ctx); err != nil {
+					break
+				}
+				if err = t.phase2Commit(ctx); err == nil {
+					return nil
+				} else if _, ok := err.(*cas.UpdateAllOrNothingError); !ok {
+					break
+				}
+			}
+		}
 		if rerr := t.rollback(ctx); rerr != nil {
 			return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
@@ -338,7 +360,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		return err
 	}
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
-		return fmt.Errorf("Updated & removed nodes commit failed, details: %v", err)
+		return err
 	}
 
 	unusedNodeIds := make([]cas.BlobsPayload[sop.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
@@ -584,6 +606,7 @@ func (t *transaction) commitStores(ctx context.Context) error {
 		s2 := *store
 		// Compute the count delta so Store Repository can reconcile for commit.
 		s2.CountDelta = s2.Count - t.btreesBackend[i].nodeRepository.count
+		s2.Timestamp = nowUnixMilli()
 		stores[i] = s2
 	}
 	return t.storeRepository.Update(ctx, stores...)

@@ -39,6 +39,15 @@ type Registry interface {
 	Remove(context.Context, ...RegistryPayload[sop.UUID]) error
 }
 
+// UpdateAllOrNothingError is a special error type that will allow caller to handle it differently than normal errors.
+type UpdateAllOrNothingError struct {
+	Err error
+}
+
+func (r *UpdateAllOrNothingError) Error() string {
+	return r.Err.Error()
+}
+
 type registry struct {
 	redisCache redis.Cache
 }
@@ -113,7 +122,9 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				// Version Id is incremental, 'thus we can compare with -1 the previous.
 				newVersion--
 				if newVersion != h2.Version || !h.IsEqual(&h2) {
-					return fmt.Errorf("Update failed, handle logical Id(%v) version conflict detected", h.LogicalId)
+					return &UpdateAllOrNothingError{
+						Err: fmt.Errorf("Update failed, handle logical Id(%v) version conflict detected", h.LogicalId),
+					}
 				}
 			}
 		}

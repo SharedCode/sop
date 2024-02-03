@@ -35,11 +35,9 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
-	blobTableName string
+	storeInfo *btree.StoreInfo
 	items map[sop.UUID]cacheItem[TK, TV]
 	forDeletionItems []sop.UUID
-	isValueDataInNodeSegment bool
-	isValueDataActivelyPersisted bool
 	redisCache redis.Cache
 	blobStore cas.BlobStore
 }
@@ -47,9 +45,7 @@ type itemActionTracker[TK btree.Comparable, TV any] struct {
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
 func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *btree.StoreInfo, redisCache redis.Cache, blobStore cas.BlobStore) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
-		blobTableName: storeInfo.BlobTable,
-		isValueDataInNodeSegment: storeInfo.IsValueDataInNodeSegment,
-		isValueDataActivelyPersisted: storeInfo.IsValueDataActivelyPersisted,
+		storeInfo: storeInfo,
 		items: make(map[sop.UUID]cacheItem[TK, TV]),
 		redisCache: redisCache,
 		blobStore: blobStore,
@@ -74,19 +70,31 @@ func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *btree.StoreInf
 
 func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK, TV]) error {
 	if _, ok := t.items[item.Id]; !ok {
-		if item.Value == nil && item.ValueNeedsFetch {
-			var v TV
-			if err := t.redisCache.GetStruct(ctx, t.formatKey(item.Id.String()), &v); err != nil {
-				if !redis.KeyNotFound(err) {
-					log.Error(err.Error())
+		if !t.storeInfo.IsValueDataInNodeSegment {
+			if item.Value == nil && item.ValueNeedsFetch {
+				var v TV
+				if t.storeInfo.IsValueDataGloballyCached {
+					if err := t.redisCache.GetStruct(ctx, t.formatKey(item.Id.String()), &v); err != nil {
+						if !redis.KeyNotFound(err) {
+							log.Error(err.Error())
+						}
+						// If item not found in Redis or an error fetching it, fetch from Blob store.
+						if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.Id, &v); err != nil {
+							return err
+						}
+						// Just log Redis error since it is just secondary.
+						if err := t.redisCache.SetStruct(ctx, t.formatKey(item.Id.String()), &v, nodeCacheDuration); err != nil {
+							log.Error(err.Error())
+						}
+					}
+				} else {
+					if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.Id, &v); err != nil {
+						return err
+					}
 				}
-				// If item not found in Redis or an error fetching it, fetch from Blob store.
-				if err := t.blobStore.GetOne(ctx, t.blobTableName, item.Id, &v); err != nil {
-					return err
-				}
+				item.Value = &v
+				item.ValueNeedsFetch = false
 			}
-			item.Value = &v
-			item.ValueNeedsFetch = false
 		}
 		t.items[item.Id] = cacheItem[TK, TV]{
 			lockRecord: lockRecord{
