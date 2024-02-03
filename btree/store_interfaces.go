@@ -87,14 +87,14 @@ type NodeRepository[TK Comparable, TV any] interface {
 // these changes to the backend storage during transaction commit.
 type ItemActionTracker[TK Comparable, TV any] interface {
 	// Add will just cache the item, "add" action for submit on transaction commit as appropriate.
-	Add(item *Item[TK, TV])
+	Add(ctx context.Context, item *Item[TK, TV]) error
 	// Get will just cache the item, "get" action then resolve on transaction commit, compare version
 	// with backend copy, error out if version shows another transaction modified/deleted this item on the back.
-	Get(item *Item[TK, TV])
+	Get(ctx context.Context, item *Item[TK, TV]) error
 	// Update will just cache the item, "update" action for submit on transaction commit as appropriate.
-	Update(item *Item[TK, TV])
+	Update(ctx context.Context, item *Item[TK, TV]) error
 	// Remove will just cache the item, "remove" action for submit on transaction commit as appropriate.
-	Remove(item *Item[TK, TV])
+	Remove(ctx context.Context, item *Item[TK, TV]) error
 }
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its

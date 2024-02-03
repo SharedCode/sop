@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	log "log/slog"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
@@ -36,14 +37,19 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 type itemActionTracker[TK btree.Comparable, TV any] struct {
 	blobTableName string
 	items map[sop.UUID]cacheItem[TK, TV]
+	forDeletionItems []sop.UUID
+	isValueDataInNodeSegment bool
+	isValueDataActivelyPersisted bool
 	redisCache redis.Cache
 	blobStore cas.BlobStore
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
-func newItemActionTracker[TK btree.Comparable, TV any](blobTableName string, redisCache redis.Cache, blobStore cas.BlobStore) *itemActionTracker[TK, TV] {
+func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *btree.StoreInfo, redisCache redis.Cache, blobStore cas.BlobStore) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
-		blobTableName: blobTableName,
+		blobTableName: storeInfo.BlobTable,
+		isValueDataInNodeSegment: storeInfo.IsValueDataInNodeSegment,
+		isValueDataActivelyPersisted: storeInfo.IsValueDataActivelyPersisted,
 		items: make(map[sop.UUID]cacheItem[TK, TV]),
 		redisCache: redisCache,
 		blobStore: blobStore,
@@ -66,8 +72,22 @@ func newItemActionTracker[TK btree.Comparable, TV any](blobTableName string, red
 // Get			Remove		ForRemove
 // Get			Update		ForUpdate
 
-func (t *itemActionTracker[TK, TV]) Get(item *btree.Item[TK, TV]) {
+func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK, TV]) error {
 	if _, ok := t.items[item.Id]; !ok {
+		if item.Value == nil && item.ValueNeedsFetch {
+			var v TV
+			if err := t.redisCache.GetStruct(ctx, t.formatKey(item.Id.String()), &v); err != nil {
+				if !redis.KeyNotFound(err) {
+					log.Error(err.Error())
+				}
+				// If item not found in Redis or an error fetching it, fetch from Blob store.
+				if err := t.blobStore.GetOne(ctx, t.blobTableName, item.Id, &v); err != nil {
+					return err
+				}
+			}
+			item.Value = &v
+			item.ValueNeedsFetch = false
+		}
 		t.items[item.Id] = cacheItem[TK, TV]{
 			lockRecord: lockRecord{
 				LockId: sop.NewUUID(),
@@ -77,9 +97,10 @@ func (t *itemActionTracker[TK, TV]) Get(item *btree.Item[TK, TV]) {
 			versionInDB: item.Version,
 		}
 	}
+	return nil
 }
 
-func (t *itemActionTracker[TK, TV]) Add(item *btree.Item[TK, TV]) {
+func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK, TV]) error {
 	t.items[item.Id] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
 			LockId: sop.NewUUID(),
@@ -90,18 +111,19 @@ func (t *itemActionTracker[TK, TV]) Add(item *btree.Item[TK, TV]) {
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
 	item.Version++
+	return nil
 }
 
-func (t *itemActionTracker[TK, TV]) Update(item *btree.Item[TK, TV]) {
+func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item[TK, TV]) error {
 	v, ok := t.items[item.Id]
 	if ok {
 		if v.Action == addAction {
-			return
+			return nil
 		}
 		v.lockRecord.Action = updateAction
 		v.item = item
 		t.items[item.Id] = v
-		return
+		return nil
 	}
 	t.items[item.Id] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
@@ -113,12 +135,13 @@ func (t *itemActionTracker[TK, TV]) Update(item *btree.Item[TK, TV]) {
 	}
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
 	item.Version++
+	return nil
 }
 
-func (t *itemActionTracker[TK, TV]) Remove(item *btree.Item[TK, TV]) {
+func (t *itemActionTracker[TK, TV]) Remove(ctx context.Context, item *btree.Item[TK, TV]) error {
 	if v, ok := t.items[item.Id]; ok && v.Action == addAction {
 		delete(t.items, item.Id)
-		return
+		return nil
 	}
 	t.items[item.Id] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
@@ -128,6 +151,7 @@ func (t *itemActionTracker[TK, TV]) Remove(item *btree.Item[TK, TV]) {
 		item:        item,
 		versionInDB: item.Version,
 	}
+	return nil
 }
 
 func (t *itemActionTracker[TK, TV]) hasTrackedItems() bool {

@@ -32,7 +32,9 @@ type Item[TK Comparable, TV any] struct {
 	Value *TV
 	// Version is used for conflict resolution among (in-flight) transactions.
 	Version         int
-	valueNeedsFetch bool
+	// flag that tells B-Tree whether value data needs fetching or not.
+	// Applicable only for B-Tree where 'IsValueDataInNodeSegment' is false use-case.
+	ValueNeedsFetch bool
 }
 
 func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
@@ -509,7 +511,9 @@ func (node *Node[TK, TV]) moveToPrevious(ctx context.Context, btree *Btree[TK, T
 func (node *Node[TK, TV]) fixVacatedSlot(ctx context.Context, btree *Btree[TK, TV]) error {
 	position := btree.currentItemRef.getNodeItemIndex()
 	deletedItem := node.Slots[position]
-	btree.storeInterface.ItemActionTracker.Remove(deletedItem)
+	if err := btree.storeInterface.ItemActionTracker.Remove(ctx, deletedItem); err != nil {
+		return err
+	}
 	// If there are more than 1 items in slot then we move the items 1 slot to omit deleted item slot.
 	if node.Count > 1 {
 		if position < node.Count-1 {

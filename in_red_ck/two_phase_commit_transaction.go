@@ -447,9 +447,6 @@ func (t *transaction) rollback(ctx context.Context) error {
 
 func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
 	for i := range t.btreesBackend {
-		if t.btreesBackend[i].getStoreInfo().IsValueDataInNodeSegment || t.btreesBackend[i].getStoreInfo().IsValueDataActivelyPersisted {
-			continue
-		}
 		if err := t.btreesBackend[i].commitTrackedItemsValues(ctx); err != nil {
 			return err
 		}
@@ -458,9 +455,6 @@ func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
 }
 func (t *transaction) rollbackTrackedItemsValues(ctx context.Context) error {
 	for i := range t.btreesBackend {
-		if t.btreesBackend[i].getStoreInfo().IsValueDataInNodeSegment || t.btreesBackend[i].getStoreInfo().IsValueDataActivelyPersisted {
-			continue
-		}
 		if err := t.btreesBackend[i].rollbackTrackedItemsValues(ctx); err != nil {
 			return err
 		}
@@ -469,9 +463,6 @@ func (t *transaction) rollbackTrackedItemsValues(ctx context.Context) error {
 }
 func (t *transaction) deleteTrackedItemsValues(ctx context.Context) error {
 	for i := range t.btreesBackend {
-		if t.btreesBackend[i].getStoreInfo().IsValueDataInNodeSegment || t.btreesBackend[i].getStoreInfo().IsValueDataActivelyPersisted {
-			continue
-		}
 		if err := t.btreesBackend[i].deleteInactiveTrackedItemsValues(ctx); err != nil {
 			return err
 		}
