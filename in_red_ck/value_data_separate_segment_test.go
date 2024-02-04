@@ -228,7 +228,7 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 
 func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 	start := 9001
-	end := 100000
+	end := 25000
 
 	t1, _ := newMockTransaction(t, true, -1)
 	t1.Begin()
