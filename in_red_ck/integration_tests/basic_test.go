@@ -60,7 +60,11 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, _ := in_red_ck.NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
+	b3, err := in_red_ck.NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return

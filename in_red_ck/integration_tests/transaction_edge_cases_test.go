@@ -125,8 +125,11 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	// Commit t1 & t2.
 	err1 := t1.Commit(ctx)
 	err2 := t2.Commit(ctx)
-	if err1 != nil || err2 != nil {
-		t.Error("got = commit failure, want = both commit success.")
+	if err1 != nil {
+		t.Error(err1)
+	}
+	if err2 != nil {
+		t.Error(err2)
 	}
 }
 

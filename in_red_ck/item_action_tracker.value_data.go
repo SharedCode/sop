@@ -72,12 +72,14 @@ func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx 
 			cachedItem.item.Value = cachedItem.inflightItemValue
 			cachedItem.inflightItemValue = nil
 			cachedItem.item.ValueNeedsFetch = false
-			cachedItem.item.Id = itemId
-			t.items[itemId] = cachedItem
 			if t.storeInfo.IsValueDataGloballyCached {
 				t.redisCache.Delete(ctx, t.formatKey(cachedItem.item.Id.String()))
 			}
 			itemsForDelete.Blobs = append(itemsForDelete.Blobs, cachedItem.item.Id)
+
+			// Restore the Item Id now that the temp got added for deletion.
+			cachedItem.item.Id = itemId
+			t.items[itemId] = cachedItem
 			continue
 		}
 	}
