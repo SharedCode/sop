@@ -70,7 +70,7 @@ func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *btree.StoreInf
 // Get			Update		ForUpdate
 
 func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK, TV]) error {
-	if v, ok := t.items[item.Id]; !ok || v.item.ValueNeedsFetch {
+	if val, ok := t.items[item.Id]; !ok || val.item.ValueNeedsFetch {
 		if item.Value == nil && item.ValueNeedsFetch {
 			var v TV
 			if t.storeInfo.IsValueDataGloballyCached {
@@ -133,6 +133,9 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 		v.lockRecord.Action = updateAction
 		v.item = item
 		t.items[item.Id] = v
+		if item.Version == v.versionInDB {
+			item.Version++
+		}
 		return nil
 	}
 	t.items[item.Id] = cacheItem[TK, TV]{
