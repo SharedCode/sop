@@ -9,16 +9,13 @@ import (
 // Add Test_ prefix if you want to run this test.
 // It drops the blob & registry tables of the B-Tree, thus, the test was removed from the set.
 func DeleteBTree(t *testing.T) {
-	if err := in_red_ck.RemoveBtree(ctx, "fooStore"); err != nil {
-		t.Error(err)
+	tableList := []string{
+		"fooStore", "persondb", "twophase", "twophase2", "twophase3",
+		"twophase22", "persondb7", "persondb77", "person2db", "barStore",
 	}
-	if err := in_red_ck.RemoveBtree(ctx, "persondb"); err != nil {
-		t.Error(err)
-	}
-	if err := in_red_ck.RemoveBtree(ctx, "twophase"); err != nil {
-		t.Error(err)
-	}
-	if err := in_red_ck.RemoveBtree(ctx, "twophase2"); err != nil {
-		t.Error(err)
+	for _, tn := range tableList {
+		if err := in_red_ck.RemoveBtree(ctx, tn); err != nil {
+			t.Error(err)
+		}	
 	}
 }

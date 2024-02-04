@@ -58,8 +58,14 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // leafLoadBalancing - true means leaf load balancing feature is enabled, false otherwise.
 // description - (optional) description about the store.
 // t - transaction that the instance will participate in.
+
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
 	isValueDataInNodeSegment bool, leafLoadBalancing bool, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
+	s := btree.NewStoreInfo(name, slotLength, isUnique, isValueDataInNodeSegment, leafLoadBalancing, desciption)
+	return NewBtreeExt[TK, TV](ctx, s.Name, s.SlotLength, s.IsUnique, s.IsValueDataInNodeSegment,
+		s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached, s.LeafLoadBalancing, s.Description, t)
+}
+func NewBtreeExt[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("Transaction 't' parameter can't be nil")
 	}
@@ -75,7 +81,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slo
 		trans.Rollback(ctx)
 		return nil, err
 	}
-	ns := btree.NewStoreInfo(name, slotLength, isUnique, true, leafLoadBalancing, desciption)
+	ns := btree.NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption)
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeId.IsNil() {
@@ -105,7 +111,7 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreIn
 	si := StoreInterface[TK, TV]{}
 
 	// Assign the item action tracker frontend and backend bits.
-	iat := newItemActionTracker[TK, TV]()
+	iat := newItemActionTracker[TK, TV](s, trans.redisCache, trans.blobStore)
 	si.ItemActionTracker = iat
 
 	// Assign the node repository frontend and backend bits.
@@ -119,6 +125,8 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreIn
 		trans.Rollback(ctx)
 		return nil, err
 	}
+
+	// B-Tree backend processing(of commit & rollback) required objects.
 	b3b := btreeBackend{
 		// Node blob repository.
 		nodeRepository: nrw.realNodeRepository,
@@ -127,7 +135,11 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreIn
 		// Needed when applying the "delta" to the Store Count field.
 		getStoreInfo: func() *btree.StoreInfo { return b3.StoreInfo },
 
-		// Needed for tracked items' lock management.
+		// Needed for tracked items' lock & "value data" in separate segments management.
+		commitTrackedItemsValues: iat.commitTrackedValuesToSeparateSegments,
+		rollbackTrackedItemsValues: iat.rollbackTrackedValuesInSeparateSegments,
+		deleteInactiveTrackedItemsValues: iat.deleteInactiveTrackedValuesInSeparateSegments,
+
 		hasTrackedItems:    iat.hasTrackedItems,
 		checkTrackedItems:  iat.checkTrackedItems,
 		lockTrackedItems:   iat.lock,
@@ -153,7 +165,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 		b3.StoreInfo.Count = storeInfo[0].Count
 		b3.StoreInfo.RootNodeId = storeInfo[0].RootNodeId
 
-		for itemId, ci := range b3ModifiedItems {
+		for _, ci := range b3ModifiedItems {
 			if ci.Action == addAction {
 				if ok, err := b3.Add(ctx, ci.item.Key, *ci.item.Value); !ok || err != nil {
 					if err != nil {
@@ -163,7 +175,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 				}
 				continue
 			}
-			if ok, err := b3.FindOneWithId(ctx, ci.item.Key, itemId); !ok || err != nil {
+			if ok, err := b3.FindOneWithId(ctx, ci.item.Key, ci.item.Id); !ok || err != nil {
 				if err != nil {
 					return err
 				}

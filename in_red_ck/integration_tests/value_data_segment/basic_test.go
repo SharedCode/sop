@@ -1,4 +1,4 @@
-package integration_tests
+package value_data_segment
 
 import (
 	"context"
@@ -36,7 +36,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_ck.NewBtree[int, string](ctx, "barStore", 8, false, true, true, "", trans)
+	b3, err := in_red_ck.NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
 	if err != nil {
 		t.Error(err)
 		return
@@ -45,8 +45,8 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
-	if _, err := in_red_ck.OpenBtree[int, string](ctx, "barStore22", trans); err == nil {
-		t.Logf("OpenBtree('barStore', trans) failed, got nil want error.")
+	if _, err := in_red_ck.OpenBtree[int, string](ctx, "fooStore22", trans); err == nil {
+		t.Logf("OpenBtree('fooStore', trans) failed, got nil want error.")
 	}
 }
 
@@ -60,7 +60,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_ck.NewBtree[int, string](ctx, "barStore", 8, false, true, true, "", trans)
+	b3, err := in_red_ck.NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
 	if err != nil {
 		t.Error(err)
 		return

@@ -29,20 +29,27 @@ type TwoPhaseCommitTransaction interface {
 }
 
 type btreeBackend struct {
-	nodeRepository     *nodeRepository
+	nodeRepository *nodeRepository
+	// Following are function pointers because BTree is generic typed for Key & Value,
+	// and these functions being pointers allow the backend to deal without requiring knowing data types.
 	refetchAndMerge    func(ctx context.Context) error
 	getStoreInfo       func() *btree.StoreInfo
 	hasTrackedItems    func() bool
-	checkTrackedItems  func(ctx context.Context, itemRedisCache redis.Cache) error
-	lockTrackedItems   func(ctx context.Context, itemRedisCache redis.Cache, duration time.Duration) error
-	unlockTrackedItems func(ctx context.Context, itemRedisCache redis.Cache) error
+	checkTrackedItems  func(ctx context.Context) error
+	lockTrackedItems   func(ctx context.Context, duration time.Duration) error
+	unlockTrackedItems func(ctx context.Context) error
+
+	// Manage tracked items' values in separate segments.
+	commitTrackedItemsValues   func(ctx context.Context) error
+	rollbackTrackedItemsValues func(ctx context.Context) error
+	deleteInactiveTrackedItemsValues func(ctx context.Context) error
 }
 
 type transaction struct {
 	// B-Tree instances, & their backend bits, managed within the transaction session.
 	btreesBackend []btreeBackend
-	// Needed by NodeRepository for Node data merging to the backend storage systems.
-	nodeBlobStore   cas.BlobStore
+	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
+	blobStore       cas.BlobStore
 	redisCache      redis.Cache
 	storeRepository cas.StoreRepository
 	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
@@ -81,8 +88,8 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 		storeRepository: cas.NewStoreRepository(),
 		registry:        cas.NewRegistry(),
 		redisCache:      redis.NewClient(),
-		nodeBlobStore:   cas.NewBlobStore(),
-		logger:          newTransactionLogger(),
+		blobStore:       cas.NewBlobStore(),
+		logger:          newTransactionLogger(nil),
 		phaseDone:       -1,
 	}, nil
 }
@@ -134,6 +141,30 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
+		if _, ok := err.(*cas.UpdateAllOrNothingError); ok {
+			startTime := now()
+			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
+			// until it succeeds or timeout.
+			for {
+				if err := t.timedOut(ctx, startTime); err != nil {
+					break
+				}
+				if rerr := t.rollback(ctx); rerr != nil {
+					return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
+				}
+				log.Warn(err.Error() + ", will retry")
+
+				randomSleep(ctx)
+				if err = t.phase1Commit(ctx); err != nil {
+					break
+				}
+				if err = t.phase2Commit(ctx); err == nil {
+					return nil
+				} else if _, ok := err.(*cas.UpdateAllOrNothingError); !ok {
+					break
+				}
+			}
+		}
 		if rerr := t.rollback(ctx); rerr != nil {
 			return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
@@ -141,6 +172,8 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 	}
 	return nil
 }
+
+
 
 func (t *transaction) Rollback(ctx context.Context) error {
 	if t.phaseDone == 2 {
@@ -172,6 +205,13 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 	return nil
 }
 
+// Sleep in random milli-seconds to allow different conflicting (Node modifying) transactions
+// to retry on different times, thus, increasing chance to succeed one after the other.
+func randomSleep(ctx context.Context) {
+	sleepTime := sleepBeforeRefetchBase + (1+rand.Intn(5))*100
+	sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
+}
+
 // sleep with context.
 func sleep(ctx context.Context, sleepTime time.Duration) {
 	sleep, cancel := context.WithTimeout(ctx, sleepTime)
@@ -186,7 +226,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return nil
 	}
 	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
-	t.logger.log(lockTrackedItems)
+	t.logger.log(ctx, lockTrackedItems, nil)
 	if err := t.lockTrackedItems(ctx); err != nil {
 		return err
 	}
@@ -221,27 +261,34 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 
+		t.logger.enqueue(commitTrackedItemsValues, nil)
+		if err := t.commitTrackedItemsValues(ctx); err != nil {
+			return err
+		}
+
 		successful = true
+
 		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
 		// has to do merging & conflict resolution. Add is simple upsert.
 		updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
 
 		// TODO: parallelize these tasks.
 		// Commit new root nodes.
-		t.logger.log(commitNewRootNodes)
+		t.logger.enqueue(commitNewRootNodes, nil)
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
 			return err
 		}
 
 		if successful {
 			// Check for conflict on fetched items.
+			t.logger.enqueue(areFetchedItemsIntact, nil)
 			if successful, err = t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
 				return err
 			}
 		}
 		if successful {
 			// Commit updated nodes.
-			t.logger.log(commitUpdatedNodes)
+			t.logger.enqueue(commitUpdatedNodes, nil)
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
 			}
@@ -249,7 +296,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Only do commit removed nodes if successful so far.
 		if successful {
 			// Commit removed nodes.
-			t.logger.log(commitRemovedNodes)
+			t.logger.enqueue(commitRemovedNodes, nil)
 			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
 				return err
 			}
@@ -257,11 +304,10 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		if !successful {
 			// Rollback partial changes.
 			t.rollback(ctx)
+			// Clear enqueued logs as we rolled back.
+			t.logger.clearQueue()
 
-			// Sleep in random seconds to allow different conflicting (Node modifying) transactions
-			// (in-flight) to retry on different times.
-			sleepTime := sleepBeforeRefetchBase + (1+rand.Intn(5))*100
-			sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
+			randomSleep(ctx)
 
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
 				return err
@@ -272,21 +318,24 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 	}
 
+	// Persist logs in the queue.
+	t.logger.saveQueue(ctx)
+
 	// TODO: parallelize these tasks as well.
 	// Commit added nodes.
-	t.logger.log(commitAddedNodes)
+	t.logger.log(ctx, commitAddedNodes, nil)
 	if err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
 		return err
 	}
 
 	// Commit stores update(CountDelta apply).
-	t.logger.log(commitStoreInfo)
+	t.logger.log(ctx, commitStoreInfo, nil)
 	if err := t.commitStores(ctx); err != nil {
 		return err
 	}
 
 	// Mark that store info commit succeeded, so it can get rolled back if rollback occurs.
-	t.logger.log(beforeFinalize)
+	t.logger.log(ctx, beforeFinalize, nil)
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes. See phase2Commit for actual change.
 	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(ctx, updatedNodesHandles)
@@ -313,14 +362,13 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 }
 
 func (t *transaction) phase2Commit(ctx context.Context) error {
-	if !t.hasTrackedItems() {
-		return nil
-	}
 	// Finalize the commit, it is the only all or nothing action in the commit,
 	// and on registry (very small) records only.
-	t.logger.log(finalizeCommit)
+	if err := t.logger.log(ctx, finalizeCommit, nil); err != nil {
+		return err
+	}
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
-		return fmt.Errorf("Updated & removed nodes commit failed, details: %v", err)
+		return err
 	}
 
 	unusedNodeIds := make([]cas.BlobsPayload[sop.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
@@ -337,7 +385,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	}
 
 	// Package the logically deleted Ids for actual physical deletes.
-	deletedIds := make([]cas.RegistryPayload[sop.UUID], len(t.removedNodeHandles), len(t.updatedNodeHandles)+len(t.removedNodeHandles))
+	deletedIds := make([]cas.RegistryPayload[sop.UUID], len(t.removedNodeHandles))
 	for i := range t.removedNodeHandles {
 		deletedIds[i].RegistryTable = t.removedNodeHandles[i].RegistryTable
 		deletedIds[i].IDs = make([]sop.UUID, len(t.removedNodeHandles[i].IDs))
@@ -352,15 +400,102 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		}
 		unusedNodeIds = append(unusedNodeIds, blobsIds)
 	}
-	// TODO: parallelize deleteEntries & unlockTrackeditems.
+
+	// TODO: finalize error handling, e.g. - if err occurred, don't remove logs.
+
+	t.logger.log(ctx, deleteEntries, []interface{}{deletedIds, unusedNodeIds})
 	t.deleteEntries(ctx, deletedIds, unusedNodeIds)
 
+	t.logger.log(ctx, deleteTrackedItemsValues, nil)
+	t.deleteTrackedItemsValues(ctx)
+
+	// Commit is considered completed and the logs are not needed anymore.
+	t.logger.removeLogs(ctx)
 	// Unlock the items in Redis.
-	t.logger.log(unlockTrackedItems)
 	if err := t.unlockTrackedItems(ctx); err != nil {
 		// Just log as warning any error as at this point, commit is already finalized.
 		// Any partial changes before failure in unlock tracked items will just expire in Redis.
 		log.Warn(err.Error())
+	}
+	return nil
+}
+
+func (t *transaction) rollback(ctx context.Context) error {
+	if t.logger.committedState == unlockTrackedItems {
+		// This state should not be reached and rollback invoked, but return an error about it, in case.
+		return fmt.Errorf("Transaction got committed, 'can't rollback it")
+	}
+
+	updatedNodes, removedNodes, addedNodes, _, rootNodes := t.classifyModifiedNodes()
+
+	var lastErr error
+	if t.logger.committedState == finalizeCommit {
+		// do nothing as the function failed, nothing to undo.
+	}
+	if t.logger.committedState > commitStoreInfo {
+		if err := t.rollbackStores(ctx); err != nil {
+			lastErr = err
+		}
+	}
+	if t.logger.committedState > commitAddedNodes {
+		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, addedNodes); err != nil {
+			lastErr = err
+		}
+	}
+	if t.logger.committedState > commitRemovedNodes {
+		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
+			lastErr = err
+		}
+	}
+	if t.logger.committedState > commitUpdatedNodes {
+		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
+			lastErr = err
+		}
+	}
+	if t.logger.committedState > commitNewRootNodes {
+		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, rootNodes); err != nil {
+			lastErr = err
+		}
+	}
+	if t.logger.committedState >= commitTrackedItemsValues {
+		if err := t.btreesBackend[0].rollbackTrackedItemsValues(ctx); err != nil {
+			lastErr = err
+		}
+	}
+	if t.logger.committedState >= lockTrackedItems {
+		if err := t.unlockTrackedItems(ctx); err != nil {
+			lastErr = err
+		}
+	}
+	// Transaction got rolled back, no need for the logs.
+	t.logger.removeLogs(ctx)
+	// Rewind the transaction log in case retry will check it.
+	t.logger.log(ctx, unknown, nil)
+
+	return lastErr
+}
+
+func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
+	for i := range t.btreesBackend {
+		if err := t.btreesBackend[i].commitTrackedItemsValues(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (t *transaction) rollbackTrackedItemsValues(ctx context.Context) error {
+	for i := range t.btreesBackend {
+		if err := t.btreesBackend[i].rollbackTrackedItemsValues(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (t *transaction) deleteTrackedItemsValues(ctx context.Context) error {
+	for i := range t.btreesBackend {
+		if err := t.btreesBackend[i].deleteInactiveTrackedItemsValues(ctx); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -387,11 +522,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 			return nil
 		}
 
-		// Sleep in random seconds to allow different conflicting (Node modifying) transactions
-		// (in-flight) to retry on different times.
-		sleepTime := sleepBeforeRefetchBase + (1+rand.Intn(5))*100
-		sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
-
+		randomSleep(ctx)
 		// Recreate the fetches on latest committed nodes & check if fetched Items are unchanged.
 		if err := t.refetchAndMergeModifications(ctx); err != nil {
 			return err
@@ -479,6 +610,7 @@ func (t *transaction) commitStores(ctx context.Context) error {
 		s2 := *store
 		// Compute the count delta so Store Repository can reconcile for commit.
 		s2.CountDelta = s2.Count - t.btreesBackend[i].nodeRepository.count
+		s2.Timestamp = nowUnixMilli()
 		stores[i] = s2
 	}
 	return t.storeRepository.Update(ctx, stores...)
@@ -507,7 +639,7 @@ func (t *transaction) hasTrackedItems() bool {
 // Check Tracked items for conflict, this pass is to remove any race condition.
 func (t *transaction) checkTrackedItems(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
-		if err := s.checkTrackedItems(ctx, t.redisCache); err != nil {
+		if err := s.checkTrackedItems(ctx); err != nil {
 			return err
 		}
 	}
@@ -516,7 +648,7 @@ func (t *transaction) checkTrackedItems(ctx context.Context) error {
 
 func (t *transaction) lockTrackedItems(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
-		if err := s.lockTrackedItems(ctx, t.redisCache, t.maxTime); err != nil {
+		if err := s.lockTrackedItems(ctx, t.maxTime); err != nil {
 			return err
 		}
 	}
@@ -526,7 +658,7 @@ func (t *transaction) lockTrackedItems(ctx context.Context) error {
 func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	var lastErr error
 	for _, s := range t.btreesBackend {
-		if err := s.unlockTrackedItems(ctx, t.redisCache); err != nil {
+		if err := s.unlockTrackedItems(ctx); err != nil {
 			lastErr = err
 		}
 	}
@@ -562,7 +694,7 @@ func (t *transaction) deleteEntries(ctx context.Context,
 				if !ok {
 					log.Info("Kafka Enqueue is still being sampled, deleting the leftover unused nodes.")
 				}
-				t.nodeBlobStore.Remove(ctx, unusedNodeIds...)
+				t.blobStore.Remove(ctx, unusedNodeIds...)
 			} else {
 				log.Info(fmt.Sprintf("Kafka Enqueue passed sampling, expecting consumer(@topic:%s) to delete the leftover unused nodes.", kafka.GetConfig().Topic))
 			}
@@ -572,57 +704,9 @@ func (t *transaction) deleteEntries(ctx context.Context,
 				log.Warn("DeleteService is not enabled, deleting the leftover unused nodes.")
 				warnDeleteServiceMissing = false
 			}
-			t.nodeBlobStore.Remove(ctx, unusedNodeIds...)
+			t.blobStore.Remove(ctx, unusedNodeIds...)
 		}
 	}
 	// Delete from registry the requested entries.
 	t.registry.Remove(ctx, deletedRegistryIds...)
-}
-
-func (t *transaction) rollback(ctx context.Context) error {
-	if t.logger.committedState == unlockTrackedItems {
-		// This state should not be reached and rollback invoked, but return an error about it, in case.
-		return fmt.Errorf("Transaction got committed, 'can't rollback it")
-	}
-
-	updatedNodes, removedNodes, addedNodes, _, rootNodes := t.classifyModifiedNodes()
-
-	var lastErr error
-	if t.logger.committedState == finalizeCommit {
-		// do nothing as the function failed, nothing to undo.
-	}
-	if t.logger.committedState > commitStoreInfo {
-		if err := t.rollbackStores(ctx); err != nil {
-			lastErr = err
-		}
-	}
-	if t.logger.committedState > commitAddedNodes {
-		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, addedNodes); err != nil {
-			lastErr = err
-		}
-	}
-	if t.logger.committedState > commitRemovedNodes {
-		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
-			lastErr = err
-		}
-	}
-	if t.logger.committedState > commitUpdatedNodes {
-		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
-			lastErr = err
-		}
-	}
-	if t.logger.committedState > commitNewRootNodes {
-		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, rootNodes); err != nil {
-			lastErr = err
-		}
-	}
-	if t.logger.committedState >= lockTrackedItems {
-		if err := t.unlockTrackedItems(ctx); err != nil {
-			lastErr = err
-		}
-	}
-	// Rewind the transaction log in case retry will check it.
-	t.logger.log(unknown)
-
-	return lastErr
 }

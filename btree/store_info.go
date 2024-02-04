@@ -26,7 +26,7 @@ type StoreInfo struct {
 	Count int64
 	// Used internally by SOP. Should be ignored when persisted in the backend.
 	CountDelta int64 `json:"-"`
-	// Timestamp in milliseconds.
+	// Add or update timestamp in milliseconds.
 	Timestamp int64
 	// Is marked deleted or not.
 	IsDeleted bool
@@ -36,10 +36,30 @@ type StoreInfo struct {
 	// If true, node load will be balanced by pushing items to sibling nodes if there are vacant slots,
 	// otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
 	LeafLoadBalancing bool
+
+	// If true, each Btree Add(..) method call will persist the item value's data to another partition, then on commit,
+	// it will then be a very quick action as item(s) values' data were already saved on backend.
+	// This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
+	IsValueDataActivelyPersisted bool
+	// If true, the Value data will be cached in Redis, otherwise not. This is used when 'IsValueDataInNodeSegment'
+	// is set to false. Typically set to false if 'IsValueDataActivelyPersisted' is true, as value data is expected 
+	// to be huge rendering caching it in Redis to affect Redis performance due to the drastic size of data per item.
+	IsValueDataGloballyCached bool
 }
 
-// NewStoreInfo instantiates a new Store.
+// NewStoreInfo instantiates a new Store, defaults extended parameters to typical use-case values. Please use NewStoreInfoExtended(..) function
+// below for option to set including the extended parameters.
 func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, leafLoadBalancing bool, desciption string) *StoreInfo {
+	isValueDataActivelyPersisted := false
+	isValueDataGloballyCached := false
+	if !isValueDataInNodeSegment {
+		isValueDataGloballyCached = true
+	}
+	return NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption)
+}
+
+// NewStoreInfoExt instantiates a new Store and offers more parameters configurable to your desire.
+func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if slotLength%2 != 0 {
 		slotLength--
@@ -51,7 +71,7 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 
 	// auto generate table names based off of store name.
 	registryTableName := FormatRegistryTable(name)
-	blobTable := FormatBlobTable(name)
+	blobTableName := FormatBlobTable(name)
 
 	const maxSlotLength = 10000
 
@@ -61,17 +81,15 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 		slotLength = maxSlotLength
 	}
 
-	// This line will be removed when value data persistence on a separate partition(a.k.a. segment) is supported.
-	// For now, always set to true as it is saved in the node segment always, in this version release.
-	isValueDataInNodeSegment = true
-
 	return &StoreInfo{
 		Name:                     name,
 		SlotLength:               slotLength,
 		IsUnique:                 isUnique,
 		IsValueDataInNodeSegment: isValueDataInNodeSegment,
+		IsValueDataActivelyPersisted: isValueDataActivelyPersisted,
+		IsValueDataGloballyCached: isValueDataGloballyCached,
 		RegistryTable:            registryTableName,
-		BlobTable:                blobTable,
+		BlobTable:                blobTableName,
 		Description:              desciption,
 		LeafLoadBalancing:        leafLoadBalancing,
 	}
@@ -102,5 +120,7 @@ func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 		s.BlobTable == b.BlobTable &&
 		s.RegistryTable == b.RegistryTable &&
 		s.IsValueDataInNodeSegment == b.IsValueDataInNodeSegment &&
+		s.IsValueDataActivelyPersisted == b.IsValueDataActivelyPersisted &&
+		s.IsValueDataGloballyCached == b.IsValueDataGloballyCached &&
 		s.LeafLoadBalancing == b.LeafLoadBalancing
 }

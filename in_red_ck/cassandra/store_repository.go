@@ -117,7 +117,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	// Lock all keys.
 	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
 		if err := redis.Lock(ctx, duration, lockKeys...); err != nil {
-			log.Error(err.Error() + " will retry")
+			log.Warn(err.Error() + ", will retry")
 			return retry.RetryableError(err)
 		}
 		return nil
@@ -251,7 +251,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	// Delete the store records in Redis.
 	for i := range names {
 		// Tolerate Redis cache failure.
-		if err := sr.redisCache.Delete(ctx, names[i]); err != nil {
+		if err := sr.redisCache.Delete(ctx, names[i]); err != nil && !redis.KeyNotFound(err) {
 			log.Error("Registry Add (redis setstruct) failed, details: %v", err)
 		}
 	}

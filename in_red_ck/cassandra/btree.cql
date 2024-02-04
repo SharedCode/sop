@@ -45,3 +45,18 @@ create table foo_r(
     wip_ts bigint,
     is_del boolean
 );
+
+-- Time Series table for transaction log.
+create table t_by_day(
+    date text PRIMARY KEY,
+    -- Transaction ID.
+    tid UUID
+);
+
+-- Transaction Log table.
+create table t_log(
+    id UUID,
+    c_f text,
+    c_f_p blob,
+    PRIMARY KEY(id, c_f)
+);

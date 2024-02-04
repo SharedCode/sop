@@ -1,54 +1,45 @@
-package integration_tests
+package in_red_ck
 
 import (
-	"cmp"
 	"fmt"
 	"testing"
-
-	"github.com/SharedCode/sop/in_red_ck"
 )
 
-type PersonKey struct {
-	Firstname string
-	Lastname  string
-}
+func Test_ValueDataInSeparateSegment_Rollback(t *testing.T) {
+	trans, _ := newMockTransaction(t, true, -1)
+	trans.Begin()
 
-type Person struct {
-	Gender string
-	Email  string
-	Phone  string
-	SSN    string
-}
+	b3, _ := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
 
-func newPerson(fname string, lname string, gender string, email string, phone string) (PersonKey, Person) {
-	return PersonKey{
-			Firstname: fname,
-			Lastname:  lname,
-		},
-		Person{
-			Gender: gender,
-			Email:  email,
-			Phone:  phone,
-			SSN:    "1234",
-		}
-}
-func (x PersonKey) Compare(other interface{}) int {
-	y := other.(PersonKey)
-	i := cmp.Compare[string](x.Lastname, y.Lastname)
-	if i != 0 {
-		return i
+	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
+	b3.Add(ctx, pk, p)
+
+	trans.Commit(ctx)
+
+	trans, _ = newMockTransaction(t, true, -1)
+	trans.Begin()
+
+	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
+	b3.Update(ctx, pk, p)
+
+	trans.Rollback(ctx)
+
+	trans, _ = newMockTransaction(t, false, -1)
+	trans.Begin()
+	b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
+	pk, p = newPerson("joe", "shroeger", "male", "email", "phone")
+
+	b3.FindOne(ctx, pk, false)
+	v, _ := b3.GetCurrentValue(ctx)
+
+	if v.Email != "email" {
+		t.Errorf("Rollback did not restore person record, email got = %s, want = 'email'.", v.Email)
 	}
-	return cmp.Compare[string](x.Firstname, y.Firstname)
+	trans.Commit(ctx)
 }
 
-const nodeSlotLength = 500
-const batchSize = 200
-
-const tableName1 = "person2db"
-const tableName2 = "twophase22"
-
-func Test_SimpleAddPerson(t *testing.T) {
-	trans, err := in_red_ck.NewTransaction(true, -1)
+func Test_ValueDataInSeparateSegment_SimpleAddPerson(t *testing.T) {
+	trans, err := newMockTransaction(t, true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -56,7 +47,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", trans)
+	b3, err := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -86,19 +77,19 @@ func Test_SimpleAddPerson(t *testing.T) {
 	}
 }
 
-func Test_TwoTransactionsWithNoConflict(t *testing.T) {
-	trans, err := in_red_ck.NewTransaction(true, -1)
+func Test_ValueDataInSeparateSegment_TwoTransactionsWithNoConflict(t *testing.T) {
+	trans, err := newMockTransaction(t, true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
-	trans2, err := in_red_ck.NewTransaction(true, -1)
+	trans2, err := newMockTransaction(t, true, -1)
 
 	trans.Begin()
 	trans2.Begin()
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
-	b3, err := in_red_ck.OpenBtree[PersonKey, Person](ctx, tableName1, trans)
+	b3, err := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -108,7 +99,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		return
 	}
 
-	b32, err := in_red_ck.OpenBtree[PersonKey, Person](ctx, tableName1, trans2)
+	b32, err := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -126,14 +117,14 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	}
 }
 
-func Test_AddAndSearchManyPersons(t *testing.T) {
-	trans, err := in_red_ck.NewTransaction(true, -1)
+func Test_ValueDataInSeparateSegment_AddAndSearchManyPersons(t *testing.T) {
+	trans, err := newMockTransaction(t, true, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
 	trans.Begin()
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", trans)
+	b3, err := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -155,7 +146,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	trans, err = in_red_ck.NewTransaction(false, -1)
+	trans, err = newMockTransaction(t, false, -1)
 	if err != nil {
 		t.Errorf(err.Error())
 		t.Fail()
@@ -168,7 +159,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	b3, err = in_red_ck.OpenBtree[PersonKey, Person](ctx, tableName1, trans)
+	b3, err = OpenBtree[PersonKey, Person](ctx, "persondb7", trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -185,13 +176,13 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 }
 
 // This test took about 3 minutes from empty to finish in my laptop.
-func Test_VolumeAddThenSearch(t *testing.T) {
+func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1, _ := newMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+	b3, _ := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
 
 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
 	// for scheduled batch deletes.
@@ -205,13 +196,12 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_ck.NewTransaction(true, -1)
+			t1, _ = newMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+			b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
 		}
 	}
 
-	// Search them all. Searching 90,000 items just took few seconds in my laptop.
 	for i := start; i <= end; i++ {
 		lname := fmt.Sprintf("reepper%d", i)
 		pk, _ := newPerson("jack", lname, "male", "email very very long long long", "phone123")
@@ -229,21 +219,20 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_ck.NewTransaction(false, -1)
+			t1, _ = newMockTransaction(t, false, -1)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+			b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
 		}
 	}
 }
 
-// Add prefix Test_ if wanting to run this test.
-func VolumeDeletes(t *testing.T) {
+func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1, _ := newMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+	b3, _ := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
 
 	// Populating 90,000 items took about few minutes, did not use Kafka based delete service.
 	for i := start; i <= end; i++ {
@@ -259,22 +248,21 @@ func VolumeDeletes(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_ck.NewTransaction(true, -1)
+			t1, _ = newMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+			b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
 		}
 	}
 }
 
 // Mixed CRUD operations.
-// Add prefix Test_ if wanting to run this test.
-func MixedOperations(t *testing.T) {
+func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
 
-	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1, _ := newMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+	b3, _ := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
 
 	lastNamePrefix := "zoltan"
 	firstName := "jack"
@@ -305,9 +293,9 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_ck.NewTransaction(true, -1)
+			t1, _ = newMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+			b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
 		}
 	}
 
@@ -341,51 +329,9 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_ck.NewTransaction(true, -1)
+			t1, _ = newMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+			b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
 		}
-	}
-}
-
-func Test_TwoPhaseCommitRolledback(t *testing.T) {
-	t1, _ := in_red_ck.NewTransaction(true, -1)
-	t1.Begin()
-
-	b3, _ := in_red_ck.NewBtree[int, string](ctx, tableName2, 8, false, true, true, "", t1)
-	originalCount := b3.Count()
-	b3.Add(ctx, 5000, "I am the value with 5000 key.")
-	b3.Add(ctx, 5001, "I am the value with 5001 key.")
-	b3.Add(ctx, 5000, "I am also a value with 5000 key.")
-	if b3.Count() != originalCount+3 {
-		t.Errorf("Count() failed, got %v, want %v", b3.Count(), originalCount+3)
-	}
-
-	twoPhase := t1.GetPhasedTransaction()
-
-	if err := twoPhase.Phase1Commit(ctx); err == nil {
-		twoPhase.Rollback(ctx)
-
-		t1, _ = in_red_ck.NewTransaction(true, -1)
-		t1.Begin()
-
-		b3, _ = in_red_ck.OpenBtree[int, string](ctx, tableName2, t1)
-		if b3.Count() != originalCount {
-			t.Errorf("Rollback Count() failed, got %v, want %v", b3.Count(), originalCount)
-		}
-	} else {
-		t.Errorf("No error expected, got %v", err)
-	}
-}
-
-func Test_IllegalBtreeStoreName(t *testing.T) {
-	t1, _ := in_red_ck.NewTransaction(true, -1)
-	t1.Begin()
-
-	if _, err := in_red_ck.NewBtree[int, string](ctx, "2phase", 8, false, true, true, "", t1); err == nil {
-		t.Error("NewBtree('2phase') failed, got nil, want err.")
-	}
-	if t1.HasBegun() {
-		t.Error("Transaction is not rolledback.")
 	}
 }
