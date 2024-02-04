@@ -31,7 +31,7 @@ type Item[TK Comparable, TV any] struct {
 	// otherwise it should point to the actual data and persisted in B-Tree Node segment together with the Key.
 	Value *TV
 	// Version is used for conflict resolution among (in-flight) transactions.
-	Version         int
+	Version int
 	// flag that tells B-Tree whether value data needs fetching or not.
 	// Applicable only for B-Tree where 'IsValueDataInNodeSegment' is false use-case.
 	ValueNeedsFetch bool

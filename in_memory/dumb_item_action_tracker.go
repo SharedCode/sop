@@ -1,6 +1,6 @@
 package in_memory
 
-import(
+import (
 	"context"
 	"github.com/SharedCode/sop/btree"
 )
@@ -13,10 +13,10 @@ func newDumbItemActionTracker[TK btree.Comparable, TV any]() btree.ItemActionTra
 
 // in-memory SOP does not track item actions, thus, do nothing for its ItemActionTracker.
 
-func (iat mt[TK, TV]) Add(ctx context.Context, item *btree.Item[TK, TV]) error   {
+func (iat mt[TK, TV]) Add(ctx context.Context, item *btree.Item[TK, TV]) error {
 	return nil
 }
-func (iat mt[TK, TV]) Get(ctx context.Context, item *btree.Item[TK, TV]) error   {
+func (iat mt[TK, TV]) Get(ctx context.Context, item *btree.Item[TK, TV]) error {
 	return nil
 }
 func (iat mt[TK, TV]) Update(ctx context.Context, item *btree.Item[TK, TV]) error {

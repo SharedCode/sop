@@ -22,40 +22,40 @@ const (
 	commitStoreInfo
 	beforeFinalize
 	finalizeCommit
-	deleteEntries
-	deleteTrackedItemsValues
+	deleteObsoleteEntries
+	deleteObsoleteTrackedItemsValues
 	unlockTrackedItems
 )
 
 var commitFunctionsStringLookup map[commitFunctions]string = map[commitFunctions]string{
-	lockTrackedItems:         "lockTrackedItems",
-	commitTrackedItemsValues: "commitTrackedItemsValues",
-	commitNewRootNodes:       "commitNewRootNodes",
-	areFetchedItemsIntact:    "areFetchedItemsIntact",
-	commitUpdatedNodes:       "commitUpdatedNodes",
-	commitRemovedNodes:       "commitRemovedNodes",
-	commitAddedNodes:         "commitAddedNodes",
-	commitStoreInfo:          "commitStoreInfo",
-	beforeFinalize:           "beforeFinalize",
-	finalizeCommit:           "finalizeCommit",
-	deleteEntries:            "deleteEntries",
-	deleteTrackedItemsValues: "deleteTrackedItemsValues",
-	unlockTrackedItems:       "unlockTrackedItems",
+	lockTrackedItems:                 "lockTrackedItems",
+	commitTrackedItemsValues:         "commitTrackedItemsValues",
+	commitNewRootNodes:               "commitNewRootNodes",
+	areFetchedItemsIntact:            "areFetchedItemsIntact",
+	commitUpdatedNodes:               "commitUpdatedNodes",
+	commitRemovedNodes:               "commitRemovedNodes",
+	commitAddedNodes:                 "commitAddedNodes",
+	commitStoreInfo:                  "commitStoreInfo",
+	beforeFinalize:                   "beforeFinalize",
+	finalizeCommit:                   "finalizeCommit",
+	deleteObsoleteEntries:            "deleteObsoleteEntries",
+	deleteObsoleteTrackedItemsValues: "deleteObsoleteTrackedItemsValues",
+	unlockTrackedItems:               "unlockTrackedItems",
 }
 var commitFunctionsLookup map[string]commitFunctions = map[string]commitFunctions{
-	"lockTrackedItems":         lockTrackedItems,
-	"commitTrackedItemsValues": commitTrackedItemsValues,
-	"commitNewRootNodes":       commitNewRootNodes,
-	"areFetchedItemsIntact":    areFetchedItemsIntact,
-	"commitUpdatedNodes":       commitUpdatedNodes,
-	"commitRemovedNodes":       commitRemovedNodes,
-	"commitAddedNodes":         commitAddedNodes,
-	"commitStoreInfo":          commitStoreInfo,
-	"beforeFinalize":           beforeFinalize,
-	"finalizeCommit":           finalizeCommit,
-	"deleteEntries":            deleteEntries,
-	"deleteTrackedItemsValues": deleteTrackedItemsValues,
-	"unlockTrackedItems":       unlockTrackedItems,
+	"lockTrackedItems":                 lockTrackedItems,
+	"commitTrackedItemsValues":         commitTrackedItemsValues,
+	"commitNewRootNodes":               commitNewRootNodes,
+	"areFetchedItemsIntact":            areFetchedItemsIntact,
+	"commitUpdatedNodes":               commitUpdatedNodes,
+	"commitRemovedNodes":               commitRemovedNodes,
+	"commitAddedNodes":                 commitAddedNodes,
+	"commitStoreInfo":                  commitStoreInfo,
+	"beforeFinalize":                   beforeFinalize,
+	"finalizeCommit":                   finalizeCommit,
+	"deleteObsoleteEntries":            deleteObsoleteEntries,
+	"deleteObsoleteTrackedItemsValues": deleteObsoleteTrackedItemsValues,
+	"unlockTrackedItems":               unlockTrackedItems,
 }
 
 type transactionLog struct {

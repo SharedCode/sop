@@ -16,6 +16,6 @@ func DeleteBTree(t *testing.T) {
 	for _, tn := range tableList {
 		if err := in_red_ck.RemoveBtree(ctx, tn); err != nil {
 			t.Error(err)
-		}	
+		}
 	}
 }
