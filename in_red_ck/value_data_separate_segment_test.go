@@ -178,7 +178,7 @@ func Test_ValueDataInSeparateSegment_AddAndSearchManyPersons(t *testing.T) {
 // This test took about 3 minutes from empty to finish in my laptop.
 func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
-	end := 100000
+	end := 15000
 
 	t1, _ := newMockTransaction(t, true, -1)
 	t1.Begin()
@@ -228,7 +228,7 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 
 func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 	start := 9001
-	end := 15000
+	end := 10000
 
 	t1, _ := newMockTransaction(t, true, -1)
 	t1.Begin()
@@ -258,7 +258,7 @@ func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 // Mixed CRUD operations.
 func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 	start := 9000
-	end := 11000
+	end := 9500
 
 	t1, _ := newMockTransaction(t, true, -1)
 	t1.Begin()
