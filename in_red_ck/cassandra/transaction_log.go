@@ -7,7 +7,6 @@ import (
 	"github.com/SharedCode/sop"
 )
 
-
 type TransactionLog interface {
 	// Initiate is invoked to signal start of transaction logging & to add the 1st transaction log.
 	// In Cassandra backend, this should translate into adding a new transaction by day

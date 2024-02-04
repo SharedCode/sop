@@ -3,8 +3,8 @@ package in_red_ck
 import (
 	"context"
 	"fmt"
-	"time"
 	log "log/slog"
+	"time"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
@@ -30,26 +30,26 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 	lockRecord
 	item *btree.Item[TK, TV]
 	// Version of the item as read from DB.
-	versionInDB int
-	isLockOwner bool
+	versionInDB       int
+	isLockOwner       bool
 	inflightItemValue *TV
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
-	storeInfo *btree.StoreInfo
-	items map[sop.UUID]cacheItem[TK, TV]
+	storeInfo        *btree.StoreInfo
+	items            map[sop.UUID]cacheItem[TK, TV]
 	forDeletionItems []sop.UUID
-	redisCache redis.Cache
-	blobStore cas.BlobStore
+	redisCache       redis.Cache
+	blobStore        cas.BlobStore
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
 func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *btree.StoreInfo, redisCache redis.Cache, blobStore cas.BlobStore) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
-		storeInfo: storeInfo,
-		items: make(map[sop.UUID]cacheItem[TK, TV]),
+		storeInfo:  storeInfo,
+		items:      make(map[sop.UUID]cacheItem[TK, TV]),
 		redisCache: redisCache,
-		blobStore: blobStore,
+		blobStore:  blobStore,
 	}
 }
 

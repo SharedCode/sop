@@ -40,9 +40,9 @@ type btreeBackend struct {
 	unlockTrackedItems func(ctx context.Context) error
 
 	// Manage tracked items' values in separate segments.
-	commitTrackedItemsValues   func(ctx context.Context) error
-	rollbackTrackedItemsValues func(ctx context.Context) error
-	deleteInactiveTrackedItemsValues func(ctx context.Context) error
+	commitTrackedItemsValues         func(ctx context.Context) error
+	rollbackTrackedItemsValues       func(ctx context.Context) error
+	deleteObsoleteTrackedItemsValues func(ctx context.Context) error
 }
 
 type transaction struct {
@@ -172,8 +172,6 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 	}
 	return nil
 }
-
-
 
 func (t *transaction) Rollback(ctx context.Context) error {
 	if t.phaseDone == 2 {
@@ -403,11 +401,11 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 
 	// TODO: finalize error handling, e.g. - if err occurred, don't remove logs.
 
-	t.logger.log(ctx, deleteEntries, []interface{}{deletedIds, unusedNodeIds})
-	t.deleteEntries(ctx, deletedIds, unusedNodeIds)
+	t.logger.log(ctx, deleteObsoleteEntries, []interface{}{deletedIds, unusedNodeIds})
+	t.deleteObsoleteEntries(ctx, deletedIds, unusedNodeIds)
 
-	t.logger.log(ctx, deleteTrackedItemsValues, nil)
-	t.deleteTrackedItemsValues(ctx)
+	t.logger.log(ctx, deleteObsoleteTrackedItemsValues, nil)
+	t.deleteObsoleteTrackedItemsValues(ctx)
 
 	// Commit is considered completed and the logs are not needed anymore.
 	t.logger.removeLogs(ctx)
@@ -491,9 +489,9 @@ func (t *transaction) rollbackTrackedItemsValues(ctx context.Context) error {
 	}
 	return nil
 }
-func (t *transaction) deleteTrackedItemsValues(ctx context.Context) error {
+func (t *transaction) deleteObsoleteTrackedItemsValues(ctx context.Context) error {
 	for i := range t.btreesBackend {
-		if err := t.btreesBackend[i].deleteInactiveTrackedItemsValues(ctx); err != nil {
+		if err := t.btreesBackend[i].deleteObsoleteTrackedItemsValues(ctx); err != nil {
 			return err
 		}
 	}
@@ -668,7 +666,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 var warnDeleteServiceMissing bool = true
 
 // Delete the registry entries and unused node blobs.
-func (t *transaction) deleteEntries(ctx context.Context,
+func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 	deletedRegistryIds []cas.RegistryPayload[sop.UUID], unusedNodeIds []cas.BlobsPayload[sop.UUID]) {
 	if len(unusedNodeIds) > 0 {
 		// Delete from Redis the inactive nodes.

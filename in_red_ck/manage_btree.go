@@ -58,13 +58,14 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // leafLoadBalancing - true means leaf load balancing feature is enabled, false otherwise.
 // description - (optional) description about the store.
 // t - transaction that the instance will participate in.
-
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
 	isValueDataInNodeSegment bool, leafLoadBalancing bool, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	s := btree.NewStoreInfo(name, slotLength, isUnique, isValueDataInNodeSegment, leafLoadBalancing, desciption)
 	return NewBtreeExt[TK, TV](ctx, s.Name, s.SlotLength, s.IsUnique, s.IsValueDataInNodeSegment,
 		s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached, s.LeafLoadBalancing, s.Description, t)
 }
+
+// Synonymous to NewBtree but supporting additional configurable parameters, e.g. - option to turn off or on(default) Redis caching of value data, etc...
 func NewBtreeExt[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("Transaction 't' parameter can't be nil")
@@ -136,9 +137,9 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreIn
 		getStoreInfo: func() *btree.StoreInfo { return b3.StoreInfo },
 
 		// Needed for tracked items' lock & "value data" in separate segments management.
-		commitTrackedItemsValues: iat.commitTrackedValuesToSeparateSegments,
-		rollbackTrackedItemsValues: iat.rollbackTrackedValuesInSeparateSegments,
-		deleteInactiveTrackedItemsValues: iat.deleteInactiveTrackedValuesInSeparateSegments,
+		commitTrackedItemsValues:         iat.commitTrackedValuesToSeparateSegments,
+		rollbackTrackedItemsValues:       iat.rollbackTrackedValuesInSeparateSegments,
+		deleteObsoleteTrackedItemsValues: iat.deleteObsoleteTrackedValuesInSeparateSegments,
 
 		hasTrackedItems:    iat.hasTrackedItems,
 		checkTrackedItems:  iat.checkTrackedItems,

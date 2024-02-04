@@ -42,7 +42,7 @@ type StoreInfo struct {
 	// This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
 	IsValueDataActivelyPersisted bool
 	// If true, the Value data will be cached in Redis, otherwise not. This is used when 'IsValueDataInNodeSegment'
-	// is set to false. Typically set to false if 'IsValueDataActivelyPersisted' is true, as value data is expected 
+	// is set to false. Typically set to false if 'IsValueDataActivelyPersisted' is true, as value data is expected
 	// to be huge rendering caching it in Redis to affect Redis performance due to the drastic size of data per item.
 	IsValueDataGloballyCached bool
 }
@@ -82,16 +82,16 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 	}
 
 	return &StoreInfo{
-		Name:                     name,
-		SlotLength:               slotLength,
-		IsUnique:                 isUnique,
-		IsValueDataInNodeSegment: isValueDataInNodeSegment,
+		Name:                         name,
+		SlotLength:                   slotLength,
+		IsUnique:                     isUnique,
+		IsValueDataInNodeSegment:     isValueDataInNodeSegment,
 		IsValueDataActivelyPersisted: isValueDataActivelyPersisted,
-		IsValueDataGloballyCached: isValueDataGloballyCached,
-		RegistryTable:            registryTableName,
-		BlobTable:                blobTableName,
-		Description:              desciption,
-		LeafLoadBalancing:        leafLoadBalancing,
+		IsValueDataGloballyCached:    isValueDataGloballyCached,
+		RegistryTable:                registryTableName,
+		BlobTable:                    blobTableName,
+		Description:                  desciption,
+		LeafLoadBalancing:            leafLoadBalancing,
 	}
 }
 
