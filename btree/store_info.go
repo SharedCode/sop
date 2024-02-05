@@ -28,15 +28,9 @@ type StoreInfo struct {
 	CountDelta int64 `json:"-"`
 	// Add or update timestamp in milliseconds.
 	Timestamp int64
-	// Is marked deleted or not.
-	IsDeleted bool
 	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's data segment.
 	// Otherwise is false.
 	IsValueDataInNodeSegment bool
-	// If true, node load will be balanced by pushing items to sibling nodes if there are vacant slots,
-	// otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
-	LeafLoadBalancing bool
-
 	// If true, each Btree Add(..) method call will persist the item value's data to another partition, then on commit,
 	// it will then be a very quick action as item(s) values' data were already saved on backend.
 	// This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
@@ -45,6 +39,9 @@ type StoreInfo struct {
 	// is set to false. Typically set to false if 'IsValueDataActivelyPersisted' is true, as value data is expected
 	// to be huge rendering caching it in Redis to affect Redis performance due to the drastic size of data per item.
 	IsValueDataGloballyCached bool
+	// If true, node load will be balanced by pushing items to sibling nodes if there are vacant slots,
+	// otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
+	LeafLoadBalancing bool
 }
 
 // NewStoreInfo instantiates a new Store, defaults extended parameters to typical use-case values. Please use NewStoreInfoExtended(..) function
@@ -85,12 +82,12 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		Name:                         name,
 		SlotLength:                   slotLength,
 		IsUnique:                     isUnique,
+		Description:                  desciption,
+		RegistryTable:                registryTableName,
+		BlobTable:                    blobTableName,
 		IsValueDataInNodeSegment:     isValueDataInNodeSegment,
 		IsValueDataActivelyPersisted: isValueDataActivelyPersisted,
 		IsValueDataGloballyCached:    isValueDataGloballyCached,
-		RegistryTable:                registryTableName,
-		BlobTable:                    blobTableName,
-		Description:                  desciption,
 		LeafLoadBalancing:            leafLoadBalancing,
 	}
 }

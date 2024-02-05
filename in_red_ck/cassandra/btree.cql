@@ -24,6 +24,10 @@ create table store (
     ts bigint,
     -- is value data in node segment.
     vdins boolean,
+    -- is value data actively persisted.
+    vdap boolean,
+    -- is value data globally cached.
+    vdgc boolean,
     -- leaf load balancing feature, defaults to false in Cassandra.
     llb boolean,
     -- is_del true specifies this store had been marked logically deleted.

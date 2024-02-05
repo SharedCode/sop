@@ -57,11 +57,11 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
-	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, llb) VALUES(?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
+	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
 	for _, s := range stores {
 		// Add a new store record.
 		if err := connection.Session.Query(insertStatement, s.Name, gocql.UUID(s.RootNodeId), s.SlotLength, s.Count, s.IsUnique, s.Description,
-			s.RegistryTable, s.BlobTable, s.Timestamp, s.IsValueDataInNodeSegment, s.LeafLoadBalancing).WithContext(ctx).Exec(); err != nil {
+			s.RegistryTable, s.BlobTable, s.Timestamp, s.IsValueDataInNodeSegment, s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached, s.LeafLoadBalancing).WithContext(ctx).Exec(); err != nil {
 			return err
 		}
 		// Create a new Blob table.
@@ -203,7 +203,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 	if len(paramQ) == 0 {
 		return stores, nil
 	}
-	selectStatement := fmt.Sprintf("SELECT name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, llb, is_del FROM %s.store  WHERE name in (%v);",
+	selectStatement := fmt.Sprintf("SELECT name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb FROM %s.store  WHERE name in (%v);",
 		connection.Config.Keyspace, strings.Join(paramQ, ", "))
 
 	qry := connection.Session.Query(selectStatement, namesAsIntf...).WithContext(ctx)
@@ -215,7 +215,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 	store := btree.StoreInfo{}
 	var rid gocql.UUID
 	for iter.Scan(&store.Name, &rid, &store.SlotLength, &store.Count, &store.IsUnique,
-		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.LeafLoadBalancing, &store.IsDeleted) {
+		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.IsValueDataActivelyPersisted, &store.IsValueDataGloballyCached, &store.LeafLoadBalancing) {
 		store.RootNodeId = sop.UUID(rid)
 
 		if err := sr.redisCache.SetStruct(ctx, store.Name, &store, storeCacheDuration); err != nil {

@@ -18,25 +18,28 @@ func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx co
 	}
 	for uuid, cachedItem := range t.items {
 		if cachedItem.Action == updateAction || cachedItem.Action == removeAction {
-			t.forDeletionItems = append(t.forDeletionItems, cachedItem.item.Id)
+			if cachedItem.item.ValueNeedsFetch {
+				// If there is value data on another segment, mark it for delete.
+				t.forDeletionItems = append(t.forDeletionItems, cachedItem.item.Id)
+			}
+			cachedItem.item.ValueNeedsFetch = false
 			if cachedItem.Action == updateAction {
 				// Replace the Item ID so we can persist a new one and not touching current one that
 				// could be fetched in other transactions.
 				if cachedItem.item.Value != nil {
 					cachedItem.item.Id = sop.NewUUID()
 				}
-				cachedItem.item.ValueNeedsFetch = false
 				t.items[uuid] = cachedItem
 			}
 		}
 		if cachedItem.Action == addAction || cachedItem.Action == updateAction {
-			itemsForAdd.Blobs = append(itemsForAdd.Blobs,
-				sop.KeyValuePair[sop.UUID, interface{}]{
-					Key:   cachedItem.item.Id,
-					Value: cachedItem.item.Value,
-				})
-			// nullify Value since we are saving it to a separate partition.
 			if cachedItem.item.Value != nil {
+				itemsForAdd.Blobs = append(itemsForAdd.Blobs,
+					sop.KeyValuePair[sop.UUID, interface{}]{
+						Key:   cachedItem.item.Id,
+						Value: cachedItem.item.Value,
+					})
+				// nullify Value since we are saving it to a separate partition.
 				cachedItem.inflightItemValue = cachedItem.item.Value
 				cachedItem.item.Value = nil
 				cachedItem.item.ValueNeedsFetch = true
@@ -69,9 +72,11 @@ func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx 
 	}
 	for itemId, cachedItem := range t.items {
 		if cachedItem.Action == addAction || cachedItem.Action == updateAction {
-			cachedItem.item.Value = cachedItem.inflightItemValue
-			cachedItem.inflightItemValue = nil
-			cachedItem.item.ValueNeedsFetch = false
+			if cachedItem.inflightItemValue != nil {
+				cachedItem.item.Value = cachedItem.inflightItemValue
+				cachedItem.inflightItemValue = nil
+				cachedItem.item.ValueNeedsFetch = false
+			}
 			if t.storeInfo.IsValueDataGloballyCached {
 				t.redisCache.Delete(ctx, t.formatKey(cachedItem.item.Id.String()))
 			}
