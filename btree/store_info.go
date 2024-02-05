@@ -82,12 +82,12 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		Name:                         name,
 		SlotLength:                   slotLength,
 		IsUnique:                     isUnique,
+		Description:                  desciption,
+		RegistryTable:                registryTableName,
+		BlobTable:                    blobTableName,
 		IsValueDataInNodeSegment:     isValueDataInNodeSegment,
 		IsValueDataActivelyPersisted: isValueDataActivelyPersisted,
 		IsValueDataGloballyCached:    isValueDataGloballyCached,
-		RegistryTable:                registryTableName,
-		BlobTable:                    blobTableName,
-		Description:                  desciption,
 		LeafLoadBalancing:            leafLoadBalancing,
 	}
 }
