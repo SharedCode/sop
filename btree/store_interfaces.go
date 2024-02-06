@@ -31,10 +31,10 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// according to key ordering sequence.
 	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 	FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error)
-	// FindOneWithId is synonymous to FindOne but allows code to supply the Item's Id to identify it.
+	// FindOneWithID is synonymous to FindOne but allows code to supply the Item's ID to identify it.
 	// This is useful for B-Tree that allows duplicate keys(IsUnique = false) as it provides a way to
-	// differentiate duplicated keys via the unique Id(sop.UUID).
-	FindOneWithId(ctx context.Context, key TK, id sop.UUID) (bool, error)
+	// differentiate duplicated keys via the unique ID(sop.UUID).
+	FindOneWithID(ctx context.Context, key TK, id sop.UUID) (bool, error)
 	// GetCurrentKey returns the current item's key.
 	GetCurrentKey() TK
 	// GetCurrentValue returns the current item's value.
@@ -72,14 +72,14 @@ type BtreeInterface[TK Comparable, TV any] interface {
 type NodeRepository[TK Comparable, TV any] interface {
 	// Add will just cache the item, "add" action for submit on transaction commit as appropriate.
 	Add(node *Node[TK, TV])
-	// Get fetches from backend(or from cache if exists) & returns the Node with a given nodeId.
-	Get(ctx context.Context, nodeId sop.UUID) (*Node[TK, TV], error)
-	// Mark Node with nodeId as fetched, so, it will get checked for version conflict during commit.
-	Fetched(nodeId sop.UUID)
+	// Get fetches from backend(or from cache if exists) & returns the Node with a given nodeID.
+	Get(ctx context.Context, nodeID sop.UUID) (*Node[TK, TV], error)
+	// Mark Node with nodeID as fetched, so, it will get checked for version conflict during commit.
+	Fetched(nodeID sop.UUID)
 	// Update will just cache the item, "update" action for resolve on transaction commit as appropriate.
 	Update(node *Node[TK, TV])
 	// Remove will just cache the item, "remove" action for resolve on transaction commit as appropriate.
-	Remove(nodeId sop.UUID)
+	Remove(nodeID sop.UUID)
 }
 
 // ItemActionTracker specifies the CRUD action methods that can be done to manage Items.

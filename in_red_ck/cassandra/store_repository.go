@@ -60,7 +60,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
 	for _, s := range stores {
 		// Add a new store record.
-		if err := connection.Session.Query(insertStatement, s.Name, gocql.UUID(s.RootNodeId), s.SlotLength, s.Count, s.IsUnique, s.Description,
+		if err := connection.Session.Query(insertStatement, s.Name, gocql.UUID(s.RootNodeID), s.SlotLength, s.Count, s.IsUnique, s.Description,
 			s.RegistryTable, s.BlobTable, s.Timestamp, s.IsValueDataInNodeSegment, s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached, s.LeafLoadBalancing).WithContext(ctx).Exec(); err != nil {
 			return err
 		}
@@ -107,7 +107,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 		i++
 	}
 
-	// Create lock Ids that we can use to logically lock and prevent other updates.
+	// Create lock IDs that we can use to logically lock and prevent other updates.
 	lockKeys := redis.CreateLockKeys(keys)
 
 	// 15 minutes to lock, merge/update details then unlock.
@@ -216,7 +216,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 	var rid gocql.UUID
 	for iter.Scan(&store.Name, &rid, &store.SlotLength, &store.Count, &store.IsUnique,
 		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.IsValueDataActivelyPersisted, &store.IsValueDataGloballyCached, &store.LeafLoadBalancing) {
-		store.RootNodeId = sop.UUID(rid)
+		store.RootNodeID = sop.UUID(rid)
 
 		if err := sr.redisCache.SetStruct(ctx, store.Name, &store, storeCacheDuration); err != nil {
 			log.Error(fmt.Sprintf("StoreRepository Get (redis setstruct) failed, details: %v", err))

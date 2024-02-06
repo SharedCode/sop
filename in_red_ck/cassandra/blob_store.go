@@ -14,11 +14,11 @@ import (
 type BlobsPayload[T sop.UUID | sop.KeyValuePair[sop.UUID, interface{}]] struct {
 	// Blob store table name.
 	BlobTable string
-	// Blobs contains the blobs Ids and blobs data for upsert to the store or the blobs Ids to be removed.
+	// Blobs contains the blobs IDs and blobs data for upsert to the store or the blobs IDs to be removed.
 	Blobs []T
 }
 
-// Returns the total number of UUIDs given a set of blobs (Id) payload.
+// Returns the total number of UUIDs given a set of blobs (ID) payload.
 func GetBlobPayloadCount[T sop.UUID](payloads []BlobsPayload[T]) int {
 	total := 0
 	for _, p := range payloads {
@@ -32,14 +32,14 @@ func GetBlobPayloadCount[T sop.UUID](payloads []BlobsPayload[T]) int {
 // as it will impose performance penalties. This kind of data are typically stored in blob stores
 // like AWS S3, or file system, etc...
 type BlobStore interface {
-	// Get or fetch a blob given an Id.
-	GetOne(ctx context.Context, blobTable string, blobId sop.UUID, target interface{}) error
+	// Get or fetch a blob given an ID.
+	GetOne(ctx context.Context, blobTable string, blobID sop.UUID, target interface{}) error
 	// Add blobs to store.
 	Add(ctx context.Context, blobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error
 	// Update blobs in store.
 	Update(ctx context.Context, blobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error
-	// Remove blobs in store with given Ids.
-	Remove(ctx context.Context, blobsIds ...BlobsPayload[sop.UUID]) error
+	// Remove blobs in store with given IDs.
+	Remove(ctx context.Context, blobsIDs ...BlobsPayload[sop.UUID]) error
 }
 
 // Marshaler allows you to specify custom marshaler if needed. Defaults to the SOP default marshaler.
@@ -53,12 +53,12 @@ func NewBlobStore() BlobStore {
 }
 
 // GetOne fetches a blob from blob table.
-func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobId sop.UUID, target interface{}) error {
+func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobID sop.UUID, target interface{}) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
 	selectStatement := fmt.Sprintf("SELECT node FROM %s.%s WHERE id in (?);", connection.Config.Keyspace, blobTable)
-	qry := connection.Session.Query(selectStatement, gocql.UUID(blobId)).WithContext(ctx)
+	qry := connection.Session.Query(selectStatement, gocql.UUID(blobID)).WithContext(ctx)
 	if connection.Config.ConsistencyBook.BlobStoreGet > gocql.Any {
 		qry.Consistency(connection.Config.ConsistencyBook.BlobStoreGet)
 	}
@@ -122,20 +122,20 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.
 }
 
 // Remove will delete(non-logged) node records from different Blob stores(node tables).
-func (b *blobStore) Remove(ctx context.Context, storesBlobsIds ...BlobsPayload[sop.UUID]) error {
+func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...BlobsPayload[sop.UUID]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
 	// Delete per blob table the Node "blobs".
-	for _, storeBlobIds := range storesBlobsIds {
-		paramQ := make([]string, len(storeBlobIds.Blobs))
-		idsAsIntfs := make([]interface{}, len(storeBlobIds.Blobs))
-		for i := range storeBlobIds.Blobs {
+	for _, storeBlobIDs := range storesBlobsIDs {
+		paramQ := make([]string, len(storeBlobIDs.Blobs))
+		idsAsIntfs := make([]interface{}, len(storeBlobIDs.Blobs))
+		for i := range storeBlobIDs.Blobs {
 			paramQ[i] = "?"
-			idsAsIntfs[i] = interface{}(gocql.UUID(storeBlobIds.Blobs[i]))
+			idsAsIntfs[i] = interface{}(gocql.UUID(storeBlobIDs.Blobs[i]))
 		}
 		deleteStatement := fmt.Sprintf("DELETE FROM %s.%s WHERE id in (%v);",
-			connection.Config.Keyspace, storeBlobIds.BlobTable, strings.Join(paramQ, ", "))
+			connection.Config.Keyspace, storeBlobIDs.BlobTable, strings.Join(paramQ, ", "))
 		qry := connection.Session.Query(deleteStatement, idsAsIntfs...).WithContext(ctx)
 		if connection.Config.ConsistencyBook.BlobStoreRemove > gocql.Any {
 			qry.Consistency(connection.Config.ConsistencyBook.BlobStoreRemove)

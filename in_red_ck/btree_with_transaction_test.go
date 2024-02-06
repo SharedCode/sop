@@ -154,7 +154,7 @@ func Test_TransactionWithInducedErrorOnFindOne(t *testing.T) {
 	}
 }
 
-func Test_TransactionWithInducedErrorOnFindOneWithId(t *testing.T) {
+func Test_TransactionWithInducedErrorOnFindOneWithID(t *testing.T) {
 	t2, _ := newMockTransaction(t, true, -1)
 	t2.Begin()
 
@@ -164,7 +164,7 @@ func Test_TransactionWithInducedErrorOnFindOneWithId(t *testing.T) {
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := newBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 8
-	b3t.FindOneWithId(ctx, 1, sop.NewUUID())
+	b3t.FindOneWithID(ctx, 1, sop.NewUUID())
 	if trans.HasBegun() {
 		t.Error("Transaction is not rolled back.")
 	}

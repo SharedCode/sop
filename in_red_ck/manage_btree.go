@@ -85,9 +85,9 @@ func NewBtreeExt[TK btree.Comparable, TV any](ctx context.Context, name string, 
 	ns := btree.NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption)
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
-		if ns.RootNodeId.IsNil() {
-			// Pre-assign root node Id so B-Trees can merge newly created root nodes on commit.
-			ns.RootNodeId = sop.NewUUID()
+		if ns.RootNodeID.IsNil() {
+			// Pre-assign root node ID so B-Trees can merge newly created root nodes on commit.
+			ns.RootNodeID = sop.NewUUID()
 			ns.Timestamp = nowUnixMilli()
 		}
 		if err := trans.storeRepository.Add(ctx, *ns); err != nil {
@@ -164,7 +164,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 			return err
 		}
 		b3.StoreInfo.Count = storeInfo[0].Count
-		b3.StoreInfo.RootNodeId = storeInfo[0].RootNodeId
+		b3.StoreInfo.RootNodeID = storeInfo[0].RootNodeID
 
 		for _, ci := range b3ModifiedItems {
 			if ci.Action == addAction {
@@ -176,7 +176,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 				}
 				continue
 			}
-			if ok, err := b3.FindOneWithId(ctx, ci.item.Key, ci.item.Id); !ok || err != nil {
+			if ok, err := b3.FindOneWithID(ctx, ci.item.Key, ci.item.ID); !ok || err != nil {
 				if err != nil {
 					return err
 				}

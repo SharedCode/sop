@@ -143,12 +143,12 @@ func (b3 *btreeWithTransaction[TK, TV]) FindOne(ctx context.Context, key TK, fir
 	}
 	return r, err
 }
-func (b3 *btreeWithTransaction[TK, TV]) FindOneWithId(ctx context.Context, key TK, id sop.UUID) (bool, error) {
+func (b3 *btreeWithTransaction[TK, TV]) FindOneWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf(transHasNotBegunErrorMsg)
 	}
-	r, err := b3.btree.FindOneWithId(ctx, key, id)
+	r, err := b3.btree.FindOneWithID(ctx, key, id)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}

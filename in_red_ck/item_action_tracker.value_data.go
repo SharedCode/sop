@@ -20,14 +20,14 @@ func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx co
 		if cachedItem.Action == updateAction || cachedItem.Action == removeAction {
 			if cachedItem.item.ValueNeedsFetch {
 				// If there is value data on another segment, mark it for delete.
-				t.forDeletionItems = append(t.forDeletionItems, cachedItem.item.Id)
+				t.forDeletionItems = append(t.forDeletionItems, cachedItem.item.ID)
 			}
 			cachedItem.item.ValueNeedsFetch = false
 			if cachedItem.Action == updateAction {
 				// Replace the Item ID so we can persist a new one and not touching current one that
 				// could be fetched in other transactions.
 				if cachedItem.item.Value != nil {
-					cachedItem.item.Id = sop.NewUUID()
+					cachedItem.item.ID = sop.NewUUID()
 				}
 				t.items[uuid] = cachedItem
 			}
@@ -36,7 +36,7 @@ func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx co
 			if cachedItem.item.Value != nil {
 				itemsForAdd.Blobs = append(itemsForAdd.Blobs,
 					sop.KeyValuePair[sop.UUID, interface{}]{
-						Key:   cachedItem.item.Id,
+						Key:   cachedItem.item.ID,
 						Value: cachedItem.item.Value,
 					})
 				// nullify Value since we are saving it to a separate partition.
@@ -70,7 +70,7 @@ func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx 
 		BlobTable: t.storeInfo.BlobTable,
 		Blobs:     make([]sop.UUID, 0, 5),
 	}
-	for itemId, cachedItem := range t.items {
+	for itemID, cachedItem := range t.items {
 		if cachedItem.Action == addAction || cachedItem.Action == updateAction {
 			if cachedItem.inflightItemValue != nil {
 				cachedItem.item.Value = cachedItem.inflightItemValue
@@ -78,13 +78,13 @@ func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx 
 				cachedItem.item.ValueNeedsFetch = false
 			}
 			if t.storeInfo.IsValueDataGloballyCached {
-				t.redisCache.Delete(ctx, t.formatKey(cachedItem.item.Id.String()))
+				t.redisCache.Delete(ctx, t.formatKey(cachedItem.item.ID.String()))
 			}
-			itemsForDelete.Blobs = append(itemsForDelete.Blobs, cachedItem.item.Id)
+			itemsForDelete.Blobs = append(itemsForDelete.Blobs, cachedItem.item.ID)
 
-			// Restore the Item Id now that the temp got added for deletion.
-			cachedItem.item.Id = itemId
-			t.items[itemId] = cachedItem
+			// Restore the Item ID now that the temp got added for deletion.
+			cachedItem.item.ID = itemID
+			t.items[itemID] = cachedItem
 			continue
 		}
 	}
@@ -103,11 +103,11 @@ func (t *itemActionTracker[TK, TV]) deleteObsoleteTrackedValuesInSeparateSegment
 		BlobTable: t.storeInfo.BlobTable,
 		Blobs:     make([]sop.UUID, 0, 5),
 	}
-	for _, forDeleteId := range t.forDeletionItems {
+	for _, forDeleteID := range t.forDeletionItems {
 		if t.storeInfo.IsValueDataGloballyCached {
-			t.redisCache.Delete(ctx, t.formatKey(forDeleteId.String()))
+			t.redisCache.Delete(ctx, t.formatKey(forDeleteID.String()))
 		}
-		itemsForDelete.Blobs = append(itemsForDelete.Blobs, forDeleteId)
+		itemsForDelete.Blobs = append(itemsForDelete.Blobs, forDeleteID)
 	}
 	if len(itemsForDelete.Blobs) > 0 {
 		return t.blobStore.Remove(ctx, itemsForDelete)

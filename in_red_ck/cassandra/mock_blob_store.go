@@ -18,8 +18,8 @@ func NewMockBlobStore() BlobStore {
 	}
 }
 
-func (b *mockBlobStore) GetOne(ctx context.Context, blobName string, blobId sop.UUID, target interface{}) error {
-	if ba, ok := b.lookup[blobId]; ok {
+func (b *mockBlobStore) GetOne(ctx context.Context, blobName string, blobID sop.UUID, target interface{}) error {
+	if ba, ok := b.lookup[blobID]; ok {
 		return json.Unmarshal(ba, target)
 	}
 	return nil
@@ -51,10 +51,10 @@ func (b *mockBlobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[
 	return nil
 }
 
-func (b *mockBlobStore) Remove(ctx context.Context, storesBlobsIds ...BlobsPayload[sop.UUID]) error {
-	for _, storeBlobIds := range storesBlobsIds {
-		for _, blobId := range storeBlobIds.Blobs {
-			delete(b.lookup, blobId)
+func (b *mockBlobStore) Remove(ctx context.Context, storesBlobsIDs ...BlobsPayload[sop.UUID]) error {
+	for _, storeBlobIDs := range storesBlobsIDs {
+		for _, blobID := range storeBlobIDs.Blobs {
+			delete(b.lookup, blobID)
 		}
 	}
 	return nil
