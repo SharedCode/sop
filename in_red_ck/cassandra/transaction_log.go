@@ -34,7 +34,7 @@ func (b *transactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePa
 		return sop.NilUUID, nil, fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
 	// selectStatement := fmt.Sprintf("SELECT node FROM %s.%s WHERE id in (?);", connection.Config.Keyspace, blobTable)
-	// qry := connection.Session.Query(selectStatement, gocql.UUID(blobId)).WithContext(ctx)
+	// qry := connection.Session.Query(selectStatement, gocql.UUID(blobID)).WithContext(ctx)
 	// if connection.Config.ConsistencyBook.BlobStoreGet > gocql.Any {
 	// 	qry.Consistency(connection.Config.ConsistencyBook.BlobStoreGet)
 	// }
@@ -49,7 +49,7 @@ func (b *transactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePa
 	return sop.NilUUID, nil, nil
 }
 
-func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunctionName string, blobsIds interface{}) error {
+func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunctionName string, blobsIDs interface{}) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
@@ -61,7 +61,7 @@ func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunc
 }
 
 // Add blob(s) to the Blob store.
-func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunctionName string, blobsIds interface{}) error {
+func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunctionName string, blobsIDs interface{}) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
@@ -91,15 +91,15 @@ func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
 	}
 	// // Delete per blob table the Node "blobs".
-	// for _, storeBlobIds := range storesBlobsIds {
-	// 	paramQ := make([]string, len(storeBlobIds.Blobs))
-	// 	idsAsIntfs := make([]interface{}, len(storeBlobIds.Blobs))
-	// 	for i := range storeBlobIds.Blobs {
+	// for _, storeBlobIDs := range storesBlobsIDs {
+	// 	paramQ := make([]string, len(storeBlobIDs.Blobs))
+	// 	idsAsIntfs := make([]interface{}, len(storeBlobIDs.Blobs))
+	// 	for i := range storeBlobIDs.Blobs {
 	// 		paramQ[i] = "?"
-	// 		idsAsIntfs[i] = interface{}(gocql.UUID(storeBlobIds.Blobs[i]))
+	// 		idsAsIntfs[i] = interface{}(gocql.UUID(storeBlobIDs.Blobs[i]))
 	// 	}
 	// 	deleteStatement := fmt.Sprintf("DELETE FROM %s.%s WHERE id in (%v);",
-	// 		connection.Config.Keyspace, storeBlobIds.BlobTable, strings.Join(paramQ, ", "))
+	// 		connection.Config.Keyspace, storeBlobIDs.BlobTable, strings.Join(paramQ, ", "))
 	// 	qry := connection.Session.Query(deleteStatement, idsAsIntfs...).WithContext(ctx)
 	// 	if connection.Config.ConsistencyBook.BlobStoreRemove > gocql.Any {
 	// 		qry.Consistency(connection.Config.ConsistencyBook.BlobStoreRemove)

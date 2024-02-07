@@ -16,12 +16,12 @@ type StoreInfo struct {
 	IsUnique bool
 	// (optional) Description of the Store.
 	Description string
-	// Virtual Id registry table name.
+	// Virtual ID registry table name.
 	RegistryTable string
 	// Blob table name.
 	BlobTable string
-	// RootNodeId is the root node's Id.
-	RootNodeId sop.UUID
+	// RootNodeID is the root node's ID.
+	RootNodeID sop.UUID
 	// Total count of items stored.
 	Count int64
 	// Used internally by SOP. Should be ignored when persisted in the backend.

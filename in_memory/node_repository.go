@@ -21,24 +21,24 @@ func newNodeRepository[TK btree.Comparable, TV any]() btree.NodeRepository[TK, T
 
 // Add will upsert node to the map.
 func (nr *nodeRepository[TK, TV]) Add(n *btree.Node[TK, TV]) {
-	nr.lookup[n.Id] = n
+	nr.lookup[n.ID] = n
 }
 
 // Update will upsert node to the map.
 func (nr *nodeRepository[TK, TV]) Update(n *btree.Node[TK, TV]) {
-	nr.lookup[n.Id] = n
+	nr.lookup[n.ID] = n
 }
 
-// Get will retrieve a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeId sop.UUID) (*btree.Node[TK, TV], error) {
-	v, _ := nr.lookup[nodeId]
+// Get will retrieve a node with nodeID from the map.
+func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeID sop.UUID) (*btree.Node[TK, TV], error) {
+	v, _ := nr.lookup[nodeID]
 	return v, nil
 }
 
 // Fetched does nothing for in-memory.
-func (nr *nodeRepository[TK, TV]) Fetched(nodeId sop.UUID) {}
+func (nr *nodeRepository[TK, TV]) Fetched(nodeID sop.UUID) {}
 
-// Remove will remove a node with nodeId from the map.
-func (nr *nodeRepository[TK, TV]) Remove(nodeId sop.UUID) {
-	delete(nr.lookup, nodeId)
+// Remove will remove a node with nodeID from the map.
+func (nr *nodeRepository[TK, TV]) Remove(nodeID sop.UUID) {
+	delete(nr.lookup, nodeID)
 }

@@ -23,7 +23,7 @@ const (
 )
 
 type lockRecord struct {
-	LockId sop.UUID
+	LockID sop.UUID
 	Action actionType
 }
 type cacheItem[TK btree.Comparable, TV any] struct {
@@ -70,25 +70,25 @@ func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *btree.StoreInf
 // Get			Update		ForUpdate
 
 func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK, TV]) error {
-	if val, ok := t.items[item.Id]; !ok || val.item.ValueNeedsFetch {
+	if val, ok := t.items[item.ID]; !ok || val.item.ValueNeedsFetch {
 		if item.Value == nil && item.ValueNeedsFetch {
 			var v TV
 			if t.storeInfo.IsValueDataGloballyCached {
-				if err := t.redisCache.GetStruct(ctx, t.formatKey(item.Id.String()), &v); err != nil {
+				if err := t.redisCache.GetStruct(ctx, t.formatKey(item.ID.String()), &v); err != nil {
 					if !redis.KeyNotFound(err) {
 						log.Error(err.Error())
 					}
 					// If item not found in Redis or an error fetching it, fetch from Blob store.
-					if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.Id, &v); err != nil {
+					if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.ID, &v); err != nil {
 						return err
 					}
 					// Just log Redis error since it is just secondary.
-					if err := t.redisCache.SetStruct(ctx, t.formatKey(item.Id.String()), &v, nodeCacheDuration); err != nil {
+					if err := t.redisCache.SetStruct(ctx, t.formatKey(item.ID.String()), &v, nodeCacheDuration); err != nil {
 						log.Error(err.Error())
 					}
 				}
 			} else {
-				if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.Id, &v); err != nil {
+				if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.ID, &v); err != nil {
 					return err
 				}
 			}
@@ -98,9 +98,9 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 				return nil
 			}
 		}
-		t.items[item.Id] = cacheItem[TK, TV]{
+		t.items[item.ID] = cacheItem[TK, TV]{
 			lockRecord: lockRecord{
-				LockId: sop.NewUUID(),
+				LockID: sop.NewUUID(),
 				Action: getAction,
 			},
 			item:        item,
@@ -111,9 +111,9 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 }
 
 func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK, TV]) error {
-	t.items[item.Id] = cacheItem[TK, TV]{
+	t.items[item.ID] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
-			LockId: sop.NewUUID(),
+			LockID: sop.NewUUID(),
 			Action: addAction,
 		},
 		item:        item,
@@ -125,22 +125,22 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 }
 
 func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item[TK, TV]) error {
-	v, ok := t.items[item.Id]
+	v, ok := t.items[item.ID]
 	if ok {
 		if v.Action == addAction {
 			return nil
 		}
 		v.lockRecord.Action = updateAction
 		v.item = item
-		t.items[item.Id] = v
+		t.items[item.ID] = v
 		if item.Version == v.versionInDB {
 			item.Version++
 		}
 		return nil
 	}
-	t.items[item.Id] = cacheItem[TK, TV]{
+	t.items[item.ID] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
-			LockId: sop.NewUUID(),
+			LockID: sop.NewUUID(),
 			Action: updateAction,
 		},
 		item:        item,
@@ -152,13 +152,13 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 }
 
 func (t *itemActionTracker[TK, TV]) Remove(ctx context.Context, item *btree.Item[TK, TV]) error {
-	if v, ok := t.items[item.Id]; ok && v.Action == addAction {
-		delete(t.items, item.Id)
+	if v, ok := t.items[item.ID]; ok && v.Action == addAction {
+		delete(t.items, item.ID)
 		return nil
 	}
-	t.items[item.Id] = cacheItem[TK, TV]{
+	t.items[item.ID] = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
-			LockId: sop.NewUUID(),
+			LockID: sop.NewUUID(),
 			Action: removeAction,
 		},
 		item:        item,
@@ -183,7 +183,7 @@ func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context) error
 			return err
 		}
 		// Item found in Redis.
-		if readItem.LockId == cachedItem.LockId {
+		if readItem.LockID == cachedItem.LockID {
 			continue
 		}
 		// Lock compatibility check.
@@ -214,11 +214,11 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Dura
 			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
 			if err := t.redisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
 				return err
-			} else if readItem.LockId != cachedItem.LockId {
+			} else if readItem.LockID != cachedItem.LockID {
 				if readItem.Action == getAction && cachedItem.Action == getAction {
 					continue
 				}
-				if readItem.LockId.IsNil() {
+				if readItem.LockID.IsNil() {
 					return fmt.Errorf("lock(item: %v) call can't attain a lock in Redis", uuid)
 				}
 				return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
@@ -229,7 +229,7 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Dura
 			continue
 		}
 		// Item found in Redis.
-		if readItem.LockId == cachedItem.LockId {
+		if readItem.LockID == cachedItem.LockID {
 			continue
 		}
 		// Lock compatibility check.

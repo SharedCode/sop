@@ -11,7 +11,7 @@ import (
 // LockKeys contain fields to allow locking and unlocking of a set of redis keys.
 type LockKeys struct {
 	key         string
-	lockId      sop.UUID
+	lockID      sop.UUID
 	isLockOwner bool
 }
 
@@ -27,7 +27,7 @@ func CreateLockKeys(keys []string) []*LockKeys {
 		lockKeys[i] = &LockKeys{
 			// Prefix key with "L" to increase uniqueness.
 			key:    FormatLockKey(keys[i]),
-			lockId: sop.NewUUID(),
+			lockID: sop.NewUUID(),
 		}
 	}
 	return lockKeys
@@ -43,13 +43,13 @@ func Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKeys) er
 				return err
 			}
 			// Item does not exist, upsert it.
-			if err := redisCache.Set(ctx, lk.key, lk.lockId.String(), duration); err != nil {
+			if err := redisCache.Set(ctx, lk.key, lk.lockID.String(), duration); err != nil {
 				return err
 			}
 			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
 			if readItem2, err := redisCache.Get(ctx, lk.key); err != nil {
 				return err
-			} else if readItem2 != lk.lockId.String() {
+			} else if readItem2 != lk.lockID.String() {
 				return fmt.Errorf("lock(item: %v) call detected conflict", lk.key)
 			}
 			// We got the item locked, ensure we can unlock it.
@@ -57,7 +57,7 @@ func Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKeys) er
 			continue
 		}
 		// Item found in Redis.
-		if readItem != lk.lockId.String() {
+		if readItem != lk.lockID.String() {
 			return fmt.Errorf("lock(item: %v) call detected conflict", lk.key)
 		}
 	}

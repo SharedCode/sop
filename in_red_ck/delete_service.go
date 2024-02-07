@@ -49,16 +49,16 @@ func DoDeletedItemsProcessing(ctx context.Context) {
 		log.Warn("Kafka is not initialized, please set valid brokers & topic to initialize.")
 		return
 	}
-	blobsIds, err := kafka.Dequeue[[]cas.BlobsPayload[sop.UUID]](ctx, 5)
+	blobsIDs, err := kafka.Dequeue[[]cas.BlobsPayload[sop.UUID]](ctx, 5)
 	if err != nil {
 		log.Error("Error kafka dequeue, details: %v", err)
-		if len(blobsIds) == 0 {
+		if len(blobsIDs) == 0 {
 			return
 		}
 	}
 	bs := cas.NewBlobStore()
-	for i := range blobsIds {
-		if err := bs.Remove(ctx, blobsIds[i]...); err != nil {
+	for i := range blobsIDs {
+		if err := bs.Remove(ctx, blobsIDs[i]...); err != nil {
 			log.Error("Error removing blobs from Cassandra blobs table, details: %v", err)
 		}
 	}

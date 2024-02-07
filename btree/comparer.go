@@ -16,8 +16,8 @@ type Comparable interface {
 	cmp.Ordered | *Comparer | any
 }
 
-// compare can compare a Comparable type.
-func compare[T Comparable](x, y T) int {
+// Compare can Compare a Comparable type.
+func Compare[T Comparable](x, y T) int {
 	anyX := any(x)
 	anyY := any(y)
 	switch any(x).(type) {

@@ -5,7 +5,7 @@ import (
 )
 
 func Test_OpenVsNewBTree(t *testing.T) {
-	trans, _ := newMockTransaction(t, true, -1)
+	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
 	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
@@ -18,7 +18,7 @@ func Test_OpenVsNewBTree(t *testing.T) {
 }
 
 func Test_SingleBTree(t *testing.T) {
-	trans, _ := newMockTransaction(t, true, -1)
+	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
 	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
@@ -48,7 +48,7 @@ func Test_SingleBTree(t *testing.T) {
 // This test exercise & demonstrate to use B-Tree that is unique on Keys.
 // Adding an item with a key matching an existing item in the trie will fail.
 func Test_UniqueKeyBTree(t *testing.T) {
-	trans, _ := newMockTransaction(t, true, -1)
+	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
 	b3, _ := NewBtree[int, string](ctx, "fooWorld", 8, true, false, true, "", trans)
 	b3.Add(ctx, 1, "hello world")
@@ -64,7 +64,7 @@ func Test_UniqueKeyBTree(t *testing.T) {
 }
 
 func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
+	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 	b3, _ := NewBtree[int, string](ctx, "fooWorld2", 8, true, false, true, "", t1)
 	b3.Add(ctx, 1, "hello world")
@@ -74,7 +74,7 @@ func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}
 
-	t2, _ := newMockTransaction(t, true, -1)
+	t2, _ := NewMockTransaction(t, true, -1)
 	t2.Begin()
 	// Open the same trie created above.
 	b32, _ := OpenBtree[int, string](ctx, "fooWorld2", t2)
@@ -89,13 +89,13 @@ func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 
 // Fail 2nd commit as item key 1 was added in 1st and is also being added in 2nd.
 func Test_UniqueKeyBTreeOnMultipleCommits(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
+	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 	b3, _ := NewBtree[int, string](ctx, "fooWorld3", 8, true, false, true, "", t1)
 	b3.Add(ctx, 1, "hello world")
 	b3.Add(ctx, 2, "foo bar")
 
-	t2, _ := newMockTransaction(t, true, -1)
+	t2, _ := NewMockTransaction(t, true, -1)
 	t2.Begin()
 	// Open the same trie created above.
 	b32, _ := OpenBtree[int, string](ctx, "fooWorld3", t2)

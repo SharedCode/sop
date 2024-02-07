@@ -9,7 +9,7 @@ import (
 // Tests were copied from in_memory package, refactored to work for in_red_ck.
 
 func Test_HelloWorld(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
+	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
 	b3, _ := NewBtree[int, string](ctx, "inmymemory", 8, false, true, true, "", t1)
@@ -32,7 +32,7 @@ func Test_HelloWorld(t *testing.T) {
 }
 
 func Test_FunctionalityTests(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
+	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
 	b3, _ := NewBtree[int, string](ctx, "inmymemory1", 8, false, true, true, "", t1)
@@ -117,7 +117,7 @@ func Test_FunctionalityTests(t *testing.T) {
 
 func Test_ComplexDataMgmtCases(t *testing.T) {
 	max := 100000
-	t1, _ := newMockTransaction(t, true, -1)
+	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 	b3, _ := NewBtree[int, string](ctx, "inmymemory2", 8, true, true, true, "", t1)
 
@@ -298,7 +298,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 
 	t1.Commit(ctx)
 
-	t1, _ = newMockTransaction(t, false, -1)
+	t1, _ = NewMockTransaction(t, false, -1)
 	t1.Begin()
 	b3, _ = OpenBtree[int, string](ctx, "inmymemory2", t1)
 
@@ -323,7 +323,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 
 func Test_SimpleDataMgmtCases(t *testing.T) {
 	max := 100000
-	t1, _ := newMockTransaction(t, true, -1)
+	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 	b3, _ := NewBtree[string, string](ctx, "inmymemory3", 8, false, true, true, "", t1)
 
@@ -408,7 +408,7 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 	}
 	t1.Commit(ctx)
 
-	t1, _ = newMockTransaction(t, false, -1)
+	t1, _ = NewMockTransaction(t, false, -1)
 	t1.Begin()
 	b3, _ = OpenBtree[string, string](ctx, "inmymemory3", t1)
 

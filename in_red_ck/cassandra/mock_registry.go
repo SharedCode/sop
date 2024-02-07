@@ -20,7 +20,7 @@ func NewMockRegistry(inducedErrorOnUpdateAllOrNothing bool) Registry {
 func (v *Mock_vid_registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop.Handle]) error {
 	for _, storeHandles := range storesHandles {
 		for _, h := range storeHandles.IDs {
-			v.Lookup[h.LogicalId] = h
+			v.Lookup[h.LogicalID] = h
 		}
 	}
 	return nil
@@ -32,7 +32,7 @@ func (v *Mock_vid_registry) Update(ctx context.Context, allOrNothing bool, store
 	}
 	for _, storeHandles := range storesHandles {
 		for _, h := range storeHandles.IDs {
-			v.Lookup[h.LogicalId] = h
+			v.Lookup[h.LogicalID] = h
 		}
 	}
 	return nil
@@ -43,7 +43,7 @@ func (v *Mock_vid_registry) Get(ctx context.Context, storesLids ...RegistryPaylo
 		handles := make([]sop.Handle, 0, len(storeLids.IDs))
 		for _, lid := range storeLids.IDs {
 			h, _ := v.Lookup[lid]
-			if h.LogicalId.IsNil() {
+			if h.LogicalID.IsNil() {
 				continue
 			}
 			handles = append(handles, h)

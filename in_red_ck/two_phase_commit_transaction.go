@@ -52,7 +52,7 @@ type transaction struct {
 	blobStore       cas.BlobStore
 	redisCache      redis.Cache
 	storeRepository cas.StoreRepository
-	// VirtualIdRegistry manages the virtual Ids, a.k.a. "handle".
+	// VirtualIDRegistry manages the virtual IDs, a.k.a. "handle".
 	registry cas.Registry
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
 	forWriting bool
@@ -369,40 +369,40 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		return err
 	}
 
-	unusedNodeIds := make([]cas.BlobsPayload[sop.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
+	unusedNodeIDs := make([]cas.BlobsPayload[sop.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
-		blobsIds := cas.BlobsPayload[sop.UUID]{
+		blobsIDs := cas.BlobsPayload[sop.UUID]{
 			BlobTable: btree.ConvertToBlobTableName(t.updatedNodeHandles[i].RegistryTable),
 			Blobs:     make([]sop.UUID, len(t.updatedNodeHandles[i].IDs)),
 		}
 		for ii := range t.updatedNodeHandles[i].IDs {
-			// Since we've flipped the inactive to active, the new inactive Id is to be flushed out of Redis cache.
-			blobsIds.Blobs[ii] = t.updatedNodeHandles[i].IDs[ii].GetInActiveId()
+			// Since we've flipped the inactive to active, the new inactive ID is to be flushed out of Redis cache.
+			blobsIDs.Blobs[ii] = t.updatedNodeHandles[i].IDs[ii].GetInActiveID()
 		}
-		unusedNodeIds = append(unusedNodeIds, blobsIds)
+		unusedNodeIDs = append(unusedNodeIDs, blobsIDs)
 	}
 
-	// Package the logically deleted Ids for actual physical deletes.
-	deletedIds := make([]cas.RegistryPayload[sop.UUID], len(t.removedNodeHandles))
+	// Package the logically deleted IDs for actual physical deletes.
+	deletedIDs := make([]cas.RegistryPayload[sop.UUID], len(t.removedNodeHandles))
 	for i := range t.removedNodeHandles {
-		deletedIds[i].RegistryTable = t.removedNodeHandles[i].RegistryTable
-		deletedIds[i].IDs = make([]sop.UUID, len(t.removedNodeHandles[i].IDs))
-		blobsIds := cas.BlobsPayload[sop.UUID]{
+		deletedIDs[i].RegistryTable = t.removedNodeHandles[i].RegistryTable
+		deletedIDs[i].IDs = make([]sop.UUID, len(t.removedNodeHandles[i].IDs))
+		blobsIDs := cas.BlobsPayload[sop.UUID]{
 			BlobTable: btree.ConvertToBlobTableName(t.removedNodeHandles[i].RegistryTable),
 			Blobs:     make([]sop.UUID, len(t.removedNodeHandles[i].IDs)),
 		}
 		for ii := range t.removedNodeHandles[i].IDs {
-			// Removed nodes are marked deleted, thus, its active node Id can be safely removed.
-			deletedIds[i].IDs[ii] = t.removedNodeHandles[i].IDs[ii].LogicalId
-			blobsIds.Blobs[ii] = t.removedNodeHandles[i].IDs[ii].GetActiveId()
+			// Removed nodes are marked deleted, thus, its active node ID can be safely removed.
+			deletedIDs[i].IDs[ii] = t.removedNodeHandles[i].IDs[ii].LogicalID
+			blobsIDs.Blobs[ii] = t.removedNodeHandles[i].IDs[ii].GetActiveID()
 		}
-		unusedNodeIds = append(unusedNodeIds, blobsIds)
+		unusedNodeIDs = append(unusedNodeIDs, blobsIDs)
 	}
 
 	// TODO: finalize error handling, e.g. - if err occurred, don't remove logs.
 
-	t.logger.log(ctx, deleteObsoleteEntries, []interface{}{deletedIds, unusedNodeIds})
-	t.deleteObsoleteEntries(ctx, deletedIds, unusedNodeIds)
+	t.logger.log(ctx, deleteObsoleteEntries, []interface{}{deletedIDs, unusedNodeIDs})
+	t.deleteObsoleteEntries(ctx, deletedIDs, unusedNodeIDs)
 
 	t.logger.log(ctx, deleteObsoleteTrackedItemsValues, nil)
 	t.deleteObsoleteTrackedItemsValues(ctx)
@@ -552,7 +552,7 @@ func (t *transaction) classifyModifiedNodes() ([]sop.KeyValuePair[*btree.StoreIn
 		for _, cacheNode := range s.nodeRepository.nodeLocalCache {
 			// Allow newly created root nodes to get merged between transactions.
 			if s.nodeRepository.count == 0 &&
-				cacheNode.action == addAction && t.btreesBackend[i].getStoreInfo().RootNodeId == cacheNode.node.(btree.MetaDataType).GetId() {
+				cacheNode.action == addAction && t.btreesBackend[i].getStoreInfo().RootNodeID == cacheNode.node.(btree.MetaDataType).GetID() {
 				rootNodes = append(rootNodes, cacheNode.node)
 				continue
 			}
@@ -667,16 +667,16 @@ var warnDeleteServiceMissing bool = true
 
 // Delete the registry entries and unused node blobs.
 func (t *transaction) deleteObsoleteEntries(ctx context.Context,
-	deletedRegistryIds []cas.RegistryPayload[sop.UUID], unusedNodeIds []cas.BlobsPayload[sop.UUID]) {
-	if len(unusedNodeIds) > 0 {
+	deletedRegistryIDs []cas.RegistryPayload[sop.UUID], unusedNodeIDs []cas.BlobsPayload[sop.UUID]) {
+	if len(unusedNodeIDs) > 0 {
 		// Delete from Redis the inactive nodes.
 		// Leave the registry keys as there may be other in-flight transactions that need them
 		// for conflict resolution, to rollback or to fail their "reader" transaction.
-		deletedKeys := make([]string, cas.GetBlobPayloadCount[sop.UUID](unusedNodeIds))
+		deletedKeys := make([]string, cas.GetBlobPayloadCount[sop.UUID](unusedNodeIDs))
 		ik := 0
-		for i := range unusedNodeIds {
-			for ii := range unusedNodeIds[i].Blobs {
-				deletedKeys[ik] = t.btreesBackend[0].nodeRepository.formatKey(unusedNodeIds[i].Blobs[ii].String())
+		for i := range unusedNodeIDs {
+			for ii := range unusedNodeIDs[i].Blobs {
+				deletedKeys[ik] = t.btreesBackend[0].nodeRepository.formatKey(unusedNodeIDs[i].Blobs[ii].String())
 				ik++
 			}
 		}
@@ -685,14 +685,14 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 		}
 		// Only attempt to send the delete message to Kafka if the delete service is enabled.
 		if IsDeleteServiceEnabled {
-			if ok, err := kafka.Enqueue[[]cas.BlobsPayload[sop.UUID]](ctx, unusedNodeIds); !ok || err != nil {
+			if ok, err := kafka.Enqueue[[]cas.BlobsPayload[sop.UUID]](ctx, unusedNodeIDs); !ok || err != nil {
 				if err != nil {
 					log.Error("Kafka Enqueue failed, details: %v, deleting the leftover unused nodes.", err)
 				}
 				if !ok {
 					log.Info("Kafka Enqueue is still being sampled, deleting the leftover unused nodes.")
 				}
-				t.blobStore.Remove(ctx, unusedNodeIds...)
+				t.blobStore.Remove(ctx, unusedNodeIDs...)
 			} else {
 				log.Info(fmt.Sprintf("Kafka Enqueue passed sampling, expecting consumer(@topic:%s) to delete the leftover unused nodes.", kafka.GetConfig().Topic))
 			}
@@ -702,9 +702,9 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 				log.Warn("DeleteService is not enabled, deleting the leftover unused nodes.")
 				warnDeleteServiceMissing = false
 			}
-			t.blobStore.Remove(ctx, unusedNodeIds...)
+			t.blobStore.Remove(ctx, unusedNodeIDs...)
 		}
 	}
 	// Delete from registry the requested entries.
-	t.registry.Remove(ctx, deletedRegistryIds...)
+	t.registry.Remove(ctx, deletedRegistryIDs...)
 }

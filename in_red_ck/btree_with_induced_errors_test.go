@@ -74,7 +74,7 @@ func (b3 b3WithInducedErrors[TK, TV]) FindOne(ctx context.Context, key TK, first
 	}
 	return true, nil
 }
-func (b3 b3WithInducedErrors[TK, TV]) FindOneWithId(ctx context.Context, key TK, id sop.UUID) (bool, error) {
+func (b3 b3WithInducedErrors[TK, TV]) FindOneWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
 	b3.t.Helper()
 	if b3.induceErrorOnMethod == 8 {
 		return false, fmt.Errorf("foobar")

@@ -271,12 +271,12 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 
 	b3.FindOne(ctx, pk, false)
 	ci, _ := b3.GetCurrentItem(ctx)
-	itemId := ci.Id
+	itemID := ci.ID
 	p.SSN = "789"
 	b3.UpdateCurrentItem(ctx, p)
 
 	// Cause an update to "joe zoeyb" on t2, 'should generate conflict!
-	b32.FindOneWithId(ctx, pk, itemId)
+	b32.FindOneWithID(ctx, pk, itemID)
 	p.SSN = "555"
 	b32.UpdateCurrentItem(ctx, p)
 

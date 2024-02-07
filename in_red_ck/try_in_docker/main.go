@@ -29,7 +29,7 @@ func main() {
 		writeAndExit(err.Error())
 	}
 	storeInfo := *btree.NewStoreInfo("foobar", 4, true, true, true, "")
-	storeInfo.RootNodeId = sop.NewUUID()
+	storeInfo.RootNodeID = sop.NewUUID()
 	repo := cas.NewStoreRepository()
 	sis, err := repo.Get(ctx, "foobar")
 	if err != nil {
