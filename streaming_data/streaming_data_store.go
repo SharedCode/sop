@@ -11,7 +11,10 @@ import (
 
 // TODO: split these to multiple files, for now, together in one file to keep us focused.
 
+// StreamingDataStore interface contains methods useful for managing entries that allow encoding or decoding
+// of data streams.
 type StreamingDataStore[TK btree.Comparable] interface {
+	// Add insert an item to the b-tree and returns an encoder you can use to write the streaming data on.
 	Add(ctx context.Context, key TK) (json.Encoder, error)
 }
 
@@ -40,7 +43,7 @@ func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string
 	}
 }
 
-// Add adds an item to the b-tree and does not check for duplicates.
+// Add insert an item to the b-tree and returns an encoder you can use to write the streaming data on.
 func (s *streamingDataStore[TK]) Add(ctx context.Context, key TK) (json.Encoder, error) {
 	e := newWriter[TK](ctx, s.btree)
 	e.key = key

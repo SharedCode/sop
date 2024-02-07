@@ -17,34 +17,9 @@ func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx co
 		Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 5),
 	}
 	for uuid, cachedItem := range t.items {
-		if cachedItem.Action == updateAction || cachedItem.Action == removeAction {
-			if cachedItem.item.ValueNeedsFetch {
-				// If there is value data on another segment, mark it for delete.
-				t.forDeletionItems = append(t.forDeletionItems, cachedItem.item.ID)
-			}
-			cachedItem.item.ValueNeedsFetch = false
-			if cachedItem.Action == updateAction {
-				// Replace the Item ID so we can persist a new one and not touching current one that
-				// could be fetched in other transactions.
-				if cachedItem.item.Value != nil {
-					cachedItem.item.ID = sop.NewUUID()
-				}
-				t.items[uuid] = cachedItem
-			}
-		}
-		if cachedItem.Action == addAction || cachedItem.Action == updateAction {
-			if cachedItem.item.Value != nil {
-				itemsForAdd.Blobs = append(itemsForAdd.Blobs,
-					sop.KeyValuePair[sop.UUID, interface{}]{
-						Key:   cachedItem.item.ID,
-						Value: cachedItem.item.Value,
-					})
-				// nullify Value since we are saving it to a separate partition.
-				cachedItem.inflightItemValue = cachedItem.item.Value
-				cachedItem.item.Value = nil
-				cachedItem.item.ValueNeedsFetch = true
-			}
-			t.items[uuid] = cachedItem
+		itemForAdd := t.manage(uuid, cachedItem)
+		if itemForAdd != nil {
+			itemsForAdd.Blobs = append(itemsForAdd.Blobs, *itemForAdd)
 		}
 	}
 	if len(itemsForAdd.Blobs) > 0 {
@@ -60,6 +35,39 @@ func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx co
 		}
 	}
 	return nil
+}
+
+func (t *itemActionTracker[TK, TV]) manage(uuid sop.UUID, cachedItem cacheItem[TK, TV]) *sop.KeyValuePair[sop.UUID, interface{}] {
+	var r *sop.KeyValuePair[sop.UUID, interface{}]
+	if cachedItem.Action == updateAction || cachedItem.Action == removeAction{
+		if cachedItem.item.ValueNeedsFetch {
+			// If there is value data on another segment, mark it for delete.
+			t.forDeletionItems = append(t.forDeletionItems, cachedItem.item.ID)
+		}
+		cachedItem.item.ValueNeedsFetch = false
+		if cachedItem.Action == updateAction {
+			// Replace the Item ID so we can persist a new one and not touching current one that
+			// could be fetched in other transactions.
+			if cachedItem.item.Value != nil {
+				cachedItem.item.ID = sop.NewUUID()
+			}
+			t.items[uuid] = cachedItem
+		}
+	}
+	if cachedItem.Action == addAction || cachedItem.Action == updateAction {
+		if cachedItem.item.Value != nil {
+			r = &sop.KeyValuePair[sop.UUID, interface{}]{
+				Key:   cachedItem.item.ID,
+				Value: cachedItem.item.Value,
+			}
+			// nullify Value since we are saving it to a separate partition.
+			cachedItem.inflightItemValue = cachedItem.item.Value
+			cachedItem.item.Value = nil
+			cachedItem.item.ValueNeedsFetch = true
+		}
+		t.items[uuid] = cachedItem
+	}
+	return r
 }
 
 func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx context.Context) error {
