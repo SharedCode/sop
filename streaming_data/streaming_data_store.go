@@ -20,9 +20,10 @@ type streamingDataStore[TK btree.Comparable] struct {
 }
 
 type streamingDataKey[TK btree.Comparable] struct {
-	key TK
+	key        TK
 	chunkIndex int
 }
+
 func (x streamingDataKey[TK]) Compare(other interface{}) int {
 	y := other.(streamingDataKey[TK])
 	i := btree.Compare[TK](x.key, y.key)
@@ -40,8 +41,8 @@ func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string
 }
 
 // Add adds an item to the b-tree and does not check for duplicates.
-func (s *streamingDataStore[TK])Add(ctx context.Context, key TK) (json.Encoder, error) {
-	e := newEncoder[TK](ctx, s.btree)
+func (s *streamingDataStore[TK]) Add(ctx context.Context, key TK) (json.Encoder, error) {
+	e := newWriter[TK](ctx, s.btree)
 	e.key = key
 	return *json.NewEncoder(e), nil
 }
