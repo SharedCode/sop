@@ -146,7 +146,7 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 		if err != nil {
 			return false, err
 		}
-		if !firstItemWithKey && compare[TK](ci.Key, key) == 0 {
+		if !firstItemWithKey && Compare[TK](ci.Key, key) == 0 {
 			return true, nil
 		}
 	}

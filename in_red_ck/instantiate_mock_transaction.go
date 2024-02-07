@@ -15,7 +15,8 @@ var mockRegistry = cas.NewMockRegistry(false)
 var mockRedisCache = redis.NewMockClient()
 var mockNodeBlobStore = cas.NewMockBlobStore()
 
-func newMockTransaction(t *testing.T, forWriting bool, maxTime time.Duration) (Transaction, error) {
+// NewMockTransaction instantiates a mocked transaction, i.e. - it uses in-memory Repositories as backend, not Cassandra.
+func NewMockTransaction(t *testing.T, forWriting bool, maxTime time.Duration) (Transaction, error) {
 	t.Helper()
 	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, forWriting, maxTime)
 	return &singlePhaseTransaction{
