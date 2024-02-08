@@ -71,7 +71,7 @@ func (t *itemActionTracker[TK, TV]) manage(uuid sop.UUID, cachedItem cacheItem[T
 }
 
 func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx context.Context) error {
-	if t.storeInfo.IsValueDataInNodeSegment || t.storeInfo.IsValueDataActivelyPersisted {
+	if t.storeInfo.IsValueDataInNodeSegment {
 		return nil
 	}
 	itemsForDelete := cas.BlobsPayload[sop.UUID]{
@@ -104,7 +104,7 @@ func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx 
 }
 
 func (t *itemActionTracker[TK, TV]) deleteObsoleteTrackedValuesInSeparateSegments(ctx context.Context) error {
-	if t.storeInfo.IsValueDataInNodeSegment || t.storeInfo.IsValueDataActivelyPersisted {
+	if t.storeInfo.IsValueDataInNodeSegment {
 		return nil
 	}
 	itemsForDelete := cas.BlobsPayload[sop.UUID]{
