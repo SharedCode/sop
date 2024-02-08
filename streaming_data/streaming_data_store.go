@@ -9,8 +9,8 @@ import (
 	"github.com/SharedCode/sop/in_red_ck"
 )
 
-// StreamingDataStore interface contains methods useful for managing entries that allow encoding or decoding
-// of data streams.
+// StreamingDataStore contains methods useful for storage & management of entries that allow
+// encoding and decoding to/from data streams.
 type StreamingDataStore[TK btree.Comparable] struct {
 	btree btree.BtreeInterface[streamingDataKey[TK], []byte]
 }
