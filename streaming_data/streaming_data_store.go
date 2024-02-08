@@ -122,38 +122,38 @@ func (s *StreamingDataStore[TK]) FindOne(ctx context.Context, key TK, firstItemW
 
 // GetCurrentKey returns the current item's key.
 func (s *StreamingDataStore[TK]) GetCurrentKey() TK {
-	return s.GetCurrentKey()
+	return s.btree.GetCurrentKey().key
 }
 
 // First positions the "cursor" to the first item as per key ordering.
 // Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 func (s *StreamingDataStore[TK]) First(ctx context.Context) (bool, error) {
-	return s.First(ctx)
+	return s.btree.First(ctx)
 }
 // Last positionts the "cursor" to the last item as per key ordering.
 // Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 func (s *StreamingDataStore[TK]) Last(ctx context.Context) (bool, error) {
-	return s.Last(ctx)
+	return s.btree.Last(ctx)
 }
 // Next positions the "cursor" to the next item as per key ordering.
 // Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 func (s *StreamingDataStore[TK]) Next(ctx context.Context) (bool, error) {
-	return s.Next(ctx)
+	return s.btree.Next(ctx)
 }
 // Previous positions the "cursor" to the previous item as per key ordering.
 // Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 func (s *StreamingDataStore[TK]) Previous(ctx context.Context) (bool, error) {
-	return s.Previous(ctx)
+	return s.btree.Previous(ctx)
 }
 
 // IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
 // Specifying uniqueness base on key makes the B-Tree permanently set. If you want just a temporary
 // unique check during Add of an item, then you can use AddIfNotExist method for that.
 func (s *StreamingDataStore[TK]) IsUnique() bool {
-	return s.IsUnique()
+	return s.btree.IsUnique()
 }
 
 // Returns the number of items in this B-Tree.
 func (s *StreamingDataStore[TK]) Count() int64 {
-	return s.Count()
+	return s.btree.Count()
 }
