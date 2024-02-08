@@ -33,6 +33,7 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 	versionInDB       int
 	isLockOwner       bool
 	inflightItemValue *TV
+	partlyCommitted bool
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
@@ -111,7 +112,7 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 }
 
 func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK, TV]) error {
-	t.items[item.ID] = cacheItem[TK, TV]{
+	cachedItem := cacheItem[TK, TV]{
 		lockRecord: lockRecord{
 			LockID: sop.NewUUID(),
 			Action: addAction,
@@ -119,16 +120,56 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 		item:        item,
 		versionInDB: item.Version,
 	}
+	t.items[item.ID] = cachedItem
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
 	item.Version++
+
+	if t.storeInfo.IsValueDataActivelyPersisted {
+		// Actively persist the item.
+		itemsForAdd := cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
+			BlobTable: t.storeInfo.BlobTable,
+			Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 5),
+		}
+		itemForAdd := t.manage(item.ID, cachedItem)
+		if itemForAdd != nil {
+			itemsForAdd.Blobs = append(itemsForAdd.Blobs, *itemForAdd)
+		}
+		if len(itemsForAdd.Blobs) > 0 {
+			if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
 func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item[TK, TV]) error {
 	v, ok := t.items[item.ID]
+
+	activelyPersist := func(v cacheItem[TK, TV]) error {
+		if t.storeInfo.IsValueDataActivelyPersisted {
+			// Actively persist the item.
+			itemsForAdd := cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
+				BlobTable: t.storeInfo.BlobTable,
+				Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 5),
+			}
+			itemForAdd := t.manage(item.ID, v)
+			if itemForAdd != nil {
+				itemsForAdd.Blobs = append(itemsForAdd.Blobs, *itemForAdd)
+			}
+			if len(itemsForAdd.Blobs) > 0 {
+				if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
 	if ok {
 		if v.Action == addAction {
-			return nil
+			return activelyPersist(v)
 		}
 		v.lockRecord.Action = updateAction
 		v.item = item
@@ -136,9 +177,10 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 		if item.Version == v.versionInDB {
 			item.Version++
 		}
-		return nil
+		return activelyPersist(v)
 	}
-	t.items[item.ID] = cacheItem[TK, TV]{
+
+	v = cacheItem[TK, TV]{
 		lockRecord: lockRecord{
 			LockID: sop.NewUUID(),
 			Action: updateAction,
@@ -146,12 +188,19 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 		item:        item,
 		versionInDB: item.Version,
 	}
+	t.items[item.ID] = v
 	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
 	item.Version++
-	return nil
+	return activelyPersist(v)
 }
 
 func (t *itemActionTracker[TK, TV]) Remove(ctx context.Context, item *btree.Item[TK, TV]) error {
+	if t.storeInfo.IsValueDataActivelyPersisted {
+		t.forDeletionItems = append(t.forDeletionItems, item.ID)
+		item.ValueNeedsFetch = false
+		return nil
+	}
+
 	if v, ok := t.items[item.ID]; ok && v.Action == addAction {
 		delete(t.items, item.ID)
 		return nil
