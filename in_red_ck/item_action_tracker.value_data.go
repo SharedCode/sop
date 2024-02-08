@@ -70,6 +70,14 @@ func (t *itemActionTracker[TK, TV]) manage(uuid sop.UUID, cachedItem cacheItem[T
 	return r
 }
 
+// TODO: for IsValueDataActivelyPersisted, we need to support both partial & fulle rollback.
+// For refetch & merge: partial rollback will not undo saved "values" in data segments and
+// will, thus, merge with the "item" keeping these values' data in other segments and not in memory.
+// So, it is a light weight merge.
+//
+// When timeout or conflict occurs, then full rollback will allow undo of entire changes including
+// these "values" data segments deletion.
+
 func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx context.Context) error {
 	if t.storeInfo.IsValueDataInNodeSegment {
 		return nil
