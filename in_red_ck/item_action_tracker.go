@@ -32,8 +32,6 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 	// Version of the item as read from DB.
 	versionInDB       int
 	isLockOwner       bool
-	inflightItemValue *TV
-	partlyCommitted bool
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
@@ -128,7 +126,7 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 		// Actively persist the item.
 		itemsForAdd := cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
 			BlobTable: t.storeInfo.BlobTable,
-			Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 5),
+			Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 1),
 		}
 		itemForAdd := t.manage(item.ID, cachedItem)
 		if itemForAdd != nil {
@@ -152,7 +150,7 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 			// Actively persist the item.
 			itemsForAdd := cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
 				BlobTable: t.storeInfo.BlobTable,
-				Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 5),
+				Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 1),
 			}
 			itemForAdd := t.manage(item.ID, v)
 			if itemForAdd != nil {

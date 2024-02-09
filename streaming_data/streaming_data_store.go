@@ -9,8 +9,8 @@ import (
 	"github.com/SharedCode/sop/in_red_ck"
 )
 
-// StreamingDataStore interface contains methods useful for managing entries that allow encoding or decoding
-// of data streams.
+// StreamingDataStore contains methods useful for storage & management of entries that allow
+// encoding and decoding to/from data streams.
 type StreamingDataStore[TK btree.Comparable] struct {
 	btree btree.BtreeInterface[streamingDataKey[TK], []byte]
 }
@@ -41,7 +41,7 @@ func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string
 }
 
 // Add insert an item to the b-tree and returns an encoder you can use to write the streaming data on.
-func (s *StreamingDataStore[TK]) Add(ctx context.Context, key TK) (Encoder, error) {
+func (s *StreamingDataStore[TK]) Add(ctx context.Context, key TK) (*Encoder[TK], error) {
 	w := newWriter[TK](ctx, true, key, s.btree)
 	return newEncoder(ctx, w), nil
 }
@@ -49,7 +49,7 @@ func (s *StreamingDataStore[TK]) Add(ctx context.Context, key TK) (Encoder, erro
 // AddIfNotExist adds an item if there is no item matching the key yet.
 // Otherwise, it will do nothing and return false, for not adding the item.
 // This is useful for cases one wants to add an item without creating a duplicate entry.
-func (s *StreamingDataStore[TK]) AddIfNotExist(ctx context.Context, key TK) (Encoder, error) {
+func (s *StreamingDataStore[TK]) AddIfNotExist(ctx context.Context, key TK) (*Encoder[TK], error) {
 	if found, err := s.FindOne(ctx, key, false); err != nil || found {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (s *StreamingDataStore[TK]) RemoveCurrentItem(ctx context.Context) (bool, e
 }
 
 // Update finds the item with key and update its value to the value argument.
-func (s *StreamingDataStore[TK]) Update(ctx context.Context, key TK) (Encoder, error) {
+func (s *StreamingDataStore[TK]) Update(ctx context.Context, key TK) (*Encoder[TK], error) {
 	if found, err := s.FindOne(ctx, key, false); err != nil || !found {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (s *StreamingDataStore[TK]) Update(ctx context.Context, key TK) (Encoder, e
 }
 // UpdateCurrentItem will update the Value of the current item.
 // Key is read-only, thus, no argument for the key.
-func (s *StreamingDataStore[TK]) UpdateCurrentItem(ctx context.Context) (Encoder, error) {
+func (s *StreamingDataStore[TK]) UpdateCurrentItem(ctx context.Context) (*Encoder[TK], error) {
 	w := newWriter[TK](ctx, false, s.btree.GetCurrentKey().key, s.btree)
 	return newEncoder(ctx, w), nil
 }

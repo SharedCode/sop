@@ -105,6 +105,7 @@ func (btree *Btree[TK, TV]) Count() int64 {
 // Add a key/value pair item to the tree.
 func (btree *Btree[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {
 	var item = newItem[TK, TV](key, value)
+
 	node, err := btree.getRootNode(ctx)
 	if err != nil {
 		return false, err
@@ -121,6 +122,32 @@ func (btree *Btree[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, er
 	// Add to local cache for submit/resolution on Commit.
 	if err := btree.storeInterface.ItemActionTracker.Add(ctx, item); err != nil {
 		return false, err
+	}
+
+	// Service the node's requested action(s).
+	btree.distribute(ctx)
+	btree.promote(ctx)
+
+	// Increment store's item count.
+	// TODO: Register StoreInfo change to transaction manager (on V2) so it can get persisted.
+	btree.StoreInfo.Count++
+
+	return true, nil
+}
+
+// For internal use only, when SOP is doing refetch and merge in commt.
+func (btree *Btree[TK, TV]) AddItem(ctx context.Context, item *Item[TK, TV]) (bool, error) {
+	node, err := btree.getRootNode(ctx)
+	if err != nil {
+		return false, err
+	}
+	result, err := node.add(ctx, btree, item)
+	if err != nil {
+		return false, err
+	}
+	// Add failed with no reason, 'just return false.
+	if !result {
+		return false, nil
 	}
 
 	// Service the node's requested action(s).
@@ -337,6 +364,25 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) 
 	if err := btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
 		return false, err
 	}
+	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
+	btree.saveNode(node)
+	return true, nil
+}
+
+// For internal use only, when SOP is doing refetch and merge in commt.
+func (btree *Btree[TK, TV]) UpdateCurrentNodeItem(ctx context.Context, item *Item[TK, TV]) (bool, error) {
+	if btree.currentItemRef.getNodeID() == sop.NilUUID {
+		return false, nil
+	}
+	node, err := btree.getNode(ctx, btree.currentItemRef.getNodeID())
+	if err != nil {
+		return false, err
+	}
+	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+		return false, nil
+	}
+	node.Slots[btree.currentItemRef.getNodeItemIndex()] = item
+
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
 	btree.saveNode(node)
 	return true, nil

@@ -118,7 +118,7 @@ func (t *transaction) Phase1Commit(ctx context.Context) error {
 	}
 	if err := t.phase1Commit(ctx); err != nil {
 		t.phaseDone = 2
-		if rerr := t.rollback(ctx); rerr != nil {
+		if rerr := t.rollback(ctx, true); rerr != nil {
 			return fmt.Errorf("Phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
 		return fmt.Errorf("Phase 1 commit failed, details: %v", err)
@@ -149,7 +149,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 				if err := t.timedOut(ctx, startTime); err != nil {
 					break
 				}
-				if rerr := t.rollback(ctx); rerr != nil {
+				if rerr := t.rollback(ctx, false); rerr != nil {
 					return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 				}
 				log.Warn(err.Error() + ", will retry")
@@ -165,7 +165,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 				}
 			}
 		}
-		if rerr := t.rollback(ctx); rerr != nil {
+		if rerr := t.rollback(ctx, true); rerr != nil {
 			return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
 		return fmt.Errorf("Phase 2 commit failed, details: %v", err)
@@ -182,7 +182,7 @@ func (t *transaction) Rollback(ctx context.Context) error {
 	}
 	// Reset transaction status and mark done to end it without persisting any change.
 	t.phaseDone = 2
-	if err := t.rollback(ctx); err != nil {
+	if err := t.rollback(ctx, true); err != nil {
 		return fmt.Errorf("Rollback failed, details: %v", err)
 	}
 	return nil
@@ -301,7 +301,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 		if !successful {
 			// Rollback partial changes.
-			t.rollback(ctx)
+			t.rollback(ctx, false)
 			// Clear enqueued logs as we rolled back.
 			t.logger.clearQueue()
 
@@ -418,7 +418,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) rollback(ctx context.Context) error {
+func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues bool) error {
 	if t.logger.committedState == unlockTrackedItems {
 		// This state should not be reached and rollback invoked, but return an error about it, in case.
 		return fmt.Errorf("Transaction got committed, 'can't rollback it")
@@ -455,7 +455,7 @@ func (t *transaction) rollback(ctx context.Context) error {
 			lastErr = err
 		}
 	}
-	if t.logger.committedState >= commitTrackedItemsValues {
+	if rollbackTrackedItemsValues && t.logger.committedState >= commitTrackedItemsValues {
 		if err := t.btreesBackend[0].rollbackTrackedItemsValues(ctx); err != nil {
 			lastErr = err
 		}
