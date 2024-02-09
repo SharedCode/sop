@@ -125,6 +125,19 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	if err1 != nil || err2 != nil {
 		t.Error("got = commit failure, want = both commit success.")
 	}
+
+	t2, _ = NewMockTransaction(t, true, -1)
+	t2.Begin()
+	b32, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t2)
+	if found, err := b32.FindOne(ctx, pk2, false); err != nil {
+		t.Error(err)
+	} else if !found {
+		t.Errorf("FindOne(pk2) failed, got not found, want found")
+	}
+	p22, _ := b32.GetCurrentValue(ctx)
+	if p22.SSN != p2.SSN {
+		t.Errorf("UpdateCurrentItem failed, got %s, want %s", p22.SSN, p2.SSN)
+	}
 }
 
 // Reader transaction fails commit when an item read was modified by another transaction in-flight.

@@ -175,6 +175,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 						}
 						return fmt.Errorf("refetchAndMergeModifications failed to merge add item with key %v", ci.item.Key)
 					}
+					ci.persisted = true
 					si.ItemActionTracker.(*itemActionTracker[TK, TV]).items[ci.item.ID] = ci
 					continue
 				}
@@ -220,12 +221,12 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 					// Merge the inflight Item ID with target.
 					si.ItemActionTracker.(*itemActionTracker[TK, TV]).forDeletionItems = append(
 						si.ItemActionTracker.(*itemActionTracker[TK, TV]).forDeletionItems, item.ID)
-					ci2 := si.ItemActionTracker.(*itemActionTracker[TK, TV]).items[item.ID]
-					ci2.item.ID = ci.item.ID
-					si.ItemActionTracker.(*itemActionTracker[TK, TV]).items[item.ID] = ci2
+					delete(si.ItemActionTracker.(*itemActionTracker[TK, TV]).items, item.ID)
+					ci.persisted = true
+					si.ItemActionTracker.(*itemActionTracker[TK, TV]).items[ci.item.ID] = ci
 
 					// Ensure Btree will do everything else needed to update current Item, except merge change(above).
-					if ok, err := b3.UpdateCurrentNodeItem(ctx, ci2.item); !ok || err != nil {
+					if ok, err := b3.UpdateCurrentNodeItem(ctx, ci.item); !ok || err != nil {
 						if err != nil {
 							return err
 						}
