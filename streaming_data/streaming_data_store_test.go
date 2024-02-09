@@ -26,7 +26,7 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore", trans)
 
-	ok, _ := sds.FindOne(ctx, "fooVideo", false)
+	ok, _ := sds.FindOne(ctx, "fooVideo")
 	if !ok {
 		t.Errorf("FindOne('fooVideo') failed, got not found, want found")
 	}
@@ -76,7 +76,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore", trans)
 
-	ok, _ := sds.FindOne(ctx, "fooVideo2", false)
+	ok, _ := sds.FindOne(ctx, "fooVideo2")
 	if !ok {
 		t.Errorf("FindOne('fooVideo') failed, got not found, want found")
 	}

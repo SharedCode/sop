@@ -16,11 +16,12 @@ type reader[TK btree.Comparable] struct {
 	readCount  int
 }
 
-func newReader[TK btree.Comparable](ctx context.Context, key TK, btree btree.BtreeInterface[StreamingDataKey[TK], []byte]) *reader[TK] {
+func newReader[TK btree.Comparable](ctx context.Context, key TK, chunkIndex int, btree btree.BtreeInterface[StreamingDataKey[TK], []byte]) *reader[TK] {
 	return &reader[TK]{
 		btree: btree,
 		ctx:   ctx,
 		key:   key,
+		chunkIndex: chunkIndex,
 	}
 }
 
