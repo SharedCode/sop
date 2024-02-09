@@ -175,7 +175,6 @@ func Test_ValueDataInSeparateSegment_AddAndSearchManyPersons(t *testing.T) {
 	trans.Commit(ctx)
 }
 
-// This test took about 3 minutes from empty to finish in my laptop.
 func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 15000
@@ -184,8 +183,6 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 	t1.Begin()
 	b3, _ := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
 
-	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
-	// for scheduled batch deletes.
 	for i := start; i <= end; i++ {
 		pk, p := newPerson("jack", fmt.Sprintf("reepper%d", i), "male", "email very very long long long", "phone123")
 		if ok, _ := b3.AddIfNotExist(ctx, pk, p); ok {
@@ -234,7 +231,6 @@ func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 	t1.Begin()
 	b3, _ := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
 
-	// Populating 90,000 items took about few minutes, did not use Kafka based delete service.
 	for i := start; i <= end; i++ {
 		pk, _ := newPerson("jack", fmt.Sprintf("reepper%d", i), "male", "email very very long long long", "phone123")
 		if ok, err := b3.Remove(ctx, pk); !ok || err != nil {
