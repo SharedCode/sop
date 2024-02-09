@@ -150,11 +150,6 @@ func (btree *Btree[TK, TV]) AddItem(ctx context.Context, item *Item[TK, TV]) (bo
 		return false, nil
 	}
 
-	// // Add to local cache for submit/resolution on Commit.
-	// if err := btree.storeInterface.ItemActionTracker.Add(ctx, item); err != nil {
-	// 	return false, err
-	// }
-
 	// Service the node's requested action(s).
 	btree.distribute(ctx)
 	btree.promote(ctx)
@@ -387,10 +382,6 @@ func (btree *Btree[TK, TV]) UpdateCurrentNodeItem(ctx context.Context, item *Ite
 		return false, nil
 	}
 	node.Slots[btree.currentItemRef.getNodeItemIndex()] = item
-	// // Register to local cache the "item update" for submit/resolution on Commit.
-	// if err := btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
-	// 	return false, err
-	// }
 
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
 	btree.saveNode(node)
