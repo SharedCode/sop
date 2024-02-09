@@ -2,8 +2,8 @@ package streaming_data
 
 import (
 	"context"
-	"fmt"
 	"encoding/json"
+	"fmt"
 
 	"github.com/SharedCode/sop/btree"
 )
@@ -11,13 +11,13 @@ import (
 // An Encoder writes JSON values to an output stream by delegating to JSON Encoder.
 type Encoder[TK btree.Comparable] struct {
 	jsonEncoder *json.Encoder
-	w *writer[TK]
+	w           *writer[TK]
 }
 
 func newEncoder[TK btree.Comparable](ctx context.Context, w *writer[TK]) *Encoder[TK] {
 	return &Encoder[TK]{
 		jsonEncoder: json.NewEncoder(w),
-		w: w,
+		w:           w,
 	}
 }
 
@@ -33,7 +33,7 @@ func (e *Encoder[TK]) Close() error {
 		return nil
 	}
 	for {
-		found, err := e.w.btree.FindOne(e.w.ctx, streamingDataKey[TK]{key: e.w.key, chunkIndex: e.w.chunkIndex}, false)
+		found, err := e.w.btree.FindOne(e.w.ctx, StreamingDataKey[TK]{Key: e.w.key, ChunkIndex: e.w.chunkIndex}, false)
 		if err != nil {
 			return err
 		}

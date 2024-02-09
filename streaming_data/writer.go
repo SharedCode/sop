@@ -8,26 +8,26 @@ import (
 )
 
 type writer[TK btree.Comparable] struct {
-	btree      btree.BtreeInterface[streamingDataKey[TK], []byte]
-	ctx        context.Context
-	key        TK
-	chunkIndex int
+	btree       btree.BtreeInterface[StreamingDataKey[TK], []byte]
+	ctx         context.Context
+	key         TK
+	chunkIndex  int
 	addOrUpdate bool
 }
 
-func newWriter[TK btree.Comparable](ctx context.Context, addOrUpdate bool, key TK, btree btree.BtreeInterface[streamingDataKey[TK], []byte]) *writer[TK] {
+func newWriter[TK btree.Comparable](ctx context.Context, addOrUpdate bool, key TK, btree btree.BtreeInterface[StreamingDataKey[TK], []byte]) *writer[TK] {
 	return &writer[TK]{
-		btree: btree,
-		ctx:   ctx,
+		btree:       btree,
+		ctx:         ctx,
 		addOrUpdate: addOrUpdate,
-		key: key,
+		key:         key,
 	}
 }
 
 func (w *writer[TK]) Write(p []byte) (n int, err error) {
 	// Add.
 	if w.addOrUpdate {
-		if ok, err := w.btree.Add(w.ctx, streamingDataKey[TK]{key: w.key, chunkIndex: w.chunkIndex}, p); err != nil || !ok {
+		if ok, err := w.btree.Add(w.ctx, StreamingDataKey[TK]{Key: w.key, ChunkIndex: w.chunkIndex}, p); err != nil || !ok {
 			if err != nil {
 				return 0, err
 			}
@@ -38,7 +38,7 @@ func (w *writer[TK]) Write(p []byte) (n int, err error) {
 		return len(p), nil
 	}
 	// Update.
-	ok, err := w.btree.FindOne(w.ctx, streamingDataKey[TK]{key: w.key, chunkIndex: w.chunkIndex}, false)
+	ok, err := w.btree.FindOne(w.ctx, StreamingDataKey[TK]{Key: w.key, ChunkIndex: w.chunkIndex}, false)
 	if err != nil {
 		return 0, err
 	}
@@ -54,7 +54,7 @@ func (w *writer[TK]) Write(p []byte) (n int, err error) {
 		return len(p), nil
 	}
 	// Current chunk with index not found, new chunk should be added.
-	if ok, err := w.btree.Add(w.ctx, streamingDataKey[TK]{key: w.key, chunkIndex: w.chunkIndex}, p); err != nil || !ok {
+	if ok, err := w.btree.Add(w.ctx, StreamingDataKey[TK]{Key: w.key, ChunkIndex: w.chunkIndex}, p); err != nil || !ok {
 		if err != nil {
 			return 0, err
 		}
