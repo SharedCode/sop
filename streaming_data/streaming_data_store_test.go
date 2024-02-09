@@ -21,8 +21,8 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	}
 	trans.Commit(ctx)
 
-	// Read back the data.
-	trans, _ = in_red_ck.NewMockTransaction(t, true, -1)
+	// Read back the data. Pass false on 2nd argument will toggle to a "reader" transaction.
+	trans, _ = in_red_ck.NewMockTransaction(t, false, -1)
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore", trans)
 
@@ -38,5 +38,11 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 			break
 		}
 		fmt.Println(target)
+	}
+	// Commit on "reader" transaction will ensure that data you read did not change on entire
+	// transaction session until commit time. If other transaction did change the data read,
+	// Commit on the reader will return an error to reflect that data consistency conflict.
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Reader transaction commit failed, details: %v", err)
 	}
 }
