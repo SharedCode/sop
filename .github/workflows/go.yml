@@ -5,9 +5,9 @@ name: Go
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "value_data_segment"]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "value_data_segment"]
 
 jobs:
 
