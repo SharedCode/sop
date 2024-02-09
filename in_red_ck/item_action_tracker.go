@@ -32,6 +32,7 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 	// Version of the item as read from DB.
 	versionInDB       int
 	isLockOwner       bool
+	persisted       bool
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {

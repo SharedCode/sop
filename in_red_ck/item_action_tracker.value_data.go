@@ -38,6 +38,9 @@ func (t *itemActionTracker[TK, TV]) commitTrackedValuesToSeparateSegments(ctx co
 }
 
 func (t *itemActionTracker[TK, TV]) manage(uuid sop.UUID, cachedItem cacheItem[TK, TV]) *sop.KeyValuePair[sop.UUID, interface{}] {
+	if cachedItem.persisted {
+		return nil
+	}
 	var r *sop.KeyValuePair[sop.UUID, interface{}]
 	if cachedItem.Action == updateAction || cachedItem.Action == removeAction{
 		if cachedItem.item.ValueNeedsFetch {
@@ -61,7 +64,6 @@ func (t *itemActionTracker[TK, TV]) manage(uuid sop.UUID, cachedItem cacheItem[T
 				Value: cachedItem.item.Value,
 			}
 			// nullify Value since we are saving it to a separate partition.
-			// cachedItem.inflightItemValue = cachedItem.item.Value
 			cachedItem.item.Value = nil
 			cachedItem.item.ValueNeedsFetch = true
 		}
@@ -80,11 +82,6 @@ func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx 
 	}
 	for itemID, cachedItem := range t.items {
 		if cachedItem.Action == addAction || cachedItem.Action == updateAction {
-			// if cachedItem.inflightItemValue != nil {
-			// 	cachedItem.item.Value = cachedItem.inflightItemValue
-			// 	cachedItem.inflightItemValue = nil
-			// 	cachedItem.item.ValueNeedsFetch = false
-			// }
 			if t.storeInfo.IsValueDataGloballyCached {
 				t.redisCache.Delete(ctx, t.formatKey(cachedItem.item.ID.String()))
 			}

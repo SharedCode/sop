@@ -381,6 +381,7 @@ func (btree *Btree[TK, TV]) UpdateCurrentNodeItem(ctx context.Context, item *Ite
 	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
 		return false, nil
 	}
+	btree.currentItem = item
 	node.Slots[btree.currentItemRef.getNodeItemIndex()] = item
 
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
