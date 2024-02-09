@@ -166,9 +166,9 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 		b3.StoreInfo.Count = storeInfo[0].Count
 		b3.StoreInfo.RootNodeID = storeInfo[0].RootNodeID
 
-		for _, ci := range b3ModifiedItems {
+		for uuid, ci := range b3ModifiedItems {
 			if ci.Action == addAction {
-				if b3.StoreInfo.IsValueDataActivelyPersisted {
+				if !b3.StoreInfo.IsValueDataInNodeSegment {
 					if ok, err := b3.AddItem(ctx, ci.item); !ok || err != nil {
 						if err != nil {
 							return err
@@ -186,7 +186,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 				}
 				continue
 			}
-			if ok, err := b3.FindOneWithID(ctx, ci.item.Key, ci.item.ID); !ok || err != nil {
+			if ok, err := b3.FindOneWithID(ctx, ci.item.Key, uuid); !ok || err != nil {
 				if err != nil {
 					return err
 				}
@@ -216,7 +216,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 				continue
 			}
 			if ci.Action == updateAction {
-				if b3.StoreInfo.IsValueDataActivelyPersisted {
+				if !b3.StoreInfo.IsValueDataInNodeSegment {
 					// Merge the inflight Item ID with target.
 					si.ItemActionTracker.(*itemActionTracker[TK, TV]).forDeletionItems = append(
 						si.ItemActionTracker.(*itemActionTracker[TK, TV]).forDeletionItems, item.ID)
