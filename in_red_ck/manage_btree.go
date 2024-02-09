@@ -168,6 +168,16 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 
 		for _, ci := range b3ModifiedItems {
 			if ci.Action == addAction {
+				if b3.StoreInfo.IsValueDataActivelyPersisted {
+					if ok, err := b3.AddItem(ctx, ci.item); !ok || err != nil {
+						if err != nil {
+							return err
+						}
+						return fmt.Errorf("refetchAndMergeModifications failed to merge add item with key %v", ci.item.Key)
+					}
+					si.ItemActionTracker.(*itemActionTracker[TK, TV]).items[ci.item.ID] = ci
+					continue
+				}
 				if ok, err := b3.Add(ctx, ci.item.Key, *ci.item.Value); !ok || err != nil {
 					if err != nil {
 						return err
@@ -184,7 +194,8 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 			}
 
 			// Check if the item read from backend has been updated since the time we read it.
-			if item, err := b3.GetCurrentItem(ctx); err != nil || item.Version != ci.versionInDB {
+			item, err := b3.GetCurrentItem(ctx)
+			if err != nil || item.Version != ci.versionInDB {
 				if err != nil {
 					return err
 				}
@@ -205,6 +216,23 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 				continue
 			}
 			if ci.Action == updateAction {
+				if b3.StoreInfo.IsValueDataActivelyPersisted {
+					// Merge the inflight Item ID with target.
+					si.ItemActionTracker.(*itemActionTracker[TK, TV]).forDeletionItems = append(
+						si.ItemActionTracker.(*itemActionTracker[TK, TV]).forDeletionItems, item.ID)
+					ci2 := si.ItemActionTracker.(*itemActionTracker[TK, TV]).items[item.ID]
+					ci2.item.ID = ci.item.ID
+					si.ItemActionTracker.(*itemActionTracker[TK, TV]).items[item.ID] = ci2
+
+					// Ensure Btree will do everything else needed to update current Item, except merge change(above).
+					if ok, err := b3.UpdateCurrentNodeItem(ctx, ci2.item); !ok || err != nil {
+						if err != nil {
+							return err
+						}
+						return fmt.Errorf("refetchAndMergeModifications failed to merge update item with key %v", ci.item.Key)
+					}
+					continue
+				}
 				if ok, err := b3.UpdateCurrentItem(ctx, *ci.item.Value); !ok || err != nil {
 					if err != nil {
 						return err

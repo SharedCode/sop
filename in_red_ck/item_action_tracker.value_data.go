@@ -61,7 +61,7 @@ func (t *itemActionTracker[TK, TV]) manage(uuid sop.UUID, cachedItem cacheItem[T
 				Value: cachedItem.item.Value,
 			}
 			// nullify Value since we are saving it to a separate partition.
-			cachedItem.inflightItemValue = cachedItem.item.Value
+			// cachedItem.inflightItemValue = cachedItem.item.Value
 			cachedItem.item.Value = nil
 			cachedItem.item.ValueNeedsFetch = true
 		}
@@ -69,14 +69,6 @@ func (t *itemActionTracker[TK, TV]) manage(uuid sop.UUID, cachedItem cacheItem[T
 	}
 	return r
 }
-
-// TODO: for IsValueDataActivelyPersisted, we need to support both partial & full rollback.
-// For refetch & merge: partial rollback will not undo saved "values" in data segments and
-// will, thus, merge with the "item" keeping these values' data in other segments and not in memory.
-// So, it is a light weight merge.
-//
-// When timeout or conflict occurs, then full rollback will allow undo of entire changes including
-// these "values" data segments deletion.
 
 func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx context.Context) error {
 	if t.storeInfo.IsValueDataInNodeSegment {
@@ -88,11 +80,11 @@ func (t *itemActionTracker[TK, TV]) rollbackTrackedValuesInSeparateSegments(ctx 
 	}
 	for itemID, cachedItem := range t.items {
 		if cachedItem.Action == addAction || cachedItem.Action == updateAction {
-			if cachedItem.inflightItemValue != nil {
-				cachedItem.item.Value = cachedItem.inflightItemValue
-				cachedItem.inflightItemValue = nil
-				cachedItem.item.ValueNeedsFetch = false
-			}
+			// if cachedItem.inflightItemValue != nil {
+			// 	cachedItem.item.Value = cachedItem.inflightItemValue
+			// 	cachedItem.inflightItemValue = nil
+			// 	cachedItem.item.ValueNeedsFetch = false
+			// }
 			if t.storeInfo.IsValueDataGloballyCached {
 				t.redisCache.Delete(ctx, t.formatKey(cachedItem.item.ID.String()))
 			}
