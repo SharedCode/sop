@@ -128,6 +128,54 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 	trans.Commit(ctx)
 }
 
+func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
+	// Upload the video.
+	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
+	trans.Begin()
+	sds := NewStreamingDataStore[string](ctx, "fooStore4", trans)
+	encoder, _ := sds.Add(ctx, "fooVideo3")
+	encodeVideo(t, encoder, 5)
+	trans.Commit(ctx)
+
+	// Update the video.
+	trans, _ = in_red_ck.NewMockTransaction(t, true, -1)
+	trans.Begin()
+	sds = NewStreamingDataStore[string](ctx, "fooStore4", trans)
+	encoder, _ = sds.Update(ctx, "fooVideo3")
+	encodeVideo(t, encoder, 7)
+	// Since we updated with 7 chunks, 2 longer than existing, Close will not do anything.
+	// But call it anyway as part of "standard" for update encoder.
+	encoder.Close()
+
+	if sds.Count() != 7 {
+		t.Errorf("Failed Update, got %d, want %d", sds.Count(), 7)
+	}
+	trans.Commit(ctx)
+}
+
+func Test_StreamingDataStoreUpdate(t *testing.T) {
+	// Upload the video.
+	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
+	trans.Begin()
+	sds := NewStreamingDataStore[string](ctx, "fooStore5", trans)
+	encoder, _ := sds.Add(ctx, "fooVideo")
+	encodeVideo(t, encoder, 5)
+	trans.Commit(ctx)
+
+	// Update the video.
+	trans, _ = in_red_ck.NewMockTransaction(t, true, -1)
+	trans.Begin()
+	sds = NewStreamingDataStore[string](ctx, "fooStore5", trans)
+	encoder, _ = sds.Update(ctx, "fooVideo")
+	encodeVideo(t, encoder, 5)
+	encoder.Close()
+
+	if sds.Count() != 5 {
+		t.Errorf("Failed Update, got %d, want %d", sds.Count(), 5)
+	}
+	trans.Commit(ctx)
+}
+
 func Test_StreamingDataStoreDelete(t *testing.T) {
 	// Upload the video.
 	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
