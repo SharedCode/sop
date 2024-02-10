@@ -7,6 +7,9 @@ import (
 	"github.com/SharedCode/sop"
 )
 
+// This is a good plan, it will work optimally because we are reading entire transaction logs set
+// then deleting the entire partition when done. Use consistency of LOCAL_ONE when writing logs.
+
 type TransactionLog interface {
 	// Initiate is invoked to signal start of transaction logging & to add the 1st transaction log.
 	// In Cassandra backend, this should translate into adding a new transaction by day

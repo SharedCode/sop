@@ -11,6 +11,8 @@ import (
 	"github.com/SharedCode/sop/in_red_ck/kafka"
 )
 
+// TODO: refactor this to add management of unrolled back transactions' logs & their cleanup.
+
 var lastDeleteTime int64
 
 // Service interval defaults to 2 hours. That is, process deleted items every two hours.
