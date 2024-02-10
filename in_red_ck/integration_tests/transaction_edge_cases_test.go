@@ -377,7 +377,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	}
 }
 
-/* 
+/*
 - A commit with no conflict: commit success
 - A commit with partial conflict: retry success
 - A commit with full conflict: retry success
@@ -530,7 +530,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	fmt.Printf("Count of records: %d\n", i)
 }
 
-/* 
+/*
 - A commit with no conflict: commit success
 - A commit with partial conflict on update: rollback
 - A commit with full conflict on update: rollback
