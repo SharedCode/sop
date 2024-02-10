@@ -75,28 +75,6 @@ func newTransactionLogger(logger cas.TransactionLog) *transactionLog {
 	}
 }
 
-// enqueue will add a log to the queue, which can be persisted calling saveQueue.
-func (tl *transactionLog) enqueue(f commitFunctions, payload interface{}) {
-	tl.committedState = f
-	if payload == nil {
-		return
-	}
-	tl.queuedLogs = append(tl.queuedLogs, sop.KeyValuePair[commitFunctions, interface{}]{Key: f, Value: payload})
-}
-func (tl *transactionLog) clearQueue() {
-	tl.queuedLogs = nil
-}
-
-// save the enqueued logs to backend.
-func (tl *transactionLog) saveQueue(ctx context.Context) error {
-	for i := range tl.queuedLogs {
-		if err := tl.log(ctx, tl.queuedLogs[i].Key, tl.queuedLogs[i].Value); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // Log the committed function state.
 func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload interface{}) error {
 	tl.committedState = f

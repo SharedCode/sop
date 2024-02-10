@@ -261,7 +261,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 
-		t.logger.enqueue(commitTrackedItemsValues, nil)
+		t.logger.log(ctx, commitTrackedItemsValues, nil)
 		if err := t.commitTrackedItemsValues(ctx); err != nil {
 			return err
 		}
@@ -273,21 +273,21 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
 
 		// Commit new root nodes.
-		t.logger.enqueue(commitNewRootNodes, nil)
+		t.logger.log(ctx, commitNewRootNodes, nil)
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
 			return err
 		}
 
 		if successful {
 			// Check for conflict on fetched items.
-			t.logger.enqueue(areFetchedItemsIntact, nil)
+			t.logger.log(ctx, areFetchedItemsIntact, nil)
 			if successful, err = t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
 				return err
 			}
 		}
 		if successful {
 			// Commit updated nodes.
-			t.logger.enqueue(commitUpdatedNodes, nil)
+			t.logger.log(ctx, commitUpdatedNodes, nil)
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
 			}
@@ -295,7 +295,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Only do commit removed nodes if successful so far.
 		if successful {
 			// Commit removed nodes.
-			t.logger.enqueue(commitRemovedNodes, nil)
+			t.logger.log(ctx, commitRemovedNodes, nil)
 			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
 				return err
 			}
@@ -303,22 +303,20 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		if !successful {
 			// Rollback partial changes.
 			t.rollback(ctx, false)
-			// Clear enqueued logs as we rolled back.
-			t.logger.clearQueue()
+			// Clear logs as we rolled back.
+			t.logger.removeLogs(ctx)
 
 			randomSleep(ctx)
 
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
 				return err
 			}
+			t.logger.log(ctx, lockTrackedItems, nil)
 			if err = t.lockTrackedItems(ctx); err != nil {
 				return err
 			}
 		}
 	}
-
-	// Persist logs in the queue.
-	t.logger.saveQueue(ctx)
 
 	// Commit added nodes.
 	t.logger.log(ctx, commitAddedNodes, nil)
