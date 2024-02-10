@@ -42,7 +42,7 @@ func (t *itemActionTracker[TK, TV]) manage(uuid sop.UUID, cachedItem cacheItem[T
 		return nil
 	}
 	var r *sop.KeyValuePair[sop.UUID, interface{}]
-	if cachedItem.Action == updateAction || cachedItem.Action == removeAction{
+	if cachedItem.Action == updateAction || cachedItem.Action == removeAction {
 		if cachedItem.item.ValueNeedsFetch {
 			// If there is value data on another segment, mark it for delete.
 			t.forDeletionItems = append(t.forDeletionItems, cachedItem.item.ID)
