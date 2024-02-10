@@ -16,7 +16,7 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	trans.Begin()
 	sds := NewStreamingDataStore[string](ctx, "fooStore", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo")
-	for i := 0; i < 10; i ++ {
+	for i := 0; i < 10; i++ {
 		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
 	}
 	trans.Commit(ctx)
@@ -33,7 +33,7 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	decoder, _ := sds.GetCurrentValue(ctx)
 	var target string
 	for i := 0; i < 10; i++ {
-		if err := decoder.Decode(&target); err != nil && err != io.EOF{
+		if err := decoder.Decode(&target); err != nil && err != io.EOF {
 			t.Error(err)
 			break
 		}
@@ -53,7 +53,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	trans.Begin()
 	sds := NewStreamingDataStore[string](ctx, "fooStore", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo2")
-	for i := 0; i < 10; i ++ {
+	for i := 0; i < 10; i++ {
 		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
 	}
 	trans.Commit(ctx)
@@ -64,7 +64,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	sds = NewStreamingDataStore[string](ctx, "fooStore", trans)
 	encoder, _ = sds.Update(ctx, "fooVideo2")
 	chunkCount := 9
-	for i := 0; i < chunkCount; i ++ {
+	for i := 0; i < chunkCount; i++ {
 		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 15MB.", i))
 	}
 	// Close the "update" encoder to cleanup mis-aligned chunks.
@@ -87,7 +87,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 		if i > chunkCount {
 			t.Errorf("Failed decoding video, got %d want %d", i, chunkCount)
 		}
-		if err := decoder.Decode(&target); err != nil{
+		if err := decoder.Decode(&target); err != nil {
 			if err == io.EOF {
 				break
 			}
@@ -128,6 +128,54 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 	trans.Commit(ctx)
 }
 
+func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
+	// Upload the video.
+	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
+	trans.Begin()
+	sds := NewStreamingDataStore[string](ctx, "fooStore4", trans)
+	encoder, _ := sds.Add(ctx, "fooVideo3")
+	encodeVideo(t, encoder, 5)
+	trans.Commit(ctx)
+
+	// Update the video.
+	trans, _ = in_red_ck.NewMockTransaction(t, true, -1)
+	trans.Begin()
+	sds = NewStreamingDataStore[string](ctx, "fooStore4", trans)
+	encoder, _ = sds.Update(ctx, "fooVideo3")
+	encodeVideo(t, encoder, 7)
+	// Since we updated with 7 chunks, 2 longer than existing, Close will not do anything.
+	// But call it anyway as part of "standard" for update encoder.
+	encoder.Close()
+
+	if sds.Count() != 7 {
+		t.Errorf("Failed Update, got %d, want %d", sds.Count(), 7)
+	}
+	trans.Commit(ctx)
+}
+
+func Test_StreamingDataStoreUpdate(t *testing.T) {
+	// Upload the video.
+	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
+	trans.Begin()
+	sds := NewStreamingDataStore[string](ctx, "fooStore5", trans)
+	encoder, _ := sds.Add(ctx, "fooVideo")
+	encodeVideo(t, encoder, 5)
+	trans.Commit(ctx)
+
+	// Update the video.
+	trans, _ = in_red_ck.NewMockTransaction(t, true, -1)
+	trans.Begin()
+	sds = NewStreamingDataStore[string](ctx, "fooStore5", trans)
+	encoder, _ = sds.Update(ctx, "fooVideo")
+	encodeVideo(t, encoder, 5)
+	encoder.Close()
+
+	if sds.Count() != 5 {
+		t.Errorf("Failed Update, got %d, want %d", sds.Count(), 5)
+	}
+	trans.Commit(ctx)
+}
+
 func Test_StreamingDataStoreDelete(t *testing.T) {
 	// Upload the video.
 	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
@@ -143,7 +191,7 @@ func Test_StreamingDataStoreDelete(t *testing.T) {
 	encoder, _ = sds.Add(ctx, "fooVideo3")
 	encodeVideo(t, encoder, 15)
 
-	if ok, err := sds.Remove(ctx, "fooVideo2"); err != nil{
+	if ok, err := sds.Remove(ctx, "fooVideo2"); err != nil {
 		if err != nil {
 			t.Errorf("Failed Remove, details: %v", err)
 		}
@@ -159,7 +207,7 @@ func Test_StreamingDataStoreDelete(t *testing.T) {
 }
 
 func encodeVideo(t *testing.T, encoder *Encoder[string], count int) {
-	for i := 0; i < count; i ++ {
+	for i := 0; i < count; i++ {
 		encoder.Encode("#%d. A huge chunk, about 20MB.")
 	}
 }

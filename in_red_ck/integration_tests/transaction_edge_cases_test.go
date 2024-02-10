@@ -1,6 +1,7 @@
 package integration_tests
 
 import (
+	"fmt"
 	"testing"
 
 	"golang.org/x/sync/errgroup"
@@ -376,10 +377,239 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	}
 }
 
-/* TODO:
-- A commit with no conflict, #1.
-- A commit with partial conflict, on key 1.
-- A commit with full conflict, #1.
-- A commit with partial conflict, on key 2.
-- A commit with partial conflict, on key 3.
+/*
+- A commit with no conflict: commit success
+- A commit with partial conflict: retry success
+- A commit with full conflict: retry success
 */
+func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
+	sr := cas.NewStoreRepository()
+	sr.Remove(ctx, "tablex")
+
+	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1.Begin()
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, "tablex", 8, false, true, true, "", t1)
+	// Add a single item so we persist "root node".
+	b3.Add(ctx, 1, "I am the value with 500 key.")
+	t1.Commit(ctx)
+
+	eg, ctx2 := errgroup.WithContext(ctx)
+
+	f1 := func() error {
+		t1, _ := in_red_ck.NewTransaction(true, -1)
+		t1.Begin()
+		b3, _ := in_red_ck.OpenBtree[int, string](ctx2, "tablex", t1)
+		b3.Add(ctx2, 50, "I am the value with 5000 key.")
+		b3.Add(ctx2, 51, "I am the value with 5001 key.")
+		b3.Add(ctx2, 52, "I am also a value with 5000 key.")
+		return t1.Commit(ctx2)
+	}
+
+	f2 := func() error {
+		t2, _ := in_red_ck.NewTransaction(true, -1)
+		t2.Begin()
+		b32, _ := in_red_ck.OpenBtree[int, string](ctx2, "tablex", t2)
+		b32.Add(ctx2, 550, "I am the value with 5000 key.")
+		b32.Add(ctx2, 551, "I am the value with 5001 key.")
+		b32.Add(ctx2, 552, "I am the value with 5001 key.")
+		return t2.Commit(ctx2)
+	}
+
+	f3 := func() error {
+		t3, _ := in_red_ck.NewTransaction(true, -1)
+		t3.Begin()
+		b32, _ := in_red_ck.OpenBtree[int, string](ctx2, "tablex", t3)
+		b32.Add(ctx2, 550, "random foo.")
+		b32.Add(ctx2, 551, "bar hello.")
+		return t3.Commit(ctx2)
+	}
+
+	eg.Go(f1)
+	eg.Go(f2)
+	eg.Go(f3)
+
+	if err := eg.Wait(); err != nil {
+		t.Error(err)
+		return
+	}
+
+	t1, _ = in_red_ck.NewTransaction(false, -1)
+	t1.Begin()
+
+	b3, _ = in_red_ck.OpenBtree[int, string](ctx, "tablex", t1)
+	b3.First(ctx)
+	i := 1
+	for {
+		if ok, err := b3.Next(ctx); err != nil {
+			t.Error(err)
+		} else if !ok {
+			break
+		}
+		i++
+	}
+	if i < 5 {
+		t.Errorf("Failed, traversing/counting all records, got %d, want 5.", i)
+	}
+}
+
+/*
+- A commit with no conflict: commit success
+One or both of these two should fail:
+- A commit with partial conflict.
+- A commit with full conflict.
+*/
+func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
+	sr := cas.NewStoreRepository()
+	sr.Remove(ctx, "tablex2")
+
+	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1.Begin()
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, "tablex2", 8, true, true, true, "", t1)
+	// Add a single item so we persist "root node".
+	b3.Add(ctx, 1, "I am the value with 500 key.")
+	t1.Commit(ctx)
+
+	eg, ctx2 := errgroup.WithContext(ctx)
+
+	f1 := func() error {
+		t1, _ := in_red_ck.NewTransaction(true, -1)
+		t1.Begin()
+		b3, _ := in_red_ck.OpenBtree[int, string](ctx2, "tablex2", t1)
+		b3.Add(ctx2, 50, "I am the value with 5000 key.")
+		b3.Add(ctx2, 51, "I am the value with 5001 key.")
+		b3.Add(ctx2, 52, "I am also a value with 5000 key.")
+		return t1.Commit(ctx2)
+	}
+
+	f2 := func() error {
+		t2, _ := in_red_ck.NewTransaction(true, -1)
+		t2.Begin()
+		b32, _ := in_red_ck.OpenBtree[int, string](ctx2, "tablex2", t2)
+		b32.Add(ctx2, 550, "I am the value with 5000 key.")
+		b32.Add(ctx2, 551, "I am the value with 5001 key.")
+		b32.Add(ctx2, 552, "I am the value with 5001 key.")
+		return t2.Commit(ctx2)
+	}
+
+	f3 := func() error {
+		t3, _ := in_red_ck.NewTransaction(true, -1)
+		t3.Begin()
+		b32, _ := in_red_ck.OpenBtree[int, string](ctx2, "tablex2", t3)
+		b32.Add(ctx2, 550, "random foo.")
+		b32.Add(ctx2, 551, "bar hello.")
+		return t3.Commit(ctx2)
+	}
+
+	eg.Go(f1)
+	eg.Go(f2)
+	eg.Go(f3)
+
+	if err := eg.Wait(); err == nil {
+		t.Error("Failed, got no error, want an error")
+		return
+	}
+
+	t1, _ = in_red_ck.NewTransaction(false, -1)
+	t1.Begin()
+
+	b3, _ = in_red_ck.OpenBtree[int, string](ctx, "tablex2", t1)
+	b3.First(ctx)
+	i := 1
+	for {
+		fmt.Printf("Item with key: %v\n", b3.GetCurrentKey())
+		if ok, err := b3.Next(ctx); err != nil {
+			t.Error(err)
+		} else if !ok {
+			break
+		}
+		i++
+	}
+	if i < 3 || i > 6 {
+		t.Errorf("Failed, traversing/counting all records, got %d, want 3 to 6", i)
+	}
+	fmt.Printf("Count of records: %d\n", i)
+}
+
+/*
+- A commit with no conflict: commit success
+- A commit with partial conflict on update: rollback
+- A commit with full conflict on update: rollback
+*/
+func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
+	sr := cas.NewStoreRepository()
+	sr.Remove(ctx, "tabley")
+
+	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1.Begin()
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, "tabley", 8, false, true, true, "", t1)
+	// Add a single item so we persist "root node".
+	b3.Add(ctx, 1, "I am the value with 500 key.")
+	b3.Add(ctx, 550, "I am the value with 5000 key.")
+	b3.Add(ctx, 551, "I am the value with 5001 key.")
+	b3.Add(ctx, 552, "I am the value with 5001 key.")
+	t1.Commit(ctx)
+
+	eg, ctx2 := errgroup.WithContext(ctx)
+	eg2, ctx3 := errgroup.WithContext(ctx)
+
+	f1 := func() error {
+		t1, _ := in_red_ck.NewTransaction(true, -1)
+		t1.Begin()
+		b3, _ := in_red_ck.OpenBtree[int, string](ctx3, "tabley", t1)
+		b3.Add(ctx3, 50, "I am the value with 5000 key.")
+		b3.Add(ctx3, 51, "I am the value with 5001 key.")
+		b3.Add(ctx3, 52, "I am also a value with 5000 key.")
+		return t1.Commit(ctx3)
+	}
+
+	f2 := func() error {
+		t2, _ := in_red_ck.NewTransaction(true, -1)
+		t2.Begin()
+		b32, _ := in_red_ck.OpenBtree[int, string](ctx2, "tabley", t2)
+		b32.Update(ctx2, 550, "I am the value with 5000 key.")
+		b32.Update(ctx2, 551, "I am the value with 5001 key.")
+		b32.Update(ctx2, 552, "I am the value with 5001 key.")
+		return t2.Commit(ctx2)
+	}
+
+	f3 := func() error {
+		t3, _ := in_red_ck.NewTransaction(true, -1)
+		t3.Begin()
+		b32, _ := in_red_ck.OpenBtree[int, string](ctx2, "tabley", t3)
+		b32.Update(ctx2, 550, "random foo.")
+		b32.Update(ctx2, 551, "bar hello.")
+		return t3.Commit(ctx2)
+	}
+
+	eg2.Go(f1)
+	eg.Go(f2)
+	eg.Go(f3)
+
+	if err := eg.Wait(); err == nil {
+		t.Error("Failed, got no error, want an error")
+		return
+	}
+	if err := eg2.Wait(); err != nil {
+		t.Error(err)
+		return
+	}
+
+	t1, _ = in_red_ck.NewTransaction(false, -1)
+	t1.Begin()
+
+	b3, _ = in_red_ck.OpenBtree[int, string](ctx, "tabley", t1)
+	b3.First(ctx)
+	i := 1
+	for {
+		fmt.Printf("Item with key: %v\n", b3.GetCurrentKey())
+		if ok, err := b3.Next(ctx); err != nil {
+			t.Error(err)
+		} else if !ok {
+			break
+		}
+		i++
+	}
+	if i != 7 {
+		t.Errorf("Failed, traversing/counting all records, got %d, want 7.", i)
+	}
+}

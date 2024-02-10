@@ -219,10 +219,31 @@ func sleep(ctx context.Context, sleepTime time.Duration) {
 
 const sleepBeforeRefetchBase = 100
 
+// For writer transaction. Save the managed Node(s) as inactive:
+// NOTE: a transaction Commit can timeout and thus, rollback if it exceeds the maximum time(defaults to 30 mins).
+// Return error to trigger rollback for any operation that fails.
+//
+//   - Create a lookup table of added/updated/removed items together with their Nodes
+//     Specify whether Node is updated, added or removed
+//   - Repeat until timeout, for updated Nodes:
+//   - Upsert each Node from the lookup to blobStore
+//   - Log UUID in transaction rollback log categorized as updated Node
+//   - Compare each updated Node to Redis copy if identical(active UUID is same)
+//     NOTE: added Node(s) don't need this logic.
+//     For identical Node(s), update the "inactive UUID" with the Node's UUID(in redis).
+//     Collect each Node that are different in Redis(as updated by other transaction(s))
+//     Gather all the items of these Nodes(using the lookup table)
+//     Break if there are no more items different.
+//   - Re-fetch the Nodes of these items, re-create the lookup table consisting only of these items
+//     & their re-fetched Nodes
+//
+// Repeat end.
+// - Return error if loop timed out to trigger rollback.
 func (t *transaction) phase1Commit(ctx context.Context) error {
 	if !t.hasTrackedItems() {
 		return nil
 	}
+
 	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
 	t.logger.log(ctx, lockTrackedItems, nil)
 	if err := t.lockTrackedItems(ctx); err != nil {
@@ -230,28 +251,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]
-	startTime := now()
 	var updatedNodesHandles, removedNodesHandles []cas.RegistryPayload[sop.Handle]
 
-	// For writer transaction. Save the managed Node(s) as inactive:
-	// NOTE: a transaction Commit can timeout and thus, rollback if it exceeds the maximum time(defaults to 30 mins).
-	// Return error to trigger rollback for any operation that fails.
-	//
-	// - Create a lookup table of added/updated/removed items together with their Nodes
-	//   Specify whether Node is updated, added or removed
-	// * Repeat until timeout, for updated Nodes:
-	// - Upsert each Node from the lookup to blobStore(Add only if blobStore is S3)
-	// - Log UUID in transaction rollback log categorized as updated Node
-	// - Compare each updated Node to Redis copy if identical(active UUID is same)
-	//   NOTE: added Node(s) don't need this logic.
-	//   For identical Node(s), update the "inactive UUID" with the Node's UUID(in redis).
-	//   Collect each Node that are different in Redis(as updated by other transaction(s))
-	//   Gather all the items of these Nodes(using the lookup table)
-	//   Break if there are no more items different.
-	// - Re-fetch the Nodes of these items, re-create the lookup table consisting only of these items
-	//   & their re-fetched Nodes
-	// Repeat end.
-	// - Return error if loop timed out to trigger rollback.
+	startTime := now()
 	successful := false
 	for !successful {
 		var err error
@@ -270,7 +272,6 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// has to do merging & conflict resolution. Add is simple upsert.
 		updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
 
-		// TODO: parallelize these tasks.
 		// Commit new root nodes.
 		t.logger.enqueue(commitNewRootNodes, nil)
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
@@ -319,7 +320,6 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	// Persist logs in the queue.
 	t.logger.saveQueue(ctx)
 
-	// TODO: parallelize these tasks as well.
 	// Commit added nodes.
 	t.logger.log(ctx, commitAddedNodes, nil)
 	if err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
@@ -335,13 +335,13 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	// Mark that store info commit succeeded, so it can get rolled back if rollback occurs.
 	t.logger.log(ctx, beforeFinalize, nil)
 
-	// Prepare to switch to active "state" the (inactive) updated Nodes. See phase2Commit for actual change.
+	// Prepare to switch to active "state" the (inactive) updated Nodes, in phase2Commit.
 	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(ctx, updatedNodesHandles)
 	if err != nil {
 		return err
 	}
-	// Prepare to update upsert time of removed nodes to signal that they are finalized.
-	// See phase2Commit for actual change.
+
+	// Prepare to update upsert time of removed nodes to signal that they are finalized, in phase2Commit.
 	rh, err := t.btreesBackend[0].nodeRepository.touchNodes(ctx, removedNodesHandles)
 	if err != nil {
 		return err
@@ -360,8 +360,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 }
 
 func (t *transaction) phase2Commit(ctx context.Context) error {
-	// Finalize the commit, it is the only all or nothing action in the commit,
-	// and on registry (very small) records only.
+	// Finalize the commit, it is the only all or nothing action in the commit, and on registry (very small) records only.
 	if err := t.logger.log(ctx, finalizeCommit, nil); err != nil {
 		return err
 	}
@@ -398,8 +397,6 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		}
 		unusedNodeIDs = append(unusedNodeIDs, blobsIDs)
 	}
-
-	// TODO: finalize error handling, e.g. - if err occurred, don't remove logs.
 
 	t.logger.log(ctx, deleteObsoleteEntries, []interface{}{deletedIDs, unusedNodeIDs})
 	t.deleteObsoleteEntries(ctx, deletedIDs, unusedNodeIDs)
