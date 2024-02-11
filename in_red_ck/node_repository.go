@@ -389,22 +389,24 @@ func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop
 	return true, nil
 }
 
-func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, 
-	nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) error {
-
-	if len(nodes) == 0 {
+func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackCommand rollbackCommand, rollbackData interface{}) error {
+	var bibs []cas.BlobsPayload[sop.UUID]
+	var vids []cas.RegistryPayload[sop.UUID]
+	kvp := rollbackData.(sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]])
+	vids = kvp.Key
+	bibs = kvp.Value
+	if len(vids) == 0 {
 		return nil
 	}
-	bibs := nr.convertToBlobRequestPayload(nodes)
-	vids := nr.convertToRegistryRequestPayload(nodes)
+
 	var lastErr error
 	// Undo on blob store & redis.
 	if err := nr.transaction.blobStore.Remove(ctx, bibs...); err != nil {
 		lastErr = fmt.Errorf("Unable to undo new root nodes, %v, error: %v", bibs, err)
 		log.Error(lastErr.Error())
 	}
-	for i := range nodes {
-		for ii := range nodes[i].Value {
+	for i := range vids {
+		for ii := range vids[i].IDs {
 			if err := nr.transaction.redisCache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].String())); err != nil && !redis.KeyNotFound(err) {
 				err = fmt.Errorf("Unable to undo new root nodes in redis, error: %v", err)
 				if lastErr == nil {

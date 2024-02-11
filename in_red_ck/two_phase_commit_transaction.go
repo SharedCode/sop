@@ -65,6 +65,13 @@ type transaction struct {
 	removedNodeHandles []cas.RegistryPayload[sop.Handle]
 }
 
+// rollback functions' commands.
+type rollbackCommand int
+const (
+	getRollbackData = iota
+	rollback
+)
+
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
 var now = time.Now
 
@@ -254,7 +261,11 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
 
 		// Commit new root nodes.
-		t.logger.log(ctx, commitNewRootNodes, nil)
+		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
+		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
+		t.logger.log(ctx, commitNewRootNodes, sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+			Key: vids, Value: bibs,
+		})
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
 			return err
 		}
@@ -428,7 +439,10 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 		}
 	}
 	if t.logger.committedState > commitNewRootNodes {
-		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, rootNodes); err != nil {
+		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
+		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
+		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, rollback,
+			sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{ Key: vids, Value: bibs}); err != nil {
 			lastErr = err
 		}
 	}
