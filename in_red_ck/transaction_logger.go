@@ -75,18 +75,27 @@ func newTransactionLogger(logger cas.TransactionLog) *transactionLog {
 	}
 }
 
+func toString(f commitFunctions) string {
+	s,_ := commitFunctionsStringLookup[f]
+	return s
+}
+func toCommitFunction(s string) commitFunctions {
+	f,_ := commitFunctionsLookup[s]
+	return f
+}
+
 // Log the committed function state.
 func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload interface{}) error {
 	tl.committedState = f
-	if tl.transactionID.IsNil() {
-		tl.logger.Initiate(ctx, sop.NilUUID, "", nil)
-		tl.transactionID = sop.NewUUID()
-		return nil
-	}
 	if payload == nil {
 		return nil
 	}
-	return tl.logger.Add(ctx, tl.transactionID, commitFunctionsStringLookup[f], payload)
+	if tl.transactionID.IsNil() {
+		tl.transactionID = sop.NewUUID()
+		tl.logger.Initiate(ctx, tl.transactionID, toString(f), payload)
+		return nil
+	}
+	return tl.logger.Add(ctx, tl.transactionID, toString(f), payload)
 }
 
 // removes logs saved to backend. During commit completion, logs need to be cleared.

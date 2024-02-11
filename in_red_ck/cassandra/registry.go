@@ -71,7 +71,7 @@ func NewRegistry() Registry {
 
 func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop.Handle]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	for _, sh := range storesHandles {
 		insertStatement := fmt.Sprintf("INSERT INTO %s.%s (lid, is_idb, p_ida, p_idb, ver, wip_ts, is_del) VALUES(?,?,?,?,?,?,?);",
@@ -100,7 +100,7 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 // Update does an all or nothing update of the batch of handles, mapping them to respective registry table(s).
 func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles ...RegistryPayload[sop.Handle]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	if len(storesHandles) == 0 {
 		return nil
@@ -183,7 +183,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 
 func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[sop.UUID]) ([]RegistryPayload[sop.Handle], error) {
 	if connection == nil {
-		return nil, fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
 	storesHandles := make([]RegistryPayload[sop.Handle], 0, len(storesLids))
@@ -246,7 +246,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[sop.UU
 
 func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[sop.UUID]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
 	for _, storeLids := range storesLids {

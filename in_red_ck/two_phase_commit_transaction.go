@@ -219,26 +219,7 @@ func sleep(ctx context.Context, sleepTime time.Duration) {
 
 const sleepBeforeRefetchBase = 100
 
-// For writer transaction. Save the managed Node(s) as inactive:
-// NOTE: a transaction Commit can timeout and thus, rollback if it exceeds the maximum time(defaults to 30 mins).
-// Return error to trigger rollback for any operation that fails.
-//
-//   - Create a lookup table of added/updated/removed items together with their Nodes
-//     Specify whether Node is updated, added or removed
-//   - Repeat until timeout, for updated Nodes:
-//   - Upsert each Node from the lookup to blobStore
-//   - Log UUID in transaction rollback log categorized as updated Node
-//   - Compare each updated Node to Redis copy if identical(active UUID is same)
-//     NOTE: added Node(s) don't need this logic.
-//     For identical Node(s), update the "inactive UUID" with the Node's UUID(in redis).
-//     Collect each Node that are different in Redis(as updated by other transaction(s))
-//     Gather all the items of these Nodes(using the lookup table)
-//     Break if there are no more items different.
-//   - Re-fetch the Nodes of these items, re-create the lookup table consisting only of these items
-//     & their re-fetched Nodes
-//
-// Repeat end.
-// - Return error if loop timed out to trigger rollback.
+// phase1Commit does the phase 1 commit steps.
 func (t *transaction) phase1Commit(ctx context.Context) error {
 	if !t.hasTrackedItems() {
 		return nil
@@ -357,6 +338,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	return nil
 }
 
+// phase2Commit finalizes the commit process and does cleanup afterwards.
 func (t *transaction) phase2Commit(ctx context.Context) error {
 	// Finalize the commit, it is the only all or nothing action in the commit, and on registry (very small) records only.
 	if err := t.logger.log(ctx, finalizeCommit, nil); err != nil {
