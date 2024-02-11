@@ -441,8 +441,7 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	if t.logger.committedState > commitNewRootNodes {
 		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
 		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
-		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, rollback,
-			sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{ Key: vids, Value: bibs}); err != nil {
+		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{ Key: vids, Value: bibs}); err != nil {
 			lastErr = err
 		}
 	}

@@ -389,7 +389,7 @@ func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop
 	return true, nil
 }
 
-func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackCommand rollbackCommand, rollbackData interface{}) error {
+func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData interface{}) error {
 	var bibs []cas.BlobsPayload[sop.UUID]
 	var vids []cas.RegistryPayload[sop.UUID]
 	kvp := rollbackData.(sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]])
