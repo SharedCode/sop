@@ -410,16 +410,26 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 		// do nothing as the function failed, nothing to undo.
 	}
 	if t.logger.committedState > commitStoreInfo {
-		if err := t.rollbackStores(ctx); err != nil {
+		rollbackStoresInfo := t.getRollbackStoresInfo()
+		if err := t.storeRepository.Update(ctx, rollbackStoresInfo...); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitAddedNodes {
-		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, addedNodes); err != nil {
+		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(addedNodes)
+		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(addedNodes)
+		bv := sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{ Key: vids, Value: bibs}
+		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitRemovedNodes {
+
+
+		// TODO: finish the Handle.IsDeleted expiration. That is, uncompleted transactions that marked
+		// a handle as IsDeleted = true, needs to expire and gets cleared(set to false) the IsDeleted flag.
+
+
 		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
 			lastErr = err
 		}
@@ -432,7 +442,8 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	if t.logger.committedState > commitNewRootNodes {
 		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
 		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
-		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{ Key: vids, Value: bibs}); err != nil {
+		bv := sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{ Key: vids, Value: bibs}
+		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
 	}
@@ -594,7 +605,7 @@ func (t *transaction) commitStores(ctx context.Context) error {
 	}
 	return t.storeRepository.Update(ctx, stores...)
 }
-func (t *transaction) rollbackStores(ctx context.Context) error {
+func (t *transaction) getRollbackStoresInfo() []btree.StoreInfo {
 	stores := make([]btree.StoreInfo, len(t.btreesBackend))
 	for i := range t.btreesBackend {
 		store := t.btreesBackend[i].getStoreInfo()
@@ -603,7 +614,7 @@ func (t *transaction) rollbackStores(ctx context.Context) error {
 		s2.CountDelta = t.btreesBackend[i].nodeRepository.count - s2.Count
 		stores[i] = s2
 	}
-	return t.storeRepository.Update(ctx, stores...)
+	return stores
 }
 
 func (t *transaction) hasTrackedItems() bool {

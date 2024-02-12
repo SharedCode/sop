@@ -255,13 +255,14 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			// Node with such ID is marked deleted or had been updated since reading it.
-			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
+			if (handles[i].IDs[ii].IsDeleted && !handles[i].IDs[ii].IsExpiredInactive()) || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
 				return false, nil, nil
 			}
 			// Create new phys. UUID and auto-assign it to the available phys. ID(A or B) "ID slot".
 			id := handles[i].IDs[ii].AllocateID()
 			if id == sop.NilUUID {
 				if handles[i].IDs[ii].IsExpiredInactive() {
+					handles[i].IDs[ii].IsDeleted = false
 					handles[i].IDs[ii].ClearInactiveID()
 					// Allocate a new ID after clearing the unused inactive ID.
 					id = handles[i].IDs[ii].AllocateID()
@@ -426,14 +427,16 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData
 	return lastErr
 }
 
-func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) error {
-	if len(nodes) == 0 {
+func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData interface{}) error {
+	var bibs []cas.BlobsPayload[sop.UUID]
+	var vids []cas.RegistryPayload[sop.UUID]
+	kvp := rollbackData.(sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]])
+	vids = kvp.Key
+	bibs = kvp.Value
+	if len(vids) == 0 {
 		return nil
 	}
 	var lastErr error
-	vids := nr.convertToRegistryRequestPayload(nodes)
-	// Remove nodes from blob store.
-	bibs := nr.convertToBlobRequestPayload(nodes)
 	if err := nr.transaction.blobStore.Remove(ctx, bibs...); err != nil {
 		lastErr = fmt.Errorf("Unable to undo added nodes, %v, error: %v", bibs, err)
 		log.Error(lastErr.Error())

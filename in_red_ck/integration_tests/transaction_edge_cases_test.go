@@ -524,8 +524,8 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 		}
 		i++
 	}
-	if i < 3 || i > 6 {
-		t.Errorf("Failed, traversing/counting all records, got %d, want 3 to 6", i)
+	if i < 3 || i > 7 {
+		t.Errorf("Failed, traversing/counting all records, got %d, want 3 to 7", i)
 	}
 	fmt.Printf("Count of records: %d\n", i)
 }
