@@ -76,11 +76,11 @@ func newTransactionLogger(logger cas.TransactionLog) *transactionLog {
 }
 
 func toString(f commitFunctions) string {
-	s,_ := commitFunctionsStringLookup[f]
+	s, _ := commitFunctionsStringLookup[f]
 	return s
 }
 func toCommitFunction(s string) commitFunctions {
-	f,_ := commitFunctionsLookup[s]
+	f, _ := commitFunctionsLookup[s]
 	return f
 }
 

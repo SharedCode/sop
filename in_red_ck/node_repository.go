@@ -526,7 +526,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, vids []cas.R
 	for i := range handles {
 		handlesForRollback[i] = cas.RegistryPayload[sop.Handle]{
 			RegistryTable: handles[i].RegistryTable,
-			IDs: make([]sop.Handle, 0, len(handles[i].IDs)),
+			IDs:           make([]sop.Handle, 0, len(handles[i].IDs)),
 		}
 		for ii := range handles[i].IDs {
 			// Undo the deleted mark for ID.
