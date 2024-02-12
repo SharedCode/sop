@@ -31,7 +31,7 @@ func init() {
 var ctx = context.Background()
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	trans, err := in_red_ck.NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1, false)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -55,7 +55,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans, err := in_red_ck.NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1, false)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}

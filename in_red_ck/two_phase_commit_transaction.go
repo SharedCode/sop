@@ -70,7 +70,7 @@ var now = time.Now
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
-func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration, logging bool) (TwoPhaseCommitTransaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
 		maxTime = time.Duration(15 * time.Minute)
@@ -89,7 +89,7 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 		registry:        cas.NewRegistry(),
 		redisCache:      redis.NewClient(),
 		blobStore:       cas.NewBlobStore(),
-		logger:          newTransactionLogger(nil),
+		logger:          newTransactionLogger(nil, logging),
 		phaseDone:       -1,
 	}, nil
 }

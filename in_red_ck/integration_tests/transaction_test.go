@@ -48,7 +48,7 @@ const tableName1 = "person2db"
 const tableName2 = "twophase22"
 
 func Test_SimpleAddPerson(t *testing.T) {
-	trans, err := in_red_ck.NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1, false)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -87,12 +87,12 @@ func Test_SimpleAddPerson(t *testing.T) {
 }
 
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
-	trans, err := in_red_ck.NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1, false)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
-	trans2, err := in_red_ck.NewTransaction(true, -1)
+	trans2, err := in_red_ck.NewTransaction(true, -1, false)
 
 	trans.Begin()
 	trans2.Begin()
@@ -127,7 +127,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 }
 
 func Test_AddAndSearchManyPersons(t *testing.T) {
-	trans, err := in_red_ck.NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1, false)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -155,7 +155,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	trans, err = in_red_ck.NewTransaction(false, -1)
+	trans, err = in_red_ck.NewTransaction(false, -1, false)
 	if err != nil {
 		t.Errorf(err.Error())
 		t.Fail()
@@ -189,7 +189,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
 	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
 
@@ -205,7 +205,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_ck.NewTransaction(true, -1)
+			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
 			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
 		}
@@ -229,7 +229,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_ck.NewTransaction(false, -1)
+			t1, _ = in_red_ck.NewTransaction(false, -1, false)
 			t1.Begin()
 			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
 		}
@@ -241,7 +241,7 @@ func VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
 	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
 
@@ -259,7 +259,7 @@ func VolumeDeletes(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_ck.NewTransaction(true, -1)
+			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
 			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
 		}
@@ -272,7 +272,7 @@ func MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
 
-	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
 	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
 
@@ -305,7 +305,7 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_ck.NewTransaction(true, -1)
+			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
 			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
 		}
@@ -341,7 +341,7 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_ck.NewTransaction(true, -1)
+			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
 			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
 		}
@@ -349,7 +349,7 @@ func MixedOperations(t *testing.T) {
 }
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
-	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
 
 	b3, _ := in_red_ck.NewBtree[int, string](ctx, tableName2, 8, false, true, true, "", t1)
@@ -366,7 +366,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	if err := twoPhase.Phase1Commit(ctx); err == nil {
 		twoPhase.Rollback(ctx)
 
-		t1, _ = in_red_ck.NewTransaction(true, -1)
+		t1, _ = in_red_ck.NewTransaction(true, -1, false)
 		t1.Begin()
 
 		b3, _ = in_red_ck.OpenBtree[int, string](ctx, tableName2, t1)
@@ -379,7 +379,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 }
 
 func Test_IllegalBtreeStoreName(t *testing.T) {
-	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
 
 	if _, err := in_red_ck.NewBtree[int, string](ctx, "2phase", 8, false, true, true, "", t1); err == nil {

@@ -61,17 +61,19 @@ var commitFunctionsLookup map[string]commitFunctions = map[string]commitFunction
 type transactionLog struct {
 	committedState commitFunctions
 	logger         cas.TransactionLog
+	logging bool
 	transactionID  sop.UUID
 	queuedLogs     []sop.KeyValuePair[commitFunctions, interface{}]
 }
 
 // Instantiate a transaction logger.
-func newTransactionLogger(logger cas.TransactionLog) *transactionLog {
+func newTransactionLogger(logger cas.TransactionLog, logging bool) *transactionLog {
 	if logger == nil {
 		logger = cas.NewTransactionLog()
 	}
 	return &transactionLog{
 		logger: logger,
+		logging: logging,
 	}
 }
 
@@ -87,6 +89,9 @@ func toCommitFunction(s string) commitFunctions {
 // Log the committed function state.
 func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload interface{}) error {
 	tl.committedState = f
+	if !tl.logging {
+		return nil
+	}
 	if payload == nil {
 		return nil
 	}
@@ -100,5 +105,8 @@ func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload in
 
 // removes logs saved to backend. During commit completion, logs need to be cleared.
 func (tl *transactionLog) removeLogs(ctx context.Context) error {
+	if !tl.logging {
+		return nil
+	}
 	return tl.logger.Remove(ctx, tl.transactionID)
 }
