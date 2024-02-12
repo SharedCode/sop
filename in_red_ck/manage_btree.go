@@ -137,9 +137,9 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreIn
 		getStoreInfo: func() *btree.StoreInfo { return b3.StoreInfo },
 
 		// Needed for tracked items' lock & "value data" in separate segments management.
-		commitTrackedItemsValues:         iat.commitTrackedValuesToSeparateSegments,
-		rollbackTrackedItemsValues:       iat.rollbackTrackedValuesInSeparateSegments,
-		deleteObsoleteTrackedItemsValues: iat.deleteObsoleteTrackedValuesInSeparateSegments,
+		commitTrackedItemsValues:          iat.commitTrackedItemsValues,
+		getRollbackTrackedItemsValuesInfo: iat.getRollbackTrackedItemsValuesInfo,
+		deleteObsoleteTrackedItemsValues:  iat.deleteObsoleteTrackedItemsValues,
 
 		hasTrackedItems:    iat.hasTrackedItems,
 		checkTrackedItems:  iat.checkTrackedItems,

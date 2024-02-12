@@ -40,9 +40,9 @@ type btreeBackend struct {
 	unlockTrackedItems func(ctx context.Context) error
 
 	// Manage tracked items' values in separate segments.
-	commitTrackedItemsValues         func(ctx context.Context) error
-	rollbackTrackedItemsValues       func(ctx context.Context) error
-	deleteObsoleteTrackedItemsValues func(ctx context.Context) error
+	commitTrackedItemsValues          func(ctx context.Context) error
+	getRollbackTrackedItemsValuesInfo func() *cas.BlobsPayload[sop.UUID]
+	deleteObsoleteTrackedItemsValues  func(ctx context.Context) error
 }
 
 type transaction struct {
@@ -206,7 +206,7 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 // Sleep in random milli-seconds to allow different conflicting (Node modifying) transactions
 // to retry on different times, thus, increasing chance to succeed one after the other.
 func randomSleep(ctx context.Context) {
-	sleepTime := (1+rand.Intn(5))*100
+	sleepTime := (1 + rand.Intn(5)) * 100
 	sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 }
 
@@ -418,37 +418,33 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	if t.logger.committedState > commitAddedNodes {
 		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(addedNodes)
 		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(addedNodes)
-		bv := sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{ Key: vids, Value: bibs}
+		bv := sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{Key: vids, Value: bibs}
 		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitRemovedNodes {
-
-
-		// TODO: finish the Handle.IsDeleted expiration. That is, uncompleted transactions that marked
-		// a handle as IsDeleted = true, needs to expire and gets cleared(set to false) the IsDeleted flag.
-
-
-		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
+		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(removedNodes)
+		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitUpdatedNodes {
-		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
+		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(updatedNodes)
+		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitNewRootNodes {
 		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
 		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
-		bv := sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{ Key: vids, Value: bibs}
+		bv := sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{Key: vids, Value: bibs}
 		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
 	}
 	if rollbackTrackedItemsValues && t.logger.committedState >= commitTrackedItemsValues {
-		if err := t.btreesBackend[0].rollbackTrackedItemsValues(ctx); err != nil {
+		if err := t.rollbackTrackedItemsValues(ctx); err != nil {
 			lastErr = err
 		}
 	}
@@ -474,20 +470,30 @@ func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
 	return nil
 }
 func (t *transaction) rollbackTrackedItemsValues(ctx context.Context) error {
+	var lastErr error
 	for i := range t.btreesBackend {
-		if err := t.btreesBackend[i].rollbackTrackedItemsValues(ctx); err != nil {
-			return err
+		itemsForDelete := t.btreesBackend[i].getRollbackTrackedItemsValuesInfo()
+		if itemsForDelete != nil && len(itemsForDelete.Blobs) > 0 {
+			if t.btreesBackend[i].getStoreInfo().IsValueDataGloballyCached {
+				for i := range itemsForDelete.Blobs {
+					t.redisCache.Delete(ctx, formatItemKey(itemsForDelete.Blobs[i].String()))
+				}
+			}
+			if err := t.blobStore.Remove(ctx, *itemsForDelete); err != nil {
+				lastErr = err
+			}
 		}
 	}
-	return nil
+	return lastErr
 }
 func (t *transaction) deleteObsoleteTrackedItemsValues(ctx context.Context) error {
+	var lastErr error
 	for i := range t.btreesBackend {
 		if err := t.btreesBackend[i].deleteObsoleteTrackedItemsValues(ctx); err != nil {
-			return err
+			lastErr = err
 		}
 	}
-	return nil
+	return lastErr
 }
 
 // Checks if fetched items are intact.

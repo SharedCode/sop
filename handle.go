@@ -71,10 +71,9 @@ func (h *Handle) AllocateID() UUID {
 
 // Returns true if inactive ID is expired, false otherwise.
 func (h *Handle) IsExpiredInactive() bool {
-	// TODO: Do we want maxDuration to be configurable? For now, hardcode to 2 hours.
-	// Transactions are encouraged to be around 15 mins max, thus, 2 hr expiration of failed
-	// node update ID(inactive ID) seems good.
-	const maxDuration = 2
+	// Transaction commit is encouraged to be 15 mins max, thus, 1 hr expiration of failed
+	// node update ID(inactive or marked deleted ID) seems good.
+	const maxDuration = 1
 	expiryTime := time.Now().Add(time.Duration(-maxDuration) * time.Hour).UnixMilli()
 	return h.WorkInProgressTimestamp > 0 && h.WorkInProgressTimestamp < expiryTime
 }

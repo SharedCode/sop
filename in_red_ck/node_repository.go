@@ -258,12 +258,14 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 			if (handles[i].IDs[ii].IsDeleted && !handles[i].IDs[ii].IsExpiredInactive()) || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
 				return false, nil, nil
 			}
+			if handles[i].IDs[ii].IsDeleted && handles[i].IDs[ii].IsExpiredInactive() {
+				// In case the handle was marked deleted by an incomplete transaction then reset it back to undo it.
+				handles[i].IDs[ii].IsDeleted = false
+			}
 			// Create new phys. UUID and auto-assign it to the available phys. ID(A or B) "ID slot".
 			id := handles[i].IDs[ii].AllocateID()
 			if id == sop.NilUUID {
 				if handles[i].IDs[ii].IsExpiredInactive() {
-					// In case the handle was marked deleted by an incomplete transaction then reset it back to undo it.
-					handles[i].IDs[ii].IsDeleted = false
 					handles[i].IDs[ii].ClearInactiveID()
 					// Allocate a new ID after clearing the unused inactive ID.
 					id = handles[i].IDs[ii].AllocateID()
@@ -463,21 +465,24 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData i
 }
 
 // rollback updated Nodes.
-func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) error {
-	if len(nodes) == 0 {
+func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, vids []cas.RegistryPayload[sop.UUID]) error {
+	if len(vids) == 0 {
 		return nil
 	}
-	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return err
 	}
-	blobsIDs := make([]cas.BlobsPayload[sop.UUID], len(nodes))
+	blobsIDs := make([]cas.BlobsPayload[sop.UUID], len(vids))
 	for i := range handles {
 		blobsIDs[i].BlobTable = btree.ConvertToBlobTableName(vids[i].RegistryTable)
-		blobsIDs[i].Blobs = make([]sop.UUID, len(handles[i].IDs))
+		blobsIDs[i].Blobs = make([]sop.UUID, 0, len(handles[i].IDs))
 		for ii := range handles[i].IDs {
-			blobsIDs[i].Blobs[ii] = handles[i].IDs[ii].GetInActiveID()
+			if handles[i].IDs[ii].GetInActiveID().IsNil() {
+				handles[i].IDs[ii].WorkInProgressTimestamp = 0
+				continue
+			}
+			blobsIDs[i].Blobs = append(blobsIDs[i].Blobs, handles[i].IDs[ii].GetInActiveID())
 			handles[i].IDs[ii].ClearInactiveID()
 		}
 	}
@@ -495,9 +500,6 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 	// Undo changes in redis.
 	for i := range blobsIDs {
 		for ii := range blobsIDs[i].Blobs {
-			if blobsIDs[i].Blobs[ii].IsNil() {
-				continue
-			}
 			if err = nr.transaction.redisCache.Delete(ctx, nr.formatKey(blobsIDs[i].Blobs[ii].String())); err != nil && !redis.KeyNotFound(err) {
 				err = fmt.Errorf("Unable to undo updated nodes in redis, error: %v", err)
 				if lastErr == nil {
@@ -510,28 +512,35 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodes []sop.
 	return lastErr
 }
 
-func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) error {
-	if len(nodes) == 0 {
+func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, vids []cas.RegistryPayload[sop.UUID]) error {
+	if len(vids) == 0 {
 		return nil
 	}
-	vids := nr.convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		err = fmt.Errorf("Unable to fetch removed nodes from registry, %v, error: %v", vids, err)
 		log.Error(err.Error())
 		return err
 	}
+	handlesForRollback := make([]cas.RegistryPayload[sop.Handle], len(handles))
 	for i := range handles {
+		handlesForRollback[i] = cas.RegistryPayload[sop.Handle]{
+			RegistryTable: handles[i].RegistryTable,
+			IDs: make([]sop.Handle, 0, len(handles[i].IDs)),
+		}
 		for ii := range handles[i].IDs {
 			// Undo the deleted mark for ID.
-			handles[i].IDs[ii].IsDeleted = false
-			handles[i].IDs[ii].WorkInProgressTimestamp = 0
+			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].WorkInProgressTimestamp > 0 {
+				handles[i].IDs[ii].IsDeleted = false
+				handles[i].IDs[ii].WorkInProgressTimestamp = 0
+				handlesForRollback[i].IDs = append(handlesForRollback[i].IDs, handles[i].IDs[ii])
+			}
 		}
 	}
 
 	// Persist the handles changes.
-	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
-		err = fmt.Errorf("Unable to undo removed nodes in registry, %v, error: %v", handles, err)
+	if err := nr.transaction.registry.Update(ctx, false, handlesForRollback...); err != nil {
+		err = fmt.Errorf("Unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
 		log.Error(err.Error())
 		return err
 	}
