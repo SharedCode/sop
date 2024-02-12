@@ -137,6 +137,9 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 			if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
 				return err
 			}
+			if t.storeInfo.IsValueDataGloballyCached {
+				t.redisCache.SetStruct(ctx, t.formatKey(itemForAdd.Key.String()), itemForAdd.Value, nodeCacheDuration)
+			}
 		}
 	}
 
@@ -160,6 +163,9 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 			if len(itemsForAdd.Blobs) > 0 {
 				if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
 					return err
+				}
+				if t.storeInfo.IsValueDataGloballyCached {
+					t.redisCache.SetStruct(ctx, t.formatKey(itemForAdd.Key.String()), itemForAdd.Value, nodeCacheDuration)
 				}
 			}
 		}
