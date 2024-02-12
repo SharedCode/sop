@@ -444,7 +444,8 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 		}
 	}
 	if rollbackTrackedItemsValues && t.logger.committedState >= commitTrackedItemsValues {
-		if err := t.rollbackTrackedItemsValues(ctx); err != nil {
+		itemsForDelete := t.getRollbackTrackedItemsValuesInfo()
+		if err := t.deleteTrackedItemsValues(ctx, itemsForDelete); err != nil {
 			lastErr = err
 		}
 	}
@@ -469,31 +470,34 @@ func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
 	}
 	return nil
 }
-func (t *transaction) rollbackTrackedItemsValues(ctx context.Context) error {
-	var lastErr error
+func (t *transaction) getRollbackTrackedItemsValuesInfo() []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]] {
+	r := make([]sop.Tuple[bool, cas.BlobsPayload[sop.UUID]], 0, 5)
 	for i := range t.btreesBackend {
 		itemsForDelete := t.btreesBackend[i].getRollbackTrackedItemsValuesInfo()
 		if itemsForDelete != nil && len(itemsForDelete.Blobs) > 0 {
-			t.deleteTrackedItemsValues(ctx, sop.Tuple[bool, *cas.BlobsPayload[sop.UUID]]{
+				r = append(r, sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]{
 				First: t.btreesBackend[i].getStoreInfo().IsValueDataGloballyCached,
-				Second: itemsForDelete,
+				Second: *itemsForDelete,
 			})
 		}
 	}
-	return lastErr
+	return r
 }
 
-func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDelete sop.Tuple[bool, *cas.BlobsPayload[sop.UUID]]) error {
-	// First field of the Tuple specifies whether we need to delete from Redis cache the blob IDs specified in Second.
-	if itemsForDelete.First {
-		for i := range itemsForDelete.Second.Blobs {
-			t.redisCache.Delete(ctx, formatItemKey(itemsForDelete.Second.Blobs[i].String()))
+func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDelete []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]) error {
+	var lastErr error
+	for i := range itemsForDelete {
+		// First field of the Tuple specifies whether we need to delete from Redis cache the blob IDs specified in Second.
+		if itemsForDelete[i].First {
+			for ii := range itemsForDelete[i].Second.Blobs {
+				t.redisCache.Delete(ctx, formatItemKey(itemsForDelete[i].Second.Blobs[ii].String()))
+			}
+		}
+		if err := t.blobStore.Remove(ctx, itemsForDelete[i].Second); err != nil {
+			lastErr = err
 		}
 	}
-	if err := t.blobStore.Remove(ctx, *itemsForDelete.Second); err != nil {
-		return err
-	}
-	return nil
+	return lastErr
 }
 
 func (t *transaction) deleteObsoleteTrackedItemsValues(ctx context.Context) error {
