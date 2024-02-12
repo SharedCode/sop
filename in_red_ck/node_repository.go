@@ -262,6 +262,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 			id := handles[i].IDs[ii].AllocateID()
 			if id == sop.NilUUID {
 				if handles[i].IDs[ii].IsExpiredInactive() {
+					// In case the handle was marked deleted by an incomplete transaction then reset it back to undo it.
 					handles[i].IDs[ii].IsDeleted = false
 					handles[i].IDs[ii].ClearInactiveID()
 					// Allocate a new ID after clearing the unused inactive ID.
