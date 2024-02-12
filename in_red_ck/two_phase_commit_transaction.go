@@ -65,13 +65,6 @@ type transaction struct {
 	removedNodeHandles []cas.RegistryPayload[sop.Handle]
 }
 
-// rollback functions' commands.
-type rollbackCommand int
-const (
-	getRollbackData = iota
-	rollback
-)
-
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
 var now = time.Now
 
@@ -213,7 +206,8 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 // Sleep in random milli-seconds to allow different conflicting (Node modifying) transactions
 // to retry on different times, thus, increasing chance to succeed one after the other.
 func randomSleep(ctx context.Context) {
-	sleepTime := sleepBeforeRefetchBase + (1+rand.Intn(5))*100
+	sleepTimes := []int{100, 200, 300, 400, 500}
+	sleepTime := sleepTimes[rand.Intn(5)]
 	sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 }
 
@@ -223,8 +217,6 @@ func sleep(ctx context.Context, sleepTime time.Duration) {
 	defer cancel()
 	<-sleep.Done()
 }
-
-const sleepBeforeRefetchBase = 100
 
 // phase1Commit does the phase 1 commit steps.
 func (t *transaction) phase1Commit(ctx context.Context) error {
