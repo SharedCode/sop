@@ -193,7 +193,7 @@ func (nr *nodeRepository) remove(nodeID sop.UUID) {
 	// Code should not reach this point, as B-tree will not issue a remove if node is not cached locally.
 }
 
-func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) (bool, error) {
+func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) (bool, error) {
 	if len(nodes) == 0 {
 		return true, nil
 	}
@@ -208,7 +208,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 			handles[i].IDs = make([]sop.Handle, len(vids[i].IDs))
 		}
 		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
-		blobs[i].BlobTable = nodes[i].Key.BlobTable
+		blobs[i].BlobTable = nodes[i].First.BlobTable
 		for ii := range handles[i].IDs {
 			// Check if a non-empty root node was found, fail to cause "re-sync & merge".
 			if !handles[i].IDs[ii].LogicalID.IsNil() {
@@ -216,7 +216,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 			}
 			handles[i].IDs[ii] = sop.NewHandle(vids[i].IDs[ii])
 			blobs[i].Blobs[ii].Key = handles[i].IDs[ii].GetActiveID()
-			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
+			blobs[i].Blobs[ii].Value = nodes[i].Second[ii]
 		}
 	}
 	// Persist the nodes blobs to blob store and redis cache.
@@ -224,9 +224,9 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 		return false, err
 	}
 	for i := range nodes {
-		for ii := range nodes[i].Value {
+		for ii := range nodes[i].Second {
 			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetActiveID().String()),
-				nodes[i].Value[ii], nodeCacheDuration); err != nil {
+				nodes[i].Second[ii], nodeCacheDuration); err != nil {
 				return false, err
 			}
 		}
@@ -239,7 +239,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Ke
 }
 
 // Save to blob store, save node ID to the alternate(inactive) physical ID(see virtual ID).
-func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) (bool, []cas.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) (bool, []cas.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
 	}
@@ -251,11 +251,11 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 	}
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
 	for i := range handles {
-		blobs[i].BlobTable = nodes[i].Key.BlobTable
+		blobs[i].BlobTable = nodes[i].First.BlobTable
 		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			// Node with such ID is marked deleted or had been updated since reading it.
-			if (handles[i].IDs[ii].IsDeleted && !handles[i].IDs[ii].IsExpiredInactive()) || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
+			if (handles[i].IDs[ii].IsDeleted && !handles[i].IDs[ii].IsExpiredInactive()) || handles[i].IDs[ii].Version != nodes[i].Second[ii].(btree.MetaDataType).GetVersion() {
 				return false, nil, nil
 			}
 			if handles[i].IDs[ii].IsDeleted && handles[i].IDs[ii].IsExpiredInactive() {
@@ -276,7 +276,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 				return false, nil, nil
 			}
 			blobs[i].Blobs[ii].Key = id
-			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
+			blobs[i].Blobs[ii].Value = nodes[i].Second[ii]
 		}
 	}
 	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
@@ -288,8 +288,8 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 		return false, nil, err
 	}
 	for i := range nodes {
-		for ii := range nodes[i].Value {
-			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveID().String()), nodes[i].Value[ii], nodeCacheDuration); err != nil {
+		for ii := range nodes[i].Second {
+			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveID().String()), nodes[i].Second[ii], nodeCacheDuration); err != nil {
 				return false, nil, err
 			}
 		}
@@ -299,7 +299,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Ke
 
 // Add the removed Node(s) and their Item(s) Data(if not in node segment) to the recycler
 // so they can get serviced for physical delete on schedule in the future.
-func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) (bool, []cas.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) (bool, []cas.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
 	}
@@ -313,7 +313,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Ke
 		for ii := range handles[i].IDs {
 			// Node with such ID is already marked deleted, is in-flight change or had been updated since reading it,
 			// fail it for "refetch" & retry.
-			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
+			if handles[i].IDs[ii].IsDeleted || handles[i].IDs[ii].Version != nodes[i].Second[ii].(btree.MetaDataType).GetVersion() {
 				return false, nil, nil
 			}
 			// Mark ID as deleted.
@@ -328,7 +328,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Ke
 	return true, handles, nil
 }
 
-func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) error {
+func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) error {
 	/* UUID to Virtual ID story:
 	   - (on commit) New(added) nodes will have their IDs converted to virtual ID with empty
 	     phys IDs(or same ID with active & virtual ID).
@@ -342,21 +342,21 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 	handles := make([]cas.RegistryPayload[sop.Handle], len(nodes))
 	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
 	for i := range nodes {
-		handles[i].RegistryTable = nodes[i].Key.RegistryTable
-		handles[i].IDs = make([]sop.Handle, len(nodes[i].Value))
-		blobs[i].BlobTable = nodes[i].Key.BlobTable
+		handles[i].RegistryTable = nodes[i].First.RegistryTable
+		handles[i].IDs = make([]sop.Handle, len(nodes[i].Second))
+		blobs[i].BlobTable = nodes[i].First.BlobTable
 		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
-		for ii := range nodes[i].Value {
-			metaData := nodes[i].Value[ii].(btree.MetaDataType)
+		for ii := range nodes[i].Second {
+			metaData := nodes[i].Second[ii].(btree.MetaDataType)
 			// Add node to blob store.
 			h := sop.NewHandle(metaData.GetID())
 			// Increment version.
 			h.Version++
 			blobs[i].Blobs[ii].Key = metaData.GetID()
-			blobs[i].Blobs[ii].Value = nodes[i].Value[ii]
+			blobs[i].Blobs[ii].Value = nodes[i].Second[ii]
 			handles[i].IDs[ii] = h
 			// Add node to Redis cache.
-			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(metaData.GetID().String()), nodes[i].Value[ii], nodeCacheDuration); err != nil {
+			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(metaData.GetID().String()), nodes[i].Second[ii], nodeCacheDuration); err != nil {
 				return err
 			}
 		}
@@ -372,7 +372,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.KeyV
 	return nil
 }
 
-func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) (bool, error) {
+func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) (bool, error) {
 	if len(nodes) == 0 {
 		return true, nil
 	}
@@ -385,7 +385,7 @@ func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop
 	for i := range handles {
 		for ii := range handles[i].IDs {
 			// Node with ID had been updated(or deleted) since reading it.
-			if handles[i].IDs[ii].Version != nodes[i].Value[ii].(btree.MetaDataType).GetVersion() {
+			if handles[i].IDs[ii].Version != nodes[i].Second[ii].(btree.MetaDataType).GetVersion() {
 				return false, nil
 			}
 		}
@@ -584,29 +584,29 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, handles []cas.Registry
 	return handles, nil
 }
 
-func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) []cas.BlobsPayload[sop.UUID] {
+func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) []cas.BlobsPayload[sop.UUID] {
 	bibs := make([]cas.BlobsPayload[sop.UUID], len(nodes))
 	for i := range nodes {
 		bibs[i] = cas.BlobsPayload[sop.UUID]{
-			BlobTable: nodes[i].Key.BlobTable,
-			Blobs:     make([]sop.UUID, len(nodes[i].Value)),
+			BlobTable: nodes[i].First.BlobTable,
+			Blobs:     make([]sop.UUID, len(nodes[i].Second)),
 		}
-		for ii := range nodes[i].Value {
-			bibs[i].Blobs[ii] = nodes[i].Value[ii].(btree.MetaDataType).GetID()
+		for ii := range nodes[i].Second {
+			bibs[i].Blobs[ii] = nodes[i].Second[ii].(btree.MetaDataType).GetID()
 		}
 	}
 	return bibs
 }
 
-func (nr *nodeRepository) convertToRegistryRequestPayload(nodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]) []cas.RegistryPayload[sop.UUID] {
+func (nr *nodeRepository) convertToRegistryRequestPayload(nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) []cas.RegistryPayload[sop.UUID] {
 	vids := make([]cas.RegistryPayload[sop.UUID], len(nodes))
 	for i := range nodes {
 		vids[i] = cas.RegistryPayload[sop.UUID]{
-			RegistryTable: nodes[i].Key.RegistryTable,
-			IDs:           make([]sop.UUID, len(nodes[i].Value)),
+			RegistryTable: nodes[i].First.RegistryTable,
+			IDs:           make([]sop.UUID, len(nodes[i].Second)),
 		}
-		for ii := range nodes[i].Value {
-			vids[i].IDs[ii] = nodes[i].Value[ii].(btree.MetaDataType).GetID()
+		for ii := range nodes[i].Second {
+			vids[i].IDs[ii] = nodes[i].Second[ii].(btree.MetaDataType).GetID()
 		}
 	}
 	return vids

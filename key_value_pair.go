@@ -9,8 +9,11 @@ type KeyValuePair[TK any, TV any] struct {
 	Value TV
 }
 
-// Tuple of two items.
+// Tuple of two items. If there is less concept of Key and Value and leaning towards more generic
+// pair of items(first and second), then please use this one instead of KeyValuePair.
 type Tuple[T1 any, T2 any] struct {
+	// First item in the pair.
 	First T1
+	// Second item in the pair.
 	Second T2
 }

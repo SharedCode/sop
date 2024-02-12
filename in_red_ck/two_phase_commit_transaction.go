@@ -229,7 +229,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
-	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]
+	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.Tuple[*btree.StoreInfo, []interface{}]
 	var updatedNodesHandles, removedNodesHandles []cas.RegistryPayload[sop.Handle]
 
 	startTime := now()
@@ -553,12 +553,12 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes.
-func (t *transaction) classifyModifiedNodes() ([]sop.KeyValuePair[*btree.StoreInfo, []interface{}],
-	[]sop.KeyValuePair[*btree.StoreInfo, []interface{}],
-	[]sop.KeyValuePair[*btree.StoreInfo, []interface{}],
-	[]sop.KeyValuePair[*btree.StoreInfo, []interface{}],
-	[]sop.KeyValuePair[*btree.StoreInfo, []interface{}]) {
-	var storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]
+func (t *transaction) classifyModifiedNodes() ([]sop.Tuple[*btree.StoreInfo, []interface{}],
+	[]sop.Tuple[*btree.StoreInfo, []interface{}],
+	[]sop.Tuple[*btree.StoreInfo, []interface{}],
+	[]sop.Tuple[*btree.StoreInfo, []interface{}],
+	[]sop.Tuple[*btree.StoreInfo, []interface{}]) {
+	var storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes []sop.Tuple[*btree.StoreInfo, []interface{}]
 	for i, s := range t.btreesBackend {
 		var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []interface{}
 		for _, cacheNode := range s.nodeRepository.nodeLocalCache {
@@ -580,33 +580,33 @@ func (t *transaction) classifyModifiedNodes() ([]sop.KeyValuePair[*btree.StoreIn
 			}
 		}
 		if len(updatedNodes) > 0 {
-			storesUpdatedNodes = append(storesUpdatedNodes, sop.KeyValuePair[*btree.StoreInfo, []interface{}]{
-				Key:   s.getStoreInfo(),
-				Value: updatedNodes,
+			storesUpdatedNodes = append(storesUpdatedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+				First:   s.getStoreInfo(),
+				Second: updatedNodes,
 			})
 		}
 		if len(removedNodes) > 0 {
-			storesRemovedNodes = append(storesRemovedNodes, sop.KeyValuePair[*btree.StoreInfo, []interface{}]{
-				Key:   s.getStoreInfo(),
-				Value: removedNodes,
+			storesRemovedNodes = append(storesRemovedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+				First:   s.getStoreInfo(),
+				Second: removedNodes,
 			})
 		}
 		if len(addedNodes) > 0 {
-			storesAddedNodes = append(storesAddedNodes, sop.KeyValuePair[*btree.StoreInfo, []interface{}]{
-				Key:   s.getStoreInfo(),
-				Value: addedNodes,
+			storesAddedNodes = append(storesAddedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+				First:   s.getStoreInfo(),
+				Second: addedNodes,
 			})
 		}
 		if len(fetchedNodes) > 0 {
-			storesFetchedNodes = append(storesFetchedNodes, sop.KeyValuePair[*btree.StoreInfo, []interface{}]{
-				Key:   s.getStoreInfo(),
-				Value: fetchedNodes,
+			storesFetchedNodes = append(storesFetchedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+				First:   s.getStoreInfo(),
+				Second: fetchedNodes,
 			})
 		}
 		if len(rootNodes) > 0 {
-			storesRootNodes = append(storesRootNodes, sop.KeyValuePair[*btree.StoreInfo, []interface{}]{
-				Key:   s.getStoreInfo(),
-				Value: rootNodes,
+			storesRootNodes = append(storesRootNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+				First:   s.getStoreInfo(),
+				Second: rootNodes,
 			})
 		}
 	}
