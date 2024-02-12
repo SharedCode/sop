@@ -8,3 +8,9 @@ type KeyValuePair[TK any, TV any] struct {
 	// Value is the value part in the pair.
 	Value TV
 }
+
+// Tuple of two items.
+type Tuple[T1 any, T2 any] struct {
+	First T1
+	Second T2
+}

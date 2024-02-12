@@ -254,8 +254,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Commit new root nodes.
 		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
 		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
-		t.logger.log(ctx, commitNewRootNodes, sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
-			Key: vids, Value: bibs,
+		t.logger.log(ctx, commitNewRootNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+			First: vids, Second: bibs,
 		})
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
 			return err
@@ -418,7 +418,7 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	if t.logger.committedState > commitAddedNodes {
 		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(addedNodes)
 		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(addedNodes)
-		bv := sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{Key: vids, Value: bibs}
+		bv := sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
 		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
@@ -438,7 +438,7 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	if t.logger.committedState > commitNewRootNodes {
 		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
 		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
-		bv := sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{Key: vids, Value: bibs}
+		bv := sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
 		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
@@ -474,18 +474,28 @@ func (t *transaction) rollbackTrackedItemsValues(ctx context.Context) error {
 	for i := range t.btreesBackend {
 		itemsForDelete := t.btreesBackend[i].getRollbackTrackedItemsValuesInfo()
 		if itemsForDelete != nil && len(itemsForDelete.Blobs) > 0 {
-			if t.btreesBackend[i].getStoreInfo().IsValueDataGloballyCached {
-				for i := range itemsForDelete.Blobs {
-					t.redisCache.Delete(ctx, formatItemKey(itemsForDelete.Blobs[i].String()))
-				}
-			}
-			if err := t.blobStore.Remove(ctx, *itemsForDelete); err != nil {
-				lastErr = err
-			}
+			t.deleteTrackedItemsValues(ctx, sop.Tuple[bool, *cas.BlobsPayload[sop.UUID]]{
+				First: t.btreesBackend[i].getStoreInfo().IsValueDataGloballyCached,
+				Second: itemsForDelete,
+			})
 		}
 	}
 	return lastErr
 }
+
+func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDelete sop.Tuple[bool, *cas.BlobsPayload[sop.UUID]]) error {
+	// First field of the Tuple specifies whether we need to delete from Redis cache the blob IDs specified in Second.
+	if itemsForDelete.First {
+		for i := range itemsForDelete.Second.Blobs {
+			t.redisCache.Delete(ctx, formatItemKey(itemsForDelete.Second.Blobs[i].String()))
+		}
+	}
+	if err := t.blobStore.Remove(ctx, *itemsForDelete.Second); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (t *transaction) deleteObsoleteTrackedItemsValues(ctx context.Context) error {
 	var lastErr error
 	for i := range t.btreesBackend {

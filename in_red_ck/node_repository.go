@@ -396,9 +396,9 @@ func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop
 func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData interface{}) error {
 	var bibs []cas.BlobsPayload[sop.UUID]
 	var vids []cas.RegistryPayload[sop.UUID]
-	kvp := rollbackData.(sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]])
-	vids = kvp.Key
-	bibs = kvp.Value
+	tup := rollbackData.(sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]])
+	vids = tup.First
+	bibs = tup.Second
 	if len(vids) == 0 {
 		return nil
 	}
@@ -433,9 +433,9 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData
 func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData interface{}) error {
 	var bibs []cas.BlobsPayload[sop.UUID]
 	var vids []cas.RegistryPayload[sop.UUID]
-	kvp := rollbackData.(sop.KeyValuePair[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]])
-	vids = kvp.Key
-	bibs = kvp.Value
+	tup := rollbackData.(sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]])
+	vids = tup.First
+	bibs = tup.Second
 	if len(vids) == 0 {
 		return nil
 	}
