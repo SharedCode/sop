@@ -74,7 +74,7 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 		if item.Value == nil && item.ValueNeedsFetch {
 			var v TV
 			if t.storeInfo.IsValueDataGloballyCached {
-				if err := t.redisCache.GetStruct(ctx, t.formatKey(item.ID.String()), &v); err != nil {
+				if err := t.redisCache.GetStruct(ctx, formatItemKey(item.ID.String()), &v); err != nil {
 					if !redis.KeyNotFound(err) {
 						log.Error(err.Error())
 					}
@@ -83,7 +83,7 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 						return err
 					}
 					// Just log Redis error since it is just secondary.
-					if err := t.redisCache.SetStruct(ctx, t.formatKey(item.ID.String()), &v, nodeCacheDuration); err != nil {
+					if err := t.redisCache.SetStruct(ctx, formatItemKey(item.ID.String()), &v, nodeCacheDuration); err != nil {
 						log.Error(err.Error())
 					}
 				}
@@ -137,6 +137,9 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 			if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
 				return err
 			}
+			if t.storeInfo.IsValueDataGloballyCached {
+				t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), itemForAdd.Value, nodeCacheDuration)
+			}
 		}
 	}
 
@@ -160,6 +163,9 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 			if len(itemsForAdd.Blobs) > 0 {
 				if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
 					return err
+				}
+				if t.storeInfo.IsValueDataGloballyCached {
+					t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), itemForAdd.Value, nodeCacheDuration)
 				}
 			}
 		}

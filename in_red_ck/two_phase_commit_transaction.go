@@ -41,8 +41,8 @@ type btreeBackend struct {
 
 	// Manage tracked items' values in separate segments.
 	commitTrackedItemsValues         func(ctx context.Context) error
-	rollbackTrackedItemsValues       func(ctx context.Context) error
-	deleteObsoleteTrackedItemsValues func(ctx context.Context) error
+	getForRollbackTrackedItemsValues func() *cas.BlobsPayload[sop.UUID]
+	getObsoleteTrackedItemsValues    func() *cas.BlobsPayload[sop.UUID]
 }
 
 type transaction struct {
@@ -70,7 +70,9 @@ var now = time.Now
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
-func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error) {
+// If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
+// However, without logging, the transaction commit can execute faster because there is no data getting logged.
+func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration, logging bool) (TwoPhaseCommitTransaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
 		maxTime = time.Duration(15 * time.Minute)
@@ -89,7 +91,7 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration) (TwoPh
 		registry:        cas.NewRegistry(),
 		redisCache:      redis.NewClient(),
 		blobStore:       cas.NewBlobStore(),
-		logger:          newTransactionLogger(nil),
+		logger:          newTransactionLogger(nil, logging),
 		phaseDone:       -1,
 	}, nil
 }
@@ -206,7 +208,7 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 // Sleep in random milli-seconds to allow different conflicting (Node modifying) transactions
 // to retry on different times, thus, increasing chance to succeed one after the other.
 func randomSleep(ctx context.Context) {
-	sleepTime := sleepBeforeRefetchBase + (1+rand.Intn(5))*100
+	sleepTime := (1 + rand.Intn(5)) * 100
 	sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 }
 
@@ -217,28 +219,7 @@ func sleep(ctx context.Context, sleepTime time.Duration) {
 	<-sleep.Done()
 }
 
-const sleepBeforeRefetchBase = 100
-
-// For writer transaction. Save the managed Node(s) as inactive:
-// NOTE: a transaction Commit can timeout and thus, rollback if it exceeds the maximum time(defaults to 30 mins).
-// Return error to trigger rollback for any operation that fails.
-//
-//   - Create a lookup table of added/updated/removed items together with their Nodes
-//     Specify whether Node is updated, added or removed
-//   - Repeat until timeout, for updated Nodes:
-//   - Upsert each Node from the lookup to blobStore
-//   - Log UUID in transaction rollback log categorized as updated Node
-//   - Compare each updated Node to Redis copy if identical(active UUID is same)
-//     NOTE: added Node(s) don't need this logic.
-//     For identical Node(s), update the "inactive UUID" with the Node's UUID(in redis).
-//     Collect each Node that are different in Redis(as updated by other transaction(s))
-//     Gather all the items of these Nodes(using the lookup table)
-//     Break if there are no more items different.
-//   - Re-fetch the Nodes of these items, re-create the lookup table consisting only of these items
-//     & their re-fetched Nodes
-//
-// Repeat end.
-// - Return error if loop timed out to trigger rollback.
+// phase1Commit does the phase 1 commit steps.
 func (t *transaction) phase1Commit(ctx context.Context) error {
 	if !t.hasTrackedItems() {
 		return nil
@@ -250,7 +231,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
-	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]
+	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.Tuple[*btree.StoreInfo, []interface{}]
 	var updatedNodesHandles, removedNodesHandles []cas.RegistryPayload[sop.Handle]
 
 	startTime := now()
@@ -261,7 +242,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 
-		t.logger.enqueue(commitTrackedItemsValues, nil)
+		t.logger.log(ctx, commitTrackedItemsValues, t.getForRollbackTrackedItemsValues())
 		if err := t.commitTrackedItemsValues(ctx); err != nil {
 			return err
 		}
@@ -273,21 +254,25 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
 
 		// Commit new root nodes.
-		t.logger.enqueue(commitNewRootNodes, nil)
+		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
+		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
+		t.logger.log(ctx, commitNewRootNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+			First: vids, Second: bibs,
+		})
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
 			return err
 		}
 
 		if successful {
 			// Check for conflict on fetched items.
-			t.logger.enqueue(areFetchedItemsIntact, nil)
+			t.logger.log(ctx, areFetchedItemsIntact, nil)
 			if successful, err = t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
 				return err
 			}
 		}
 		if successful {
 			// Commit updated nodes.
-			t.logger.enqueue(commitUpdatedNodes, nil)
+			t.logger.log(ctx, commitUpdatedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(updatedNodes))
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
 			}
@@ -295,7 +280,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Only do commit removed nodes if successful so far.
 		if successful {
 			// Commit removed nodes.
-			t.logger.enqueue(commitRemovedNodes, nil)
+			t.logger.log(ctx, commitRemovedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(removedNodes))
 			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
 				return err
 			}
@@ -303,31 +288,32 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		if !successful {
 			// Rollback partial changes.
 			t.rollback(ctx, false)
-			// Clear enqueued logs as we rolled back.
-			t.logger.clearQueue()
+			// Clear logs as we rolled back.
+			t.logger.removeLogs(ctx)
 
 			randomSleep(ctx)
 
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
 				return err
 			}
+			t.logger.log(ctx, lockTrackedItems, nil)
 			if err = t.lockTrackedItems(ctx); err != nil {
 				return err
 			}
 		}
 	}
 
-	// Persist logs in the queue.
-	t.logger.saveQueue(ctx)
-
 	// Commit added nodes.
-	t.logger.log(ctx, commitAddedNodes, nil)
+	t.logger.log(ctx, commitAddedNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+		First:  t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(addedNodes),
+		Second: t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(addedNodes),
+	})
 	if err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
 		return err
 	}
 
 	// Commit stores update(CountDelta apply).
-	t.logger.log(ctx, commitStoreInfo, nil)
+	t.logger.log(ctx, commitStoreInfo, t.getRollbackStoresInfo())
 	if err := t.commitStores(ctx); err != nil {
 		return err
 	}
@@ -359,15 +345,42 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	return nil
 }
 
+// phase2Commit finalizes the commit process and does cleanup afterwards.
 func (t *transaction) phase2Commit(ctx context.Context) error {
-	// Finalize the commit, it is the only all or nothing action in the commit, and on registry (very small) records only.
-	if err := t.logger.log(ctx, finalizeCommit, nil); err != nil {
-		return err
-	}
+
+	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
+	t.logger.log(ctx, finalizeCommit, []interface{}{t.getToBeObsoleteEntries(), t.getObsoleteTrackedItemsValues()})
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
 		return err
 	}
 
+	// Unlock the items in Redis since technically "commit" is done.
+	if err := t.unlockTrackedItems(ctx); err != nil {
+		// Just log as warning any error as at this point, commit is already finalized.
+		// Any partial changes before failure in unlock tracked items will just expire in Redis.
+		log.Warn(err.Error())
+	}
+
+	// Cleanup transaction logs & obsolete entries.
+	t.cleanup(ctx)
+	return nil
+}
+
+func (t *transaction) cleanup(ctx context.Context) {
+	// Cleanup resources not needed anymore.
+	t.logger.log(ctx, deleteObsoleteEntries, nil)
+	obsoleteEntries := t.getToBeObsoleteEntries()
+	t.deleteObsoleteEntries(ctx, obsoleteEntries.First, obsoleteEntries.Second)
+
+	t.logger.log(ctx, deleteTrackedItemsValues, nil)
+	t.deleteTrackedItemsValues(ctx, t.getObsoleteTrackedItemsValues())
+
+	// Remove unneeded transaction logs since commit is done.
+	t.logger.removeLogs(ctx)
+}
+
+func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]] {
+	// Cleanup resources not needed anymore.
 	unusedNodeIDs := make([]cas.BlobsPayload[sop.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
 		blobsIDs := cas.BlobsPayload[sop.UUID]{
@@ -398,21 +411,10 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 		unusedNodeIDs = append(unusedNodeIDs, blobsIDs)
 	}
 
-	t.logger.log(ctx, deleteObsoleteEntries, []interface{}{deletedIDs, unusedNodeIDs})
-	t.deleteObsoleteEntries(ctx, deletedIDs, unusedNodeIDs)
-
-	t.logger.log(ctx, deleteObsoleteTrackedItemsValues, nil)
-	t.deleteObsoleteTrackedItemsValues(ctx)
-
-	// Commit is considered completed and the logs are not needed anymore.
-	t.logger.removeLogs(ctx)
-	// Unlock the items in Redis.
-	if err := t.unlockTrackedItems(ctx); err != nil {
-		// Just log as warning any error as at this point, commit is already finalized.
-		// Any partial changes before failure in unlock tracked items will just expire in Redis.
-		log.Warn(err.Error())
+	return sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+		First:  deletedIDs,
+		Second: unusedNodeIDs,
 	}
-	return nil
 }
 
 func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues bool) error {
@@ -428,32 +430,42 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 		// do nothing as the function failed, nothing to undo.
 	}
 	if t.logger.committedState > commitStoreInfo {
-		if err := t.rollbackStores(ctx); err != nil {
+		rollbackStoresInfo := t.getRollbackStoresInfo()
+		if err := t.storeRepository.Update(ctx, rollbackStoresInfo...); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitAddedNodes {
-		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, addedNodes); err != nil {
+		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(addedNodes)
+		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(addedNodes)
+		bv := sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
+		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitRemovedNodes {
-		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, removedNodes); err != nil {
+		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(removedNodes)
+		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitUpdatedNodes {
-		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, updatedNodes); err != nil {
+		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(updatedNodes)
+		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitNewRootNodes {
-		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, rootNodes); err != nil {
+		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
+		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
+		bv := sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
+		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
 	}
 	if rollbackTrackedItemsValues && t.logger.committedState >= commitTrackedItemsValues {
-		if err := t.btreesBackend[0].rollbackTrackedItemsValues(ctx); err != nil {
+		itemsForDelete := t.getForRollbackTrackedItemsValues()
+		if err := t.deleteTrackedItemsValues(ctx, itemsForDelete); err != nil {
 			lastErr = err
 		}
 	}
@@ -478,21 +490,47 @@ func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
 	}
 	return nil
 }
-func (t *transaction) rollbackTrackedItemsValues(ctx context.Context) error {
+func (t *transaction) getForRollbackTrackedItemsValues() []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]] {
+	r := make([]sop.Tuple[bool, cas.BlobsPayload[sop.UUID]], 0, 5)
 	for i := range t.btreesBackend {
-		if err := t.btreesBackend[i].rollbackTrackedItemsValues(ctx); err != nil {
-			return err
+		itemsForDelete := t.btreesBackend[i].getForRollbackTrackedItemsValues()
+		if itemsForDelete != nil && len(itemsForDelete.Blobs) > 0 {
+			r = append(r, sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]{
+				First:  t.btreesBackend[i].getStoreInfo().IsValueDataGloballyCached,
+				Second: *itemsForDelete,
+			})
 		}
 	}
-	return nil
+	return r
 }
-func (t *transaction) deleteObsoleteTrackedItemsValues(ctx context.Context) error {
+func (t *transaction) getObsoleteTrackedItemsValues() []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]] {
+	r := make([]sop.Tuple[bool, cas.BlobsPayload[sop.UUID]], 0, 5)
 	for i := range t.btreesBackend {
-		if err := t.btreesBackend[i].deleteObsoleteTrackedItemsValues(ctx); err != nil {
-			return err
+		itemsForDelete := t.btreesBackend[i].getObsoleteTrackedItemsValues()
+		if itemsForDelete != nil && len(itemsForDelete.Blobs) > 0 {
+			r = append(r, sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]{
+				First:  t.btreesBackend[i].getStoreInfo().IsValueDataGloballyCached,
+				Second: *itemsForDelete,
+			})
 		}
 	}
-	return nil
+	return r
+}
+
+func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDelete []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]) error {
+	var lastErr error
+	for i := range itemsForDelete {
+		// First field of the Tuple specifies whether we need to delete from Redis cache the blob IDs specified in Second.
+		if itemsForDelete[i].First {
+			for ii := range itemsForDelete[i].Second.Blobs {
+				t.redisCache.Delete(ctx, formatItemKey(itemsForDelete[i].Second.Blobs[ii].String()))
+			}
+		}
+		if err := t.blobStore.Remove(ctx, itemsForDelete[i].Second); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 // Checks if fetched items are intact.
@@ -538,12 +576,12 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes.
-func (t *transaction) classifyModifiedNodes() ([]sop.KeyValuePair[*btree.StoreInfo, []interface{}],
-	[]sop.KeyValuePair[*btree.StoreInfo, []interface{}],
-	[]sop.KeyValuePair[*btree.StoreInfo, []interface{}],
-	[]sop.KeyValuePair[*btree.StoreInfo, []interface{}],
-	[]sop.KeyValuePair[*btree.StoreInfo, []interface{}]) {
-	var storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes []sop.KeyValuePair[*btree.StoreInfo, []interface{}]
+func (t *transaction) classifyModifiedNodes() ([]sop.Tuple[*btree.StoreInfo, []interface{}],
+	[]sop.Tuple[*btree.StoreInfo, []interface{}],
+	[]sop.Tuple[*btree.StoreInfo, []interface{}],
+	[]sop.Tuple[*btree.StoreInfo, []interface{}],
+	[]sop.Tuple[*btree.StoreInfo, []interface{}]) {
+	var storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes []sop.Tuple[*btree.StoreInfo, []interface{}]
 	for i, s := range t.btreesBackend {
 		var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []interface{}
 		for _, cacheNode := range s.nodeRepository.nodeLocalCache {
@@ -565,33 +603,33 @@ func (t *transaction) classifyModifiedNodes() ([]sop.KeyValuePair[*btree.StoreIn
 			}
 		}
 		if len(updatedNodes) > 0 {
-			storesUpdatedNodes = append(storesUpdatedNodes, sop.KeyValuePair[*btree.StoreInfo, []interface{}]{
-				Key:   s.getStoreInfo(),
-				Value: updatedNodes,
+			storesUpdatedNodes = append(storesUpdatedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+				First:  s.getStoreInfo(),
+				Second: updatedNodes,
 			})
 		}
 		if len(removedNodes) > 0 {
-			storesRemovedNodes = append(storesRemovedNodes, sop.KeyValuePair[*btree.StoreInfo, []interface{}]{
-				Key:   s.getStoreInfo(),
-				Value: removedNodes,
+			storesRemovedNodes = append(storesRemovedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+				First:  s.getStoreInfo(),
+				Second: removedNodes,
 			})
 		}
 		if len(addedNodes) > 0 {
-			storesAddedNodes = append(storesAddedNodes, sop.KeyValuePair[*btree.StoreInfo, []interface{}]{
-				Key:   s.getStoreInfo(),
-				Value: addedNodes,
+			storesAddedNodes = append(storesAddedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+				First:  s.getStoreInfo(),
+				Second: addedNodes,
 			})
 		}
 		if len(fetchedNodes) > 0 {
-			storesFetchedNodes = append(storesFetchedNodes, sop.KeyValuePair[*btree.StoreInfo, []interface{}]{
-				Key:   s.getStoreInfo(),
-				Value: fetchedNodes,
+			storesFetchedNodes = append(storesFetchedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+				First:  s.getStoreInfo(),
+				Second: fetchedNodes,
 			})
 		}
 		if len(rootNodes) > 0 {
-			storesRootNodes = append(storesRootNodes, sop.KeyValuePair[*btree.StoreInfo, []interface{}]{
-				Key:   s.getStoreInfo(),
-				Value: rootNodes,
+			storesRootNodes = append(storesRootNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+				First:  s.getStoreInfo(),
+				Second: rootNodes,
 			})
 		}
 	}
@@ -610,7 +648,7 @@ func (t *transaction) commitStores(ctx context.Context) error {
 	}
 	return t.storeRepository.Update(ctx, stores...)
 }
-func (t *transaction) rollbackStores(ctx context.Context) error {
+func (t *transaction) getRollbackStoresInfo() []btree.StoreInfo {
 	stores := make([]btree.StoreInfo, len(t.btreesBackend))
 	for i := range t.btreesBackend {
 		store := t.btreesBackend[i].getStoreInfo()
@@ -619,7 +657,7 @@ func (t *transaction) rollbackStores(ctx context.Context) error {
 		s2.CountDelta = t.btreesBackend[i].nodeRepository.count - s2.Count
 		stores[i] = s2
 	}
-	return t.storeRepository.Update(ctx, stores...)
+	return stores
 }
 
 func (t *transaction) hasTrackedItems() bool {

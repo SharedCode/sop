@@ -12,6 +12,7 @@ func DeleteBTree(t *testing.T) {
 	tableList := []string{
 		"fooStore", "persondb", "twophase", "twophase2", "twophase3",
 		"twophase22", "persondb7", "persondb77", "person2db", "barStore",
+		"tabley", "tablex2", "tablex",
 	}
 	for _, tn := range tableList {
 		if err := in_red_ck.RemoveBtree(ctx, tn); err != nil {

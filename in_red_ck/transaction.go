@@ -36,8 +36,9 @@ type singlePhaseTransaction struct {
 // maxTime - specify the maximum "commit" time of the transaction. That is, upon call to commit, it is given
 // this amount of time to conclude, otherwise, it will time out and rollback.
 // If -1 is specified, 15 minute max commit time will be assigned.
-func NewTransaction(forWriting bool, maxTime time.Duration) (Transaction, error) {
-	twoPhase, err := NewTwoPhaseCommitTransaction(forWriting, maxTime)
+// logging - true will turn on transaction logging, otherwise will not.
+func NewTransaction(forWriting bool, maxTime time.Duration, logging bool) (Transaction, error) {
+	twoPhase, err := NewTwoPhaseCommitTransaction(forWriting, maxTime, logging)
 	if err != nil {
 		return nil, err
 	}

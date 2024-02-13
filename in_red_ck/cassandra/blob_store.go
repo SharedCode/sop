@@ -55,7 +55,7 @@ func NewBlobStore() BlobStore {
 // GetOne fetches a blob from blob table.
 func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobID sop.UUID, target interface{}) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	selectStatement := fmt.Sprintf("SELECT node FROM %s.%s WHERE id in (?);", connection.Config.Keyspace, blobTable)
 	qry := connection.Session.Query(selectStatement, gocql.UUID(blobID)).WithContext(ctx)
@@ -75,7 +75,7 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobID sop.UUI
 // Add blob(s) to the Blob store.
 func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	for i := range storesblobs {
 		for ii := range storesblobs[i].Blobs {
@@ -100,7 +100,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.Key
 // Update blob(s) in the Blob store.
 func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	for i := range storesblobs {
 		for ii := range storesblobs[i].Blobs {
@@ -124,7 +124,7 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.
 // Remove will delete(non-logged) node records from different Blob stores(node tables).
 func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...BlobsPayload[sop.UUID]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	// Delete per blob table the Node "blobs".
 	for _, storeBlobIDs := range storesBlobsIDs {

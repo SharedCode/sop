@@ -55,7 +55,7 @@ func SetStoreCacheDuration(duration time.Duration) {
 // Add a new store record, create a new Virtual ID registry and node blob tables.
 func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
 	for _, s := range stores {
@@ -86,7 +86,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 // Update enforces so only the Store's Count & timestamp can get updated.
 func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
 	// Sort the stores info so we can commit them in same sort order across transactions,
@@ -182,7 +182,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 
 func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.StoreInfo, error) {
 	if connection == nil {
-		return nil, fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	stores := make([]btree.StoreInfo, 0, len(names))
 	// Format some variadic ? and convert to interface the names param.
@@ -234,7 +234,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 
 func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call GetConnection(config) to open it")
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	// Format some variadic ? and convert to interface the names param.
 	namesAsIntf := make([]interface{}, len(names))

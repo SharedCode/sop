@@ -23,7 +23,7 @@ const (
 	beforeFinalize
 	finalizeCommit
 	deleteObsoleteEntries
-	deleteObsoleteTrackedItemsValues
+	deleteTrackedItemsValues
 	unlockTrackedItems
 )
 
@@ -39,7 +39,7 @@ var commitFunctionsStringLookup map[commitFunctions]string = map[commitFunctions
 	beforeFinalize:                   "beforeFinalize",
 	finalizeCommit:                   "finalizeCommit",
 	deleteObsoleteEntries:            "deleteObsoleteEntries",
-	deleteObsoleteTrackedItemsValues: "deleteObsoleteTrackedItemsValues",
+	deleteTrackedItemsValues: "deleteObsoleteTrackedItemsValues",
 	unlockTrackedItems:               "unlockTrackedItems",
 }
 var commitFunctionsLookup map[string]commitFunctions = map[string]commitFunctions{
@@ -54,64 +54,56 @@ var commitFunctionsLookup map[string]commitFunctions = map[string]commitFunction
 	"beforeFinalize":                   beforeFinalize,
 	"finalizeCommit":                   finalizeCommit,
 	"deleteObsoleteEntries":            deleteObsoleteEntries,
-	"deleteObsoleteTrackedItemsValues": deleteObsoleteTrackedItemsValues,
+	"deleteObsoleteTrackedItemsValues": deleteTrackedItemsValues,
 	"unlockTrackedItems":               unlockTrackedItems,
 }
 
 type transactionLog struct {
 	committedState commitFunctions
 	logger         cas.TransactionLog
+	logging bool
 	transactionID  sop.UUID
 	queuedLogs     []sop.KeyValuePair[commitFunctions, interface{}]
 }
 
 // Instantiate a transaction logger.
-func newTransactionLogger(logger cas.TransactionLog) *transactionLog {
+func newTransactionLogger(logger cas.TransactionLog, logging bool) *transactionLog {
 	if logger == nil {
 		logger = cas.NewTransactionLog()
 	}
 	return &transactionLog{
 		logger: logger,
+		logging: logging,
 	}
 }
 
-// enqueue will add a log to the queue, which can be persisted calling saveQueue.
-func (tl *transactionLog) enqueue(f commitFunctions, payload interface{}) {
-	tl.committedState = f
-	if payload == nil {
-		return
-	}
-	tl.queuedLogs = append(tl.queuedLogs, sop.KeyValuePair[commitFunctions, interface{}]{Key: f, Value: payload})
+func toString(f commitFunctions) string {
+	s, _ := commitFunctionsStringLookup[f]
+	return s
 }
-func (tl *transactionLog) clearQueue() {
-	tl.queuedLogs = nil
+func toCommitFunction(s string) commitFunctions {
+	f, _ := commitFunctionsLookup[s]
+	return f
 }
 
-// save the enqueued logs to backend.
-func (tl *transactionLog) saveQueue(ctx context.Context) error {
-	for i := range tl.queuedLogs {
-		if err := tl.log(ctx, tl.queuedLogs[i].Key, tl.queuedLogs[i].Value); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Log the committed function state.
+// Log the about to be committed function state.
 func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload interface{}) error {
 	tl.committedState = f
+	if !tl.logging{
+		return nil
+	}
 	if tl.transactionID.IsNil() {
-		tl.logger.Initiate(ctx, sop.NilUUID, "", nil)
 		tl.transactionID = sop.NewUUID()
+		tl.logger.Initiate(ctx, tl.transactionID, toString(f), payload)
 		return nil
 	}
-	if payload == nil {
-		return nil
-	}
-	return tl.logger.Add(ctx, tl.transactionID, commitFunctionsStringLookup[f], payload)
+	return tl.logger.Add(ctx, tl.transactionID, toString(f), payload)
 }
 
 // removes logs saved to backend. During commit completion, logs need to be cleared.
 func (tl *transactionLog) removeLogs(ctx context.Context) error {
+	if !tl.logging {
+		return nil
+	}
 	return tl.logger.Remove(ctx, tl.transactionID)
 }

@@ -52,9 +52,11 @@ create table foo_r(
 
 -- Time Series table for transaction log.
 create table t_by_day(
-    date text PRIMARY KEY,
+    -- date with day resolution, e.g. - 01/01/2024.
+    date text,
     -- Transaction ID.
-    tid UUID
+    tid UUID,
+    PRIMARY KEY (date, tid)
 );
 
 -- Transaction Log table.
