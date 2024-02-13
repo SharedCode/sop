@@ -10,7 +10,6 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -698,8 +697,6 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	return lastErr
 }
 
-var warnDeleteServiceMissing bool = true
-
 // Delete the registry entries and unused node blobs.
 func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 	deletedRegistryIDs []cas.RegistryPayload[sop.UUID], unusedNodeIDs []cas.BlobsPayload[sop.UUID]) {
@@ -718,27 +715,7 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 		if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
 			log.Error("Redis Delete failed, details: %v", err)
 		}
-		// Only attempt to send the delete message to Kafka if the delete service is enabled.
-		if IsDeleteServiceEnabled {
-			if ok, err := kafka.Enqueue[[]cas.BlobsPayload[sop.UUID]](ctx, unusedNodeIDs); !ok || err != nil {
-				if err != nil {
-					log.Error("Kafka Enqueue failed, details: %v, deleting the leftover unused nodes.", err)
-				}
-				if !ok {
-					log.Info("Kafka Enqueue is still being sampled, deleting the leftover unused nodes.")
-				}
-				t.blobStore.Remove(ctx, unusedNodeIDs...)
-			} else {
-				log.Info(fmt.Sprintf("Kafka Enqueue passed sampling, expecting consumer(@topic:%s) to delete the leftover unused nodes.", kafka.GetConfig().Topic))
-			}
-		} else {
-			if warnDeleteServiceMissing {
-				// Warn only once per instance lifetime.
-				log.Warn("DeleteService is not enabled, deleting the leftover unused nodes.")
-				warnDeleteServiceMissing = false
-			}
-			t.blobStore.Remove(ctx, unusedNodeIDs...)
-		}
+		t.blobStore.Remove(ctx, unusedNodeIDs...)
 	}
 	// Delete from registry the requested entries.
 	t.registry.Remove(ctx, deletedRegistryIDs...)
