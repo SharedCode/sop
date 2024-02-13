@@ -89,10 +89,7 @@ func toCommitFunction(s string) commitFunctions {
 // Log the committed function state.
 func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload interface{}) error {
 	tl.committedState = f
-	if !tl.logging {
-		return nil
-	}
-	if payload == nil {
+	if !tl.logging{
 		return nil
 	}
 	if tl.transactionID.IsNil() {

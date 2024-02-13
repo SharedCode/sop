@@ -40,9 +40,9 @@ type btreeBackend struct {
 	unlockTrackedItems func(ctx context.Context) error
 
 	// Manage tracked items' values in separate segments.
-	commitTrackedItemsValues          func(ctx context.Context) error
-	getRollbackTrackedItemsValuesInfo func() *cas.BlobsPayload[sop.UUID]
-	deleteObsoleteTrackedItemsValues  func(ctx context.Context) error
+	commitTrackedItemsValues         func(ctx context.Context) error
+	getForRollbackTrackedItemsValues func() *cas.BlobsPayload[sop.UUID]
+	getObsoleteTrackedItemsValues    func() *cas.BlobsPayload[sop.UUID]
 }
 
 type transaction struct {
@@ -70,6 +70,8 @@ var now = time.Now
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
+// If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
+// However, without logging, the transaction commit can execute faster because there is no data getting logged.
 func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration, logging bool) (TwoPhaseCommitTransaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
@@ -240,7 +242,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 
-		t.logger.log(ctx, commitTrackedItemsValues, t.getRollbackTrackedItemsValuesInfo())
+		t.logger.log(ctx, commitTrackedItemsValues, t.getForRollbackTrackedItemsValues())
 		if err := t.commitTrackedItemsValues(ctx); err != nil {
 			return err
 		}
@@ -346,6 +348,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 // phase2Commit finalizes the commit process and does cleanup afterwards.
 func (t *transaction) phase2Commit(ctx context.Context) error {
 	// Finalize the commit, it is the only all or nothing action in the commit, and on registry (very small) records only.
+
+	// TODO: log the to be obsolete entries so they can get cleaned up if commit partially succeeded.
 	if err := t.logger.log(ctx, finalizeCommit, nil); err != nil {
 		return err
 	}
@@ -368,11 +372,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) cleanup(ctx context.Context) {
-
-	// Remove unneeded transaction logs since commit is done.
-	t.logger.removeLogs(ctx)
-
+func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]] {
 	// Cleanup resources not needed anymore.
 	unusedNodeIDs := make([]cas.BlobsPayload[sop.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
@@ -404,9 +404,20 @@ func (t *transaction) cleanup(ctx context.Context) {
 		unusedNodeIDs = append(unusedNodeIDs, blobsIDs)
 	}
 
-	// Cleanup obsolete entries.
-	t.deleteObsoleteEntries(ctx, deletedIDs, unusedNodeIDs)
-	t.deleteObsoleteTrackedItemsValues(ctx)
+	return sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+		First:  deletedIDs,
+		Second: unusedNodeIDs,
+	}
+}
+
+func (t *transaction) cleanup(ctx context.Context) {
+	// Cleanup resources not needed anymore.
+	obsoleteEntries := t.getToBeObsoleteEntries()
+	t.deleteObsoleteEntries(ctx, obsoleteEntries.First, obsoleteEntries.Second)
+	t.deleteTrackedItemsValues(ctx, t.getObsoleteTrackedItemsValues())
+
+	// Remove unneeded transaction logs since commit is done.
+	t.logger.removeLogs(ctx)
 }
 
 func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues bool) error {
@@ -456,7 +467,7 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 		}
 	}
 	if rollbackTrackedItemsValues && t.logger.committedState >= commitTrackedItemsValues {
-		itemsForDelete := t.getRollbackTrackedItemsValuesInfo()
+		itemsForDelete := t.getForRollbackTrackedItemsValues()
 		if err := t.deleteTrackedItemsValues(ctx, itemsForDelete); err != nil {
 			lastErr = err
 		}
@@ -482,10 +493,23 @@ func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
 	}
 	return nil
 }
-func (t *transaction) getRollbackTrackedItemsValuesInfo() []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]] {
+func (t *transaction) getForRollbackTrackedItemsValues() []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]] {
 	r := make([]sop.Tuple[bool, cas.BlobsPayload[sop.UUID]], 0, 5)
 	for i := range t.btreesBackend {
-		itemsForDelete := t.btreesBackend[i].getRollbackTrackedItemsValuesInfo()
+		itemsForDelete := t.btreesBackend[i].getForRollbackTrackedItemsValues()
+		if itemsForDelete != nil && len(itemsForDelete.Blobs) > 0 {
+			r = append(r, sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]{
+				First:  t.btreesBackend[i].getStoreInfo().IsValueDataGloballyCached,
+				Second: *itemsForDelete,
+			})
+		}
+	}
+	return r
+}
+func (t *transaction) getObsoleteTrackedItemsValues() []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]] {
+	r := make([]sop.Tuple[bool, cas.BlobsPayload[sop.UUID]], 0, 5)
+	for i := range t.btreesBackend {
+		itemsForDelete := t.btreesBackend[i].getObsoleteTrackedItemsValues()
 		if itemsForDelete != nil && len(itemsForDelete.Blobs) > 0 {
 			r = append(r, sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]{
 				First:  t.btreesBackend[i].getStoreInfo().IsValueDataGloballyCached,
@@ -506,16 +530,6 @@ func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDele
 			}
 		}
 		if err := t.blobStore.Remove(ctx, itemsForDelete[i].Second); err != nil {
-			lastErr = err
-		}
-	}
-	return lastErr
-}
-
-func (t *transaction) deleteObsoleteTrackedItemsValues(ctx context.Context) error {
-	var lastErr error
-	for i := range t.btreesBackend {
-		if err := t.btreesBackend[i].deleteObsoleteTrackedItemsValues(ctx); err != nil {
 			lastErr = err
 		}
 	}

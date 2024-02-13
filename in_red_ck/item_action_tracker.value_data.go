@@ -72,7 +72,7 @@ func (t *itemActionTracker[TK, TV]) manage(uuid sop.UUID, cachedItem cacheItem[T
 	return r
 }
 
-func (t *itemActionTracker[TK, TV]) getRollbackTrackedItemsValuesInfo() *cas.BlobsPayload[sop.UUID] {
+func (t *itemActionTracker[TK, TV]) getForRollbackTrackedItemsValues() *cas.BlobsPayload[sop.UUID] {
 	var itemsForDelete cas.BlobsPayload[sop.UUID]
 	if t.storeInfo.IsValueDataInNodeSegment {
 		return nil
@@ -93,7 +93,7 @@ func (t *itemActionTracker[TK, TV]) getRollbackTrackedItemsValuesInfo() *cas.Blo
 	return &itemsForDelete
 }
 
-func (t *itemActionTracker[TK, TV]) deleteObsoleteTrackedItemsValues(ctx context.Context) error {
+func (t *itemActionTracker[TK, TV]) getObsoleteTrackedItemsValues() *cas.BlobsPayload[sop.UUID] {
 	if t.storeInfo.IsValueDataInNodeSegment {
 		return nil
 	}
@@ -102,15 +102,9 @@ func (t *itemActionTracker[TK, TV]) deleteObsoleteTrackedItemsValues(ctx context
 		Blobs:     make([]sop.UUID, 0, 5),
 	}
 	for _, forDeleteID := range t.forDeletionItems {
-		if t.storeInfo.IsValueDataGloballyCached {
-			t.redisCache.Delete(ctx, formatItemKey(forDeleteID.String()))
-		}
 		itemsForDelete.Blobs = append(itemsForDelete.Blobs, forDeleteID)
 	}
-	if len(itemsForDelete.Blobs) > 0 {
-		return t.blobStore.Remove(ctx, itemsForDelete)
-	}
-	return nil
+	return &itemsForDelete
 }
 
 // format Item Key for Redis I/O.
