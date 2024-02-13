@@ -23,7 +23,7 @@ const (
 	beforeFinalize
 	finalizeCommit
 	deleteObsoleteEntries
-	deleteObsoleteTrackedItemsValues
+	deleteTrackedItemsValues
 	unlockTrackedItems
 )
 
@@ -39,7 +39,7 @@ var commitFunctionsStringLookup map[commitFunctions]string = map[commitFunctions
 	beforeFinalize:                   "beforeFinalize",
 	finalizeCommit:                   "finalizeCommit",
 	deleteObsoleteEntries:            "deleteObsoleteEntries",
-	deleteObsoleteTrackedItemsValues: "deleteObsoleteTrackedItemsValues",
+	deleteTrackedItemsValues: "deleteObsoleteTrackedItemsValues",
 	unlockTrackedItems:               "unlockTrackedItems",
 }
 var commitFunctionsLookup map[string]commitFunctions = map[string]commitFunctions{
@@ -54,7 +54,7 @@ var commitFunctionsLookup map[string]commitFunctions = map[string]commitFunction
 	"beforeFinalize":                   beforeFinalize,
 	"finalizeCommit":                   finalizeCommit,
 	"deleteObsoleteEntries":            deleteObsoleteEntries,
-	"deleteObsoleteTrackedItemsValues": deleteObsoleteTrackedItemsValues,
+	"deleteObsoleteTrackedItemsValues": deleteTrackedItemsValues,
 	"unlockTrackedItems":               unlockTrackedItems,
 }
 
@@ -86,7 +86,7 @@ func toCommitFunction(s string) commitFunctions {
 	return f
 }
 
-// Log the committed function state.
+// Log the about to be committed function state.
 func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload interface{}) error {
 	tl.committedState = f
 	if !tl.logging{

@@ -347,14 +347,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 // phase2Commit finalizes the commit process and does cleanup afterwards.
 func (t *transaction) phase2Commit(ctx context.Context) error {
-	// Finalize the commit, it is the only all or nothing action in the commit, and on registry (very small) records only.
 
-	// TODO: log the to be obsolete entries so they can get cleaned up if commit partially succeeded.
-	if err := t.logger.log(ctx, finalizeCommit, nil); err != nil {
-		return err
-	}
-
-	// The last step to consider a completed commit.
+	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
+	t.logger.log(ctx, finalizeCommit, []interface{}{t.getToBeObsoleteEntries(), t.getObsoleteTrackedItemsValues()})
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
 		return err
 	}
@@ -368,8 +363,20 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 
 	// Cleanup transaction logs & obsolete entries.
 	t.cleanup(ctx)
-
 	return nil
+}
+
+func (t *transaction) cleanup(ctx context.Context) {
+	// Cleanup resources not needed anymore.
+	t.logger.log(ctx, deleteObsoleteEntries, nil)
+	obsoleteEntries := t.getToBeObsoleteEntries()
+	t.deleteObsoleteEntries(ctx, obsoleteEntries.First, obsoleteEntries.Second)
+
+	t.logger.log(ctx, deleteTrackedItemsValues, nil)
+	t.deleteTrackedItemsValues(ctx, t.getObsoleteTrackedItemsValues())
+
+	// Remove unneeded transaction logs since commit is done.
+	t.logger.removeLogs(ctx)
 }
 
 func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]] {
@@ -408,16 +415,6 @@ func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[s
 		First:  deletedIDs,
 		Second: unusedNodeIDs,
 	}
-}
-
-func (t *transaction) cleanup(ctx context.Context) {
-	// Cleanup resources not needed anymore.
-	obsoleteEntries := t.getToBeObsoleteEntries()
-	t.deleteObsoleteEntries(ctx, obsoleteEntries.First, obsoleteEntries.Second)
-	t.deleteTrackedItemsValues(ctx, t.getObsoleteTrackedItemsValues())
-
-	// Remove unneeded transaction logs since commit is done.
-	t.logger.removeLogs(ctx)
 }
 
 func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues bool) error {
