@@ -107,6 +107,9 @@ func (t *transaction) Begin() error {
 }
 
 func (t *transaction) Phase1Commit(ctx context.Context) error {
+	// Service the cleanup of left hanging transactions.
+	t.onIdle(ctx)
+
 	if !t.HasBegun() {
 		return fmt.Errorf("No transaction to commit, call Begin to start a transaction")
 	}
@@ -746,4 +749,13 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 	}
 	// Delete from registry the requested entries.
 	t.registry.Remove(ctx, deletedRegistryIDs...)
+}
+
+var lastOnIdleRunTime int64
+func (t *transaction) onIdle(ctx context.Context) {
+	nextRunTime := now().Add(time.Duration(-7) * time.Minute).UnixMilli()
+	if lastOnIdleRunTime < nextRunTime {
+		t.logger.processExpiredTransactionLogs(ctx)
+		nextRunTime = nowUnixMilli()
+	}
 }

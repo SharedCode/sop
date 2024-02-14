@@ -114,3 +114,19 @@ func (tl *transactionLog) removeLogs(ctx context.Context) error {
 	tl.transactionID = sop.NilUUID
 	return err
 }
+
+func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context) error {
+	_, committedFunctionLogs, err := tl.logger.GetOne(ctx)
+	if err != nil {
+		return err
+	}
+	if len(committedFunctionLogs) == 0 {
+		return nil
+	}
+
+	// TODO: unmarshal payload(s) and do cleanup, i.e - call the rollback functions
+	// passing the unmarshalled payload(s).
+
+
+	return nil
+}
