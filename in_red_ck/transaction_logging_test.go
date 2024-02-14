@@ -1,7 +1,6 @@
 package in_red_ck
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -82,12 +81,12 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	sop.Now = func() time.Time { return today }
 	now = func() time.Time { return today }
 	
-	tid, flogs, _ := twoPhaseTrans.logger.logger.GetOne(ctx)
+	tid, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
 	if tid.IsNil() {
 		t.Errorf("Failed, got nil Tid, want valid Tid.")
 	}
-	for i := range flogs {
-		fmt.Printf("commit function: %s\n", flogs[i].Key)
-		fmt.Printf("commit function payload: %v\n", flogs[i].Value)
+
+	if err := twoPhaseTrans.logger.processExpiredTransactionLogs(ctx, twoPhaseTrans); err != nil {
+		t.Errorf("processExpiredTransactionLogs failed, got %v want nil.", err)
 	}
 }

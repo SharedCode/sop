@@ -371,7 +371,10 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 func (t *transaction) phase2Commit(ctx context.Context) error {
 
 	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
-	if err := t.logger.log(ctx, finalizeCommit, []interface{}{t.getToBeObsoleteEntries(), t.getObsoleteTrackedItemsValues()}); err != nil {
+	if err := t.logger.log(ctx, finalizeCommit, sop.Tuple[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]], []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]]{
+			First: t.getToBeObsoleteEntries(),
+			Second: t.getObsoleteTrackedItemsValues(),
+		}); err != nil {
 		return err
 	}
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
@@ -447,7 +450,7 @@ func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[s
 }
 
 func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues bool) error {
-	if t.logger.committedState == unlockTrackedItems {
+	if t.logger.committedState > finalizeCommit {
 		// This state should not be reached and rollback invoked, but return an error about it, in case.
 		return fmt.Errorf("Transaction got committed, 'can't rollback it")
 	}
@@ -552,7 +555,9 @@ func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDele
 		// First field of the Tuple specifies whether we need to delete from Redis cache the blob IDs specified in Second.
 		if itemsForDelete[i].First {
 			for ii := range itemsForDelete[i].Second.Blobs {
-				t.redisCache.Delete(ctx, formatItemKey(itemsForDelete[i].Second.Blobs[ii].String()))
+				if err := t.redisCache.Delete(ctx, formatItemKey(itemsForDelete[i].Second.Blobs[ii].String())); err != nil {
+					lastErr = err
+				}
 			}
 		}
 		if err := t.blobStore.Remove(ctx, itemsForDelete[i].Second); err != nil {
@@ -729,7 +734,8 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 
 // Delete the registry entries and unused node blobs.
 func (t *transaction) deleteObsoleteEntries(ctx context.Context,
-	deletedRegistryIDs []cas.RegistryPayload[sop.UUID], unusedNodeIDs []cas.BlobsPayload[sop.UUID]) {
+	deletedRegistryIDs []cas.RegistryPayload[sop.UUID], unusedNodeIDs []cas.BlobsPayload[sop.UUID]) error {
+	var lastErr error
 	if len(unusedNodeIDs) > 0 {
 		// Delete from Redis the inactive nodes.
 		// Leave the registry keys as there may be other in-flight transactions that need them
@@ -743,19 +749,25 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 			}
 		}
 		if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
+			lastErr = err
 			log.Error("Redis Delete failed, details: %v", err)
 		}
-		t.blobStore.Remove(ctx, unusedNodeIDs...)
+		if err := t.blobStore.Remove(ctx, unusedNodeIDs...); err != nil {
+			lastErr = err
+		}
 	}
 	// Delete from registry the requested entries.
-	t.registry.Remove(ctx, deletedRegistryIDs...)
+	if err := t.registry.Remove(ctx, deletedRegistryIDs...); err != nil {
+		lastErr = err
+	}
+	return lastErr
 }
 
 var lastOnIdleRunTime int64
 func (t *transaction) onIdle(ctx context.Context) {
 	nextRunTime := now().Add(time.Duration(-7) * time.Minute).UnixMilli()
 	if lastOnIdleRunTime < nextRunTime {
-		t.logger.processExpiredTransactionLogs(ctx)
-		nextRunTime = nowUnixMilli()
+		t.logger.processExpiredTransactionLogs(ctx, t)
+		lastOnIdleRunTime = nowUnixMilli()
 	}
 }
