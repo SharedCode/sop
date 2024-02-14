@@ -18,13 +18,21 @@ var mockNodeBlobStore = cas.NewMockBlobStore()
 // NewMockTransaction instantiates a mocked transaction, i.e. - it uses in-memory Repositories as backend, not Cassandra.
 func NewMockTransaction(t *testing.T, forWriting bool, maxTime time.Duration) (Transaction, error) {
 	t.Helper()
-	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, forWriting, maxTime)
+	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, forWriting, maxTime, false)
+	return &singlePhaseTransaction{
+		sopPhaseCommitTransaction: twoPhase,
+	}, nil
+}
+// NewMockTransaction with logging turned on.
+func NewMockTransactionWithLogging(t *testing.T, forWriting bool, maxTime time.Duration) (Transaction, error) {
+	t.Helper()
+	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, forWriting, maxTime, true)
 	return &singlePhaseTransaction{
 		sopPhaseCommitTransaction: twoPhase,
 	}, nil
 }
 
-func newMockTwoPhaseCommitTransaction(t *testing.T, forWriting bool, maxTime time.Duration) (TwoPhaseCommitTransaction, error) {
+func newMockTwoPhaseCommitTransaction(t *testing.T, forWriting bool, maxTime time.Duration, logging bool) (TwoPhaseCommitTransaction, error) {
 	t.Helper()
 	if maxTime <= 0 {
 		m := 15
@@ -37,7 +45,7 @@ func newMockTwoPhaseCommitTransaction(t *testing.T, forWriting bool, maxTime tim
 		registry:        mockRegistry,
 		redisCache:      mockRedisCache,
 		blobStore:       mockNodeBlobStore,
-		logger:          newTransactionLogger(nil, false),
+		logger:          newTransactionLogger(nil, logging),
 		phaseDone:       -1,
 	}, nil
 }

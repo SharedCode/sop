@@ -38,10 +38,10 @@ func DeleteService(ctx context.Context) {
 	if ServiceIntervalInHour < 1 {
 		ServiceIntervalInHour = 1
 	}
-	nextRunTime := time.Now().Add(time.Duration(-ServiceIntervalInHour) * time.Hour).UnixMilli()
+	nextRunTime := now().Add(time.Duration(-ServiceIntervalInHour) * time.Hour).UnixMilli()
 	if lastDeleteTime < nextRunTime {
 		DoDeletedItemsProcessing(ctx)
-		lastDeleteTime = time.Now().UnixMilli()
+		lastDeleteTime = nowUnixMilli()
 	}
 }
 

@@ -3,6 +3,7 @@ package cassandra
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/SharedCode/sop"
 )
@@ -27,13 +28,16 @@ type TransactionLog interface {
 
 type transactionLog struct{}
 
+// Now lambda to allow unit test to inject replayable time.Now.
+var Now = time.Now
+
 // NewBlobStore instantiates a new BlobStore instance.
 func NewTransactionLog() TransactionLog {
 	return &transactionLog{}
 }
 
 // GetOne fetches a blob from blob table.
-func (b *transactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePair[string, interface{}], error) {
+func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePair[string, interface{}], error) {
 	if connection == nil {
 		return sop.NilUUID, nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -53,12 +57,9 @@ func (b *transactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePa
 	return sop.NilUUID, nil, nil
 }
 
-func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunctionName string, blobsIDs interface{}) error {
+func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
-	}
-	if tid.IsNil() {
-		return nil
 	}
 	// for i := range storesblobs {
 	// 	for ii := range storesblobs[i].Blobs {
@@ -81,7 +82,7 @@ func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunc
 }
 
 // Add blob(s) to the Blob store.
-func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunctionName string, blobsIDs interface{}) error {
+func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}

@@ -225,7 +225,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
-	t.logger.log(ctx, lockTrackedItems, nil)
+	if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
+		return err
+	}
 	if err := t.lockTrackedItems(ctx); err != nil {
 		return err
 	}
@@ -241,7 +243,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 
-		t.logger.log(ctx, commitTrackedItemsValues, t.getForRollbackTrackedItemsValues())
+		if err := t.logger.log(ctx, commitTrackedItemsValues, t.getForRollbackTrackedItemsValues()); err != nil {
+			return err
+		}
 		if err := t.commitTrackedItemsValues(ctx); err != nil {
 			return err
 		}
@@ -255,23 +259,29 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Commit new root nodes.
 		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
 		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
-		t.logger.log(ctx, commitNewRootNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+		if err := t.logger.log(ctx, commitNewRootNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
 			First: vids, Second: bibs,
-		})
+		}); err != nil {
+			return err
+		}
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
 			return err
 		}
 
 		if successful {
 			// Check for conflict on fetched items.
-			t.logger.log(ctx, areFetchedItemsIntact, nil)
+			if err := t.logger.log(ctx, areFetchedItemsIntact, nil); err != nil {
+				return err
+			}
 			if successful, err = t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
 				return err
 			}
 		}
 		if successful {
 			// Commit updated nodes.
-			t.logger.log(ctx, commitUpdatedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(updatedNodes))
+			if err := t.logger.log(ctx, commitUpdatedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(updatedNodes)); err != nil {
+				return err
+			}
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
 			}
@@ -279,7 +289,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Only do commit removed nodes if successful so far.
 		if successful {
 			// Commit removed nodes.
-			t.logger.log(ctx, commitRemovedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(removedNodes))
+			if err := t.logger.log(ctx, commitRemovedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(removedNodes)); err != nil {
+				return err
+			}
 			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
 				return err
 			}
@@ -295,7 +307,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
 				return err
 			}
-			t.logger.log(ctx, lockTrackedItems, nil)
+			if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
+				return err
+			}
 			if err = t.lockTrackedItems(ctx); err != nil {
 				return err
 			}
@@ -303,22 +317,28 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	// Commit added nodes.
-	t.logger.log(ctx, commitAddedNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+	if err := t.logger.log(ctx, commitAddedNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
 		First:  t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(addedNodes),
 		Second: t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(addedNodes),
-	})
+	}); err != nil {
+		return err
+	}
 	if err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
 		return err
 	}
 
 	// Commit stores update(CountDelta apply).
-	t.logger.log(ctx, commitStoreInfo, t.getRollbackStoresInfo())
+	if err := t.logger.log(ctx, commitStoreInfo, t.getRollbackStoresInfo()); err != nil {
+		return err
+	}
 	if err := t.commitStores(ctx); err != nil {
 		return err
 	}
 
 	// Mark that store info commit succeeded, so it can get rolled back if rollback occurs.
-	t.logger.log(ctx, beforeFinalize, nil)
+	if err := t.logger.log(ctx, beforeFinalize, nil); err != nil {
+		return err
+	}
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes, in phase2Commit.
 	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(ctx, updatedNodesHandles)
@@ -348,7 +368,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 func (t *transaction) phase2Commit(ctx context.Context) error {
 
 	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
-	t.logger.log(ctx, finalizeCommit, []interface{}{t.getToBeObsoleteEntries(), t.getObsoleteTrackedItemsValues()})
+	if err := t.logger.log(ctx, finalizeCommit, []interface{}{t.getToBeObsoleteEntries(), t.getObsoleteTrackedItemsValues()}); err != nil {
+		return err
+	}
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
 		return err
 	}
@@ -365,17 +387,22 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) cleanup(ctx context.Context) {
+func (t *transaction) cleanup(ctx context.Context) error {
 	// Cleanup resources not needed anymore.
-	t.logger.log(ctx, deleteObsoleteEntries, nil)
+	if err := t.logger.log(ctx, deleteObsoleteEntries, nil); err != nil {
+		return err
+	}
 	obsoleteEntries := t.getToBeObsoleteEntries()
 	t.deleteObsoleteEntries(ctx, obsoleteEntries.First, obsoleteEntries.Second)
 
-	t.logger.log(ctx, deleteTrackedItemsValues, nil)
+	if err := t.logger.log(ctx, deleteTrackedItemsValues, nil); err != nil {
+		return err
+	}
 	t.deleteTrackedItemsValues(ctx, t.getObsoleteTrackedItemsValues())
 
 	// Remove unneeded transaction logs since commit is done.
 	t.logger.removeLogs(ctx)
+	return nil
 }
 
 func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]] {

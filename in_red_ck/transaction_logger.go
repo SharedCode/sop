@@ -66,10 +66,14 @@ type transactionLog struct {
 	queuedLogs     []sop.KeyValuePair[commitFunctions, interface{}]
 }
 
+var synthesizeErrorOnFunction commitFunctions = unknown
+var syntheticError error
+
 // Instantiate a transaction logger.
 func newTransactionLogger(logger cas.TransactionLog, logging bool) *transactionLog {
 	if logger == nil {
-		logger = cas.NewTransactionLog()
+		// TODO: switch to the real TransactionLog when ready.
+		logger = cas.NewMockTransactionLog()
 	}
 	return &transactionLog{
 		logger: logger,
@@ -89,9 +93,15 @@ func toCommitFunction(s string) commitFunctions {
 // Log the about to be committed function state.
 func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload interface{}) error {
 	tl.committedState = f
-	if !tl.logging{
+	if !tl.logging || f == unknown {
 		return nil
 	}
+
+	// Allow unit test to synthesize error for unit testing.
+	if synthesizeErrorOnFunction == f && syntheticError != nil {
+		return syntheticError
+	}
+
 	if tl.transactionID.IsNil() {
 		tl.transactionID = sop.NewUUID()
 		tl.logger.Initiate(ctx, tl.transactionID, toString(f), payload)
@@ -105,5 +115,7 @@ func (tl *transactionLog) removeLogs(ctx context.Context) error {
 	if !tl.logging {
 		return nil
 	}
-	return tl.logger.Remove(ctx, tl.transactionID)
+	err := tl.logger.Remove(ctx, tl.transactionID)
+	tl.transactionID = sop.NilUUID
+	return err
 }
