@@ -2,51 +2,104 @@ package cassandra
 
 import (
 	"context"
+	"encoding/json"
+	"time"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/in_memory"
 )
 
+const dateHour = "2006-01-02T15"
+
 type mockTransactionLog struct {
-	datesLogs map[string]map[sop.UUID]map[string]interface{}
+	datesLogs in_memory.BtreeInterface[string, map[sop.UUID][]sop.KeyValuePair[string, []byte]]
+	logsDates map[sop.UUID]string
 }
 
 func NewMockTransactionLog() TransactionLog {
 	return &mockTransactionLog{
-		datesLogs: make(map[string]map[sop.UUID]map[string]interface{}),
+		datesLogs: in_memory.NewBtree[string, map[sop.UUID][]sop.KeyValuePair[string, []byte]](true),
+		logsDates: make(map[sop.UUID]string),
 	}
 }
 
-// GetOne fetches a blob from blob table.
+// GetOne returns the oldest transaction ID.
 func (tl *mockTransactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePair[string, interface{}], error) {
+	if tl.datesLogs.First() {
+		kt, _ := time.Parse(dateHour, tl.datesLogs.GetCurrentKey())
+		// Cap the returned entries to older than an hour to safeguard ongoing transactions.
+		nt, _ := time.Parse(dateHour, Now().Format(dateHour))
+		cappedTime := nt.Add(-time.Duration(1*time.Hour))
+		if kt.Unix() < cappedTime.Unix() {
+			v := tl.datesLogs.GetCurrentValue()
+			for kk, vv := range v {
+				r := make([]sop.KeyValuePair[string, interface{}], len(vv))
+				for ii := range vv {
+					var target interface{}
+					json.Unmarshal(vv[ii].Value, &target)	
+					r[ii].Key = vv[ii].Key
+					r[ii].Value = target
+				}
+				return kk, r, nil 
+			}
+		}
+	}
 	return sop.NilUUID, nil, nil
 }
 
 func (tl *mockTransactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error {
-	date := Now().Format("02-01-2006")
-	dayLogs, ok := tl.datesLogs[date]
-	if !ok {
-		dayLogs = make(map[sop.UUID]map[string]interface{})
-		dayLogs[tid] = make(map[string]interface{})
+	date := Now().Format(dateHour)
+	var dayLogs map[sop.UUID][]sop.KeyValuePair[string, []byte]
+	if !tl.datesLogs.FindOne(date, false) {
+		dayLogs = make(map[sop.UUID][]sop.KeyValuePair[string, []byte])
+		dayLogs[tid] = make([]sop.KeyValuePair[string, []byte], 0, 13)
+	} else {
+		dayLogs = tl.datesLogs.GetCurrentValue()
 	}
-	dayLogs[tid][commitFunctionName] = payload
-	tl.datesLogs[date] = dayLogs
+	ba, _ :=  json.Marshal(payload)
+	dayLogs[tid] = append(dayLogs[tid], sop.KeyValuePair[string, []byte]{
+		Key: commitFunctionName,
+		Value: ba,
+	})
+	tl.datesLogs.Add(date, dayLogs)
+	tl.logsDates[tid] = date
 	return nil
 }
 
 // Add blob(s) to the Blob store.
 func (tl *mockTransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error {
-	date := Now().Format("02-01-2006")
-	dayLogs := tl.datesLogs[date]
-	dayLogs[tid][commitFunctionName] = payload
-	tl.datesLogs[date] = dayLogs
+	date := Now().Format(dateHour)
+	tl.datesLogs.FindOne(date, false)
+	dayLogs := tl.datesLogs.GetCurrentValue()
+	ba, _ := json.Marshal(payload)
+	dayLogs[tid] = append(dayLogs[tid], sop.KeyValuePair[string, []byte]{
+		Key: commitFunctionName,
+		Value: ba,
+	})
+	tl.datesLogs.UpdateCurrentItem(dayLogs)
+	tl.logsDates[tid] = date
 	return nil
 }
 
 // Remove will delete(non-logged) node records from different Blob stores(node tables).
 func (tl *mockTransactionLog) Remove(ctx context.Context, tid sop.UUID) error {
-	date := Now().Format("02-01-2006")
-	dayLogs := tl.datesLogs[date]
-	delete(dayLogs, tid)
-	tl.datesLogs[date] = dayLogs
+	date := tl.logsDates[tid]
+	if tl.datesLogs.FindOne(date, false) {
+		for {
+			dayLogs := tl.datesLogs.GetCurrentValue()
+			if _, ok := dayLogs[tid]; ok {
+				delete(dayLogs, tid)
+				if len(dayLogs) == 0 {
+					tl.datesLogs.RemoveCurrentItem()
+				} else {
+					tl.datesLogs.UpdateCurrentItem(dayLogs)
+				}
+				return nil
+			}
+			if !tl.datesLogs.Next() {
+				break
+			}
+		}
+	}
 	return nil
 }

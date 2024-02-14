@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
 // This is a good plan, it will work optimally because we are reading entire transaction logs set
@@ -26,7 +27,11 @@ type TransactionLog interface {
 	GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePair[string, interface{}], error)
 }
 
-type transactionLog struct{}
+type transactionLog struct{
+	// Should coordinate via Redis cache. Each date hour should get locked and for "work" by GetOne
+	// to increase chances of distribution of cleanup load across machines.
+	redisCache redis.Cache
+}
 
 // Now lambda to allow unit test to inject replayable time.Now.
 var Now = time.Now

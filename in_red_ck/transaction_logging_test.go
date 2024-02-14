@@ -2,8 +2,11 @@ package in_red_ck
 
 import (
 	"fmt"
-	"strings"
 	"testing"
+	"time"
+
+	"github.com/SharedCode/sop"
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
 func Test_TLog_Rollback(t *testing.T) {
@@ -40,6 +43,12 @@ func Test_TLog_Rollback(t *testing.T) {
 }
 
 func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
+	// Unwind time to yesterday.
+	yesterday := time.Now().Add(time.Duration(-24*time.Hour))
+	cas.Now = func() time.Time { return yesterday }
+	sop.Now = func() time.Time { return yesterday }
+	now = func() time.Time { return yesterday }
+
 	trans, _ := NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 
@@ -57,13 +66,28 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
 	b3.Update(ctx, pk, p)
 
-	synthesizeErrorOnFunction = finalizeCommit
-	syntheticError = fmt.Errorf("SyntheticError")
+	pt := trans.GetPhasedTransaction()
+	twoPhaseTrans := pt.(*transaction)
 
-	if err := trans.Commit(ctx); !strings.Contains(err.Error(), syntheticError.Error()) {
-		t.Errorf("Commit failed, got %v, want %v.", err, syntheticError)
+	twoPhaseTrans.phase1Commit(ctx)
+
+	tid, _, _ := twoPhaseTrans.logger.logger.GetOne(ctx)
+	if !tid.IsNil() {
+		t.Errorf("Failed, got %v, want nil.", tid)
 	}
 
-	// TODO: add some code to cleanup tlogs...
-
+	// Fast forward to allow us to get
+	today := time.Now()
+	cas.Now = func() time.Time { return today }
+	sop.Now = func() time.Time { return today }
+	now = func() time.Time { return today }
+	
+	tid, flogs, _ := twoPhaseTrans.logger.logger.GetOne(ctx)
+	if tid.IsNil() {
+		t.Errorf("Failed, got nil Tid, want valid Tid.")
+	}
+	for i := range flogs {
+		fmt.Printf("commit function: %s\n", flogs[i].Key)
+		fmt.Printf("commit function payload: %v\n", flogs[i].Value)
+	}
 }

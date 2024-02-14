@@ -4,6 +4,9 @@ import (
 	"time"
 )
 
+// Now lambda to allow unit test to inject replayable time.Now.
+var Now = time.Now
+
 // Handle is a structure that holds Logical ID and the underlying Physical ID it maps to.
 // It is used by SOP to provide ability to support ACID transactions and swiftly replace
 // Node(s) of the trie.
@@ -60,7 +63,7 @@ func (h *Handle) AllocateID() UUID {
 		return NilUUID
 	}
 	id := NewUUID()
-	h.WorkInProgressTimestamp = time.Now().UnixMilli()
+	h.WorkInProgressTimestamp = Now().UnixMilli()
 	if h.IsActiveIDB {
 		h.PhysicalIDA = id
 		return id
@@ -74,7 +77,7 @@ func (h *Handle) IsExpiredInactive() bool {
 	// Transaction commit is encouraged to be 15 mins max, thus, 1 hr expiration of failed
 	// node update ID(inactive or marked deleted ID) seems good.
 	const maxDuration = 1
-	expiryTime := time.Now().Add(time.Duration(-maxDuration) * time.Hour).UnixMilli()
+	expiryTime := Now().Add(time.Duration(-maxDuration) * time.Hour).UnixMilli()
 	return h.WorkInProgressTimestamp > 0 && h.WorkInProgressTimestamp < expiryTime
 }
 

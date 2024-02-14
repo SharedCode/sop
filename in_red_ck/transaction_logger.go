@@ -97,11 +97,6 @@ func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload in
 		return nil
 	}
 
-	// Allow unit test to synthesize error for unit testing.
-	if synthesizeErrorOnFunction == f && syntheticError != nil {
-		return syntheticError
-	}
-
 	if tl.transactionID.IsNil() {
 		tl.transactionID = sop.NewUUID()
 		tl.logger.Initiate(ctx, tl.transactionID, toString(f), payload)
