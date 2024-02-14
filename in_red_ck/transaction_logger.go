@@ -135,16 +135,17 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 				if err := t.deleteTrackedItemsValues(ctx, v.Second); err != nil {
 					lastErr = err
 				}
+			}
+			if lastCommittedFunctionLog >= deleteObsoleteEntries {
 				if err := t.deleteObsoleteEntries(ctx, v.First.First, v.First.Second); err != nil {
 					lastErr = err
 				}
-			}
-			if lastCommittedFunctionLog == deleteObsoleteEntries {
-				if err := t.deleteObsoleteEntries(ctx, v.First.First, v.First.Second); err != nil {
+				if err := tl.logger.Remove(ctx, tid); err != nil {
 					lastErr = err
 				}
+				return lastErr
 			}
-			return lastErr
+			continue
 		}
 		if toCommitFunction(committedFunctionLogs[i].Key) == commitStoreInfo {
 			if lastCommittedFunctionLog > commitStoreInfo {

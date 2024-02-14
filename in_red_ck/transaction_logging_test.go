@@ -70,12 +70,13 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 
 	twoPhaseTrans.phase1Commit(ctx)
 
+	// GetOne should not get anything as uncommitted transaction is still ongoing or not expired.
 	tid, _, _ := twoPhaseTrans.logger.logger.GetOne(ctx)
 	if !tid.IsNil() {
 		t.Errorf("Failed, got %v, want nil.", tid)
 	}
 
-	// Fast forward to allow us to get
+	// Fast forward by a day to allow us to expire the uncommitted transaction.
 	today := time.Now()
 	cas.Now = func() time.Time { return today }
 	sop.Now = func() time.Time { return today }
