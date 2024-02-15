@@ -9,22 +9,20 @@ import (
 	"github.com/SharedCode/sop/in_memory"
 )
 
-const dateHour = "2006-01-02T15"
-
 type mockTransactionLog struct {
-	datesLogs in_memory.BtreeInterface[string, map[sop.UUID][]sop.KeyValuePair[string, []byte]]
+	datesLogs in_memory.BtreeInterface[string, map[sop.UUID][]sop.KeyValuePair[int, []byte]]
 	logsDates map[sop.UUID]string
 }
 
 func NewMockTransactionLog() TransactionLog {
 	return &mockTransactionLog{
-		datesLogs: in_memory.NewBtree[string, map[sop.UUID][]sop.KeyValuePair[string, []byte]](true),
+		datesLogs: in_memory.NewBtree[string, map[sop.UUID][]sop.KeyValuePair[int, []byte]](true),
 		logsDates: make(map[sop.UUID]string),
 	}
 }
 
 // GetOne returns the oldest transaction ID.
-func (tl *mockTransactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePair[string, interface{}], error) {
+func (tl *mockTransactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePair[int, interface{}], error) {
 	if tl.datesLogs.First() {
 		kt, _ := time.Parse(dateHour, tl.datesLogs.GetCurrentKey())
 		// Cap the returned entries to older than an hour to safeguard ongoing transactions.
@@ -33,32 +31,32 @@ func (tl *mockTransactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyVa
 		if kt.Unix() < cappedTime.Unix() {
 			v := tl.datesLogs.GetCurrentValue()
 			for kk, vv := range v {
-				r := make([]sop.KeyValuePair[string, interface{}], len(vv))
+				r := make([]sop.KeyValuePair[int, interface{}], len(vv))
 				for ii := range vv {
 					var target interface{}
 					json.Unmarshal(vv[ii].Value, &target)	
 					r[ii].Key = vv[ii].Key
 					r[ii].Value = target
 				}
-				return kk, r, nil 
+				return kk, r, nil
 			}
 		}
 	}
 	return sop.NilUUID, nil, nil
 }
 
-func (tl *mockTransactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error {
+func (tl *mockTransactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) error {
 	date := Now().Format(dateHour)
-	var dayLogs map[sop.UUID][]sop.KeyValuePair[string, []byte]
+	var dayLogs map[sop.UUID][]sop.KeyValuePair[int, []byte]
 	if !tl.datesLogs.FindOne(date, false) {
-		dayLogs = make(map[sop.UUID][]sop.KeyValuePair[string, []byte])
-		dayLogs[tid] = make([]sop.KeyValuePair[string, []byte], 0, 13)
+		dayLogs = make(map[sop.UUID][]sop.KeyValuePair[int, []byte])
+		dayLogs[tid] = make([]sop.KeyValuePair[int, []byte], 0, 13)
 	} else {
 		dayLogs = tl.datesLogs.GetCurrentValue()
 	}
 	ba, _ :=  json.Marshal(payload)
-	dayLogs[tid] = append(dayLogs[tid], sop.KeyValuePair[string, []byte]{
-		Key: commitFunctionName,
+	dayLogs[tid] = append(dayLogs[tid], sop.KeyValuePair[int, []byte]{
+		Key: commitFunction,
 		Value: ba,
 	})
 	tl.datesLogs.Add(date, dayLogs)
@@ -67,13 +65,13 @@ func (tl *mockTransactionLog) Initiate(ctx context.Context, tid sop.UUID, commit
 }
 
 // Add blob(s) to the Blob store.
-func (tl *mockTransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error {
+func (tl *mockTransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) error {
 	date := Now().Format(dateHour)
 	tl.datesLogs.FindOne(date, false)
 	dayLogs := tl.datesLogs.GetCurrentValue()
 	ba, _ := json.Marshal(payload)
-	dayLogs[tid] = append(dayLogs[tid], sop.KeyValuePair[string, []byte]{
-		Key: commitFunctionName,
+	dayLogs[tid] = append(dayLogs[tid], sop.KeyValuePair[int, []byte]{
+		Key: commitFunction,
 		Value: ba,
 	})
 	tl.datesLogs.UpdateCurrentItem(dayLogs)

@@ -7,7 +7,10 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/gocql/gocql"
 )
+
+const dateHour = "2006-01-02T15"
 
 // This is a good plan, it will work optimally because we are reading entire transaction logs set
 // then deleting the entire partition when done. Use consistency of LOCAL_ONE when writing logs.
@@ -16,15 +19,15 @@ type TransactionLog interface {
 	// Initiate is invoked to signal start of transaction logging & to add the 1st transaction log.
 	// In Cassandra backend, this should translate into adding a new transaction by day
 	// record(see t_by_day table), and a call to Add method to add the 1st log.
-	Initiate(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error
+	Initiate(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) error
 	// Add a transaction log.
-	Add(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error
+	Add(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) error
 	// Remove all logs of a given transaciton.
 	Remove(ctx context.Context, tid sop.UUID) error
 
 	// GetOne will fetch the oldest transaction logs from the backend, older than 1 hour ago.
 	// It is capped to an hour ago older because anything newer may still be an in-flight or ongoing transaction.
-	GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePair[string, interface{}], error)
+	GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePair[int, interface{}], error)
 }
 
 type transactionLog struct{
@@ -42,7 +45,7 @@ func NewTransactionLog() TransactionLog {
 }
 
 // GetOne fetches a blob from blob table.
-func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePair[string, interface{}], error) {
+func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePair[int, interface{}], error) {
 	if connection == nil {
 		return sop.NilUUID, nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -62,52 +65,36 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValueP
 	return sop.NilUUID, nil, nil
 }
 
-func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error {
+func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
-	// for i := range storesblobs {
-	// 	for ii := range storesblobs[i].Blobs {
-	// 		ba, err := Marshaler.Marshal(storesblobs[i].Blobs[ii].Value)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		insertStatement := fmt.Sprintf("INSERT INTO %s.%s (id, node) VALUES(?,?);",
-	// 			connection.Config.Keyspace, storesblobs[i].BlobTable)
-	// 		qry := connection.Session.Query(insertStatement, gocql.UUID(storesblobs[i].Blobs[ii].Key), ba).WithContext(ctx)
-	// 		if connection.Config.ConsistencyBook.BlobStoreAdd > gocql.Any {
-	// 			qry.Consistency(connection.Config.ConsistencyBook.BlobStoreAdd)
-	// 		}
-	// 		if err := qry.Exec(); err != nil {
-	// 			return err
-	// 		}
-	// 	}
-	// }
-	return nil
+
+	date := Now().Format(dateHour)
+	insertStatement := fmt.Sprintf("INSERT INTO %s.t_by_hour (date, tid) VALUES(?,?);", connection.Config.Keyspace)
+	qry := connection.Session.Query(insertStatement, date, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
+	if err := qry.Exec(); err != nil {
+		return err
+	}
+	return tl.Add(ctx, tid, commitFunction, payload)
 }
 
 // Add blob(s) to the Blob store.
-func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunctionName string, payload interface{}) error {
+func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
-	// for i := range storesblobs {
-	// 	for ii := range storesblobs[i].Blobs {
-	// 		ba, err := Marshaler.Marshal(storesblobs[i].Blobs[ii].Value)
-	// 		if err != nil {
-	// 			return err
-	// 		}
-	// 		insertStatement := fmt.Sprintf("INSERT INTO %s.%s (id, node) VALUES(?,?);",
-	// 			connection.Config.Keyspace, storesblobs[i].BlobTable)
-	// 		qry := connection.Session.Query(insertStatement, gocql.UUID(storesblobs[i].Blobs[ii].Key), ba).WithContext(ctx)
-	// 		if connection.Config.ConsistencyBook.BlobStoreAdd > gocql.Any {
-	// 			qry.Consistency(connection.Config.ConsistencyBook.BlobStoreAdd)
-	// 		}
-	// 		if err := qry.Exec(); err != nil {
-	// 			return err
-	// 		}
-	// 	}
-	// }
+
+	ba, err := Marshaler.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	insertStatement := fmt.Sprintf("INSERT INTO %s.t_log (id, c_f, c_f_p) VALUES(?,?,?);", connection.Config.Keyspace)
+	qry := connection.Session.Query(insertStatement, gocql.UUID(tid), commitFunction, ba).WithContext(ctx).Consistency(gocql.LocalOne)
+	if err := qry.Exec(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -116,23 +103,17 @@ func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
-	// // Delete per blob table the Node "blobs".
-	// for _, storeBlobIDs := range storesBlobsIDs {
-	// 	paramQ := make([]string, len(storeBlobIDs.Blobs))
-	// 	idsAsIntfs := make([]interface{}, len(storeBlobIDs.Blobs))
-	// 	for i := range storeBlobIDs.Blobs {
-	// 		paramQ[i] = "?"
-	// 		idsAsIntfs[i] = interface{}(gocql.UUID(storeBlobIDs.Blobs[i]))
-	// 	}
-	// 	deleteStatement := fmt.Sprintf("DELETE FROM %s.%s WHERE id in (%v);",
-	// 		connection.Config.Keyspace, storeBlobIDs.BlobTable, strings.Join(paramQ, ", "))
-	// 	qry := connection.Session.Query(deleteStatement, idsAsIntfs...).WithContext(ctx)
-	// 	if connection.Config.ConsistencyBook.BlobStoreRemove > gocql.Any {
-	// 		qry.Consistency(connection.Config.ConsistencyBook.BlobStoreRemove)
-	// 	}
-	// 	if err := qry.Exec(); err != nil {
-	// 		return err
-	// 	}
+
+	// deleteStatement := fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
+	// qry := connection.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
+	// if err := qry.Exec(); err != nil {
+	// 	return err
 	// }
+	// deleteStatement = fmt.Sprintf("DELETE tid FROM %s.t_by_hour WHERE date = ? AND tid = ?;", connection.Config.Keyspace)
+	// qry = connection.Session.Query(deleteStatement, hour, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
+	// if err := qry.Exec(); err != nil {
+	// 	return err
+	// }
+
 	return nil
 }

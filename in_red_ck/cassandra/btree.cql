@@ -62,7 +62,8 @@ create table t_by_hour(
 -- Transaction Log table.
 create table t_log(
     id UUID,
-    c_f text,
+    c_f int,
+    date text,
     c_f_p blob,
     PRIMARY KEY(id, c_f)
 );
