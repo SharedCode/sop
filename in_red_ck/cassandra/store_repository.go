@@ -108,7 +108,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	}
 
 	// Create lock IDs that we can use to logically lock and prevent other updates.
-	lockKeys := redis.CreateLockKeys(keys)
+	lockKeys := redis.CreateLockKeys(keys...)
 
 	// 15 minutes to lock, merge/update details then unlock.
 	duration := time.Duration(15 * time.Minute)

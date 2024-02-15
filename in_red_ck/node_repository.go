@@ -25,7 +25,7 @@ type nodeRepositoryTyped[TK btree.Comparable, TV any] struct {
 }
 
 // nowUnixMilli is a lambda expression that returns the current time in Unix milliseconds.
-var nowUnixMilli = now().UnixMilli
+var nowUnixMilli = Now().UnixMilli
 
 var nodeCacheDuration time.Duration = time.Duration(1 * time.Hour)
 

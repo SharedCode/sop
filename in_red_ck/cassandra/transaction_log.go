@@ -41,15 +41,87 @@ var Now = time.Now
 
 // NewBlobStore instantiates a new BlobStore instance.
 func NewTransactionLog() TransactionLog {
-	return &transactionLog{}
+	return &transactionLog{
+		redisCache: redis.NewClient(),
+	}
 }
+
 
 // GetOne fetches a blob from blob table.
 func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValuePair[int, interface{}], error) {
-	if connection == nil {
-		return sop.NilUUID, nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+	const hourBeingProcessed = "HBP"
+	duration := time.Duration(12*time.Hour)
+
+	resetterLK := redis.FormatLockKey("Rst" + hourBeingProcessed)
+	var gotReset bool
+	if _, err := tl.redisCache.Get(ctx, resetterLK); redis.KeyNotFound(err) {
+		gotReset = true
+		if err := tl.redisCache.Set(ctx, resetterLK, "fb", duration); err != nil {
+			return sop.NilUUID, nil, err
+		}
 	}
-	// selectStatement := fmt.Sprintf("SELECT node FROM %s.%s WHERE id in (?);", connection.Config.Keyspace, blobTable)
+
+	lk := redis.FormatLockKey(hourBeingProcessed)
+	if gotReset {
+		// Clear the "hour being processed" every 12 hours so we can ensure to process from the oldest.
+		// Take care of timeout/crashed processors.
+		tl.redisCache.Delete(ctx, lk)
+	}
+
+	var tid sop.UUID
+	var r []sop.KeyValuePair[int, interface{}]
+	var gotV sop.KeyValuePair[sop.UUID, string]
+	err := tl.redisCache.GetStruct(ctx, lk, &gotV)
+	if err != nil && !redis.KeyNotFound(err){
+		return sop.NilUUID, nil, err
+	}
+	ourID := sop.NewUUID()
+	for {
+		hour := gotV.Value
+		hour, tid, r, err = tl.getOne(ctx, hour)
+		if err != nil || tid.IsNil() {
+			return tid, r, err
+		}
+
+		err = tl.redisCache.GetStruct(ctx, lk, &gotV)
+		if err != nil && !redis.KeyNotFound(err){
+			return sop.NilUUID, nil, err
+		}
+		if gotV.Value > hour {
+			continue
+		}
+		gotV.Key = ourID
+		gotV.Value = hour
+		if err := tl.redisCache.SetStruct(ctx, lk, &gotV, duration); err != nil {
+			return sop.NilUUID, nil, err
+		}
+		wantV := sop.KeyValuePair[sop.UUID, string] {
+			Key: gotV.Key,
+			Value: gotV.Value,
+		}
+		err = tl.redisCache.GetStruct(ctx, lk, &gotV)
+		if err != nil {
+			return sop.NilUUID, nil, err
+		}
+		if gotV.Key == wantV.Key || gotV.Value == hour {
+			return tid, r, nil
+		}
+		if gotV.Value < hour {
+			gotV.Value = hour
+			if err := tl.redisCache.SetStruct(ctx, lk, &gotV, duration); err != nil {
+				return sop.NilUUID, nil, err
+			}
+			return tid, r, nil
+		}
+	}
+}
+
+func (tl *transactionLog) getOne(ctx context.Context, lastHour string) (string, sop.UUID, []sop.KeyValuePair[int, interface{}], error) {
+	if connection == nil {
+		return "", sop.NilUUID, nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+	}
+
+	// selectStatement := fmt.Sprintf("SELECT node FROM %s. WHERE id in (?);", connection.Config.Keyspace, blobTable)
 	// qry := connection.Session.Query(selectStatement, gocql.UUID(blobID)).WithContext(ctx)
 	// if connection.Config.ConsistencyBook.BlobStoreGet > gocql.Any {
 	// 	qry.Consistency(connection.Config.ConsistencyBook.BlobStoreGet)
@@ -62,7 +134,8 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, []sop.KeyValueP
 	// 	return err
 	// }
 	// return Marshaler.Unmarshal(ba, target)
-	return sop.NilUUID, nil, nil
+
+	return "", sop.NilUUID, nil, nil
 }
 
 func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) error {

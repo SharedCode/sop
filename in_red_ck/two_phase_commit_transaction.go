@@ -65,7 +65,7 @@ type transaction struct {
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
-var now = time.Now
+var Now = time.Now
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
@@ -146,7 +146,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 	}
 	if err := t.phase2Commit(ctx); err != nil {
 		if _, ok := err.(*cas.UpdateAllOrNothingError); ok {
-			startTime := now()
+			startTime := Now()
 			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
 			// until it succeeds or timeout.
 			for {
@@ -201,7 +201,7 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if now().Sub(startTime).Minutes() > float64(t.maxTime) {
+	if Now().Sub(startTime).Minutes() > float64(t.maxTime) {
 		return fmt.Errorf("Transaction timed out(maxTime=%v)", t.maxTime)
 	}
 	return nil
@@ -238,7 +238,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.Tuple[*btree.StoreInfo, []interface{}]
 	var updatedNodesHandles, removedNodesHandles []cas.RegistryPayload[sop.Handle]
 
-	startTime := now()
+	startTime := Now()
 	successful := false
 	for !successful {
 		var err error
@@ -372,9 +372,9 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 
 	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
 	if err := t.logger.log(ctx, finalizeCommit, sop.Tuple[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]], []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]]{
-			First: t.getToBeObsoleteEntries(),
-			Second: t.getObsoleteTrackedItemsValues(),
-		}); err != nil {
+		First:  t.getToBeObsoleteEntries(),
+		Second: t.getObsoleteTrackedItemsValues(),
+	}); err != nil {
 		return err
 	}
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
@@ -576,7 +576,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 		return nil
 	}
 	// For a reader transaction, conflict check is enough.
-	startTime := now()
+	startTime := Now()
 	for {
 		if err := t.timedOut(ctx, startTime); err != nil {
 			return err
@@ -764,8 +764,9 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 }
 
 var lastOnIdleRunTime int64
+
 func (t *transaction) onIdle(ctx context.Context) {
-	nextRunTime := now().Add(time.Duration(-7) * time.Minute).UnixMilli()
+	nextRunTime := Now().Add(time.Duration(-7) * time.Minute).UnixMilli()
 	if lastOnIdleRunTime < nextRunTime {
 		t.logger.processExpiredTransactionLogs(ctx, t)
 		lastOnIdleRunTime = nowUnixMilli()

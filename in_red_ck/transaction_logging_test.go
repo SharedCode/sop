@@ -43,10 +43,10 @@ func Test_TLog_Rollback(t *testing.T) {
 
 func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	// Unwind time to yesterday.
-	yesterday := time.Now().Add(time.Duration(-24*time.Hour))
+	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	now = func() time.Time { return yesterday }
+	Now = func() time.Time { return yesterday }
 
 	trans, _ := NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
@@ -80,8 +80,8 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	today := time.Now()
 	cas.Now = func() time.Time { return today }
 	sop.Now = func() time.Time { return today }
-	now = func() time.Time { return today }
-	
+	Now = func() time.Time { return today }
+
 	tid, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
 	if tid.IsNil() {
 		t.Errorf("Failed, got nil Tid, want valid Tid.")

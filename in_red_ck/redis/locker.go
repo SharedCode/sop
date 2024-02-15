@@ -21,7 +21,7 @@ func FormatLockKey(k string) string {
 }
 
 // Create a set of lock keys.
-func CreateLockKeys(keys []string) []*LockKeys {
+func CreateLockKeys(keys ...string) []*LockKeys {
 	lockKeys := make([]*LockKeys, len(keys))
 	for i := range keys {
 		lockKeys[i] = &LockKeys{
