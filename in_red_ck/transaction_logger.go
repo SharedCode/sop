@@ -73,6 +73,9 @@ func (tl *transactionLog) removeLogs(ctx context.Context) error {
 	return err
 }
 
+// TODO: consume all Transaction IDs(TIDs) and clean their obsolete, leftover resources that fall within a given hour.
+// Perhaps using a package level variable to keep the "hour" being worked on and change the processor function below
+// to consume all TIDs of the hour before issuing another GetOne call to fetch the next hour.
 func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *transaction) error {
 	tid, hr, committedFunctionLogs, err := tl.logger.GetOne(ctx)
 	tl.transactionHour = hr

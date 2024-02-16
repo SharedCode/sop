@@ -52,6 +52,9 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 	const hourBeingProcessed = "HBP"
 	duration := time.Duration(12*time.Hour)
 
+	// TODO: once items older than an hour are tapped out, after "resting"(idle) for an hour, resetting to the oldest hour seems
+	// right so we can circle back and forth.
+
 	resetterLK := redis.FormatLockKey("Rst" + hourBeingProcessed)
 	var gotReset bool
 	if _, err := tl.redisCache.Get(ctx, resetterLK); redis.KeyNotFound(err) {
@@ -126,7 +129,7 @@ func (tl *transactionLog) getOne(ctx context.Context, lastHour string) (string, 
 	mh, _ := time.Parse(dateHour, Now().Format(dateHour))
 	cappedHour := mh.Add(-time.Duration(1*time.Hour)).Format(dateHour)
 
-	selectStatement := fmt.Sprintf("SELECT date, tid FROM %s.t_by_hour WHERE date < ? AND date > ? ALLOW FILTERING;", connection.Config.Keyspace)
+	selectStatement := fmt.Sprintf("SELECT date, tid FROM %s.t_by_hour WHERE date < ? AND date > ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
 	qry := connection.Session.Query(selectStatement, cappedHour, lastHour).WithContext(ctx).Consistency(gocql.LocalOne)
 
 	iter := qry.Iter()
