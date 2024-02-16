@@ -37,8 +37,10 @@ type ConsistencyBook struct {
 	RegistryUpdate  gocql.Consistency
 	RegistryGet     gocql.Consistency
 	RegistryRemove  gocql.Consistency
-	StoreGet        gocql.Consistency
+	StoreAdd        gocql.Consistency
 	StoreUpdate     gocql.Consistency
+	StoreGet        gocql.Consistency
+	StoreRemove     gocql.Consistency
 	BlobStoreAdd    gocql.Consistency
 	BlobStoreGet    gocql.Consistency
 	BlobStoreUpdate gocql.Consistency

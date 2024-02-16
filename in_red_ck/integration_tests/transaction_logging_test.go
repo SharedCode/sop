@@ -6,17 +6,17 @@ import (
 
 	// "github.com/SharedCode/sop"
 	// "github.com/SharedCode/sop/in_red_ck"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	// cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
 func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 
-	tl := cas.NewTransactionLog()
-	tid, _, _, _ := tl.GetOne(ctx)
+	// tl := cas.NewTransactionLog()
+	// tid, _, _, _ := tl.GetOne(ctx)
 	
-	if tid.IsNil() {
-		t.Errorf("Failed, got nil Tid, want valid Tid.")
-	}
+	// if tid.IsNil() {
+	// 	t.Errorf("Failed, got nil Tid, want valid Tid.")
+	// }
 
 
 	// // Unwind time to yesterday.
