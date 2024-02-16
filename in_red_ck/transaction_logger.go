@@ -33,17 +33,13 @@ type transactionLog struct {
 	logger         cas.TransactionLog
 	logging bool
 	transactionID  sop.UUID
-	queuedLogs     []sop.KeyValuePair[commitFunctions, interface{}]
+	transactionHour string
 }
-
-var synthesizeErrorOnFunction commitFunctions = unknown
-var syntheticError error
 
 // Instantiate a transaction logger.
 func newTransactionLogger(logger cas.TransactionLog, logging bool) *transactionLog {
 	if logger == nil {
-		// TODO: switch to the real TransactionLog when ready.
-		logger = cas.NewMockTransactionLog()
+		logger = cas.NewTransactionLog()
 	}
 	return &transactionLog{
 		logger: logger,
@@ -60,8 +56,9 @@ func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload in
 
 	if tl.transactionID.IsNil() {
 		tl.transactionID = sop.NewUUID()
-		tl.logger.Initiate(ctx, tl.transactionID, int(f), payload)
-		return nil
+		hr, err := tl.logger.Initiate(ctx, tl.transactionID, int(f), payload)
+		tl.transactionHour = hr
+		return err
 	}
 	return tl.logger.Add(ctx, tl.transactionID, int(f), payload)
 }
@@ -71,19 +68,20 @@ func (tl *transactionLog) removeLogs(ctx context.Context) error {
 	if !tl.logging {
 		return nil
 	}
-	err := tl.logger.Remove(ctx, tl.transactionID)
+	err := tl.logger.Remove(ctx, tl.transactionID, tl.transactionHour)
 	tl.transactionID = sop.NilUUID
 	return err
 }
 
 func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *transaction) error {
-	tid, committedFunctionLogs, err := tl.logger.GetOne(ctx)
+	tid, hr, committedFunctionLogs, err := tl.logger.GetOne(ctx)
+	tl.transactionHour = hr
 	if err != nil {
 		return err
 	}
 	if len(committedFunctionLogs) == 0 {
 		if !tid.IsNil() {
-			return tl.logger.Remove(ctx, tid)
+			return tl.logger.Remove(ctx, tid, tl.transactionHour)
 		}
 		return nil
 	}
@@ -102,7 +100,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 				if err := t.deleteObsoleteEntries(ctx, v.First.First, v.First.Second); err != nil {
 					lastErr = err
 				}
-				if err := tl.logger.Remove(ctx, tid); err != nil {
+				if err := tl.logger.Remove(ctx, tid, tl.transactionHour); err != nil {
 					lastErr = err
 				}
 				return lastErr
@@ -164,7 +162,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 		}
 	}
 
-	if err := tl.logger.Remove(ctx, tid); err != nil {
+	if err := tl.logger.Remove(ctx, tid, tl.transactionHour); err != nil {
 		lastErr = err
 	}
 	return lastErr

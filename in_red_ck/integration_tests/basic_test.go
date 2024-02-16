@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop/in_red_ck"
-	"github.com/SharedCode/sop/in_red_ck/cassandra"
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
-var cassConfig = cassandra.Config{
+var cassConfig = cas.Config{
 	ClusterHosts: []string{"localhost:9042"},
 	Keyspace:     "btree",
 }
@@ -86,5 +86,20 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	t.Logf("Successfully added & found item with key 1.")
 	if err := trans.Commit(ctx); err != nil {
 		t.Errorf("Commit returned error, details: %v.", err)
+	}
+}
+
+func TestGetOne(t *testing.T) {
+
+	tl := cas.NewTransactionLog()
+	uuid, _, r, err := tl.GetOne(ctx)
+	if uuid.IsNil() {
+
+	}
+	if r == nil {
+
+	}
+	if err == nil {
+		
 	}
 }

@@ -45,7 +45,7 @@ func newMockTwoPhaseCommitTransaction(t *testing.T, forWriting bool, maxTime tim
 		registry:        mockRegistry,
 		redisCache:      mockRedisCache,
 		blobStore:       mockNodeBlobStore,
-		logger:          newTransactionLogger(nil, logging),
+		logger:          newTransactionLogger(cas.NewMockTransactionLog(), logging),
 		phaseDone:       -1,
 	}, nil
 }

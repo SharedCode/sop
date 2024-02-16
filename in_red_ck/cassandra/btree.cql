@@ -53,10 +53,9 @@ create table foo_r(
 -- Time Series table for transaction log.
 create table t_by_hour(
     -- date with hour resolution, e.g. - 01/01/2024.
-    date text,
+    date text PRIMARY KEY,
     -- Transaction ID.
-    tid UUID,
-    PRIMARY KEY (date, tid)
+    tid UUID
 );
 
 -- Transaction Log table.

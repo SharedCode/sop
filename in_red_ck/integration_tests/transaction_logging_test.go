@@ -11,9 +11,8 @@ import (
 
 func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 
-
 	tl := cas.NewTransactionLog()
-	tid, _, _ := tl.GetOne(ctx)
+	tid, _, _, _ := tl.GetOne(ctx)
 	
 	if tid.IsNil() {
 		t.Errorf("Failed, got nil Tid, want valid Tid.")

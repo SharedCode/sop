@@ -48,7 +48,7 @@ const tableName1 = "person2db"
 const tableName2 = "twophase22"
 
 func Test_SimpleAddPerson(t *testing.T) {
-	trans, err := in_red_ck.NewTransaction(true, -1, false)
+	trans, err := in_red_ck.NewTransaction(true, -1, true)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}

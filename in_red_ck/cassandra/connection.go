@@ -111,7 +111,7 @@ func OpenConnection(config Config) (*Connection, error) {
 	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.t_by_hour (date text, tid UUID, PRIMARY KEY(date, tid));", config.Keyspace)).Exec(); err != nil {
 		return nil, err
 	}
-	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.t_log (id UUID, c_f int, date text, c_f_p blob, PRIMARY KEY(id, c_f));", config.Keyspace)).Exec(); err != nil {
+	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.t_log (id UUID, c_f int, c_f_p blob, PRIMARY KEY(id, c_f));", config.Keyspace)).Exec(); err != nil {
 		return nil, err
 	}
 
