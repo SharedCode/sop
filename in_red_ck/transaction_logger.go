@@ -188,8 +188,11 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 }
 
 func toStruct[T any](obj interface{}) T {
-	ba, _ := json.Marshal(obj)
 	var t T
+	if obj == nil {
+		return t
+	}
+	ba, _ := json.Marshal(obj)
 	json.Unmarshal(ba, &t)
 	return t
 }

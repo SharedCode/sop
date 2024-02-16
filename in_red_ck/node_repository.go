@@ -394,6 +394,9 @@ func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop
 }
 
 func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData interface{}) error {
+	if rollbackData == nil {
+		return nil
+	}
 	var bibs []cas.BlobsPayload[sop.UUID]
 	var vids []cas.RegistryPayload[sop.UUID]
 	tup := rollbackData.(sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]])

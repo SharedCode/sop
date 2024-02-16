@@ -83,14 +83,18 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 	ourID := sop.NewUUID()
 	for {
 		hour := gotV.Value
-		hour, tid, err = tl.getOne(ctx, hour)
+		var hr2 string
+		hr2, tid, err = tl.getOne(ctx, hour)
 		if err != nil || tid.IsNil() {
-			return sop.NilUUID, hour, nil, err
+			return sop.NilUUID, "", nil, err
+		}
+		if hr2 != "" {
+			hour = hr2
 		}
 
 		err = tl.redisCache.GetStruct(ctx, lk, &gotV)
 		if err != nil && !redis.KeyNotFound(err) {
-			return sop.NilUUID, hour, nil, err
+			return sop.NilUUID, "", nil, err
 		}
 		if gotV.Value > hour {
 			continue
@@ -98,7 +102,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		gotV.Key = ourID
 		gotV.Value = hour
 		if err := tl.redisCache.SetStruct(ctx, lk, &gotV, duration); err != nil {
-			return sop.NilUUID, hour, nil, err
+			return sop.NilUUID, "", nil, err
 		}
 		wantV := sop.KeyValuePair[sop.UUID, string]{
 			Key:   gotV.Key,
@@ -106,7 +110,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		}
 		err = tl.redisCache.GetStruct(ctx, lk, &gotV)
 		if err != nil {
-			return sop.NilUUID, hour, nil, err
+			return sop.NilUUID, "", nil, err
 		}
 		if gotV.Key == wantV.Key || gotV.Value == hour {
 			r, err = tl.getLogsDetails(ctx, tid)
@@ -115,7 +119,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		if gotV.Value < hour {
 			gotV.Value = hour
 			if err := tl.redisCache.SetStruct(ctx, lk, &gotV, duration); err != nil {
-				return sop.NilUUID, hour, nil, err
+				return sop.NilUUID, "", nil, err
 			}
 			r, err = tl.getLogsDetails(ctx, tid)
 			return tid, hour, r, err
