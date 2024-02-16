@@ -30,6 +30,8 @@ type TransactionLog interface {
 	// It is capped to an hour ago older because anything newer may still be an in-flight or ongoing transaction.
 	GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, interface{}], error)
 
+	// Given a date hour, returns an available for cleanup set of transaction logs with their Transaction ID.
+	// Or nils if there is no more needing cleanup for this date hour.
 	GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, interface{}], error)
 }
 
@@ -96,9 +98,11 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		if err != nil && !redis.KeyNotFound(err) {
 			return sop.NilUUID, "", nil, err
 		}
+		// If another SOP process already "claimed" this hour(gotV.Value, read from Redis) then loop back to get the next hour.
 		if gotV.Value > hour {
 			continue
 		}
+	
 		gotV.Key = ourID
 		gotV.Value = hour
 		if err := tl.redisCache.SetStruct(ctx, lk, &gotV, duration); err != nil {
