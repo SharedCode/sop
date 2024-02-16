@@ -48,12 +48,12 @@ func DeleteService(ctx context.Context) {
 // Process(issue delete SQL stmt) the deleted items from the kafka queue.
 func DoDeletedItemsProcessing(ctx context.Context) {
 	if !kafka.IsInitialized() {
-		log.Warn("Kafka is not initialized, please set valid brokers & topic to initialize.")
+		log.Warn("Kafka is not initialized, please set valid brokers & topic to initialize")
 		return
 	}
 	blobsIDs, err := kafka.Dequeue[[]cas.BlobsPayload[sop.UUID]](ctx, 5)
 	if err != nil {
-		log.Error("Error kafka dequeue, details: %v", err)
+		log.Error("error kafka dequeue, details: %v", err)
 		if len(blobsIDs) == 0 {
 			return
 		}
@@ -61,7 +61,7 @@ func DoDeletedItemsProcessing(ctx context.Context) {
 	bs := cas.NewBlobStore()
 	for i := range blobsIDs {
 		if err := bs.Remove(ctx, blobsIDs[i]...); err != nil {
-			log.Error("Error removing blobs from Cassandra blobs table, details: %v", err)
+			log.Error("error removing blobs from Cassandra blobs table, details: %v", err)
 		}
 	}
 }

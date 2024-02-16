@@ -41,7 +41,7 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(ctx context.Context, btre
 				return false, err
 			}
 			if nc == nil {
-				return false, fmt.Errorf("Can't get child (ID='%v') of this root node.", node.ChildrenIDs[0])
+				return false, fmt.Errorf("can't get child (ID='%v') of this root node", node.ChildrenIDs[0])
 			}
 			copy(node.Slots, nc.Slots)
 			node.Count = nc.Count
@@ -91,7 +91,7 @@ func (node *Node[TK, TV]) promoteSingleChildAsParentChild(ctx context.Context, b
 		return false, err
 	}
 	if p == nil {
-		return false, fmt.Errorf("Can't get parent (ID='%v') of this node.", node.ParentID)
+		return false, fmt.Errorf("can't get parent (ID='%v') of this node", node.ParentID)
 	}
 	ion := p.getIndexOfChild(node)
 	p.ChildrenIDs[ion] = node.ChildrenIDs[0]

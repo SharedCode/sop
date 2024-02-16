@@ -9,7 +9,7 @@ import (
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
-type commitFunctions int
+type commitFunction int
 
 // Transaction commit functions.
 const (
@@ -29,7 +29,7 @@ const (
 )
 
 type transactionLog struct {
-	committedState commitFunctions
+	committedState commitFunction
 	logger         cas.TransactionLog
 	logging bool
 	transactionID  sop.UUID
@@ -48,7 +48,7 @@ func newTransactionLogger(logger cas.TransactionLog, logging bool) *transactionL
 }
 
 // Log the about to be committed function state.
-func (tl *transactionLog) log(ctx context.Context, f commitFunctions, payload interface{}) error {
+func (tl *transactionLog) log(ctx context.Context, f commitFunction, payload interface{}) error {
 	tl.committedState = f
 	if !tl.logging || f == unknown {
 		return nil

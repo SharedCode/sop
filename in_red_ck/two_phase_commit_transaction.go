@@ -98,10 +98,10 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration, loggin
 
 func (t *transaction) Begin() error {
 	if t.HasBegun() {
-		return fmt.Errorf("Transaction is ongoing, 'can't begin again")
+		return fmt.Errorf("transaction is ongoing, 'can't begin again")
 	}
 	if t.phaseDone == 2 {
-		return fmt.Errorf("Transaction is done, 'create a new one")
+		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 0
 	return nil
@@ -112,10 +112,10 @@ func (t *transaction) Phase1Commit(ctx context.Context) error {
 	t.onIdle(ctx)
 
 	if !t.HasBegun() {
-		return fmt.Errorf("No transaction to commit, call Begin to start a transaction")
+		return fmt.Errorf("no transaction to commit, call Begin to start a transaction")
 	}
 	if t.phaseDone == 2 {
-		return fmt.Errorf("Transaction is done, 'create a new one")
+		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 1
 	if !t.forWriting {
@@ -124,22 +124,22 @@ func (t *transaction) Phase1Commit(ctx context.Context) error {
 	if err := t.phase1Commit(ctx); err != nil {
 		t.phaseDone = 2
 		if rerr := t.rollback(ctx, true); rerr != nil {
-			return fmt.Errorf("Phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
+			return fmt.Errorf("phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
-		return fmt.Errorf("Phase 1 commit failed, details: %v", err)
+		return fmt.Errorf("phase 1 commit failed, details: %v", err)
 	}
 	return nil
 }
 
 func (t *transaction) Phase2Commit(ctx context.Context) error {
 	if !t.HasBegun() {
-		return fmt.Errorf("No transaction to commit, call Begin to start a transaction")
+		return fmt.Errorf("no transaction to commit, call Begin to start a transaction")
 	}
 	if t.phaseDone == 0 {
-		return fmt.Errorf("Phase 1 commit has not been invoke yet")
+		return fmt.Errorf("phase 1 commit has not been invoke yet")
 	}
 	if t.phaseDone == 2 {
-		return fmt.Errorf("Transaction is done, 'create a new one")
+		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 2
 	if !t.forWriting {
@@ -155,7 +155,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 					break
 				}
 				if rerr := t.rollback(ctx, false); rerr != nil {
-					return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
+					return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 				}
 				log.Warn(err.Error() + ", will retry")
 
@@ -171,24 +171,24 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 			}
 		}
 		if rerr := t.rollback(ctx, true); rerr != nil {
-			return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
+			return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
-		return fmt.Errorf("Phase 2 commit failed, details: %v", err)
+		return fmt.Errorf("phase 2 commit failed, details: %v", err)
 	}
 	return nil
 }
 
 func (t *transaction) Rollback(ctx context.Context) error {
 	if t.phaseDone == 2 {
-		return fmt.Errorf("Transaction is done, 'create a new one")
+		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	if !t.HasBegun() {
-		return fmt.Errorf("No transaction to rollback, call Begin to start a transaction")
+		return fmt.Errorf("no transaction to rollback, call Begin to start a transaction")
 	}
 	// Reset transaction status and mark done to end it without persisting any change.
 	t.phaseDone = 2
 	if err := t.rollback(ctx, true); err != nil {
-		return fmt.Errorf("Rollback failed, details: %v", err)
+		return fmt.Errorf("rollback failed, details: %v", err)
 	}
 	return nil
 }
@@ -203,7 +203,7 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 		return ctx.Err()
 	}
 	if Now().Sub(startTime).Minutes() > float64(t.maxTime) {
-		return fmt.Errorf("Transaction timed out(maxTime=%v)", t.maxTime)
+		return fmt.Errorf("transaction timed out(maxTime=%v)", t.maxTime)
 	}
 	return nil
 }
@@ -453,15 +453,12 @@ func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[s
 func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues bool) error {
 	if t.logger.committedState > finalizeCommit {
 		// This state should not be reached and rollback invoked, but return an error about it, in case.
-		return fmt.Errorf("Transaction got committed, 'can't rollback it")
+		return fmt.Errorf("transaction got committed, 'can't rollback it")
 	}
 
 	updatedNodes, removedNodes, addedNodes, _, rootNodes := t.classifyModifiedNodes()
 
 	var lastErr error
-	if t.logger.committedState == finalizeCommit {
-		// do nothing as the function failed, nothing to undo.
-	}
 	if t.logger.committedState > commitStoreInfo {
 		rollbackStoresInfo := t.getRollbackStoresInfo()
 		if err := t.storeRepository.Update(ctx, rollbackStoresInfo...); err != nil {
@@ -600,7 +597,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.
 func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
-	log.Debug("Same Node(s) are being modified elsewhere, 'will refetch and re-merge changes in...")
+	log.Debug("same node(s) are being modified elsewhere, 'will refetch and re-merge changes in...")
 	for i := range t.btreesBackend {
 		if err := t.btreesBackend[i].refetchAndMerge(ctx); err != nil {
 			return err
@@ -751,7 +748,7 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 		}
 		if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
 			lastErr = err
-			log.Error("Redis Delete failed, details: %v", err)
+			log.Error("Redis delete failed, details: %v", err)
 		}
 		if err := t.blobStore.Remove(ctx, unusedNodeIDs...); err != nil {
 			lastErr = err
