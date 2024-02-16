@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/SharedCode/sop"
@@ -767,8 +768,8 @@ var lastOnIdleRunTime int64
 
 func (t *transaction) onIdle(ctx context.Context) {
 	nextRunTime := Now().Add(time.Duration(-7) * time.Minute).UnixMilli()
-	if lastOnIdleRunTime < nextRunTime {
+	if atomic.LoadInt64(&lastOnIdleRunTime) < nextRunTime {
+		atomic.StoreInt64(&lastOnIdleRunTime, nowUnixMilli())
 		t.logger.processExpiredTransactionLogs(ctx, t)
-		lastOnIdleRunTime = nowUnixMilli()
 	}
 }
