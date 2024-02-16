@@ -5,7 +5,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"math/rand"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/SharedCode/sop"
@@ -107,6 +107,23 @@ func (t *transaction) Begin() error {
 	return nil
 }
 
+var lastOnIdleRunTime int64
+var locker = sync.Mutex{}
+func (t *transaction) onIdle(ctx context.Context) {
+	nextRunTime := Now().Add(time.Duration(-5) * time.Minute).UnixMilli()
+	runTime := false
+	if lastOnIdleRunTime < nextRunTime {
+		locker.Lock()
+		if lastOnIdleRunTime < nextRunTime {
+			lastOnIdleRunTime = nowUnixMilli()
+			runTime = true
+		}
+		locker.Unlock()
+		if runTime {
+			t.logger.processExpiredTransactionLogs(ctx, t)
+		}
+	}
+}
 func (t *transaction) Phase1Commit(ctx context.Context) error {
 	// Service the cleanup of left hanging transactions.
 	t.onIdle(ctx)
@@ -759,14 +776,4 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 		lastErr = err
 	}
 	return lastErr
-}
-
-var lastOnIdleRunTime int64
-
-func (t *transaction) onIdle(ctx context.Context) {
-	nextRunTime := Now().Add(time.Duration(-7) * time.Minute).UnixMilli()
-	if atomic.LoadInt64(&lastOnIdleRunTime) < nextRunTime {
-		atomic.StoreInt64(&lastOnIdleRunTime, nowUnixMilli())
-		t.logger.processExpiredTransactionLogs(ctx, t)
-	}
 }

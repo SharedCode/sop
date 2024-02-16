@@ -45,6 +45,24 @@ func (tl *mockTransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []s
 	return sop.NilUUID, "", nil, nil
 }
 
+func (tl *mockTransactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, interface{}], error) {
+	if !tl.datesLogs.FindOne(hour, false) {
+		return sop.NilUUID, nil, nil
+	}
+	v := tl.datesLogs.GetCurrentValue()
+	for kk, vv := range v {
+		r := make([]sop.KeyValuePair[int, interface{}], len(vv))
+		for ii := range vv {
+			var target interface{}
+			json.Unmarshal(vv[ii].Value, &target)
+			r[ii].Key = vv[ii].Key
+			r[ii].Value = target
+		}
+		return kk, r, nil
+	}
+	return sop.NilUUID, nil, nil
+}
+
 func (tl *mockTransactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) (string, error) {
 	date := Now().Format(dateHour)
 	var dayLogs map[sop.UUID][]sop.KeyValuePair[int, []byte]

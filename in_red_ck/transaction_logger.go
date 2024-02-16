@@ -73,18 +73,34 @@ func (tl *transactionLog) removeLogs(ctx context.Context) error {
 	return err
 }
 
-// TODO: consume all Transaction IDs(TIDs) and clean their obsolete, leftover resources that fall within a given hour.
-// Perhaps using a package level variable to keep the "hour" being worked on and change the processor function below
+var hourBeingProcessed string
+// Consume all Transaction IDs(TIDs) and clean their obsolete, leftover resources that fall within a given hour.
+// Using a package level variable(hourBeingProcessed) to keep the "hour" being worked on and the processor function below
 // to consume all TIDs of the hour before issuing another GetOne call to fetch the next hour.
 func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *transaction) error {
-	tid, hr, committedFunctionLogs, err := tl.logger.GetOne(ctx)
-	tl.transactionHour = hr
-	if err != nil {
-		return err
+	var tid sop.UUID
+	var hr string
+	var committedFunctionLogs []sop.KeyValuePair[int, interface{}]
+	var err error
+	if hourBeingProcessed == "" {
+		tid, hr, committedFunctionLogs, err = tl.logger.GetOne(ctx)
+		if err != nil {
+			return err
+		}
+		hourBeingProcessed = hr
+	} else {
+		tid, committedFunctionLogs, err = tl.logger.GetLogsDetails(ctx, hourBeingProcessed)
+		if err != nil {
+			return err
+		}
+	}
+	if tid.IsNil() {
+		hourBeingProcessed = ""
+		return nil
 	}
 	if len(committedFunctionLogs) == 0 {
 		if !tid.IsNil() {
-			return tl.logger.Remove(ctx, tid, tl.transactionHour)
+			return tl.logger.Remove(ctx, tid, hourBeingProcessed)
 		}
 		return nil
 	}
@@ -103,7 +119,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 				if err := t.deleteObsoleteEntries(ctx, v.First.First, v.First.Second); err != nil {
 					lastErr = err
 				}
-				if err := tl.logger.Remove(ctx, tid, tl.transactionHour); err != nil {
+				if err := tl.logger.Remove(ctx, tid, hourBeingProcessed); err != nil {
 					lastErr = err
 				}
 				return lastErr
@@ -165,7 +181,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 		}
 	}
 
-	if err := tl.logger.Remove(ctx, tid, tl.transactionHour); err != nil {
+	if err := tl.logger.Remove(ctx, tid, hourBeingProcessed); err != nil {
 		lastErr = err
 	}
 	return lastErr

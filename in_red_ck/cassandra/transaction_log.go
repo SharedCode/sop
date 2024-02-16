@@ -29,6 +29,8 @@ type TransactionLog interface {
 	// GetOne will fetch the oldest transaction logs from the backend, older than 1 hour ago.
 	// It is capped to an hour ago older because anything newer may still be an in-flight or ongoing transaction.
 	GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, interface{}], error)
+
+	GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, interface{}], error)
 }
 
 type transactionLog struct {
@@ -83,7 +85,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		hour := gotV.Value
 		hour, tid, err = tl.getOne(ctx, hour)
 		if err != nil || tid.IsNil() {
-			return tid, hour, nil, err
+			return sop.NilUUID, hour, nil, err
 		}
 
 		err = tl.redisCache.GetStruct(ctx, lk, &gotV)
@@ -121,13 +123,45 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 	}
 }
 
+func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, interface{}], error) {
+	if hour == "" {
+		return sop.NilUUID, nil, nil
+	}
+	if connection == nil {
+		return sop.NilUUID, nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+	}
+
+	selectStatement := fmt.Sprintf("SELECT tid FROM %s.t_by_hour WHERE date = ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
+	qry := connection.Session.Query(selectStatement, hour).WithContext(ctx).Consistency(gocql.LocalOne)
+
+	iter := qry.Iter()
+	var gtid gocql.UUID
+	for iter.Scan(&gtid) {
+	}
+	if err := iter.Close(); err != nil {
+		return sop.NilUUID, nil, err
+	}
+
+	tid := sop.UUID(gtid)
+	if tid.IsNil() {
+		return tid, nil, nil
+	}
+
+	r, err := tl.getLogsDetails(ctx, tid)
+	return tid, r, err
+}
+
 func (tl *transactionLog) getOne(ctx context.Context, lastHour string) (string, sop.UUID, error) {
+	mh, _ := time.Parse(dateHour, Now().Format(dateHour))
+	cappedHour := mh.Add(-time.Duration(1 * time.Hour)).Format(dateHour)
+
+	if lastHour >= cappedHour {
+		return "", sop.NilUUID, nil
+	}
+
 	if connection == nil {
 		return "", sop.NilUUID, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
-
-	mh, _ := time.Parse(dateHour, Now().Format(dateHour))
-	cappedHour := mh.Add(-time.Duration(1 * time.Hour)).Format(dateHour)
 
 	selectStatement := fmt.Sprintf("SELECT date, tid FROM %s.t_by_hour WHERE date < ? AND date > ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
 	qry := connection.Session.Query(selectStatement, cappedHour, lastHour).WithContext(ctx).Consistency(gocql.LocalOne)
