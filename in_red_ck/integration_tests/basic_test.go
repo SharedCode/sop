@@ -100,6 +100,6 @@ func TestGetOne(t *testing.T) {
 
 	}
 	if err == nil {
-		
+
 	}
 }

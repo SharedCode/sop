@@ -23,6 +23,7 @@ func NewMockTransaction(t *testing.T, forWriting bool, maxTime time.Duration) (T
 		sopPhaseCommitTransaction: twoPhase,
 	}, nil
 }
+
 // NewMockTransaction with logging turned on.
 func NewMockTransactionWithLogging(t *testing.T, forWriting bool, maxTime time.Duration) (Transaction, error) {
 	t.Helper()

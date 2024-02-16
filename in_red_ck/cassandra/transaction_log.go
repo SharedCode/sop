@@ -31,7 +31,7 @@ type TransactionLog interface {
 	GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, interface{}], error)
 }
 
-type transactionLog struct{
+type transactionLog struct {
 	// Should coordinate via Redis cache. Each date hour should get locked and for "work" by GetOne
 	// to increase chances of distribution of cleanup load across machines.
 	redisCache redis.Cache
@@ -50,7 +50,7 @@ func NewTransactionLog() TransactionLog {
 // GetOne fetches a blob from blob table.
 func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, interface{}], error) {
 	const hourBeingProcessed = "HBP"
-	duration := time.Duration(12*time.Hour)
+	duration := time.Duration(12 * time.Hour)
 
 	// TODO: once items older than an hour are tapped out, after "resting"(idle) for an hour, resetting to the oldest hour seems
 	// right so we can circle back and forth.
@@ -75,7 +75,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 	var r []sop.KeyValuePair[int, interface{}]
 	var gotV sop.KeyValuePair[sop.UUID, string]
 	err := tl.redisCache.GetStruct(ctx, lk, &gotV)
-	if err != nil && !redis.KeyNotFound(err){
+	if err != nil && !redis.KeyNotFound(err) {
 		return sop.NilUUID, "", nil, err
 	}
 	ourID := sop.NewUUID()
@@ -87,7 +87,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		}
 
 		err = tl.redisCache.GetStruct(ctx, lk, &gotV)
-		if err != nil && !redis.KeyNotFound(err){
+		if err != nil && !redis.KeyNotFound(err) {
 			return sop.NilUUID, hour, nil, err
 		}
 		if gotV.Value > hour {
@@ -98,8 +98,8 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		if err := tl.redisCache.SetStruct(ctx, lk, &gotV, duration); err != nil {
 			return sop.NilUUID, hour, nil, err
 		}
-		wantV := sop.KeyValuePair[sop.UUID, string] {
-			Key: gotV.Key,
+		wantV := sop.KeyValuePair[sop.UUID, string]{
+			Key:   gotV.Key,
 			Value: gotV.Value,
 		}
 		err = tl.redisCache.GetStruct(ctx, lk, &gotV)
@@ -127,7 +127,7 @@ func (tl *transactionLog) getOne(ctx context.Context, lastHour string) (string, 
 	}
 
 	mh, _ := time.Parse(dateHour, Now().Format(dateHour))
-	cappedHour := mh.Add(-time.Duration(1*time.Hour)).Format(dateHour)
+	cappedHour := mh.Add(-time.Duration(1 * time.Hour)).Format(dateHour)
 
 	selectStatement := fmt.Sprintf("SELECT date, tid FROM %s.t_by_hour WHERE date < ? AND date > ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
 	qry := connection.Session.Query(selectStatement, cappedHour, lastHour).WithContext(ctx).Consistency(gocql.LocalOne)
@@ -135,7 +135,8 @@ func (tl *transactionLog) getOne(ctx context.Context, lastHour string) (string, 
 	iter := qry.Iter()
 	var nextHour string
 	var tid gocql.UUID
-	for iter.Scan(&nextHour, &tid) {}
+	for iter.Scan(&nextHour, &tid) {
+	}
 	if err := iter.Close(); err != nil {
 		return "", sop.NilUUID, err
 	}
@@ -162,7 +163,7 @@ func (tl *transactionLog) getLogsDetails(ctx context.Context, tid sop.UUID) ([]s
 			}
 		}
 		r = append(r, sop.KeyValuePair[int, interface{}]{
-			Key: c_f,
+			Key:   c_f,
 			Value: t,
 		})
 	}
@@ -171,7 +172,6 @@ func (tl *transactionLog) getLogsDetails(ctx context.Context, tid sop.UUID) ([]s
 	}
 	return r, nil
 }
-
 
 func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) (string, error) {
 	if connection == nil {

@@ -27,14 +27,14 @@ func (tl *mockTransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []s
 		kt, _ := time.Parse(dateHour, tl.datesLogs.GetCurrentKey())
 		// Cap the returned entries to older than an hour to safeguard ongoing transactions.
 		nt, _ := time.Parse(dateHour, Now().Format(dateHour))
-		cappedTime := nt.Add(-time.Duration(1*time.Hour))
+		cappedTime := nt.Add(-time.Duration(1 * time.Hour))
 		if kt.Unix() < cappedTime.Unix() {
 			v := tl.datesLogs.GetCurrentValue()
 			for kk, vv := range v {
 				r := make([]sop.KeyValuePair[int, interface{}], len(vv))
 				for ii := range vv {
 					var target interface{}
-					json.Unmarshal(vv[ii].Value, &target)	
+					json.Unmarshal(vv[ii].Value, &target)
 					r[ii].Key = vv[ii].Key
 					r[ii].Value = target
 				}
@@ -54,9 +54,9 @@ func (tl *mockTransactionLog) Initiate(ctx context.Context, tid sop.UUID, commit
 	} else {
 		dayLogs = tl.datesLogs.GetCurrentValue()
 	}
-	ba, _ :=  json.Marshal(payload)
+	ba, _ := json.Marshal(payload)
 	dayLogs[tid] = append(dayLogs[tid], sop.KeyValuePair[int, []byte]{
-		Key: commitFunction,
+		Key:   commitFunction,
 		Value: ba,
 	})
 	tl.datesLogs.Add(date, dayLogs)
@@ -71,7 +71,7 @@ func (tl *mockTransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunct
 	dayLogs := tl.datesLogs.GetCurrentValue()
 	ba, _ := json.Marshal(payload)
 	dayLogs[tid] = append(dayLogs[tid], sop.KeyValuePair[int, []byte]{
-		Key: commitFunction,
+		Key:   commitFunction,
 		Value: ba,
 	})
 	tl.datesLogs.UpdateCurrentItem(dayLogs)

@@ -29,10 +29,10 @@ const (
 )
 
 type transactionLog struct {
-	committedState commitFunction
-	logger         cas.TransactionLog
-	logging bool
-	transactionID  sop.UUID
+	committedState  commitFunction
+	logger          cas.TransactionLog
+	logging         bool
+	transactionID   sop.UUID
 	transactionHour string
 }
 
@@ -42,7 +42,7 @@ func newTransactionLogger(logger cas.TransactionLog, logging bool) *transactionL
 		logger = cas.NewTransactionLog()
 	}
 	return &transactionLog{
-		logger: logger,
+		logger:  logger,
 		logging: logging,
 	}
 }
@@ -91,7 +91,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 
 	var lastErr error
 	lastCommittedFunctionLog := committedFunctionLogs[len(committedFunctionLogs)-1].Key
-	for i := len(committedFunctionLogs)-1; i >= 0; i-- {
+	for i := len(committedFunctionLogs) - 1; i >= 0; i-- {
 		if committedFunctionLogs[i].Key == finalizeCommit {
 			v := toStruct[sop.Tuple[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]], []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]]](committedFunctionLogs[i].Value)
 			if lastCommittedFunctionLog == deleteTrackedItemsValues {
