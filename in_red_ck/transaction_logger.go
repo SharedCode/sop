@@ -112,6 +112,15 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 	lastCommittedFunctionLog := committedFunctionLogs[len(committedFunctionLogs)-1].Key
 	for i := len(committedFunctionLogs) - 1; i >= 0; i-- {
 		if committedFunctionLogs[i].Key == finalizeCommit {
+			if committedFunctionLogs[i].Value == nil {
+				if lastCommittedFunctionLog >= deleteObsoleteEntries {
+					if err := tl.logger.Remove(ctx, tid, hourBeingProcessed); err != nil {
+						lastErr = err
+					}
+					return lastErr
+				}
+				continue
+			}
 			v := toStruct[sop.Tuple[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]], []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]]](committedFunctionLogs[i].Value)
 			if lastCommittedFunctionLog == deleteTrackedItemsValues {
 				if err := t.deleteTrackedItemsValues(ctx, v.Second); err != nil {
@@ -130,7 +139,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 			continue
 		}
 		if committedFunctionLogs[i].Key == commitStoreInfo {
-			if lastCommittedFunctionLog > commitStoreInfo {
+			if lastCommittedFunctionLog > commitStoreInfo && committedFunctionLogs[i].Value != nil {
 				sis := toStruct[[]btree.StoreInfo](committedFunctionLogs[i].Value)
 				if err := t.storeRepository.Update(ctx, sis...); err != nil {
 					lastErr = err
@@ -139,7 +148,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 			continue
 		}
 		if committedFunctionLogs[i].Key == commitAddedNodes {
-			if lastCommittedFunctionLog > commitAddedNodes {
+			if lastCommittedFunctionLog > commitAddedNodes && committedFunctionLogs[i].Value != nil {
 				bv := toStruct[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]](committedFunctionLogs[i].Value)
 				if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, bv); err != nil {
 					lastErr = err
@@ -148,7 +157,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 			continue
 		}
 		if committedFunctionLogs[i].Key == commitRemovedNodes {
-			if lastCommittedFunctionLog > commitRemovedNodes {
+			if lastCommittedFunctionLog > commitRemovedNodes && committedFunctionLogs[i].Value != nil {
 				vids := toStruct[[]cas.RegistryPayload[sop.UUID]](committedFunctionLogs[i].Value)
 				if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, vids); err != nil {
 					lastErr = err
@@ -157,7 +166,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 			continue
 		}
 		if committedFunctionLogs[i].Key == commitUpdatedNodes {
-			if lastCommittedFunctionLog > commitUpdatedNodes {
+			if lastCommittedFunctionLog > commitUpdatedNodes && committedFunctionLogs[i].Value != nil {
 				vids := toStruct[[]cas.RegistryPayload[sop.UUID]](committedFunctionLogs[i].Value)
 				if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, vids); err != nil {
 					lastErr = err
@@ -166,7 +175,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 			continue
 		}
 		if committedFunctionLogs[i].Key == commitNewRootNodes {
-			if lastCommittedFunctionLog > commitNewRootNodes {
+			if lastCommittedFunctionLog > commitNewRootNodes && committedFunctionLogs[i].Value != nil {
 				bv := toStruct[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]](committedFunctionLogs[i].Value)
 				if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, bv); err != nil {
 					lastErr = err
@@ -175,7 +184,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 			continue
 		}
 		if committedFunctionLogs[i].Key == commitTrackedItemsValues {
-			if lastCommittedFunctionLog >= commitTrackedItemsValues {
+			if lastCommittedFunctionLog >= commitTrackedItemsValues && committedFunctionLogs[i].Value != nil {
 				ifd := toStruct[[]sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]](committedFunctionLogs[i].Value)
 				if err := t.deleteTrackedItemsValues(ctx, ifd); err != nil {
 					lastErr = err

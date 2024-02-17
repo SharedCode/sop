@@ -110,6 +110,10 @@ func (t *transaction) Begin() error {
 var lastOnIdleRunTime int64
 var locker = sync.Mutex{}
 func (t *transaction) onIdle(ctx context.Context) {
+	// Required to have a backend btree to do cleanup.
+	if len(t.btreesBackend) == 0 {
+		return
+	}
 	nextRunTime := Now().Add(time.Duration(-5) * time.Minute).UnixMilli()
 	runTime := false
 	if lastOnIdleRunTime < nextRunTime {
@@ -389,10 +393,16 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 func (t *transaction) phase2Commit(ctx context.Context) error {
 
 	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
-	if err := t.logger.log(ctx, finalizeCommit, sop.Tuple[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]], []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]]{
-		First:  t.getToBeObsoleteEntries(),
-		Second: t.getObsoleteTrackedItemsValues(),
-	}); err != nil {
+	f := t.getToBeObsoleteEntries()
+	s := t.getObsoleteTrackedItemsValues()
+	var pl sop.Tuple[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]], []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]]
+	if len(f.First) > 0 || len(f.Second) > 0 || len(s) > 0 {
+		pl = sop.Tuple[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]], []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]]{
+			First:  f,
+			Second: s,
+		}
+	}
+	if err := t.logger.log(ctx, finalizeCommit, pl); err != nil {
 		return err
 	}
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {

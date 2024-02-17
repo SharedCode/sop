@@ -79,10 +79,13 @@ func TestCleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ := in_red_ck.NewTransaction(true, -1, true)
+	for {
+		trans, _ := in_red_ck.NewTransaction(true, -1, true)
+		trans.Begin()
 
-	// Cleanup should be launched from this call.
-	trans.Begin()
+		_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
 
-	trans.Commit(ctx)
+		// Cleanup should be launched from this call.
+		trans.Commit(ctx)
+	}
 }

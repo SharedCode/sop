@@ -206,27 +206,31 @@ func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID, hour string)
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
-	var deleteStatement string
-	if !tid.IsNil() {
-		deleteStatement = fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
-		qry := connection.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
-		if err := qry.Exec(); err != nil {
-			return err
-		}
-		deleteStatement = fmt.Sprintf("DELETE tid FROM %s.t_by_hour WHERE date = ? IF tid = ?;", connection.Config.Keyspace)
-		qry = connection.Session.Query(deleteStatement, hour, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
-		if err := qry.Exec(); err != nil {
-			return err
-		}
-		return nil
-	}
-	deleteStatement = fmt.Sprintf("DELETE FROM %s.t_by_hour WHERE date = ?;", connection.Config.Keyspace)
-	qry := connection.Session.Query(deleteStatement, hour).WithContext(ctx).Consistency(gocql.LocalOne)
+	deleteStatement := fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
+	qry := connection.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
 	if err := qry.Exec(); err != nil {
 		return err
 	}
-	// This occurs when there is no more TID records, thus, safe to signal proceed to process next expired hour.
-	redis.Unlock(ctx, tl.hourLockKey)
+	deleteStatement = fmt.Sprintf("DELETE FROM %s.t_by_hour WHERE date = ? AND tid = ?;", connection.Config.Keyspace)
+	qry = connection.Session.Query(deleteStatement, hour, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
+	if err := qry.Exec(); err != nil {
+		return err
+	}
+
+	selectStatement := fmt.Sprintf("SELECT COUNT(*) FROM %s.t_by_hour WHERE date = ?;", connection.Config.Keyspace)
+	qry = connection.Session.Query(selectStatement, hour).WithContext(ctx).Consistency(gocql.LocalOne)
+
+	iter := qry.Iter()
+	var c int
+	for iter.Scan(&c) {
+	}
+	if err := iter.Close(); err != nil {
+		return err
+	}
+	if c == 0 {
+		// This occurs when there is no more TID records, thus, safe to signal proceed to process next expired hour.
+		redis.Unlock(ctx, tl.hourLockKey)
+	}
 
 	return nil
 }
