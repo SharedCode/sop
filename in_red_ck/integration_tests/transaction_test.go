@@ -48,7 +48,7 @@ const tableName1 = "person2db"
 const tableName2 = "twophase22"
 
 func Test_SimpleAddPerson(t *testing.T) {
-	trans, err := in_red_ck.NewTransaction(true, -1, true)
+	trans, err := in_red_ck.NewTransaction(true, -1, false)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -92,7 +92,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 
-	trans2, err := in_red_ck.NewTransaction(true, -1, false)
+	trans2, _ := in_red_ck.NewTransaction(true, -1, false)
 
 	trans.Begin()
 	trans2.Begin()

@@ -26,7 +26,13 @@ type TransactionLog interface {
 	// Remove all logs of a given transaciton.
 	Remove(ctx context.Context, tid sop.UUID, hour string) error
 
-	// GetOne will fetch the oldest transaction logs from the backend, older than 1 hour ago.
+	// GetOne will fetch the oldest transaction logs from the backend, older than 1 hour ago, mark it so succeeding call
+	// will return the next hour and so on, until no more, upon reaching the current hour.
+	//
+	// GetOne behaves like a job distributor by the hour. SOP uses it to sprinkle/distribute task to cleanup
+	// left over resources by unfinished transactions in time. Be it due to crash or host reboot, any transaction
+	// temp resource will then age and reach expiration limit, then get cleaned up. This method is used to do distribution.
+	//
 	// It is capped to an hour ago older because anything newer may still be an in-flight or ongoing transaction.
 	GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, interface{}], error)
 
@@ -39,6 +45,7 @@ type transactionLog struct {
 	// Should coordinate via Redis cache. Each date hour should get locked and for "work" by GetOne
 	// to increase chances of distribution of cleanup load across machines.
 	redisCache redis.Cache
+	hourLockKey *redis.LockKeys
 }
 
 // Now lambda to allow unit test to inject replayable time.Now.
@@ -48,87 +55,29 @@ var Now = time.Now
 func NewTransactionLog() TransactionLog {
 	return &transactionLog{
 		redisCache: redis.NewClient(),
+		hourLockKey: redis.CreateLockKeys("HBP")[0],
 	}
 }
 
-// GetOne fetches a blob from blob table.
+// GetOne fetches an expired Transaction ID(TID), the hour it was created in and transaction logs for this TID.
 func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, interface{}], error) {
-	const hourBeingProcessed = "HBP"
-	duration := time.Duration(12 * time.Hour)
+	duration := time.Duration(1 * time.Hour)
 
-	// TODO: once items older than an hour are tapped out, after "resting"(idle) for an hour, resetting to the oldest hour seems
-	// right so we can circle back and forth.
-
-	resetterLK := redis.FormatLockKey("Rst" + hourBeingProcessed)
-	var gotReset bool
-	if _, err := tl.redisCache.Get(ctx, resetterLK); redis.KeyNotFound(err) {
-		gotReset = true
-		if err := tl.redisCache.Set(ctx, resetterLK, "fb", duration); err != nil {
-			return sop.NilUUID, "", nil, err
-		}
+	if err := redis.Lock(ctx, duration, tl.hourLockKey); err != nil {
+		return sop.NilUUID, "", nil, nil
 	}
 
-	lk := redis.FormatLockKey(hourBeingProcessed)
-	if gotReset {
-		// Clear the "hour being processed" cache entry every 12 hours so we can ensure to process from the oldest.
-		// Take care of timeout, crashed, etc... processing.
-		tl.redisCache.Delete(ctx, lk)
+	hour, tid, err := tl.getOne(ctx)
+	if err != nil {
+		redis.Unlock(ctx, tl.hourLockKey)
+		return sop.NilUUID, hour, nil, err
 	}
-
-	var tid sop.UUID
-	var r []sop.KeyValuePair[int, interface{}]
-	var gotV sop.KeyValuePair[sop.UUID, string]
-	err := tl.redisCache.GetStruct(ctx, lk, &gotV)
-	if err != nil && !redis.KeyNotFound(err) {
-		return sop.NilUUID, "", nil, err
+	r, err := tl.getLogsDetails(ctx, tid)
+	if err != nil {
+		redis.Unlock(ctx, tl.hourLockKey)
+		return sop.NilUUID, hour, nil, err
 	}
-	ourID := sop.NewUUID()
-	for {
-		hour := gotV.Value
-		var hr2 string
-		hr2, tid, err = tl.getOne(ctx, hour)
-		if err != nil || tid.IsNil() {
-			return sop.NilUUID, "", nil, err
-		}
-		if hr2 != "" {
-			hour = hr2
-		}
-
-		err = tl.redisCache.GetStruct(ctx, lk, &gotV)
-		if err != nil && !redis.KeyNotFound(err) {
-			return sop.NilUUID, "", nil, err
-		}
-		// If another SOP process already "claimed" this hour(gotV.Value, read from Redis) then loop back to get the next hour.
-		if gotV.Value > hour {
-			continue
-		}
-	
-		gotV.Key = ourID
-		gotV.Value = hour
-		if err := tl.redisCache.SetStruct(ctx, lk, &gotV, duration); err != nil {
-			return sop.NilUUID, "", nil, err
-		}
-		wantV := sop.KeyValuePair[sop.UUID, string]{
-			Key:   gotV.Key,
-			Value: gotV.Value,
-		}
-		err = tl.redisCache.GetStruct(ctx, lk, &gotV)
-		if err != nil {
-			return sop.NilUUID, "", nil, err
-		}
-		if gotV.Key == wantV.Key || gotV.Value == hour {
-			r, err = tl.getLogsDetails(ctx, tid)
-			return tid, hour, r, err
-		}
-		if gotV.Value < hour {
-			gotV.Value = hour
-			if err := tl.redisCache.SetStruct(ctx, lk, &gotV, duration); err != nil {
-				return sop.NilUUID, "", nil, err
-			}
-			r, err = tl.getLogsDetails(ctx, tid)
-			return tid, hour, r, err
-		}
-	}
+	return tid, hour, r, nil
 }
 
 func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, interface{}], error) {
@@ -152,6 +101,8 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 
 	tid := sop.UUID(gtid)
 	if tid.IsNil() {
+		// Unlock the hour.
+		redis.Unlock(ctx, tl.hourLockKey)
 		return tid, nil, nil
 	}
 
@@ -159,20 +110,16 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 	return tid, r, err
 }
 
-func (tl *transactionLog) getOne(ctx context.Context, lastHour string) (string, sop.UUID, error) {
+func (tl *transactionLog) getOne(ctx context.Context) (string, sop.UUID, error) {
 	mh, _ := time.Parse(dateHour, Now().Format(dateHour))
 	cappedHour := mh.Add(-time.Duration(1 * time.Hour)).Format(dateHour)
-
-	if lastHour >= cappedHour {
-		return "", sop.NilUUID, nil
-	}
 
 	if connection == nil {
 		return "", sop.NilUUID, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
-	selectStatement := fmt.Sprintf("SELECT date, tid FROM %s.t_by_hour WHERE date < ? AND date > ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
-	qry := connection.Session.Query(selectStatement, cappedHour, lastHour).WithContext(ctx).Consistency(gocql.LocalOne)
+	selectStatement := fmt.Sprintf("SELECT date, tid FROM %s.t_by_hour WHERE date < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
+	qry := connection.Session.Query(selectStatement, cappedHour).WithContext(ctx).Consistency(gocql.LocalOne)
 
 	iter := qry.Iter()
 	var nextHour string

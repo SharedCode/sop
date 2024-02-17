@@ -1,62 +1,88 @@
 package integration_tests
 
 import (
+	"fmt"
 	"testing"
-	// "time"
-	// "github.com/SharedCode/sop"
-	// "github.com/SharedCode/sop/in_red_ck"
-	// cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	"time"
+
+	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/in_red_ck"
+	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
-func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
+func Test_MultipleExpiredTransCleanup(t *testing.T) {
+	in_red_ck.RemoveBtree(ctx, "ztab1")
 
-	// tl := cas.NewTransactionLog()
-	// tid, _, _, _ := tl.GetOne(ctx)
+	// Seed with good records.
+	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
+	cas.Now = func() time.Time { return yesterday }
+	sop.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
 
-	// if tid.IsNil() {
-	// 	t.Errorf("Failed, got nil Tid, want valid Tid.")
-	// }
+	trans, _ := in_red_ck.NewTransaction(true, -1, true)
+	trans.Begin()
 
-	// // Unwind time to yesterday.
-	// yesterday := time.Now().Add(time.Duration(-24*time.Hour))
-	// cas.Now = func() time.Time { return yesterday }
-	// sop.Now = func() time.Time { return yesterday }
-	// in_red_ck.Now = func() time.Time { return yesterday }
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "ztab1", 8, false, true, false, "", trans)
 
-	// trans, _ := in_red_ck.NewTransaction(true, -1, true)
-	// trans.Begin()
+	for i := 0; i < 50; i++ {
+		pk, p := newPerson("joe", fmt.Sprintf("krueger%d", i), "male", "email", "phone")
+		b3.Add(ctx, pk, p)
+		}
 
-	// b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, "tlogtable", nodeSlotLength, false, false, false, "", trans)
+	trans.Commit(ctx)
 
-	// pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
-	// b3.Add(ctx, pk, p)
+	// Create & leave transaction 1 resources for cleanup.
+	yesterday = time.Now().Add(time.Duration(-23 * time.Hour))
+	cas.Now = func() time.Time { return yesterday }
+	sop.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
 
-	// trans.Commit(ctx)
+	trans, _ = in_red_ck.NewTransaction(true, -1, true)
+	trans.Begin()
 
-	// trans, _ = in_red_ck.NewTransaction(true, -1, true)
-	// trans.Begin()
+	b3, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	pk, p := newPerson("joe", "krueger77", "male", "email", "phone")
+	b3.Add(ctx, pk, p)
 
-	// b3, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "tlogtable", trans)
-	// pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
-	// b3.Update(ctx, pk, p)
+	trans.GetPhasedTransaction().Phase1Commit(ctx)
 
-	// pt := trans.GetPhasedTransaction()
-	// pt.Phase1Commit(ctx)
+	// Create & leave transaction 2 resources for cleanup.
+	yesterday = time.Now().Add(time.Duration(-22 * time.Hour))
+	cas.Now = func() time.Time { return yesterday }
+	sop.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
 
-	// // Fast forward by a day to allow us to expire the uncommitted transaction.
-	// today := time.Now()
-	// cas.Now = func() time.Time { return today }
-	// sop.Now = func() time.Time { return today }
-	// in_red_ck.Now = func() time.Time { return today }
+	trans, _ = in_red_ck.NewTransaction(true, -1, true)
+	trans.Begin()
 
-	// tl := cas.NewTransactionLog()
-	// tid, _, _ := tl.GetOne(ctx)
+	b3, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	pk, p = newPerson("joe", "krueger47", "male", "email2", "phone")
+	b3.Update(ctx, pk, p)
 
-	// if tid.IsNil() {
-	// 	t.Errorf("Failed, got nil Tid, want valid Tid.")
-	// }
+	trans.GetPhasedTransaction().Phase1Commit(ctx)
 
-	// // if err := twoPhaseTrans.logger.processExpiredTransactionLogs(ctx, twoPhaseTrans); err != nil {
-	// // 	t.Errorf("processExpiredTransactionLogs failed, got %v want nil.", err)
-	// // }
+	yesterday = time.Now()
+	cas.Now = func() time.Time { return yesterday }
+	sop.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
+
+	trans, _ = in_red_ck.NewTransaction(true, -1, true)
+
+	// Cleanup should be launched from this call.
+	trans.Begin()
+
+}
+
+func TestCleanup(t *testing.T) {
+	yesterday := time.Now()
+	cas.Now = func() time.Time { return yesterday }
+	sop.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
+
+	trans, _ := in_red_ck.NewTransaction(true, -1, true)
+
+	// Cleanup should be launched from this call.
+	trans.Begin()
+
+	trans.Commit(ctx)
 }

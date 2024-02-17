@@ -59,8 +59,8 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 	}
 	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
 	for _, s := range stores {
+	
 		// Add a new store record.
-
 		qry := connection.Session.Query(insertStatement, s.Name, gocql.UUID(s.RootNodeID), s.SlotLength, s.Count, s.IsUnique, s.Description,
 			s.RegistryTable, s.BlobTable, s.Timestamp, s.IsValueDataInNodeSegment, s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached, s.LeafLoadBalancing).WithContext(ctx)
 		if connection.Config.ConsistencyBook.StoreAdd > gocql.Any {

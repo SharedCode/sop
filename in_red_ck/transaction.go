@@ -36,7 +36,10 @@ type singlePhaseTransaction struct {
 // maxTime - specify the maximum "commit" time of the transaction. That is, upon call to commit, it is given
 // this amount of time to conclude, otherwise, it will time out and rollback.
 // If -1 is specified, 15 minute max commit time will be assigned.
-// logging - true will turn on transaction logging, otherwise will not.
+// logging - true will turn on transaction logging, otherwise will not. If turned on, SOP will log each step
+// of the commit and these logs will help SOP to cleanup any uncommitted resources in case there are
+// some build up, e.g. crash or host reboot left ongoing commits' temp changes. In time these will expire and
+// SOP to clean them up.
 func NewTransaction(forWriting bool, maxTime time.Duration, logging bool) (Transaction, error) {
 	twoPhase, err := NewTwoPhaseCommitTransaction(forWriting, maxTime, logging)
 	if err != nil {
