@@ -77,6 +77,11 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		redis.Unlock(ctx, tl.hourLockKey)
 		return sop.NilUUID, hour, nil, err
 	}
+	// Check one more time to remove race condition issue.
+	if err := redis.IsLocked(ctx, tl.hourLockKey); err != nil {
+		// Just return nils as we can't attain a lock.
+		return sop.NilUUID, hour, nil, nil
+	}
 	return tid, hour, r, nil
 }
 
@@ -195,22 +200,33 @@ func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction 
 	return nil
 }
 
-// Remove will delete(non-logged) node records from different Blob stores(node tables).
+// Remove will delete transaction log by hour(t_by_hour) & transaction log(t_log) records.
 func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID, hour string) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
-	deleteStatement := fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
-	qry := connection.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
+	var deleteStatement string
+	if !tid.IsNil() {
+		deleteStatement = fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
+		qry := connection.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
+		if err := qry.Exec(); err != nil {
+			return err
+		}
+		deleteStatement = fmt.Sprintf("DELETE tid FROM %s.t_by_hour WHERE date = ? IF tid = ?;", connection.Config.Keyspace)
+		qry = connection.Session.Query(deleteStatement, hour, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
+		if err := qry.Exec(); err != nil {
+			return err
+		}
+		return nil
+	}
+	deleteStatement = fmt.Sprintf("DELETE FROM %s.t_by_hour WHERE date = ?;", connection.Config.Keyspace)
+	qry := connection.Session.Query(deleteStatement, hour).WithContext(ctx).Consistency(gocql.LocalOne)
 	if err := qry.Exec(); err != nil {
 		return err
 	}
-	deleteStatement = fmt.Sprintf("DELETE FROM %s.t_by_hour WHERE date = ? AND tid = ?;", connection.Config.Keyspace)
-	qry = connection.Session.Query(deleteStatement, hour, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
-	if err := qry.Exec(); err != nil {
-		return err
-	}
+	// This occurs when there is no more TID records, thus, safe to signal proceed to process next expired hour.
+	redis.Unlock(ctx, tl.hourLockKey)
 
 	return nil
 }
