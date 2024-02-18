@@ -6,9 +6,9 @@ Code Coverage: https://app.codecov.io/github/SharedCode/sop
 
 # Usability
 SOP can be used in a wide, diverse storage usability scenarios. Ranging from general purpose data storage - search & management, to highly scaleable and performant version of the same, to domain specific use-cases. As SOP has many feature knobs you can turn on or off, it can be used and get customized with very little to no coding required. Some examples bundled out of the box are:
-  A. General purpose data/object storage management system
-  B. Large data storage and management, where your data is stored in its own data segment(partition in C*). See StoreInfo.IsValueDataInNodeSegment = false flag
-  C. Streaming Data application domain enabling very large data storage - search and management, supporting 1GB to multi-GBs record or item. See sop/streaming_data package for code & sample usage in test
+  * A. General purpose data/object storage management system
+  * B. Large data storage and management, where your data is stored in its own data segment(partition in C*). See StoreInfo.IsValueDataInNodeSegment = false flag
+  * C. Streaming Data application domain enabling very large data storage - search and management, supporting 1GB to multi-GBs record or item. See sop/streaming_data package for code & sample usage in test
 
 Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3). But SOP supports all three of them out of the box.
 
