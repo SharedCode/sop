@@ -12,7 +12,6 @@ SOP has all the bits required to be used like a golang map but which, has the fe
 Requirements:
   * Cassandra
   * Redis
-  * Kafka if wanting to enable the Delete Service
   * Golang that supports generics, currently set to 1.21.5 and higher
 
 ## Sample Code
@@ -197,13 +196,10 @@ Batch size caveat: In case you get failure on commit with an error of (or due to
 You specify the slot length, one time, during B-Tree creation, see NewBtree(..) call in link below for example.
 Here: https://github.com/SharedCode/sop/blob/800e7e23e9e2dce42f708db9fe9a90f3e9bbe988/in_red_ck/transaction_test.go#L57C13-L57C22
 
-## Delete Service
-The system leaves out unused Nodes from time to time after you do a management action(Create, Update or Delete), an aftermath of ACID transactions. I.e. - so transaction(s) that fetch current versions of Nodes will not be interrupted and continue to fetch them, not until the system (elsewhere) commits new versions in an "instantaneous" super quick action, thus making current ones "obsolete". These leftover "obsolete" Nodes need to be deleted and there are two options in place to do that:
-  * Deletes on commit - SOP will, by default, delete these unused or leftover Nodes
-  * Deletes via Kafka route - if DeleteService is enabled, SOP will enqueue to Kafka and let your application to take messages from Kafka and do the deletes, on your desired schedule or interval
+## Transaction Logging
+SOP supports transaction logging, you can enable this by passing "true" to the third parameter of the in_red_ck.NewTransaction(true, -1, **true**) method to create a new transaction. The third parameter tells SOP whether to enable logging within the transaction. Logging can be important specially when your cluster is not stable yet, and it is somewhat prone to host reboot for maintenance, etc... When a transaction is in "commit" process and the host dies, then the transaction temp resources will be left hanging. If logging is on, then the next time SOP transaction commit occurs, like after reboot of a host, then SOP will cleanup these left hanging temp resources.
 
-The optimal choice is the latter. For example, you can setup a Kafka consumer which takes from Kafka queue, enable the "delete service" in SOP(see "EnableDeleteSevice") and uses SOP's BlobStore API to delete these Nodes, at your schedule or interval, like once every day or every hour. For sample code how to do this, pls. feel free to reuse/pattern it with the "in_red_ck/delete_service.go" code.
-See here for code details: https://github.com/SharedCode/sop/blob/3b3b574bb97905ca38d761dedd8af95a7fbce4e2/in_red_ck/delete_service.go#L24C11-L24C11
+Can be a life saver specially if you are storing/managing very large data set, and thus, your partitions in temp are occupying huge storage space. Turn logging on in your transactions, highly recommended in the scenarios described.
 
 ## Item Serialization
 By default, uses Golang's built-in JSON marshaller for serialization for simplicity and support for "streaming"(future feature, perhaps in V3). But you can override this by assigning your own "Marshaler" interface implementation to ```../in_red_ck/cassandra``` & ```../in_red_ck/redis``` packages.
