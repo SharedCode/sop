@@ -2,7 +2,6 @@ package cassandra
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -168,7 +167,7 @@ func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([
 	for iter.Scan(&c_f, &c_f_p) {
 		var t interface{}
 		if c_f_p != nil {
-			if err := json.Unmarshal(c_f_p, &t); err != nil {
+			if err := Marshaler.Unmarshal(c_f_p, &t); err != nil {
 				return nil, err
 			}
 		}
