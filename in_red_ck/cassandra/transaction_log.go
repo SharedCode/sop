@@ -108,10 +108,11 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (gocq
 		return NilUUID, nil, err
 	}
 
-	// Put a max time of two hours for a given cleanup processor.
-	if Now().Sub(t).Hours() > 4 {
+	// Put a max time of three hours for a given cleanup processor.
+	mh, _ := time.Parse(dateHour, Now().Format(dateHour))
+	if mh.Sub(t).Hours() > 4 {
 		// Unlock the hour to allow open opportunity to claim the next cleanup processing.
-		// Capping to 4 hours(Redis cache is set to 7hrs) maintains only one cleaner process at a time.
+		// Capping to 4th hour(Redis cache is set to 7hrs) maintains only one cleaner process at a time.
 		redis.Unlock(ctx, tl.hourLockKey)
 		return NilUUID, nil, nil
 	}
