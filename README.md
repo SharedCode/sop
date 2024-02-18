@@ -199,7 +199,7 @@ Here: https://github.com/SharedCode/sop/blob/800e7e23e9e2dce42f708db9fe9a90f3e9b
 ## Transaction Logging
 SOP supports transaction logging, you can enable this by passing "true" to the third parameter of the in_red_ck.NewTransaction(true, -1, **true**) method to create a new transaction. The third parameter tells SOP whether to enable logging within the transaction. Logging can be important specially when your cluster is not stable yet, and it is somewhat prone to host reboot for maintenance, etc... When a transaction is in "commit" process and the host dies, then the transaction temp resources will be left hanging. If logging is on, then the next time SOP transaction commit occurs, like after reboot of a host, then SOP will cleanup these left hanging temp resources.
 
-Can be a life saver specially if you are storing/managing very large data set, and thus, your partitions in temp are occupying huge storage space. Turn logging on in your transactions, highly recommended in the scenarios described.
+Can be a life saver specially if you are storing/managing very large data set, and thus, your partitions in temp are occupying huge storage space. Turn logging on in your transactions, it is highly recommended.
 
 ## Item Serialization
 By default, uses Golang's built-in JSON marshaller for serialization for simplicity and support for "streaming"(future feature, perhaps in V3). But you can override this by assigning your own "Marshaler" interface implementation to ```../in_red_ck/cassandra``` & ```../in_red_ck/redis``` packages.
