@@ -102,18 +102,3 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}
 }
-
-func TestGetOne(t *testing.T) {
-
-	tl := cas.NewTransactionLog()
-	uuid, _, r, err := tl.GetOne(ctx)
-	if cas.IsNil(uuid) {
-
-	}
-	if r == nil {
-
-	}
-	if err == nil {
-
-	}
-}
