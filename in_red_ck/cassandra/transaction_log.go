@@ -77,15 +77,21 @@ func (tl *transactionLog) GetOne(ctx context.Context) (gocql.UUID, string, []sop
 		redis.Unlock(ctx, tl.hourLockKey)
 		return NilUUID, hour, nil, err
 	}
+	if IsNil(tid) {
+		// Unlock the hour.
+		redis.Unlock(ctx, tl.hourLockKey)
+		return NilUUID, "", nil, nil
+	}
+
 	r, err := tl.getLogsDetails(ctx, tid)
 	if err != nil {
 		redis.Unlock(ctx, tl.hourLockKey)
-		return NilUUID, hour, nil, err
+		return NilUUID, "", nil, err
 	}
 	// Check one more time to remove race condition issue.
 	if err := redis.IsLocked(ctx, tl.hourLockKey); err != nil {
 		// Just return nils as we can't attain a lock.
-		return NilUUID, hour, nil, nil
+		return NilUUID, "", nil, nil
 	}
 	return tid, hour, r, nil
 }

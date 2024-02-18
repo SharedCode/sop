@@ -27,7 +27,7 @@ func Test_MultipleExpiredTransCleanup(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		pk, p := newPerson("joe", fmt.Sprintf("krueger%d", i), "male", "email", "phone")
 		b3.Add(ctx, pk, p)
-		}
+	}
 
 	trans.Commit(ctx)
 
