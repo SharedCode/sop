@@ -12,7 +12,14 @@ func Test_HelloWorld(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, "inmymemory", 8, false, true, true, "", t1)
+	b3, _ := NewBtree[int, string](ctx, StoreInfo{
+		Name: "inmymemory",
+		SlotLength: 8,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true, 
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
@@ -35,7 +42,14 @@ func Test_FunctionalityTests(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, "inmymemory1", 8, false, true, true, "", t1)
+	b3, _ := NewBtree[int, string](ctx, StoreInfo{
+		Name: "inmymemory1",
+		SlotLength: 8,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true, 
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
 
 	const five001Value = "I am the value with 5001 key."
 
@@ -119,7 +133,14 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 	max := 100000
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[int, string](ctx, "inmymemory2", 8, true, true, true, "", t1)
+	b3, _ := NewBtree[int, string](ctx, StoreInfo{
+		Name: "inmymemory2",
+		SlotLength: 8,
+		IsUnique: true, 
+		IsValueDataInNodeSegment: true, 
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
 
 	// Simple IsUnique check.
 	if !b3.IsUnique() {
@@ -325,7 +346,14 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 	max := 100000
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[string, string](ctx, "inmymemory3", 8, false, true, true, "", t1)
+	b3, _ := NewBtree[string, string](ctx, StoreInfo{
+		Name: "inmymemory3",
+		SlotLength: 8,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true, 
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
 
 	tests := []struct {
 		name       string

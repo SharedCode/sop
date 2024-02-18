@@ -9,6 +9,32 @@ import (
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
+// StoreInfo contains a given (B-Tree) store details.
+type StoreInfo struct {
+	// Short name of this (B-Tree store).
+	Name string
+	// Count of items that can be stored on a given node.
+	SlotLength int
+	// IsUnique tells whether key/value pair (items) of this tree should be unique on key.
+	IsUnique bool
+	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's data segment.
+	// Otherwise is false.
+	IsValueDataInNodeSegment bool
+	// If true, each Btree Add(..) method call will persist the item value's data to another partition, then on commit,
+	// it will then be a very quick action as item(s) values' data were already saved on backend.
+	// This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
+	IsValueDataActivelyPersisted bool
+	// If true, the Value data will be cached in Redis, otherwise not. This is used when 'IsValueDataInNodeSegment'
+	// is set to false. Typically set to false if 'IsValueDataActivelyPersisted' is true, as value data is expected
+	// to be huge rendering caching it in Redis to affect Redis performance due to the drastic size of data per item.
+	IsValueDataGloballyCached bool
+	// If true, node load will be balanced by pushing items to sibling nodes if there are vacant slots,
+	// otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
+	LeafLoadBalancing bool
+	// (optional) Description of the Store.
+	Description string
+}
+
 // Removes B-Tree with a given name from the backend storage. This involves dropping tables
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
@@ -45,28 +71,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
-//
-// Parameters:
-// name - specifies the name of the store/b-tree. This has to follow valid Cassandra table name, e.g. - it should start
-// with a letter, etc... as we generate Cassandra tables on the back, one for blob(_b) & one for registry(_r).
-// slotLength - specifies the number of item slots per node of a b-tree.
-// isUnique - specifies whether the b-tree will enforce key uniqueness(true) or not(false).
-// isValueDataInNodeSegment - specifies whether the b-tree will store the "value" data in the tree's node segment together with
-//
-//	the key, or store it in another (data) segment. Currently not implemented and always stores the data in the node segment.
-//
-// leafLoadBalancing - true means leaf load balancing feature is enabled, false otherwise.
-// description - (optional) description about the store.
-// t - transaction that the instance will participate in.
-func NewBtree[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool,
-	isValueDataInNodeSegment bool, leafLoadBalancing bool, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
-	s := btree.NewStoreInfo(name, slotLength, isUnique, isValueDataInNodeSegment, leafLoadBalancing, desciption)
-	return NewBtreeExt[TK, TV](ctx, s.Name, s.SlotLength, s.IsUnique, s.IsValueDataInNodeSegment,
-		s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached, s.LeafLoadBalancing, s.Description, t)
-}
-
-// Synonymous to NewBtree but supporting additional configurable parameters, e.g. - option to turn off or on(default) Redis caching of value data, etc...
-func NewBtreeExt[TK btree.Comparable, TV any](ctx context.Context, name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
+func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si StoreInfo, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("Transaction 't' parameter can't be nil")
 	}
@@ -77,12 +82,12 @@ func NewBtreeExt[TK btree.Comparable, TV any](ctx context.Context, name string, 
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
 
-	stores, err := trans.storeRepository.Get(ctx, name)
+	stores, err := trans.storeRepository.Get(ctx, si.Name)
 	if err != nil {
 		trans.Rollback(ctx)
 		return nil, err
 	}
-	ns := btree.NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption)
+	ns := btree.NewStoreInfoExt(si.Name, si.SlotLength, si.IsUnique, si.IsValueDataInNodeSegment, si.IsValueDataActivelyPersisted, si.IsValueDataGloballyCached, si.LeafLoadBalancing, si.Description)
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeID.IsNil() {
@@ -102,7 +107,7 @@ func NewBtreeExt[TK btree.Comparable, TV any](ctx context.Context, name string, 
 	if !ns.IsCompatible(stores[0]) {
 		trans.Rollback(ctx)
 		// Recommend to use the OpenBtree function to open it.
-		return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it", name)
+		return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it", si.Name)
 	}
 	ns = &stores[0]
 	return newBtree[TK, TV](ctx, ns, trans)

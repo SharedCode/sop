@@ -38,7 +38,14 @@ func Test_Rollback(t *testing.T) {
 	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
 
-	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		LeafLoadBalancing: false,
+		Description: "",
+	}, trans)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
@@ -55,7 +62,15 @@ func Test_Rollback(t *testing.T) {
 
 	trans, _ = NewMockTransaction(t, false, -1)
 	trans.Begin()
-	b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	b3, _ = NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		LeafLoadBalancing: false,
+		Description: "",
+	}, trans)
+
 	pk, p = newPerson("joe", "shroeger", "male", "email", "phone")
 
 	b3.FindOne(ctx, pk, false)
@@ -76,7 +91,15 @@ func Test_SimpleAddPerson(t *testing.T) {
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	b3, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		LeafLoadBalancing: false,
+		Description: "",
+	}, trans)
+
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -118,7 +141,15 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	trans2.Begin()
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
-	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	b3, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		LeafLoadBalancing: false,
+		Description: "",
+	}, trans)
+
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -128,7 +159,15 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		return
 	}
 
-	b32, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	b32, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		LeafLoadBalancing: false,
+		Description: "",
+	}, trans)
+
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -153,7 +192,15 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}
 
 	trans.Begin()
-	b3, err := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	b3, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		LeafLoadBalancing: false,
+		Description: "",
+	}, trans)
+
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -211,7 +258,14 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		LeafLoadBalancing: false,
+		Description: "",
+	}, t1)
 
 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
 	// for scheduled batch deletes.
@@ -227,7 +281,14 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+			b3, _ = NewBtree[PersonKey, Person](ctx, StoreInfo{
+				Name: "persondb",
+				SlotLength: nodeSlotLength,
+				IsUnique: false, 
+				IsValueDataInNodeSegment: false, 
+				LeafLoadBalancing: false,
+				Description: "",
+			}, t1)
 		}
 	}
 
@@ -251,7 +312,14 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, false, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+			b3, _ = NewBtree[PersonKey, Person](ctx, StoreInfo{
+				Name: "persondb",
+				SlotLength: nodeSlotLength,
+				IsUnique: false, 
+				IsValueDataInNodeSegment: false, 
+				LeafLoadBalancing: false,
+				Description: "",
+			}, t1)
 		}
 	}
 }
@@ -262,7 +330,14 @@ func Test_VolumeDeletes(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		LeafLoadBalancing: false,
+		Description: "",
+	}, t1)
 
 	// Populating 90,000 items took about few minutes, did not use Kafka based delete service.
 	for i := start; i <= end; i++ {
@@ -280,7 +355,14 @@ func Test_VolumeDeletes(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+			b3, _ = NewBtree[PersonKey, Person](ctx, StoreInfo{
+				Name: "persondb",
+				SlotLength: nodeSlotLength,
+				IsUnique: false, 
+				IsValueDataInNodeSegment: false, 
+				LeafLoadBalancing: false,
+				Description: "",
+			}, t1)
 		}
 	}
 }
@@ -292,7 +374,14 @@ func Test_MixedOperations(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		LeafLoadBalancing: false,
+		Description: "",
+	}, t1)
 
 	lastNamePrefix := "zoltan"
 	firstName := "jack"
@@ -325,7 +414,14 @@ func Test_MixedOperations(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+			b3, _ = NewBtree[PersonKey, Person](ctx, StoreInfo{
+				Name: "persondb",
+				SlotLength: nodeSlotLength,
+				IsUnique: false, 
+				IsValueDataInNodeSegment: false, 
+				LeafLoadBalancing: false,
+				Description: "",
+			}, t1)
 		}
 	}
 
@@ -361,7 +457,14 @@ func Test_MixedOperations(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", t1)
+			b3, _ = NewBtree[PersonKey, Person](ctx, StoreInfo{
+				Name: "persondb",
+				SlotLength: nodeSlotLength,
+				IsUnique: false, 
+				IsValueDataInNodeSegment: false, 
+				LeafLoadBalancing: false,
+				Description: "",
+			}, t1)
 		}
 	}
 }

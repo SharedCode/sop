@@ -56,7 +56,14 @@ func Test_SimpleAddPerson(t *testing.T) {
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", trans)
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, in_red_ck.StoreInfo{
+		Name: tableName1,
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing: false,
+		Description: "",
+	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -133,7 +140,14 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}
 
 	trans.Begin()
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", trans)
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, in_red_ck.StoreInfo{
+		Name: tableName1,
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing: false,
+		Description: "",
+	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -191,7 +205,14 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, in_red_ck.StoreInfo{
+		Name: tableName1,
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing: false,
+		Description: "",
+	}, t1)
 
 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
 	// for scheduled batch deletes.
@@ -207,7 +228,14 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, in_red_ck.StoreInfo{
+				Name: tableName1,
+				SlotLength: nodeSlotLength,
+				IsUnique: false, 
+				IsValueDataInNodeSegment: true,
+				LeafLoadBalancing: false,
+				Description: "",
+			}, t1)
 		}
 	}
 
@@ -231,7 +259,14 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = in_red_ck.NewTransaction(false, -1, false)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, in_red_ck.StoreInfo{
+				Name: tableName1,
+				SlotLength: nodeSlotLength,
+				IsUnique: false, 
+				IsValueDataInNodeSegment: true,
+				LeafLoadBalancing: false,
+				Description: "",
+			}, t1)
 		}
 	}
 }
@@ -243,7 +278,14 @@ func VolumeDeletes(t *testing.T) {
 
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, in_red_ck.StoreInfo{
+		Name: tableName1,
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing: false,
+		Description: "",
+	}, t1)
 
 	// Populating 90,000 items took about few minutes, did not use Kafka based delete service.
 	for i := start; i <= end; i++ {
@@ -261,7 +303,14 @@ func VolumeDeletes(t *testing.T) {
 			}
 			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, in_red_ck.StoreInfo{
+				Name: tableName1,
+				SlotLength: nodeSlotLength,
+				IsUnique: false, 
+				IsValueDataInNodeSegment: true,
+				LeafLoadBalancing: false,
+				Description: "",
+			}, t1)
 		}
 	}
 }
@@ -274,7 +323,14 @@ func MixedOperations(t *testing.T) {
 
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, in_red_ck.StoreInfo{
+		Name: tableName1,
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing: false,
+		Description: "",
+	}, t1)
 
 	lastNamePrefix := "zoltan"
 	firstName := "jack"
@@ -307,7 +363,14 @@ func MixedOperations(t *testing.T) {
 			}
 			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, in_red_ck.StoreInfo{
+				Name: tableName1,
+				SlotLength: nodeSlotLength,
+				IsUnique: false, 
+				IsValueDataInNodeSegment: true,
+				LeafLoadBalancing: false,
+				Description: "",
+			}, t1)
 		}
 	}
 
@@ -343,7 +406,14 @@ func MixedOperations(t *testing.T) {
 			}
 			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, tableName1, nodeSlotLength, false, true, false, "", t1)
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, in_red_ck.StoreInfo{
+				Name: tableName1,
+				SlotLength: nodeSlotLength,
+				IsUnique: false, 
+				IsValueDataInNodeSegment: true,
+				LeafLoadBalancing: false,
+				Description: "",
+			}, t1)
 		}
 	}
 }
@@ -352,7 +422,14 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
 
-	b3, _ := in_red_ck.NewBtree[int, string](ctx, tableName2, 8, false, true, true, "", t1)
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, in_red_ck.StoreInfo{
+		Name: tableName2,
+		SlotLength: 8,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
 	originalCount := b3.Count()
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
@@ -382,7 +459,14 @@ func Test_IllegalBtreeStoreName(t *testing.T) {
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
 
-	if _, err := in_red_ck.NewBtree[int, string](ctx, "2phase", 8, false, true, true, "", t1); err == nil {
+	if _, err := in_red_ck.NewBtree[int, string](ctx, in_red_ck.StoreInfo{
+		Name: "2phase",
+		SlotLength: 8,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1); err == nil {
 		t.Error("NewBtree('2phase') failed, got nil, want err.")
 	}
 	if t1.HasBegun() {

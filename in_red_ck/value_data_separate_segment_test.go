@@ -9,7 +9,16 @@ func Test_ValueDataInSeparateSegment_Rollback(t *testing.T) {
 	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
 
-	b3, _ := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
+	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb7",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		IsValueDataActivelyPersisted: false,
+		IsValueDataGloballyCached: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, trans)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
@@ -26,7 +35,7 @@ func Test_ValueDataInSeparateSegment_Rollback(t *testing.T) {
 
 	trans, _ = NewMockTransaction(t, false, -1)
 	trans.Begin()
-	b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", trans)
 	pk, p = newPerson("joe", "shroeger", "male", "email", "phone")
 
 	b3.FindOne(ctx, pk, false)
@@ -47,7 +56,16 @@ func Test_ValueDataInSeparateSegment_SimpleAddPerson(t *testing.T) {
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, err := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
+	b3, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb7",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		IsValueDataActivelyPersisted: false,
+		IsValueDataGloballyCached: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -89,7 +107,16 @@ func Test_ValueDataInSeparateSegment_TwoTransactionsWithNoConflict(t *testing.T)
 	trans2.Begin()
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
-	b3, err := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
+	b3, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb7",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		IsValueDataActivelyPersisted: false,
+		IsValueDataGloballyCached: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -99,7 +126,16 @@ func Test_ValueDataInSeparateSegment_TwoTransactionsWithNoConflict(t *testing.T)
 		return
 	}
 
-	b32, err := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
+	b32, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb7",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		IsValueDataActivelyPersisted: false,
+		IsValueDataGloballyCached: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -124,7 +160,16 @@ func Test_ValueDataInSeparateSegment_AddAndSearchManyPersons(t *testing.T) {
 	}
 
 	trans.Begin()
-	b3, err := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", trans)
+	b3, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb7",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		IsValueDataActivelyPersisted: false,
+		IsValueDataGloballyCached: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -181,7 +226,16 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
+	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb7",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		IsValueDataActivelyPersisted: false,
+		IsValueDataGloballyCached: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
 
 	for i := start; i <= end; i++ {
 		pk, p := newPerson("jack", fmt.Sprintf("reepper%d", i), "male", "email very very long long long", "phone123")
@@ -195,7 +249,7 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
+			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1)
 		}
 	}
 
@@ -218,7 +272,7 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, false, -1)
 			t1.Begin()
-			b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
+			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1)
 		}
 	}
 }
@@ -229,7 +283,16 @@ func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
+	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb7",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		IsValueDataActivelyPersisted: false,
+		IsValueDataGloballyCached: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
 
 	for i := start; i <= end; i++ {
 		pk, _ := newPerson("jack", fmt.Sprintf("reepper%d", i), "male", "email very very long long long", "phone123")
@@ -246,7 +309,7 @@ func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
+			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1)
 		}
 	}
 }
@@ -258,7 +321,16 @@ func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
+	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
+		Name: "persondb7",
+		SlotLength: nodeSlotLength,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false, 
+		IsValueDataActivelyPersisted: false,
+		IsValueDataGloballyCached: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
 
 	lastNamePrefix := "zoltan"
 	firstName := "jack"
@@ -291,7 +363,7 @@ func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
+			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1)
 		}
 	}
 
@@ -327,7 +399,7 @@ func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtreeExt[PersonKey, Person](ctx, "persondb7", nodeSlotLength, false, false, false, true, true, "", t1)
+			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1)
 		}
 	}
 }

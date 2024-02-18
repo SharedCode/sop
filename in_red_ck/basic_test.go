@@ -7,7 +7,14 @@ import (
 func Test_OpenVsNewBTree(t *testing.T) {
 	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
+	b3, _ := NewBtree[int, string](ctx, StoreInfo{
+		Name: "fooStore",
+		SlotLength: 8,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
@@ -20,7 +27,14 @@ func Test_OpenVsNewBTree(t *testing.T) {
 func Test_SingleBTree(t *testing.T) {
 	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, "fooStore", 8, false, false, true, "", trans)
+	b3, _ := NewBtree[int, string](ctx, StoreInfo{
+		Name: "fooStore",
+		SlotLength: 8,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: false,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, trans)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
@@ -50,7 +64,14 @@ func Test_SingleBTree(t *testing.T) {
 func Test_UniqueKeyBTree(t *testing.T) {
 	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, "fooWorld", 8, true, false, true, "", trans)
+	b3, _ := NewBtree[int, string](ctx, StoreInfo{
+		Name: "fooWorld",
+		SlotLength: 8,
+		IsUnique: true,
+		IsValueDataInNodeSegment: false,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, trans)
 	b3.Add(ctx, 1, "hello world")
 	b3.Add(ctx, 2, "foo bar")
 
@@ -66,7 +87,14 @@ func Test_UniqueKeyBTree(t *testing.T) {
 func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[int, string](ctx, "fooWorld2", 8, true, false, true, "", t1)
+	b3, _ := NewBtree[int, string](ctx, StoreInfo{
+		Name: "fooWorld2",
+		SlotLength: 8,
+		IsUnique: true,
+		IsValueDataInNodeSegment: false,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
 	b3.Add(ctx, 1, "hello world")
 	b3.Add(ctx, 2, "foo bar")
 
@@ -91,7 +119,14 @@ func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 func Test_UniqueKeyBTreeOnMultipleCommits(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[int, string](ctx, "fooWorld3", 8, true, false, true, "", t1)
+	b3, _ := NewBtree[int, string](ctx, StoreInfo{
+		Name: "fooWorld3",
+		SlotLength: 8,
+		IsUnique: true,
+		IsValueDataInNodeSegment: false,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
 	b3.Add(ctx, 1, "hello world")
 	b3.Add(ctx, 2, "foo bar")
 
