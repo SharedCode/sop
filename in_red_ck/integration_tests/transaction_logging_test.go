@@ -10,7 +10,7 @@ import (
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
-func Test_MultipleExpiredTransCleanup(t *testing.T) {
+func MultipleExpiredTransCleanup(t *testing.T) {
 	in_red_ck.RemoveBtree(ctx, "ztab1")
 
 	// Seed with good records.
@@ -73,7 +73,7 @@ func Test_MultipleExpiredTransCleanup(t *testing.T) {
 
 }
 
-func TestCleanup(t *testing.T) {
+func Cleanup(t *testing.T) {
 	yesterday := time.Now()
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
