@@ -115,7 +115,13 @@ func (t *transaction) onIdle(ctx context.Context) {
 	if len(t.btreesBackend) == 0 {
 		return
 	}
-	nextRunTime := Now().Add(time.Duration(-5) * time.Minute).UnixMilli()
+	// If it is known that there is nothing to clean up then do 1hr interval polling,
+	// otherwise do shorter interval of 5 minutes, to allow faster cleanup.
+	interval := 60
+	if hourBeingProcessed != "" {
+		interval = 5
+	}
+	nextRunTime := Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
 	runTime := false
 	if lastOnIdleRunTime < nextRunTime {
 		locker.Lock()
