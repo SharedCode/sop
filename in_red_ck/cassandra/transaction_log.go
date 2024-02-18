@@ -65,7 +65,7 @@ func NewTransactionLog() TransactionLog {
 
 // GetOne fetches an expired Transaction ID(TID), the hour it was created in and transaction logs for this TID.
 func (tl *transactionLog) GetOne(ctx context.Context) (gocql.UUID, string, []sop.KeyValuePair[int, interface{}], error) {
-	duration := time.Duration(1 * time.Hour)
+	duration := time.Duration(7 * time.Hour)
 
 	if err := redis.Lock(ctx, duration, tl.hourLockKey); err != nil {
 		return NilUUID, "", nil, nil
@@ -107,6 +107,15 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (gocq
 	if err != nil {
 		return NilUUID, nil, err
 	}
+
+	// Put a max time of two hours for a given cleanup processor.
+	if Now().Sub(t).Hours() > 4 {
+		// Unlock the hour to allow open opportunity to claim the next cleanup processing.
+		// Capping to 4 hours(Redis cache is set to 7hrs) maintains only one cleaner process at a time.
+		redis.Unlock(ctx, tl.hourLockKey)
+		return NilUUID, nil, nil
+	}
+
 	hrid := gocql.UUIDFromTime(t)
 
 	selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
@@ -123,7 +132,7 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (gocq
 	if IsNil(tid) {
 		// Unlock the hour.
 		redis.Unlock(ctx, tl.hourLockKey)
-		return tid, nil, nil
+		return NilUUID, nil, nil
 	}
 
 	r, err := tl.getLogsDetails(ctx, tid)
