@@ -50,19 +50,10 @@ create table foo_r(
     is_del boolean
 );
 
--- Time Series table for transaction log.
-create table t_by_hour(
-    -- date with hour resolution, e.g. - 01/01/2024.
-    date text PRIMARY KEY,
-    -- Transaction ID.
-    tid UUID
-);
-
 -- Transaction Log table.
 create table t_log(
     id UUID,
     c_f int,
-    date text,
     c_f_p blob,
     PRIMARY KEY(id, c_f)
 );

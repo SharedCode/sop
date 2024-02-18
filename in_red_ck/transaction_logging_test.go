@@ -72,7 +72,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 
 	// GetOne should not get anything as uncommitted transaction is still ongoing or not expired.
 	tid, _, _, _ := twoPhaseTrans.logger.logger.GetOne(ctx)
-	if !tid.IsNil() {
+	if !cas.IsNil(tid) {
 		t.Errorf("Failed, got %v, want nil.", tid)
 	}
 
@@ -83,7 +83,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	Now = func() time.Time { return today }
 
 	tid, _, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
-	if tid.IsNil() {
+	if cas.IsNil(tid) {
 		t.Errorf("Failed, got nil Tid, want valid Tid.")
 	}
 

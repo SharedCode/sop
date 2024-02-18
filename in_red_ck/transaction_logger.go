@@ -7,6 +7,7 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/gocql/gocql"
 )
 
 type commitFunction int
@@ -32,8 +33,7 @@ type transactionLog struct {
 	committedState  commitFunction
 	logger          cas.TransactionLog
 	logging         bool
-	transactionID   sop.UUID
-	transactionHour string
+	transactionID   gocql.UUID
 }
 
 // Instantiate a transaction logger.
@@ -44,6 +44,7 @@ func newTransactionLogger(logger cas.TransactionLog, logging bool) *transactionL
 	return &transactionLog{
 		logger:  logger,
 		logging: logging,
+		transactionID: gocql.TimeUUID(),
 	}
 }
 
@@ -54,12 +55,6 @@ func (tl *transactionLog) log(ctx context.Context, f commitFunction, payload int
 		return nil
 	}
 
-	if tl.transactionID.IsNil() {
-		tl.transactionID = sop.NewUUID()
-		hr, err := tl.logger.Initiate(ctx, tl.transactionID, int(f), payload)
-		tl.transactionHour = hr
-		return err
-	}
 	return tl.logger.Add(ctx, tl.transactionID, int(f), payload)
 }
 
@@ -68,8 +63,7 @@ func (tl *transactionLog) removeLogs(ctx context.Context) error {
 	if !tl.logging {
 		return nil
 	}
-	err := tl.logger.Remove(ctx, tl.transactionID, tl.transactionHour)
-	tl.transactionID = sop.NilUUID
+	err := tl.logger.Remove(ctx, tl.transactionID)
 	return err
 }
 
@@ -78,7 +72,7 @@ var hourBeingProcessed string
 // Using a package level variable(hourBeingProcessed) to keep the "hour" being worked on and the processor function below
 // to consume all TIDs of the hour before issuing another GetOne call to fetch the next hour.
 func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *transaction) error {
-	var tid sop.UUID
+	var tid gocql.UUID
 	var hr string
 	var committedFunctionLogs []sop.KeyValuePair[int, interface{}]
 	var err error
@@ -94,16 +88,16 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 			return err
 		}
 	}
-	if tid.IsNil() {
+	if cas.IsNil(tid) {
 		if hourBeingProcessed != "" {
-			tl.logger.Remove(ctx, tid, hourBeingProcessed)
+			tl.logger.Remove(ctx, tid)
 			hourBeingProcessed = ""
 		}
 		return nil
 	}
 	if len(committedFunctionLogs) == 0 {
-		if !tid.IsNil() {
-			return tl.logger.Remove(ctx, tid, hourBeingProcessed)
+		if !cas.IsNil(tid) {
+			return tl.logger.Remove(ctx, tid)
 		}
 		return nil
 	}
@@ -114,7 +108,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 		if committedFunctionLogs[i].Key == finalizeCommit {
 			if committedFunctionLogs[i].Value == nil {
 				if lastCommittedFunctionLog >= deleteObsoleteEntries {
-					if err := tl.logger.Remove(ctx, tid, hourBeingProcessed); err != nil {
+					if err := tl.logger.Remove(ctx, tid); err != nil {
 						lastErr = err
 					}
 					return lastErr
@@ -131,7 +125,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 				if err := t.deleteObsoleteEntries(ctx, v.First.First, v.First.Second); err != nil {
 					lastErr = err
 				}
-				if err := tl.logger.Remove(ctx, tid, hourBeingProcessed); err != nil {
+				if err := tl.logger.Remove(ctx, tid); err != nil {
 					lastErr = err
 				}
 				return lastErr
@@ -193,7 +187,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 		}
 	}
 
-	if err := tl.logger.Remove(ctx, tid, hourBeingProcessed); err != nil {
+	if err := tl.logger.Remove(ctx, tid); err != nil {
 		lastErr = err
 	}
 	return lastErr

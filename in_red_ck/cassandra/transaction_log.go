@@ -6,25 +6,25 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gocql/gocql"
+
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_ck/redis"
-	"github.com/gocql/gocql"
 )
 
 const dateHour = "2006-01-02T15"
+
+// NilUUID with gocql.UUID type.
+var NilUUID = gocql.UUID(sop.NilUUID)
 
 // This is a good plan, it will work optimally because we are reading entire transaction logs set
 // then deleting the entire partition when done. Use consistency of LOCAL_ONE when writing logs.
 
 type TransactionLog interface {
-	// Initiate is invoked to signal start of transaction logging & to add the 1st transaction log.
-	// In Cassandra backend, this should translate into adding a new transaction by day
-	// record(see t_by_day table), and a call to Add method to add the 1st log.
-	Initiate(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) (string, error)
 	// Add a transaction log.
-	Add(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) error
+	Add(ctx context.Context, tid gocql.UUID, commitFunction int, payload interface{}) error
 	// Remove all logs of a given transaciton.
-	Remove(ctx context.Context, tid sop.UUID, hour string) error
+	Remove(ctx context.Context, tid gocql.UUID) error
 
 	// GetOne will fetch the oldest transaction logs from the backend, older than 1 hour ago, mark it so succeeding call
 	// will return the next hour and so on, until no more, upon reaching the current hour.
@@ -34,11 +34,11 @@ type TransactionLog interface {
 	// temp resource will then age and reach expiration limit, then get cleaned up. This method is used to do distribution.
 	//
 	// It is capped to an hour ago older because anything newer may still be an in-flight or ongoing transaction.
-	GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, interface{}], error)
+	GetOne(ctx context.Context) (gocql.UUID, string, []sop.KeyValuePair[int, interface{}], error)
 
 	// Given a date hour, returns an available for cleanup set of transaction logs with their Transaction ID.
 	// Or nils if there is no more needing cleanup for this date hour.
-	GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, interface{}], error)
+	GetLogsDetails(ctx context.Context, hour string) (gocql.UUID, []sop.KeyValuePair[int, interface{}], error)
 }
 
 type transactionLog struct {
@@ -46,6 +46,11 @@ type transactionLog struct {
 	// to increase chances of distribution of cleanup load across machines.
 	redisCache redis.Cache
 	hourLockKey *redis.LockKeys
+}
+
+// Returns true if id is nil or empty UUID, otherwise false.
+func IsNil(id gocql.UUID) bool {
+	return sop.UUID(id).IsNil()
 }
 
 // Now lambda to allow unit test to inject replayable time.Now.
@@ -60,52 +65,57 @@ func NewTransactionLog() TransactionLog {
 }
 
 // GetOne fetches an expired Transaction ID(TID), the hour it was created in and transaction logs for this TID.
-func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, interface{}], error) {
+func (tl *transactionLog) GetOne(ctx context.Context) (gocql.UUID, string, []sop.KeyValuePair[int, interface{}], error) {
 	duration := time.Duration(1 * time.Hour)
 
 	if err := redis.Lock(ctx, duration, tl.hourLockKey); err != nil {
-		return sop.NilUUID, "", nil, nil
+		return NilUUID, "", nil, nil
 	}
 
 	hour, tid, err := tl.getOne(ctx)
 	if err != nil {
 		redis.Unlock(ctx, tl.hourLockKey)
-		return sop.NilUUID, hour, nil, err
+		return NilUUID, hour, nil, err
 	}
 	r, err := tl.getLogsDetails(ctx, tid)
 	if err != nil {
 		redis.Unlock(ctx, tl.hourLockKey)
-		return sop.NilUUID, hour, nil, err
+		return NilUUID, hour, nil, err
 	}
 	// Check one more time to remove race condition issue.
 	if err := redis.IsLocked(ctx, tl.hourLockKey); err != nil {
 		// Just return nils as we can't attain a lock.
-		return sop.NilUUID, hour, nil, nil
+		return NilUUID, hour, nil, nil
 	}
 	return tid, hour, r, nil
 }
 
-func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, interface{}], error) {
+func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (gocql.UUID, []sop.KeyValuePair[int, interface{}], error) {
 	if hour == "" {
-		return sop.NilUUID, nil, nil
+		return NilUUID, nil, nil
 	}
 	if connection == nil {
-		return sop.NilUUID, nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return NilUUID, nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
-	selectStatement := fmt.Sprintf("SELECT tid FROM %s.t_by_hour WHERE date = ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
-	qry := connection.Session.Query(selectStatement, hour).WithContext(ctx).Consistency(gocql.LocalOne)
+	t, err := time.Parse(dateHour, hour)
+	if err != nil {
+		return NilUUID, nil, err
+	}
+	hrid := gocql.UUIDFromTime(t)
+
+	selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
+	qry := connection.Session.Query(selectStatement, hrid).WithContext(ctx).Consistency(gocql.LocalOne)
 
 	iter := qry.Iter()
-	var gtid gocql.UUID
-	for iter.Scan(&gtid) {
+	var tid gocql.UUID
+	for iter.Scan(&tid) {
 	}
 	if err := iter.Close(); err != nil {
-		return sop.NilUUID, nil, err
+		return NilUUID, nil, err
 	}
 
-	tid := sop.UUID(gtid)
-	if tid.IsNil() {
+	if IsNil(tid) {
 		// Unlock the hour.
 		redis.Unlock(ctx, tl.hourLockKey)
 		return tid, nil, nil
@@ -115,35 +125,35 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 	return tid, r, err
 }
 
-func (tl *transactionLog) getOne(ctx context.Context) (string, sop.UUID, error) {
+func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error) {
 	mh, _ := time.Parse(dateHour, Now().Format(dateHour))
-	cappedHour := mh.Add(-time.Duration(1 * time.Hour)).Format(dateHour)
+	cappedHour := mh.Add(-time.Duration(1 * time.Hour))
+	cappedHourTID := gocql.UUIDFromTime(cappedHour)
 
 	if connection == nil {
-		return "", sop.NilUUID, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return "", NilUUID, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
-	selectStatement := fmt.Sprintf("SELECT date, tid FROM %s.t_by_hour WHERE date < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
-	qry := connection.Session.Query(selectStatement, cappedHour).WithContext(ctx).Consistency(gocql.LocalOne)
+	selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
+	qry := connection.Session.Query(selectStatement, cappedHourTID).WithContext(ctx).Consistency(gocql.LocalOne)
 
 	iter := qry.Iter()
-	var nextHour string
 	var tid gocql.UUID
-	for iter.Scan(&nextHour, &tid) {
+	for iter.Scan(&tid) {
 	}
 	if err := iter.Close(); err != nil {
-		return "", sop.NilUUID, err
+		return "", NilUUID, err
 	}
-	return nextHour, sop.UUID(tid), nil
+	return cappedHour.Format(dateHour) , tid, nil
 }
 
-func (tl *transactionLog) getLogsDetails(ctx context.Context, tid sop.UUID) ([]sop.KeyValuePair[int, interface{}], error) {
+func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([]sop.KeyValuePair[int, interface{}], error) {
 	if connection == nil {
 		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
 	selectStatement := fmt.Sprintf("SELECT c_f, c_f_p FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
-	qry := connection.Session.Query(selectStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
+	qry := connection.Session.Query(selectStatement, tid).WithContext(ctx).Consistency(gocql.LocalOne)
 
 	iter := qry.Iter()
 	r := make([]sop.KeyValuePair[int, interface{}], 0, iter.NumRows())
@@ -167,22 +177,8 @@ func (tl *transactionLog) getLogsDetails(ctx context.Context, tid sop.UUID) ([]s
 	return r, nil
 }
 
-func (tl *transactionLog) Initiate(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) (string, error) {
-	if connection == nil {
-		return "", fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
-	}
-
-	date := Now().Format(dateHour)
-	insertStatement := fmt.Sprintf("INSERT INTO %s.t_by_hour (date, tid) VALUES(?,?);", connection.Config.Keyspace)
-	qry := connection.Session.Query(insertStatement, date, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
-	if err := qry.Exec(); err != nil {
-		return date, err
-	}
-	return date, tl.Add(ctx, tid, commitFunction, payload)
-}
-
 // Add blob(s) to the Blob store.
-func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload interface{}) error {
+func (tl *transactionLog) Add(ctx context.Context, tid gocql.UUID, commitFunction int, payload interface{}) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -193,43 +189,23 @@ func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction 
 	}
 
 	insertStatement := fmt.Sprintf("INSERT INTO %s.t_log (id, c_f, c_f_p) VALUES(?,?,?);", connection.Config.Keyspace)
-	qry := connection.Session.Query(insertStatement, gocql.UUID(tid), commitFunction, ba).WithContext(ctx).Consistency(gocql.LocalOne)
+	qry := connection.Session.Query(insertStatement, tid, commitFunction, ba).WithContext(ctx).Consistency(gocql.LocalOne)
 	if err := qry.Exec(); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Remove will delete transaction log by hour(t_by_hour) & transaction log(t_log) records.
-func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID, hour string) error {
+// Remove will delete transaction log(t_log) records given a transaction ID(tid).
+func (tl *transactionLog) Remove(ctx context.Context, tid gocql.UUID) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
 	deleteStatement := fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
-	qry := connection.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
+	qry := connection.Session.Query(deleteStatement, tid).WithContext(ctx).Consistency(gocql.LocalOne)
 	if err := qry.Exec(); err != nil {
 		return err
-	}
-	deleteStatement = fmt.Sprintf("DELETE FROM %s.t_by_hour WHERE date = ? AND tid = ?;", connection.Config.Keyspace)
-	qry = connection.Session.Query(deleteStatement, hour, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
-	if err := qry.Exec(); err != nil {
-		return err
-	}
-
-	selectStatement := fmt.Sprintf("SELECT COUNT(*) FROM %s.t_by_hour WHERE date = ?;", connection.Config.Keyspace)
-	qry = connection.Session.Query(selectStatement, hour).WithContext(ctx).Consistency(gocql.LocalOne)
-
-	iter := qry.Iter()
-	var c int
-	for iter.Scan(&c) {
-	}
-	if err := iter.Close(); err != nil {
-		return err
-	}
-	if c == 0 {
-		// This occurs when there is no more TID records, thus, safe to signal proceed to process next expired hour.
-		redis.Unlock(ctx, tl.hourLockKey)
 	}
 
 	return nil

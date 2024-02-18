@@ -93,7 +93,7 @@ func TestGetOne(t *testing.T) {
 
 	tl := cas.NewTransactionLog()
 	uuid, _, r, err := tl.GetOne(ctx)
-	if uuid.IsNil() {
+	if cas.IsNil(uuid) {
 
 	}
 	if r == nil {
