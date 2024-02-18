@@ -68,14 +68,21 @@ func (tl *mockTransactionLog) GetLogsDetails(ctx context.Context, hour string) (
 // Add blob(s) to the Blob store.
 func (tl *mockTransactionLog) Add(ctx context.Context, tid gocql.UUID, commitFunction int, payload interface{}) error {
 	date := Now().Format(dateHour)
-	tl.datesLogs.FindOne(date, false)
+	found := tl.datesLogs.FindOne(date, false)
 	dayLogs := tl.datesLogs.GetCurrentValue()
+	if dayLogs == nil {
+		dayLogs = make(map[gocql.UUID][]sop.KeyValuePair[int, []byte])
+	}
 	ba, _ := json.Marshal(payload)
 	dayLogs[tid] = append(dayLogs[tid], sop.KeyValuePair[int, []byte]{
 		Key:   commitFunction,
 		Value: ba,
 	})
-	tl.datesLogs.UpdateCurrentItem(dayLogs)
+	if found {
+		tl.datesLogs.UpdateCurrentItem(dayLogs)
+	} else {
+		tl.datesLogs.Add(date, dayLogs)
+	}
 	tl.logsDates[tid] = date
 	return nil
 }

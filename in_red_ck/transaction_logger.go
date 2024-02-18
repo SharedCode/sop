@@ -89,10 +89,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 		}
 	}
 	if cas.IsNil(tid) {
-		if hourBeingProcessed != "" {
-			tl.logger.Remove(ctx, tid)
-			hourBeingProcessed = ""
-		}
+		hourBeingProcessed = ""
 		return nil
 	}
 	if len(committedFunctionLogs) == 0 {
