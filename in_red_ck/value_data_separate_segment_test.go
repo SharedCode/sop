@@ -3,21 +3,23 @@ package in_red_ck
 import (
 	"fmt"
 	"testing"
+
+	"github.com/SharedCode/sop"
 )
 
 func Test_ValueDataInSeparateSegment_Rollback(t *testing.T) {
 	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
 
-	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
-		Name: "persondb7",
-		SlotLength: nodeSlotLength,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: false, 
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		Name:                         "persondb7",
+		SlotLength:                   nodeSlotLength,
+		IsUnique:                     false,
+		IsValueDataInNodeSegment:     false,
 		IsValueDataActivelyPersisted: false,
-		IsValueDataGloballyCached: true,
-		LeafLoadBalancing: true,
-		Description: "",
+		IsValueDataGloballyCached:    true,
+		LeafLoadBalancing:            true,
+		Description:                  "",
 	}, trans)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
@@ -56,15 +58,15 @@ func Test_ValueDataInSeparateSegment_SimpleAddPerson(t *testing.T) {
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
-		Name: "persondb7",
-		SlotLength: nodeSlotLength,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: false, 
+	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		Name:                         "persondb7",
+		SlotLength:                   nodeSlotLength,
+		IsUnique:                     false,
+		IsValueDataInNodeSegment:     false,
 		IsValueDataActivelyPersisted: false,
-		IsValueDataGloballyCached: true,
-		LeafLoadBalancing: true,
-		Description: "",
+		IsValueDataGloballyCached:    true,
+		LeafLoadBalancing:            true,
+		Description:                  "",
 	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -107,15 +109,15 @@ func Test_ValueDataInSeparateSegment_TwoTransactionsWithNoConflict(t *testing.T)
 	trans2.Begin()
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
-	b3, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
-		Name: "persondb7",
-		SlotLength: nodeSlotLength,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: false, 
+	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		Name:                         "persondb7",
+		SlotLength:                   nodeSlotLength,
+		IsUnique:                     false,
+		IsValueDataInNodeSegment:     false,
 		IsValueDataActivelyPersisted: false,
-		IsValueDataGloballyCached: true,
-		LeafLoadBalancing: true,
-		Description: "",
+		IsValueDataGloballyCached:    true,
+		LeafLoadBalancing:            true,
+		Description:                  "",
 	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -126,15 +128,15 @@ func Test_ValueDataInSeparateSegment_TwoTransactionsWithNoConflict(t *testing.T)
 		return
 	}
 
-	b32, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
-		Name: "persondb7",
-		SlotLength: nodeSlotLength,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: false, 
+	b32, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		Name:                         "persondb7",
+		SlotLength:                   nodeSlotLength,
+		IsUnique:                     false,
+		IsValueDataInNodeSegment:     false,
 		IsValueDataActivelyPersisted: false,
-		IsValueDataGloballyCached: true,
-		LeafLoadBalancing: true,
-		Description: "",
+		IsValueDataGloballyCached:    true,
+		LeafLoadBalancing:            true,
+		Description:                  "",
 	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -160,15 +162,15 @@ func Test_ValueDataInSeparateSegment_AddAndSearchManyPersons(t *testing.T) {
 	}
 
 	trans.Begin()
-	b3, err := NewBtree[PersonKey, Person](ctx, StoreInfo{
-		Name: "persondb7",
-		SlotLength: nodeSlotLength,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: false, 
+	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		Name:                         "persondb7",
+		SlotLength:                   nodeSlotLength,
+		IsUnique:                     false,
+		IsValueDataInNodeSegment:     false,
 		IsValueDataActivelyPersisted: false,
-		IsValueDataGloballyCached: true,
-		LeafLoadBalancing: true,
-		Description: "",
+		IsValueDataGloballyCached:    true,
+		LeafLoadBalancing:            true,
+		Description:                  "",
 	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -226,15 +228,15 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
-		Name: "persondb7",
-		SlotLength: nodeSlotLength,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: false, 
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		Name:                         "persondb7",
+		SlotLength:                   nodeSlotLength,
+		IsUnique:                     false,
+		IsValueDataInNodeSegment:     false,
 		IsValueDataActivelyPersisted: false,
-		IsValueDataGloballyCached: true,
-		LeafLoadBalancing: true,
-		Description: "",
+		IsValueDataGloballyCached:    true,
+		LeafLoadBalancing:            true,
+		Description:                  "",
 	}, t1)
 
 	for i := start; i <= end; i++ {
@@ -283,15 +285,15 @@ func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
-		Name: "persondb7",
-		SlotLength: nodeSlotLength,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: false, 
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		Name:                         "persondb7",
+		SlotLength:                   nodeSlotLength,
+		IsUnique:                     false,
+		IsValueDataInNodeSegment:     false,
 		IsValueDataActivelyPersisted: false,
-		IsValueDataGloballyCached: true,
-		LeafLoadBalancing: true,
-		Description: "",
+		IsValueDataGloballyCached:    true,
+		LeafLoadBalancing:            true,
+		Description:                  "",
 	}, t1)
 
 	for i := start; i <= end; i++ {
@@ -321,15 +323,15 @@ func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
-		Name: "persondb7",
-		SlotLength: nodeSlotLength,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: false, 
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		Name:                         "persondb7",
+		SlotLength:                   nodeSlotLength,
+		IsUnique:                     false,
+		IsValueDataInNodeSegment:     false,
 		IsValueDataActivelyPersisted: false,
-		IsValueDataGloballyCached: true,
-		LeafLoadBalancing: true,
-		Description: "",
+		IsValueDataGloballyCached:    true,
+		LeafLoadBalancing:            true,
+		Description:                  "",
 	}, t1)
 
 	lastNamePrefix := "zoltan"

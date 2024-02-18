@@ -24,13 +24,13 @@ func Test_TransactionInducedErrorOnNew(t *testing.T) {
 
 	// This call should fail and cause rollback because slotLength is being asked to 99 which will
 	// fail spec check vs the "existing" store created above (w/ slot length 5).
-	NewBtree[int, string](ctx, StoreInfo{
-		Name: "fooStore",
-		SlotLength: 99,
-		IsUnique: false, 
+	NewBtree[int, string](ctx, sop.StoreInfo{
+		Name:                     "fooStore",
+		SlotLength:               99,
+		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
-		LeafLoadBalancing: true,
-		Description: "",
+		LeafLoadBalancing:        true,
+		Description:              "",
 	}, t2)
 	if trans.HasBegun() {
 		t.Error("Transaction is not rolled back after an error on NewBtree")

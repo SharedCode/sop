@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_red_ck"
 )
@@ -41,15 +42,15 @@ func (x StreamingDataKey[TK]) Compare(other interface{}) int {
 //
 // This behaviour makes this store ideal for data management of huge blobs, like movies or huge data graphs.
 func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans in_red_ck.Transaction) *StreamingDataStore[TK] {
-	btree, _ := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, in_red_ck.StoreInfo{
-		Name: name,
-		SlotLength: 500,
-		IsUnique: true,
-		IsValueDataInNodeSegment: false,
+	btree, _ := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.StoreInfo{
+		Name:                         name,
+		SlotLength:                   500,
+		IsUnique:                     true,
+		IsValueDataInNodeSegment:     false,
 		IsValueDataActivelyPersisted: true,
-		IsValueDataGloballyCached: false,
-		LeafLoadBalancing: false,
-		Description: "Streaming data",
+		IsValueDataGloballyCached:    false,
+		LeafLoadBalancing:            false,
+		Description:                  "Streaming data",
 	}, trans)
 	return &StreamingDataStore[TK]{
 		btree: btree,
