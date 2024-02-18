@@ -115,11 +115,10 @@ func (t *transaction) onIdle(ctx context.Context) {
 	if len(t.btreesBackend) == 0 {
 		return
 	}
-	// Poll every 4 hrs seems reasonable, not too aggressive, 'just right.
+	// If it is known that there is nothing to clean up then do 4hr interval polling,
+	// otherwise do shorter interval of 5 minutes, to allow faster cleanup.
 	// Having "abandoned" commit is a very rare occurrence.
 	interval := 4 * 60
-	// If it is known that there is nothing to clean up then do 1hr interval polling,
-	// otherwise do shorter interval of 5 minutes, to allow faster cleanup.
 	if hourBeingProcessed != "" {
 		interval = 5
 	}
