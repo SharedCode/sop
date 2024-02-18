@@ -142,7 +142,9 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (gocq
 
 func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error) {
 	mh, _ := time.Parse(dateHour, Now().Format(dateHour))
-	cappedHour := mh.Add(-time.Duration(1 * time.Hour))
+	// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
+	// gap ensures no issue due to overlapping.
+	cappedHour := mh.Add(-time.Duration(70 * time.Minute))
 	cappedHourTID := gocql.UUIDFromTime(cappedHour)
 
 	if connection == nil {
