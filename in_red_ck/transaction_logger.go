@@ -30,10 +30,10 @@ const (
 )
 
 type transactionLog struct {
-	committedState  commitFunction
-	logger          cas.TransactionLog
-	logging         bool
-	transactionID   gocql.UUID
+	committedState commitFunction
+	logger         cas.TransactionLog
+	logging        bool
+	transactionID  gocql.UUID
 }
 
 // Instantiate a transaction logger.
@@ -42,8 +42,8 @@ func newTransactionLogger(logger cas.TransactionLog, logging bool) *transactionL
 		logger = cas.NewTransactionLog()
 	}
 	return &transactionLog{
-		logger:  logger,
-		logging: logging,
+		logger:        logger,
+		logging:       logging,
 		transactionID: gocql.UUIDFromTime(Now()),
 	}
 }
@@ -68,6 +68,7 @@ func (tl *transactionLog) removeLogs(ctx context.Context) error {
 }
 
 var hourBeingProcessed string
+
 // Consume all Transaction IDs(TIDs) and clean their obsolete, leftover resources that fall within a given hour.
 // Using a package level variable(hourBeingProcessed) to keep the "hour" being worked on and the processor function below
 // to consume all TIDs of the hour before issuing another GetOne call to fetch the next hour.

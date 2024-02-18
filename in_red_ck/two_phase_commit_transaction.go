@@ -109,6 +109,7 @@ func (t *transaction) Begin() error {
 
 var lastOnIdleRunTime int64
 var locker = sync.Mutex{}
+
 func (t *transaction) onIdle(ctx context.Context) {
 	// Required to have a backend btree to do cleanup.
 	if len(t.btreesBackend) == 0 {

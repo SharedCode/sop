@@ -44,7 +44,7 @@ type TransactionLog interface {
 type transactionLog struct {
 	// Should coordinate via Redis cache. Each date hour should get locked and for "work" by GetOne
 	// to increase chances of distribution of cleanup load across machines.
-	redisCache redis.Cache
+	redisCache  redis.Cache
 	hourLockKey *redis.LockKeys
 }
 
@@ -59,7 +59,7 @@ var Now = time.Now
 // NewBlobStore instantiates a new BlobStore instance.
 func NewTransactionLog() TransactionLog {
 	return &transactionLog{
-		redisCache: redis.NewClient(),
+		redisCache:  redis.NewClient(),
 		hourLockKey: redis.CreateLockKeys("HBP")[0],
 	}
 }
@@ -150,7 +150,7 @@ func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error
 	if err := iter.Close(); err != nil {
 		return "", NilUUID, err
 	}
-	return cappedHour.Format(dateHour) , tid, nil
+	return cappedHour.Format(dateHour), tid, nil
 }
 
 func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([]sop.KeyValuePair[int, interface{}], error) {
