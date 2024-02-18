@@ -59,20 +59,33 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 	}
 	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
 	for _, s := range stores {
+
 		// Add a new store record.
-		if err := connection.Session.Query(insertStatement, s.Name, gocql.UUID(s.RootNodeID), s.SlotLength, s.Count, s.IsUnique, s.Description,
-			s.RegistryTable, s.BlobTable, s.Timestamp, s.IsValueDataInNodeSegment, s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached, s.LeafLoadBalancing).WithContext(ctx).Exec(); err != nil {
+		qry := connection.Session.Query(insertStatement, s.Name, gocql.UUID(s.RootNodeID), s.SlotLength, s.Count, s.IsUnique, s.Description,
+			s.RegistryTable, s.BlobTable, s.Timestamp, s.IsValueDataInNodeSegment, s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached, s.LeafLoadBalancing).WithContext(ctx)
+		if connection.Config.ConsistencyBook.StoreAdd > gocql.Any {
+			qry.Consistency(connection.Config.ConsistencyBook.StoreAdd)
+		}
+		if err := qry.Exec(); err != nil {
 			return err
 		}
 		// Create a new Blob table.
 		createNewBlobTable := fmt.Sprintf("CREATE TABLE %s.%s(id UUID PRIMARY KEY, node blob);", connection.Config.Keyspace, s.BlobTable)
-		if err := connection.Session.Query(createNewBlobTable).WithContext(ctx).Exec(); err != nil {
+		qry = connection.Session.Query(createNewBlobTable).WithContext(ctx)
+		if connection.Config.ConsistencyBook.StoreAdd > gocql.Any {
+			qry.Consistency(connection.Config.ConsistencyBook.StoreAdd)
+		}
+		if err := qry.Exec(); err != nil {
 			return err
 		}
 		// Create a new Virtual ID registry table.
 		createNewRegistry := fmt.Sprintf("CREATE TABLE %s.%s(lid UUID PRIMARY KEY, is_idb boolean, p_ida UUID, p_idb UUID, ver int, wip_ts bigint, is_del boolean);",
 			connection.Config.Keyspace, s.RegistryTable)
-		if err := connection.Session.Query(createNewRegistry).WithContext(ctx).Exec(); err != nil {
+		qry = connection.Session.Query(createNewRegistry).WithContext(ctx)
+		if connection.Config.ConsistencyBook.StoreAdd > gocql.Any {
+			qry.Consistency(connection.Config.ConsistencyBook.StoreAdd)
+		}
+		if err := qry.Exec(); err != nil {
 			return err
 		}
 		// Tolerate error in Redis caching.
@@ -108,7 +121,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	}
 
 	// Create lock IDs that we can use to logically lock and prevent other updates.
-	lockKeys := redis.CreateLockKeys(keys)
+	lockKeys := redis.CreateLockKeys(keys...)
 
 	// 15 minutes to lock, merge/update details then unlock.
 	duration := time.Duration(15 * time.Minute)
@@ -244,7 +257,11 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 		namesAsIntf[i] = interface{}(names[i])
 	}
 	deleteStatement := fmt.Sprintf("DELETE FROM %s.store WHERE name in (%v);", connection.Config.Keyspace, strings.Join(paramQ, ", "))
-	if err := connection.Session.Query(deleteStatement, namesAsIntf...).WithContext(ctx).Exec(); err != nil {
+	qry := connection.Session.Query(deleteStatement, namesAsIntf...).WithContext(ctx)
+	if connection.Config.ConsistencyBook.StoreRemove > gocql.Any {
+		qry.Consistency(connection.Config.ConsistencyBook.StoreRemove)
+	}
+	if err := qry.Exec(); err != nil {
 		return err
 	}
 
@@ -259,12 +276,21 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	for _, n := range names {
 		// Drop Blob table.
 		dropBlobTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, btree.FormatBlobTable(n))
-		if err := connection.Session.Query(dropBlobTable).WithContext(ctx).Exec(); err != nil {
+
+		qry = connection.Session.Query(dropBlobTable).WithContext(ctx)
+		if connection.Config.ConsistencyBook.StoreRemove > gocql.Any {
+			qry.Consistency(connection.Config.ConsistencyBook.StoreRemove)
+		}
+		if err := qry.Exec(); err != nil {
 			return err
 		}
 		// Drop Virtual ID registry table.
 		dropRegistryTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, btree.FormatRegistryTable(n))
-		if err := connection.Session.Query(dropRegistryTable).WithContext(ctx).Exec(); err != nil {
+		qry = connection.Session.Query(dropRegistryTable).WithContext(ctx)
+		if connection.Config.ConsistencyBook.StoreRemove > gocql.Any {
+			qry.Consistency(connection.Config.ConsistencyBook.StoreRemove)
+		}
+		if err := qry.Exec(); err != nil {
 			return err
 		}
 	}

@@ -92,7 +92,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 
-	trans2, err := in_red_ck.NewTransaction(true, -1, false)
+	trans2, _ := in_red_ck.NewTransaction(true, -1, false)
 
 	trans.Begin()
 	trans2.Begin()

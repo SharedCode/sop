@@ -101,9 +101,7 @@ func (t *itemActionTracker[TK, TV]) getObsoleteTrackedItemsValues() *cas.BlobsPa
 		BlobTable: t.storeInfo.BlobTable,
 		Blobs:     make([]sop.UUID, 0, 5),
 	}
-	for _, forDeleteID := range t.forDeletionItems {
-		itemsForDelete.Blobs = append(itemsForDelete.Blobs, forDeleteID)
-	}
+	itemsForDelete.Blobs = append(itemsForDelete.Blobs, t.forDeletionItems...)
 	return &itemsForDelete
 }
 

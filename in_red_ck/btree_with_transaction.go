@@ -13,7 +13,7 @@ type btreeWithTransaction[TK btree.Comparable, TV any] struct {
 	btree       btree.BtreeInterface[TK, TV]
 }
 
-const transHasNotBegunErrorMsg = "Can't do operation on b-tree if transaction has not begun."
+const transHasNotBegunErrorMsg = "can't do operation on b-tree if transaction has not begun"
 
 // Instantiate a B-Tree wrapper that enforces transaction session on each method(a.k.a. operation).
 func newBtreeWithTransaction[TK btree.Comparable, TV any](t *transaction, btree btree.BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
@@ -35,7 +35,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value T
 	}
 	if !b3.transaction.forWriting {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf("Can't add item, transaction is for reading.")
+		return false, fmt.Errorf("can't add item, transaction is for reading")
 	}
 	r, err := b3.btree.Add(ctx, key, value)
 	if err != nil {
@@ -53,7 +53,7 @@ func (b3 *btreeWithTransaction[TK, TV]) AddIfNotExist(ctx context.Context, key T
 	}
 	if !b3.transaction.forWriting {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf("Can't add item, transaction is for reading.")
+		return false, fmt.Errorf("can't add item, transaction is for reading")
 	}
 	r, err := b3.btree.AddIfNotExist(ctx, key, value)
 	if err != nil {
@@ -69,7 +69,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Update(ctx context.Context, key TK, valu
 	}
 	if !b3.transaction.forWriting {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf("Can't update item, transaction is for reading.")
+		return false, fmt.Errorf("can't update item, transaction is for reading")
 	}
 	r, err := b3.btree.Update(ctx, key, value)
 	if err != nil {
@@ -86,7 +86,7 @@ func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, v
 	}
 	if !b3.transaction.forWriting {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf("Can't update item, transaction is for reading.")
+		return false, fmt.Errorf("can't update item, transaction is for reading")
 	}
 	r, err := b3.btree.UpdateCurrentItem(ctx, value)
 	if err != nil {
@@ -102,7 +102,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Remove(ctx context.Context, key TK) (boo
 	}
 	if !b3.transaction.forWriting {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf("Can't remove item, transaction is for reading.")
+		return false, fmt.Errorf("can't remove item, transaction is for reading")
 	}
 	r, err := b3.btree.Remove(ctx, key)
 	if err != nil {
@@ -118,7 +118,7 @@ func (b3 *btreeWithTransaction[TK, TV]) RemoveCurrentItem(ctx context.Context) (
 	}
 	if !b3.transaction.forWriting {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf("Can't remove item, transaction is for reading.")
+		return false, fmt.Errorf("can't remove item, transaction is for reading")
 	}
 	r, err := b3.btree.RemoveCurrentItem(ctx)
 	if err != nil {

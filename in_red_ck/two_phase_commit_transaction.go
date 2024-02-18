@@ -5,12 +5,12 @@ import (
 	"fmt"
 	log "log/slog"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -66,7 +66,7 @@ type transaction struct {
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
-var now = time.Now
+var Now = time.Now
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
@@ -98,21 +98,46 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration, loggin
 
 func (t *transaction) Begin() error {
 	if t.HasBegun() {
-		return fmt.Errorf("Transaction is ongoing, 'can't begin again")
+		return fmt.Errorf("transaction is ongoing, 'can't begin again")
 	}
 	if t.phaseDone == 2 {
-		return fmt.Errorf("Transaction is done, 'create a new one")
+		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 0
 	return nil
 }
 
+var lastOnIdleRunTime int64
+var locker = sync.Mutex{}
+
+func (t *transaction) onIdle(ctx context.Context) {
+	// Required to have a backend btree to do cleanup.
+	if len(t.btreesBackend) == 0 {
+		return
+	}
+	nextRunTime := Now().Add(time.Duration(-5) * time.Minute).UnixMilli()
+	runTime := false
+	if lastOnIdleRunTime < nextRunTime {
+		locker.Lock()
+		if lastOnIdleRunTime < nextRunTime {
+			lastOnIdleRunTime = nowUnixMilli()
+			runTime = true
+		}
+		locker.Unlock()
+		if runTime {
+			t.logger.processExpiredTransactionLogs(ctx, t)
+		}
+	}
+}
 func (t *transaction) Phase1Commit(ctx context.Context) error {
+	// Service the cleanup of left hanging transactions.
+	t.onIdle(ctx)
+
 	if !t.HasBegun() {
-		return fmt.Errorf("No transaction to commit, call Begin to start a transaction")
+		return fmt.Errorf("no transaction to commit, call Begin to start a transaction")
 	}
 	if t.phaseDone == 2 {
-		return fmt.Errorf("Transaction is done, 'create a new one")
+		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 1
 	if !t.forWriting {
@@ -121,22 +146,22 @@ func (t *transaction) Phase1Commit(ctx context.Context) error {
 	if err := t.phase1Commit(ctx); err != nil {
 		t.phaseDone = 2
 		if rerr := t.rollback(ctx, true); rerr != nil {
-			return fmt.Errorf("Phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
+			return fmt.Errorf("phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
-		return fmt.Errorf("Phase 1 commit failed, details: %v", err)
+		return fmt.Errorf("phase 1 commit failed, details: %v", err)
 	}
 	return nil
 }
 
 func (t *transaction) Phase2Commit(ctx context.Context) error {
 	if !t.HasBegun() {
-		return fmt.Errorf("No transaction to commit, call Begin to start a transaction")
+		return fmt.Errorf("no transaction to commit, call Begin to start a transaction")
 	}
 	if t.phaseDone == 0 {
-		return fmt.Errorf("Phase 1 commit has not been invoke yet")
+		return fmt.Errorf("phase 1 commit has not been invoke yet")
 	}
 	if t.phaseDone == 2 {
-		return fmt.Errorf("Transaction is done, 'create a new one")
+		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 2
 	if !t.forWriting {
@@ -144,7 +169,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 	}
 	if err := t.phase2Commit(ctx); err != nil {
 		if _, ok := err.(*cas.UpdateAllOrNothingError); ok {
-			startTime := now()
+			startTime := Now()
 			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
 			// until it succeeds or timeout.
 			for {
@@ -152,7 +177,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 					break
 				}
 				if rerr := t.rollback(ctx, false); rerr != nil {
-					return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
+					return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 				}
 				log.Warn(err.Error() + ", will retry")
 
@@ -168,24 +193,24 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 			}
 		}
 		if rerr := t.rollback(ctx, true); rerr != nil {
-			return fmt.Errorf("Phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
+			return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
-		return fmt.Errorf("Phase 2 commit failed, details: %v", err)
+		return fmt.Errorf("phase 2 commit failed, details: %v", err)
 	}
 	return nil
 }
 
 func (t *transaction) Rollback(ctx context.Context) error {
 	if t.phaseDone == 2 {
-		return fmt.Errorf("Transaction is done, 'create a new one")
+		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	if !t.HasBegun() {
-		return fmt.Errorf("No transaction to rollback, call Begin to start a transaction")
+		return fmt.Errorf("no transaction to rollback, call Begin to start a transaction")
 	}
 	// Reset transaction status and mark done to end it without persisting any change.
 	t.phaseDone = 2
 	if err := t.rollback(ctx, true); err != nil {
-		return fmt.Errorf("Rollback failed, details: %v", err)
+		return fmt.Errorf("rollback failed, details: %v", err)
 	}
 	return nil
 }
@@ -199,8 +224,8 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if now().Sub(startTime).Minutes() > float64(t.maxTime) {
-		return fmt.Errorf("Transaction timed out(maxTime=%v)", t.maxTime)
+	if Now().Sub(startTime).Minutes() > float64(t.maxTime) {
+		return fmt.Errorf("transaction timed out(maxTime=%v)", t.maxTime)
 	}
 	return nil
 }
@@ -226,7 +251,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
-	t.logger.log(ctx, lockTrackedItems, nil)
+	if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
+		return err
+	}
 	if err := t.lockTrackedItems(ctx); err != nil {
 		return err
 	}
@@ -234,7 +261,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.Tuple[*btree.StoreInfo, []interface{}]
 	var updatedNodesHandles, removedNodesHandles []cas.RegistryPayload[sop.Handle]
 
-	startTime := now()
+	startTime := Now()
 	successful := false
 	for !successful {
 		var err error
@@ -242,7 +269,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 
-		t.logger.log(ctx, commitTrackedItemsValues, t.getForRollbackTrackedItemsValues())
+		if err := t.logger.log(ctx, commitTrackedItemsValues, t.getForRollbackTrackedItemsValues()); err != nil {
+			return err
+		}
 		if err := t.commitTrackedItemsValues(ctx); err != nil {
 			return err
 		}
@@ -256,23 +285,29 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Commit new root nodes.
 		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
 		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
-		t.logger.log(ctx, commitNewRootNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+		if err := t.logger.log(ctx, commitNewRootNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
 			First: vids, Second: bibs,
-		})
+		}); err != nil {
+			return err
+		}
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
 			return err
 		}
 
 		if successful {
 			// Check for conflict on fetched items.
-			t.logger.log(ctx, areFetchedItemsIntact, nil)
+			if err := t.logger.log(ctx, areFetchedItemsIntact, nil); err != nil {
+				return err
+			}
 			if successful, err = t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
 				return err
 			}
 		}
 		if successful {
 			// Commit updated nodes.
-			t.logger.log(ctx, commitUpdatedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(updatedNodes))
+			if err := t.logger.log(ctx, commitUpdatedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(updatedNodes)); err != nil {
+				return err
+			}
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
 			}
@@ -280,7 +315,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Only do commit removed nodes if successful so far.
 		if successful {
 			// Commit removed nodes.
-			t.logger.log(ctx, commitRemovedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(removedNodes))
+			if err := t.logger.log(ctx, commitRemovedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(removedNodes)); err != nil {
+				return err
+			}
 			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
 				return err
 			}
@@ -296,7 +333,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
 				return err
 			}
-			t.logger.log(ctx, lockTrackedItems, nil)
+			if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
+				return err
+			}
 			if err = t.lockTrackedItems(ctx); err != nil {
 				return err
 			}
@@ -304,22 +343,28 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	// Commit added nodes.
-	t.logger.log(ctx, commitAddedNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+	if err := t.logger.log(ctx, commitAddedNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
 		First:  t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(addedNodes),
 		Second: t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(addedNodes),
-	})
+	}); err != nil {
+		return err
+	}
 	if err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
 		return err
 	}
 
 	// Commit stores update(CountDelta apply).
-	t.logger.log(ctx, commitStoreInfo, t.getRollbackStoresInfo())
+	if err := t.logger.log(ctx, commitStoreInfo, t.getRollbackStoresInfo()); err != nil {
+		return err
+	}
 	if err := t.commitStores(ctx); err != nil {
 		return err
 	}
 
 	// Mark that store info commit succeeded, so it can get rolled back if rollback occurs.
-	t.logger.log(ctx, beforeFinalize, nil)
+	if err := t.logger.log(ctx, beforeFinalize, nil); err != nil {
+		return err
+	}
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes, in phase2Commit.
 	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(ctx, updatedNodesHandles)
@@ -349,7 +394,18 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 func (t *transaction) phase2Commit(ctx context.Context) error {
 
 	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
-	t.logger.log(ctx, finalizeCommit, []interface{}{t.getToBeObsoleteEntries(), t.getObsoleteTrackedItemsValues()})
+	f := t.getToBeObsoleteEntries()
+	s := t.getObsoleteTrackedItemsValues()
+	var pl sop.Tuple[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]], []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]]
+	if len(f.First) > 0 || len(f.Second) > 0 || len(s) > 0 {
+		pl = sop.Tuple[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]], []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]]{
+			First:  f,
+			Second: s,
+		}
+	}
+	if err := t.logger.log(ctx, finalizeCommit, pl); err != nil {
+		return err
+	}
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
 		return err
 	}
@@ -366,17 +422,22 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) cleanup(ctx context.Context) {
+func (t *transaction) cleanup(ctx context.Context) error {
 	// Cleanup resources not needed anymore.
-	t.logger.log(ctx, deleteObsoleteEntries, nil)
+	if err := t.logger.log(ctx, deleteObsoleteEntries, nil); err != nil {
+		return err
+	}
 	obsoleteEntries := t.getToBeObsoleteEntries()
 	t.deleteObsoleteEntries(ctx, obsoleteEntries.First, obsoleteEntries.Second)
 
-	t.logger.log(ctx, deleteTrackedItemsValues, nil)
+	if err := t.logger.log(ctx, deleteTrackedItemsValues, nil); err != nil {
+		return err
+	}
 	t.deleteTrackedItemsValues(ctx, t.getObsoleteTrackedItemsValues())
 
 	// Remove unneeded transaction logs since commit is done.
 	t.logger.removeLogs(ctx)
+	return nil
 }
 
 func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]] {
@@ -418,17 +479,14 @@ func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[s
 }
 
 func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues bool) error {
-	if t.logger.committedState == unlockTrackedItems {
+	if t.logger.committedState > finalizeCommit {
 		// This state should not be reached and rollback invoked, but return an error about it, in case.
-		return fmt.Errorf("Transaction got committed, 'can't rollback it")
+		return fmt.Errorf("transaction got committed, 'can't rollback it")
 	}
 
 	updatedNodes, removedNodes, addedNodes, _, rootNodes := t.classifyModifiedNodes()
 
 	var lastErr error
-	if t.logger.committedState == finalizeCommit {
-		// do nothing as the function failed, nothing to undo.
-	}
 	if t.logger.committedState > commitStoreInfo {
 		rollbackStoresInfo := t.getRollbackStoresInfo()
 		if err := t.storeRepository.Update(ctx, rollbackStoresInfo...); err != nil {
@@ -523,7 +581,9 @@ func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDele
 		// First field of the Tuple specifies whether we need to delete from Redis cache the blob IDs specified in Second.
 		if itemsForDelete[i].First {
 			for ii := range itemsForDelete[i].Second.Blobs {
-				t.redisCache.Delete(ctx, formatItemKey(itemsForDelete[i].Second.Blobs[ii].String()))
+				if err := t.redisCache.Delete(ctx, formatItemKey(itemsForDelete[i].Second.Blobs[ii].String())); err != nil {
+					lastErr = err
+				}
 			}
 		}
 		if err := t.blobStore.Remove(ctx, itemsForDelete[i].Second); err != nil {
@@ -542,7 +602,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 		return nil
 	}
 	// For a reader transaction, conflict check is enough.
-	startTime := now()
+	startTime := Now()
 	for {
 		if err := t.timedOut(ctx, startTime); err != nil {
 			return err
@@ -565,7 +625,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.
 func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
-	log.Debug("Same Node(s) are being modified elsewhere, 'will refetch and re-merge changes in...")
+	log.Debug("same node(s) are being modified elsewhere, 'will refetch and re-merge changes in...")
 	for i := range t.btreesBackend {
 		if err := t.btreesBackend[i].refetchAndMerge(ctx); err != nil {
 			return err
@@ -698,11 +758,10 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 	return lastErr
 }
 
-var warnDeleteServiceMissing bool = true
-
 // Delete the registry entries and unused node blobs.
 func (t *transaction) deleteObsoleteEntries(ctx context.Context,
-	deletedRegistryIDs []cas.RegistryPayload[sop.UUID], unusedNodeIDs []cas.BlobsPayload[sop.UUID]) {
+	deletedRegistryIDs []cas.RegistryPayload[sop.UUID], unusedNodeIDs []cas.BlobsPayload[sop.UUID]) error {
+	var lastErr error
 	if len(unusedNodeIDs) > 0 {
 		// Delete from Redis the inactive nodes.
 		// Leave the registry keys as there may be other in-flight transactions that need them
@@ -716,30 +775,16 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 			}
 		}
 		if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
-			log.Error("Redis Delete failed, details: %v", err)
+			lastErr = err
+			log.Error("Redis delete failed, details: %v", err)
 		}
-		// Only attempt to send the delete message to Kafka if the delete service is enabled.
-		if IsDeleteServiceEnabled {
-			if ok, err := kafka.Enqueue[[]cas.BlobsPayload[sop.UUID]](ctx, unusedNodeIDs); !ok || err != nil {
-				if err != nil {
-					log.Error("Kafka Enqueue failed, details: %v, deleting the leftover unused nodes.", err)
-				}
-				if !ok {
-					log.Info("Kafka Enqueue is still being sampled, deleting the leftover unused nodes.")
-				}
-				t.blobStore.Remove(ctx, unusedNodeIDs...)
-			} else {
-				log.Info(fmt.Sprintf("Kafka Enqueue passed sampling, expecting consumer(@topic:%s) to delete the leftover unused nodes.", kafka.GetConfig().Topic))
-			}
-		} else {
-			if warnDeleteServiceMissing {
-				// Warn only once per instance lifetime.
-				log.Warn("DeleteService is not enabled, deleting the leftover unused nodes.")
-				warnDeleteServiceMissing = false
-			}
-			t.blobStore.Remove(ctx, unusedNodeIDs...)
+		if err := t.blobStore.Remove(ctx, unusedNodeIDs...); err != nil {
+			lastErr = err
 		}
 	}
 	// Delete from registry the requested entries.
-	t.registry.Remove(ctx, deletedRegistryIDs...)
+	if err := t.registry.Remove(ctx, deletedRegistryIDs...); err != nil {
+		lastErr = err
+	}
+	return lastErr
 }

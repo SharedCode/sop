@@ -25,7 +25,7 @@ type nodeRepositoryTyped[TK btree.Comparable, TV any] struct {
 }
 
 // nowUnixMilli is a lambda expression that returns the current time in Unix milliseconds.
-var nowUnixMilli = now().UnixMilli
+var nowUnixMilli = Now().UnixMilli
 
 var nodeCacheDuration time.Duration = time.Duration(1 * time.Hour)
 
@@ -141,7 +141,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 		}
 		target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
 		if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nodeCacheDuration); err != nil {
-			log.Warn(fmt.Sprintf("Failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID, err))
+			log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID, err))
 		}
 		nr.nodeLocalCache[logicalID] = cacheNode{
 			action: defaultAction,
@@ -394,6 +394,9 @@ func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop
 }
 
 func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData interface{}) error {
+	if rollbackData == nil {
+		return nil
+	}
 	var bibs []cas.BlobsPayload[sop.UUID]
 	var vids []cas.RegistryPayload[sop.UUID]
 	tup := rollbackData.(sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]])
@@ -406,13 +409,13 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData
 	var lastErr error
 	// Undo on blob store & redis.
 	if err := nr.transaction.blobStore.Remove(ctx, bibs...); err != nil {
-		lastErr = fmt.Errorf("Unable to undo new root nodes, %v, error: %v", bibs, err)
+		lastErr = fmt.Errorf("unable to undo new root nodes, %v, error: %v", bibs, err)
 		log.Error(lastErr.Error())
 	}
 	for i := range vids {
 		for ii := range vids[i].IDs {
 			if err := nr.transaction.redisCache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].String())); err != nil && !redis.KeyNotFound(err) {
-				err = fmt.Errorf("Unable to undo new root nodes in redis, error: %v", err)
+				err = fmt.Errorf("unable to undo new root nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
 				}
@@ -423,7 +426,7 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData
 	// If we're able to commit roots in registry then they are "ours", we need to unregister.
 	if nr.transaction.logger.committedState > commitNewRootNodes {
 		if err := nr.transaction.registry.Remove(ctx, vids...); err != nil {
-			lastErr = fmt.Errorf("Unable to undo new root nodes registration, %v, error: %v", vids, err)
+			lastErr = fmt.Errorf("unable to undo new root nodes registration, %v, error: %v", vids, err)
 			log.Error(lastErr.Error())
 		}
 	}
@@ -441,19 +444,19 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData i
 	}
 	var lastErr error
 	if err := nr.transaction.blobStore.Remove(ctx, bibs...); err != nil {
-		lastErr = fmt.Errorf("Unable to undo added nodes, %v, error: %v", bibs, err)
+		lastErr = fmt.Errorf("unable to undo added nodes, %v, error: %v", bibs, err)
 		log.Error(lastErr.Error())
 	}
 	// Unregister nodes IDs.
 	if err := nr.transaction.registry.Remove(ctx, vids...); err != nil {
-		lastErr = fmt.Errorf("Unable to undo added nodes registration, %v, error: %v", vids, err)
+		lastErr = fmt.Errorf("unable to undo added nodes registration, %v, error: %v", vids, err)
 		log.Error(lastErr.Error())
 	}
 	// Remove nodes from Redis cache.
 	for i := range vids {
 		for ii := range vids[i].IDs {
 			if err := nr.transaction.redisCache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].String())); err != nil && !redis.KeyNotFound(err) {
-				err = fmt.Errorf("Unable to undo added nodes in redis, error: %v", err)
+				err = fmt.Errorf("unable to undo added nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
 				}
@@ -489,19 +492,19 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, vids []cas.R
 	var lastErr error
 	// Undo the nodes blobs to blob store.
 	if err = nr.transaction.blobStore.Remove(ctx, blobsIDs...); err != nil {
-		lastErr = fmt.Errorf("Unable to undo updated nodes, %v, error: %v", blobsIDs, err)
+		lastErr = fmt.Errorf("unable to undo updated nodes, %v, error: %v", blobsIDs, err)
 		log.Error(lastErr.Error())
 	}
 	// Undo changes in virtual ID registry.
 	if err = nr.transaction.registry.Update(ctx, false, handles...); err != nil {
-		lastErr = fmt.Errorf("Unable to undo updated nodes registration, %v, error: %v", handles, err)
+		lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
 		log.Error(lastErr.Error())
 	}
 	// Undo changes in redis.
 	for i := range blobsIDs {
 		for ii := range blobsIDs[i].Blobs {
 			if err = nr.transaction.redisCache.Delete(ctx, nr.formatKey(blobsIDs[i].Blobs[ii].String())); err != nil && !redis.KeyNotFound(err) {
-				err = fmt.Errorf("Unable to undo updated nodes in redis, error: %v", err)
+				err = fmt.Errorf("unable to undo updated nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
 				}
@@ -518,7 +521,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, vids []cas.R
 	}
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
-		err = fmt.Errorf("Unable to fetch removed nodes from registry, %v, error: %v", vids, err)
+		err = fmt.Errorf("unable to fetch removed nodes from registry, %v, error: %v", vids, err)
 		log.Error(err.Error())
 		return err
 	}
@@ -540,7 +543,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, vids []cas.R
 
 	// Persist the handles changes.
 	if err := nr.transaction.registry.Update(ctx, false, handlesForRollback...); err != nil {
-		err = fmt.Errorf("Unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
+		err = fmt.Errorf("unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
 		log.Error(err.Error())
 		return err
 	}

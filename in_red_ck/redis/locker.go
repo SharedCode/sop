@@ -21,7 +21,7 @@ func FormatLockKey(k string) string {
 }
 
 // Create a set of lock keys.
-func CreateLockKeys(keys []string) []*LockKeys {
+func CreateLockKeys(keys ...string) []*LockKeys {
 	lockKeys := make([]*LockKeys, len(keys))
 	for i := range keys {
 		lockKeys[i] = &LockKeys{
@@ -50,7 +50,7 @@ func Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKeys) er
 			if readItem2, err := redisCache.Get(ctx, lk.key); err != nil {
 				return err
 			} else if readItem2 != lk.lockID.String() {
-				return fmt.Errorf("lock(item: %v) call detected conflict", lk.key)
+				return fmt.Errorf("lock(key: %v) call detected conflict", lk.key)
 			}
 			// We got the item locked, ensure we can unlock it.
 			lk.isLockOwner = true
@@ -58,7 +58,27 @@ func Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKeys) er
 		}
 		// Item found in Redis.
 		if readItem != lk.lockID.String() {
-			return fmt.Errorf("lock(item: %v) call detected conflict", lk.key)
+			return fmt.Errorf("lock(key: %v) call detected conflict", lk.key)
+		}
+	}
+	// Successfully locked.
+	return nil
+}
+
+// Returns true if lockKeys have claimed lock equivalent.
+func IsLocked(ctx context.Context, lockKeys ...*LockKeys) error {
+	redisCache := NewClient()
+	for _, lk := range lockKeys {
+		readItem, err := redisCache.Get(ctx, lk.key)
+		if err != nil {
+			if !KeyNotFound(err) {
+				return err
+			}
+			return fmt.Errorf("IsLocked(key: %v) not found", lk.key)
+		}
+		// Item found in Redis.
+		if readItem != lk.lockID.String() {
+			return fmt.Errorf("IsLocked(key: %v) locked by another", lk.key)
 		}
 	}
 	// Successfully locked.

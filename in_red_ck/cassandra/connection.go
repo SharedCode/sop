@@ -37,8 +37,10 @@ type ConsistencyBook struct {
 	RegistryUpdate  gocql.Consistency
 	RegistryGet     gocql.Consistency
 	RegistryRemove  gocql.Consistency
-	StoreGet        gocql.Consistency
+	StoreAdd        gocql.Consistency
 	StoreUpdate     gocql.Consistency
+	StoreGet        gocql.Consistency
+	StoreRemove     gocql.Consistency
 	BlobStoreAdd    gocql.Consistency
 	BlobStoreGet    gocql.Consistency
 	BlobStoreUpdate gocql.Consistency
@@ -108,10 +110,7 @@ func OpenConnection(config Config) (*Connection, error) {
 	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.store (name text PRIMARY KEY, root_id UUID, slot_count int, count bigint, unique boolean, des text, reg_tbl text, blob_tbl text, ts bigint, vdins boolean, vdap boolean, vdgc boolean, llb boolean);", config.Keyspace)).Exec(); err != nil {
 		return nil, err
 	}
-	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.t_by_day (date text, tid UUID, PRIMARY KEY(date, tid));", config.Keyspace)).Exec(); err != nil {
-		return nil, err
-	}
-	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.t_log (id UUID, c_f text, c_f_p blob, PRIMARY KEY(id, c_f));", config.Keyspace)).Exec(); err != nil {
+	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.t_log (id UUID, c_f int, c_f_p blob, PRIMARY KEY(id, c_f));", config.Keyspace)).Exec(); err != nil {
 		return nil, err
 	}
 
