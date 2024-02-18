@@ -9,7 +9,15 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, "twophase", 8, false, true, true, "", t1)
+	b3, _ := NewBtree[int, string](ctx, StoreInfo{
+		Name: "twophase",
+		SlotLength: 8,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true, 
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
+
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
 	b3.Add(ctx, 5000, "I am also a value with 5000 key.")
@@ -31,7 +39,15 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, "twophase1", 8, false, true, true, "", t1)
+	b3, _ := NewBtree[int, string](ctx, StoreInfo{
+		Name: "twophase1",
+		SlotLength: 8,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true, 
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
+
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
 	b3.Add(ctx, 5000, "I am also a value with 5000 key.")
@@ -75,7 +91,15 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, "twophase2", 8, true, true, true, "", t1)
+	b3, _ := NewBtree[int, string](ctx, StoreInfo{
+		Name: "twophase2",
+		SlotLength: 8,
+		IsUnique: true, 
+		IsValueDataInNodeSegment: true, 
+		LeafLoadBalancing: true,
+		Description: "",
+	}, t1)
+
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
 
@@ -90,7 +114,15 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 			t1.Begin()
 			twoPhase := t1.GetPhasedTransaction()
 
-			b3, _ := NewBtree[int, string](ctx, "twophase2", 8, true, true, true, "", t1)
+			b3, _ := NewBtree[int, string](ctx, StoreInfo{
+				Name: "twophase2",
+				SlotLength: 8,
+				IsUnique: true,
+				IsValueDataInNodeSegment: true, 
+				LeafLoadBalancing: true,
+				Description: "",
+			}, t1)
+
 			b3.Add(ctx, 5000, "I am the value with 5000 key.")
 			b3.Add(ctx, 5001, "I am the value with 5001 key.")
 

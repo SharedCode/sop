@@ -36,7 +36,14 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_ck.NewBtree[int, string](ctx, "barStore", 8, false, true, true, "", trans)
+	b3, err := in_red_ck.NewBtree[int, string](ctx, in_red_ck.StoreInfo{
+		Name: "barstore",
+		SlotLength: 8,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, trans)
 	if err != nil {
 		t.Error(err)
 		return
@@ -60,7 +67,14 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_ck.NewBtree[int, string](ctx, "barStore", 8, false, true, true, "", trans)
+	b3, err := in_red_ck.NewBtree[int, string](ctx, in_red_ck.StoreInfo{
+		Name: "barstore",
+		SlotLength: 8,
+		IsUnique: false, 
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing: true,
+		Description: "",
+	}, trans)
 	if err != nil {
 		t.Error(err)
 		return
@@ -86,20 +100,5 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	t.Logf("Successfully added & found item with key 1.")
 	if err := trans.Commit(ctx); err != nil {
 		t.Errorf("Commit returned error, details: %v.", err)
-	}
-}
-
-func TestGetOne(t *testing.T) {
-
-	tl := cas.NewTransactionLog()
-	uuid, _, r, err := tl.GetOne(ctx)
-	if cas.IsNil(uuid) {
-
-	}
-	if r == nil {
-
-	}
-	if err == nil {
-
 	}
 }
