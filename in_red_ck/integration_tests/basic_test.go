@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/in_red_ck/kafka"
@@ -36,13 +37,13 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_ck.NewBtree[int, string](ctx, in_red_ck.StoreInfo{
-		Name: "barstore",
-		SlotLength: 8,
-		IsUnique: false, 
+	b3, err := in_red_ck.NewBtree[int, string](ctx, sop.StoreInfo{
+		Name:                     "barstore",
+		SlotLength:               8,
+		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing: true,
-		Description: "",
+		LeafLoadBalancing:        true,
+		Description:              "",
 	}, trans)
 	if err != nil {
 		t.Error(err)
@@ -67,13 +68,13 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_ck.NewBtree[int, string](ctx, in_red_ck.StoreInfo{
-		Name: "barstore",
-		SlotLength: 8,
-		IsUnique: false, 
+	b3, err := in_red_ck.NewBtree[int, string](ctx, sop.StoreInfo{
+		Name:                     "barstore",
+		SlotLength:               8,
+		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing: true,
-		Description: "",
+		LeafLoadBalancing:        true,
+		Description:              "",
 	}, trans)
 	if err != nil {
 		t.Error(err)

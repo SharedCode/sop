@@ -22,13 +22,13 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	trans, _ := in_red_ck.NewTransaction(true, -1, true)
 	trans.Begin()
 
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, in_red_ck.StoreInfo{
-		Name: "ztab1",
-		SlotLength: 8,
-		IsUnique: false, 
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		Name:                     "ztab1",
+		SlotLength:               8,
+		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing: false,
-		Description: "",
+		LeafLoadBalancing:        false,
+		Description:              "",
 	}, trans)
 
 	for i := 0; i < 50; i++ {

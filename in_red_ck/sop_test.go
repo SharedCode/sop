@@ -2,8 +2,9 @@ package in_red_ck
 
 import (
 	"fmt"
-
 	"testing"
+
+	"github.com/SharedCode/sop"
 )
 
 // Tests were copied from in_memory package, refactored to work for in_red_ck.
@@ -12,13 +13,13 @@ func Test_HelloWorld(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, StoreInfo{
-		Name: "inmymemory",
-		SlotLength: 8,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: true, 
-		LeafLoadBalancing: true,
-		Description: "",
+	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+		Name:                     "inmymemory",
+		SlotLength:               8,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+		Description:              "",
 	}, t1)
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 
@@ -42,13 +43,13 @@ func Test_FunctionalityTests(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, StoreInfo{
-		Name: "inmymemory1",
-		SlotLength: 8,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: true, 
-		LeafLoadBalancing: true,
-		Description: "",
+	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+		Name:                     "inmymemory1",
+		SlotLength:               8,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+		Description:              "",
 	}, t1)
 
 	const five001Value = "I am the value with 5001 key."
@@ -133,13 +134,13 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 	max := 100000
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[int, string](ctx, StoreInfo{
-		Name: "inmymemory2",
-		SlotLength: 8,
-		IsUnique: true, 
-		IsValueDataInNodeSegment: true, 
-		LeafLoadBalancing: true,
-		Description: "",
+	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+		Name:                     "inmymemory2",
+		SlotLength:               8,
+		IsUnique:                 true,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+		Description:              "",
 	}, t1)
 
 	// Simple IsUnique check.
@@ -346,13 +347,13 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 	max := 100000
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[string, string](ctx, StoreInfo{
-		Name: "inmymemory3",
-		SlotLength: 8,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: true, 
-		LeafLoadBalancing: true,
-		Description: "",
+	b3, _ := NewBtree[string, string](ctx, sop.StoreInfo{
+		Name:                     "inmymemory3",
+		SlotLength:               8,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+		Description:              "",
 	}, t1)
 
 	tests := []struct {

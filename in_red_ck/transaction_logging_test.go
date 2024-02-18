@@ -12,13 +12,13 @@ func Test_TLog_Rollback(t *testing.T) {
 	trans, _ := NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 
-	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
-		Name: "tlogtable",
-		SlotLength: nodeSlotLength,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: false, 
-		LeafLoadBalancing: false,
-		Description: "",
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		Name:                     "tlogtable",
+		SlotLength:               nodeSlotLength,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: false,
+		LeafLoadBalancing:        false,
+		Description:              "",
 	}, trans)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
@@ -58,13 +58,13 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	trans, _ := NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 
-	b3, _ := NewBtree[PersonKey, Person](ctx, StoreInfo{
-		Name: "tlogtable",
-		SlotLength: nodeSlotLength,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: false, 
-		LeafLoadBalancing: false,
-		Description: "",
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		Name:                     "tlogtable",
+		SlotLength:               nodeSlotLength,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: false,
+		LeafLoadBalancing:        false,
+		Description:              "",
 	}, trans)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")

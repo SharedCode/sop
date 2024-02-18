@@ -3,19 +3,21 @@ package in_red_ck
 import (
 	"fmt"
 	"testing"
+
+	"github.com/SharedCode/sop"
 )
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, StoreInfo{
-		Name: "twophase",
-		SlotLength: 8,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: true, 
-		LeafLoadBalancing: true,
-		Description: "",
+	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+		Name:                     "twophase",
+		SlotLength:               8,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+		Description:              "",
 	}, t1)
 
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
@@ -39,13 +41,13 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, StoreInfo{
-		Name: "twophase1",
-		SlotLength: 8,
-		IsUnique: false, 
-		IsValueDataInNodeSegment: true, 
-		LeafLoadBalancing: true,
-		Description: "",
+	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+		Name:                     "twophase1",
+		SlotLength:               8,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+		Description:              "",
 	}, t1)
 
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
@@ -91,13 +93,13 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, StoreInfo{
-		Name: "twophase2",
-		SlotLength: 8,
-		IsUnique: true, 
-		IsValueDataInNodeSegment: true, 
-		LeafLoadBalancing: true,
-		Description: "",
+	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+		Name:                     "twophase2",
+		SlotLength:               8,
+		IsUnique:                 true,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+		Description:              "",
 	}, t1)
 
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
@@ -114,13 +116,13 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 			t1.Begin()
 			twoPhase := t1.GetPhasedTransaction()
 
-			b3, _ := NewBtree[int, string](ctx, StoreInfo{
-				Name: "twophase2",
-				SlotLength: 8,
-				IsUnique: true,
-				IsValueDataInNodeSegment: true, 
-				LeafLoadBalancing: true,
-				Description: "",
+			b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+				Name:                     "twophase2",
+				SlotLength:               8,
+				IsUnique:                 true,
+				IsValueDataInNodeSegment: true,
+				LeafLoadBalancing:        true,
+				Description:              "",
 			}, t1)
 
 			b3.Add(ctx, 5000, "I am the value with 5000 key.")
