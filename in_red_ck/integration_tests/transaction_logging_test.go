@@ -14,7 +14,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	in_red_ck.RemoveBtree(ctx, "ztab1")
 
 	// Seed with good records.
-	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
+	yesterday := time.Now().Add(time.Duration(-48 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
@@ -39,7 +39,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Create & leave transaction 1 resources for cleanup.
-	yesterday = time.Now().Add(time.Duration(-23 * time.Hour))
+	yesterday = time.Now().Add(time.Duration(-47 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
@@ -54,7 +54,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	trans.GetPhasedTransaction().Phase1Commit(ctx)
 
 	// Create & leave transaction 2 resources for cleanup.
-	yesterday = time.Now().Add(time.Duration(-22 * time.Hour))
+	yesterday = time.Now().Add(time.Duration(-46 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
@@ -81,100 +81,23 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 }
 
 func Cleanup(t *testing.T) {
-
-	yesterday := time.Now()
+	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
 
-	for {
-		trans, _ := in_red_ck.NewTransaction(false, -1, true)
-		trans.Begin()
+	trans, _ := in_red_ck.NewTransaction(false, -1, true)
+	trans.Begin()
+	_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	trans.Commit(ctx)
 
-		_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	yesterday = time.Now().Add(-time.Duration(23 * time.Hour + 54 * time.Minute))
+	cas.Now = func() time.Time { return yesterday }
+	sop.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
 
-		// Cleanup should be launched from this call.
-		trans.Commit(ctx)
-	}
-
-	// seedHour := time.Now().Add(time.Duration(-18 * time.Hour))
-	// cas.Now = func() time.Time { return seedHour }
-	// sop.Now = func() time.Time { return seedHour }
-	// in_red_ck.Now = func() time.Time { return seedHour }
-
-	// trans, _ := in_red_ck.NewTransaction(false, -1, true)
-	// trans.Begin()
-
-	// in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
-	// 	Name:                     "ztab1",
-	// 	SlotLength:               8,
-	// 	IsUnique:                 false,
-	// 	IsValueDataInNodeSegment: true,
-	// 	LeafLoadBalancing:        false,
-	// 	Description:              "",
-	// }, trans)
-
-	// // Cleanup should be launched from this call.
-	// trans.Commit(ctx)
-
-	// seedHour = time.Now().Add(time.Duration(-13 * time.Hour))
-	// cas.Now = func() time.Time { return seedHour }
-	// sop.Now = func() time.Time { return seedHour }
-	// in_red_ck.Now = func() time.Time { return seedHour }
-
-	// trans, _ = in_red_ck.NewTransaction(false, -1, true)
-	// trans.Begin()
-
-	// in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
-	// 	Name:                     "ztab1",
-	// 	SlotLength:               8,
-	// 	IsUnique:                 false,
-	// 	IsValueDataInNodeSegment: true,
-	// 	LeafLoadBalancing:        false,
-	// 	Description:              "",
-	// }, trans)
-
-	// // Cleanup should be launched from this call.
-	// trans.Commit(ctx)
-
-	// seedHour = time.Now().Add(time.Duration(-8 * time.Hour))
-	// cas.Now = func() time.Time { return seedHour }
-	// sop.Now = func() time.Time { return seedHour }
-	// in_red_ck.Now = func() time.Time { return seedHour }
-
-	// trans, _ = in_red_ck.NewTransaction(false, -1, true)
-	// trans.Begin()
-
-	// in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
-	// 	Name:                     "ztab1",
-	// 	SlotLength:               8,
-	// 	IsUnique:                 false,
-	// 	IsValueDataInNodeSegment: true,
-	// 	LeafLoadBalancing:        false,
-	// 	Description:              "",
-	// }, trans)
-
-	// // Cleanup should be launched from this call.
-	// trans.Commit(ctx)
-
-	// seedHour = time.Now().Add(time.Duration(-3 * time.Hour))
-	// cas.Now = func() time.Time { return seedHour }
-	// sop.Now = func() time.Time { return seedHour }
-	// in_red_ck.Now = func() time.Time { return seedHour }
-
-	// trans, _ = in_red_ck.NewTransaction(false, -1, true)
-	// trans.Begin()
-
-	// in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
-	// 	Name:                     "ztab1",
-	// 	SlotLength:               8,
-	// 	IsUnique:                 false,
-	// 	IsValueDataInNodeSegment: true,
-	// 	LeafLoadBalancing:        false,
-	// 	Description:              "",
-	// }, trans)
-
-	// // Cleanup should be launched from this call.
-	// trans.Commit(ctx)
-
+	trans, _ = in_red_ck.NewTransaction(false, -1, true)
+	trans.Begin()
+	_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	trans.Commit(ctx)
 }
