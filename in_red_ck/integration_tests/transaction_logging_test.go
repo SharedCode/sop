@@ -91,7 +91,7 @@ func Cleanup(t *testing.T) {
 	_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
 	trans.Commit(ctx)
 
-	yesterday = time.Now().Add(-time.Duration(23 * time.Hour + 54 * time.Minute))
+	yesterday = time.Now().Add(-time.Duration(23*time.Hour + 54*time.Minute))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
