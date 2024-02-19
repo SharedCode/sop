@@ -78,8 +78,9 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		slotLength = maxSlotLength
 	}
 
-	// Enforce isValueDataInNodeSegment false as required if isValueDataActivelyPersisted.
-	if isValueDataActivelyPersisted {
+	// Enforce isValueDataInNodeSegment false as required if either or both
+	// isValueDataActivelyPersisted or isValueDataGloballyCached is true.
+	if isValueDataActivelyPersisted || isValueDataGloballyCached {
 		isValueDataInNodeSegment = false
 	}
 
