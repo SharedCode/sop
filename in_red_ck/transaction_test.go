@@ -73,7 +73,7 @@ func Test_Rollback(t *testing.T) {
 		Description:              "",
 	}, trans)
 
-	pk, p = newPerson("joe", "shroeger", "male", "email", "phone")
+	pk, _ = newPerson("joe", "shroeger", "male", "email", "phone")
 
 	b3.FindOne(ctx, pk, false)
 	v, _ := b3.GetCurrentValue(ctx)
@@ -137,7 +137,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 
-	trans2, err := NewMockTransaction(t, true, -1)
+	trans2, _ := NewMockTransaction(t, true, -1)
 
 	trans.Begin()
 	trans2.Begin()
