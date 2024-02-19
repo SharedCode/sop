@@ -26,9 +26,9 @@ func NewMockTransactionLog() TransactionLog {
 // GetOne returns the oldest transaction ID.
 func (tl *mockTransactionLog) GetOne(ctx context.Context) (gocql.UUID, string, []sop.KeyValuePair[int, interface{}], error) {
 	if tl.datesLogs.First() {
-		kt, _ := time.Parse(dateHour, tl.datesLogs.GetCurrentKey())
+		kt, _ := time.Parse(DateHourLayout, tl.datesLogs.GetCurrentKey())
 		// Cap the returned entries to older than an hour to safeguard ongoing transactions.
-		nt, _ := time.Parse(dateHour, Now().Format(dateHour))
+		nt, _ := time.Parse(DateHourLayout, Now().Format(DateHourLayout))
 		cappedTime := nt.Add(-time.Duration(1 * time.Hour))
 		if kt.Unix() < cappedTime.Unix() {
 			v := tl.datesLogs.GetCurrentValue()
@@ -67,7 +67,7 @@ func (tl *mockTransactionLog) GetLogsDetails(ctx context.Context, hour string) (
 
 // Add blob(s) to the Blob store.
 func (tl *mockTransactionLog) Add(ctx context.Context, tid gocql.UUID, commitFunction int, payload interface{}) error {
-	date := Now().Format(dateHour)
+	date := Now().Format(DateHourLayout)
 	found := tl.datesLogs.FindOne(date, false)
 	dayLogs := tl.datesLogs.GetCurrentValue()
 	if dayLogs == nil {
