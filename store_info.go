@@ -11,17 +11,21 @@ type StoreInfo struct {
 	// Set to true if you want "Value" data stored in the B-Tree node's data segment persisted together with the Keys.
 	// Small size "Value" can benefit getting stored in Node's segment, but bigger data needs to be stored in its own segment(false)
 	// not to impact performance.
+	//
+	// You don't need to bother with "IsValueDataActivelyPersisted" & "IsValueDataGloballyCached" if this is set to true.
+	// Because if true, the "Value" is persisted part of the Node and since Node is cached in Redis, you get caching for free.
+	// You get the ideal benefits not requiring the other two features which are designed for "Value" being persisted in its own segment.
 	IsValueDataInNodeSegment bool
 	// If true, each Btree Add(..) method call will persist the item value's data to another partition, then on commit,
 	// it will then be a very quick action as item(s) values' data were already saved on backend.
-	// This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
+	// This requires 'IsValueDataInNodeSegment' field to be set to false to work.
 	IsValueDataActivelyPersisted bool
 	// If true, the Value data will be cached in Redis, otherwise not. This is used when 'IsValueDataInNodeSegment'
 	// is set to false. Typically set to false if 'IsValueDataActivelyPersisted' is true, as value data is expected
-	// to be huge rendering caching it in Redis to affect Redis performance due to the drastic size of data per item.
+	// to be huge & to affect Redis performance due to the drastic size of data per item.
 	IsValueDataGloballyCached bool
 	// If true, during node is full scenario, instead of breaking the node in two to create space, item can get distributed
-	// to sibling nodes with vacant slot(s). This increases density of the nodes.
+	// to sibling nodes with vacant slot(s). This increases density of the nodes but at the expense of potentially, more I/O.
 	// This feature can be turned off if backend is impacted by the "balancing" act, i.e. - distribution can cause changes
 	// to sibling nodes, thus, may increase I/O unnecessarily.
 	LeafLoadBalancing bool
