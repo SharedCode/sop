@@ -11,7 +11,8 @@ import (
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
-const dateHour = "2006-01-02T15"
+// DateHourLayout format mask string.
+const DateHourLayout = "2006-01-02T15"
 
 // NilUUID with gocql.UUID type.
 var NilUUID = gocql.UUID(sop.NilUUID)
@@ -103,13 +104,13 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (gocq
 		return NilUUID, nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
-	t, err := time.Parse(dateHour, hour)
+	t, err := time.Parse(DateHourLayout, hour)
 	if err != nil {
 		return NilUUID, nil, err
 	}
 
 	// Put a max time of three hours for a given cleanup processor.
-	mh, _ := time.Parse(dateHour, Now().Format(dateHour))
+	mh, _ := time.Parse(DateHourLayout, Now().Format(DateHourLayout))
 	if mh.Sub(t).Hours() > 4 {
 		// Unlock the hour to allow open opportunity to claim the next cleanup processing.
 		// Capping to 4th hour(Redis cache is set to 7hrs) maintains only one cleaner process at a time.
@@ -141,7 +142,7 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (gocq
 }
 
 func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error) {
-	mh, _ := time.Parse(dateHour, Now().Format(dateHour))
+	mh, _ := time.Parse(DateHourLayout, Now().Format(DateHourLayout))
 	// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
 	// gap ensures no issue due to overlapping.
 	cappedHour := mh.Add(-time.Duration(70 * time.Minute))
@@ -161,7 +162,7 @@ func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error
 	if err := iter.Close(); err != nil {
 		return "", NilUUID, err
 	}
-	return cappedHour.Format(dateHour), tid, nil
+	return cappedHour.Format(DateHourLayout), tid, nil
 }
 
 func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([]sop.KeyValuePair[int, interface{}], error) {

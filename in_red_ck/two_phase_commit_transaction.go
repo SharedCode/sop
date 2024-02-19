@@ -127,7 +127,7 @@ func (t *transaction) onIdle(ctx context.Context) {
 	if lastOnIdleRunTime < nextRunTime {
 		locker.Lock()
 		if lastOnIdleRunTime < nextRunTime {
-			lastOnIdleRunTime = nowUnixMilli()
+			lastOnIdleRunTime = Now().UnixMilli()
 			runTime = true
 		}
 		locker.Unlock()
@@ -710,7 +710,7 @@ func (t *transaction) commitStores(ctx context.Context) error {
 		s2 := *store
 		// Compute the count delta so Store Repository can reconcile for commit.
 		s2.CountDelta = s2.Count - t.btreesBackend[i].nodeRepository.count
-		s2.Timestamp = nowUnixMilli()
+		s2.Timestamp = Now().UnixMilli()
 		stores[i] = s2
 	}
 	return t.storeRepository.Update(ctx, stores...)

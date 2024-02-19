@@ -2,7 +2,6 @@ package in_red_ck
 
 import (
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -27,7 +26,4 @@ func IsInitialized() bool {
 func Shutdown() {
 	cas.CloseConnection()
 	redis.CloseConnection()
-	// Close the Kafka package bits as well in case opened. They are optional.
-	kafka.CloseProducer()
-	kafka.CloseConsumer()
 }

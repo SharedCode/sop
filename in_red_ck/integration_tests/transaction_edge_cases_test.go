@@ -17,8 +17,8 @@ import (
 // Transaction rolls back, new completes fine.
 // Reader transaction succeeds.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
-	t1, err := in_red_ck.NewTransaction(true, -1, false)
-	t2, err := in_red_ck.NewTransaction(true, -1, false)
+	t1, _ := in_red_ck.NewTransaction(true, -1, false)
+	t2, _ := in_red_ck.NewTransaction(true, -1, false)
 
 	t1.Begin()
 	t2.Begin()
@@ -39,7 +39,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	pk, p := newPerson("peter", "swift", "male", "email", "phone")
 	pk2, p2 := newPerson("peter", "parker", "male", "email", "phone")
 
-	found, err := b3.FindOne(ctx, pk, false)
+	found, _ := b3.FindOne(ctx, pk, false)
 	if !found {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
@@ -102,8 +102,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 // Two transactions updating different items with no collision but items'
 // keys are sequential/contiguous between the two.
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
-	t1, err := in_red_ck.NewTransaction(true, -1, false)
-	t2, err := in_red_ck.NewTransaction(true, -1, false)
+	t1, _ := in_red_ck.NewTransaction(true, -1, false)
+	t2, _ := in_red_ck.NewTransaction(true, -1, false)
 
 	t1.Begin()
 	t2.Begin()
@@ -124,7 +124,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	pk, p := newPerson("joe", "pirelli", "male", "email", "phone")
 	pk2, p2 := newPerson("joe2", "pirelli", "male", "email", "phone")
 
-	found, err := b3.FindOne(ctx, pk, false)
+	found, _ := b3.FindOne(ctx, pk, false)
 	if !found {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
@@ -172,8 +172,8 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 
 // Reader transaction fails commit when an item read was modified by another transaction in-flight.
 func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
-	t1, err := in_red_ck.NewTransaction(true, -1, false)
-	t2, err := in_red_ck.NewTransaction(false, -1, false)
+	t1, _ := in_red_ck.NewTransaction(true, -1, false)
+	t2, _ := in_red_ck.NewTransaction(false, -1, false)
 
 	t1.Begin()
 	t2.Begin()
@@ -194,7 +194,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	pk, p := newPerson("joe", "zoey", "male", "email", "phone")
 	pk2, p2 := newPerson("joe2", "zoey", "male", "email", "phone")
 
-	found, err := b3.FindOne(ctx, pk, false)
+	found, _ := b3.FindOne(ctx, pk, false)
 	if !found {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
@@ -243,8 +243,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 // Node merging and row(or item) level conflict detection.
 // Case: Reader transaction succeeds commit, while another item in same Node got updated by another transaction.
 func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T) {
-	t1, err := in_red_ck.NewTransaction(true, -1, false)
-	t2, err := in_red_ck.NewTransaction(false, -1, false)
+	t1, _ := in_red_ck.NewTransaction(true, -1, false)
+	t2, _ := in_red_ck.NewTransaction(false, -1, false)
 
 	t1.Begin()
 	t2.Begin()
@@ -266,7 +266,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	pk2, p2 := newPerson("joe2", "zoeya", "male", "email", "phone")
 	pk3, p3 := newPerson("joe3", "zoeya", "male", "email", "phone")
 
-	found, err := b3.FindOne(ctx, pk, false)
+	found, _ := b3.FindOne(ctx, pk, false)
 	if !found {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
@@ -315,8 +315,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 
 // One transaction updates a colliding item in 1st and a 2nd trans.
 func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
-	t1, err := in_red_ck.NewTransaction(true, -1, false)
-	t2, err := in_red_ck.NewTransaction(true, -1, false)
+	t1, _ := in_red_ck.NewTransaction(true, -1, false)
+	t2, _ := in_red_ck.NewTransaction(true, -1, false)
 
 	t1.Begin()
 	t2.Begin()
@@ -340,7 +340,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	pk4, p4 := newPerson("joe4", "zoeyb", "male", "email", "phone")
 	pk5, p5 := newPerson("joe5", "zoeyb", "male", "email", "phone")
 
-	found, err := b3.FindOne(ctx, pk, false)
+	found, _ := b3.FindOne(ctx, pk, false)
 	if !found {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)

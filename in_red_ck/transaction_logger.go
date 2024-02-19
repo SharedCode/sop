@@ -41,10 +41,11 @@ func newTransactionLogger(logger cas.TransactionLog, logging bool) *transactionL
 	if logger == nil {
 		logger = cas.NewTransactionLog()
 	}
+
 	return &transactionLog{
 		logger:        logger,
 		logging:       logging,
-		transactionID: gocql.UUIDFromTime(Now()),
+		transactionID: gocql.UUIDFromTime(Now().UTC()),
 	}
 }
 

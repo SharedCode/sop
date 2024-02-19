@@ -7,7 +7,6 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_ck"
 	"github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/kafka"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
@@ -24,9 +23,6 @@ var redisConfig = redis.Options{
 
 func init() {
 	in_red_ck.Initialize(cassConfig, redisConfig)
-	kafka.Initialize(kafka.DefaultConfig)
-	// Don't want to fill the kafka queue, so, this is commented out.
-	//EnableDeleteService(true)
 }
 
 var ctx = context.Background()
