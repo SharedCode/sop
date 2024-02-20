@@ -290,8 +290,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
 
 		// Commit new root nodes.
-		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
-		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
+		bibs := convertToBlobRequestPayload(rootNodes)
+		vids := convertToRegistryRequestPayload(rootNodes)
 		if err := t.logger.log(ctx, commitNewRootNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
 			First: vids, Second: bibs,
 		}); err != nil {
@@ -312,7 +312,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 		if successful {
 			// Commit updated nodes.
-			if err := t.logger.log(ctx, commitUpdatedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(updatedNodes)); err != nil {
+			if err := t.logger.log(ctx, commitUpdatedNodes, convertToRegistryRequestPayload(updatedNodes)); err != nil {
 				return err
 			}
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
@@ -322,7 +322,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Only do commit removed nodes if successful so far.
 		if successful {
 			// Commit removed nodes.
-			if err := t.logger.log(ctx, commitRemovedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(removedNodes)); err != nil {
+			if err := t.logger.log(ctx, commitRemovedNodes, convertToRegistryRequestPayload(removedNodes)); err != nil {
 				return err
 			}
 			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
@@ -351,8 +351,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 	// Commit added nodes.
 	if err := t.logger.log(ctx, commitAddedNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
-		First:  t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(addedNodes),
-		Second: t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(addedNodes),
+		First:  convertToRegistryRequestPayload(addedNodes),
+		Second: convertToBlobRequestPayload(addedNodes),
 	}); err != nil {
 		return err
 	}
@@ -501,28 +501,28 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 		}
 	}
 	if t.logger.committedState > commitAddedNodes {
-		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(addedNodes)
-		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(addedNodes)
+		bibs := convertToBlobRequestPayload(addedNodes)
+		vids := convertToRegistryRequestPayload(addedNodes)
 		bv := sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
 		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitRemovedNodes {
-		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(removedNodes)
+		vids := convertToRegistryRequestPayload(removedNodes)
 		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitUpdatedNodes {
-		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(updatedNodes)
+		vids := convertToRegistryRequestPayload(updatedNodes)
 		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitNewRootNodes {
-		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
-		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
+		bibs := convertToBlobRequestPayload(rootNodes)
+		vids := convertToRegistryRequestPayload(rootNodes)
 		bv := sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
 		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, bv); err != nil {
 			lastErr = err

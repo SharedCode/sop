@@ -45,7 +45,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
-func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreInfo, t Transaction) (btree.BtreeInterface[TK, TV], error) {
+func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("Transaction 't' parameter can't be nil")
 	}
@@ -91,7 +91,7 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreIn
 	si := StoreInterface[TK, TV]{}
 
 	// Assign the item action tracker frontend and backend bits.
-	iat := newItemActionTracker[TK, TV](s, trans.redisCache, trans.blobStore)
+	iat := newItemActionTracker[TK, TV](s, trans.redisCache, trans.blobStore, trans.logger)
 	si.ItemActionTracker = iat
 
 	// Assign the node repository frontend and backend bits.

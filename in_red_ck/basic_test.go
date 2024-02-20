@@ -9,7 +9,7 @@ import (
 func Test_OpenVsNewBTree(t *testing.T) {
 	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -29,7 +29,7 @@ func Test_OpenVsNewBTree(t *testing.T) {
 func Test_SingleBTree(t *testing.T) {
 	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -66,7 +66,7 @@ func Test_SingleBTree(t *testing.T) {
 func Test_UniqueKeyBTree(t *testing.T) {
 	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
-	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooWorld",
 		SlotLength:               8,
 		IsUnique:                 true,
@@ -89,7 +89,7 @@ func Test_UniqueKeyBTree(t *testing.T) {
 func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooWorld2",
 		SlotLength:               8,
 		IsUnique:                 true,
@@ -121,7 +121,7 @@ func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 func Test_UniqueKeyBTreeOnMultipleCommits(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooWorld3",
 		SlotLength:               8,
 		IsUnique:                 true,

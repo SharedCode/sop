@@ -194,7 +194,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tu
 	if len(nodes) == 0 {
 		return true, nil
 	}
-	vids := nr.convertToRegistryRequestPayload(nodes)
+	vids := convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, err
@@ -241,7 +241,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 		return true, nil, nil
 	}
 	// 1st pass, update the virtual ID registry ensuring the set of nodes are only being modified by us.
-	vids := nr.convertToRegistryRequestPayload(nodes)
+	vids := convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, nil, err
@@ -300,7 +300,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Tu
 	if len(nodes) == 0 {
 		return true, nil, nil
 	}
-	vids := nr.convertToRegistryRequestPayload(nodes)
+	vids := convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, nil, err
@@ -374,7 +374,7 @@ func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop
 		return true, nil
 	}
 	// Check if the Items read for each fetchedNode are intact.
-	vids := nr.convertToRegistryRequestPayload(nodes)
+	vids := convertToRegistryRequestPayload(nodes)
 	handles, err := nr.transaction.registry.Get(ctx, vids...)
 	if err != nil {
 		return false, err
@@ -584,7 +584,7 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, handles []cas.Registry
 	return handles, nil
 }
 
-func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) []cas.BlobsPayload[sop.UUID] {
+func convertToBlobRequestPayload(nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) []cas.BlobsPayload[sop.UUID] {
 	bibs := make([]cas.BlobsPayload[sop.UUID], len(nodes))
 	for i := range nodes {
 		bibs[i] = cas.BlobsPayload[sop.UUID]{
@@ -598,7 +598,7 @@ func (nr *nodeRepository) convertToBlobRequestPayload(nodes []sop.Tuple[*btree.S
 	return bibs
 }
 
-func (nr *nodeRepository) convertToRegistryRequestPayload(nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) []cas.RegistryPayload[sop.UUID] {
+func convertToRegistryRequestPayload(nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) []cas.RegistryPayload[sop.UUID] {
 	vids := make([]cas.RegistryPayload[sop.UUID], len(nodes))
 	for i := range nodes {
 		vids[i] = cas.RegistryPayload[sop.UUID]{

@@ -40,7 +40,7 @@ func Test_Rollback(t *testing.T) {
 	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
 
-	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -64,7 +64,7 @@ func Test_Rollback(t *testing.T) {
 
 	trans, _ = NewMockTransaction(t, false, -1)
 	trans.Begin()
-	b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -93,7 +93,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -143,7 +143,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	trans2.Begin()
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -161,7 +161,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		return
 	}
 
-	b32, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b32, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -194,7 +194,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}
 
 	trans.Begin()
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -260,7 +260,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -283,7 +283,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
 				SlotLength:               nodeSlotLength,
 				IsUnique:                 false,
@@ -314,7 +314,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, false, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
 				SlotLength:               nodeSlotLength,
 				IsUnique:                 false,
@@ -332,7 +332,7 @@ func Test_VolumeDeletes(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -357,7 +357,7 @@ func Test_VolumeDeletes(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
 				SlotLength:               nodeSlotLength,
 				IsUnique:                 false,
@@ -376,7 +376,7 @@ func Test_MixedOperations(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -416,7 +416,7 @@ func Test_MixedOperations(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
 				SlotLength:               nodeSlotLength,
 				IsUnique:                 false,
@@ -459,7 +459,7 @@ func Test_MixedOperations(t *testing.T) {
 			}
 			t1, _ = NewMockTransaction(t, true, -1)
 			t1.Begin()
-			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
 				SlotLength:               nodeSlotLength,
 				IsUnique:                 false,

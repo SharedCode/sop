@@ -19,7 +19,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -43,7 +43,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = NewMockTransaction(t, true, -1)
 		t1.Begin()
-		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
@@ -53,7 +53,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		}, t1)
 	}
 
-	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -84,7 +84,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	}
 	t1, _ = NewMockTransaction(t, false, -1)
 	t1.Begin()
-	b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -120,7 +120,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -143,7 +143,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = NewMockTransaction(t, true, -1)
 		t1.Begin()
-		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
@@ -153,7 +153,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		}, t1)
 	}
 
-	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -180,7 +180,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 
 	t2, _ = NewMockTransaction(t, true, -1)
 	t2.Begin()
-	b32, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b32, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -207,7 +207,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -230,7 +230,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = NewMockTransaction(t, true, -1)
 		t1.Begin()
-		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
@@ -240,7 +240,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		}, t1)
 	}
 
-	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -278,7 +278,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -303,7 +303,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		t1.Commit(ctx)
 		t1, _ = NewMockTransaction(t, true, -1)
 		t1.Begin()
-		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
@@ -313,7 +313,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		}, t1)
 	}
 
-	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -350,7 +350,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -379,7 +379,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = NewMockTransaction(t, true, -1)
 		t1.Begin()
-		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
@@ -389,7 +389,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		}, t1)
 	}
 
-	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -448,7 +448,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	// Commit successfully 1st so we can create a good data set that we can check if restored on commit failed.
 	trans, _ := NewMockTransaction(t, true, -1)
 	trans.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,

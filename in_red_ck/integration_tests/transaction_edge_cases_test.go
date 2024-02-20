@@ -23,7 +23,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -73,7 +73,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	}
 	t1, _ = in_red_ck.NewTransaction(false, -1, false)
 	t1.Begin()
-	b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -108,7 +108,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -131,7 +131,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = in_red_ck.NewTransaction(true, -1, false)
 		t1.Begin()
-		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
@@ -141,7 +141,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		}, t1)
 	}
 
-	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -178,7 +178,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -201,7 +201,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = in_red_ck.NewTransaction(true, -1, false)
 		t1.Begin()
-		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
@@ -211,7 +211,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		}, t1)
 	}
 
-	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -249,7 +249,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -274,7 +274,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		t1.Commit(ctx)
 		t1, _ = in_red_ck.NewTransaction(true, -1, false)
 		t1.Begin()
-		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
@@ -284,7 +284,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		}, t1)
 	}
 
-	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -321,7 +321,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -350,7 +350,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = in_red_ck.NewTransaction(true, -1, false)
 		t1.Begin()
-		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
@@ -360,7 +360,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		}, t1)
 	}
 
-	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b32, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -421,7 +421,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase3",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -438,7 +438,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	f1 := func() error {
 		t1, _ := in_red_ck.NewTransaction(true, -1, false)
 		t1.Begin()
-		b3, _ := in_red_ck.NewBtree[int, string](ctx2, sop.StoreInfo{
+		b3, _ := in_red_ck.NewBtree[int, string](ctx2, sop.StoreOptions{
 			Name:                     "twophase3",
 			SlotLength:               8,
 			IsUnique:                 false,
@@ -455,7 +455,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	f2 := func() error {
 		t2, _ := in_red_ck.NewTransaction(true, -1, false)
 		t2.Begin()
-		b32, _ := in_red_ck.NewBtree[int, string](ctx2, sop.StoreInfo{
+		b32, _ := in_red_ck.NewBtree[int, string](ctx2, sop.StoreOptions{
 			Name:                     "twophase3",
 			SlotLength:               8,
 			IsUnique:                 false,
@@ -508,7 +508,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "tablex",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -591,7 +591,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "tablex2",
 		SlotLength:               8,
 		IsUnique:                 true,
@@ -675,7 +675,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "tabley",
 		SlotLength:               8,
 		IsUnique:                 false,

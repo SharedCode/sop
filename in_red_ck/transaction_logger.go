@@ -15,6 +15,12 @@ type commitFunction int
 // Transaction commit functions.
 const (
 	unknown = iota
+
+	// Pre commit log functions.
+	addActivelyPersistedItem
+	updateActivelyPersistedItem
+
+	// commit log functions.
 	lockTrackedItems
 	commitTrackedItemsValues
 	commitNewRootNodes

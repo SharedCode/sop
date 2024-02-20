@@ -11,7 +11,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -41,7 +41,7 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase1",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -93,7 +93,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase2",
 		SlotLength:               8,
 		IsUnique:                 true,
@@ -116,7 +116,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 			t1.Begin()
 			twoPhase := t1.GetPhasedTransaction()
 
-			b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+			b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 				Name:                     "twophase2",
 				SlotLength:               8,
 				IsUnique:                 true,

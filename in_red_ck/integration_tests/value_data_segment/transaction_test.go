@@ -54,7 +54,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -138,7 +138,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}
 
 	trans.Begin()
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -203,7 +203,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -226,7 +226,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
 				SlotLength:               nodeSlotLength,
 				IsUnique:                 false,
@@ -257,7 +257,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = in_red_ck.NewTransaction(false, -1, false)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
 				SlotLength:               nodeSlotLength,
 				IsUnique:                 false,
@@ -276,7 +276,7 @@ func VolumeDeletes(t *testing.T) {
 
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -301,7 +301,7 @@ func VolumeDeletes(t *testing.T) {
 			}
 			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
 				SlotLength:               nodeSlotLength,
 				IsUnique:                 false,
@@ -321,7 +321,7 @@ func MixedOperations(t *testing.T) {
 
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -361,7 +361,7 @@ func MixedOperations(t *testing.T) {
 			}
 			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
 				SlotLength:               nodeSlotLength,
 				IsUnique:                 false,
@@ -404,7 +404,7 @@ func MixedOperations(t *testing.T) {
 			}
 			t1, _ = in_red_ck.NewTransaction(true, -1, false)
 			t1.Begin()
-			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+			b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
 				SlotLength:               nodeSlotLength,
 				IsUnique:                 false,
@@ -420,7 +420,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
 
-	b3, _ := in_red_ck.NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -457,7 +457,7 @@ func Test_IllegalBtreeStoreName(t *testing.T) {
 	t1, _ := in_red_ck.NewTransaction(true, -1, false)
 	t1.Begin()
 
-	if _, err := in_red_ck.NewBtree[int, string](ctx, sop.StoreInfo{
+	if _, err := in_red_ck.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "2phase",
 		SlotLength:               8,
 		IsUnique:                 false,

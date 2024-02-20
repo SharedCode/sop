@@ -12,7 +12,7 @@ func Test_TLog_Rollback(t *testing.T) {
 	trans, _ := NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 
-	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "tlogtable",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
@@ -58,7 +58,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	trans, _ := NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 
-	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "tlogtable",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
