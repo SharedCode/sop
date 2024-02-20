@@ -35,6 +35,8 @@ type Item[TK Comparable, TV any] struct {
 	// flag that tells B-Tree whether value data needs fetching or not.
 	// Applicable only for B-Tree where 'IsValueDataInNodeSegment' is false use-case.
 	ValueNeedsFetch bool
+	// For internal use only, 'tells whether value was just read from the backend.
+	valueWasFetched bool
 }
 
 func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
