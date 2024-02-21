@@ -137,9 +137,9 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 		}
 		if len(itemsForAdd.Blobs) > 0 {
 			// Log so on crash it can get cleaned up.
-			// if err := t.tlogger.log(ctx, addActivelyPersistedItem, extractRequestPayloadIDs(&itemsForAdd)); err != nil {
-			// 	return err
-			// }
+			if err := t.tlogger.log(ctx, addActivelyPersistedItem, extractRequestPayloadIDs(&itemsForAdd)); err != nil {
+				return err
+			}
 			if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
 				return err
 			}
@@ -168,9 +168,9 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 			}
 			if len(itemsForAdd.Blobs) > 0 {
 				// Log so on crash it can get cleaned up.
-				// if err := t.tlogger.log(ctx, updateActivelyPersistedItem, extractRequestPayloadIDs(&itemsForAdd)); err != nil {
-				// 	return err
-				// }
+				if err := t.tlogger.log(ctx, updateActivelyPersistedItem, extractRequestPayloadIDs(&itemsForAdd)); err != nil {
+					return err
+				}
 				if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
 					return err
 				}
