@@ -12,6 +12,7 @@ import (
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/gocql/gocql"
 )
 
 // TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.
@@ -257,10 +258,17 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return nil
 	}
 
-	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
+	var preCommitTID gocql.UUID
+	if t.logger.committedState == addActivelyPersistedItem {
+		preCommitTID = t.logger.transactionID
+		// Assign new TID to the transaction as pre-commit logs need to be cleaned up seperately.
+		t.logger.setNewTID()
+	}
+
 	if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
 		return err
 	}
+	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
 	if err := t.lockTrackedItems(ctx); err != nil {
 		return err
 	}
@@ -281,6 +289,13 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 		if err := t.commitTrackedItemsValues(ctx); err != nil {
 			return err
+		}
+
+		// Remove the pre commit logs as not needed anymore from this point.
+		// TODO: finalize the logic here and the commit call above.
+		if preCommitTID != cas.NilUUID {
+			t.logger.logger.Remove(ctx, preCommitTID)
+			preCommitTID = cas.NilUUID
 		}
 
 		successful = true
