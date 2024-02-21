@@ -22,7 +22,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	trans, _ := in_red_ck.NewTransaction(true, -1, true)
 	trans.Begin()
 
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreInfo{
+	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "ztab1",
 		SlotLength:               8,
 		IsUnique:                 false,

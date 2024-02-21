@@ -35,7 +35,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_ck.NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, err := in_red_ck.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstore",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -66,7 +66,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_ck.NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, err := in_red_ck.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstore",
 		SlotLength:               8,
 		IsUnique:                 false,

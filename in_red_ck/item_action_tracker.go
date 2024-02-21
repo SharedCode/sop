@@ -41,15 +41,17 @@ type itemActionTracker[TK btree.Comparable, TV any] struct {
 	forDeletionItems []sop.UUID
 	redisCache       redis.Cache
 	blobStore        cas.BlobStore
+	tlogger          *transactionLog
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
-func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *btree.StoreInfo, redisCache redis.Cache, blobStore cas.BlobStore) *itemActionTracker[TK, TV] {
+func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *btree.StoreInfo, redisCache redis.Cache, blobStore cas.BlobStore, tl *transactionLog) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
 		storeInfo:  storeInfo,
 		items:      make(map[sop.UUID]cacheItem[TK, TV]),
 		redisCache: redisCache,
 		blobStore:  blobStore,
+		tlogger: tl,
 	}
 }
 
@@ -134,6 +136,10 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 			itemsForAdd.Blobs = append(itemsForAdd.Blobs, *itemForAdd)
 		}
 		if len(itemsForAdd.Blobs) > 0 {
+			// Log so on crash it can get cleaned up.
+			if err := t.tlogger.log(ctx, addActivelyPersistedItem, extractRequestPayloadIDs(&itemsForAdd)); err != nil {
+				return err
+			}
 			if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
 				return err
 			}
@@ -161,6 +167,10 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 				itemsForAdd.Blobs = append(itemsForAdd.Blobs, *itemForAdd)
 			}
 			if len(itemsForAdd.Blobs) > 0 {
+				// Log so on crash it can get cleaned up.
+				if err := t.tlogger.log(ctx, updateActivelyPersistedItem, extractRequestPayloadIDs(&itemsForAdd)); err != nil {
+					return err
+				}
 				if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
 					return err
 				}
@@ -219,6 +229,16 @@ func (t *itemActionTracker[TK, TV]) Remove(ctx context.Context, item *btree.Item
 		versionInDB: item.Version,
 	}
 	return nil
+}
+
+func extractRequestPayloadIDs(payload *cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) cas.BlobsPayload[sop.UUID] {
+	var r cas.BlobsPayload[sop.UUID]
+	r.BlobTable = payload.BlobTable
+	r.Blobs = make([]sop.UUID, len(payload.Blobs))
+	for i := range payload.Blobs {
+		r.Blobs[i] = payload.Blobs[i].Key
+	}
+	return r
 }
 
 func (t *itemActionTracker[TK, TV]) hasTrackedItems() bool {

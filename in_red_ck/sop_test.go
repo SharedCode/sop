@@ -13,7 +13,7 @@ func Test_HelloWorld(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "inmymemory",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -43,7 +43,7 @@ func Test_FunctionalityTests(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "inmymemory1",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -134,7 +134,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 	max := 100000
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[int, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "inmymemory2",
 		SlotLength:               8,
 		IsUnique:                 true,
@@ -347,7 +347,7 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 	max := 100000
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[string, string](ctx, sop.StoreInfo{
+	b3, _ := NewBtree[string, string](ctx, sop.StoreOptions{
 		Name:                     "inmymemory3",
 		SlotLength:               8,
 		IsUnique:                 false,

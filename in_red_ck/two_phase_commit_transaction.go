@@ -12,6 +12,7 @@ import (
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/gocql/gocql"
 )
 
 // TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.
@@ -257,10 +258,17 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return nil
 	}
 
-	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
+	var preCommitTID gocql.UUID
+	if t.logger.committedState == addActivelyPersistedItem {
+		preCommitTID = t.logger.transactionID
+		// Assign new TID to the transaction as pre-commit logs need to be cleaned up seperately.
+		t.logger.setNewTID()
+	}
+
 	if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
 		return err
 	}
+	// Mark session modified items as locked in Redis. If lock or there is conflict, return it as error.
 	if err := t.lockTrackedItems(ctx); err != nil {
 		return err
 	}
@@ -283,6 +291,13 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 
+		// Remove the pre commit logs as not needed anymore from this point.
+		// TODO: finalize the logic here and the commit call above.
+		if preCommitTID != cas.NilUUID {
+			t.logger.logger.Remove(ctx, preCommitTID)
+			preCommitTID = cas.NilUUID
+		}
+
 		successful = true
 
 		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
@@ -290,8 +305,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
 
 		// Commit new root nodes.
-		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
-		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
+		bibs := convertToBlobRequestPayload(rootNodes)
+		vids := convertToRegistryRequestPayload(rootNodes)
 		if err := t.logger.log(ctx, commitNewRootNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
 			First: vids, Second: bibs,
 		}); err != nil {
@@ -312,7 +327,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 		if successful {
 			// Commit updated nodes.
-			if err := t.logger.log(ctx, commitUpdatedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(updatedNodes)); err != nil {
+			if err := t.logger.log(ctx, commitUpdatedNodes, convertToRegistryRequestPayload(updatedNodes)); err != nil {
 				return err
 			}
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
@@ -322,7 +337,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Only do commit removed nodes if successful so far.
 		if successful {
 			// Commit removed nodes.
-			if err := t.logger.log(ctx, commitRemovedNodes, t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(removedNodes)); err != nil {
+			if err := t.logger.log(ctx, commitRemovedNodes, convertToRegistryRequestPayload(removedNodes)); err != nil {
 				return err
 			}
 			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
@@ -351,8 +366,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 	// Commit added nodes.
 	if err := t.logger.log(ctx, commitAddedNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
-		First:  t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(addedNodes),
-		Second: t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(addedNodes),
+		First:  convertToRegistryRequestPayload(addedNodes),
+		Second: convertToBlobRequestPayload(addedNodes),
 	}); err != nil {
 		return err
 	}
@@ -501,28 +516,28 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 		}
 	}
 	if t.logger.committedState > commitAddedNodes {
-		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(addedNodes)
-		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(addedNodes)
+		bibs := convertToBlobRequestPayload(addedNodes)
+		vids := convertToRegistryRequestPayload(addedNodes)
 		bv := sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
 		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitRemovedNodes {
-		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(removedNodes)
+		vids := convertToRegistryRequestPayload(removedNodes)
 		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitUpdatedNodes {
-		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(updatedNodes)
+		vids := convertToRegistryRequestPayload(updatedNodes)
 		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitNewRootNodes {
-		bibs := t.btreesBackend[0].nodeRepository.convertToBlobRequestPayload(rootNodes)
-		vids := t.btreesBackend[0].nodeRepository.convertToRegistryRequestPayload(rootNodes)
+		bibs := convertToBlobRequestPayload(rootNodes)
+		vids := convertToRegistryRequestPayload(rootNodes)
 		bv := sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
 		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, bv); err != nil {
 			lastErr = err

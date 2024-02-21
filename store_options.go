@@ -1,7 +1,7 @@
 package sop
 
-// StoreInfo contains a given (B-Tree) store details.
-type StoreInfo struct {
+// StoreOptions contains field options settable when constructing a given (B-Tree).
+type StoreOptions struct {
 	// Short name of this (B-Tree store).
 	Name string
 	// Count of items that can be stored on a given node.

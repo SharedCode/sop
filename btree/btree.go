@@ -177,6 +177,7 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 			return true, nil
 		}
 	}
+	btree.unfetchCurrentValue()
 	node, err := btree.getRootNode(ctx)
 	if err != nil {
 		return false, err
@@ -220,13 +221,27 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 		return zero, err
 	} else {
 		// Register to local cache the "item get" for submit/resolution on Commit.
+		vnf := item.ValueNeedsFetch
 		if err := btree.storeInterface.ItemActionTracker.Get(ctx, item); err != nil {
 			return zero, err
 		}
 		btree.storeInterface.NodeRepository.Fetched(btree.currentItemRef.nodeID)
-		// TODO: in V2, we need to fetch Value if btree is set to save Value in another "data segment"
-		// and it is not yet fetched. That fetch action can error thus, need to be able to return an error.
+		if vnf && !item.ValueNeedsFetch && item.Value != nil {
+			item.valueWasFetched = true
+		}
 		return *item.Value, nil
+	}
+}
+
+// Unfetch Current Value will reset the current item's value as if it was not fetched from the backend.
+// Useful when trying to conserve memory as item's values are large data, calling this method will set it
+// to nil, "unfetch" status.
+func (btree *Btree[TK, TV]) unfetchCurrentValue() {
+	if btree.StoreInfo.IsValueDataActivelyPersisted && !btree.StoreInfo.IsValueDataGloballyCached &&
+	btree.currentItem != nil && btree.currentItem.Value != nil && btree.currentItem.valueWasFetched {
+		btree.currentItem.Value = nil
+		btree.currentItem.ValueNeedsFetch = true
+		btree.currentItem.valueWasFetched = false
 	}
 }
 
@@ -236,10 +251,14 @@ func (btree *Btree[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], e
 	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
 		return zero, err
 	} else {
+		vnf := item.ValueNeedsFetch
 		if err := btree.storeInterface.ItemActionTracker.Get(ctx, item); err != nil {
 			return zero, err
 		}
 		btree.storeInterface.NodeRepository.Fetched(btree.currentItemRef.nodeID)
+		if vnf && !item.ValueNeedsFetch && item.Value != nil {
+			item.valueWasFetched = true
+		}
 		return *item, nil
 	}
 }
@@ -277,6 +296,7 @@ func (btree *Btree[TK, TV]) First(ctx context.Context) (bool, error) {
 	if btree.StoreInfo.Count == 0 {
 		return false, nil
 	}
+	btree.unfetchCurrentValue()
 	node, err := btree.getRootNode(ctx)
 	if err != nil {
 		return false, err
@@ -291,6 +311,7 @@ func (btree *Btree[TK, TV]) Last(ctx context.Context) (bool, error) {
 	if btree.StoreInfo.Count == 0 {
 		return false, nil
 	}
+	btree.unfetchCurrentValue()
 	node, err := btree.getRootNode(ctx)
 	if err != nil {
 		return false, err
@@ -305,6 +326,7 @@ func (btree *Btree[TK, TV]) Next(ctx context.Context) (bool, error) {
 	if btree.StoreInfo.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
 	}
+	btree.unfetchCurrentValue()
 	node, err := btree.getNode(ctx, btree.currentItemRef.getNodeID())
 	if err != nil {
 		return false, err
@@ -322,6 +344,7 @@ func (btree *Btree[TK, TV]) Previous(ctx context.Context) (bool, error) {
 	if btree.StoreInfo.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
 	}
+	btree.unfetchCurrentValue()
 	node, err := btree.getNode(ctx, btree.currentItemRef.getNodeID())
 	if err != nil {
 		return false, err
