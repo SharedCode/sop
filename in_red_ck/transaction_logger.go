@@ -197,13 +197,13 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 			continue
 		}
 
-		// Process pre commit log functions.
-		if lastCommittedFunctionLog == addActivelyPersistedItem && committedFunctionLogs[i].Value != nil {
-			itemsForDelete := (committedFunctionLogs[i].Value).(cas.BlobsPayload[sop.UUID])
-			if err := t.blobStore.Remove(ctx, itemsForDelete); err != nil {
-				return err
-			}
-		}
+		// // Process pre commit log functions.
+		// if lastCommittedFunctionLog == addActivelyPersistedItem && committedFunctionLogs[i].Value != nil {
+		// 	itemsForDelete := (committedFunctionLogs[i].Value).(cas.BlobsPayload[sop.UUID])
+		// 	if err := t.blobStore.Remove(ctx, itemsForDelete); err != nil {
+		// 		return err
+		// 	}
+		// }
 	}
 
 	if err := tl.logger.Remove(ctx, tid); err != nil {

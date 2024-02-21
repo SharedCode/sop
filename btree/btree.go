@@ -229,8 +229,6 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 		if vnf && !item.ValueNeedsFetch && item.Value != nil {
 			item.valueWasFetched = true
 		}
-		// TODO: in V2, we need to fetch Value if btree is set to save Value in another "data segment"
-		// and it is not yet fetched. That fetch action can error thus, need to be able to return an error.
 		return *item.Value, nil
 	}
 }

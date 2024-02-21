@@ -260,9 +260,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 	var preCommitTID gocql.UUID
 	if t.logger.committedState == addActivelyPersistedItem {
-		preCommitTID = t.logger.transactionID
-		// Assign new TID to the transaction as pre-commit logs need to be cleaned up seperately.
-		t.logger.setNewTID()
+		// preCommitTID = t.logger.transactionID
+		// // Assign new TID to the transaction as pre-commit logs need to be cleaned up seperately.
+		// t.logger.setNewTID()
 	}
 
 	if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
@@ -294,8 +294,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Remove the pre commit logs as not needed anymore from this point.
 		// TODO: finalize the logic here and the commit call above.
 		if preCommitTID != cas.NilUUID {
-			t.logger.logger.Remove(ctx, preCommitTID)
-			preCommitTID = cas.NilUUID
+			// t.logger.logger.Remove(ctx, preCommitTID)
+			// preCommitTID = cas.NilUUID
 		}
 
 		successful = true
