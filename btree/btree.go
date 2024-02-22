@@ -177,7 +177,6 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 			return true, nil
 		}
 	}
-	btree.unfetchCurrentValue()
 	node, err := btree.getRootNode(ctx)
 	if err != nil {
 		return false, err
@@ -296,7 +295,6 @@ func (btree *Btree[TK, TV]) First(ctx context.Context) (bool, error) {
 	if btree.StoreInfo.Count == 0 {
 		return false, nil
 	}
-	btree.unfetchCurrentValue()
 	node, err := btree.getRootNode(ctx)
 	if err != nil {
 		return false, err
@@ -311,7 +309,6 @@ func (btree *Btree[TK, TV]) Last(ctx context.Context) (bool, error) {
 	if btree.StoreInfo.Count == 0 {
 		return false, nil
 	}
-	btree.unfetchCurrentValue()
 	node, err := btree.getRootNode(ctx)
 	if err != nil {
 		return false, err
@@ -326,7 +323,6 @@ func (btree *Btree[TK, TV]) Next(ctx context.Context) (bool, error) {
 	if btree.StoreInfo.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
 	}
-	btree.unfetchCurrentValue()
 	node, err := btree.getNode(ctx, btree.currentItemRef.getNodeID())
 	if err != nil {
 		return false, err
@@ -344,7 +340,6 @@ func (btree *Btree[TK, TV]) Previous(ctx context.Context) (bool, error) {
 	if btree.StoreInfo.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
 	}
-	btree.unfetchCurrentValue()
 	node, err := btree.getNode(ctx, btree.currentItemRef.getNodeID())
 	if err != nil {
 		return false, err
@@ -404,6 +399,7 @@ func (btree *Btree[TK, TV]) UpdateCurrentNodeItem(ctx context.Context, item *Ite
 	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
 		return false, nil
 	}
+	btree.unfetchCurrentValue()
 	btree.currentItem = item
 	node.Slots[btree.currentItemRef.getNodeItemIndex()] = item
 
@@ -574,6 +570,7 @@ func (btree *Btree[TK, TV]) getNode(ctx context.Context, id sop.UUID) (*Node[TK,
 }
 
 func (btree *Btree[TK, TV]) setCurrentItemID(nodeID sop.UUID, itemIndex int) {
+	btree.unfetchCurrentValue()
 	btree.currentItem = nil
 	if btree.currentItemRef.nodeID == nodeID && btree.currentItemRef.getNodeItemIndex() == itemIndex {
 		return
