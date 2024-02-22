@@ -237,7 +237,7 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 // to nil, "unfetch" status.
 func (btree *Btree[TK, TV]) unfetchCurrentValue() {
 	if btree.StoreInfo.IsValueDataActivelyPersisted && !btree.StoreInfo.IsValueDataGloballyCached &&
-	btree.currentItem != nil && btree.currentItem.Value != nil && btree.currentItem.valueWasFetched {
+		btree.currentItem != nil && btree.currentItem.Value != nil && btree.currentItem.valueWasFetched {
 		btree.currentItem.Value = nil
 		btree.currentItem.ValueNeedsFetch = true
 		btree.currentItem.valueWasFetched = false

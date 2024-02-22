@@ -51,7 +51,7 @@ func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *btree.StoreInf
 		items:      make(map[sop.UUID]cacheItem[TK, TV]),
 		redisCache: redisCache,
 		blobStore:  blobStore,
-		tlogger: tl,
+		tlogger:    tl,
 	}
 }
 

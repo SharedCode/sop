@@ -11,6 +11,7 @@ import (
 )
 
 type commitFunction int
+
 // Transaction commit functions.
 const (
 	unknown = iota
@@ -28,7 +29,7 @@ const (
 	deleteTrackedItemsValues
 
 	// Pre commit functions.
-	addActivelyPersistedItem = 99
+	addActivelyPersistedItem    = 99
 	updateActivelyPersistedItem = addActivelyPersistedItem
 )
 

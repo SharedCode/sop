@@ -34,16 +34,16 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 
 	tidLogs := trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).
 		logger.logger.(*cas.MockTransactionLog).GetTIDLogs(
-			trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).logger.transactionID)
+		trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).logger.transactionID)
 
 	if tidLogs == nil {
 		t.Errorf("failed Rollback, got %v, want nil", tidLogs)
 	}
-		
+
 	trans.Rollback(ctx)
 
 	gotTidLogs := trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).
-	logger.logger.(*cas.MockTransactionLog).GetTIDLogs(
+		logger.logger.(*cas.MockTransactionLog).GetTIDLogs(
 		trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).logger.transactionID)
 
 	if gotTidLogs != nil {
