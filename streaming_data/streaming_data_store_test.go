@@ -12,7 +12,7 @@ import (
 var ctx = context.Background()
 
 func Test_StreamingDataStoreBasicUse(t *testing.T) {
-	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
+	trans, _ := in_red_ck.NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 	sds := NewStreamingDataStore[string](ctx, "fooStore", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo")
@@ -22,7 +22,7 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Read back the data. Pass false on 2nd argument will toggle to a "reader" transaction.
-	trans, _ = in_red_ck.NewMockTransaction(t, false, -1)
+	trans, _ = in_red_ck.NewMockTransactionWithLogging(t, false, -1)
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore", trans)
 
@@ -49,7 +49,7 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 
 func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	// Upload the video.
-	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
+	trans, _ := in_red_ck.NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 	sds := NewStreamingDataStore[string](ctx, "fooStore", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo2")
@@ -59,7 +59,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Update the video.
-	trans, _ = in_red_ck.NewMockTransaction(t, true, -1)
+	trans, _ = in_red_ck.NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore", trans)
 	encoder, _ = sds.Update(ctx, "fooVideo2")
@@ -72,7 +72,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Read back the video.
-	trans, _ = in_red_ck.NewMockTransaction(t, false, -1)
+	trans, _ = in_red_ck.NewMockTransactionWithLogging(t, false, -1)
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore", trans)
 
@@ -106,7 +106,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 
 func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 	// Upload the video.
-	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
+	trans, _ := in_red_ck.NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 	sds := NewStreamingDataStore[string](ctx, "fooStore2", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo1")
@@ -114,7 +114,7 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Update the video.
-	trans, _ = in_red_ck.NewMockTransaction(t, true, -1)
+	trans, _ = in_red_ck.NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore2", trans)
 	encoder, _ = sds.Update(ctx, "fooVideo1")
@@ -130,7 +130,7 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 
 func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 	// Upload the video.
-	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
+	trans, _ := in_red_ck.NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 	sds := NewStreamingDataStore[string](ctx, "fooStore4", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo3")
@@ -138,7 +138,7 @@ func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Update the video.
-	trans, _ = in_red_ck.NewMockTransaction(t, true, -1)
+	trans, _ = in_red_ck.NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore4", trans)
 	encoder, _ = sds.Update(ctx, "fooVideo3")
@@ -155,7 +155,7 @@ func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 
 func Test_StreamingDataStoreUpdate(t *testing.T) {
 	// Upload the video.
-	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
+	trans, _ := in_red_ck.NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 	sds := NewStreamingDataStore[string](ctx, "fooStore5", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo")
@@ -163,7 +163,7 @@ func Test_StreamingDataStoreUpdate(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Update the video.
-	trans, _ = in_red_ck.NewMockTransaction(t, true, -1)
+	trans, _ = in_red_ck.NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore5", trans)
 	encoder, _ = sds.Update(ctx, "fooVideo")
@@ -178,7 +178,7 @@ func Test_StreamingDataStoreUpdate(t *testing.T) {
 
 func Test_StreamingDataStoreDelete(t *testing.T) {
 	// Upload the video.
-	trans, _ := in_red_ck.NewMockTransaction(t, true, -1)
+	trans, _ := in_red_ck.NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 	sds := NewStreamingDataStore[string](ctx, "fooStore3", trans)
 
