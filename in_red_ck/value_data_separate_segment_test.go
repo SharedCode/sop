@@ -228,7 +228,7 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions {
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                         "persondb7",
 		SlotLength:                   nodeSlotLength,
 		IsUnique:                     false,

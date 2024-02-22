@@ -501,6 +501,22 @@ func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[s
 }
 
 func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues bool) error {
+	var lastErr error
+
+	// Rollback pre commit logged items.
+	if t.logger.committedState == addActivelyPersistedItem {
+		itemsForDelete := t.getForRollbackTrackedItemsValues()
+		if err := t.deleteTrackedItemsValues(ctx, itemsForDelete); err != nil {
+			lastErr = err
+		}
+		// Transaction got rolled back, no need for the logs.
+		t.logger.removeLogs(ctx)
+		// Rewind the transaction log in case retry will check it.
+		t.logger.log(ctx, unknown, nil)
+		return lastErr
+	}
+
+	// Rollback on commit logged items.
 	if t.logger.committedState > finalizeCommit {
 		// This state should not be reached and rollback invoked, but return an error about it, in case.
 		return fmt.Errorf("transaction got committed, 'can't rollback it")
@@ -508,7 +524,6 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 
 	updatedNodes, removedNodes, addedNodes, _, rootNodes := t.classifyModifiedNodes()
 
-	var lastErr error
 	if t.logger.committedState > commitStoreInfo {
 		rollbackStoresInfo := t.getRollbackStoresInfo()
 		if err := t.storeRepository.Update(ctx, rollbackStoresInfo...); err != nil {
