@@ -26,14 +26,9 @@ const (
 	finalizeCommit
 	deleteObsoleteEntries
 	deleteTrackedItemsValues
-)
 
-const (
-	// Pre commit log functions. Though these enums map to "lockTrackedItems" int value,
-	// they don't conflict because these are pre commit states. Pre commit gets erased
-	// during successful initial commit steps where the pre commit logs are no longer needed.
-	// Thus, there is no conflict usagewise.
-	addActivelyPersistedItem = unknown + 1
+	// Pre commit functions.
+	addActivelyPersistedItem = 99
 	updateActivelyPersistedItem = addActivelyPersistedItem
 )
 
@@ -117,6 +112,16 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 	var lastErr error
 	lastCommittedFunctionLog := committedFunctionLogs[len(committedFunctionLogs)-1].Key
 	for i := len(committedFunctionLogs) - 1; i >= 0; i-- {
+		// Process pre commit log functions.
+		if committedFunctionLogs[i].Key == addActivelyPersistedItem && committedFunctionLogs[i].Value != nil {
+			itemsForDelete := (committedFunctionLogs[i].Value).(cas.BlobsPayload[sop.UUID])
+			if err := t.blobStore.Remove(ctx, itemsForDelete); err != nil {
+				lastErr = err
+			}
+			continue
+		}
+
+		// Process commit log functions.
 		if committedFunctionLogs[i].Key == finalizeCommit {
 			if committedFunctionLogs[i].Value == nil {
 				if lastCommittedFunctionLog >= deleteObsoleteEntries {
@@ -197,14 +202,6 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 				}
 			}
 			continue
-		}
-
-		// Process pre commit log functions.
-		if committedFunctionLogs[i].Key == addActivelyPersistedItem && committedFunctionLogs[i].Value != nil {
-			itemsForDelete := (committedFunctionLogs[i].Value).(cas.BlobsPayload[sop.UUID])
-			if err := t.blobStore.Remove(ctx, itemsForDelete); err != nil {
-				return err
-			}
 		}
 	}
 

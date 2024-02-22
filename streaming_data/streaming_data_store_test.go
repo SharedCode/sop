@@ -206,6 +206,11 @@ func Test_StreamingDataStoreDelete(t *testing.T) {
 	trans.Commit(ctx)
 }
 
+// TODO:
+// * add unit test for edge case like add/update of items and failed to commit.
+// Validate whether cleanup does a good job.
+// * add unit test that rolls back added/updated items, validate whether cleanup is working fine.
+
 func encodeVideo(t *testing.T, encoder *Encoder[string], count int) {
 	for i := 0; i < count; i++ {
 		encoder.Encode("#%d. A huge chunk, about 20MB.")
