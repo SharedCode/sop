@@ -124,8 +124,8 @@ func (t *transaction) onIdle(ctx context.Context) {
 		interval = 5
 	}
 	nextRunTime := Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
-	runTime := false
 	if lastOnIdleRunTime < nextRunTime {
+		runTime := false
 		locker.Lock()
 		if lastOnIdleRunTime < nextRunTime {
 			lastOnIdleRunTime = Now().UnixMilli()
