@@ -59,7 +59,7 @@ func (tl *transactionLog) setNewTID() {
 }
 
 // Log the about to be committed function state.
-func (tl *transactionLog) log(ctx context.Context, f commitFunction, payload interface{}) error {
+func (tl *transactionLog) log(ctx context.Context, f commitFunction, payload []byte) error {
 	tl.committedState = f
 	if !tl.logging || f == unknown {
 		return nil
@@ -85,7 +85,7 @@ var hourBeingProcessed string
 func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *transaction) error {
 	var tid gocql.UUID
 	var hr string
-	var committedFunctionLogs []sop.KeyValuePair[int, interface{}]
+	var committedFunctionLogs []sop.KeyValuePair[int, []byte]
 	var err error
 	if hourBeingProcessed == "" {
 		tid, hr, committedFunctionLogs, err = tl.logger.GetOne(ctx)
@@ -212,12 +212,16 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 	return lastErr
 }
 
-func toStruct[T any](obj interface{}) T {
+func toStruct[T any](obj []byte) T {
 	var t T
 	if obj == nil {
 		return t
 	}
-	ba, _ := json.Marshal(obj)
-	json.Unmarshal(ba, &t)
+	json.Unmarshal(obj, &t)
 	return t
+}
+
+func toByteArray(obj interface{}) []byte {
+	ba, _ := json.Marshal(obj)
+	return ba
 }
