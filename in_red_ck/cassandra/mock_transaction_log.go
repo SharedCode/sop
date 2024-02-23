@@ -2,7 +2,6 @@ package cassandra
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -24,7 +23,7 @@ func NewMockTransactionLog() TransactionLog {
 }
 
 // GetOne returns the oldest transaction ID.
-func (tl *MockTransactionLog) GetOne(ctx context.Context) (gocql.UUID, string, []sop.KeyValuePair[int, interface{}], error) {
+func (tl *MockTransactionLog) GetOne(ctx context.Context) (gocql.UUID, string, []sop.KeyValuePair[int, []byte], error) {
 	if tl.datesLogs.First() {
 		kt, _ := time.Parse(DateHourLayout, tl.datesLogs.GetCurrentKey())
 		// Cap the returned entries to older than an hour to safeguard ongoing transactions.
@@ -33,12 +32,10 @@ func (tl *MockTransactionLog) GetOne(ctx context.Context) (gocql.UUID, string, [
 		if kt.Unix() < cappedTime.Unix() {
 			v := tl.datesLogs.GetCurrentValue()
 			for kk, vv := range v {
-				r := make([]sop.KeyValuePair[int, interface{}], len(vv))
+				r := make([]sop.KeyValuePair[int, []byte], len(vv))
 				for ii := range vv {
-					var target interface{}
-					json.Unmarshal(vv[ii].Value, &target)
 					r[ii].Key = vv[ii].Key
-					r[ii].Value = target
+					r[ii].Value = vv[ii].Value
 				}
 				return kk, tl.datesLogs.GetCurrentKey(), r, nil
 			}
@@ -47,25 +44,23 @@ func (tl *MockTransactionLog) GetOne(ctx context.Context) (gocql.UUID, string, [
 	return NilUUID, "", nil, nil
 }
 
-func (tl *MockTransactionLog) GetLogsDetails(ctx context.Context, hour string) (gocql.UUID, []sop.KeyValuePair[int, interface{}], error) {
+func (tl *MockTransactionLog) GetLogsDetails(ctx context.Context, hour string) (gocql.UUID, []sop.KeyValuePair[int, []byte], error) {
 	if !tl.datesLogs.FindOne(hour, false) {
 		return NilUUID, nil, nil
 	}
 	v := tl.datesLogs.GetCurrentValue()
 	for kk, vv := range v {
-		r := make([]sop.KeyValuePair[int, interface{}], len(vv))
+		r := make([]sop.KeyValuePair[int, []byte], len(vv))
 		for ii := range vv {
-			var target interface{}
-			json.Unmarshal(vv[ii].Value, &target)
 			r[ii].Key = vv[ii].Key
-			r[ii].Value = target
+			r[ii].Value = vv[ii].Value
 		}
 		return kk, r, nil
 	}
 	return NilUUID, nil, nil
 }
 
-func (tl *MockTransactionLog) GetTIDLogs(tid gocql.UUID) []sop.KeyValuePair[int, interface{}] {
+func (tl *MockTransactionLog) GetTIDLogs(tid gocql.UUID) []sop.KeyValuePair[int, []byte] {
 	if tl.datesLogs.First() {
 		for {
 			v := tl.datesLogs.GetCurrentValue()
@@ -73,12 +68,10 @@ func (tl *MockTransactionLog) GetTIDLogs(tid gocql.UUID) []sop.KeyValuePair[int,
 				if kk != tid {
 					continue
 				}
-				r := make([]sop.KeyValuePair[int, interface{}], len(vv))
+				r := make([]sop.KeyValuePair[int, []byte], len(vv))
 				for ii := range vv {
-					var target interface{}
-					json.Unmarshal(vv[ii].Value, &target)
 					r[ii].Key = vv[ii].Key
-					r[ii].Value = target
+					r[ii].Value = vv[ii].Value
 				}
 				return r
 			}
@@ -91,17 +84,16 @@ func (tl *MockTransactionLog) GetTIDLogs(tid gocql.UUID) []sop.KeyValuePair[int,
 }
 
 // Add blob(s) to the Blob store.
-func (tl *MockTransactionLog) Add(ctx context.Context, tid gocql.UUID, commitFunction int, payload interface{}) error {
+func (tl *MockTransactionLog) Add(ctx context.Context, tid gocql.UUID, commitFunction int, payload []byte) error {
 	date := Now().Format(DateHourLayout)
 	found := tl.datesLogs.FindOne(date, false)
 	dayLogs := tl.datesLogs.GetCurrentValue()
 	if dayLogs == nil {
 		dayLogs = make(map[gocql.UUID][]sop.KeyValuePair[int, []byte])
 	}
-	ba, _ := json.Marshal(payload)
 	dayLogs[tid] = append(dayLogs[tid], sop.KeyValuePair[int, []byte]{
 		Key:   commitFunction,
-		Value: ba,
+		Value: payload,
 	})
 	if found {
 		tl.datesLogs.UpdateCurrentItem(dayLogs)

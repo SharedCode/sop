@@ -22,7 +22,7 @@ var NilUUID = gocql.UUID(sop.NilUUID)
 
 type TransactionLog interface {
 	// Add a transaction log.
-	Add(ctx context.Context, tid gocql.UUID, commitFunction int, payload interface{}) error
+	Add(ctx context.Context, tid gocql.UUID, commitFunction int, payload []byte) error
 	// Remove all logs of a given transaciton.
 	Remove(ctx context.Context, tid gocql.UUID) error
 
@@ -34,11 +34,11 @@ type TransactionLog interface {
 	// temp resource will then age and reach expiration limit, then get cleaned up. This method is used to do distribution.
 	//
 	// It is capped to an hour ago older because anything newer may still be an in-flight or ongoing transaction.
-	GetOne(ctx context.Context) (gocql.UUID, string, []sop.KeyValuePair[int, interface{}], error)
+	GetOne(ctx context.Context) (gocql.UUID, string, []sop.KeyValuePair[int, []byte], error)
 
 	// Given a date hour, returns an available for cleanup set of transaction logs with their Transaction ID.
 	// Or nils if there is no more needing cleanup for this date hour.
-	GetLogsDetails(ctx context.Context, hour string) (gocql.UUID, []sop.KeyValuePair[int, interface{}], error)
+	GetLogsDetails(ctx context.Context, hour string) (gocql.UUID, []sop.KeyValuePair[int, []byte], error)
 }
 
 type transactionLog struct {
@@ -65,7 +65,7 @@ func NewTransactionLog() TransactionLog {
 }
 
 // GetOne fetches an expired Transaction ID(TID), the hour it was created in and transaction logs for this TID.
-func (tl *transactionLog) GetOne(ctx context.Context) (gocql.UUID, string, []sop.KeyValuePair[int, interface{}], error) {
+func (tl *transactionLog) GetOne(ctx context.Context) (gocql.UUID, string, []sop.KeyValuePair[int, []byte], error) {
 	duration := time.Duration(7 * time.Hour)
 
 	if err := redis.Lock(ctx, duration, tl.hourLockKey); err != nil {
@@ -96,7 +96,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (gocql.UUID, string, []sop
 	return tid, hour, r, nil
 }
 
-func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (gocql.UUID, []sop.KeyValuePair[int, interface{}], error) {
+func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (gocql.UUID, []sop.KeyValuePair[int, []byte], error) {
 	if hour == "" {
 		return NilUUID, nil, nil
 	}
@@ -165,7 +165,7 @@ func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error
 	return cappedHour.Format(DateHourLayout), tid, nil
 }
 
-func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([]sop.KeyValuePair[int, interface{}], error) {
+func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([]sop.KeyValuePair[int, []byte], error) {
 	if connection == nil {
 		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -174,19 +174,13 @@ func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([
 	qry := connection.Session.Query(selectStatement, tid).WithContext(ctx).Consistency(gocql.LocalOne)
 
 	iter := qry.Iter()
-	r := make([]sop.KeyValuePair[int, interface{}], 0, iter.NumRows())
+	r := make([]sop.KeyValuePair[int, []byte], 0, iter.NumRows())
 	var c_f int
 	var c_f_p []byte
 	for iter.Scan(&c_f, &c_f_p) {
-		var t interface{}
-		if c_f_p != nil {
-			if err := Marshaler.Unmarshal(c_f_p, &t); err != nil {
-				return nil, err
-			}
-		}
-		r = append(r, sop.KeyValuePair[int, interface{}]{
+		r = append(r, sop.KeyValuePair[int, []byte]{
 			Key:   c_f,
-			Value: t,
+			Value: c_f_p,
 		})
 	}
 	if err := iter.Close(); err != nil {
@@ -196,18 +190,13 @@ func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([
 }
 
 // Add blob(s) to the Blob store.
-func (tl *transactionLog) Add(ctx context.Context, tid gocql.UUID, commitFunction int, payload interface{}) error {
+func (tl *transactionLog) Add(ctx context.Context, tid gocql.UUID, commitFunction int, payload []byte) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
-	ba, err := Marshaler.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
 	insertStatement := fmt.Sprintf("INSERT INTO %s.t_log (id, c_f, c_f_p) VALUES(?,?,?);", connection.Config.Keyspace)
-	qry := connection.Session.Query(insertStatement, tid, commitFunction, ba).WithContext(ctx).Consistency(gocql.LocalOne)
+	qry := connection.Session.Query(insertStatement, tid, commitFunction, payload).WithContext(ctx).Consistency(gocql.LocalOne)
 	if err := qry.Exec(); err != nil {
 		return err
 	}

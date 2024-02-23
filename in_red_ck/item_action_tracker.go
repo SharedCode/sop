@@ -231,14 +231,14 @@ func (t *itemActionTracker[TK, TV]) Remove(ctx context.Context, item *btree.Item
 	return nil
 }
 
-func extractRequestPayloadIDs(payload *cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) cas.BlobsPayload[sop.UUID] {
+func extractRequestPayloadIDs(payload *cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) []byte {
 	var r cas.BlobsPayload[sop.UUID]
 	r.BlobTable = payload.BlobTable
 	r.Blobs = make([]sop.UUID, len(payload.Blobs))
 	for i := range payload.Blobs {
 		r.Blobs[i] = payload.Blobs[i].Key
 	}
-	return r
+	return toByteArray(r)
 }
 
 func (t *itemActionTracker[TK, TV]) hasTrackedItems() bool {

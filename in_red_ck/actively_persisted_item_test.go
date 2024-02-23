@@ -38,7 +38,7 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 		trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).logger.transactionID)
 
 	if tidLogs == nil {
-		t.Errorf("failed Rollback, got %v, want nil", tidLogs)
+		t.Error("failed pre Rollback, got nil, want valid logs")
 	}
 
 	trans.Rollback(ctx)
@@ -102,11 +102,16 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 
 	tid, _, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
 	if cas.IsNil(tid) {
-		t.Errorf("Failed, got nil Tid, want valid Tid.")
+		t.Errorf("Failed, got nil, want valid Tid.")
 	}
 
 	if err := twoPhaseTrans.logger.processExpiredTransactionLogs(ctx, twoPhaseTrans); err != nil {
 		t.Errorf("processExpiredTransactionLogs failed, got %v want nil.", err)
+	}
+
+	tid, _, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
+	if !cas.IsNil(tid) {
+		t.Errorf("Failed, got %v, want nil.", tid)
 	}
 
 	trans, _ = NewMockTransactionWithLogging(t, false, -1)

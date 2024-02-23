@@ -124,8 +124,8 @@ func (t *transaction) onIdle(ctx context.Context) {
 		interval = 5
 	}
 	nextRunTime := Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
-	runTime := false
 	if lastOnIdleRunTime < nextRunTime {
+		runTime := false
 		locker.Lock()
 		if lastOnIdleRunTime < nextRunTime {
 			lastOnIdleRunTime = Now().UnixMilli()
@@ -284,7 +284,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 
-		if err := t.logger.log(ctx, commitTrackedItemsValues, t.getForRollbackTrackedItemsValues()); err != nil {
+		if err := t.logger.log(ctx, commitTrackedItemsValues, toByteArray(t.getForRollbackTrackedItemsValues())); err != nil {
 			return err
 		}
 		if err := t.commitTrackedItemsValues(ctx); err != nil {
@@ -307,9 +307,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Commit new root nodes.
 		bibs := convertToBlobRequestPayload(rootNodes)
 		vids := convertToRegistryRequestPayload(rootNodes)
-		if err := t.logger.log(ctx, commitNewRootNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+		if err := t.logger.log(ctx, commitNewRootNodes, toByteArray(sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
 			First: vids, Second: bibs,
-		}); err != nil {
+		})); err != nil {
 			return err
 		}
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
@@ -327,7 +327,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 		if successful {
 			// Commit updated nodes.
-			if err := t.logger.log(ctx, commitUpdatedNodes, convertToRegistryRequestPayload(updatedNodes)); err != nil {
+			if err := t.logger.log(ctx, commitUpdatedNodes, toByteArray(convertToRegistryRequestPayload(updatedNodes))); err != nil {
 				return err
 			}
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
@@ -337,7 +337,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Only do commit removed nodes if successful so far.
 		if successful {
 			// Commit removed nodes.
-			if err := t.logger.log(ctx, commitRemovedNodes, convertToRegistryRequestPayload(removedNodes)); err != nil {
+			if err := t.logger.log(ctx, commitRemovedNodes, toByteArray(convertToRegistryRequestPayload(removedNodes))); err != nil {
 				return err
 			}
 			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
@@ -365,10 +365,10 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	// Commit added nodes.
-	if err := t.logger.log(ctx, commitAddedNodes, sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+	if err := t.logger.log(ctx, commitAddedNodes, toByteArray(sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
 		First:  convertToRegistryRequestPayload(addedNodes),
 		Second: convertToBlobRequestPayload(addedNodes),
-	}); err != nil {
+	})); err != nil {
 		return err
 	}
 	if err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
@@ -376,7 +376,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	// Commit stores update(CountDelta apply).
-	if err := t.logger.log(ctx, commitStoreInfo, t.getRollbackStoresInfo()); err != nil {
+	if err := t.logger.log(ctx, commitStoreInfo, toByteArray(t.getRollbackStoresInfo())); err != nil {
 		return err
 	}
 	if err := t.commitStores(ctx); err != nil {
@@ -425,7 +425,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 			Second: s,
 		}
 	}
-	if err := t.logger.log(ctx, finalizeCommit, pl); err != nil {
+	if err := t.logger.log(ctx, finalizeCommit, toByteArray(pl)); err != nil {
 		return err
 	}
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
