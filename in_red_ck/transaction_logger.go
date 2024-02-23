@@ -115,7 +115,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 	for i := len(committedFunctionLogs) - 1; i >= 0; i-- {
 		// Process pre commit log functions.
 		if committedFunctionLogs[i].Key == addActivelyPersistedItem && committedFunctionLogs[i].Value != nil {
-			itemsForDelete := (committedFunctionLogs[i].Value).(cas.BlobsPayload[sop.UUID])
+			itemsForDelete := toStruct[cas.BlobsPayload[sop.UUID]](committedFunctionLogs[i].Value)
 			if err := t.blobStore.Remove(ctx, itemsForDelete); err != nil {
 				lastErr = err
 			}
