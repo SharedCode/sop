@@ -49,7 +49,13 @@ const (
 	BigData
 )
 
-// Helper function to easily configure a store.
+// Helper function to easily configure a store. Select the right valueDataSize matching your usage scenario.
+//
+// Caveat, pls. don't use the incorrect ValueDataSize in your usage scenario. For example, choosing BigData but actual item
+// value data size can be small or medium size will cause unnecessary latency as SOP will not use global caching on your items'
+// value data. On the contrary, if you use SmallData(or MediumData) but actual item value data size is big, then this will
+// impact performance too. As SOP will use global & local cache in your items' value data that occupies huge space, impacting Redis,
+// over-allocating it & the local (host) cache.
 func ConfigureStore(storeName string, uniqueKey bool, slotLength int, description string, valueDataSize ValueDataSize) StoreOptions {
 	so := StoreOptions{
 		Name:                     storeName,
