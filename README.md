@@ -57,11 +57,11 @@ func main() {
 	trans, _ := in_red_ck.NewTransaction(true, -1)
 	trans.Begin()
 
-	// Create/instantiate a new B-Tree named "fooStore" w/ 500 slots & other parameters
+	// Create/instantiate a new B-Tree named "fooStore" w/ 200 slots, Key is unique & other parameters
 	// including the "transaction" that it will participate in.
-	//
+	so := sop.ConfigureStore("fooStore", false, 200, "", sop.SmallData)
 	// Key is of type "int" & Value is of type "string".
-	b3, _ := in_red_ck.NewBtree[int, string](ctx, "fooStore", 500, false, false, true, "", trans)
+	b3, _ := in_red_ck.NewBtree[int, string](ctx, so, trans)
 
 	b3.Add(ctx, 1, "hello world")
 
@@ -113,8 +113,11 @@ func main() {
 	trans, err := in_red_ck.NewTransaction(true, -1)
 	trans.Begin()
 
-	// Create the B-Tree (store) instance.
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, "persondb", nodeSlotLength, false, false, false, "", trans)
+	// Create the B-Tree (store) instance. ValueDataSize can be SmallData or MediumData in this case.
+	// Let's choose MediumData as the person record can get set with medium sized data, that storing it in
+	// separate segment than the Btree node could be beneficial or more optimal per I/O.
+	so := sop.ConfigureStore("persondb", false, nodeSlotLength, "", sop.MediumData)
+	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, so, trans)
 
 	// Add a person record w/ details.
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone", "mySSN123")
@@ -142,7 +145,7 @@ You can also create or open one or many B-Trees within a transaction. And you ca
 Blob storage was implemented in Cassandra, thus, there is no need for AWS S3. Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_ck".
 SOP in Redis, Cassandra & Kafka(in_red_ck). Or fashionably, SOP in "red Calvin Klein", hehe.
 
-V2 is in Alpha status but there is no known issue.
+V2 is in Beta status and there is no known issue.
 
 But yeah, V2 is showing very good results. ACID, two phase commit transaction, and impressive performance as Redis is baked in. SOP V2 actually succeeded in turning M-Way Trie a native "resident" of the cluster. Each of the host running SOP, be it an application or a micro-service, is turned into a high performance database server. Each, a master, or shall I say, master-less. And, of course, it is objects persistence, thus, you just author your golang struct and SOP takes care of fast storage & ultra fast searches and in the order you specified. No need to worry whether you are hitting an index, because each SOP "store"(or B-Tree) is the index itself! :)
 
@@ -175,6 +178,51 @@ func init() {
 }
 ```
 Above illustrates sample configuration for Cassandra & Redis bits, and how to initialize (via in_red_ck.Initialize(..) function) the "system". You specify that and call Initialize one time(e.g. in init() like as shown) in your app or microservice and that is it.
+
+## Streaming Data
+As discussed above, the third usability scenario of SOP is support for very large data. SOP comes with a store out of the box that is configured for storing very large amount of data, like in the range of 1GB to multi-GBs. Sample code to use this store:
+```
+import (
+	"github.com/SharedCode/sop/in_red_ck"
+)
+
+// ...
+	// To create and populate a "streaming data" store.
+	trans, _ := in_red_ck.NewTransaction(true, -1, true)
+	trans.Begin()
+	sds := NewStreamingDataStore[string](ctx, "fooStore", trans)
+	encoder, _ := sds.Add(ctx, "fooVideo")
+	for i := 0; i < 10; i++ {
+		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
+	}
+	trans.Commit(ctx)
+
+	// Read back the data.
+	trans, _ = in_red_ck.NewTransaction(false, -1, true)
+	trans.Begin()
+	sds = NewStreamingDataStore[string](ctx, "fooStore", trans)
+
+	// Find the video we uploaded.
+	sds.FindOne(ctx, "fooVideo")
+	decoder, _ := sds.GetCurrentValue(ctx)
+	var chunk string
+	for {
+		if err := decoder.Decode(&chunk); err == io.EOF {
+			// Stop when we have consumed all data(reached EOF) of the uploaded video.
+			break
+		}
+		// Do something with the
+		fmt.Println(chunk)
+	}
+	// End the reader transaction.
+	trans.Commit(ctx)
+```
+### Upload
+The Streaming Data Store's methods like Add, AddIfNotExists and Update all return an "encoder" object that allows your code to upload(via "Encode" method) chunks or segments of data belonging to the item, e.g. - a video if it is a video, or anything that is huge data.
+Upon completion, calling transaction "Commit" will finalize the upload.
+
+### Download
+On downloading, code can call ```FindOne``` to find the item and position the built-in cursor to it, then call ```GetCurrentValue``` will return a "decoder" object that allows your code to download the chunks or segments of the uploaded data(via "Decode" method). And like usual, calling the transaction "Commit" will finalize the reading transaction.
 
 ## Transaction Batching
 You read that right, in SOP, all your actions within a transaction becomes the batch that gets submitted to the backend. Thus, you can just focus on your data mining and/or application logic and let the SOP transaction to take care of submitting all your changes for commit. Even items you've fetched are checked for consistency during commit. And yes, there is a "reader" transaction where you just do fetches or item reads, then on commit, SOP will ensure the items you read did not change while in the middle or up to the time you submitted or committed the transaction.
@@ -209,7 +257,7 @@ Here: https://github.com/SharedCode/sop/blob/800e7e23e9e2dce42f708db9fe9a90f3e9b
 ## Transaction Logging
 SOP supports transaction logging, you can enable this by passing "true" to the third parameter of the ```in_red_ck.NewTransaction(true, -1, **true**)``` method to create a new transaction. Logging can be important specially when your cluster is not stable yet, and it is somewhat prone to host reboot for maintenance, etc... When a transaction is in "commit" process and the host dies, then the transaction temp resources will be left hanging. If logging is on, then the next time SOP transaction commit occurs, like after reboot of a host, then SOP will cleanup these left hanging temp resources.
 
-Can be a life saver specially if you are storing/managing very large data set, and thus, your partitions in temp are occupying huge storage space. Turn logging on in your transactions, it is highly recommended.
+Can be a life saver specially if you are storing/managing very large data set, and thus, your temp partitions are occupying huge storage space. Turn logging on in your transactions, it is highly recommended.
 
 ## Item Serialization
 By default, uses Golang's built-in JSON marshaller for serialization for simplicity and support for "streaming"(future feature, perhaps in V3). But you can override this by assigning your own "Marshaler" interface implementation to ```../in_red_ck/cassandra``` & ```../in_red_ck/redis``` packages.
