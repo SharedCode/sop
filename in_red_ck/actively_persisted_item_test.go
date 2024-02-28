@@ -13,16 +13,8 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	trans, _ := NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 
-	sds, _ := NewBtree[string, string](ctx, sop.StoreOptions{
-		Name:                         "xyz",
-		SlotLength:                   8,
-		IsUnique:                     true,
-		IsValueDataInNodeSegment:     false,
-		IsValueDataActivelyPersisted: true,
-		IsValueDataGloballyCached:    false,
-		LeafLoadBalancing:            false,
-		Description:                  "Streaming data",
-	}, trans)
+	so := sop.ConfigureStore("xyz", true, 8, "Streaming data", sop.BigData)
+	sds, _ := NewBtree[string, string](ctx, so, trans)
 
 	sds.Add(ctx, "fooVideo", "video content")
 	trans.Commit(ctx)
@@ -62,16 +54,8 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	trans, _ := NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 
-	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                         "xyz2",
-		SlotLength:                   8,
-		IsUnique:                     false,
-		IsValueDataInNodeSegment:     false,
-		IsValueDataActivelyPersisted: true,
-		IsValueDataGloballyCached:    false,
-		LeafLoadBalancing:            false,
-		Description:                  "Streaming data",
-	}, trans)
+	so := sop.ConfigureStore("xyz2", false, 8, "Streaming data", sop.BigData)
+	b3, _ := NewBtree[PersonKey, Person](ctx, so, trans)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
