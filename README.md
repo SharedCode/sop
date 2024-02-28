@@ -211,7 +211,7 @@ import (
 			// Stop when we have consumed all data(reached EOF) of the uploaded video.
 			break
 		}
-		// Do something with the
+		// Do something with the downloaded data chunk.
 		fmt.Println(chunk)
 	}
 	// End the reader transaction.
