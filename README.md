@@ -218,11 +218,11 @@ import (
 	trans.Commit(ctx)
 ```
 ### Upload
-The Streaming Data Store's methods like Add, AddIfNotExists and Update all return an "encoder" object that allows your code to upload(via "Encode" method) chunks or segments of data belonging to the item, e.g. - a video if it is a video, or anything that is huge data.
-Upon completion, calling transaction "Commit" will finalize the upload.
+The Streaming Data Store's methods like ```Add```, ```AddIfNotExists``` and ```Update``` all return an ```Encoder``` object that allows your code to upload(via ```Encode``` method) chunks or segments of data belonging to the item, e.g. - a video if it is a video, or anything that is huge data.
+Upon completion, calling transaction ```Commit``` will finalize the upload.
 
 ### Download
-On downloading, code can call ```FindOne``` to find the item and position the built-in cursor to it, then call ```GetCurrentValue``` will return a "decoder" object that allows your code to download the chunks or segments of the uploaded data(via "Decode" method). And like usual, calling the transaction "Commit" will finalize the reading transaction.
+On downloading, code can call ```FindOne``` to find the item and position the built-in cursor to it, then call ```GetCurrentValue``` will return a ```Decoder``` object that allows your code to download the chunks or segments of the uploaded data(via ```Decode``` method). And like usual, calling the transaction ```Commit``` will finalize the reading transaction.
 
 ## Transaction Batching
 You read that right, in SOP, all your actions within a transaction becomes the batch that gets submitted to the backend. Thus, you can just focus on your data mining and/or application logic and let the SOP transaction to take care of submitting all your changes for commit. Even items you've fetched are checked for consistency during commit. And yes, there is a "reader" transaction where you just do fetches or item reads, then on commit, SOP will ensure the items you read did not change while in the middle or up to the time you submitted or committed the transaction.
