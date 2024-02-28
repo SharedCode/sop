@@ -13,14 +13,9 @@ func Test_HelloWorld(t *testing.T) {
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
 
-	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "inmymemory",
-		SlotLength:               8,
-		IsUnique:                 false,
-		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        true,
-		Description:              "",
-	}, t1)
+	so := sop.ConfigureStore("inmymemory", false, 8, "", sop.SmallData)
+	so.LeafLoadBalancing = true
+	b3, _ := NewBtree[int, string](ctx, so, t1)
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
@@ -347,14 +342,10 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 	max := 100000
 	t1, _ := NewMockTransaction(t, true, -1)
 	t1.Begin()
-	b3, _ := NewBtree[string, string](ctx, sop.StoreOptions{
-		Name:                     "inmymemory3",
-		SlotLength:               8,
-		IsUnique:                 false,
-		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        true,
-		Description:              "",
-	}, t1)
+
+	so := sop.ConfigureStore("inmymemory3", false, 8, "", sop.SmallData)
+	so.LeafLoadBalancing = true
+	b3, _ := NewBtree[string, string](ctx, so, t1)
 
 	tests := []struct {
 		name       string

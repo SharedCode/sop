@@ -32,3 +32,40 @@ type StoreOptions struct {
 	// (optional) Description of the Store.
 	Description string
 }
+
+// ValueDataSize enumeration.
+type ValueDataSize int
+
+const (
+	// SmallData means your item value data is small and can be stored in the Btree node segment together with keys.
+	SmallData = iota
+	// MediumData means your item value data is medium size and should be stored in separate segment than the Btree node.
+	MediumData
+	// BigData means your item value data is big in size and like MediumData, stored in separate segment but
+	// is actively persisted and not globally cached as caching the big data will impact the local & global cache system(Redis).
+	//
+	// Is actively persisted means that for each "Add" or "Update" (and their variants) method call, Btree will persist
+	// the item value's data to the backend storage & remove it from memory.
+	BigData
+)
+
+// Helper function to easily configure a store.
+func ConfigureStore(storeName string, uniqueKey bool, slotLength int, description string, valueDataSize ValueDataSize) StoreOptions {
+	so := StoreOptions{
+		Name:                     storeName,
+		IsUnique:                 uniqueKey,
+		SlotLength:               slotLength,
+		IsValueDataInNodeSegment: true,
+		Description:              description,
+	}
+	if valueDataSize == MediumData {
+		so.IsValueDataInNodeSegment = false
+		so.IsValueDataGloballyCached = true
+	}
+	if valueDataSize == BigData {
+		so.IsValueDataInNodeSegment = false
+		so.IsValueDataGloballyCached = false
+		so.IsValueDataActivelyPersisted = true
+	}
+	return so
+}
