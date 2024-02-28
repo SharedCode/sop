@@ -127,6 +127,15 @@ func (s *StreamingDataStore[TK]) FindOne(ctx context.Context, key TK) (bool, err
 	return s.btree.FindOne(ctx, k, false)
 }
 
+// FindChunk will search Btree for an item with a given key and chunkIndex.
+// If you passed in a chunkIndex that is beyond the number of chunks of the item then it will return false.
+//
+// You can use FindChunk or FindOne & Next to navigate to the fragment or chunk # you are targeting to download.
+func (s *StreamingDataStore[TK]) FindChunk(ctx context.Context, key TK, chunkIndex int) (bool, error) {
+	k := StreamingDataKey[TK]{Key: key, ChunkIndex: chunkIndex}
+	return s.btree.FindOne(ctx, k, false)
+}
+
 // GetCurrentKey returns the current item's key.
 func (s *StreamingDataStore[TK]) GetCurrentKey() TK {
 	return s.btree.GetCurrentKey().Key
@@ -146,6 +155,9 @@ func (s *StreamingDataStore[TK]) Last(ctx context.Context) (bool, error) {
 
 // Next positions the "cursor" to the next item chunk as per key ordering.
 // Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
+//
+// Ensure you are not navigating passed the target chunk via calling GetCurrentKey and checking that
+// it is still the Key of the item you are interested about.
 func (s *StreamingDataStore[TK]) Next(ctx context.Context) (bool, error) {
 	return s.btree.Next(ctx)
 }
