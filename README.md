@@ -211,7 +211,7 @@ import (
 			// Stop when we have consumed all data(reached EOF) of the uploaded video.
 			break
 		}
-		// Do something with the
+		// Do something with the downloaded data chunk.
 		fmt.Println(chunk)
 	}
 	// End the reader transaction.
@@ -223,6 +223,19 @@ Upon completion, calling transaction ```Commit``` will finalize the upload.
 
 ### Download
 On downloading, code can call ```FindOne``` to find the item and position the built-in cursor to it, then call ```GetCurrentValue``` will return a ```Decoder``` object that allows your code to download the chunks or segments of the uploaded data(via ```Decode``` method). And like usual, calling the transaction ```Commit``` will finalize the reading transaction.
+
+### Fragment(s) Download
+Streaming Data store supports ability to skip chunk(s) and start downloading to a given desired chunk #. Btree store's navigation method ```Next``` is very appropriate for this. Sample code to show how to position to the fragment or chunk #:
+```
+	sds.FindOne(ctx, "fooVideo")
+	// Calling Next will skip chunk #1 and position to chunk #2. You can skip as many times as you want to target the fragment needed.
+	sds.Next(ctx)
+
+	// Calling GetCurrentValue will return a decoder that will start downloading from chunk #2 and beyond, 'til EOF.
+	decoder, _ := sds.GetCurrentValue(ctx)
+	// decoder.Decode method will behave just the same, but starts with the current fragment or chunk #.
+```
+Alternately, instead of using ```FindOne``` & ```Next``` to skip and position to the chunk #, you can use the ```FindChunk``` method and specify the chunk # your code wants to start downloading from.
 
 ## Transaction Batching
 You read that right, in SOP, all your actions within a transaction becomes the batch that gets submitted to the backend. Thus, you can just focus on your data mining and/or application logic and let the SOP transaction to take care of submitting all your changes for commit. Even items you've fetched are checked for consistency during commit. And yes, there is a "reader" transaction where you just do fetches or item reads, then on commit, SOP will ensure the items you read did not change while in the middle or up to the time you submitted or committed the transaction.
