@@ -59,8 +59,8 @@ func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string
 
 // Add insert an item to the b-tree and returns an encoder you can use to write the streaming data on.
 func (s *StreamingDataStore[TK]) Add(ctx context.Context, key TK) (*Encoder[TK], error) {
-	w := newWriter[TK](ctx, true, key, s.btree)
-	return newEncoder(ctx, w), nil
+	w := newWriter(ctx, true, key, s.btree)
+	return newEncoder(w), nil
 }
 
 // Remove will delete the item's data chunks given its key.
@@ -108,14 +108,14 @@ func (s *StreamingDataStore[TK]) Update(ctx context.Context, key TK) (*Encoder[T
 
 // UpdateCurrentItem will return an encoder that will allow you to update the current item's data chunks.
 func (s *StreamingDataStore[TK]) UpdateCurrentItem(ctx context.Context) (*Encoder[TK], error) {
-	w := newWriter[TK](ctx, false, s.btree.GetCurrentKey().Key, s.btree)
-	return newEncoder(ctx, w), nil
+	w := newWriter(ctx, false, s.btree.GetCurrentKey().Key, s.btree)
+	return newEncoder(w), nil
 }
 
 // GetCurrentValue returns the current item's decoder you can use to download the data chunks (or stream it down).
 func (s *StreamingDataStore[TK]) GetCurrentValue(ctx context.Context) (*json.Decoder, error) {
 	ck := s.btree.GetCurrentKey()
-	r := newReader[TK](ctx, ck.Key, ck.ChunkIndex, s.btree)
+	r := newReader(ctx, ck.Key, ck.ChunkIndex, s.btree)
 	return json.NewDecoder(r), nil
 }
 

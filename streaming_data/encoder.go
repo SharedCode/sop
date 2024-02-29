@@ -1,7 +1,6 @@
 package streaming_data
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -14,7 +13,7 @@ type Encoder[TK btree.Comparable] struct {
 	w           *writer[TK]
 }
 
-func newEncoder[TK btree.Comparable](ctx context.Context, w *writer[TK]) *Encoder[TK] {
+func newEncoder[TK btree.Comparable](w *writer[TK]) *Encoder[TK] {
 	return &Encoder[TK]{
 		jsonEncoder: json.NewEncoder(w),
 		w:           w,

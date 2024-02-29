@@ -36,7 +36,22 @@ func (r *reader[TK]) Read(p []byte) (n int, err error) {
 		}
 		return c, nil
 	}
-	found, err := r.btree.FindOne(r.ctx, StreamingDataKey[TK]{Key: r.key, ChunkIndex: r.chunkIndex}, false)
+
+	var found bool
+	ck := r.btree.GetCurrentKey()
+	ck.ChunkIndex++
+	sdk := StreamingDataKey[TK]{
+		Key: r.key,
+		ChunkIndex: r.chunkIndex,
+	}
+	if ck.Compare(sdk) == 0 {
+		found, err = r.btree.Next(r.ctx)
+		if found && r.btree.GetCurrentKey().Compare(sdk) != 0 {
+			found = false
+		}
+	} else {
+		found, err = r.btree.FindOne(r.ctx, StreamingDataKey[TK]{Key: r.key, ChunkIndex: r.chunkIndex}, false)
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -53,7 +68,7 @@ func (r *reader[TK]) Read(p []byte) (n int, err error) {
 		r.readChunk = ba
 		return c, nil
 	}
-	// Increment the chunk index in prep for next (chunk) Write call.
+	// Increment the chunk index in prep for next (chunk) Read call.
 	r.chunkIndex++
 	return c, nil
 }

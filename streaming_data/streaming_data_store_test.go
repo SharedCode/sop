@@ -32,12 +32,66 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	}
 	decoder, _ := sds.GetCurrentValue(ctx)
 	var target string
-	for i := 0; i < 10; i++ {
-		if err := decoder.Decode(&target); err != nil && err != io.EOF {
-			t.Error(err)
+	i := 0
+	for {
+		i++
+		if err := decoder.Decode(&target); err != nil {
+			if err != io.EOF {
+				t.Error(err)
+			}
 			break
 		}
 		fmt.Println(target)
+	}
+	if i != 11 {
+		t.Errorf("Decoder failed, got %d, want 10.", i)
+	}
+	// Commit on "reader" transaction will ensure that data you read did not change on entire
+	// transaction session until commit time. If other transaction did change the data read,
+	// Commit on the reader will return an error to reflect that data consistency conflict.
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Reader transaction commit failed, details: %v", err)
+	}
+}
+
+func Test_StreamingDataStoreMultipleItems(t *testing.T) {
+	trans, _ := in_red_ck.NewMockTransactionWithLogging(t, true, -1)
+	trans.Begin()
+	sds := NewStreamingDataStore[string](ctx, "fooStoreM", trans)
+	encoder, _ := sds.Add(ctx, "fooVideo")
+	for i := 0; i < 10; i++ {
+		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
+	}
+	encoder, _ = sds.Add(ctx, "fooVideo2")
+	for i := 0; i < 10; i++ {
+		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
+	}
+	trans.Commit(ctx)
+
+	// Read back the data. Pass false on 2nd argument will toggle to a "reader" transaction.
+	trans, _ = in_red_ck.NewMockTransactionWithLogging(t, false, -1)
+	trans.Begin()
+	sds = NewStreamingDataStore[string](ctx, "fooStoreM", trans)
+
+	ok, _ := sds.FindOne(ctx, "fooVideo")
+	if !ok {
+		t.Errorf("FindOne('fooVideo') failed, got not found, want found")
+	}
+	decoder, _ := sds.GetCurrentValue(ctx)
+	var target string
+	i := 0
+	for {
+		i++
+		if err := decoder.Decode(&target); err != nil {
+			if err != io.EOF {
+				t.Error(err)
+			}
+			break
+		}
+		fmt.Println(target)
+	}
+	if i != 11 {
+		t.Errorf("Decoder failed, got %d, want 10.", i)
 	}
 	// Commit on "reader" transaction will ensure that data you read did not change on entire
 	// transaction session until commit time. If other transaction did change the data read,
@@ -110,7 +164,7 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 	trans.Begin()
 	sds := NewStreamingDataStore[string](ctx, "fooStore2", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo1")
-	encodeVideo(t, encoder, 50)
+	encodeVideo(encoder, 50)
 	trans.Commit(ctx)
 
 	// Update the video.
@@ -118,7 +172,7 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore2", trans)
 	encoder, _ = sds.Update(ctx, "fooVideo1")
-	encodeVideo(t, encoder, 5)
+	encodeVideo(encoder, 5)
 	// Important to close the encoder, otherwise, cleanup will not happen.
 	encoder.Close()
 
@@ -134,7 +188,7 @@ func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 	trans.Begin()
 	sds := NewStreamingDataStore[string](ctx, "fooStore4", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo3")
-	encodeVideo(t, encoder, 5)
+	encodeVideo(encoder, 5)
 	trans.Commit(ctx)
 
 	// Update the video.
@@ -142,7 +196,7 @@ func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore4", trans)
 	encoder, _ = sds.Update(ctx, "fooVideo3")
-	encodeVideo(t, encoder, 7)
+	encodeVideo(encoder, 7)
 	// Since we updated with 7 chunks, 2 longer than existing, Close will not do anything.
 	// But call it anyway as part of "standard" for update encoder.
 	encoder.Close()
@@ -159,7 +213,7 @@ func Test_StreamingDataStoreUpdate(t *testing.T) {
 	trans.Begin()
 	sds := NewStreamingDataStore[string](ctx, "fooStore5", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo")
-	encodeVideo(t, encoder, 5)
+	encodeVideo(encoder, 5)
 	trans.Commit(ctx)
 
 	// Update the video.
@@ -167,7 +221,7 @@ func Test_StreamingDataStoreUpdate(t *testing.T) {
 	trans.Begin()
 	sds = NewStreamingDataStore[string](ctx, "fooStore5", trans)
 	encoder, _ = sds.Update(ctx, "fooVideo")
-	encodeVideo(t, encoder, 5)
+	encodeVideo(encoder, 5)
 	encoder.Close()
 
 	if sds.Count() != 5 {
@@ -183,13 +237,13 @@ func Test_StreamingDataStoreDelete(t *testing.T) {
 	sds := NewStreamingDataStore[string](ctx, "fooStore3", trans)
 
 	encoder, _ := sds.Add(ctx, "fooVideo1")
-	encodeVideo(t, encoder, 50)
+	encodeVideo(encoder, 50)
 
 	encoder, _ = sds.Add(ctx, "fooVideo2")
-	encodeVideo(t, encoder, 5)
+	encodeVideo(encoder, 5)
 
 	encoder, _ = sds.Add(ctx, "fooVideo3")
-	encodeVideo(t, encoder, 15)
+	encodeVideo(encoder, 15)
 
 	if ok, err := sds.Remove(ctx, "fooVideo2"); err != nil {
 		if err != nil {
@@ -211,7 +265,7 @@ func Test_StreamingDataStoreDelete(t *testing.T) {
 // Validate whether cleanup does a good job.
 // * add unit test that rolls back added/updated items, validate whether cleanup is working fine.
 
-func encodeVideo(t *testing.T, encoder *Encoder[string], count int) {
+func encodeVideo(encoder *Encoder[string], count int) {
 	for i := 0; i < count; i++ {
 		encoder.Encode("#%d. A huge chunk, about 20MB.")
 	}
