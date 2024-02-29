@@ -60,10 +60,10 @@ func Test_StreamingDataStoreMultipleItems(t *testing.T) {
 	sds := NewStreamingDataStore[string](ctx, "fooStoreM", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo")
 	for i := 0; i < 10; i++ {
-		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
+		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 12MB.", i))
 	}
 	encoder, _ = sds.Add(ctx, "fooVideo2")
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 20; i++ {
 		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
 	}
 	trans.Commit(ctx)
