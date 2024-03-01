@@ -157,13 +157,14 @@ As discussed above, the third usability scenario of SOP is support for very larg
 ```
 import (
 	"github.com/SharedCode/sop/in_red_ck"
+	sd "github.com/SharedCode/sop/in_red_ck/streaming_data"
 )
 
 // ...
 	// To create and populate a "streaming data" store.
 	trans, _ := in_red_ck.NewTransaction(true, -1, true)
 	trans.Begin()
-	sds := NewStreamingDataStore[string](ctx, "fooStore", trans)
+	sds := sd.NewStreamingDataStore[string](ctx, "fooStore", trans)
 	encoder, _ := sds.Add(ctx, "fooVideo")
 	for i := 0; i < 10; i++ {
 		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
@@ -173,7 +174,7 @@ import (
 	// Read back the data.
 	trans, _ = in_red_ck.NewTransaction(false, -1, true)
 	trans.Begin()
-	sds = NewStreamingDataStore[string](ctx, "fooStore", trans)
+	sds = sd.OpenStreamingDataStore[string](ctx, "fooStore", trans)
 
 	// Find the video we uploaded.
 	sds.FindOne(ctx, "fooVideo")
@@ -199,9 +200,8 @@ On downloading, code can call ```FindOne``` to find the item and position the bu
 ### Fragment(s) Download
 Streaming Data store supports ability to skip chunk(s) and start downloading to a given desired chunk #. Btree store's navigation method ```Next``` is very appropriate for this. Sample code to show how to position to the fragment or chunk #:
 ```
-	sds.FindOne(ctx, "fooVideo")
-	// Calling Next will skip chunk #1 and position to chunk #2. You can skip as many times as you want to target the fragment needed.
-	sds.Next(ctx)
+	// FindChunk will find & position the "cursor" to the item with a given key and chunk index(1). Chunk index is 0 based, so, 1 is actually the 2nd chunk.
+	sds.FindChunk(ctx, "fooVideo", 1)
 
 	// Calling GetCurrentValue will return a decoder that will start downloading from chunk #2 and beyond, 'til EOF.
 	decoder, _ := sds.GetCurrentValue(ctx)
