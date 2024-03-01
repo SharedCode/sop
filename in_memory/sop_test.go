@@ -110,6 +110,20 @@ func Test_FunctionalityTests(t *testing.T) {
 	fmt.Printf("Btree functionality tests ended.\n\n")
 }
 
+func Test_EdgeCases(t *testing.T) {
+	b3 := NewBtree[int, string](false)
+
+	k := b3.GetCurrentKey()
+	if k != 0 {
+		t.Errorf("GetCurrentKey on empty Btree failed, got %d, want 0.", k)
+	}
+	v := b3.GetCurrentValue()
+	if v != "" {
+		t.Errorf("GetCurrentValue on empty Btree failed, got %s, want ''.", v)
+	}
+	// Add other edge cases unit test(s) here.
+}
+
 func Test_ComplexDataMgmtCases(t *testing.T) {
 	max := 100000
 	fmt.Printf("Btree complex data mgmt tests started(%d items).\n", max)

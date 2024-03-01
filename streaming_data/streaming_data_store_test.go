@@ -11,6 +11,22 @@ import (
 
 var ctx = context.Background()
 
+func Test_StreamingDataStoreInvalidCases(t *testing.T) {
+	trans, _ := in_red_ck.NewMockTransactionWithLogging(t, true, -1)
+	trans.Begin()
+	sds := NewStreamingDataStore[string](ctx, "fooStore", trans)
+
+	if _, err := sds.GetCurrentValue(ctx); err == nil {
+		t.Errorf("GetCurrentValue on empty btree failed, got nil want err")
+	}
+	if _, err := sds.UpdateCurrentItem(ctx); err == nil {
+		t.Errorf("UpdateCurrentItem on empty btree failed, got nil want err")
+	}
+	if _, err := sds.RemoveCurrentItem(ctx); err == nil {
+		t.Errorf("RemoveCurrentItem on empty btree failed, got nil want err")
+	}
+}
+
 func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	trans, _ := in_red_ck.NewMockTransactionWithLogging(t, true, -1)
 	trans.Begin()

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
@@ -73,6 +74,10 @@ func (s *StreamingDataStore[TK]) Remove(ctx context.Context, key TK) (bool, erro
 
 // RemoveCurrentItem will delete the current item's data chunks.
 func (s *StreamingDataStore[TK]) RemoveCurrentItem(ctx context.Context) (bool, error) {
+	if s.btree.Count() == 0 {
+		return false, fmt.Errorf("failed to remove current item, store is empty")
+	}
+
 	key := s.btree.GetCurrentKey().Key
 	keys := make([]StreamingDataKey[TK], 0, 5)
 	for {
@@ -108,12 +113,18 @@ func (s *StreamingDataStore[TK]) Update(ctx context.Context, key TK) (*Encoder[T
 
 // UpdateCurrentItem will return an encoder that will allow you to update the current item's data chunks.
 func (s *StreamingDataStore[TK]) UpdateCurrentItem(ctx context.Context) (*Encoder[TK], error) {
+	if s.btree.Count() == 0 {
+		return nil, fmt.Errorf("failed to update current item, store is empty")
+	}
 	w := newWriter(ctx, false, s.btree.GetCurrentKey().Key, s.btree)
 	return newEncoder(w), nil
 }
 
 // GetCurrentValue returns the current item's decoder you can use to download the data chunks (or stream it down).
 func (s *StreamingDataStore[TK]) GetCurrentValue(ctx context.Context) (*json.Decoder, error) {
+	if s.btree.Count() == 0 {
+		return nil, fmt.Errorf("failed to get current value, store is empty")
+	}
 	ck := s.btree.GetCurrentKey()
 	r := newReader(ctx, ck.Key, ck.ChunkIndex, s.btree)
 	return json.NewDecoder(r), nil
