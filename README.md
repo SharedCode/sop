@@ -1,4 +1,4 @@
-# M-Way Trie algorithms for Scaleable Objects Persistence (SOP)
+# M-Way Trie for Scaleable Objects Persistence (SOP)
 
 Scaleable Objects Persistence (SOP) Framework - Golang V2
 
