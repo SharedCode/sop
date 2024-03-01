@@ -38,7 +38,21 @@ func (w *writer[TK]) Write(p []byte) (n int, err error) {
 		return len(p), nil
 	}
 	// Update.
-	ok, err := w.btree.FindOne(w.ctx, StreamingDataKey[TK]{Key: w.key, ChunkIndex: w.chunkIndex}, false)
+	var ok bool
+	ck := w.btree.GetCurrentKey()
+	ck.ChunkIndex++
+	sdk := StreamingDataKey[TK]{
+		Key: w.key,
+		ChunkIndex: w.chunkIndex,
+	}
+	if ck.Compare(sdk) == 0 {
+		ok, err = w.btree.Next(w.ctx)
+		if ok && w.btree.GetCurrentKey().Compare(sdk) != 0 {
+			ok = false
+		}
+	} else {
+		ok, err = w.btree.FindOne(w.ctx, StreamingDataKey[TK]{Key: w.key, ChunkIndex: w.chunkIndex}, false)
+	}
 	if err != nil {
 		return 0, err
 	}
