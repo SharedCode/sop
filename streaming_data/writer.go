@@ -24,7 +24,7 @@ func newWriter[TK btree.Comparable](ctx context.Context, addOrUpdate bool, key T
 	}
 }
 
-func (w *writer[TK]) Write(p []byte) (n int, err error) {
+func (w *writer[TK]) Write(p []byte) (int, error) {
 	// Add.
 	if w.addOrUpdate {
 		if ok, err := w.btree.Add(w.ctx, StreamingDataKey[TK]{Key: w.key, ChunkIndex: w.chunkIndex}, p); err != nil || !ok {
@@ -39,6 +39,7 @@ func (w *writer[TK]) Write(p []byte) (n int, err error) {
 	}
 	// Update.
 	var ok bool
+	var err error
 	ck := w.btree.GetCurrentKey()
 	ck.ChunkIndex++
 	sdk := StreamingDataKey[TK]{

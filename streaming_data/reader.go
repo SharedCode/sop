@@ -25,7 +25,7 @@ func newReader[TK btree.Comparable](ctx context.Context, key TK, chunkIndex int,
 	}
 }
 
-func (r *reader[TK]) Read(p []byte) (n int, err error) {
+func (r *reader[TK]) Read(p []byte) (int, error) {
 	if r.readChunk != nil {
 		c := copy(p, r.readChunk[r.readCount:])
 		if c+r.readCount >= len(r.readChunk) {
@@ -38,6 +38,7 @@ func (r *reader[TK]) Read(p []byte) (n int, err error) {
 	}
 
 	var found bool
+	var err error
 	ck := r.btree.GetCurrentKey()
 	ck.ChunkIndex++
 	sdk := StreamingDataKey[TK]{
