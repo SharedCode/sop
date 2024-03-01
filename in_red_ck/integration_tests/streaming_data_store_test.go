@@ -9,6 +9,23 @@ import (
 	sd "github.com/SharedCode/sop/streaming_data"
 )
 
+func Test_StreamingDataStoreInvalidCases(t *testing.T) {
+	trans, _ := in_red_ck.NewTransaction(true, -1, true)
+	trans.Begin()
+
+	// Empty Store get/update methods test cases.
+	sds, _ := sd.NewStreamingDataStore[string](ctx, "xyz", trans)
+	if _, err := sds.GetCurrentValue(ctx); err == nil {
+		t.Errorf("GetCurrentValue on empty btree failed, got nil want err")
+	}
+	if _, err := sds.UpdateCurrentItem(ctx); err == nil {
+		t.Errorf("UpdateCurrentItem on empty btree failed, got nil want err")
+	}
+	if _, err := sds.RemoveCurrentItem(ctx); err == nil {
+		t.Errorf("RemoveCurrentItem on empty btree failed, got nil want err")
+	}
+}
+
 func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	trans, _ := in_red_ck.NewTransaction(true, -1, true)
 	trans.Begin()

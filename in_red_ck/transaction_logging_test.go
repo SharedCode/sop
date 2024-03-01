@@ -9,7 +9,7 @@ import (
 )
 
 func Test_TLog_Rollback(t *testing.T) {
-	trans, _ := NewMockTransactionWithLogging(t, true, -1)
+	trans, _ := newMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -26,7 +26,7 @@ func Test_TLog_Rollback(t *testing.T) {
 
 	trans.Commit(ctx)
 
-	trans, _ = NewMockTransactionWithLogging(t, true, -1)
+	trans, _ = newMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 
 	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
@@ -34,7 +34,7 @@ func Test_TLog_Rollback(t *testing.T) {
 
 	trans.Rollback(ctx)
 
-	trans, _ = NewMockTransactionWithLogging(t, false, -1)
+	trans, _ = newMockTransactionWithLogging(t, false, -1)
 	trans.Begin()
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "tlogtable", trans)
 	pk, _ = newPerson("joe", "shroeger", "male", "email", "phone")
@@ -55,7 +55,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 	Now = func() time.Time { return yesterday }
 
-	trans, _ := NewMockTransactionWithLogging(t, true, -1)
+	trans, _ := newMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -72,7 +72,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 
 	trans.Commit(ctx)
 
-	trans, _ = NewMockTransactionWithLogging(t, true, -1)
+	trans, _ = newMockTransactionWithLogging(t, true, -1)
 	trans.Begin()
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "tlogtable", trans)
