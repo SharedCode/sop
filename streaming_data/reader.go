@@ -41,7 +41,7 @@ func (r *reader[TK]) Read(p []byte) (n int, err error) {
 	ck := r.btree.GetCurrentKey()
 	ck.ChunkIndex++
 	sdk := StreamingDataKey[TK]{
-		Key: r.key,
+		Key:        r.key,
 		ChunkIndex: r.chunkIndex,
 	}
 	if ck.Compare(sdk) == 0 {

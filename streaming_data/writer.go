@@ -42,7 +42,7 @@ func (w *writer[TK]) Write(p []byte) (n int, err error) {
 	ck := w.btree.GetCurrentKey()
 	ck.ChunkIndex++
 	sdk := StreamingDataKey[TK]{
-		Key: w.key,
+		Key:        w.key,
 		ChunkIndex: w.chunkIndex,
 	}
 	if ck.Compare(sdk) == 0 {
