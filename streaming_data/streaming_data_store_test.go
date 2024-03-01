@@ -118,6 +118,57 @@ func Test_StreamingDataStoreMultipleItems(t *testing.T) {
 	}
 }
 
+func Test_StreamingDataStoreDeleteAnItem(t *testing.T) {
+	trans, _ := in_red_ck.NewMockTransactionWithLogging(t, true, -1)
+	trans.Begin()
+	sds, _ := NewStreamingDataStore[string](ctx, "fooStoreM", trans)
+	encoder, _ := sds.Add(ctx, "fooVideo")
+	for i := 0; i < 10; i++ {
+		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 12MB.", i))
+	}
+	encoder, _ = sds.Add(ctx, "fooVideo2")
+	for i := 0; i < 20; i++ {
+		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
+	}
+	encoder, _ = sds.Add(ctx, "fooVideo3")
+	for i := 0; i < 5; i++ {
+		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
+	}
+	trans.Commit(ctx)
+
+	trans, _ = in_red_ck.NewMockTransactionWithLogging(t, true, -1)
+	trans.Begin()
+	sds, _ = OpenStreamingDataStore[string](ctx, "fooStoreM", trans)
+
+	ok, _ := sds.Remove(ctx, "fooVideo2")
+	if !ok {
+		t.Errorf("Remove('fooVideo2') failed, got false, want true")
+	}
+	sds.FindOne(ctx, "fooVideo3")
+	decoder, _ := sds.GetCurrentValue(ctx)
+	var target string
+	i := 0
+	for {
+		i++
+		if err := decoder.Decode(&target); err != nil {
+			if err != io.EOF {
+				t.Error(err)
+			}
+			break
+		}
+		fmt.Println(target)
+	}
+	if i != 6 {
+		t.Errorf("Decoder failed, got %d, want 6.", i)
+	}
+	// Commit on "reader" transaction will ensure that data you read did not change on entire
+	// transaction session until commit time. If other transaction did change the data read,
+	// Commit on the reader will return an error to reflect that data consistency conflict.
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Reader transaction commit failed, details: %v", err)
+	}
+}
+
 func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	// Upload the video.
 	trans, _ := in_red_ck.NewMockTransactionWithLogging(t, true, -1)
@@ -276,11 +327,6 @@ func Test_StreamingDataStoreDelete(t *testing.T) {
 
 	trans.Commit(ctx)
 }
-
-// TODO:
-// * add unit test for edge case like add/update of items and failed to commit.
-// Validate whether cleanup does a good job.
-// * add unit test that rolls back added/updated items, validate whether cleanup is working fine.
 
 func encodeVideo(encoder *Encoder[string], count int) {
 	for i := 0; i < count; i++ {
