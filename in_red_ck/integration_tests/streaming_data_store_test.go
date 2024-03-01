@@ -312,9 +312,7 @@ func Test_StreamingDataStoreDelete(t *testing.T) {
 	encodeVideo(encoder, 15)
 
 	if ok, err := sds.Remove(ctx, "fooVideo2"); err != nil {
-		if err != nil {
-			t.Errorf("Failed Remove, details: %v", err)
-		}
+		t.Errorf("Failed Remove, details: %v", err)
 	} else if !ok {
 		t.Error("Failed Remove, got false, want true")
 	}
