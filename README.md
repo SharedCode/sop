@@ -152,33 +152,6 @@ But yeah, V2 is showing very good results. ACID, two phase commit transaction, a
 Check out the "Sample Configuration" section below or the unit tests under "in_red_ck" folder to get idea how to specify the configuration for Cassandra and Redis. Also, if you want to specify the Cassandra consistency level per API, you can take a look at the "ConsistencyBook" field of the Cassandra Config struct. Each of the Repository/Store API CRUD operation has Consistency level settable under the "ConsistencyBook", or you can just leave it and default for the session is, "local quorum".
 See here for code details: https://github.com/SharedCode/sop/blob/d473b66f294582dceab6bdf146178b3f00e3dd8d/in_red_ck/cassandra/connection.go#L35
 
-## Cache Duration
-You can specify the Redis cache duration by using the following API:
-  * in_red_ck/cassandra/SetRegistryCacheDuration(duration) - defaults to 12 hrs, but you can specify if needs to cache the registry "virtual Ids" differently.
-  * in_red_ck/cassandra/SetStoreCacheDuration(duration) - defaults to 2 hrs caching of the "store" metadata record.
-  * in_red_ck/SetNodeCacheDuration(duration) - defaults to 1 hr caching of the B-Tree Nodes that contains the Key/Value pairs application data.
-
-The Redis cache is minimally used because our primary is Cassandra DB, which is a very fast DB. BUT yeah, please do change if wanting to benefit with bigger Redis caching. Virtual Ids were set to 12 hrs by default but may need a shorter duration and instead, the Nodes where your application data resides needs a longer duration, for example.
-
-## Sample Configuration
-```
-var cassConfig = cassandra.Config{
-	ClusterHosts: []string{"localhost:9042"},
-	Keyspace:     "btree",
-}
-var redisConfig = redis.Options{
-	Address:                  "localhost:6379",
-	Password:                 "", // no password set
-	DB:                       0,  // use default DB
-	DefaultDurationInSeconds: 24 * 60 * 60,
-}
-
-func init() {
-	Initialize(cassConfig, redisConfig)
-}
-```
-Above illustrates sample configuration for Cassandra & Redis bits, and how to initialize (via in_red_ck.Initialize(..) function) the "system". You specify that and call Initialize one time(e.g. in init() like as shown) in your app or microservice and that is it.
-
 ## Streaming Data
 As discussed above, the third usability scenario of SOP is support for very large data. SOP comes with a store out of the box that is configured for storing very large amount of data, like in the range of 1GB to multi-GBs. Sample code to use this store:
 ```
@@ -239,6 +212,33 @@ Alternately, instead of using ```FindOne``` & ```Next``` to skip and position to
 If you think about it, this is a very useful feature. For example, you can skip and start downloading (or streaming your movie!) from a given segment. Or if you use SOP to manage/store and to download your big data, e.g. - a software update, a data graph, etc... you can easily support inteligent download, e.g. - "resume and continue" without coding at all.
 
 And since our backing store is Cassandra, benefit from its replication feature across data centers. All free softwares and code is in your hands, 'can enhance it or request for enhancement that you need.
+
+## Cache Duration
+You can specify the Redis cache duration by using the following API:
+  * in_red_ck/cassandra/SetRegistryCacheDuration(duration) - defaults to 12 hrs, but you can specify if needs to cache the registry "virtual Ids" differently.
+  * in_red_ck/cassandra/SetStoreCacheDuration(duration) - defaults to 2 hrs caching of the "store" metadata record.
+  * in_red_ck/SetNodeCacheDuration(duration) - defaults to 1 hr caching of the B-Tree Nodes that contains the Key/Value pairs application data.
+
+The Redis cache is minimally used because our primary is Cassandra DB, which is a very fast DB. BUT yeah, please do change if wanting to benefit with bigger Redis caching. Virtual Ids were set to 12 hrs by default but may need a shorter duration and instead, the Nodes where your application data resides needs a longer duration, for example.
+
+## Sample Configuration
+```
+var cassConfig = cassandra.Config{
+	ClusterHosts: []string{"localhost:9042"},
+	Keyspace:     "btree",
+}
+var redisConfig = redis.Options{
+	Address:                  "localhost:6379",
+	Password:                 "", // no password set
+	DB:                       0,  // use default DB
+	DefaultDurationInSeconds: 24 * 60 * 60,
+}
+
+func init() {
+	Initialize(cassConfig, redisConfig)
+}
+```
+Above illustrates sample configuration for Cassandra & Redis bits, and how to initialize (via in_red_ck.Initialize(..) function) the "system". You specify that and call Initialize one time(e.g. in init() like as shown) in your app or microservice and that is it.
 
 ## Transaction Batching
 You read that right, in SOP, all your actions within a transaction becomes the batch that gets submitted to the backend. Thus, you can just focus on your data mining and/or application logic and let the SOP transaction to take care of submitting all your changes for commit. Even items you've fetched are checked for consistency during commit. And yes, there is a "reader" transaction where you just do fetches or item reads, then on commit, SOP will ensure the items you read did not change while in the middle or up to the time you submitted or committed the transaction.
