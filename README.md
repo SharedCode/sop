@@ -58,7 +58,13 @@ func main() {
 	trans.Begin()
 
 	// Create/instantiate a new B-Tree named "fooStore" w/ 200 slots, Key is unique & other parameters
-	// including the "transaction" that it will participate in.
+	// including the "transaction" that it will participate in. SmallData enum was selected for the
+	// ValueDataSize as the value part of the item will be small in data size, of string type.
+	// If the value part will be small, it is good to choose SmallData so SOP will persist the
+	// value part together with the key in the Node segment itself.
+	//
+	// In this case, when the Node segment is read from its partition, it will contain both the
+	// Keys & the Values (of the Node) ready for consumption. Small value data fits well with this.
 	so := sop.ConfigureStore("fooStore", false, 200, "", sop.SmallData)
 	// Key is of type "int" & Value is of type "string".
 	b3, _ := in_red_ck.NewBtree[int, string](ctx, so, trans)
@@ -115,7 +121,8 @@ func main() {
 
 	// Create the B-Tree (store) instance. ValueDataSize can be SmallData or MediumData in this case.
 	// Let's choose MediumData as the person record can get set with medium sized data, that storing it in
-	// separate segment than the Btree node could be beneficial or more optimal per I/O.
+	// separate segment than the Btree node could be beneficial or more optimal per I/O than storing it
+	// in the node itself(as in SmallData case).
 	so := sop.ConfigureStore("persondb", false, nodeSlotLength, "", sop.MediumData)
 	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, so, trans)
 
@@ -140,10 +147,10 @@ You can store or manage any data type in Golang. From native types like int, str
   * ```> 1``` means that the current key(x) is greater than the other key(y) being compared
   * ```< 1``` means that the current key(x) is lesser than the other key(y) being compared
 
-You can also create or open one or many B-Trees within a transaction. And you can have/or manage one or many transactions within your application. Of course, it is a full-fledged ACID transaction implementation.
-
-Blob storage was implemented in Cassandra, thus, there is no need for AWS S3. Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_ck".
+You can also create or open one or many B-Trees within a transaction. And you can have/or manage one or many transactions within your application.
+Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_ck". "in_red_ck" is an acronym that stands for:
 SOP in Redis, Cassandra & Kafka(in_red_ck). Or fashionably, SOP in "red Calvin Klein", hehe.
+And kept as is despite kafka bit was no longer there as SOP standardized on all Cassandra persistence including the transaction logging part upon reaching beta release.
 
 V2 is in Beta status and there is no known issue.
 
@@ -153,7 +160,13 @@ Check out the "Sample Configuration" section below or the unit tests under "in_r
 See here for code details: https://github.com/SharedCode/sop/blob/d473b66f294582dceab6bdf146178b3f00e3dd8d/in_red_ck/cassandra/connection.go#L35
 
 ## Streaming Data
-As discussed above, the third usability scenario of SOP is support for very large data. SOP comes with a store out of the box that is configured for storing very large amount of data, like in the range of 1GB to multi-GBs. Sample code to use this store:
+As discussed above, the third usability scenario of SOP is support for very large data. Here is sample config code for creating a Btree that is fit for this use-case:
+```
+	btree, _ := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore("fooStore", true, 500, "Streaming data", sop.BigData), trans)
+```
+This sample code is from the ```StreamingDataStore struct``` in package ```sop/streaming_data```, it illustrates the ```sop.ConfigureStore``` helper function & ```sop.BigData``` value data size enum use. The streaming data store was implemented to store or manage very large value part of the item. It is a byte array and you can "encode" to it chunks of many MBs. This is the typical use-case for the ```sop.BigData``` enum. See the code here for more details: https://github.com/SharedCode/sop/blob/master/streaming_data/streaming_data_store.go
+
+Sample code to use this ```StreamingDataStore```:
 ```
 import (
 	"github.com/SharedCode/sop/in_red_ck"
