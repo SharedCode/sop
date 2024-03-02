@@ -178,9 +178,12 @@ import (
 	trans, _ := in_red_ck.NewTransaction(true, -1, true)
 	trans.Begin()
 	sds := sd.NewStreamingDataStore[string](ctx, "fooStore", trans)
+	// Add accepts a string parameter, for naming the item, e.g. - "fooVideo".
+	// It returns an "encoder" object which your code can use to upload chunks
+	// of the data.
 	encoder, _ := sds.Add(ctx, "fooVideo")
 	for i := 0; i < 10; i++ {
-		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
+		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 15MB.", i))
 	}
 	trans.Commit(ctx)
 
