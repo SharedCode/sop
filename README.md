@@ -21,6 +21,15 @@ Above list already covers most data storage scenarios one can think of. Traditio
 
 In all of these, ACID transactions, high speed, scaleable searches and management comes built-in. As SOP turned M-Way Trie data structures & algorithms a commodity available in all of its usage scenarios. Horizontally scaleable in the cluster, meaning, there is no single point of failure. SOP offers a decentralized approach in searching & management of your data. It works with optimal efficiency in the cluster. It fully parallelize I/O in the cluster, only needing very lightweight "orchestration" to detect conflict and auto-merging of changes across transactions occuring simultaneously or in time.
 
+# Best Practices
+Following are the best practices using SOP outlined so you can select & get the best outcome from SOP for your implementation use-case:
+  * Single Writer, many Readers - a dedicated background worker populating your SOP/Cassandra DB doing management operations such as: adds, updates and/or deletes. And having many readers across the cluster.
+  * Many Writer, many Readers - this setup is the slowest as you are exposed to potentially be many conflicting transactions and data merges. BUT if you organized the transactions in a way that there is minimal or zero conflict and minimal/zero (node) data merges then you can achieve a very decent/great performence considering you are benefiting from ACID transactions, thus achieving higher data quality.
+
+Still, you have to bear in mind that these use-cases are geared for achieving higher data quality. Comparing the solution with other ACID transactions data providers, you will find that what SOP provides will match or surpass whatever is available in the market. Because the solution provides a sustained throughput as there is no bottleneck and the entire data processing/mgmt solution is as parallelized as possible. The OOA algorithm for orchestration for example, provides descentralized & sustained throughput performance.
+But of course, even SOP can't be compared if you will use or compare it to an ```eventual consistency```(no ACID transaction) with comparable paired caching(e.g. - Redis) DB storage solution.
+Please feel free to request if you have a domain use in mind, as perhaps we can add to the supported use-cases, an ACID free setup. Example, I am looking at an AI use-case where SOP will have a more relaxed or custom transaction where it is not necessarily enforcing ACID attributes and supporting a lifetime that the entire lifetime IS the transaction itself.
+
 # SOP in Cassandra & Redis
 M-Way Trie data structures & algorithms based Objects persistence, using Cassandra as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the ```Redis Lock API```, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
 
