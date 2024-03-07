@@ -304,7 +304,7 @@ Phase 2 commit is a very fast, quick action as changes and Nodes are already res
 See here for more details on two phase commit & how to access it for your application transaction integration: https://github.com/SharedCode/sop/blob/21f1a1b35ef71327882d3ab5bfee0b9d744345fa/in_red_ck/transaction.go#L23a
 
 ## Optimistic Orchestration Algorithm (OOA)
-SOP uses a new, unique algorithm using Redis I/O for orchestration, which aids in decentralized, highly parallelized operations. It uses simple Redis I/O ```fetch-set-fetch``` (not the Redis lock API!) for conflict detection/resolution and data merging across transactions whether in same machine or across different machines.
+SOP uses a new, proprietary & open sourced, thus MIT licensed, unique algorithm using Redis I/O for orchestration, which aids in decentralized, highly parallelized operations. It uses simple Redis I/O ```fetch-set-fetch``` (not the Redis lock API!) for conflict detection/resolution and data merging across transactions whether in same machine or across different machines.
 Here is a brief description of the algorithm for illustration:
   * Create a globally unique ID(UUID) for the item
   * Issue a Redis ```get``` on target item key to check whether this item is locked
@@ -328,6 +328,10 @@ The entire multi-step & multi-data locks, e.g. ```lock keys``` & in-flight item(
 The estimated time complexity is: O(3r) + O(r) or simply: O(4r)
 where:
   * r represents the number of items needing lock and doing a single Redis fetch or set operation, a very quick, global cache/in-memory I/O. I stayed away from using "n" and used "r" to denote that it is a very very quick Redis I/O, not a database I/O.
+
+OOA algorithm was specially cooked by yours truly to make hot-spot free, "decentralized", distributed processing to be practical and easily "efficiently" done. This is the first use-case, but in time, I believe we can turn this into another "commodity". :)
+If you are or you know of an investor, perhaps this is the time you dial that number and get them to know SOP project. Hehe.
+Seriously, the march towards AI with awareness is possible, with funding. I am no Elon Mask, 'just alone, BUT my insights and how my brain works, is totally aligned with a super-computer. Joke. :)
 
 ## Concurrent or Parallel Commits
 SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record or row level "locking". If not then it means your transaction has conflicting change with another transaction commit elsewhere in the  cluster, and thus, it will be rolled back, or the other one, depends on who got to the final commit step first. SOP uses a combination of algorithmic ingredients like "optimistic locking", intelligent "merging", etc... doing its magic with the M-Way trie and Redis & Cassandra.
