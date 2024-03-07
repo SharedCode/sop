@@ -3,9 +3,12 @@
 Scaleable Objects Persistence (SOP) Framework - Golang V2
 
 Code Coverage: https://app.codecov.io/github/SharedCode/sop
-High level feature usability articles about SOP:
+
+### High level feature usability articles about SOP:
 SOP as AI database: https://www.linkedin.com/pulse/sop-ai-database-engine-gerardo-recinto-tzlbc/?trackingId=yRXnbOEGSvS2knwVOAyxCA%3D%3D
+
 Anatomy of a Video Blob: https://www.linkedin.com/pulse/sop-anatomy-video-blob-gerardo-recinto-4170c/?trackingId=mXG7oM1IRVyP4yIZtWWlmg%3D%3D
+
 B-Tree, a Native of the Cluster: https://www.linkedin.com/pulse/b-tree-native-cluster-gerardo-recinto-chmjc/?trackingId=oZmC6tUHSiCBcYXUqwfGUQ%3D%3D
 
 # Usability
