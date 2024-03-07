@@ -311,12 +311,14 @@ Here is a brief description of the algorithm for illustration:
 
 A. If Item exists in Redis...
   * Check whether the fetched item key has the item ID, if yes then it means the item is locked by this client and can do whatever operations on it
-  * If fetched item has a different item ID then it means the item was locked by another transaction and thus, can rollback and abort/fail the transaction
+  * If fetched item has a different item ID then it means the item was locked by another transaction
+    - if the fetched item lock is compatible for the request, e.g. - both are "read lock" then proceed or treat as if "read lock" was attained
+    - otherwise, rollback and abort/fail the transaction
 
 B. If Item does not exist in Redis...
   * Update the item key in Redis with the ID using ```set``` Redis API
   * Fetch again to check whether the this session "won" in attempting to attain a lock
-  * If fetched ID is not the same as the item ID then another session won and thus, this session can be rolled back and abort/fail the transaction
+  * If fetched ID is not the same as the item ID then another session won and apply the same logic check for compatible "read lock" and roll back and abort/fail the transaction if incompatible lock is determined
   * If fetched ID is the same then we can proceed and treat as if "lock" was attained... now, this "logical lock" only works for about 99% of the cases, thus, another Redis "fetch" for the items is done right before the final step of commit
 
 Then, as a "final final" step(after doing another Redis ```fetch``` for in-flight item(s)' version check), SOP uses the backend storage's feature to ensure only one management action for the target item(s) in-flight is done. The entire multi-step & multi-data locks, e.g. ```lock keys``` & in-flight item(s)' version checks, "lock attainment" process is called OOA and ensures highly scaleable data conflict resolution and merging. Definitely not the Redis "lock" API. :)
