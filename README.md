@@ -319,8 +319,7 @@ B. If Item does not exist in Redis...
   * If fetched ID is not the same as the item ID then another session won and thus, this session can be rolled back and abort/fail the transaction
   * If fetched ID is the same then we can proceed and treat as if "lock" was attained... now, this "logical lock" only works for about 99% of the cases, thus, another Redis "fetch" is done right before the final step of commit
 
-Then, as a "final final" step(after doing another Redis ```fetch``` for item version check), SOP uses the backend storage's feature to ensure only one management action is done 
-The entire multi-step "lock attainment" process is called OOA and ensures highly scaleable data conflict resolution and merging. Definitely not the Redis "lock" API. :)
+Then, as a "final final" step(after doing another Redis ```fetch``` for item version check), SOP uses the backend storage's feature to ensure only one management action is done. The entire multi-step "lock attainment" process is called OOA and ensures highly scaleable data conflict resolution and merging. Definitely not the Redis "lock" API. :)
 
 ## Concurrent or Parallel Commits
 SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record or row level "locking". If not then it means your transaction has conflicting change with another transaction commit elsewhere in the  cluster, and thus, it will be rolled back, or the other one, depends on who got to the final commit step first. SOP uses a combination of algorithmic ingredients like "optimistic locking", intelligent "merging", etc... doing its magic with the M-Way trie and Redis & Cassandra.
