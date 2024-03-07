@@ -29,7 +29,7 @@ Following are the best practices using SOP outlined so you can get a good unders
   * Many Writer, many Readers - this setup is slower as you are exposed to potentially be many conflicting transactions and data merges. BUT if you organized the transactions in a way that there is minimal or zero conflict and minimal/zero (node) data merges, per data being submitted across them, then you can achieve a very decent/great performence considering you are benefiting from ACID transactions, thus achieving higher data quality.
 
 Still, you have to bear in mind that these use-cases are geared for achieving higher data quality. Comparing the solution with other ACID transactions data providers, you will find that what SOP provides will match or surpass whatever is available in the market. Because the solution provides a sustained throughput as there is no bottleneck and the entire data processing/mgmt solution is as parallelized as possible. The OOA algorithm for orchestration for example, provides descentralized & sustained throughput performance.
-But of course, even SOP can't be compared if you will use or compare it to an ```eventual consistency```(no ACID transaction) with comparable paired caching(e.g. - Redis) DB storage solution.
+But of course, even SOP can't be compared if you will use or compare it to an ```eventual consistency```(no ACID transaction) with comparable paired caching(e.g. - Redis) DB storage solution. At the cost or in exchange of not having ACID, so, it depends on your needs.
 
 ## As a large or very large DB engine - 2nd & 3rd SOP use-case
 For these two use-cases, there is not much competition for what SOP has to offer here, considering SOP is addressing being able to provide better data quality on top of supporting these use-cases.
