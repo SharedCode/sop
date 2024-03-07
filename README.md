@@ -327,8 +327,7 @@ Then, as a "final final" step(after doing the mentioned Redis ```fetch``` for in
 The entire multi-step & multi-data locks, e.g. ```lock keys``` & in-flight item(s)' version checks, "lock attainment" process is called OOA and ensures highly scaleable data conflict resolution and merging. Definitely not the Redis "lock" API. :)
 The estimated time complexity is: O(3r) + O(r) or simply: O(4r)
 where:
-  * r represents the number of items needing lock and doing a single Redis fetch or set operation, a very quick, global cache/in-memory I/O
-** I stayed away from using "n" and used "r" to denote that it is a very very quick Redis I/O, not a database I/O.
+  * r represents the number of items needing lock and doing a single Redis fetch or set operation, a very quick, global cache/in-memory I/O. I stayed away from using "n" and used "r" to denote that it is a very very quick Redis I/O, not a database I/O.
 
 ## Concurrent or Parallel Commits
 SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record or row level "locking". If not then it means your transaction has conflicting change with another transaction commit elsewhere in the  cluster, and thus, it will be rolled back, or the other one, depends on who got to the final commit step first. SOP uses a combination of algorithmic ingredients like "optimistic locking", intelligent "merging", etc... doing its magic with the M-Way trie and Redis & Cassandra.
