@@ -319,9 +319,16 @@ B. If Item does not exist in Redis...
   * Update the item key in Redis with the ID using ```set``` Redis API
   * Fetch again to check whether the this session "won" in attempting to attain a lock
   * If fetched ID is not the same as the item ID then another session won and apply the same logic check for compatible "read lock" and roll back and abort/fail the transaction if incompatible lock is determined
-  * If fetched ID is the same then we can proceed and treat as if "lock" was attained... now, this "logical lock" only works for about 99% of the cases, thus, another Redis "fetch" for the items is done right before the final step of commit
+  * If fetched ID is the same then we can proceed and treat as if "lock" was attained...
 
-Then, as a "final final" step(after doing another Redis ```fetch``` for in-flight item(s)' version check), SOP uses the backend storage's feature to ensure only one management action for the target item(s) in-flight is done. The entire multi-step & multi-data locks, e.g. ```lock keys``` & in-flight item(s)' version checks, "lock attainment" process is called OOA and ensures highly scaleable data conflict resolution and merging. Definitely not the Redis "lock" API. :)
+Now at this point, the "lock" attained only works for about 99% of the cases, thus, another Redis "fetch" for the in-flight item(s) version check is done right before the final step of commit.
+Then, as a "final final" step(after doing the mentioned Redis ```fetch``` for in-flight item(s)' version check), SOP uses the backend storage's feature to ensure only one management action for the target item(s) in-flight is done.
+
+The entire multi-step & multi-data locks, e.g. ```lock keys``` & in-flight item(s)' version checks, "lock attainment" process is called OOA and ensures highly scaleable data conflict resolution and merging. Definitely not the Redis "lock" API. :)
+The estimated time complexity is: O(3r) + O(r) or simply: O(4r)
+where:
+  * r represents the number of items needing lock and doing a single Redis fetch or set operation, a very quick, global cache/in-memory I/O
+** I stayed away from using "n" and used "r" to denote that it is a very very quick Redis I/O, not a database I/O.
 
 ## Concurrent or Parallel Commits
 SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record or row level "locking". If not then it means your transaction has conflicting change with another transaction commit elsewhere in the  cluster, and thus, it will be rolled back, or the other one, depends on who got to the final commit step first. SOP uses a combination of algorithmic ingredients like "optimistic locking", intelligent "merging", etc... doing its magic with the M-Way trie and Redis & Cassandra.
