@@ -303,6 +303,25 @@ Phase 2 commit is a very fast, quick action as changes and Nodes are already res
 
 See here for more details on two phase commit & how to access it for your application transaction integration: https://github.com/SharedCode/sop/blob/21f1a1b35ef71327882d3ab5bfee0b9d744345fa/in_red_ck/transaction.go#L23a
 
+## Optimistic Orchestration Algorithm (OOA)
+SOP uses a new, unique algorithm using Redis I/O for orchestration, which aids in decentralized, highly parallelized operations. It uses simple Redis I/O ```fetch-set-fetch``` (not the Redis lock API!) for conflict detection/resolution and data merging across transactions whether in same machine or across different machines.
+Here is a brief description of the algorithm for illustration:
+  * Create a globally unique ID(UUID) for the item
+  * Issue a Redis ```get``` on target item key to check whether this item is locked
+
+A. If Item exists in Redis...
+  * Check whether the fetched item key has the item ID, if yes then it means the item is locked by this client and can do whatever operations on it
+  * If fetched item has a different item ID then it means the item was locked by another transaction and thus, can rollback and abort/fail the transaction
+
+B. If Item does not exist in Redis...
+  * Update the item key in Redis with the ID using ```set``` Redis API
+  * Fetch again to check whether the this session "won" in attempting to attain a lock
+  * If fetched ID is not the same as the item ID then another session won and thus, this session can be rolled back and abort/fail the transaction
+  * If fetched ID is the same then we can proceed and treat as if "lock" was attained... now, this "logical lock" only works for about 99% of the cases, thus, another Redis "fetch" is done right before the final step of commit
+
+Then, as a "final final" step(after doing another Redis ```fetch``` for item version check), SOP uses the backend storage's feature to ensure only one management action is done 
+The entire multi-step "lock attainment" process is called OOA and ensures highly scaleable data conflict resolution and merging. Definitely not the Redis "lock" API. :)
+
 ## Concurrent or Parallel Commits
 SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record or row level "locking". If not then it means your transaction has conflicting change with another transaction commit elsewhere in the  cluster, and thus, it will be rolled back, or the other one, depends on who got to the final commit step first. SOP uses a combination of algorithmic ingredients like "optimistic locking", intelligent "merging", etc... doing its magic with the M-Way trie and Redis & Cassandra.
 
