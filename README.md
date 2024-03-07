@@ -31,10 +31,10 @@ Following are the best practices using SOP outlined so you can get a good unders
 Still, you have to bear in mind that these use-cases are geared for achieving higher data quality. Comparing the solution with other ACID transactions data providers, you will find that what SOP provides will match or surpass whatever is available in the market. Because the solution provides a sustained throughput as there is no bottleneck and the entire data processing/mgmt solution is as parallelized as possible. The OOA algorithm for orchestration for example, provides descentralized & sustained throughput performance.
 But of course, even SOP can't be compared if you will use or compare it to an ```eventual consistency```(no ACID transaction) with comparable paired caching(e.g. - Redis) DB storage solution.
 
-## As a large(2nd use-case) or very large DB engine(3rd use-case, data streaming)
+## As a large or very large DB engine - 2nd & 3rd SOP use-case
 For these two use-cases, there is not much competition for what SOP has to offer here, considering SOP is addressing being able to provide better data quality on top of supporting these use-cases.
 
-Please feel free to request if you have a special domain use in mind, as perhaps we can add to the supported use-cases, an ACID free setup. Example, I am looking at an AI use-case where SOP will have a more relaxed or custom transaction where it is not necessarily enforcing ACID attributes and supporting entire runtime AS the transaction itself.
+Please feel free to request if you have a special domain-use in mind, as perhaps we can add to the supported use-cases, an ACID free setup. Example, I am looking at an AI use-case where SOP will have a more relaxed or custom transaction where it is not necessarily enforcing ACID attributes and supporting a bigger scope, e.g. - entire runtime as scope, transaction.
 
 # SOP in Cassandra & Redis
 M-Way Trie data structures & algorithms based Objects persistence, using Cassandra as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the ```Redis Lock API```, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
