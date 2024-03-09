@@ -30,9 +30,21 @@ type singlePhaseTransaction struct {
 	otherTransactions         []TwoPhaseCommitTransaction
 }
 
+// Transaction modes enumeration.
+type TransactionMode int
+const(
+	// No check does not allow any change to the Btree stores and does not check
+	// read items' versions (for consistency) during commit.
+	NoCheck = iota
+	// For writing mode allows changes to be done to the Btree stores.
+	ForWriting
+	// For reading mode does not allow any change to the Btree stores.
+	ForReading
+)
+
 // NewTransaction creates an enduser facing transaction object.
-// forWriting - if true will create a transaction that allows create, update, delete operations on B-Tree(s)
-// created or opened in the transaction. Otherwise it will be for read-only operations.
+// mode - if ForWriting will create a transaction that allows create, update, delete operations on B-Tree(s)
+// created or opened in the transaction. Otherwise it will be for ForReading(or NoCheck) mode.
 // maxTime - specify the maximum "commit" time of the transaction. That is, upon call to commit, it is given
 // this amount of time to conclude, otherwise, it will time out and rollback.
 // If -1 is specified, 15 minute max commit time will be assigned.
@@ -40,8 +52,8 @@ type singlePhaseTransaction struct {
 // of the commit and these logs will help SOP to cleanup any uncommitted resources in case there are
 // some build up, e.g. crash or host reboot left ongoing commits' temp changes. In time these will expire and
 // SOP to clean them up.
-func NewTransaction(forWriting bool, maxTime time.Duration, logging bool) (Transaction, error) {
-	twoPhase, err := NewTwoPhaseCommitTransaction(forWriting, maxTime, logging)
+func NewTransaction(mode TransactionMode, maxTime time.Duration, logging bool) (Transaction, error) {
+	twoPhase, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging)
 	if err != nil {
 		return nil, err
 	}

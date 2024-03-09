@@ -8,7 +8,7 @@ import (
 )
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
+	t1, _ := newMockTransaction(t, ForWriting, -1)
 	t1.Begin()
 
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
@@ -38,7 +38,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 }
 
 func Test_TwoPhaseCommitCommitted(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
+	t1, _ := newMockTransaction(t, ForWriting, -1)
 	t1.Begin()
 
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
@@ -63,7 +63,7 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 		}
 		twoPhase.Phase2Commit(ctx)
 
-		t1, _ = newMockTransaction(t, false, -1)
+		t1, _ = newMockTransaction(t, ForReading, -1)
 		t1.Begin()
 		b3, _ = OpenBtree[int, string](ctx, "twophase1", t1)
 		twoPhase = t1.GetPhasedTransaction()
@@ -90,7 +90,7 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 }
 
 func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
+	t1, _ := newMockTransaction(t, ForWriting, -1)
 	t1.Begin()
 
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
@@ -112,7 +112,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 		if err2 := my3rdPartyDBlogic(true); err2 != nil {
 			twoPhase.Rollback(ctx)
 
-			t1, _ = newMockTransaction(t, true, -1)
+			t1, _ = newMockTransaction(t, ForWriting, -1)
 			t1.Begin()
 			twoPhase := t1.GetPhasedTransaction()
 

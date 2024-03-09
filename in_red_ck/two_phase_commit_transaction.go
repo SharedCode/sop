@@ -56,7 +56,7 @@ type transaction struct {
 	// VirtualIDRegistry manages the virtual IDs, a.k.a. "handle".
 	registry cas.Registry
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
-	forWriting bool
+	mode TransactionMode
 	// -1 = intial state, 0 = began, 1 = phase 1 commit done, 2 = phase 2 commit or rollback done.
 	phaseDone int
 	maxTime   time.Duration
@@ -73,7 +73,7 @@ var Now = time.Now
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
 // If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
 // However, without logging, the transaction commit can execute faster because there is no data getting logged.
-func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration, logging bool) (TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransaction(mode TransactionMode, maxTime time.Duration, logging bool) (TwoPhaseCommitTransaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
 		maxTime = time.Duration(15 * time.Minute)
@@ -86,7 +86,7 @@ func NewTwoPhaseCommitTransaction(forWriting bool, maxTime time.Duration, loggin
 		return nil, fmt.Errorf("Redis and/or Cassandra bits were not initialized")
 	}
 	return &transaction{
-		forWriting:      forWriting,
+		mode:      mode,
 		maxTime:         maxTime,
 		storeRepository: cas.NewStoreRepository(),
 		registry:        cas.NewRegistry(),
@@ -148,7 +148,10 @@ func (t *transaction) Phase1Commit(ctx context.Context) error {
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 1
-	if !t.forWriting {
+	if t.mode == NoCheck {
+		return nil
+	}
+	if t.mode == ForReading {
 		return t.commitForReaderTransaction(ctx)
 	}
 	if err := t.phase1Commit(ctx); err != nil {
@@ -172,7 +175,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 2
-	if !t.forWriting {
+	if t.mode != ForWriting {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
@@ -632,7 +635,7 @@ func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDele
 
 // Checks if fetched items are intact.
 func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
-	if t.forWriting {
+	if t.mode == ForWriting {
 		return nil
 	}
 	if !t.hasTrackedItems() {

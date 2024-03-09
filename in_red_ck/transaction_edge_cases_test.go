@@ -13,8 +13,8 @@ import (
 // Transaction rolls back, new completes fine.
 // Reader transaction succeeds.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
-	t2, _ := newMockTransaction(t, true, -1)
+	t1, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, ForWriting, -1)
 
 	t1.Begin()
 	t2.Begin()
@@ -41,7 +41,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = newMockTransaction(t, true, -1)
+		t1, _ = newMockTransaction(t, ForWriting, -1)
 		t1.Begin()
 		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
@@ -82,7 +82,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	if err2 == nil {
 		t.Error("Commit #2, got = succeess, want = fail.")
 	}
-	t1, _ = newMockTransaction(t, false, -1)
+	t1, _ = newMockTransaction(t, ForReading, -1)
 	t1.Begin()
 	b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -114,8 +114,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 // Two transactions updating different items with no collision but items'
 // keys are sequential/contiguous between the two.
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
-	t2, _ := newMockTransaction(t, true, -1)
+	t1, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, ForWriting, -1)
 
 	t1.Begin()
 	t2.Begin()
@@ -141,7 +141,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = newMockTransaction(t, true, -1)
+		t1, _ = newMockTransaction(t, ForWriting, -1)
 		t1.Begin()
 		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
@@ -178,7 +178,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		t.Error("got = commit failure, want = both commit success.")
 	}
 
-	t2, _ = newMockTransaction(t, true, -1)
+	t2, _ = newMockTransaction(t, ForWriting, -1)
 	t2.Begin()
 	b32, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -201,8 +201,8 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 
 // Reader transaction fails commit when an item read was modified by another transaction in-flight.
 func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
-	t2, _ := newMockTransaction(t, false, -1)
+	t1, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, ForReading, -1)
 
 	t1.Begin()
 	t2.Begin()
@@ -228,7 +228,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = newMockTransaction(t, true, -1)
+		t1, _ = newMockTransaction(t, ForWriting, -1)
 		t1.Begin()
 		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
@@ -272,8 +272,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 // Node merging and row(or item) level conflict detection.
 // Case: Reader transaction succeeds commit, while another item in same Node got updated by another transaction.
 func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
-	t2, _ := newMockTransaction(t, false, -1)
+	t1, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, ForReading, -1)
 
 	t1.Begin()
 	t2.Begin()
@@ -301,7 +301,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		b3.Add(ctx, pk2, p2)
 		b3.Add(ctx, pk3, p3)
 		t1.Commit(ctx)
-		t1, _ = newMockTransaction(t, true, -1)
+		t1, _ = newMockTransaction(t, ForWriting, -1)
 		t1.Begin()
 		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
@@ -344,8 +344,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 
 // One transaction updates a colliding item in 1st and a 2nd trans.
 func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
-	t1, _ := newMockTransaction(t, true, -1)
-	t2, _ := newMockTransaction(t, true, -1)
+	t1, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, ForWriting, -1)
 
 	t1.Begin()
 	t2.Begin()
@@ -377,7 +377,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		b3.Add(ctx, pk4, p4)
 		b3.Add(ctx, pk5, p5)
 		t1.Commit(ctx)
-		t1, _ = newMockTransaction(t, true, -1)
+		t1, _ = newMockTransaction(t, ForWriting, -1)
 		t1.Begin()
 		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
@@ -446,7 +446,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 
 func Test_CommitThrowsException(t *testing.T) {
 	// Commit successfully 1st so we can create a good data set that we can check if restored on commit failed.
-	trans, _ := newMockTransaction(t, true, -1)
+	trans, _ := newMockTransaction(t, ForWriting, -1)
 	trans.Begin()
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -468,7 +468,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	goodRedisCache := t2.redisCache
 	goodBlobStore := t2.blobStore
 
-	trans, _ = newMockTransaction(t, true, -1)
+	trans, _ = newMockTransaction(t, ForWriting, -1)
 	t2 = trans.GetPhasedTransaction().(*transaction)
 
 	// Restore the populated repos.
@@ -497,7 +497,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	goodRedisCache = t2.redisCache
 	goodBlobStore = t2.blobStore
 
-	trans, _ = newMockTransaction(t, false, -1)
+	trans, _ = newMockTransaction(t, ForReading, -1)
 	t2 = trans.GetPhasedTransaction().(*transaction)
 	t2.storeRepository = goodStoreRepository
 	t2.registry = goodRegistry
