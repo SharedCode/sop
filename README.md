@@ -40,7 +40,7 @@ However, there are rough edges that can be further refined(V3+ timeline), exampl
   * Adding limits so the local cache will not over-allocate memory, e.g. - adoption of MRU algorithm
   * Fine tune caching "story" between transaction and Btree stores part of preventing over-allocating memory
 
-Today, your code can prevent getting exposed to these edge cases by ensuring the transaction is not accessing huge contents of "highly populated" Btree stores, i.e. - preventing out of memory conditions. Which is the best practice in general for transactions, even for other (R)DBMS or NoSQLs.
+Today, your code can prevent getting exposed to these edge cases by ensuring the transaction is not accessing huge contents of Btree stores to prevent out of memory conditions. Which is the best practice in general for transactions, even for other (R)DBMS or NoSQLs.
 
 # SOP in Cassandra & Redis
 M-Way Trie data structures & algorithms based Objects persistence, using Cassandra as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the ```Redis Lock API```, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
