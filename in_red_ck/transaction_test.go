@@ -131,6 +131,64 @@ func Test_SimpleAddPerson(t *testing.T) {
 	}
 }
 
+func Test_NoCheckCommitAddFail(t *testing.T) {
+	trans, err := newMockTransaction(t, NoCheck, -1)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	trans.Begin()
+
+	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
+
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondbnc",
+		SlotLength:               nodeSlotLength,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: false,
+		LeafLoadBalancing:        false,
+		Description:              "",
+	}, trans)
+
+	if _, err := b3.Add(ctx, pk, p); err == nil {
+		t.Errorf("Add('joe') failed, got(ok, err) = nil, want = err, nil.")
+	}
+}
+
+func Test_NoCheckCommit(t *testing.T) {
+	trans, err := newMockTransaction(t, ForWriting, -1)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	trans.Begin()
+
+	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
+
+	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondbnc",
+		SlotLength:               nodeSlotLength,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: false,
+		LeafLoadBalancing:        false,
+		Description:              "",
+	}, trans)
+
+	if _, err := b3.Add(ctx, pk, p); err != nil {
+		t.Errorf("Add('joe') failed, got(ok, err) = %v, want = nil.", err)
+	}
+	trans.Commit(ctx)
+
+	trans, err = newMockTransaction(t, NoCheck, -1)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	trans.Begin()
+
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondbnc", trans)
+	b3.FindOne(ctx, pk, false)
+
+	trans.Commit(ctx)
+}
+
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	trans, err := newMockTransaction(t, ForWriting, -1)
 	if err != nil {
