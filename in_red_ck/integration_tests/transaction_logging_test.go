@@ -19,7 +19,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ := in_red_ck.NewTransaction(true, -1, true)
+	trans, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, true)
 	trans.Begin()
 
 	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -44,7 +44,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_ck.NewTransaction(true, -1, true)
+	trans, _ = in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, true)
 	trans.Begin()
 
 	b3, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
@@ -59,7 +59,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_ck.NewTransaction(true, -1, true)
+	trans, _ = in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, true)
 	trans.Begin()
 
 	b3, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
@@ -73,7 +73,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_ck.NewTransaction(true, -1, true)
+	trans, _ = in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, true)
 
 	// Cleanup should be launched from this call.
 	trans.Begin()
@@ -86,7 +86,7 @@ func Cleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ := in_red_ck.NewTransaction(false, -1, true)
+	trans, _ := in_red_ck.NewTransaction(in_red_ck.ForReading, -1, true)
 	trans.Begin()
 	_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
 	trans.Commit(ctx)
@@ -96,7 +96,7 @@ func Cleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_ck.NewTransaction(false, -1, true)
+	trans, _ = in_red_ck.NewTransaction(in_red_ck.ForReading, -1, true)
 	trans.Begin()
 	_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
 	trans.Commit(ctx)

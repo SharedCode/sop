@@ -16,31 +16,31 @@ var mockRedisCache = redis.NewMockClient()
 var mockNodeBlobStore = cas.NewMockBlobStore()
 
 // newMockTransaction instantiates a mocked transaction, i.e. - it uses in-memory Repositories as backend, not Cassandra.
-func newMockTransaction(t *testing.T, forWriting bool, maxTime time.Duration) (Transaction, error) {
+func newMockTransaction(t *testing.T, mode TransactionMode, maxTime time.Duration) (Transaction, error) {
 	t.Helper()
-	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, forWriting, maxTime, false)
+	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, mode, maxTime, false)
 	return &singlePhaseTransaction{
 		sopPhaseCommitTransaction: twoPhase,
 	}, nil
 }
 
 // NewMockTransaction with logging turned on.
-func newMockTransactionWithLogging(t *testing.T, forWriting bool, maxTime time.Duration) (Transaction, error) {
+func newMockTransactionWithLogging(t *testing.T, mode TransactionMode, maxTime time.Duration) (Transaction, error) {
 	t.Helper()
-	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, forWriting, maxTime, true)
+	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, mode, maxTime, true)
 	return &singlePhaseTransaction{
 		sopPhaseCommitTransaction: twoPhase,
 	}, nil
 }
 
-func newMockTwoPhaseCommitTransaction(t *testing.T, forWriting bool, maxTime time.Duration, logging bool) (TwoPhaseCommitTransaction, error) {
+func newMockTwoPhaseCommitTransaction(t *testing.T, mode TransactionMode, maxTime time.Duration, logging bool) (TwoPhaseCommitTransaction, error) {
 	t.Helper()
 	if maxTime <= 0 {
 		m := 15
 		maxTime = time.Duration(m * int(time.Minute))
 	}
 	return &transaction{
-		forWriting:      forWriting,
+		mode:      mode,
 		maxTime:         maxTime,
 		storeRepository: mockStoreRepository,
 		registry:        mockRegistry,
