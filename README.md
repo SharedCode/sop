@@ -39,6 +39,7 @@ Please feel free to file a request/discussion entry if you have a special domain
 However, there are rough edges that can be further refined(V3+ timeline), examples are:
   * Adding limits so the local cache will not over-allocate memory, e.g. - adoption of MRU algorithm
   * Fine tune caching "story" between transaction and Btree stores part of preventing over-allocating memory
+
 Today, your code can prevent getting exposed to these edge cases by ensuring the transaction is not accessing huge contents of "highly populated" Btree stores. Which is the best practice in general of how a transaction is implemented even for other (R)DBMS or NoSQLs. But yeah, SOP has future goals to further alleviate this area.
 
 # SOP in Cassandra & Redis
