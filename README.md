@@ -76,7 +76,7 @@ var ctx = context.Background()
 ...
 
 func main() {
-	trans, _ := in_red_ck.NewTransaction(true, -1)
+	trans, _ := in_red_ck.NewTransaction(true, -1, true)
 	trans.Begin()
 
 	// Create/instantiate a new B-Tree named "fooStore" w/ 200 slots, Key is unique & other parameters
@@ -138,7 +138,7 @@ const nodeSlotLength = 500
 func main() {
 
 	// Create and start a transaction session.
-	trans, err := in_red_ck.NewTransaction(true, -1)
+	trans, err := in_red_ck.NewTransaction(true, -1, true)
 	trans.Begin()
 
 	// Create the B-Tree (store) instance. ValueDataSize can be SmallData or MediumData in this case.
@@ -361,7 +361,7 @@ The magic will start to happen after adding(and committing) your 1st record/batc
 
 Sample code to illustrate this:
 ```
-t1, _ := in_red_ck.NewTransaction(true, -1)
+t1, _ := in_red_ck.NewTransaction(true, -1, true)
 t1.Begin()
 b3, _ := in_red_ck.NewBtree[int, string](ctx, "twophase2", 8, false, true, true, "", t1)
 
@@ -373,7 +373,7 @@ t1.Commit(ctx)
 eg, ctx2 := errgroup.WithContext(ctx)
 
 f1 := func() error {
-	t1, _ := in_red_ck.NewTransaction(true, -1)
+	t1, _ := in_red_ck.NewTransaction(true, -1, true)
 	t1.Begin()
 	b3, _ := in_red_ck.OpenBtree[int, string](ctx2, "twophase2", t1)
 	b3.Add(ctx2, 5000, "I am the value with 5000 key.")
@@ -383,7 +383,7 @@ f1 := func() error {
 }
 
 f2 := func() error {
-	t2, _ := in_red_ck.NewTransaction(true, -1)
+	t2, _ := in_red_ck.NewTransaction(true, -1, true)
 	t2.Begin()
 	b32, _ := in_red_ck.OpenBtree[int, string](ctx2, "twophase2", t2)
 	b32.Add(ctx2, 5500, "I am the value with 5500 key.")
