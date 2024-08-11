@@ -5,6 +5,8 @@ Scaleable Objects Persistence (SOP) Framework - Golang V2
 Code Coverage: https://app.codecov.io/github/SharedCode/sop
 
 ### High level feature usability articles about SOP:
+Google Slides Presentation: https://docs.google.com/presentation/d/17BWiLXcz1fPGVtCkAwvE9wR0cDq_dJPjxKgzMcWKkp4/edit#slide=id.p
+
 SOP as AI database: https://www.linkedin.com/pulse/sop-ai-database-engine-gerardo-recinto-tzlbc/?trackingId=yRXnbOEGSvS2knwVOAyxCA%3D%3D
 
 Anatomy of a Video Blob: https://www.linkedin.com/pulse/sop-anatomy-video-blob-gerardo-recinto-4170c/?trackingId=mXG7oM1IRVyP4yIZtWWlmg%3D%3D
@@ -27,6 +29,7 @@ Following are the best practices using SOP outlined so you can get a good unders
 ## As a general purpose DB engine
   * Single Writer, many Readers - a dedicated background worker populating your SOP/Cassandra DB doing management operations such as: adds, updates and/or deletes. And having many readers across the cluster.
   * Many Writers, many Readers - this setup "can be" slow as you are exposed to having conflicting transactions and data merges. BUT if your use-case or organized the transactions in a way that there is minimal or not excessive conflicts per data submitted, then you can achieve a very decent/great performance considering you are benefiting from ACID transactions, thus achieving higher data quality in high volume mgmt, sorting & searching.
+  * No check mode - Transaction mode ```NoCheck``` allows your code to do reader transaction that will not do any check on commit. Useful for cases you are sure there will be no changes to the items & their Nodes(by other transactions in the cluster) you will be reading(or you don't care) in this transaction and thus, can tell SOP not to do any item version check during commit. This is the leanest & most performant mode if such guarantee is met.
 
 Still, you have to bear in mind that these use-cases are geared for achieving higher data quality. Comparing the solution with other ACID transactions data providers, you will find that what SOP provides will match or, most likely, surpass whatever is available in the market. Because the solution provides a sustained throughput as there is no bottleneck and the entire data processing/mgmt solution is as parallelized as possible. The OOA algorithm for orchestration for example, provides decentralized & sustained throughput performance.
 But of course, even SOP can't be compared if you will use or compare it to an ```eventual consistency```(no ACID transaction) with comparable paired caching(e.g. - Redis) DB storage solution. At the cost or in exchange of not having ACID, so, it depends on your needs.
@@ -82,7 +85,7 @@ var ctx = context.Background()
 ...
 
 func main() {
-	trans, _ := in_red_ck.NewTransaction(true, -1, true)
+	trans, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, true)
 	trans.Begin()
 
 	// Create/instantiate a new B-Tree named "fooStore" w/ 200 slots, Key is unique & other parameters
@@ -144,7 +147,7 @@ const nodeSlotLength = 500
 func main() {
 
 	// Create and start a transaction session.
-	trans, err := in_red_ck.NewTransaction(true, -1, true)
+	trans, err := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, true)
 	trans.Begin()
 
 	// Create the B-Tree (store) instance. ValueDataSize can be SmallData or MediumData in this case.
@@ -203,7 +206,7 @@ import (
 
 // ...
 	// To create and populate a "streaming data" store.
-	trans, _ := in_red_ck.NewTransaction(true, -1, true)
+	trans, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, true)
 	trans.Begin()
 	sds := sd.NewStreamingDataStore[string](ctx, "fooStore", trans)
 	// Add accepts a string parameter, for naming the item, e.g. - "fooVideo".
@@ -216,7 +219,7 @@ import (
 	trans.Commit(ctx)
 
 	// Read back the data.
-	trans, _ = in_red_ck.NewTransaction(false, -1, true)
+	trans, _ = in_red_ck.NewTransaction(in_red_ck.ForReading, -1, true)
 	trans.Begin()
 	sds = sd.OpenStreamingDataStore[string](ctx, "fooStore", trans)
 
@@ -303,9 +306,10 @@ There are four primary ingredients affecting performance and I/O via SOP. They a
 
 Base on your data structure size and the amount you intend to store using SOP, there is an opportunity to optimize for I/O and performance. Small to medium size data, will typically fit well with a bigger node size. For typical structure size scenarios, slot length anywhere from 100 to 5,000 may be ideal. You can match the batch size with the slot length. In this case, it means that you are potentially filling in a node with your entire batch. This is faster for example, as compared to your batch requiring multiple nodes, which will require more "virtual Ids" (or handles) in the registry table, thus, will (potentially) require more reads from registry & the node blob table. And more importantly, during commit, the lesser the number of nodes(thus, lesser "virtual Ids") used, the leaner & faster the "logged transaction" performs, which is the deciding step in the commit process, the one that makes your changes available to other transactions/machines, or triggers rollback due to conflict. It is best to keep that (virtual Ids) volume as minimal as possible.
 
-But of course, you have to consider memory requirements, i.e. - how many bytes of data per Key/Value pair(item) that you will store. In this version, the data is persisted together with the other data including meta data of the node. Thus, it is a straight up one node(one partition in Cassandra) that will contain your entire batch's items. Not bad really, but of course, you may have to do fine tuning, try a combination of "slot length"(and batch size) and see how that affects the I/O throughput. Fetches will always be very very fast, and the bigger node size(bigger slot length!), the better for fetches(reads). BUT in trade off with memory. As one node will occupy bigger memory, thus, you will have to checkout the Cassandra "size"(perf of VMs & hot spots), Redis caching and your application cluster, to see how the overall setup performs.
+But of course, you have to consider memory requirements, i.e. - how many bytes of data per Key/Value pair(item) that you will store. (SmallData) If you configure for the Key & Value pair to be persisted together with the other data including meta data of the node then it is a straight up one node(one partition in Cassandra) that will contain your entire batch's items. Not bad really, but of course, you may have to do fine tuning, try a combination of "slot length"(and batch size) and see how that affects the I/O throughput. Fetches will always be very very fast, and the bigger node size(bigger slot length!), the better for fetches(reads). BUT in trade off with memory. As one node will occupy bigger memory, thus, you will have to checkout the Cassandra "size"(perf of VMs & hot spots), Redis caching and your application cluster, to see how the overall setup performs.
+You can also consider storing the Value part to a dedicated partition(MediumData), this will keep your Nodes' memory footprint small in exchange of an extra read when fetching the Value data part. And lastly, you can also consider "data streaming"(BigData), which is similar to MediumData, but with global caching turned off, and such... fitted for the "very large data, data streaming" use-case.
 
-Reduce or increase the "slot length" and see what is fit with your application data requirementes scenario.
+Reduce or increase the "slot length" and see what is fit with your application data requirements scenario.
 In the tests that comes with SOP(under "in_red_ck" folder), the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
 But 500 is decent, so, it was used as the test's slot length.
 
@@ -367,7 +371,7 @@ The magic will start to happen after adding(and committing) your 1st record/batc
 
 Sample code to illustrate this:
 ```
-t1, _ := in_red_ck.NewTransaction(true, -1, true)
+t1, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, true)
 t1.Begin()
 b3, _ := in_red_ck.NewBtree[int, string](ctx, "twophase2", 8, false, true, true, "", t1)
 
@@ -379,7 +383,7 @@ t1.Commit(ctx)
 eg, ctx2 := errgroup.WithContext(ctx)
 
 f1 := func() error {
-	t1, _ := in_red_ck.NewTransaction(true, -1, true)
+	t1, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, true)
 	t1.Begin()
 	b3, _ := in_red_ck.OpenBtree[int, string](ctx2, "twophase2", t1)
 	b3.Add(ctx2, 5000, "I am the value with 5000 key.")
@@ -389,7 +393,7 @@ f1 := func() error {
 }
 
 f2 := func() error {
-	t2, _ := in_red_ck.NewTransaction(true, -1, true)
+	t2, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, true)
 	t2.Begin()
 	b32, _ := in_red_ck.OpenBtree[int, string](ctx2, "twophase2", t2)
 	b32.Add(ctx2, 5500, "I am the value with 5500 key.")
