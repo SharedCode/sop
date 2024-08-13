@@ -19,7 +19,7 @@ func RemoveBtree(ctx context.Context, name string) error {
 }
 
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
-func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
+func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("Transaction 't' parameter can't be nil")
 	}
@@ -45,7 +45,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
-func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
+func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("Transaction 't' parameter can't be nil")
 	}

@@ -59,7 +59,7 @@ var Now = time.Now
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
 // If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
 // However, without logging, the transaction commit can execute faster because there is no data getting logged.
-func NewTwoPhaseCommitTransaction(mode TransactionMode, maxTime time.Duration, logging bool) (sop.TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransaction(mode TransactionMode, maxTime time.Duration, logging bool) (TwoPhaseCommitTransaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
 		maxTime = time.Duration(15 * time.Minute)
