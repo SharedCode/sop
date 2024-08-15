@@ -13,32 +13,6 @@ import (
 	"github.com/gocql/gocql"
 )
 
-// Manage or fetch Virtual ID request/response payload.
-type RegistryPayload[T sop.Handle | sop.UUID] struct {
-	// Registry table (name) where the Virtual IDs will be stored or fetched from.
-	RegistryTable string
-	// IDs is an array containing the Virtual IDs details to be stored or to be fetched.
-	IDs []T
-}
-
-// Virtual ID registry is essential in our support for all or nothing (sub)feature,
-// which is essential for fault tolerance.
-//
-// All methods are taking in a set of items.
-type Registry interface {
-	// Get will fetch handles(given their IDs) from registry table(s).
-	Get(context.Context, ...RegistryPayload[sop.UUID]) ([]RegistryPayload[sop.Handle], error)
-	// Add will insert handles to registry table(s).
-	Add(context.Context, ...RegistryPayload[sop.Handle]) error
-	// Update will update handles potentially spanning across registry table(s).
-	// Set allOrNothing to true if Update operation is crucial for data consistency and
-	// wanting to do an all or nothing update for the entire batch of handles.
-	// False is recommended if such consistency is not significant.
-	Update(ctx context.Context, allOrNothing bool, handles ...RegistryPayload[sop.Handle]) error
-	// Remove will delete handles(given their IDs) from registry table(s).
-	Remove(context.Context, ...RegistryPayload[sop.UUID]) error
-}
-
 // UpdateAllOrNothingError is a special error type that will allow caller to handle it differently than normal errors.
 type UpdateAllOrNothingError struct {
 	Err error
@@ -63,13 +37,13 @@ func SetRegistryCacheDuration(duration time.Duration) {
 }
 
 // NewRegistry manages the Handle in the store's Cassandra registry table.
-func NewRegistry() Registry {
+func NewRegistry() sop.Registry {
 	return &registry{
 		redisCache: redis.NewClient(),
 	}
 }
 
-func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop.Handle]) error {
+func (v *registry) Add(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -98,7 +72,7 @@ func (v *registry) Add(ctx context.Context, storesHandles ...RegistryPayload[sop
 }
 
 // Update does an all or nothing update of the batch of handles, mapping them to respective registry table(s).
-func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles ...RegistryPayload[sop.Handle]) error {
+func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -181,12 +155,12 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 	return nil
 }
 
-func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[sop.UUID]) ([]RegistryPayload[sop.Handle], error) {
+func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if connection == nil {
 		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
-	storesHandles := make([]RegistryPayload[sop.Handle], 0, len(storesLids))
+	storesHandles := make([]sop.RegistryPayload[sop.Handle], 0, len(storesLids))
 	for _, storeLids := range storesLids {
 		handles := make([]sop.Handle, 0, len(storeLids.IDs))
 		paramQ := make([]string, 0, len(storeLids.IDs))
@@ -205,7 +179,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[sop.UU
 		}
 
 		if len(paramQ) == 0 {
-			storesHandles = append(storesHandles, RegistryPayload[sop.Handle]{
+			storesHandles = append(storesHandles, sop.RegistryPayload[sop.Handle]{
 				RegistryTable: storeLids.RegistryTable,
 				IDs:           handles,
 			})
@@ -236,7 +210,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[sop.UU
 		if err := iter.Close(); err != nil {
 			return nil, err
 		}
-		storesHandles = append(storesHandles, RegistryPayload[sop.Handle]{
+		storesHandles = append(storesHandles, sop.RegistryPayload[sop.Handle]{
 			RegistryTable: storeLids.RegistryTable,
 			IDs:           handles,
 		})
@@ -244,7 +218,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...RegistryPayload[sop.UU
 	return storesHandles, nil
 }
 
-func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[sop.UUID]) error {
+func (v *registry) Remove(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -260,7 +234,7 @@ func (v *registry) Remove(ctx context.Context, storesLids ...RegistryPayload[sop
 			connection.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
 
 		// Flush out the failing records from cache.
-		deleteFromCache := func(storeLids RegistryPayload[sop.UUID]) {
+		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
 			for _, id := range storeLids.IDs {
 				if err := v.redisCache.Delete(ctx, id.String()); err != nil && !redis.KeyNotFound(err) {
 					log.Error("Registry Delete (redis delete) failed, details: %v", err)

@@ -61,7 +61,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 		trans.Rollback(ctx)
 		return nil, err
 	}
-	ns := btree.NewStoreInfoExt(si.Name, si.SlotLength, si.IsUnique, si.IsValueDataInNodeSegment, si.IsValueDataActivelyPersisted, si.IsValueDataGloballyCached, si.LeafLoadBalancing, si.Description)
+	ns := sop.NewStoreInfoExt(si.Name, si.SlotLength, si.IsUnique, si.IsValueDataInNodeSegment, si.IsValueDataActivelyPersisted, si.IsValueDataGloballyCached, si.LeafLoadBalancing, si.Description)
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeID.IsNil() {
@@ -87,7 +87,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 	return newBtree[TK, TV](ctx, ns, trans)
 }
 
-func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreInfo, trans *transaction) (btree.BtreeInterface[TK, TV], error) {
+func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *sop.StoreInfo, trans *transaction) (btree.BtreeInterface[TK, TV], error) {
 	si := StoreInterface[TK, TV]{}
 
 	// Assign the item action tracker frontend and backend bits.
@@ -113,7 +113,7 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreIn
 		// Needed for auto-merging of Node contents.
 		refetchAndMerge: refetchAndMergeClosure[TK, TV](&si, b3, trans.storeRepository),
 		// Needed when applying the "delta" to the Store Count field.
-		getStoreInfo: func() *btree.StoreInfo { return b3.StoreInfo },
+		getStoreInfo: func() *sop.StoreInfo { return b3.StoreInfo },
 
 		// Needed for tracked items' lock & "value data" in separate segments management.
 		commitTrackedItemsValues:         iat.commitTrackedItemsValues,
@@ -131,7 +131,7 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *btree.StoreIn
 }
 
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.
-func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, TV], b3 *btree.Btree[TK, TV], sr cas.StoreRepository) func(ctx context.Context) error {
+func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, TV], b3 *btree.Btree[TK, TV], sr sop.StoreRepository) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		b3ModifiedItems := si.ItemActionTracker.(*itemActionTracker[TK, TV]).items
 		// Clear the backend "cache" so we can force B-Tree to re-fetch from Redis(or BlobStore).

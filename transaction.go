@@ -5,6 +5,18 @@ import (
 	"context"
 )
 
+// Transaction modes enumeration.
+type TransactionMode int
+const(
+	// No check does not allow any change to the Btree stores and does not check
+	// read items' versions (for consistency) during commit.
+	NoCheck = iota
+	// For writing mode allows changes to be done to the Btree stores.
+	ForWriting
+	// For reading mode does not allow any change to the Btree stores.
+	ForReading
+)
+
 // Transaction interface defines the "enduser facing" transaction methods.
 type Transaction interface {
 	// Begin the transaction.
@@ -24,14 +36,16 @@ type Transaction interface {
 	AddPhasedTransaction(otherTransaction ...TwoPhaseCommitTransaction)
 }
 
-// Transaction modes enumeration.
-type TransactionMode int
-const(
-	// No check does not allow any change to the Btree stores and does not check
-	// read items' versions (for consistency) during commit.
-	NoCheck = iota
-	// For writing mode allows changes to be done to the Btree stores.
-	ForWriting
-	// For reading mode does not allow any change to the Btree stores.
-	ForReading
-)
+// TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.
+type TwoPhaseCommitTransaction interface {
+	// Begin the transaction.
+	Begin() error
+	// Phase1Commit of the transaction.
+	Phase1Commit(ctx context.Context) error
+	// Phase2Commit of the transaction.
+	Phase2Commit(ctx context.Context) error
+	// Rollback the transaction.
+	Rollback(ctx context.Context) error
+	// Returns true if transaction has begun, false otherwise.
+	HasBegun() bool
+}

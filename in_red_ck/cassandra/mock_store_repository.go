@@ -3,30 +3,30 @@ package cassandra
 import (
 	"context"
 
-	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop"
 )
 
 // mockStoreRepository is a simple in-memory implementation of store repository to demonstrate
 // or mockup the structure composition, so we can define it in preparation of v2.
 type mockStoreRepository struct {
-	lookup map[string]btree.StoreInfo
+	lookup map[string]sop.StoreInfo
 }
 
 // NewMockStoreRepository manages the StoreInfo in Cassandra table.
-func NewMockStoreRepository() StoreRepository {
+func NewMockStoreRepository() sop.StoreRepository {
 	return &mockStoreRepository{
-		lookup: make(map[string]btree.StoreInfo),
+		lookup: make(map[string]sop.StoreInfo),
 	}
 }
 
-func (sr *mockStoreRepository) Add(ctx context.Context, stores ...btree.StoreInfo) error {
+func (sr *mockStoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
 	for _, store := range stores {
 		sr.lookup[store.Name] = store
 	}
 	return nil
 }
 
-func (sr *mockStoreRepository) Update(ctx context.Context, stores ...btree.StoreInfo) error {
+func (sr *mockStoreRepository) Update(ctx context.Context, stores ...sop.StoreInfo) error {
 	for _, store := range stores {
 		cs := sr.lookup[store.Name]
 		// Merge or apply the "count delta".
@@ -37,8 +37,8 @@ func (sr *mockStoreRepository) Update(ctx context.Context, stores ...btree.Store
 	return nil
 }
 
-func (sr *mockStoreRepository) Get(ctx context.Context, names ...string) ([]btree.StoreInfo, error) {
-	stores := make([]btree.StoreInfo, len(names))
+func (sr *mockStoreRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
+	stores := make([]sop.StoreInfo, len(names))
 	for i, name := range names {
 		v, _ := sr.lookup[name]
 		stores[i] = v

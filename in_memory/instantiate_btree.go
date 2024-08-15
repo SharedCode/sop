@@ -1,6 +1,9 @@
 package in_memory
 
-import "github.com/SharedCode/sop/btree"
+import (
+	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/btree"
+)
 
 // BtreeInterface struct defines publicly callable methods of Btree in-memory.
 // NOTE: this is synonymous to the btree.BtreeInterface but with methods removed of error
@@ -16,7 +19,7 @@ const itemsPerNode = 8
 // NewBtree will create an in-memory B-Tree & its required data stores. You can use it to store
 // and access key/value pairs similar to a map but which, sorts items & allows "range queries".
 func NewBtree[TK btree.Comparable, TV any](isUnique bool) BtreeInterface[TK, TV] {
-	s := btree.NewStoreInfo("", itemsPerNode, isUnique, true, true, "")
+	s := sop.NewStoreInfo("", itemsPerNode, isUnique, true, true, "")
 	si := btree.StoreInterface[TK, TV]{
 		NodeRepository:    newNodeRepository[TK, TV](),
 		ItemActionTracker: newDumbItemActionTracker[TK, TV](),

@@ -74,7 +74,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 
 	// GetOne should not get anything as uncommitted transaction is still ongoing or not expired.
 	tid, _, _, _ := twoPhaseTrans.logger.logger.GetOne(ctx)
-	if !cas.IsNil(tid) {
+	if !tid.IsNil() {
 		t.Errorf("Failed, got %v, want nil.", tid)
 	}
 
@@ -85,7 +85,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	Now = func() time.Time { return today }
 
 	tid, _, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
-	if cas.IsNil(tid) {
+	if tid.IsNil() {
 		t.Errorf("Failed, got nil, want valid Tid.")
 	}
 
@@ -94,7 +94,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	}
 
 	tid, _, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
-	if !cas.IsNil(tid) {
+	if !tid.IsNil() {
 		t.Errorf("Failed, got %v, want nil.", tid)
 	}
 

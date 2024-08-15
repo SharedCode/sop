@@ -11,7 +11,7 @@ type mockBlobStore struct {
 }
 
 // NewBlobStore instantiates a new (mocked) blobstore.
-func NewMockBlobStore() BlobStore {
+func NewMockBlobStore() sop.BlobStore {
 	return &mockBlobStore{
 		lookup: make(map[sop.UUID][]byte),
 	}
@@ -24,7 +24,7 @@ func (b *mockBlobStore) GetOne(ctx context.Context, blobName string, blobID sop.
 	return nil
 }
 
-func (b *mockBlobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
+func (b *mockBlobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
 			ba, err := Marshaler.Marshal(blob.Value)
@@ -37,7 +37,7 @@ func (b *mockBlobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop
 	return nil
 }
 
-func (b *mockBlobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
+func (b *mockBlobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
 			ba, err := Marshaler.Marshal(blob.Value)
@@ -50,7 +50,7 @@ func (b *mockBlobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[
 	return nil
 }
 
-func (b *mockBlobStore) Remove(ctx context.Context, storesBlobsIDs ...BlobsPayload[sop.UUID]) error {
+func (b *mockBlobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
 	for _, storeBlobIDs := range storesBlobsIDs {
 		for _, blobID := range storeBlobIDs.Blobs {
 			delete(b.lookup, blobID)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 )
 
@@ -12,7 +13,7 @@ var ctx = context.Background()
 
 func TestMockNodeWithLeftNilChild(t *testing.T) {
 	t.Log("Mock MockNodeWithLeftNilChild.\n")
-	store := btree.StoreInfo{
+	store := sop.StoreInfo{
 		SlotLength: 4,
 	}
 	si := btree.StoreInterface[int, string]{
@@ -89,7 +90,7 @@ func TestMockNodeWithLeftNilChild(t *testing.T) {
 
 func TestMockNodeWithRightNilChild(t *testing.T) {
 	t.Log("Mock MockNodeWithRightNilChild.\n")
-	store := btree.StoreInfo{
+	store := sop.StoreInfo{
 		SlotLength: 4,
 	}
 	si := btree.StoreInterface[int, string]{
@@ -166,7 +167,7 @@ func TestMockNodeWithRightNilChild(t *testing.T) {
 
 func TestMockNodeWithLeftNilChild2(t *testing.T) {
 	t.Log("Mock TestMockNodeWithLeftNilChild2.\n")
-	store := btree.StoreInfo{
+	store := sop.StoreInfo{
 		SlotLength: 2,
 	}
 	si := btree.StoreInterface[int, string]{
@@ -226,7 +227,7 @@ func TestMockNodeWithLeftNilChild2(t *testing.T) {
 
 func TestMockNodeWithMidNilChildMoveNext(t *testing.T) {
 	t.Log("Mock TestMockNodeWithMidNilChildMoveNext.\n")
-	store := btree.StoreInfo{
+	store := sop.StoreInfo{
 		SlotLength: 2,
 	}
 	si := btree.StoreInterface[int, string]{
@@ -269,7 +270,7 @@ func TestMockNodeWithMidNilChildMoveNext(t *testing.T) {
 
 func TestMockNodeWithMidNilChildMovePrevious(t *testing.T) {
 	t.Log("Mock TestMockNodeWithMidNilChildMovePrevious.\n")
-	store := btree.StoreInfo{
+	store := sop.StoreInfo{
 		SlotLength: 2,
 	}
 	si := btree.StoreInterface[int, string]{
@@ -312,7 +313,7 @@ func TestMockNodeWithMidNilChildMovePrevious(t *testing.T) {
 
 func TestMockNodeWithRightNilChildMoveNext(t *testing.T) {
 	t.Log("Mock TestMockNodeWithRightNilChildMoveNext.\n")
-	store := btree.StoreInfo{
+	store := sop.StoreInfo{
 		SlotLength: 2,
 	}
 	si := btree.StoreInterface[int, string]{
@@ -355,7 +356,7 @@ func TestMockNodeWithRightNilChildMoveNext(t *testing.T) {
 
 func TestMockNodeWithRightNilChildAnd3LevelsMoveNext(t *testing.T) {
 	t.Log("Mock TestMockNodeWithRightNilChildAnd3LevelsMoveNext.\n")
-	store := btree.StoreInfo{
+	store := sop.StoreInfo{
 		SlotLength: 2,
 	}
 	si := btree.StoreInterface[int, string]{
@@ -400,7 +401,7 @@ func TestMockNodeWithRightNilChildAnd3LevelsMoveNext(t *testing.T) {
 
 func TestMockNodeHasNilChild(t *testing.T) {
 	t.Log("Mock TestMockNodeHasNilChild.\n")
-	store := btree.StoreInfo{
+	store := sop.StoreInfo{
 		SlotLength:        2,
 		LeafLoadBalancing: true,
 	}
@@ -448,7 +449,7 @@ func TestMockNodeHasNilChild(t *testing.T) {
 
 func TestMockNodeWithLeftNilChildMovePrevious(t *testing.T) {
 	t.Log("Mock TestMockNodeWithLeftNilChildMovePrevious.\n")
-	store := btree.StoreInfo{
+	store := sop.StoreInfo{
 		SlotLength: 2,
 	}
 	si := btree.StoreInterface[int, string]{
@@ -491,7 +492,7 @@ func TestMockNodeWithLeftNilChildMovePrevious(t *testing.T) {
 
 func TestMockNodeWithLeftNilChildAnd3LevelsMovePrevious(t *testing.T) {
 	t.Log("Mock TestMockNodeWithLeftNilChildAnd3LevelsMovePrevious.\n")
-	store := btree.StoreInfo{
+	store := sop.StoreInfo{
 		SlotLength: 2,
 	}
 	si := btree.StoreInterface[int, string]{
@@ -536,7 +537,7 @@ func TestMockNodeWithLeftNilChildAnd3LevelsMovePrevious(t *testing.T) {
 
 func TestMockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	t.Log("Mock DistributeItemOnNodeWithRightNilChild.\n")
-	store := btree.StoreInfo{
+	store := sop.StoreInfo{
 		SlotLength: 4,
 	}
 	si := btree.StoreInterface[int, string]{

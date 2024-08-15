@@ -11,32 +11,18 @@ import (
 	retry "github.com/sethvargo/go-retry"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_memory"
 	"github.com/SharedCode/sop/in_red_ck/redis"
 )
 
 // Keep these common interfaces where they are implemented, if there will be a need, it is easy to move them to common folder.
 
-// StoreRepository interface specifies the store repository.
-type StoreRepository interface {
-	// Fetch store info with name.
-	Get(context.Context, ...string) ([]btree.StoreInfo, error)
-	// Add store info & create related tables like for registry & for node blob.
-	Add(context.Context, ...btree.StoreInfo) error
-	// Update store info. Update should also merge the Count of items between the incoming store info
-	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
-	Update(context.Context, ...btree.StoreInfo) error
-	// Remove store info with name & drop related tables like for registry & for node blob.
-	Remove(context.Context, ...string) error
-}
-
 type storeRepository struct {
 	redisCache redis.Cache
 }
 
 // NewStoreRepository manages the StoreInfo in Cassandra table.
-func NewStoreRepository() StoreRepository {
+func NewStoreRepository() sop.StoreRepository {
 	return &storeRepository{
 		redisCache: redis.NewClient(),
 	}
@@ -53,7 +39,7 @@ func SetStoreCacheDuration(duration time.Duration) {
 }
 
 // Add a new store record, create a new Virtual ID registry and node blob tables.
-func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) error {
+func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -97,14 +83,14 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...btree.StoreInfo) e
 }
 
 // Update enforces so only the Store's Count & timestamp can get updated.
-func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo) error {
+func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
 	// Sort the stores info so we can commit them in same sort order across transactions,
 	// thus, reduced chance of deadlock.
-	b3 := in_memory.NewBtree[string, btree.StoreInfo](true)
+	b3 := in_memory.NewBtree[string, sop.StoreInfo](true)
 	for i := range stores {
 		b3.Add(stores[i].Name, stores[i])
 	}
@@ -141,7 +127,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	}
 
 	updateStatement := fmt.Sprintf("UPDATE %s.store SET count = ?, ts = ? WHERE name = ?;", connection.Config.Keyspace)
-	undo := func(bus []btree.StoreInfo) {
+	undo := func(bus []sop.StoreInfo) {
 		// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
 		for ii := 0; ii < len(bus); ii++ {
 			qry := connection.Session.Query(updateStatement, bus[ii].Count, bus[ii].Timestamp,
@@ -153,7 +139,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 		}
 	}
 
-	beforeUpdateStores := make([]btree.StoreInfo, 0, len(stores))
+	beforeUpdateStores := make([]sop.StoreInfo, 0, len(stores))
 	// Unlock all keys before going out of scope.
 	defer redis.Unlock(ctx, lockKeys...)
 
@@ -193,16 +179,16 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...btree.StoreInfo
 	return nil
 }
 
-func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.StoreInfo, error) {
+func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
 	if connection == nil {
 		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
-	stores := make([]btree.StoreInfo, 0, len(names))
+	stores := make([]sop.StoreInfo, 0, len(names))
 	// Format some variadic ? and convert to interface the names param.
 	namesAsIntf := make([]interface{}, 0, len(names))
 	paramQ := make([]string, 0, len(names))
 	for i := range names {
-		store := btree.StoreInfo{}
+		store := sop.StoreInfo{}
 		if err := sr.redisCache.GetStruct(ctx, names[i], &store); err != nil {
 			if !redis.KeyNotFound(err) {
 				log.Error(fmt.Sprintf("StoreRepository Get (redis getstruct) failed, details: %v", err))
@@ -225,7 +211,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 	}
 
 	iter := qry.Iter()
-	store := btree.StoreInfo{}
+	store := sop.StoreInfo{}
 	var rid gocql.UUID
 	for iter.Scan(&store.Name, &rid, &store.SlotLength, &store.Count, &store.IsUnique,
 		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.IsValueDataActivelyPersisted, &store.IsValueDataGloballyCached, &store.LeafLoadBalancing) {
@@ -236,7 +222,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]btree.St
 		}
 
 		stores = append(stores, store)
-		store = btree.StoreInfo{}
+		store = sop.StoreInfo{}
 	}
 	if err := iter.Close(); err != nil {
 		return nil, err
@@ -275,7 +261,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 
 	for _, n := range names {
 		// Drop Blob table.
-		dropBlobTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, btree.FormatBlobTable(n))
+		dropBlobTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, sop.FormatBlobTable(n))
 
 		qry = connection.Session.Query(dropBlobTable).WithContext(ctx)
 		if connection.Config.ConsistencyBook.StoreRemove > gocql.Any {
@@ -285,7 +271,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 			return err
 		}
 		// Drop Virtual ID registry table.
-		dropRegistryTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, btree.FormatRegistryTable(n))
+		dropRegistryTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, sop.FormatRegistryTable(n))
 		qry = connection.Session.Query(dropRegistryTable).WithContext(ctx)
 		if connection.Config.ConsistencyBook.StoreRemove > gocql.Any {
 			qry.Consistency(connection.Config.ConsistencyBook.StoreRemove)

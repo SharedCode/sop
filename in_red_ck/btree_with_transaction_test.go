@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
 )
 
 var ctx = context.Background()
@@ -20,7 +19,7 @@ func Test_TransactionInducedErrorOnNew(t *testing.T) {
 	trans := t3.(*transaction)
 
 	// Simulate having an existing fooStore store in the backend.
-	trans.storeRepository.Add(ctx, *btree.NewStoreInfo("fooStore", 5, false, false, true, ""))
+	trans.storeRepository.Add(ctx, *sop.NewStoreInfo("fooStore", 5, false, false, true, ""))
 
 	// This call should fail and cause rollback because slotLength is being asked to 99 which will
 	// fail spec check vs the "existing" store created above (w/ slot length 5).

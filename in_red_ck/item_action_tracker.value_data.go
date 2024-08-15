@@ -5,14 +5,13 @@ import (
 	"fmt"
 
 	"github.com/SharedCode/sop"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
 func (t *itemActionTracker[TK, TV]) commitTrackedItemsValues(ctx context.Context) error {
 	if t.storeInfo.IsValueDataInNodeSegment || t.storeInfo.IsValueDataActivelyPersisted {
 		return nil
 	}
-	itemsForAdd := cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
+	itemsForAdd := sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
 		BlobTable: t.storeInfo.BlobTable,
 		Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 5),
 	}
@@ -72,12 +71,12 @@ func (t *itemActionTracker[TK, TV]) manage(uuid sop.UUID, cachedItem cacheItem[T
 	return r
 }
 
-func (t *itemActionTracker[TK, TV]) getForRollbackTrackedItemsValues() *cas.BlobsPayload[sop.UUID] {
-	var itemsForDelete cas.BlobsPayload[sop.UUID]
+func (t *itemActionTracker[TK, TV]) getForRollbackTrackedItemsValues() *sop.BlobsPayload[sop.UUID] {
+	var itemsForDelete sop.BlobsPayload[sop.UUID]
 	if t.storeInfo.IsValueDataInNodeSegment {
 		return nil
 	}
-	itemsForDelete = cas.BlobsPayload[sop.UUID]{
+	itemsForDelete = sop.BlobsPayload[sop.UUID]{
 		BlobTable: t.storeInfo.BlobTable,
 		Blobs:     make([]sop.UUID, 0, 5),
 	}
@@ -93,11 +92,11 @@ func (t *itemActionTracker[TK, TV]) getForRollbackTrackedItemsValues() *cas.Blob
 	return &itemsForDelete
 }
 
-func (t *itemActionTracker[TK, TV]) getObsoleteTrackedItemsValues() *cas.BlobsPayload[sop.UUID] {
+func (t *itemActionTracker[TK, TV]) getObsoleteTrackedItemsValues() *sop.BlobsPayload[sop.UUID] {
 	if t.storeInfo.IsValueDataInNodeSegment {
 		return nil
 	}
-	itemsForDelete := cas.BlobsPayload[sop.UUID]{
+	itemsForDelete := sop.BlobsPayload[sop.UUID]{
 		BlobTable: t.storeInfo.BlobTable,
 		Blobs:     make([]sop.UUID, 0, 5),
 	}
