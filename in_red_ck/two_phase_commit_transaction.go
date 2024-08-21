@@ -54,6 +54,15 @@ type transaction struct {
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
 var Now = time.Now
 
+// NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
+func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
+	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging)
+	if err != nil {
+		return nil, err
+	}
+	return sop.NewTransaction(mode, twoPT, maxTime, logging)
+}
+
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
 // If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.

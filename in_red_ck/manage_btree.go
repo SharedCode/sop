@@ -21,10 +21,10 @@ func RemoveBtree(ctx context.Context, name string) error {
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
 func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
-		return nil, fmt.Errorf("Transaction 't' parameter can't be nil")
+		return nil, fmt.Errorf("transaction 't' parameter can't be nil")
 	}
 	if !t.HasBegun() {
-		return nil, fmt.Errorf("Transaction 't' parameter has not started")
+		return nil, fmt.Errorf("transaction 't' parameter has not started")
 	}
 
 	var t2 interface{} = t.GetPhasedTransaction()
@@ -47,10 +47,10 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // the OpenBtree function.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
-		return nil, fmt.Errorf("Transaction 't' parameter can't be nil")
+		return nil, fmt.Errorf("transaction 't' parameter can't be nil")
 	}
 	if !t.HasBegun() {
-		return nil, fmt.Errorf("Transaction 't' parameter has not started")
+		return nil, fmt.Errorf("transaction 't' parameter has not started")
 	}
 
 	var t2 interface{} = t.GetPhasedTransaction()
