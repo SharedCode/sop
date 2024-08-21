@@ -13,18 +13,6 @@ type singlePhaseTransaction struct {
 	otherTransactions         []sop.TwoPhaseCommitTransaction
 }
 
-// Transaction modes enumeration.
-type TransactionMode int
-const(
-	// No check does not allow any change to the Btree stores and does not check
-	// read items' versions (for consistency) during commit.
-	NoCheck = iota
-	// For writing mode allows changes to be done to the Btree stores.
-	ForWriting
-	// For reading mode does not allow any change to the Btree stores.
-	ForReading
-)
-
 // NewTransaction creates an enduser facing transaction object.
 // mode - if ForWriting will create a transaction that allows create, update, delete operations on B-Tree(s)
 // created or opened in the transaction. Otherwise it will be for ForReading(or NoCheck) mode.
@@ -35,7 +23,7 @@ const(
 // of the commit and these logs will help SOP to cleanup any uncommitted resources in case there are
 // some build up, e.g. crash or host reboot left ongoing commits' temp changes. In time these will expire and
 // SOP to clean them up.
-func NewTransaction(mode TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
+func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
 	twoPhase, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging)
 	if err != nil {
 		return nil, err
@@ -103,6 +91,10 @@ func (t *singlePhaseTransaction) Rollback(ctx context.Context) error {
 		}
 	}
 	return lastErr
+}
+
+func (t *singlePhaseTransaction) Mode() sop.TransactionMode {
+	return t.sopPhaseCommitTransaction.GetMode()
 }
 
 // Returns true if transaction has begun, false otherwise.

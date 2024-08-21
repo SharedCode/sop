@@ -7,7 +7,7 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/SharedCode/sop/redis"
 	"github.com/gocql/gocql"
 )
 

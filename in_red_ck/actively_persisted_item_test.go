@@ -10,7 +10,7 @@ import (
 
 func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	// Populate with good data.
-	trans, _ := newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	so := sop.ConfigureStore("xyz", true, 8, "Streaming data", sop.BigData)
@@ -20,7 +20,7 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Now, populate then rollback and validate TID logs are gone.
-	trans, _ = newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 	sds, _ = OpenBtree[string, string](ctx, "xyz", trans)
 	sds.Add(ctx, "fooVideo2", "video content")
@@ -51,7 +51,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 	Now = func() time.Time { return yesterday }
 
-	trans, _ := newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	so := sop.ConfigureStore("xyz2", false, 8, "Streaming data", sop.BigData)
@@ -62,7 +62,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 
 	trans.Commit(ctx)
 
-	trans, _ = newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "xyz2", trans)
@@ -98,7 +98,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 		t.Errorf("Failed, got %v, want nil.", tid)
 	}
 
-	trans, _ = newMockTransactionWithLogging(t, ForReading, -1)
+	trans, _ = newMockTransactionWithLogging(t, sop.ForReading, -1)
 	trans.Begin()
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "xyz2", trans)

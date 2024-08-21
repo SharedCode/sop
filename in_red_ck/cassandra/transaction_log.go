@@ -8,7 +8,7 @@ import (
 	"github.com/gocql/gocql"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/SharedCode/sop/redis"
 )
 
 // DateHourLayout format mask string.
@@ -21,9 +21,6 @@ var NilUUID = gocql.UUID(sop.NilUUID)
 // then deleting the entire partition when done. Use consistency of LOCAL_ONE when writing logs.
 
 type transactionLog struct {
-	// Should coordinate via Redis cache. Each date hour should get locked and for "work" by GetOne
-	// to increase chances of distribution of cleanup load across machines.
-	redisCache  redis.Cache
 	hourLockKey *redis.LockKeys
 }
 
@@ -38,7 +35,6 @@ var Now = time.Now
 // NewBlobStore instantiates a new BlobStore instance.
 func NewTransactionLog() sop.TransactionLog {
 	return &transactionLog{
-		redisCache:  redis.NewClient(),
 		hourLockKey: redis.CreateLockKeys("HBP")[0],
 	}
 }

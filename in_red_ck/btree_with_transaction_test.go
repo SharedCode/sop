@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/btree"
 )
 
 var ctx = context.Background()
 
 func Test_TransactionInducedErrorOnNew(t *testing.T) {
-	t2, err := newMockTransaction(t, ForWriting, -1)
+	t2, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -37,7 +38,7 @@ func Test_TransactionInducedErrorOnNew(t *testing.T) {
 }
 
 func Test_TransactionInducedErrorOnOpen(t *testing.T) {
-	trans, err := newMockTransaction(t, ForWriting, -1)
+	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -49,14 +50,14 @@ func Test_TransactionInducedErrorOnOpen(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnAdd(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 1
 	b3t.Add(ctx, 1, "foo")
 	if trans.HasBegun() {
@@ -65,14 +66,14 @@ func Test_TransactionWithInducedErrorOnAdd(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnAddIfNotExist(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 2
 	b3t.AddIfNotExist(ctx, 1, "foo")
 	if trans.HasBegun() {
@@ -81,14 +82,14 @@ func Test_TransactionWithInducedErrorOnAddIfNotExist(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnUpdate(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 3
 	b3t.Update(ctx, 1, "foo")
 	if trans.HasBegun() {
@@ -97,14 +98,14 @@ func Test_TransactionWithInducedErrorOnUpdate(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnUpdateCurrentItem(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 4
 	b3t.UpdateCurrentItem(ctx, "foo")
 	if trans.HasBegun() {
@@ -113,14 +114,14 @@ func Test_TransactionWithInducedErrorOnUpdateCurrentItem(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnRemove(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 5
 	b3t.Remove(ctx, 1)
 	if trans.HasBegun() {
@@ -129,14 +130,14 @@ func Test_TransactionWithInducedErrorOnRemove(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnRemoveCurrentItem(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 6
 	b3t.RemoveCurrentItem(ctx)
 	if trans.HasBegun() {
@@ -145,14 +146,14 @@ func Test_TransactionWithInducedErrorOnRemoveCurrentItem(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnFindOne(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 7
 	b3t.FindOne(ctx, 1, false)
 	if trans.HasBegun() {
@@ -161,14 +162,14 @@ func Test_TransactionWithInducedErrorOnFindOne(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnFindOneWithID(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 8
 	b3t.FindOneWithID(ctx, 1, sop.NewUUID())
 	if trans.HasBegun() {
@@ -177,14 +178,14 @@ func Test_TransactionWithInducedErrorOnFindOneWithID(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnGetCurrentValue(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 9
 	b3t.GetCurrentValue(ctx)
 	if trans.HasBegun() {
@@ -193,14 +194,14 @@ func Test_TransactionWithInducedErrorOnGetCurrentValue(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnGetCurrentItem(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 10
 	b3t.GetCurrentItem(ctx)
 	if trans.HasBegun() {
@@ -209,14 +210,14 @@ func Test_TransactionWithInducedErrorOnGetCurrentItem(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnFirst(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 11
 	b3t.First(ctx)
 	if trans.HasBegun() {
@@ -225,14 +226,14 @@ func Test_TransactionWithInducedErrorOnFirst(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnLast(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 12
 	b3t.Last(ctx)
 	if trans.HasBegun() {
@@ -241,14 +242,14 @@ func Test_TransactionWithInducedErrorOnLast(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnNext(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 13
 	b3t.Next(ctx)
 	if trans.HasBegun() {
@@ -257,14 +258,14 @@ func Test_TransactionWithInducedErrorOnNext(t *testing.T) {
 }
 
 func Test_TransactionWithInducedErrorOnPrevious(t *testing.T) {
-	t2, _ := newMockTransaction(t, ForWriting, -1)
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := newBtreeWithTransaction(trans, b3)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 14
 	b3t.Previous(ctx)
 	if trans.HasBegun() {

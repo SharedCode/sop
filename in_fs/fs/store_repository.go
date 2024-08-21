@@ -40,7 +40,7 @@ func (sr *mockStoreRepository) Update(ctx context.Context, stores ...sop.StoreIn
 func (sr *mockStoreRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
 	stores := make([]sop.StoreInfo, len(names))
 	for i, name := range names {
-		v := sr.lookup[name]
+		v, _ := sr.lookup[name]
 		stores[i] = v
 	}
 	return stores, nil

@@ -28,7 +28,7 @@ func (v *Mock_vid_registry) Add(ctx context.Context, storesHandles ...sop.Regist
 
 func (v *Mock_vid_registry) Update(ctx context.Context, allOrNothing bool, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	if v.InducedErrorOnUpdateAllOrNothing && allOrNothing {
-		return fmt.Errorf("induced error on Update w/ allOrNothing true")
+		return fmt.Errorf("Induced error on Update w/ allOrNothing true.")
 	}
 	for _, storeHandles := range storesHandles {
 		for _, h := range storeHandles.IDs {
@@ -42,7 +42,7 @@ func (v *Mock_vid_registry) Get(ctx context.Context, storesLids ...sop.RegistryP
 	for _, storeLids := range storesLids {
 		handles := make([]sop.Handle, 0, len(storeLids.IDs))
 		for _, lid := range storeLids.IDs {
-			h := v.Lookup[lid]
+			h, _ := v.Lookup[lid]
 			if h.LogicalID.IsNil() {
 				continue
 			}

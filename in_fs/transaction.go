@@ -1,63 +1,15 @@
-// Package contains SOP in Redis, Cassandra & Kafka(in_red_c) integration code.
-package sop
+package in_fs
 
 import (
 	"context"
 	"time"
+
+	"github.com/SharedCode/sop"
 )
-
-// Transaction modes enumeration.
-type TransactionMode int
-const(
-	// No check does not allow any change to the Btree stores and does not check
-	// read items' versions (for consistency) during commit.
-	NoCheck = iota
-	// For writing mode allows changes to be done to the Btree stores.
-	ForWriting
-	// For reading mode does not allow any change to the Btree stores.
-	ForReading
-)
-
-// Transaction interface defines the "enduser facing" transaction methods.
-type Transaction interface {
-	// Begin the transaction.
-	Begin() error
-	// Commit the transaction.
-	Commit(ctx context.Context) error
-	// Rollback the transaction.
-	Rollback(ctx context.Context) error
-	// Returns true if transaction has begun, false otherwise.
-	HasBegun() bool
-
-	// Returns the two phased commit transaction object. Useful for integration with your application
-	// "other" database transactions. Returned transaction object will allow your code to call the
-	// two phases commit of SOP.
-	GetPhasedTransaction() TwoPhaseCommitTransaction
-	// Add your two phases commit implementation for managing your/3rd party database transaction.
-	AddPhasedTransaction(otherTransaction ...TwoPhaseCommitTransaction)
-}
-
-// TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.
-type TwoPhaseCommitTransaction interface {
-	// Begin the transaction.
-	Begin() error
-	// Phase1Commit of the transaction.
-	Phase1Commit(ctx context.Context) error
-	// Phase2Commit of the transaction.
-	Phase2Commit(ctx context.Context) error
-	// Rollback the transaction.
-	Rollback(ctx context.Context) error
-	// Returns true if transaction has begun, false otherwise.
-	HasBegun() bool
-	// Returns the Transaction mode, it can be for reading or for writing.
-	GetMode() TransactionMode
-}
-
-// Enduser facing Transaction (wrapper) implementation.
 
 type singlePhaseTransaction struct {
-	sopPhaseCommitTransaction TwoPhaseCommitTransaction
-	otherTransactions         []TwoPhaseCommitTransaction
+	sopPhaseCommitTransaction sop.TwoPhaseCommitTransaction
+	otherTransactions         []sop.TwoPhaseCommitTransaction
 }
 
 // NewTransaction creates an enduser facing transaction object.
@@ -70,10 +22,11 @@ type singlePhaseTransaction struct {
 // of the commit and these logs will help SOP to cleanup any uncommitted resources in case there are
 // some build up, e.g. crash or host reboot left ongoing commits' temp changes. In time these will expire and
 // SOP to clean them up.
-func NewTransaction(mode TransactionMode, 
-	twoPhaseCommitTrans TwoPhaseCommitTransaction,
-	maxTime time.Duration, logging bool) (Transaction, error) {
-	twoPhase := twoPhaseCommitTrans	// NewTwoPhaseCommitTransaction(mode, maxTime, logging)
+func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
+	twoPhase, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging)
+	if err != nil {
+		return nil, err
+	}
 	return &singlePhaseTransaction{
 		sopPhaseCommitTransaction: twoPhase,
 	}, nil
@@ -139,8 +92,7 @@ func (t *singlePhaseTransaction) Rollback(ctx context.Context) error {
 	return lastErr
 }
 
-// Returns the transaction's mode.
-func (t *singlePhaseTransaction) GetMode() TransactionMode {
+func (t *singlePhaseTransaction) Mode() sop.TransactionMode {
 	return t.sopPhaseCommitTransaction.GetMode()
 }
 
@@ -152,11 +104,11 @@ func (t *singlePhaseTransaction) HasBegun() bool {
 // Returns the two phased commit transaction object. Useful for integration with your application
 // "other" database transactions. Returned transaction object will allow your code to call the
 // two phases commit of SOP.
-func (t *singlePhaseTransaction) GetPhasedTransaction() TwoPhaseCommitTransaction {
+func (t *singlePhaseTransaction) GetPhasedTransaction() sop.TwoPhaseCommitTransaction {
 	return t.sopPhaseCommitTransaction
 }
 
 // Add your two phases commit implementation for managing your/3rd party database transaction.
-func (t *singlePhaseTransaction) AddPhasedTransaction(otherTransaction ...TwoPhaseCommitTransaction) {
+func (t *singlePhaseTransaction) AddPhasedTransaction(otherTransaction ...sop.TwoPhaseCommitTransaction) {
 	t.otherTransactions = append(t.otherTransactions, otherTransaction...)
 }

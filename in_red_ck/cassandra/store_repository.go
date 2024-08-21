@@ -12,7 +12,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_memory"
-	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/SharedCode/sop/redis"
 )
 
 // Keep these common interfaces where they are implemented, if there will be a need, it is easy to move them to common folder.
@@ -172,7 +172,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	for i := range stores {
 		// Tolerate redis error since we've successfully updated the master table.
 		if err := sr.redisCache.SetStruct(ctx, stores[i].Name, &stores[i], storeCacheDuration); err != nil {
-			log.Error("StoreRepository Update (redis setstruct) failed, details: %v", err)
+			log.Error(fmt.Sprintf("StoreRepository Update (redis setstruct) failed, details: %v", err))
 		}
 	}
 
@@ -255,7 +255,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	for i := range names {
 		// Tolerate Redis cache failure.
 		if err := sr.redisCache.Delete(ctx, names[i]); err != nil && !redis.KeyNotFound(err) {
-			log.Error("Registry Add (redis setstruct) failed, details: %v", err)
+			log.Error("Registry Add (redis setstruct) failed, details: %v", err.Error())
 		}
 	}
 

@@ -109,7 +109,7 @@ func (node *Node[TK, TV]) promoteSingleChildAsParentChild(ctx context.Context, b
 }
 
 // addItemOnNodeWithNilChild handles insert/distribute item on a full node with a nil child, 'should occupy nil child.
-func (node *Node[TK, TV]) addItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], item *Item[TK, TV], index int) (bool, error) {
+func (node *Node[TK, TV]) addItemOnNodeWithNilChild(btree *Btree[TK, TV], item *Item[TK, TV], index int) (bool, error) {
 	if node.ChildrenIDs[index] != sop.NilUUID {
 		return false, nil
 	}
@@ -186,7 +186,7 @@ func (node *Node[TK, TV]) goLeftUpItemOnNodeWithNilChild(ctx context.Context, bt
 }
 
 // nodeHasNilChild returns true if a node has nil child.
-func (node *Node[TK, TV]) nodeHasNilChild(btree *Btree[TK, TV]) bool {
+func (node *Node[TK, TV]) nodeHasNilChild() bool {
 	if !node.hasChildren() {
 		return false
 	}

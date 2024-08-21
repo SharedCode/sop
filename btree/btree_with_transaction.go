@@ -1,29 +1,28 @@
-package in_red_ck
+package btree
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
 )
 
-type btreeWithTransaction[TK btree.Comparable, TV any] struct {
-	transaction *transaction
-	btree       btree.BtreeInterface[TK, TV]
+type btreeWithTransaction[TK Comparable, TV any] struct {
+	transaction sop.TwoPhaseCommitTransaction
+	btree       BtreeInterface[TK, TV]
 }
 
 const transHasNotBegunErrorMsg = "can't do operation on b-tree if transaction has not begun"
 
 // Instantiate a B-Tree wrapper that enforces transaction session on each method(a.k.a. operation).
-func newBtreeWithTransaction[TK btree.Comparable, TV any](t *transaction, btree btree.BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
+func NewBtreeWithTransaction[TK Comparable, TV any](t sop.TwoPhaseCommitTransaction, btree BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
 	return &btreeWithTransaction[TK, TV]{
 		transaction: t,
 		btree:       btree,
 	}
 }
 
-// Returns the count of items in the btree.
+// Returns the count of items in the 
 func (b3 *btreeWithTransaction[TK, TV]) Count() int64 {
 	return b3.btree.Count()
 }
@@ -33,7 +32,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value T
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf(transHasNotBegunErrorMsg)
 	}
-	if b3.transaction.mode != ForWriting {
+	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't add item, transaction is not for writing")
 	}
@@ -51,7 +50,7 @@ func (b3 *btreeWithTransaction[TK, TV]) AddIfNotExist(ctx context.Context, key T
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf(transHasNotBegunErrorMsg)
 	}
-	if b3.transaction.mode != ForWriting {
+	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't add item, transaction is not for writing")
 	}
@@ -67,7 +66,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Update(ctx context.Context, key TK, valu
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf(transHasNotBegunErrorMsg)
 	}
-	if b3.transaction.mode != ForWriting {
+	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
@@ -84,7 +83,7 @@ func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, v
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf(transHasNotBegunErrorMsg)
 	}
-	if b3.transaction.mode != ForWriting {
+	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
@@ -100,7 +99,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Remove(ctx context.Context, key TK) (boo
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf(transHasNotBegunErrorMsg)
 	}
-	if b3.transaction.mode != ForWriting {
+	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
@@ -116,7 +115,7 @@ func (b3 *btreeWithTransaction[TK, TV]) RemoveCurrentItem(ctx context.Context) (
 	if !b3.transaction.HasBegun() {
 		return false, fmt.Errorf(transHasNotBegunErrorMsg)
 	}
-	if b3.transaction.mode != ForWriting {
+	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't remove item, transaction is not for writing")
 	}
@@ -179,8 +178,8 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValue(ctx context.Context) (TV
 }
 
 // GetCurrentItem returns the current item.
-func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (btree.Item[TK, TV], error) {
-	var zero btree.Item[TK, TV]
+func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], error) {
+	var zero Item[TK, TV]
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx)
 		return zero, fmt.Errorf(transHasNotBegunErrorMsg)

@@ -37,7 +37,7 @@ const nodeSlotLength = 500
 const batchSize = 200
 
 func Test_Rollback(t *testing.T) {
-	trans, _ := newMockTransaction(t, ForWriting, -1)
+	trans, _ := newMockTransaction(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -54,7 +54,7 @@ func Test_Rollback(t *testing.T) {
 
 	trans.Commit(ctx)
 
-	trans, _ = newMockTransaction(t, ForWriting, -1)
+	trans, _ = newMockTransaction(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
@@ -62,7 +62,7 @@ func Test_Rollback(t *testing.T) {
 
 	trans.Rollback(ctx)
 
-	trans, _ = newMockTransaction(t, ForReading, -1)
+	trans, _ = newMockTransaction(t, sop.ForReading, -1)
 	trans.Begin()
 	b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -85,7 +85,7 @@ func Test_Rollback(t *testing.T) {
 }
 
 func Test_SimpleAddPerson(t *testing.T) {
-	trans, err := newMockTransaction(t, ForWriting, -1)
+	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -132,7 +132,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 }
 
 func Test_NoCheckCommitAddFail(t *testing.T) {
-	trans, err := newMockTransaction(t, NoCheck, -1)
+	trans, err := newMockTransaction(t, sop.NoCheck, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -155,7 +155,7 @@ func Test_NoCheckCommitAddFail(t *testing.T) {
 }
 
 func Test_NoCheckCommit(t *testing.T) {
-	trans, err := newMockTransaction(t, ForWriting, -1)
+	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -177,7 +177,7 @@ func Test_NoCheckCommit(t *testing.T) {
 	}
 	trans.Commit(ctx)
 
-	trans, err = newMockTransaction(t, NoCheck, -1)
+	trans, err = newMockTransaction(t, sop.NoCheck, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -190,12 +190,12 @@ func Test_NoCheckCommit(t *testing.T) {
 }
 
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
-	trans, err := newMockTransaction(t, ForWriting, -1)
+	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
-	trans2, _ := newMockTransaction(t, ForWriting, -1)
+	trans2, _ := newMockTransaction(t, sop.ForWriting, -1)
 
 	trans.Begin()
 	trans2.Begin()
@@ -246,7 +246,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 }
 
 func Test_AddAndSearchManyPersons(t *testing.T) {
-	trans, err := newMockTransaction(t, ForWriting, -1)
+	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -282,7 +282,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	trans, err = newMockTransaction(t, ForReading, -1)
+	trans, err = newMockTransaction(t, sop.ForReading, -1)
 	if err != nil {
 		t.Errorf(err.Error())
 		t.Fail()
@@ -316,7 +316,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := newMockTransaction(t, ForWriting, -1)
+	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t1.Begin()
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -339,7 +339,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = newMockTransaction(t, ForWriting, -1)
+			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
 			t1.Begin()
 			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
@@ -370,7 +370,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = newMockTransaction(t, ForReading, -1)
+			t1, _ = newMockTransaction(t, sop.ForReading, -1)
 			t1.Begin()
 			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
@@ -388,7 +388,7 @@ func Test_VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := newMockTransaction(t, ForWriting, -1)
+	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t1.Begin()
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -413,7 +413,7 @@ func Test_VolumeDeletes(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = newMockTransaction(t, ForWriting, -1)
+			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
 			t1.Begin()
 			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
@@ -432,7 +432,7 @@ func Test_MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
 
-	t1, _ := newMockTransaction(t, ForWriting, -1)
+	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t1.Begin()
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -472,7 +472,7 @@ func Test_MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = newMockTransaction(t, ForWriting, -1)
+			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
 			t1.Begin()
 			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
@@ -515,7 +515,7 @@ func Test_MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = newMockTransaction(t, ForWriting, -1)
+			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
 			t1.Begin()
 			b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
