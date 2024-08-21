@@ -20,18 +20,14 @@ var mockNodeBlobStore = cas.NewMockBlobStore()
 func newMockTransaction(t *testing.T, mode sop.TransactionMode, maxTime time.Duration) (sop.Transaction, error) {
 	t.Helper()
 	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, mode, maxTime, false)
-	return &singlePhaseTransaction{
-		sopPhaseCommitTransaction: twoPhase,
-	}, nil
+	return sop.NewTransaction(mode, twoPhase, maxTime, false)
 }
 
 // NewMockTransaction with logging turned on.
 func newMockTransactionWithLogging(t *testing.T, mode sop.TransactionMode, maxTime time.Duration) (sop.Transaction, error) {
 	t.Helper()
 	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, mode, maxTime, true)
-	return &singlePhaseTransaction{
-		sopPhaseCommitTransaction: twoPhase,
-	}, nil
+	return sop.NewTransaction(mode, twoPhase, maxTime, true)
 }
 
 func newMockTwoPhaseCommitTransaction(t *testing.T, mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.TwoPhaseCommitTransaction, error) {

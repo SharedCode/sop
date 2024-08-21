@@ -25,9 +25,9 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	sds, _ = OpenBtree[string, string](ctx, "xyz", trans)
 	sds.Add(ctx, "fooVideo2", "video content")
 
-	tidLogs := trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).
+	tidLogs := trans.GetPhasedTransaction().(*transaction).
 		logger.logger.(*cas.MockTransactionLog).GetTIDLogs(
-		trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).logger.transactionID)
+		trans.GetPhasedTransaction().(*transaction).logger.transactionID)
 
 	if tidLogs == nil {
 		t.Error("failed pre Rollback, got nil, want valid logs")
@@ -35,9 +35,9 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 
 	trans.Rollback(ctx)
 
-	gotTidLogs := trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).
+	gotTidLogs := trans.GetPhasedTransaction().(*transaction).
 		logger.logger.(*cas.MockTransactionLog).GetTIDLogs(
-		trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).logger.transactionID)
+		trans.GetPhasedTransaction().(*transaction).logger.transactionID)
 
 	if gotTidLogs != nil {
 		t.Errorf("failed Rollback, got %v, want nil", gotTidLogs)
