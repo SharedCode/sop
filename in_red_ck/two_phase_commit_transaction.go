@@ -391,13 +391,13 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes, in phase2Commit.
-	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(ctx, updatedNodesHandles)
+	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(updatedNodesHandles)
 	if err != nil {
 		return err
 	}
 
 	// Prepare to update upsert time of removed nodes to signal that they are finalized, in phase2Commit.
-	rh, err := t.btreesBackend[0].nodeRepository.touchNodes(ctx, removedNodesHandles)
+	rh, err := t.btreesBackend[0].nodeRepository.touchNodes(removedNodesHandles)
 	if err != nil {
 		return err
 	}
@@ -815,7 +815,7 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 		}
 		if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
 			lastErr = err
-			log.Error("Redis delete failed, details: %v", err)
+			log.Error(fmt.Sprintf("Redis delete failed, details: %v", err))
 		}
 		if err := t.blobStore.Remove(ctx, unusedNodeIDs...); err != nil {
 			lastErr = err

@@ -547,7 +547,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, vids []sop.R
 }
 
 // Set to active the inactive nodes.
-func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepository) activateInactiveNodes(handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if len(handles) == 0 {
 		return nil, nil
 	}
@@ -568,7 +568,7 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, handles []s
 }
 
 // Update upsert time of a given set of nodes.
-func (nr *nodeRepository) touchNodes(ctx context.Context, handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepository) touchNodes(handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if len(handles) == 0 {
 		return nil, nil
 	}
