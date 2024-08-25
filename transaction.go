@@ -60,9 +60,10 @@ type singlePhaseTransaction struct {
 	otherTransactions         []TwoPhaseCommitTransaction
 }
 
-// NewTransaction creates an enduser facing transaction object.
+// NewTransaction creates an enduser facing transaction object by putting a wrapper to a two phase commit transaction object.
 // mode - if ForWriting will create a transaction that allows create, update, delete operations on B-Tree(s)
 // created or opened in the transaction. Otherwise it will be for ForReading(or NoCheck) mode.
+// twoPhaseCommitTrans - two phase commit implementation to be wrapped in this transaction.
 // maxTime - specify the maximum "commit" time of the transaction. That is, upon call to commit, it is given
 // this amount of time to conclude, otherwise, it will time out and rollback.
 // If -1 is specified, 15 minute max commit time will be assigned.
@@ -97,20 +98,17 @@ func (t *singlePhaseTransaction) Begin() error {
 // this will return the sop phase 1 commit error or
 // your other transactions phase 1 commits' last error.
 func (t *singlePhaseTransaction) Commit(ctx context.Context) error {
-	var lastErr error
 	// Phase 1 commit.
 	if err := t.sopPhaseCommitTransaction.Phase1Commit(ctx); err != nil {
 		t.Rollback(ctx)
 		return err
 	}
+	// Call phase 1 commit of other non-SOP transactions.
 	for _, ot := range t.otherTransactions {
 		if err := ot.Phase1Commit(ctx); err != nil {
-			lastErr = err
+			t.Rollback(ctx)
+			return err
 		}
-	}
-	if lastErr != nil {
-		t.Rollback(ctx)
-		return lastErr
 	}
 
 	// Phase 2 commit.
