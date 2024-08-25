@@ -19,7 +19,7 @@ func NewBlobStore() sop.BlobStore {
 }
 
 func (b *blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.UUID, target interface{}) error {
-	fn:= FilenameFormatter(blobFilePath, blobID)
+	fn := ToFilePath(blobFilePath, blobID)
 	ba, err := os.ReadFile(fn)
 	if err != nil {
 		return err
@@ -34,7 +34,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop
 			if err != nil {
 				return err
 			}
-			fn := FilenameFormatter(storeBlobs.BlobTable, blob.Key)
+			fn := ToFilePath(storeBlobs.BlobTable, blob.Key)
 			// WriteFile will add or replace existing file.
 			err = os.WriteFile(fn, ba, os.ModeAppend)
 			if err != nil {
@@ -52,7 +52,7 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[
 func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
 	for _, storeBlobIDs := range storesBlobsIDs {
 		for _, blobID := range storeBlobIDs.Blobs {
-			fn := FilenameFormatter(storeBlobIDs.BlobTable, blobID)
+			fn := ToFilePath(storeBlobIDs.BlobTable, blobID)
 			err := os.Remove(fn)
 			if err != nil {
 				return err

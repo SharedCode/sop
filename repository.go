@@ -46,10 +46,7 @@ type StoreRepository interface {
 // BlobStore specifies the backend blob store interface used for storing & managing data blobs.
 // Blobs are data that can vary in size and is big enough that they can't be stored in database
 // as it will impose performance penalties. This kind of data are typically stored in blob stores
-// like AWS S3, or file system, etc...
-//
-// A Cassandra partition can also be used but it has to occupy an entier partition,
-// like how it is implemented in "in_red_ck" package.
+// like AWS S3, or file system, a Cassandra partition, etc...
 type BlobStore interface {
 	// Get or fetch a blob given an ID.
 	GetOne(ctx context.Context, blobTable string, blobID UUID, target interface{}) error
