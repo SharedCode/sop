@@ -22,12 +22,12 @@ func DefaultToFilePath(basePath string, id sop.UUID) string {
 	return fmt.Sprintf("%s%c%s", basePath, os.PathSeparator, Apply3LevelHierarchyAndModulo(id))
 }
 
-// Support 3 level folders and 4th hex "modulo".
+// Support 3 level folders and 4th hex "modulo" file distribution algorithm.
 func Apply3LevelHierarchyAndModulo(id sop.UUID) string {
 	s := id.String()
 	ps := os.PathSeparator
 	mod := s[3] % 3
-	gf := fmt.Sprintf("%cgroup", s[3])
+	gf := fmt.Sprintf("%c%c%cmod%c", s[0], s[1], s[2], mod)
 	switch(mod) {
 	case 0:
 		return fmt.Sprintf("%c%c%s", s[0], ps, gf)
