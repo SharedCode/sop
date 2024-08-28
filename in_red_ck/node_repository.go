@@ -8,8 +8,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/SharedCode/sop/redis"
 )
 
 // nodeRepository implements both frontend and backend facing methods of the NodeRepository.
@@ -74,12 +73,12 @@ type nodeRepository struct {
 	transaction *transaction
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
 	nodeLocalCache map[sop.UUID]cacheNode
-	storeInfo      *btree.StoreInfo
+	storeInfo      *sop.StoreInfo
 	count          int64
 }
 
 // NewNodeRepository instantiates a NodeRepository.
-func newNodeRepository[TK btree.Comparable, TV any](t *transaction, storeInfo *btree.StoreInfo) *nodeRepositoryTyped[TK, TV] {
+func newNodeRepository[TK btree.Comparable, TV any](t *transaction, storeInfo *sop.StoreInfo) *nodeRepositoryTyped[TK, TV] {
 	nr := &nodeRepository{
 		transaction:    t,
 		nodeLocalCache: make(map[sop.UUID]cacheNode),
@@ -113,7 +112,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 		}
 		return v.node, nil
 	}
-	h, err := nr.transaction.registry.Get(ctx, cas.RegistryPayload[sop.UUID]{
+	h, err := nr.transaction.registry.Get(ctx, sop.RegistryPayload[sop.UUID]{
 		RegistryTable: nr.storeInfo.RegistryTable,
 		IDs:           []sop.UUID{logicalID},
 	})
@@ -190,7 +189,7 @@ func (nr *nodeRepository) remove(nodeID sop.UUID) {
 	// Code should not reach this point, as B-tree will not issue a remove if node is not cached locally.
 }
 
-func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) (bool, error) {
+func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, error) {
 	if len(nodes) == 0 {
 		return true, nil
 	}
@@ -199,7 +198,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tu
 	if err != nil {
 		return false, err
 	}
-	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
+	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
 	for i := range handles {
 		if len(handles[i].IDs) == 0 {
 			handles[i].IDs = make([]sop.Handle, len(vids[i].IDs))
@@ -236,7 +235,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tu
 }
 
 // Save to blob store, save node ID to the alternate(inactive) physical ID(see virtual ID).
-func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) (bool, []cas.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
 	}
@@ -246,7 +245,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 	if err != nil {
 		return false, nil, err
 	}
-	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
+	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
 	for i := range handles {
 		blobs[i].BlobTable = nodes[i].First.BlobTable
 		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
@@ -296,7 +295,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 
 // Add the removed Node(s) and their Item(s) Data(if not in node segment) to the recycler
 // so they can get serviced for physical delete on schedule in the future.
-func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) (bool, []cas.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
 	}
@@ -325,7 +324,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Tu
 	return true, handles, nil
 }
 
-func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) error {
+func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) error {
 	/* UUID to Virtual ID story:
 	   - (on commit) New(added) nodes will have their IDs converted to virtual ID with empty
 	     phys IDs(or same ID with active & virtual ID).
@@ -336,8 +335,8 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tupl
 	if len(nodes) == 0 {
 		return nil
 	}
-	handles := make([]cas.RegistryPayload[sop.Handle], len(nodes))
-	blobs := make([]cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
+	handles := make([]sop.RegistryPayload[sop.Handle], len(nodes))
+	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
 	for i := range nodes {
 		handles[i].RegistryTable = nodes[i].First.RegistryTable
 		handles[i].IDs = make([]sop.Handle, len(nodes[i].Second))
@@ -369,7 +368,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tupl
 	return nil
 }
 
-func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) (bool, error) {
+func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, error) {
 	if len(nodes) == 0 {
 		return true, nil
 	}
@@ -394,9 +393,9 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData
 	if rollbackData == nil {
 		return nil
 	}
-	var bibs []cas.BlobsPayload[sop.UUID]
-	var vids []cas.RegistryPayload[sop.UUID]
-	tup := rollbackData.(sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]])
+	var bibs []sop.BlobsPayload[sop.UUID]
+	var vids []sop.RegistryPayload[sop.UUID]
+	tup := rollbackData.(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]])
 	vids = tup.First
 	bibs = tup.Second
 	if len(vids) == 0 {
@@ -431,9 +430,9 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData
 }
 
 func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData interface{}) error {
-	var bibs []cas.BlobsPayload[sop.UUID]
-	var vids []cas.RegistryPayload[sop.UUID]
-	tup := rollbackData.(sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]])
+	var bibs []sop.BlobsPayload[sop.UUID]
+	var vids []sop.RegistryPayload[sop.UUID]
+	tup := rollbackData.(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]])
 	vids = tup.First
 	bibs = tup.Second
 	if len(vids) == 0 {
@@ -465,7 +464,7 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData i
 }
 
 // rollback updated Nodes.
-func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, vids []cas.RegistryPayload[sop.UUID]) error {
+func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, vids []sop.RegistryPayload[sop.UUID]) error {
 	if len(vids) == 0 {
 		return nil
 	}
@@ -473,9 +472,9 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, vids []cas.R
 	if err != nil {
 		return err
 	}
-	blobsIDs := make([]cas.BlobsPayload[sop.UUID], len(vids))
+	blobsIDs := make([]sop.BlobsPayload[sop.UUID], len(vids))
 	for i := range handles {
-		blobsIDs[i].BlobTable = btree.ConvertToBlobTableName(vids[i].RegistryTable)
+		blobsIDs[i].BlobTable = sop.ConvertToBlobTableName(vids[i].RegistryTable)
 		blobsIDs[i].Blobs = make([]sop.UUID, 0, len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			if handles[i].IDs[ii].GetInActiveID().IsNil() {
@@ -512,7 +511,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, vids []cas.R
 	return lastErr
 }
 
-func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, vids []cas.RegistryPayload[sop.UUID]) error {
+func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, vids []sop.RegistryPayload[sop.UUID]) error {
 	if len(vids) == 0 {
 		return nil
 	}
@@ -522,9 +521,9 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, vids []cas.R
 		log.Error(err.Error())
 		return err
 	}
-	handlesForRollback := make([]cas.RegistryPayload[sop.Handle], len(handles))
+	handlesForRollback := make([]sop.RegistryPayload[sop.Handle], len(handles))
 	for i := range handles {
-		handlesForRollback[i] = cas.RegistryPayload[sop.Handle]{
+		handlesForRollback[i] = sop.RegistryPayload[sop.Handle]{
 			RegistryTable: handles[i].RegistryTable,
 			IDs:           make([]sop.Handle, 0, len(handles[i].IDs)),
 		}
@@ -548,7 +547,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, vids []cas.R
 }
 
 // Set to active the inactive nodes.
-func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, handles []cas.RegistryPayload[sop.Handle]) ([]cas.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepository) activateInactiveNodes(handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if len(handles) == 0 {
 		return nil, nil
 	}
@@ -569,7 +568,7 @@ func (nr *nodeRepository) activateInactiveNodes(ctx context.Context, handles []c
 }
 
 // Update upsert time of a given set of nodes.
-func (nr *nodeRepository) touchNodes(ctx context.Context, handles []cas.RegistryPayload[sop.Handle]) ([]cas.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepository) touchNodes(handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if len(handles) == 0 {
 		return nil, nil
 	}
@@ -584,10 +583,10 @@ func (nr *nodeRepository) touchNodes(ctx context.Context, handles []cas.Registry
 	return handles, nil
 }
 
-func convertToBlobRequestPayload(nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) []cas.BlobsPayload[sop.UUID] {
-	bibs := make([]cas.BlobsPayload[sop.UUID], len(nodes))
+func convertToBlobRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) []sop.BlobsPayload[sop.UUID] {
+	bibs := make([]sop.BlobsPayload[sop.UUID], len(nodes))
 	for i := range nodes {
-		bibs[i] = cas.BlobsPayload[sop.UUID]{
+		bibs[i] = sop.BlobsPayload[sop.UUID]{
 			BlobTable: nodes[i].First.BlobTable,
 			Blobs:     make([]sop.UUID, len(nodes[i].Second)),
 		}
@@ -598,10 +597,10 @@ func convertToBlobRequestPayload(nodes []sop.Tuple[*btree.StoreInfo, []interface
 	return bibs
 }
 
-func convertToRegistryRequestPayload(nodes []sop.Tuple[*btree.StoreInfo, []interface{}]) []cas.RegistryPayload[sop.UUID] {
-	vids := make([]cas.RegistryPayload[sop.UUID], len(nodes))
+func convertToRegistryRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) []sop.RegistryPayload[sop.UUID] {
+	vids := make([]sop.RegistryPayload[sop.UUID], len(nodes))
 	for i := range nodes {
-		vids[i] = cas.RegistryPayload[sop.UUID]{
+		vids[i] = sop.RegistryPayload[sop.UUID]{
 			RegistryTable: nodes[i].First.RegistryTable,
 			IDs:           make([]sop.UUID, len(nodes[i].Second)),
 		}

@@ -97,7 +97,7 @@ func (node *Node[TK, TV]) add(ctx context.Context, btree *Btree[TK, TV], item *I
 			return false, nil
 		}
 		if currentNode.hasChildren() {
-			ok, err := currentNode.addItemOnNodeWithNilChild(ctx, btree, item, index)
+			ok, err := currentNode.addItemOnNodeWithNilChild(btree, item, index)
 			if err != nil || ok {
 				return ok, err
 			}
@@ -563,7 +563,7 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(ctx context.Context, btree *Bt
 	// Start from this node.
 	temp := node
 	for temp != nil {
-		if temp.nodeHasNilChild(btree) {
+		if temp.nodeHasNilChild() {
 			return true, nil
 		}
 		if temp.ChildrenIDs != nil {
@@ -591,7 +591,7 @@ func (node *Node[TK, TV]) isThereVacantSlotInRight(ctx context.Context, btree *B
 	// Start from this node.
 	temp := node
 	for temp != nil {
-		if temp.nodeHasNilChild(btree) {
+		if temp.nodeHasNilChild() {
 			return true, nil
 		}
 		if temp.ChildrenIDs != nil {

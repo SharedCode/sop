@@ -11,30 +11,15 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/redis"
-	"github.com/gocql/gocql"
+	"github.com/SharedCode/sop/redis"
 )
-
-// TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.
-type TwoPhaseCommitTransaction interface {
-	// Begin the transaction.
-	Begin() error
-	// Phase1Commit of the transaction.
-	Phase1Commit(ctx context.Context) error
-	// Phase2Commit of the transaction.
-	Phase2Commit(ctx context.Context) error
-	// Rollback the transaction.
-	Rollback(ctx context.Context) error
-	// Returns true if transaction has begun, false otherwise.
-	HasBegun() bool
-}
 
 type btreeBackend struct {
 	nodeRepository *nodeRepository
 	// Following are function pointers because BTree is generic typed for Key & Value,
 	// and these functions being pointers allow the backend to deal without requiring knowing data types.
 	refetchAndMerge    func(ctx context.Context) error
-	getStoreInfo       func() *btree.StoreInfo
+	getStoreInfo       func() *sop.StoreInfo
 	hasTrackedItems    func() bool
 	checkTrackedItems  func(ctx context.Context) error
 	lockTrackedItems   func(ctx context.Context, duration time.Duration) error
@@ -42,38 +27,47 @@ type btreeBackend struct {
 
 	// Manage tracked items' values in separate segments.
 	commitTrackedItemsValues         func(ctx context.Context) error
-	getForRollbackTrackedItemsValues func() *cas.BlobsPayload[sop.UUID]
-	getObsoleteTrackedItemsValues    func() *cas.BlobsPayload[sop.UUID]
+	getForRollbackTrackedItemsValues func() *sop.BlobsPayload[sop.UUID]
+	getObsoleteTrackedItemsValues    func() *sop.BlobsPayload[sop.UUID]
 }
 
 type transaction struct {
 	// B-Tree instances, & their backend bits, managed within the transaction session.
 	btreesBackend []btreeBackend
 	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
-	blobStore       cas.BlobStore
+	blobStore       sop.BlobStore
 	redisCache      redis.Cache
-	storeRepository cas.StoreRepository
+	storeRepository sop.StoreRepository
 	// VirtualIDRegistry manages the virtual IDs, a.k.a. "handle".
-	registry cas.Registry
+	registry sop.Registry
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
-	mode TransactionMode
+	mode sop.TransactionMode
 	// -1 = intial state, 0 = began, 1 = phase 1 commit done, 2 = phase 2 commit or rollback done.
 	phaseDone int
 	maxTime   time.Duration
 	logger    *transactionLog
 	// Phase 1 commit generated objects required for phase 2 commit.
-	updatedNodeHandles []cas.RegistryPayload[sop.Handle]
-	removedNodeHandles []cas.RegistryPayload[sop.Handle]
+	updatedNodeHandles []sop.RegistryPayload[sop.Handle]
+	removedNodeHandles []sop.RegistryPayload[sop.Handle]
 }
 
 // Use lambda for time.Now so automated test can replace with replayable time if needed.
 var Now = time.Now
 
+// NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
+func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
+	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging, cas.NewBlobStore())
+	if err != nil {
+		return nil, err
+	}
+	return sop.NewTransaction(mode, twoPT, maxTime, logging)
+}
+
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
 // If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
 // However, without logging, the transaction commit can execute faster because there is no data getting logged.
-func NewTwoPhaseCommitTransaction(mode TransactionMode, maxTime time.Duration, logging bool) (TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool, blobStore sop.BlobStore) (sop.TwoPhaseCommitTransaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
 		maxTime = time.Duration(15 * time.Minute)
@@ -91,7 +85,7 @@ func NewTwoPhaseCommitTransaction(mode TransactionMode, maxTime time.Duration, l
 		storeRepository: cas.NewStoreRepository(),
 		registry:        cas.NewRegistry(),
 		redisCache:      redis.NewClient(),
-		blobStore:       cas.NewBlobStore(),
+		blobStore:       blobStore,
 		logger:          newTransactionLogger(nil, logging),
 		phaseDone:       -1,
 	}, nil
@@ -148,10 +142,10 @@ func (t *transaction) Phase1Commit(ctx context.Context) error {
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 1
-	if t.mode == NoCheck {
+	if t.mode == sop.NoCheck {
 		return nil
 	}
-	if t.mode == ForReading {
+	if t.mode == sop.ForReading {
 		return t.commitForReaderTransaction(ctx)
 	}
 	if err := t.phase1Commit(ctx); err != nil {
@@ -175,7 +169,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 2
-	if t.mode != ForWriting {
+	if t.mode != sop.ForWriting {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
@@ -226,6 +220,11 @@ func (t *transaction) Rollback(ctx context.Context) error {
 	return nil
 }
 
+// Returns the transaction's mode.
+func (t *transaction) GetMode() sop.TransactionMode {
+	return t.mode
+}
+
 // Transaction has begun if it is has begun & not yet committed/rolled back.
 func (t *transaction) HasBegun() bool {
 	return t.phaseDone >= 0 && t.phaseDone < 2
@@ -261,7 +260,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return nil
 	}
 
-	var preCommitTID gocql.UUID
+	var preCommitTID sop.UUID
 	if t.logger.committedState == addActivelyPersistedItem {
 		preCommitTID = t.logger.transactionID
 		// Assign new TID to the transaction as pre-commit logs need to be cleaned up seperately.
@@ -276,8 +275,8 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
-	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.Tuple[*btree.StoreInfo, []interface{}]
-	var updatedNodesHandles, removedNodesHandles []cas.RegistryPayload[sop.Handle]
+	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
+	var updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]
 
 	startTime := Now()
 	successful := false
@@ -296,9 +295,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 
 		// Remove the pre commit logs as not needed anymore from this point.
 		// TODO: finalize the logic here and the commit call above.
-		if preCommitTID != cas.NilUUID {
+		if preCommitTID != sop.NilUUID {
 			t.logger.logger.Remove(ctx, preCommitTID)
-			preCommitTID = cas.NilUUID
+			preCommitTID = sop.NilUUID
 		}
 
 		successful = true
@@ -310,7 +309,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		// Commit new root nodes.
 		bibs := convertToBlobRequestPayload(rootNodes)
 		vids := convertToRegistryRequestPayload(rootNodes)
-		if err := t.logger.log(ctx, commitNewRootNodes, toByteArray(sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+		if err := t.logger.log(ctx, commitNewRootNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
 			First: vids, Second: bibs,
 		})); err != nil {
 			return err
@@ -368,7 +367,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	// Commit added nodes.
-	if err := t.logger.log(ctx, commitAddedNodes, toByteArray(sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+	if err := t.logger.log(ctx, commitAddedNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
 		First:  convertToRegistryRequestPayload(addedNodes),
 		Second: convertToBlobRequestPayload(addedNodes),
 	})); err != nil {
@@ -392,13 +391,13 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes, in phase2Commit.
-	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(ctx, updatedNodesHandles)
+	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(updatedNodesHandles)
 	if err != nil {
 		return err
 	}
 
 	// Prepare to update upsert time of removed nodes to signal that they are finalized, in phase2Commit.
-	rh, err := t.btreesBackend[0].nodeRepository.touchNodes(ctx, removedNodesHandles)
+	rh, err := t.btreesBackend[0].nodeRepository.touchNodes(removedNodesHandles)
 	if err != nil {
 		return err
 	}
@@ -421,9 +420,9 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
 	f := t.getToBeObsoleteEntries()
 	s := t.getObsoleteTrackedItemsValues()
-	var pl sop.Tuple[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]], []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]]
+	var pl sop.Tuple[sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]], []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]]
 	if len(f.First) > 0 || len(f.Second) > 0 || len(s) > 0 {
-		pl = sop.Tuple[sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]], []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]]{
+		pl = sop.Tuple[sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]], []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]]{
 			First:  f,
 			Second: s,
 		}
@@ -465,12 +464,12 @@ func (t *transaction) cleanup(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]] {
+func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]] {
 	// Cleanup resources not needed anymore.
-	unusedNodeIDs := make([]cas.BlobsPayload[sop.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
+	unusedNodeIDs := make([]sop.BlobsPayload[sop.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
-		blobsIDs := cas.BlobsPayload[sop.UUID]{
-			BlobTable: btree.ConvertToBlobTableName(t.updatedNodeHandles[i].RegistryTable),
+		blobsIDs := sop.BlobsPayload[sop.UUID]{
+			BlobTable: sop.ConvertToBlobTableName(t.updatedNodeHandles[i].RegistryTable),
 			Blobs:     make([]sop.UUID, len(t.updatedNodeHandles[i].IDs)),
 		}
 		for ii := range t.updatedNodeHandles[i].IDs {
@@ -481,12 +480,12 @@ func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[s
 	}
 
 	// Package the logically deleted IDs for actual physical deletes.
-	deletedIDs := make([]cas.RegistryPayload[sop.UUID], len(t.removedNodeHandles))
+	deletedIDs := make([]sop.RegistryPayload[sop.UUID], len(t.removedNodeHandles))
 	for i := range t.removedNodeHandles {
 		deletedIDs[i].RegistryTable = t.removedNodeHandles[i].RegistryTable
 		deletedIDs[i].IDs = make([]sop.UUID, len(t.removedNodeHandles[i].IDs))
-		blobsIDs := cas.BlobsPayload[sop.UUID]{
-			BlobTable: btree.ConvertToBlobTableName(t.removedNodeHandles[i].RegistryTable),
+		blobsIDs := sop.BlobsPayload[sop.UUID]{
+			BlobTable: sop.ConvertToBlobTableName(t.removedNodeHandles[i].RegistryTable),
 			Blobs:     make([]sop.UUID, len(t.removedNodeHandles[i].IDs)),
 		}
 		for ii := range t.removedNodeHandles[i].IDs {
@@ -497,7 +496,7 @@ func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]cas.RegistryPayload[s
 		unusedNodeIDs = append(unusedNodeIDs, blobsIDs)
 	}
 
-	return sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{
+	return sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
 		First:  deletedIDs,
 		Second: unusedNodeIDs,
 	}
@@ -536,7 +535,7 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	if t.logger.committedState > commitAddedNodes {
 		bibs := convertToBlobRequestPayload(addedNodes)
 		vids := convertToRegistryRequestPayload(addedNodes)
-		bv := sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
+		bv := sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
 		if err := t.btreesBackend[0].nodeRepository.rollbackAddedNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
@@ -556,7 +555,7 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	if t.logger.committedState > commitNewRootNodes {
 		bibs := convertToBlobRequestPayload(rootNodes)
 		vids := convertToRegistryRequestPayload(rootNodes)
-		bv := sop.Tuple[[]cas.RegistryPayload[sop.UUID], []cas.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
+		bv := sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{First: vids, Second: bibs}
 		if err := t.btreesBackend[0].nodeRepository.rollbackNewRootNodes(ctx, bv); err != nil {
 			lastErr = err
 		}
@@ -588,12 +587,12 @@ func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
 	}
 	return nil
 }
-func (t *transaction) getForRollbackTrackedItemsValues() []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]] {
-	r := make([]sop.Tuple[bool, cas.BlobsPayload[sop.UUID]], 0, 5)
+func (t *transaction) getForRollbackTrackedItemsValues() []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]] {
+	r := make([]sop.Tuple[bool, sop.BlobsPayload[sop.UUID]], 0, 5)
 	for i := range t.btreesBackend {
 		itemsForDelete := t.btreesBackend[i].getForRollbackTrackedItemsValues()
 		if itemsForDelete != nil && len(itemsForDelete.Blobs) > 0 {
-			r = append(r, sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]{
+			r = append(r, sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]{
 				First:  t.btreesBackend[i].getStoreInfo().IsValueDataGloballyCached,
 				Second: *itemsForDelete,
 			})
@@ -601,12 +600,12 @@ func (t *transaction) getForRollbackTrackedItemsValues() []sop.Tuple[bool, cas.B
 	}
 	return r
 }
-func (t *transaction) getObsoleteTrackedItemsValues() []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]] {
-	r := make([]sop.Tuple[bool, cas.BlobsPayload[sop.UUID]], 0, 5)
+func (t *transaction) getObsoleteTrackedItemsValues() []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]] {
+	r := make([]sop.Tuple[bool, sop.BlobsPayload[sop.UUID]], 0, 5)
 	for i := range t.btreesBackend {
 		itemsForDelete := t.btreesBackend[i].getObsoleteTrackedItemsValues()
 		if itemsForDelete != nil && len(itemsForDelete.Blobs) > 0 {
-			r = append(r, sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]{
+			r = append(r, sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]{
 				First:  t.btreesBackend[i].getStoreInfo().IsValueDataGloballyCached,
 				Second: *itemsForDelete,
 			})
@@ -615,7 +614,7 @@ func (t *transaction) getObsoleteTrackedItemsValues() []sop.Tuple[bool, cas.Blob
 	return r
 }
 
-func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDelete []sop.Tuple[bool, cas.BlobsPayload[sop.UUID]]) error {
+func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDelete []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]) error {
 	var lastErr error
 	for i := range itemsForDelete {
 		// First field of the Tuple specifies whether we need to delete from Redis cache the blob IDs specified in Second.
@@ -635,7 +634,7 @@ func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDele
 
 // Checks if fetched items are intact.
 func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
-	if t.mode == ForWriting {
+	if t.mode == sop.ForWriting {
 		return nil
 	}
 	if !t.hasTrackedItems() {
@@ -676,12 +675,12 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes.
-func (t *transaction) classifyModifiedNodes() ([]sop.Tuple[*btree.StoreInfo, []interface{}],
-	[]sop.Tuple[*btree.StoreInfo, []interface{}],
-	[]sop.Tuple[*btree.StoreInfo, []interface{}],
-	[]sop.Tuple[*btree.StoreInfo, []interface{}],
-	[]sop.Tuple[*btree.StoreInfo, []interface{}]) {
-	var storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes []sop.Tuple[*btree.StoreInfo, []interface{}]
+func (t *transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []interface{}],
+	[]sop.Tuple[*sop.StoreInfo, []interface{}],
+	[]sop.Tuple[*sop.StoreInfo, []interface{}],
+	[]sop.Tuple[*sop.StoreInfo, []interface{}],
+	[]sop.Tuple[*sop.StoreInfo, []interface{}]) {
+	var storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
 	for i, s := range t.btreesBackend {
 		var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []interface{}
 		for _, cacheNode := range s.nodeRepository.nodeLocalCache {
@@ -703,31 +702,31 @@ func (t *transaction) classifyModifiedNodes() ([]sop.Tuple[*btree.StoreInfo, []i
 			}
 		}
 		if len(updatedNodes) > 0 {
-			storesUpdatedNodes = append(storesUpdatedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+			storesUpdatedNodes = append(storesUpdatedNodes, sop.Tuple[*sop.StoreInfo, []interface{}]{
 				First:  s.getStoreInfo(),
 				Second: updatedNodes,
 			})
 		}
 		if len(removedNodes) > 0 {
-			storesRemovedNodes = append(storesRemovedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+			storesRemovedNodes = append(storesRemovedNodes, sop.Tuple[*sop.StoreInfo, []interface{}]{
 				First:  s.getStoreInfo(),
 				Second: removedNodes,
 			})
 		}
 		if len(addedNodes) > 0 {
-			storesAddedNodes = append(storesAddedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+			storesAddedNodes = append(storesAddedNodes, sop.Tuple[*sop.StoreInfo, []interface{}]{
 				First:  s.getStoreInfo(),
 				Second: addedNodes,
 			})
 		}
 		if len(fetchedNodes) > 0 {
-			storesFetchedNodes = append(storesFetchedNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+			storesFetchedNodes = append(storesFetchedNodes, sop.Tuple[*sop.StoreInfo, []interface{}]{
 				First:  s.getStoreInfo(),
 				Second: fetchedNodes,
 			})
 		}
 		if len(rootNodes) > 0 {
-			storesRootNodes = append(storesRootNodes, sop.Tuple[*btree.StoreInfo, []interface{}]{
+			storesRootNodes = append(storesRootNodes, sop.Tuple[*sop.StoreInfo, []interface{}]{
 				First:  s.getStoreInfo(),
 				Second: rootNodes,
 			})
@@ -737,7 +736,7 @@ func (t *transaction) classifyModifiedNodes() ([]sop.Tuple[*btree.StoreInfo, []i
 }
 
 func (t *transaction) commitStores(ctx context.Context) error {
-	stores := make([]btree.StoreInfo, len(t.btreesBackend))
+	stores := make([]sop.StoreInfo, len(t.btreesBackend))
 	for i := range t.btreesBackend {
 		store := t.btreesBackend[i].getStoreInfo()
 		s2 := *store
@@ -748,8 +747,8 @@ func (t *transaction) commitStores(ctx context.Context) error {
 	}
 	return t.storeRepository.Update(ctx, stores...)
 }
-func (t *transaction) getRollbackStoresInfo() []btree.StoreInfo {
-	stores := make([]btree.StoreInfo, len(t.btreesBackend))
+func (t *transaction) getRollbackStoresInfo() []sop.StoreInfo {
+	stores := make([]sop.StoreInfo, len(t.btreesBackend))
 	for i := range t.btreesBackend {
 		store := t.btreesBackend[i].getStoreInfo()
 		s2 := *store
@@ -800,13 +799,13 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 
 // Delete the registry entries and unused node blobs.
 func (t *transaction) deleteObsoleteEntries(ctx context.Context,
-	deletedRegistryIDs []cas.RegistryPayload[sop.UUID], unusedNodeIDs []cas.BlobsPayload[sop.UUID]) error {
+	deletedRegistryIDs []sop.RegistryPayload[sop.UUID], unusedNodeIDs []sop.BlobsPayload[sop.UUID]) error {
 	var lastErr error
 	if len(unusedNodeIDs) > 0 {
 		// Delete from Redis the inactive nodes.
 		// Leave the registry keys as there may be other in-flight transactions that need them
 		// for conflict resolution, to rollback or to fail their "reader" transaction.
-		deletedKeys := make([]string, cas.GetBlobPayloadCount[sop.UUID](unusedNodeIDs))
+		deletedKeys := make([]string, sop.GetBlobPayloadCount[sop.UUID](unusedNodeIDs))
 		ik := 0
 		for i := range unusedNodeIDs {
 			for ii := range unusedNodeIDs[i].Blobs {
@@ -816,7 +815,7 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 		}
 		if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
 			lastErr = err
-			log.Error("Redis delete failed, details: %v", err)
+			log.Error(fmt.Sprintf("Redis delete failed, details: %v", err))
 		}
 		if err := t.blobStore.Remove(ctx, unusedNodeIDs...); err != nil {
 			lastErr = err

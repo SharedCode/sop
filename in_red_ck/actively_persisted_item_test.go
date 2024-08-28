@@ -10,7 +10,7 @@ import (
 
 func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	// Populate with good data.
-	trans, _ := newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	so := sop.ConfigureStore("xyz", true, 8, "Streaming data", sop.BigData)
@@ -20,14 +20,14 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Now, populate then rollback and validate TID logs are gone.
-	trans, _ = newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 	sds, _ = OpenBtree[string, string](ctx, "xyz", trans)
 	sds.Add(ctx, "fooVideo2", "video content")
 
-	tidLogs := trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).
+	tidLogs := trans.GetPhasedTransaction().(*transaction).
 		logger.logger.(*cas.MockTransactionLog).GetTIDLogs(
-		trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).logger.transactionID)
+		trans.GetPhasedTransaction().(*transaction).logger.transactionID)
 
 	if tidLogs == nil {
 		t.Error("failed pre Rollback, got nil, want valid logs")
@@ -35,9 +35,9 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 
 	trans.Rollback(ctx)
 
-	gotTidLogs := trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).
+	gotTidLogs := trans.GetPhasedTransaction().(*transaction).
 		logger.logger.(*cas.MockTransactionLog).GetTIDLogs(
-		trans.(*singlePhaseTransaction).sopPhaseCommitTransaction.(*transaction).logger.transactionID)
+		trans.GetPhasedTransaction().(*transaction).logger.transactionID)
 
 	if gotTidLogs != nil {
 		t.Errorf("failed Rollback, got %v, want nil", gotTidLogs)
@@ -51,7 +51,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 	Now = func() time.Time { return yesterday }
 
-	trans, _ := newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	so := sop.ConfigureStore("xyz2", false, 8, "Streaming data", sop.BigData)
@@ -62,7 +62,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 
 	trans.Commit(ctx)
 
-	trans, _ = newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "xyz2", trans)
@@ -74,7 +74,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 
 	// GetOne should not get anything as uncommitted transaction is still ongoing or not expired.
 	tid, _, _, _ := twoPhaseTrans.logger.logger.GetOne(ctx)
-	if !cas.IsNil(tid) {
+	if !tid.IsNil() {
 		t.Errorf("Failed, got %v, want nil.", tid)
 	}
 
@@ -85,7 +85,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	Now = func() time.Time { return today }
 
 	tid, _, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
-	if cas.IsNil(tid) {
+	if tid.IsNil() {
 		t.Errorf("Failed, got nil, want valid Tid.")
 	}
 
@@ -94,11 +94,11 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	}
 
 	tid, _, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
-	if !cas.IsNil(tid) {
+	if !tid.IsNil() {
 		t.Errorf("Failed, got %v, want nil.", tid)
 	}
 
-	trans, _ = newMockTransactionWithLogging(t, ForReading, -1)
+	trans, _ = newMockTransactionWithLogging(t, sop.ForReading, -1)
 	trans.Begin()
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "xyz2", trans)

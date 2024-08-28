@@ -16,8 +16,8 @@ import (
 // Transaction rolls back, new completes fine.
 // Reader transaction succeeds.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
-	t1, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
-	t2, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+	t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
+	t2, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 
 	t1.Begin()
 	t2.Begin()
@@ -43,7 +43,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+		t1, _ = in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
 		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb7",
@@ -84,7 +84,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	if err2 == nil {
 		t.Error("Commit #2, got = succeess, want = fail.")
 	}
-	t1, _ = in_red_ck.NewTransaction(in_red_ck.ForReading, -1, false)
+	t1, _ = in_red_ck.NewTransaction(sop.ForReading, -1, false)
 	t1.Begin()
 	b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb7",
@@ -115,8 +115,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 // Two transactions updating different items with no collision but items'
 // keys are sequential/contiguous between the two.
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
-	t1, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
-	t2, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+	t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
+	t2, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 
 	t1.Begin()
 	t2.Begin()
@@ -142,7 +142,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+		t1, _ = in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
 		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb7",
@@ -185,8 +185,8 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 
 // Reader transaction fails commit when an item read was modified by another transaction in-flight.
 func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
-	t1, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
-	t2, _ := in_red_ck.NewTransaction(in_red_ck.ForReading, -1, false)
+	t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
+	t2, _ := in_red_ck.NewTransaction(sop.ForReading, -1, false)
 
 	t1.Begin()
 	t2.Begin()
@@ -212,7 +212,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+		t1, _ = in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
 		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb7",
@@ -256,8 +256,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 // Node merging and row(or item) level conflict detection.
 // Case: Reader transaction succeeds commit, while another item in same Node got updated by another transaction.
 func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T) {
-	t1, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
-	t2, _ := in_red_ck.NewTransaction(in_red_ck.ForReading, -1, false)
+	t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
+	t2, _ := in_red_ck.NewTransaction(sop.ForReading, -1, false)
 
 	t1.Begin()
 	t2.Begin()
@@ -285,7 +285,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		b3.Add(ctx, pk2, p2)
 		b3.Add(ctx, pk3, p3)
 		t1.Commit(ctx)
-		t1, _ = in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+		t1, _ = in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
 		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb7",
@@ -328,8 +328,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 
 // One transaction updates a colliding item in 1st and a 2nd trans.
 func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
-	t1, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
-	t2, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+	t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
+	t2, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 
 	t1.Begin()
 	t2.Begin()
@@ -361,7 +361,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		b3.Add(ctx, pk4, p4)
 		b3.Add(ctx, pk5, p5)
 		t1.Commit(ctx)
-		t1, _ = in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+		t1, _ = in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
 		b3, _ = in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb7",
@@ -432,7 +432,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	sr := cas.NewStoreRepository()
 	sr.Remove(ctx, "twophase2")
 
-	t1, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+	t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 	t1.Begin()
 	b3, _ := in_red_ck.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase2",
@@ -449,7 +449,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	eg, ctx2 := errgroup.WithContext(ctx)
 
 	f1 := func() error {
-		t1, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+		t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
 		b3, _ := in_red_ck.NewBtree[int, string](ctx2, sop.StoreOptions{
 			Name:                     "twophase2",
@@ -466,7 +466,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	}
 
 	f2 := func() error {
-		t2, _ := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+		t2, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 		t2.Begin()
 		b32, _ := in_red_ck.NewBtree[int, string](ctx2, sop.StoreOptions{
 			Name:                     "twophase2",
@@ -490,7 +490,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 		return
 	}
 
-	t1, _ = in_red_ck.NewTransaction(in_red_ck.ForReading, -1, false)
+	t1, _ = in_red_ck.NewTransaction(sop.ForReading, -1, false)
 	t1.Begin()
 
 	b3, _ = in_red_ck.OpenBtree[int, string](ctx, "twophase2", t1)

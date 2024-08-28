@@ -10,45 +10,13 @@ import (
 	"github.com/SharedCode/sop"
 )
 
-// Manage or fetch node blobs request/response payload.
-type BlobsPayload[T sop.UUID | sop.KeyValuePair[sop.UUID, interface{}]] struct {
-	// Blob store table name.
-	BlobTable string
-	// Blobs contains the blobs IDs and blobs data for upsert to the store or the blobs IDs to be removed.
-	Blobs []T
-}
-
-// Returns the total number of UUIDs given a set of blobs (ID) payload.
-func GetBlobPayloadCount[T sop.UUID](payloads []BlobsPayload[T]) int {
-	total := 0
-	for _, p := range payloads {
-		total = total + len(p.Blobs)
-	}
-	return total
-}
-
-// BlobStore specifies the backend blob store interface used for storing & managing data blobs.
-// Blobs are data that can vary in size and is big enough that they can't be stored in database
-// as it will impose performance penalties. This kind of data are typically stored in blob stores
-// like AWS S3, or file system, etc...
-type BlobStore interface {
-	// Get or fetch a blob given an ID.
-	GetOne(ctx context.Context, blobTable string, blobID sop.UUID, target interface{}) error
-	// Add blobs to store.
-	Add(ctx context.Context, blobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error
-	// Update blobs in store.
-	Update(ctx context.Context, blobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error
-	// Remove blobs in store with given IDs.
-	Remove(ctx context.Context, blobsIDs ...BlobsPayload[sop.UUID]) error
-}
-
 // Marshaler allows you to specify custom marshaler if needed. Defaults to the SOP default marshaler.
 var Marshaler sop.Marshaler = sop.NewMarshaler()
 
 type blobStore struct{}
 
 // NewBlobStore instantiates a new BlobStore instance.
-func NewBlobStore() BlobStore {
+func NewBlobStore() sop.BlobStore {
 	return &blobStore{}
 }
 
@@ -73,7 +41,7 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobID sop.UUI
 }
 
 // Add blob(s) to the Blob store.
-func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
+func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -98,7 +66,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...BlobsPayload[sop.Key
 }
 
 // Update blob(s) in the Blob store.
-func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
+func (b *blobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -122,7 +90,7 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...BlobsPayload[sop.
 }
 
 // Remove will delete(non-logged) node records from different Blob stores(node tables).
-func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...BlobsPayload[sop.UUID]) error {
+func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}

@@ -42,7 +42,7 @@ func (x StreamingDataKey[TK]) Compare(other interface{}) int {
 // to the separate segment and on commit, it will be a quick action as data is already saved to the data segments.
 //
 // This behaviour makes this store ideal for data management of huge blobs, like movies or huge data graphs.
-func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans in_red_ck.Transaction) (*StreamingDataStore[TK], error) {
+func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*StreamingDataStore[TK], error) {
 	btree, err := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData), trans)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string
 }
 
 // OpenStreamingDataStore opens an existing data store for use in "streaming data".
-func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans in_red_ck.Transaction) (*StreamingDataStore[TK], error) {
+func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*StreamingDataStore[TK], error) {
 	btree, err := in_red_ck.OpenBtree[StreamingDataKey[TK], []byte](ctx, name, trans)
 	if err != nil {
 		return nil, err

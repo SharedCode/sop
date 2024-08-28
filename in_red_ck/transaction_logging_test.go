@@ -9,7 +9,7 @@ import (
 )
 
 func Test_TLog_Rollback(t *testing.T) {
-	trans, _ := newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -26,7 +26,7 @@ func Test_TLog_Rollback(t *testing.T) {
 
 	trans.Commit(ctx)
 
-	trans, _ = newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
@@ -34,7 +34,7 @@ func Test_TLog_Rollback(t *testing.T) {
 
 	trans.Rollback(ctx)
 
-	trans, _ = newMockTransactionWithLogging(t, ForReading, -1)
+	trans, _ = newMockTransactionWithLogging(t,sop.ForReading, -1)
 	trans.Begin()
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "tlogtable", trans)
 	pk, _ = newPerson("joe", "shroeger", "male", "email", "phone")
@@ -55,7 +55,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 	Now = func() time.Time { return yesterday }
 
-	trans, _ := newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -72,7 +72,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 
 	trans.Commit(ctx)
 
-	trans, _ = newMockTransactionWithLogging(t, ForWriting, -1)
+	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "tlogtable", trans)
@@ -86,7 +86,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 
 	// GetOne should not get anything as uncommitted transaction is still ongoing or not expired.
 	tid, _, _, _ := twoPhaseTrans.logger.logger.GetOne(ctx)
-	if !cas.IsNil(tid) {
+	if !tid.IsNil() {
 		t.Errorf("Failed, got %v, want nil.", tid)
 	}
 
@@ -97,7 +97,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	Now = func() time.Time { return today }
 
 	tid, _, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
-	if cas.IsNil(tid) {
+	if tid.IsNil() {
 		t.Errorf("Failed, got nil Tid, want valid Tid.")
 	}
 

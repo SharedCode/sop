@@ -7,7 +7,7 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_ck"
 	"github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/SharedCode/sop/redis"
 )
 
 var cassConfig = cassandra.Config{
@@ -28,7 +28,7 @@ func init() {
 var ctx = context.Background()
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	trans, err := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+	trans, err := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -59,7 +59,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans, err := in_red_ck.NewTransaction(in_red_ck.ForWriting, -1, false)
+	trans, err := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}

@@ -2,7 +2,7 @@ package in_red_ck
 
 import (
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/SharedCode/sop/redis"
 )
 
 // Assign the configs & open connections to different sub-systems used by this package.

@@ -4,26 +4,24 @@ import (
 	"context"
 	"time"
 
-	"github.com/gocql/gocql"
-
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_memory"
 )
 
 type MockTransactionLog struct {
-	datesLogs in_memory.BtreeInterface[string, map[gocql.UUID][]sop.KeyValuePair[int, []byte]]
-	logsDates map[gocql.UUID]string
+	datesLogs in_memory.BtreeInterface[string, map[sop.UUID][]sop.KeyValuePair[int, []byte]]
+	logsDates map[sop.UUID]string
 }
 
-func NewMockTransactionLog() TransactionLog {
+func NewMockTransactionLog() sop.TransactionLog {
 	return &MockTransactionLog{
-		datesLogs: in_memory.NewBtree[string, map[gocql.UUID][]sop.KeyValuePair[int, []byte]](true),
-		logsDates: make(map[gocql.UUID]string),
+		datesLogs: in_memory.NewBtree[string, map[sop.UUID][]sop.KeyValuePair[int, []byte]](true),
+		logsDates: make(map[sop.UUID]string),
 	}
 }
 
 // GetOne returns the oldest transaction ID.
-func (tl *MockTransactionLog) GetOne(ctx context.Context) (gocql.UUID, string, []sop.KeyValuePair[int, []byte], error) {
+func (tl *MockTransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
 	if tl.datesLogs.First() {
 		kt, _ := time.Parse(DateHourLayout, tl.datesLogs.GetCurrentKey())
 		// Cap the returned entries to older than an hour to safeguard ongoing transactions.
@@ -41,12 +39,12 @@ func (tl *MockTransactionLog) GetOne(ctx context.Context) (gocql.UUID, string, [
 			}
 		}
 	}
-	return NilUUID, "", nil, nil
+	return sop.NilUUID, "", nil, nil
 }
 
-func (tl *MockTransactionLog) GetLogsDetails(ctx context.Context, hour string) (gocql.UUID, []sop.KeyValuePair[int, []byte], error) {
+func (tl *MockTransactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
 	if !tl.datesLogs.FindOne(hour, false) {
-		return NilUUID, nil, nil
+		return sop.NilUUID, nil, nil
 	}
 	v := tl.datesLogs.GetCurrentValue()
 	for kk, vv := range v {
@@ -57,10 +55,10 @@ func (tl *MockTransactionLog) GetLogsDetails(ctx context.Context, hour string) (
 		}
 		return kk, r, nil
 	}
-	return NilUUID, nil, nil
+	return sop.NilUUID, nil, nil
 }
 
-func (tl *MockTransactionLog) GetTIDLogs(tid gocql.UUID) []sop.KeyValuePair[int, []byte] {
+func (tl *MockTransactionLog) GetTIDLogs(tid sop.UUID) []sop.KeyValuePair[int, []byte] {
 	if tl.datesLogs.First() {
 		for {
 			v := tl.datesLogs.GetCurrentValue()
@@ -84,12 +82,12 @@ func (tl *MockTransactionLog) GetTIDLogs(tid gocql.UUID) []sop.KeyValuePair[int,
 }
 
 // Add blob(s) to the Blob store.
-func (tl *MockTransactionLog) Add(ctx context.Context, tid gocql.UUID, commitFunction int, payload []byte) error {
+func (tl *MockTransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
 	date := Now().Format(DateHourLayout)
 	found := tl.datesLogs.FindOne(date, false)
 	dayLogs := tl.datesLogs.GetCurrentValue()
 	if dayLogs == nil {
-		dayLogs = make(map[gocql.UUID][]sop.KeyValuePair[int, []byte])
+		dayLogs = make(map[sop.UUID][]sop.KeyValuePair[int, []byte])
 	}
 	dayLogs[tid] = append(dayLogs[tid], sop.KeyValuePair[int, []byte]{
 		Key:   commitFunction,
@@ -105,7 +103,7 @@ func (tl *MockTransactionLog) Add(ctx context.Context, tid gocql.UUID, commitFun
 }
 
 // Remove will delete(non-logged) node records from different Blob stores(node tables).
-func (tl *MockTransactionLog) Remove(ctx context.Context, tid gocql.UUID) error {
+func (tl *MockTransactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 	date := tl.logsDates[tid]
 	if tl.datesLogs.FindOne(date, false) {
 		for {

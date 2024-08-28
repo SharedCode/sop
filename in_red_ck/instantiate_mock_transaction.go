@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/SharedCode/sop/redis"
 )
 
 // Global mock repositories will allow us to simulate repositories that persists state
@@ -16,31 +17,27 @@ var mockRedisCache = redis.NewMockClient()
 var mockNodeBlobStore = cas.NewMockBlobStore()
 
 // newMockTransaction instantiates a mocked transaction, i.e. - it uses in-memory Repositories as backend, not Cassandra.
-func newMockTransaction(t *testing.T, mode TransactionMode, maxTime time.Duration) (Transaction, error) {
+func newMockTransaction(t *testing.T, mode sop.TransactionMode, maxTime time.Duration) (sop.Transaction, error) {
 	t.Helper()
 	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, mode, maxTime, false)
-	return &singlePhaseTransaction{
-		sopPhaseCommitTransaction: twoPhase,
-	}, nil
+	return sop.NewTransaction(mode, twoPhase, maxTime, false)
 }
 
 // NewMockTransaction with logging turned on.
-func newMockTransactionWithLogging(t *testing.T, mode TransactionMode, maxTime time.Duration) (Transaction, error) {
+func newMockTransactionWithLogging(t *testing.T, mode sop.TransactionMode, maxTime time.Duration) (sop.Transaction, error) {
 	t.Helper()
 	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, mode, maxTime, true)
-	return &singlePhaseTransaction{
-		sopPhaseCommitTransaction: twoPhase,
-	}, nil
+	return sop.NewTransaction(mode, twoPhase, maxTime, true)
 }
 
-func newMockTwoPhaseCommitTransaction(t *testing.T, mode TransactionMode, maxTime time.Duration, logging bool) (TwoPhaseCommitTransaction, error) {
+func newMockTwoPhaseCommitTransaction(t *testing.T, mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.TwoPhaseCommitTransaction, error) {
 	t.Helper()
 	if maxTime <= 0 {
 		m := 15
 		maxTime = time.Duration(m * int(time.Minute))
 	}
 	return &transaction{
-		mode:      mode,
+		mode:            mode,
 		maxTime:         maxTime,
 		storeRepository: mockStoreRepository,
 		registry:        mockRegistry,

@@ -5,10 +5,9 @@ import (
 	"fmt"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/SharedCode/sop/redis"
 	"github.com/gocql/gocql"
 )
 
@@ -28,7 +27,7 @@ func main() {
 	if err := in_red_ck.Initialize(cassConfig, redisConfig); err != nil {
 		writeAndExit(err.Error())
 	}
-	storeInfo := *btree.NewStoreInfo("foobar", 4, true, true, true, "")
+	storeInfo := *sop.NewStoreInfo("foobar", 4, true, true, true, "")
 	storeInfo.RootNodeID = sop.NewUUID()
 	repo := cas.NewStoreRepository()
 	sis, err := repo.Get(ctx, "foobar")
@@ -42,7 +41,7 @@ func main() {
 	}
 
 	registry := cas.NewRegistry()
-	if err := registry.Add(ctx, cas.RegistryPayload[sop.Handle]{
+	if err := registry.Add(ctx, sop.RegistryPayload[sop.Handle]{
 		RegistryTable: storeInfo.RegistryTable,
 		IDs:           []sop.Handle{sop.NewHandle(sop.NewUUID())},
 	}); err != nil {

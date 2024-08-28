@@ -1,9 +1,7 @@
-package btree
+package sop
 
 import (
 	"fmt"
-
-	"github.com/SharedCode/sop"
 )
 
 // StoreInfo contains a given (B-Tree) store details.
@@ -21,7 +19,7 @@ type StoreInfo struct {
 	// Blob table name.
 	BlobTable string
 	// RootNodeID is the root node's ID.
-	RootNodeID sop.UUID
+	RootNodeID UUID
 	// Total count of items stored.
 	Count int64
 	// Used internally by SOP. Should be ignored when persisted in the backend.
@@ -98,15 +96,18 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 	}
 }
 
+// Convenience function to format a registry table name to its equivalent blob table name.
+func ConvertToBlobTableName(registryTableName string) string {
+	return FormatBlobTable(registryTableName[0 : len(registryTableName)-2])
+}
+
+// Format a given name into a blob table name by adding suffix.
 func FormatBlobTable(name string) string {
 	return fmt.Sprintf("%s_b", name)
 }
+// Format a given name into a registry table name by adding suffix.
 func FormatRegistryTable(name string) string {
 	return fmt.Sprintf("%s_r", name)
-}
-
-func ConvertToBlobTableName(registryTableName string) string {
-	return FormatBlobTable(registryTableName[0 : len(registryTableName)-2])
 }
 
 // Returns true if this StoreInfo is empty, false otherwise.

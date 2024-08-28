@@ -8,8 +8,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
-	"github.com/SharedCode/sop/in_red_ck/redis"
+	"github.com/SharedCode/sop/redis"
 )
 
 type actionType int
@@ -36,16 +35,16 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 }
 
 type itemActionTracker[TK btree.Comparable, TV any] struct {
-	storeInfo        *btree.StoreInfo
+	storeInfo        *sop.StoreInfo
 	items            map[sop.UUID]cacheItem[TK, TV]
 	forDeletionItems []sop.UUID
 	redisCache       redis.Cache
-	blobStore        cas.BlobStore
+	blobStore        sop.BlobStore
 	tlogger          *transactionLog
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
-func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *btree.StoreInfo, redisCache redis.Cache, blobStore cas.BlobStore, tl *transactionLog) *itemActionTracker[TK, TV] {
+func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *sop.StoreInfo, redisCache redis.Cache, blobStore sop.BlobStore, tl *transactionLog) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
 		storeInfo:  storeInfo,
 		items:      make(map[sop.UUID]cacheItem[TK, TV]),
@@ -127,7 +126,7 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 
 	if t.storeInfo.IsValueDataActivelyPersisted {
 		// Actively persist the item.
-		itemsForAdd := cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
+		itemsForAdd := sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
 			BlobTable: t.storeInfo.BlobTable,
 			Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 1),
 		}
@@ -158,7 +157,7 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 	activelyPersist := func(v cacheItem[TK, TV]) error {
 		if t.storeInfo.IsValueDataActivelyPersisted {
 			// Actively persist the item.
-			itemsForAdd := cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
+			itemsForAdd := sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
 				BlobTable: t.storeInfo.BlobTable,
 				Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 1),
 			}
@@ -231,8 +230,8 @@ func (t *itemActionTracker[TK, TV]) Remove(ctx context.Context, item *btree.Item
 	return nil
 }
 
-func extractRequestPayloadIDs(payload *cas.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) []byte {
-	var r cas.BlobsPayload[sop.UUID]
+func extractRequestPayloadIDs(payload *sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) []byte {
+	var r sop.BlobsPayload[sop.UUID]
 	r.BlobTable = payload.BlobTable
 	r.Blobs = make([]sop.UUID, len(payload.Blobs))
 	for i := range payload.Blobs {
