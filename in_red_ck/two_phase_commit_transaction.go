@@ -56,7 +56,7 @@ var Now = time.Now
 
 // NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
 func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
-	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging)
+	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging, cas.NewBlobStore())
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging boo
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
 // If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
 // However, without logging, the transaction commit can execute faster because there is no data getting logged.
-func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool, blobStore sop.BlobStore) (sop.TwoPhaseCommitTransaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
 		maxTime = time.Duration(15 * time.Minute)
@@ -85,7 +85,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 		storeRepository: cas.NewStoreRepository(),
 		registry:        cas.NewRegistry(),
 		redisCache:      redis.NewClient(),
-		blobStore:       cas.NewBlobStore(),
+		blobStore:       blobStore,
 		logger:          newTransactionLogger(nil, logging),
 		phaseDone:       -1,
 	}, nil
