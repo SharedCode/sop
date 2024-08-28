@@ -10,9 +10,6 @@ type FileIO interface {
 	WriteFile(name string, data []byte, perm os.FileMode) error
 	ReadFile(name string) ([]byte, error)
 	Remove(name string) error
-
-	Lock(name string) (bool, error)
-	Unlock(name string) (error)
 }
 
 type defaultFileIO struct {
@@ -26,12 +23,4 @@ func (dio defaultFileIO)ReadFile(name string) ([]byte, error) {
 }
 func (dio defaultFileIO)Remove(name string) error {
 	return os.Remove(name)
-}
-
-func (dio defaultFileIO)Lock(name string) (bool, error) {
-	return true, nil
-}
-
-func (dio defaultFileIO)Unlock(name string) error {
-	return nil
 }
