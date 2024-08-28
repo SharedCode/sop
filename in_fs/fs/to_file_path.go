@@ -14,7 +14,7 @@ type ToFilePathFunc func(basePath string, id sop.UUID) string
 // or you can implement as fancy as partitioning across many storage devices, e.g. - using
 // the 1st hex digit, apply modulo to distribute to your different storage devices.
 //
-// Or using the basePath to specify different storage path, this perhaps is the typical case.
+// Or using the basePath to specify different storage path, this perhaps is the typical case(default).
 var ToFilePath ToFilePathFunc = DefaultToFilePath
 
 // Default file path formatter, given a base path & a GUID.
@@ -27,13 +27,5 @@ func Apply3LevelHierarchyAndModulo(id sop.UUID) string {
 	s := id.String()
 	ps := os.PathSeparator
 	mod := s[3] % 3
-	gf := fmt.Sprintf("%c%c%cmod%c", s[0], s[1], s[2], mod)
-	switch(mod) {
-	case 0:
-		return fmt.Sprintf("%c%c%s", s[0], ps, gf)
-	case 1:
-		return fmt.Sprintf("%c%c%c%c%s", s[0], ps, s[1], ps, gf)
-	default:
-		return fmt.Sprintf("%c%c%c%c%c", s[0], ps, s[1], ps, s[2])
-	}
+	return fmt.Sprintf("%c%c%c%c%c%c%c", s[0], ps, s[1], ps, s[2], ps, mod)
 }
