@@ -16,9 +16,11 @@ func NewManageBlobStoreFolder(fileIO FileIO) sop.ManageBlobStore {
 	}
 }
 
+var umaskCalled bool
+
 func (bf *manageBlobStoreFolder) CreateBlobStore(ctx context.Context, blobStoreBaseFolderPath string) error {
 	// Create a new Blob store base folder.
-	return bf.fileIO.MkdirAll(blobStoreBaseFolderPath, 0666)
+	return bf.fileIO.MkdirAll(blobStoreBaseFolderPath, permission)
 }
 
 func (bf *manageBlobStoreFolder) RemoveBlobStore(ctx context.Context, blobStoreBaseFolderPath string) error {

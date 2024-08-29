@@ -13,7 +13,7 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
-	so := sop.ConfigureStore("xyz", true, 8, "Streaming data", sop.BigData)
+	so := sop.ConfigureStore("xyz", true, 8, "Streaming data", sop.BigData, "")
 	sds, _ := NewBtree[string, string](ctx, so, trans)
 
 	sds.Add(ctx, "fooVideo", "video content")
@@ -54,7 +54,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
-	so := sop.ConfigureStore("xyz2", false, 8, "Streaming data", sop.BigData)
+	so := sop.ConfigureStore("xyz2", false, 8, "Streaming data", sop.BigData, "")
 	b3, _ := NewBtree[PersonKey, Person](ctx, so, trans)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")

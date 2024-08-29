@@ -43,7 +43,7 @@ func (x StreamingDataKey[TK]) Compare(other interface{}) int {
 //
 // This behaviour makes this store ideal for data management of huge blobs, like movies or huge data graphs.
 func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*StreamingDataStore[TK], error) {
-	btree, err := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData), trans)
+	btree, err := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, ""), trans)
 	if err != nil {
 		return nil, err
 	}

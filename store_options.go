@@ -31,6 +31,8 @@ type StoreOptions struct {
 	LeafLoadBalancing bool
 	// (optional) Description of the Store.
 	Description string
+	// For use by SOP in File System only. Specifies the base folder path of the blob store.
+	BlobStoreBaseFolderPath string
 }
 
 // ValueDataSize enumeration.
@@ -50,19 +52,21 @@ const (
 )
 
 // Helper function to easily configure a store. Select the right valueDataSize matching your usage scenario.
+// blobStoreBaseFolderPath is only used if storing blobs in File System. This specified the base folder path of the directory to contain the blobs.
 //
 // Caveat, pls. don't use the incorrect ValueDataSize in your usage scenario. For example, choosing BigData but actual item
 // value data size can be small or medium size will cause unnecessary latency as SOP will not use global caching on your items'
 // value data. On the contrary, if you use SmallData(or MediumData) but actual item value data size is big, then this will
 // impact performance too. As SOP will use global & local cache in your items' value data that occupies huge space, impacting Redis,
 // over-allocating it & the local (host) cache.
-func ConfigureStore(storeName string, uniqueKey bool, slotLength int, description string, valueDataSize ValueDataSize) StoreOptions {
+func ConfigureStore(storeName string, uniqueKey bool, slotLength int, description string, valueDataSize ValueDataSize, blobStoreBaseFolderPath string) StoreOptions {
 	so := StoreOptions{
 		Name:                     storeName,
 		IsUnique:                 uniqueKey,
 		SlotLength:               slotLength,
 		IsValueDataInNodeSegment: true,
 		Description:              description,
+		BlobStoreBaseFolderPath: blobStoreBaseFolderPath,
 	}
 	if valueDataSize == MediumData {
 		so.IsValueDataInNodeSegment = false

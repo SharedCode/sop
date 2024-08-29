@@ -19,6 +19,9 @@ var ToFilePath ToFilePathFunc = DefaultToFilePath
 
 // Default file path formatter, given a base path & a GUID.
 func DefaultToFilePath(basePath string, id sop.UUID) string {
+	if len(basePath) > 0 && basePath[len(basePath)-1] == os.PathSeparator {
+		return fmt.Sprintf("%s%s", basePath, Apply3LevelHierarchyAndModulo(id))
+	}
 	return fmt.Sprintf("%s%c%s", basePath, os.PathSeparator, Apply3LevelHierarchyAndModulo(id))
 }
 
@@ -26,6 +29,7 @@ func DefaultToFilePath(basePath string, id sop.UUID) string {
 func Apply3LevelHierarchyAndModulo(id sop.UUID) string {
 	s := id.String()
 	ps := os.PathSeparator
-	mod := s[3] % 3
-	return fmt.Sprintf("%c%c%c%c%c%c%c", s[0], ps, s[1], ps, s[2], ps, mod)
+	// 4th level is 50 folders max so it is easier to navigate w/ in cmdline.
+	mod := s[3] % 50
+	return fmt.Sprintf("%x%c%x%c%x%c%d", s[0], ps, s[1], ps, s[2], ps, mod)
 }

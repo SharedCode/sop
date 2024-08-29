@@ -2,6 +2,8 @@ package fs
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/SharedCode/sop"
 )
@@ -12,6 +14,9 @@ type blobStore struct {
 	fileIO     FileIO
 	marshaler  sop.Marshaler
 }
+
+// Directory/File permission.
+const permission os.FileMode = os.ModeSticky|os.ModePerm
 
 // NewBlobStoreUsingDefaults is synonymous to NewBlobStore but uses default implementations of
 // necessary parameter interfaces like for file IO, to file path formatter & object marshaler.
@@ -49,10 +54,15 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop
 			if err != nil {
 				return err
 			}
-			fn := b.toFilePath(storeBlobs.BlobTable, blob.Key)
+			fp := b.toFilePath(storeBlobs.BlobTable, blob.Key)
+			if !b.fileIO.DirExists(fp) {
+				if err := b.fileIO.MkdirAll(fp, permission); err != nil {
+					return err
+				}
+			}
 			// WriteFile will add or replace existing file. 666 - gives R/W permission to everybody.
-			err = b.fileIO.WriteFile(fn, ba, 0666)
-			if err != nil {
+			fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blob.Key.ToString())
+			if err = b.fileIO.WriteFile(fn, ba, permission); err != nil {
 				return err
 			}
 		}
@@ -67,9 +77,9 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[
 func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
 	for _, storeBlobIDs := range storesBlobsIDs {
 		for _, blobID := range storeBlobIDs.Blobs {
-			fn := b.toFilePath(storeBlobIDs.BlobTable, blobID)
-			err := b.fileIO.Remove(fn)
-			if err != nil {
+			fp := b.toFilePath(storeBlobIDs.BlobTable, blobID)
+			fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.ToString())
+			if err := b.fileIO.Remove(fn); err != nil {
 				return err
 			}
 		}

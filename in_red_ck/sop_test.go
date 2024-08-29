@@ -13,7 +13,7 @@ func Test_HelloWorld(t *testing.T) {
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t1.Begin()
 
-	so := sop.ConfigureStore("inmymemory", false, 8, "", sop.SmallData)
+	so := sop.ConfigureStore("inmymemory", false, 8, "", sop.SmallData, "")
 	so.LeafLoadBalancing = true
 	b3, _ := NewBtree[int, string](ctx, so, t1)
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
@@ -343,7 +343,7 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t1.Begin()
 
-	so := sop.ConfigureStore("inmymemory3", false, 8, "", sop.SmallData)
+	so := sop.ConfigureStore("inmymemory3", false, 8, "", sop.SmallData, "")
 	so.LeafLoadBalancing = true
 	b3, _ := NewBtree[string, string](ctx, so, t1)
 
