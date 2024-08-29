@@ -16,7 +16,7 @@ type StoreInfo struct {
 	Description string
 	// Virtual ID registry table name.
 	RegistryTable string
-	// Blob table name.
+	// Blob table name if using a table or (base) file path if storing blobs in File System.
 	BlobTable string
 	// RootNodeID is the root node's ID.
 	RootNodeID UUID
@@ -50,11 +50,13 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 	if !isValueDataInNodeSegment {
 		isValueDataGloballyCached = true
 	}
-	return NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption)
+	return NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption, "")
 }
 
 // NewStoreInfoExt instantiates a new Store and offers more parameters configurable to your desire.
-func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string) *StoreInfo {
+// blobStoreBasePath can be left blank("") and SOP will generate a name for it. This parameter is geared so one can specify
+// a base path folder for the blob store using the File System. If using Cassandra table, please specify blank("").
+func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string, blobStoreBasePath string) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if slotLength%2 != 0 {
 		slotLength--
@@ -67,6 +69,9 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 	// auto generate table names based off of store name.
 	registryTableName := FormatRegistryTable(name)
 	blobTableName := FormatBlobTable(name)
+	if blobStoreBasePath != "" {
+		blobTableName = blobStoreBasePath
+	}
 
 	const maxSlotLength = 10000
 
@@ -105,6 +110,7 @@ func ConvertToBlobTableName(registryTableName string) string {
 func FormatBlobTable(name string) string {
 	return fmt.Sprintf("%s_b", name)
 }
+
 // Format a given name into a registry table name by adding suffix.
 func FormatRegistryTable(name string) string {
 	return fmt.Sprintf("%s_r", name)

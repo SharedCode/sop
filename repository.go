@@ -43,6 +43,14 @@ type StoreRepository interface {
 	Remove(context.Context, ...string) error
 }
 
+// ManageBlobStore specifies the methods used to manage the Blob Store table(if in Cassandra) or folder path(if in File System).
+type ManageBlobStore interface {
+	// Creaate the blob store table or folder.
+	CreateBlobStore(context.Context, string) error
+	// Remove the blob store table or folder.
+	RemoveBlobStore(context.Context, string) error
+}
+
 // BlobStore specifies the backend blob store interface used for storing & managing data blobs.
 // Blobs are data that can vary in size and is big enough that they can't be stored in database
 // as it will impose performance penalties. This kind of data are typically stored in blob stores

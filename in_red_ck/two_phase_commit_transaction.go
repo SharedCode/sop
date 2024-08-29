@@ -56,7 +56,7 @@ var Now = time.Now
 
 // NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
 func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
-	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging, cas.NewBlobStore())
+	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging, cas.NewBlobStore(), cas.NewStoreRepository(nil))
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging boo
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
 // If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
 // However, without logging, the transaction commit can execute faster because there is no data getting logged.
-func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool, blobStore sop.BlobStore) (sop.TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool, blobStore sop.BlobStore, storeRepository sop.StoreRepository) (sop.TwoPhaseCommitTransaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
 		maxTime = time.Duration(15 * time.Minute)
@@ -82,7 +82,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 	return &transaction{
 		mode:      mode,
 		maxTime:         maxTime,
-		storeRepository: cas.NewStoreRepository(),
+		storeRepository: storeRepository,
 		registry:        cas.NewRegistry(),
 		redisCache:      redis.NewClient(),
 		blobStore:       blobStore,
@@ -805,7 +805,7 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 		// Delete from Redis the inactive nodes.
 		// Leave the registry keys as there may be other in-flight transactions that need them
 		// for conflict resolution, to rollback or to fail their "reader" transaction.
-		deletedKeys := make([]string, sop.GetBlobPayloadCount[sop.UUID](unusedNodeIDs))
+		deletedKeys := make([]string, sop.GetBlobPayloadCount(unusedNodeIDs))
 		ik := 0
 		for i := range unusedNodeIDs {
 			for ii := range unusedNodeIDs[i].Blobs {
