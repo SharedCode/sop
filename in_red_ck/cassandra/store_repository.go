@@ -24,6 +24,8 @@ type storeRepository struct {
 
 
 // NewStoreRepository manages the StoreInfo in Cassandra table.
+// Passing in nil to "managedBlobStore" will use default implementation in StoreRepository itself
+// for managing Blob Store table in Cassandra.
 func NewStoreRepository(manageBlobStore sop.ManageBlobStore) sop.StoreRepository {
 	r := &storeRepository{
 		redisCache: redis.NewClient(),

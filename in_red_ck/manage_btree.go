@@ -13,8 +13,8 @@ import (
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
 // Use with care and only when you are sure to delete the tables.
-func RemoveBtree(ctx context.Context, name string, manageBlobStore sop.ManageBlobStore) error {
-	storeRepository := cas.NewStoreRepository(manageBlobStore)
+func RemoveBtree(ctx context.Context, name string) error {
+	storeRepository := cas.NewStoreRepository(nil)
 	return storeRepository.Remove(ctx, name)
 }
 
