@@ -21,6 +21,8 @@ var redisConfig = redis.Options{
 	DefaultDurationInSeconds: 24 * 60 * 60,
 }
 
+const dataPath string = "/Users/grecinto/sop_data"
+
 func init() {
 	in_red_cfs.Initialize(cassConfig, redisConfig)
 }
@@ -40,7 +42,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath: "/Users/grecinto/sop_data",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)
@@ -72,7 +74,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath: "/Users/grecinto/sop_data",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)

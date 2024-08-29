@@ -20,16 +20,14 @@ var ToFilePath ToFilePathFunc = DefaultToFilePath
 // Default file path formatter, given a base path & a GUID.
 func DefaultToFilePath(basePath string, id sop.UUID) string {
 	if len(basePath) > 0 && basePath[len(basePath)-1] == os.PathSeparator {
-		return fmt.Sprintf("%s%s", basePath, Apply3LevelHierarchyAndModulo(id))
+		return fmt.Sprintf("%s%s", basePath, Apply4LevelHierarchy(id))
 	}
-	return fmt.Sprintf("%s%c%s", basePath, os.PathSeparator, Apply3LevelHierarchyAndModulo(id))
+	return fmt.Sprintf("%s%c%s", basePath, os.PathSeparator, Apply4LevelHierarchy(id))
 }
 
-// Support 3 level folders and 4th hex "modulo" file distribution algorithm.
-func Apply3LevelHierarchyAndModulo(id sop.UUID) string {
+// Support 4 level folders file distribution algorithm, a.k.a. tree like folder hierarchy.
+func Apply4LevelHierarchy(id sop.UUID) string {
 	s := id.String()
 	ps := os.PathSeparator
-	// 4th level is 50 folders max so it is easier to navigate w/ in cmdline.
-	mod := s[3] % 50
-	return fmt.Sprintf("%x%c%x%c%x%c%d", s[0], ps, s[1], ps, s[2], ps, mod)
+	return fmt.Sprintf("%x%c%x%c%x%c%x", s[0], ps, s[1], ps, s[2], ps, s[3])
 }

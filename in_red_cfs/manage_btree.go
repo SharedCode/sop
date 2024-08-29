@@ -8,6 +8,7 @@ import (
 	"github.com/SharedCode/sop/in_red_cfs/fs"
 	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	sd "github.com/SharedCode/sop/streaming_data"
 )
 
 // Removes B-Tree with a given name from the backend storage. This involves dropping tables
@@ -32,4 +33,17 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // the OpenBtree function.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
 	return in_red_ck.NewBtree[TK, TV](ctx, si, t)
+}
+
+// NewStreamingDataStore is a convenience function to easily instantiate a streaming data store that stores
+// blobs in File System.
+//
+// Specify your blobStoreBaseFolderPath to an appropriate folder path that will be the base folder of blob files.
+func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string) (*sd.StreamingDataStore[TK], error) {
+	return sd.NewStreamingDataStoreExt[TK](ctx, name, trans, blobStoreBaseFolderPath)
+}
+
+// OpenStreamingDataStore is a convenience function to open an existing data store for use in "streaming data".
+func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*sd.StreamingDataStore[TK], error) {
+	return sd.OpenStreamingDataStore[TK](ctx, name, trans)
 }
