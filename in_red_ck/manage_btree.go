@@ -13,8 +13,8 @@ import (
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
 // Use with care and only when you are sure to delete the tables.
-func RemoveBtree(ctx context.Context, name string) error {
-	storeRepository := cas.NewStoreRepository()
+func RemoveBtree(ctx context.Context, name string, manageBlobStore sop.ManageBlobStore) error {
+	storeRepository := cas.NewStoreRepository(manageBlobStore)
 	return storeRepository.Remove(ctx, name)
 }
 
@@ -61,7 +61,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 		trans.Rollback(ctx)
 		return nil, err
 	}
-	ns := sop.NewStoreInfoExt(si.Name, si.SlotLength, si.IsUnique, si.IsValueDataInNodeSegment, si.IsValueDataActivelyPersisted, si.IsValueDataGloballyCached, si.LeafLoadBalancing, si.Description)
+	ns := sop.NewStoreInfoExt(si.Name, si.SlotLength, si.IsUnique, si.IsValueDataInNodeSegment, si.IsValueDataActivelyPersisted, si.IsValueDataGloballyCached, si.LeafLoadBalancing, si.Description, "")
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeID.IsNil() {

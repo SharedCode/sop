@@ -19,13 +19,21 @@ import (
 
 type storeRepository struct {
 	redisCache redis.Cache
+	manageBlobStore sop.ManageBlobStore
 }
 
+
 // NewStoreRepository manages the StoreInfo in Cassandra table.
-func NewStoreRepository() sop.StoreRepository {
-	return &storeRepository{
+func NewStoreRepository(manageBlobStore sop.ManageBlobStore) sop.StoreRepository {
+	r := &storeRepository{
 		redisCache: redis.NewClient(),
+		manageBlobStore: manageBlobStore,
 	}
+	// Default to an implementation of this Store Repository for managing the blob table in Cassandra.
+	if manageBlobStore == nil {
+		r.manageBlobStore = r
+	}
+	return r
 }
 
 var storeCacheDuration = time.Duration(2 * time.Hour)
@@ -55,15 +63,12 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		if err := qry.Exec(); err != nil {
 			return err
 		}
+
 		// Create a new Blob table.
-		createNewBlobTable := fmt.Sprintf("CREATE TABLE %s.%s(id UUID PRIMARY KEY, node blob);", connection.Config.Keyspace, s.BlobTable)
-		qry = connection.Session.Query(createNewBlobTable).WithContext(ctx)
-		if connection.Config.ConsistencyBook.StoreAdd > gocql.Any {
-			qry.Consistency(connection.Config.ConsistencyBook.StoreAdd)
-		}
-		if err := qry.Exec(); err != nil {
+		if err := sr.manageBlobStore.CreateBlobStore(ctx, s.BlobTable); err != nil {
 			return err
 		}
+
 		// Create a new Virtual ID registry table.
 		createNewRegistry := fmt.Sprintf("CREATE TABLE %s.%s(lid UUID PRIMARY KEY, is_idb boolean, p_ida UUID, p_idb UUID, ver int, wip_ts bigint, is_del boolean);",
 			connection.Config.Keyspace, s.RegistryTable)
@@ -255,19 +260,13 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	for i := range names {
 		// Tolerate Redis cache failure.
 		if err := sr.redisCache.Delete(ctx, names[i]); err != nil && !redis.KeyNotFound(err) {
-			log.Error("Registry Add (redis setstruct) failed, details: %v", err.Error())
+			log.Error(fmt.Sprintf("Registry Add (redis setstruct) failed, details: %v", err))
 		}
 	}
 
 	for _, n := range names {
 		// Drop Blob table.
-		dropBlobTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, sop.FormatBlobTable(n))
-
-		qry = connection.Session.Query(dropBlobTable).WithContext(ctx)
-		if connection.Config.ConsistencyBook.StoreRemove > gocql.Any {
-			qry.Consistency(connection.Config.ConsistencyBook.StoreRemove)
-		}
-		if err := qry.Exec(); err != nil {
+		if err := sr.manageBlobStore.RemoveBlobStore(ctx, sop.FormatBlobTable(n)); err != nil {
 			return err
 		}
 		// Drop Virtual ID registry table.
@@ -281,5 +280,32 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 		}
 	}
 
+	return nil
+}
+
+func (sr *storeRepository) CreateBlobStore(ctx context.Context, blobStoreName string) error {
+	// Create a new Blob table.
+	createNewBlobTable := fmt.Sprintf("CREATE TABLE %s.%s(id UUID PRIMARY KEY, node blob);", connection.Config.Keyspace, blobStoreName)
+	qry := connection.Session.Query(createNewBlobTable).WithContext(ctx)
+	if connection.Config.ConsistencyBook.StoreAdd > gocql.Any {
+		qry.Consistency(connection.Config.ConsistencyBook.StoreAdd)
+	}
+	if err := qry.Exec(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (sr *storeRepository) RemoveBlobStore(ctx context.Context, blobStoreName string) error {
+	// Drop Blob table.
+	dropBlobTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, blobStoreName)
+
+	qry := connection.Session.Query(dropBlobTable).WithContext(ctx)
+	if connection.Config.ConsistencyBook.StoreRemove > gocql.Any {
+		qry.Consistency(connection.Config.ConsistencyBook.StoreRemove)
+	}
+	if err := qry.Exec(); err != nil {
+		return err
+	}
 	return nil
 }

@@ -1,6 +1,5 @@
 package fs
 
-
 import (
 	"os"
 )
@@ -10,17 +9,26 @@ type FileIO interface {
 	WriteFile(name string, data []byte, perm os.FileMode) error
 	ReadFile(name string) ([]byte, error)
 	Remove(name string) error
+	RemoveAll(path string) error
+	MkdirAll(path string, perm os.FileMode) error
 }
 
-type defaultFileIO struct {
+type DefaultFileIO struct {
 }
 
-func (dio defaultFileIO)WriteFile(name string, data []byte, perm os.FileMode) error {
+func (dio DefaultFileIO) WriteFile(name string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(name, data, perm)
 }
-func (dio defaultFileIO)ReadFile(name string) ([]byte, error) {
+func (dio DefaultFileIO) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(name)
 }
-func (dio defaultFileIO)Remove(name string) error {
+func (dio DefaultFileIO) Remove(name string) error {
 	return os.Remove(name)
+}
+
+func (dio DefaultFileIO) MkdirAll(path string, perm os.FileMode) error {
+	return os.MkdirAll(path, perm)
+}
+func (dio DefaultFileIO) RemoveAll(path string) error {
+	return os.RemoveAll(path)
 }
