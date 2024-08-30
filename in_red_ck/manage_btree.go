@@ -1,3 +1,4 @@
+// Package in_red_ck contains SOP implementations that uses Redis for caching & Cassandra for backend data storage.
 package in_red_ck
 
 import (
