@@ -14,7 +14,7 @@ import (
 //
 // Use with care and only when you are sure to delete the tables.
 func RemoveBtree(ctx context.Context, name string) error {
-	storeRepository := cas.NewStoreRepository(nil)
+	storeRepository := cas.NewStoreRepository()
 	return storeRepository.Remove(ctx, name)
 }
 

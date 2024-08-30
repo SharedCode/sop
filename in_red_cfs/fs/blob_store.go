@@ -39,7 +39,8 @@ func NewBlobStore(
 }
 
 func (b *blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.UUID, target interface{}) error {
-	fn := b.toFilePath(blobFilePath, blobID)
+	fp := b.toFilePath(blobFilePath, blobID)
+	fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.ToString())
 	ba, err := b.fileIO.ReadFile(fn)
 	if err != nil {
 		return err

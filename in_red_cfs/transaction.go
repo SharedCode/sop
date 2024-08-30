@@ -14,7 +14,7 @@ func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging boo
 	fio := fs.DefaultFileIO{}
 	bs := fs.NewBlobStore(fs.DefaultToFilePath, fio, sop.NewMarshaler())
 	mbsf := fs.NewManageBlobStoreFolder(fio)
-	twoPT, err :=  in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepository(mbsf))
+	twoPT, err :=  in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepositoryExt(mbsf))
 	if err != nil {
 		return nil, err
 	}

@@ -8,6 +8,8 @@ import (
 type RegistryPayload[T Handle | UUID] struct {
 	// Registry table (name) where the Virtual IDs will be stored or fetched from.
 	RegistryTable string
+	// During Rollback and Commit, we need to get hold of the paired BlobTable(or blob base folder path if in FS).
+	BlobTable string
 	// IDs is an array containing the Virtual IDs details to be stored or to be fetched.
 	IDs []T
 }

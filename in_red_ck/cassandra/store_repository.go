@@ -22,11 +22,14 @@ type storeRepository struct {
 	manageBlobStore sop.ManageBlobStore
 }
 
+func NewStoreRepository() sop.StoreRepository {
+	return NewStoreRepositoryExt(nil)
+}
 
 // NewStoreRepository manages the StoreInfo in Cassandra table.
 // Passing in nil to "managedBlobStore" will use default implementation in StoreRepository itself
 // for managing Blob Store table in Cassandra.
-func NewStoreRepository(manageBlobStore sop.ManageBlobStore) sop.StoreRepository {
+func NewStoreRepositoryExt(manageBlobStore sop.ManageBlobStore) sop.StoreRepository {
 	r := &storeRepository{
 		redisCache: redis.NewClient(),
 		manageBlobStore: manageBlobStore,
@@ -242,6 +245,12 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
+
+	sis, err := sr.Get(ctx, names...)
+	if err != nil {
+		return err
+	}
+
 	// Format some variadic ? and convert to interface the names param.
 	namesAsIntf := make([]interface{}, len(names))
 	paramQ := make([]string, len(names))
@@ -266,10 +275,12 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 		}
 	}
 
-	for _, n := range names {
+	for i, n := range names {
 		// Drop Blob table.
-		if err := sr.manageBlobStore.RemoveBlobStore(ctx, sop.FormatBlobTable(n)); err != nil {
-			return err
+		if i < len(sis) {
+			if err := sr.manageBlobStore.RemoveBlobStore(ctx, sis[i].BlobTable); err != nil {
+				return err
+			}
 		}
 		// Drop Virtual ID registry table.
 		dropRegistryTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, sop.FormatRegistryTable(n))

@@ -36,14 +36,20 @@ func (x StreamingDataKey[TK]) Compare(other interface{}) int {
 	return cmp.Compare[int](x.ChunkIndex, y.ChunkIndex)
 }
 
-// NewStreamingDataStore instantiates a new Data Store for use in "streaming data".
+// NewStreamingDataStore is synonymous to NewStreamingDataStore but is geared for storing blobs in blob table in Cassandra.
+func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*StreamingDataStore[TK], error) {
+	return NewStreamingDataStoreExt[TK](ctx, name, trans, "")
+}
+
+// NewStreamingDataStoreExt instantiates a new Data Store for use in "streaming data".
 // That is, the "value" is saved in separate segment(partition in Cassandra) &
 // actively persisted to the backend, e.g. - call to Add method will save right away
 // to the separate segment and on commit, it will be a quick action as data is already saved to the data segments.
 //
 // This behaviour makes this store ideal for data management of huge blobs, like movies or huge data graphs.
-func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*StreamingDataStore[TK], error) {
-	btree, err := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, ""), trans)
+// Supports parameter for blobStoreBaseFolderPath which is useful in File System based blob storage.
+func NewStreamingDataStoreExt[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string) (*StreamingDataStore[TK], error) {
+	btree, err := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, blobStoreBaseFolderPath), trans)
 	if err != nil {
 		return nil, err
 	}

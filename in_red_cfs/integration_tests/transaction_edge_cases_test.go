@@ -8,7 +8,6 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_cfs"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
 // Covers all of these cases:
@@ -30,6 +29,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
@@ -80,6 +80,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	var person Person
 	b3.FindOne(ctx, pk2, false)
@@ -115,6 +116,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
@@ -138,6 +140,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 			IsValueDataInNodeSegment: true,
 			LeafLoadBalancing:        false,
 			Description:              "",
+			BlobStoreBaseFolderPath:  dataPath,
 		}, t1)
 	}
 
@@ -148,6 +151,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t2)
 
 	// edit both "pirellis" in both btrees, one each.
@@ -185,6 +189,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
@@ -208,6 +213,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 			IsValueDataInNodeSegment: true,
 			LeafLoadBalancing:        false,
 			Description:              "",
+			BlobStoreBaseFolderPath:  dataPath,
 		}, t1)
 	}
 
@@ -218,6 +224,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t2)
 
 	// Read both records.
@@ -256,6 +263,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
@@ -281,6 +289,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 			IsValueDataInNodeSegment: true,
 			LeafLoadBalancing:        false,
 			Description:              "",
+			BlobStoreBaseFolderPath:  dataPath,
 		}, t1)
 	}
 
@@ -291,6 +300,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t2)
 
 	// Read both records.
@@ -328,6 +338,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
@@ -357,6 +368,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 			IsValueDataInNodeSegment: true,
 			LeafLoadBalancing:        false,
 			Description:              "",
+			BlobStoreBaseFolderPath:  dataPath,
 		}, t1)
 	}
 
@@ -367,6 +379,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t2)
 
 	b3.FindOne(ctx, pk, false)
@@ -416,7 +429,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 }
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
-	sr := cas.NewStoreRepository(nil)
+	sr := in_red_cfs.NewStoreRepository()
 	sr.Remove(ctx, "twophase3")
 
 	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
@@ -428,6 +441,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 500, "I am the value with 500 key.")
@@ -445,6 +459,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 			IsValueDataInNodeSegment: true,
 			LeafLoadBalancing:        true,
 			Description:              "",
+			BlobStoreBaseFolderPath:  dataPath,
 		}, t1)
 		b3.Add(ctx2, 5000, "I am the value with 5000 key.")
 		b3.Add(ctx2, 5001, "I am the value with 5001 key.")
@@ -462,6 +477,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 			IsValueDataInNodeSegment: true,
 			LeafLoadBalancing:        true,
 			Description:              "",
+			BlobStoreBaseFolderPath:  dataPath,
 		}, t2)
 		b32.Add(ctx2, 5500, "I am the value with 5000 key.")
 		b32.Add(ctx2, 5501, "I am the value with 5001 key.")
@@ -503,7 +519,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 - A commit with full conflict: retry success
 */
 func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
-	sr := cas.NewStoreRepository(nil)
+	sr := in_red_cfs.NewStoreRepository()
 	sr.Remove(ctx, "tablex")
 
 	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
@@ -515,6 +531,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 1, "I am the value with 500 key.")
@@ -586,7 +603,7 @@ One or both of these two should fail:
 - A commit with full conflict.
 */
 func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
-	sr := cas.NewStoreRepository(nil)
+	sr := in_red_cfs.NewStoreRepository()
 	sr.Remove(ctx, "tablex2")
 
 	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
@@ -598,6 +615,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 1, "I am the value with 500 key.")
@@ -670,7 +688,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 - A commit with full conflict on update: rollback
 */
 func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
-	sr := cas.NewStoreRepository(nil)
+	sr := in_red_cfs.NewStoreRepository()
 	sr.Remove(ctx, "tabley")
 
 	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
@@ -682,6 +700,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 1, "I am the value with 500 key.")

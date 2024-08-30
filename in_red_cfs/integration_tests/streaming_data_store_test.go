@@ -15,7 +15,7 @@ func Test_StreamingDataStoreInvalidCases(t *testing.T) {
 	trans.Begin()
 
 	// Empty Store get/update methods test cases.
-	sds, _ := sd.NewStreamingDataStore[string](ctx, "xyz", trans)
+	sds, _ := in_red_cfs.NewStreamingDataStore[string](ctx, "xyz", trans, dataPath)
 	if _, err := sds.GetCurrentValue(ctx); err == nil {
 		t.Errorf("GetCurrentValue on empty btree failed, got nil want err")
 	}
@@ -30,7 +30,7 @@ func Test_StreamingDataStoreInvalidCases(t *testing.T) {
 func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ := sd.NewStreamingDataStore[string](ctx, "videoStore", trans)
+	sds, _ := in_red_cfs.NewStreamingDataStore[string](ctx, "videoStore", trans, dataPath)
 	encoder, _ := sds.Add(ctx, "fooVideo")
 	for i := 0; i < 10; i++ {
 		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
@@ -40,7 +40,7 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	// Read back the data. Pass false on 2nd argument will toggle to a "reader" transaction.
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ = sd.NewStreamingDataStore[string](ctx, "videoStore", trans)
+	sds, _ = in_red_cfs.NewStreamingDataStore[string](ctx, "videoStore", trans, dataPath)
 
 	ok, _ := sds.FindOne(ctx, "fooVideo")
 	if !ok {
@@ -73,7 +73,7 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 func Test_StreamingDataStoreMultipleItems(t *testing.T) {
 	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ := sd.NewStreamingDataStore[string](ctx, "videoStoreM", trans)
+	sds, _ := in_red_cfs.NewStreamingDataStore[string](ctx, "videoStoreM", trans, dataPath)
 	encoder, _ := sds.Add(ctx, "fooVideo")
 	for i := 0; i < 10; i++ {
 		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 12MB.", i))
@@ -87,7 +87,7 @@ func Test_StreamingDataStoreMultipleItems(t *testing.T) {
 	// Read back the data. Pass false on 2nd argument will toggle to a "reader" transaction.
 	trans, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, true)
 	trans.Begin()
-	sds, _ = sd.NewStreamingDataStore[string](ctx, "videoStoreM", trans)
+	sds, _ = in_red_cfs.NewStreamingDataStore[string](ctx, "videoStoreM", trans, dataPath)
 
 	ok, _ := sds.FindOne(ctx, "fooVideo")
 	if !ok {
@@ -120,7 +120,7 @@ func Test_StreamingDataStoreMultipleItems(t *testing.T) {
 func Test_StreamingDataStoreDeleteAnItem(t *testing.T) {
 	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ := sd.NewStreamingDataStore[string](ctx, "videoStoreD", trans)
+	sds, _ := in_red_cfs.NewStreamingDataStore[string](ctx, "videoStoreD", trans, dataPath)
 	encoder, _ := sds.Add(ctx, "fooVideo")
 	for i := 0; i < 10; i++ {
 		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 12MB.", i))
@@ -137,7 +137,7 @@ func Test_StreamingDataStoreDeleteAnItem(t *testing.T) {
 
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ = sd.OpenStreamingDataStore[string](ctx, "videoStoreD", trans)
+	sds, _ = in_red_cfs.OpenStreamingDataStore[string](ctx, "videoStoreD", trans)
 
 	ok, _ := sds.Remove(ctx, "fooVideo2")
 	if !ok {
@@ -172,7 +172,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	// Upload the video.
 	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ := sd.NewStreamingDataStore[string](ctx, "videoStoreU", trans)
+	sds, _ := in_red_cfs.NewStreamingDataStore[string](ctx, "videoStoreU", trans, dataPath)
 	encoder, _ := sds.Add(ctx, "fooVideo2")
 	for i := 0; i < 10; i++ {
 		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
@@ -182,7 +182,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	// Update the video.
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ = sd.NewStreamingDataStore[string](ctx, "videoStoreU", trans)
+	sds, _ = in_red_cfs.NewStreamingDataStore[string](ctx, "videoStoreU", trans, dataPath)
 	encoder, _ = sds.Update(ctx, "fooVideo2")
 	chunkCount := 9
 	for i := 0; i < chunkCount; i++ {
@@ -195,7 +195,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	// Read back the video.
 	trans, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, true)
 	trans.Begin()
-	sds, _ = sd.NewStreamingDataStore[string](ctx, "videoStoreU", trans)
+	sds, _ = in_red_cfs.NewStreamingDataStore[string](ctx, "videoStoreU", trans, dataPath)
 
 	ok, _ := sds.FindOne(ctx, "fooVideo2")
 	if !ok {
@@ -229,7 +229,7 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 	// Upload the video.
 	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ := sd.NewStreamingDataStore[string](ctx, "videoStore2", trans)
+	sds, _ := in_red_cfs.NewStreamingDataStore[string](ctx, "videoStore2", trans, dataPath)
 	encoder, _ := sds.Add(ctx, "fooVideo1")
 	encodeVideo(encoder, 50)
 	trans.Commit(ctx)
@@ -237,7 +237,7 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 	// Update the video.
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ = sd.NewStreamingDataStore[string](ctx, "videoStore2", trans)
+	sds, _ = in_red_cfs.NewStreamingDataStore[string](ctx, "videoStore2", trans, dataPath)
 	encoder, _ = sds.Update(ctx, "fooVideo1")
 	encodeVideo(encoder, 5)
 	// Important to close the encoder, otherwise, cleanup will not happen.
@@ -253,7 +253,7 @@ func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 	// Upload the video.
 	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ := sd.NewStreamingDataStore[string](ctx, "videoStore4", trans)
+	sds, _ := in_red_cfs.NewStreamingDataStore[string](ctx, "videoStore4", trans, dataPath)
 	encoder, _ := sds.Add(ctx, "fooVideo3")
 	encodeVideo(encoder, 5)
 	trans.Commit(ctx)
@@ -261,7 +261,7 @@ func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 	// Update the video.
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ = sd.NewStreamingDataStore[string](ctx, "videoStore4", trans)
+	sds, _ = in_red_cfs.NewStreamingDataStore[string](ctx, "videoStore4", trans, dataPath)
 	encoder, _ = sds.Update(ctx, "fooVideo3")
 	encodeVideo(encoder, 7)
 	// Since we updated with 7 chunks, 2 longer than existing, Close will not do anything.
@@ -278,7 +278,7 @@ func Test_StreamingDataStoreUpdate(t *testing.T) {
 	// Upload the video.
 	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ := sd.NewStreamingDataStore[string](ctx, "videoStore5", trans)
+	sds, _ := in_red_cfs.NewStreamingDataStore[string](ctx, "videoStore5", trans, dataPath)
 	encoder, _ := sds.Add(ctx, "fooVideo")
 	encodeVideo(encoder, 5)
 	trans.Commit(ctx)
@@ -286,7 +286,7 @@ func Test_StreamingDataStoreUpdate(t *testing.T) {
 	// Update the video.
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ = sd.NewStreamingDataStore[string](ctx, "videoStore5", trans)
+	sds, _ = in_red_cfs.NewStreamingDataStore[string](ctx, "videoStore5", trans, dataPath)
 	encoder, _ = sds.Update(ctx, "fooVideo")
 	encodeVideo(encoder, 5)
 	encoder.Close()
@@ -301,7 +301,7 @@ func Test_StreamingDataStoreDelete(t *testing.T) {
 	// Upload the video.
 	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
-	sds, _ := sd.NewStreamingDataStore[string](ctx, "videoStore3", trans)
+	sds, _ := in_red_cfs.NewStreamingDataStore[string](ctx, "videoStore3", trans, dataPath)
 
 	encoder, _ := sds.Add(ctx, "fooVideo1")
 	encodeVideo(encoder, 50)
