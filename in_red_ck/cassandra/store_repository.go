@@ -18,7 +18,7 @@ import (
 // Keep these common interfaces where they are implemented, if there will be a need, it is easy to move them to common folder.
 
 type storeRepository struct {
-	redisCache redis.Cache
+	redisCache      redis.Cache
 	manageBlobStore sop.ManageBlobStore
 }
 
@@ -31,7 +31,7 @@ func NewStoreRepository() sop.StoreRepository {
 // for managing Blob Store table in Cassandra.
 func NewStoreRepositoryExt(manageBlobStore sop.ManageBlobStore) sop.StoreRepository {
 	r := &storeRepository{
-		redisCache: redis.NewClient(),
+		redisCache:      redis.NewClient(),
 		manageBlobStore: manageBlobStore,
 	}
 	// Default to an implementation of this Store Repository for managing the blob table in Cassandra.

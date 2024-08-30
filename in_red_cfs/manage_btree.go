@@ -33,7 +33,7 @@ func RemoveBtree(ctx context.Context, name string) error {
 	return sr.Remove(ctx, name)
 }
 
-// NewStoreRepository is a convenience function to instantiate a repository with necessary File System 
+// NewStoreRepository is a convenience function to instantiate a repository with necessary File System
 // based blob store implementation.
 func NewStoreRepository() sop.StoreRepository {
 	fio := fs.DefaultFileIO{}

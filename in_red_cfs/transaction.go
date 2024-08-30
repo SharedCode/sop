@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_ck"
 	"github.com/SharedCode/sop/in_red_cfs/fs"
+	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 )
 
@@ -14,7 +14,7 @@ func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging boo
 	fio := fs.DefaultFileIO{}
 	bs := fs.NewBlobStore(fs.DefaultToFilePath, fio, sop.NewMarshaler())
 	mbsf := fs.NewManageBlobStoreFolder(fio)
-	twoPT, err :=  in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepositoryExt(mbsf))
+	twoPT, err := in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepositoryExt(mbsf))
 	if err != nil {
 		return nil, err
 	}

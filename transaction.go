@@ -8,7 +8,8 @@ import (
 
 // Transaction modes enumeration.
 type TransactionMode int
-const(
+
+const (
 	// No check does not allow any change to the Btree stores and does not check
 	// read items' versions (for consistency) during commit.
 	NoCheck = iota
@@ -71,10 +72,10 @@ type singlePhaseTransaction struct {
 // of the commit and these logs will help SOP to cleanup any uncommitted resources in case there are
 // some build up, e.g. crash or host reboot left ongoing commits' temp changes. In time these will expire and
 // SOP to clean them up.
-func NewTransaction(mode TransactionMode, 
+func NewTransaction(mode TransactionMode,
 	twoPhaseCommitTrans TwoPhaseCommitTransaction,
 	maxTime time.Duration, logging bool) (Transaction, error) {
-	twoPhase := twoPhaseCommitTrans	// NewTwoPhaseCommitTransaction(mode, maxTime, logging)
+	twoPhase := twoPhaseCommitTrans // NewTwoPhaseCommitTransaction(mode, maxTime, logging)
 	return &singlePhaseTransaction{
 		sopPhaseCommitTransaction: twoPhase,
 	}, nil

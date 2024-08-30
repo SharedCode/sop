@@ -34,7 +34,7 @@ func Test_TLog_Rollback(t *testing.T) {
 
 	trans.Rollback(ctx)
 
-	trans, _ = newMockTransactionWithLogging(t,sop.ForReading, -1)
+	trans, _ = newMockTransactionWithLogging(t, sop.ForReading, -1)
 	trans.Begin()
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "tlogtable", trans)
 	pk, _ = newPerson("joe", "shroeger", "male", "email", "phone")

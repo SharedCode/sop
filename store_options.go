@@ -66,7 +66,7 @@ func ConfigureStore(storeName string, uniqueKey bool, slotLength int, descriptio
 		SlotLength:               slotLength,
 		IsValueDataInNodeSegment: true,
 		Description:              description,
-		BlobStoreBaseFolderPath: blobStoreBaseFolderPath,
+		BlobStoreBaseFolderPath:  blobStoreBaseFolderPath,
 	}
 	if valueDataSize == MediumData {
 		so.IsValueDataInNodeSegment = false

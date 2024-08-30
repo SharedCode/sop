@@ -602,7 +602,7 @@ func convertToRegistryRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interfa
 	for i := range nodes {
 		vids[i] = sop.RegistryPayload[sop.UUID]{
 			RegistryTable: nodes[i].First.RegistryTable,
-			BlobTable: nodes[i].First.BlobTable,
+			BlobTable:     nodes[i].First.BlobTable,
 			IDs:           make([]sop.UUID, len(nodes[i].Second)),
 		}
 		for ii := range nodes[i].Second {

@@ -29,7 +29,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath: dataPath,
+		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 
 	for i := 0; i < 50; i++ {

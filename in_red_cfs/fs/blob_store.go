@@ -16,7 +16,7 @@ type blobStore struct {
 }
 
 // Directory/File permission.
-const permission os.FileMode = os.ModeSticky|os.ModePerm
+const permission os.FileMode = os.ModeSticky | os.ModePerm
 
 // NewBlobStoreUsingDefaults is synonymous to NewBlobStore but uses default implementations of
 // necessary parameter interfaces like for file IO, to file path formatter & object marshaler.

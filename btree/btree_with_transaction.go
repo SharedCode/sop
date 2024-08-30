@@ -22,7 +22,7 @@ func NewBtreeWithTransaction[TK Comparable, TV any](t sop.TwoPhaseCommitTransact
 	}
 }
 
-// Returns the count of items in the 
+// Returns the count of items in the
 func (b3 *btreeWithTransaction[TK, TV]) Count() int64 {
 	return b3.btree.Count()
 }

@@ -48,7 +48,7 @@ func newTransactionLogger(logger sop.TransactionLog, logging bool) *transactionL
 	return &transactionLog{
 		logger:        logger,
 		logging:       logging,
-		transactionID:  sop.UUID(gocql.UUIDFromTime(Now().UTC())),
+		transactionID: sop.UUID(gocql.UUIDFromTime(Now().UTC())),
 	}
 }
 

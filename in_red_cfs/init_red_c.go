@@ -1,9 +1,9 @@
 package in_red_cfs
 
-import(
+import (
+	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/redis"
-	"github.com/SharedCode/sop/in_red_ck"
 )
 
 // Assign the configs & open connections to different sub-systems used by this package.
