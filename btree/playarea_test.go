@@ -3,8 +3,6 @@ package btree
 import (
 	"sort"
 	"testing"
-
-	"github.com/SharedCode/sop"
 )
 
 func TestSearch(t *testing.T) {
@@ -20,12 +18,5 @@ func TestSearch(t *testing.T) {
 	})
 	if found || i != 3 {
 		t.Fail()
-	}
-}
-
-func TestConvertToBlobTableName(t *testing.T) {
-	s := "foo_r"
-	if sop.ConvertToBlobTableName(s) != "foo_b" {
-		t.Errorf("ConvertToBlobTableName(..) failed, got = %s, want = %s.", sop.ConvertToBlobTableName(s), "foo_b")
 	}
 }

@@ -474,7 +474,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, vids []sop.R
 	}
 	blobsIDs := make([]sop.BlobsPayload[sop.UUID], len(vids))
 	for i := range handles {
-		blobsIDs[i].BlobTable = sop.ConvertToBlobTableName(vids[i].RegistryTable)
+		blobsIDs[i].BlobTable = vids[i].BlobTable
 		blobsIDs[i].Blobs = make([]sop.UUID, 0, len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			if handles[i].IDs[ii].GetInActiveID().IsNil() {
@@ -602,6 +602,7 @@ func convertToRegistryRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interfa
 	for i := range nodes {
 		vids[i] = sop.RegistryPayload[sop.UUID]{
 			RegistryTable: nodes[i].First.RegistryTable,
+			BlobTable: nodes[i].First.BlobTable,
 			IDs:           make([]sop.UUID, len(nodes[i].Second)),
 		}
 		for ii := range nodes[i].Second {

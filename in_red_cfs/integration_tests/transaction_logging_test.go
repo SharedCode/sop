@@ -17,7 +17,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday := time.Now().Add(time.Duration(-48 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_cfs.Now = func() time.Time { return yesterday }
+	cas.Now = func() time.Time { return yesterday }
 
 	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
@@ -29,6 +29,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
+		BlobStoreBaseFolderPath: dataPath,
 	}, trans)
 
 	for i := 0; i < 50; i++ {
@@ -42,7 +43,6 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now().Add(time.Duration(-47 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_cfs.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
@@ -57,7 +57,6 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now().Add(time.Duration(-46 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_cfs.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
@@ -71,7 +70,6 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now()
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_cfs.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 
@@ -84,7 +82,6 @@ func Cleanup(t *testing.T) {
 	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_cfs.Now = func() time.Time { return yesterday }
 
 	trans, _ := in_red_cfs.NewTransaction(sop.ForReading, -1, true)
 	trans.Begin()
@@ -94,7 +91,6 @@ func Cleanup(t *testing.T) {
 	yesterday = time.Now().Add(-time.Duration(23*time.Hour + 54*time.Minute))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_cfs.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, true)
 	trans.Begin()

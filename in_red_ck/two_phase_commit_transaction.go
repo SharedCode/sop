@@ -56,7 +56,7 @@ var Now = time.Now
 
 // NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
 func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
-	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging, cas.NewBlobStore(), cas.NewStoreRepository(nil))
+	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging, cas.NewBlobStore(), cas.NewStoreRepository())
 	if err != nil {
 		return nil, err
 	}
@@ -469,7 +469,7 @@ func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]sop.RegistryPayload[s
 	unusedNodeIDs := make([]sop.BlobsPayload[sop.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
 		blobsIDs := sop.BlobsPayload[sop.UUID]{
-			BlobTable: sop.ConvertToBlobTableName(t.updatedNodeHandles[i].RegistryTable),
+			BlobTable: t.updatedNodeHandles[i].BlobTable,
 			Blobs:     make([]sop.UUID, len(t.updatedNodeHandles[i].IDs)),
 		}
 		for ii := range t.updatedNodeHandles[i].IDs {
@@ -485,7 +485,7 @@ func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]sop.RegistryPayload[s
 		deletedIDs[i].RegistryTable = t.removedNodeHandles[i].RegistryTable
 		deletedIDs[i].IDs = make([]sop.UUID, len(t.removedNodeHandles[i].IDs))
 		blobsIDs := sop.BlobsPayload[sop.UUID]{
-			BlobTable: sop.ConvertToBlobTableName(t.removedNodeHandles[i].RegistryTable),
+			BlobTable: t.removedNodeHandles[i].BlobTable,
 			Blobs:     make([]sop.UUID, len(t.removedNodeHandles[i].IDs)),
 		}
 		for ii := range t.removedNodeHandles[i].IDs {

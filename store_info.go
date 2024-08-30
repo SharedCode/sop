@@ -101,11 +101,6 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 	}
 }
 
-// Convenience function to format a registry table name to its equivalent blob table name.
-func ConvertToBlobTableName(registryTableName string) string {
-	return FormatBlobTable(registryTableName[0 : len(registryTableName)-2])
-}
-
 // Format a given name into a blob table name by adding suffix.
 func FormatBlobTable(name string) string {
 	return fmt.Sprintf("%s_b", name)
