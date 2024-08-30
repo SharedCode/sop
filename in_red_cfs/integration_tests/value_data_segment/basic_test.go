@@ -27,6 +27,8 @@ func init() {
 
 var ctx = context.Background()
 
+const dataPath string = "/Users/grecinto/sop_data"
+
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
@@ -34,12 +36,13 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	}
 	trans.Begin()
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "fooStore",
+		Name:                     "fooStore1",
 		SlotLength:               8,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
+		BlobStoreBaseFolderPath: dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)
@@ -65,12 +68,13 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	}
 	trans.Begin()
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "fooStore",
+		Name:                     "fooStore2",
 		SlotLength:               8,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
+		BlobStoreBaseFolderPath: dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)

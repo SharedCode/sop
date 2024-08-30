@@ -36,7 +36,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	}
 	trans.Begin()
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "barstore",
+		Name:                     "barstore2",
 		SlotLength:               8,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
@@ -68,7 +68,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	}
 	trans.Begin()
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "barstore",
+		Name:                     "barstore1",
 		SlotLength:               8,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,

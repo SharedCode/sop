@@ -2,6 +2,8 @@ package sop
 
 import (
 	"fmt"
+	"os"
+	"strings"
 )
 
 // StoreInfo contains a given (B-Tree) store details.
@@ -70,6 +72,10 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 	registryTableName := FormatRegistryTable(name)
 	blobTableName := FormatBlobTable(name)
 	if blobStoreBasePath != "" {
+		// Append the store name as suffix so blob folders will be separated from one another, if not yet.
+		if !strings.HasSuffix(blobStoreBasePath, name) {
+			blobStoreBasePath = fmt.Sprintf("%s%c%s", blobStoreBasePath, os.PathSeparator, name)
+		}
 		blobTableName = blobStoreBasePath
 	}
 
