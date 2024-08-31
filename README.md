@@ -83,7 +83,7 @@ var ctx = context.Background()
 ...
 
 func main() {
-	trans, _ := in_red_cfs.NewTransaction(in_red_cfs.ForWriting, -1, true)
+	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
 
 	// Create/instantiate a new B-Tree named "fooStore" w/ 200 slots, Key is unique & other parameters
@@ -145,7 +145,7 @@ const nodeSlotLength = 500
 func main() {
 
 	// Create and start a transaction session.
-	trans, err := in_red_cfs.NewTransaction(in_red_cfs.ForWriting, -1, true)
+	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
 
 	// Create the B-Tree (store) instance. ValueDataSize can be SmallData or MediumData in this case.
