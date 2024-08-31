@@ -20,14 +20,14 @@ const permission os.FileMode = os.ModeSticky | os.ModePerm
 
 // NewBlobStoreUsingDefaults is synonymous to NewBlobStore but uses default implementations of
 // necessary parameter interfaces like for file IO, to file path formatter & object marshaler.
-func NewBlobStoreUsingDefaults() sop.BlobStore {
-	return NewBlobStore(ToFilePath, DefaultFileIO{}, sop.NewMarshaler())
+func NewBlobStore() sop.BlobStore {
+	return NewBlobStoreExt(ToFilePath, DefaultFileIO{}, sop.NewMarshaler())
 }
 
 // NewBlobStore instantiates a new blobstore for File System storage.
 // Parameters are specified for abstractions to things like File IO, filename formatter for efficient storage
 // and access of files on directories & marshaler.
-func NewBlobStore(
+func NewBlobStoreExt(
 	toFilePathFunc ToFilePathFunc,
 	fileIO FileIO,
 	marshaler sop.Marshaler) sop.BlobStore {
