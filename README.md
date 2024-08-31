@@ -94,7 +94,7 @@ func main() {
 	//
 	// In this case, when the Node segment is read from its partition, it will contain both the
 	// Keys & the Values (of the Node) ready for consumption. Small value data fits well with this.
-	so := sop.ConfigureStore("fooStore", false, 200, "", sop.SmallData)
+	so := sop.ConfigureStore("fooStore", false, 200, "", sop.SmallData, "/your/blobs/basepath/here")
 	// Key is of type "int" & Value is of type "string".
 	b3, _ := in_red_cfs.NewBtree[int, string](ctx, so, trans)
 
@@ -152,7 +152,7 @@ func main() {
 	// Let's choose MediumData as the person record can get set with medium sized data, that storing it in
 	// separate segment than the Btree node could be beneficial or more optimal per I/O than storing it
 	// in the node itself(as in SmallData case).
-	so := sop.ConfigureStore("persondb", false, nodeSlotLength, "", sop.MediumData)
+	so := sop.ConfigureStore("persondb", false, nodeSlotLength, "", sop.MediumData, "/your/blobs/basepath/here")
 	b3, err := in_red_cfs.NewBtree[PersonKey, Person](ctx, so, trans)
 
 	// Add a person record w/ details.
@@ -190,7 +190,7 @@ See here for code details: https://github.com/SharedCode/sop/blob/d473b66f294582
 ## Streaming Data
 As discussed above, the third usability scenario of SOP is support for very large data. Here is sample config code for creating a Btree that is fit for this use-case:
 ```
-	btree, _ := in_red_cfs.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore("fooStore", true, 500, "Streaming data", sop.BigData), trans)
+	btree, _ := in_red_cfs.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore("fooStore", true, 500, "Streaming data", sop.BigData, "/your/blobs/basepath/here"), trans)
 ```
 This sample code is from the ```StreamingDataStore struct``` in package ```sop/streaming_data```, it illustrates the ```sop.ConfigureStore``` helper function & ```sop.BigData``` value data size enum use. The streaming data store was implemented to store or manage very large value part of the item. It is a byte array and you can "encode" to it chunks of many MBs. This is the typical use-case for the ```sop.BigData``` enum. See the code here for more details: https://github.com/SharedCode/sop/blob/master/streaming_data/streaming_data_store.go
 
