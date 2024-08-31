@@ -243,7 +243,7 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 // Sleep in random milli-seconds to allow different conflicting (Node modifying) transactions
 // to retry on different times, thus, increasing chance to succeed one after the other.
 func randomSleep(ctx context.Context) {
-	sleepTime := (1 + rand.Intn(5)) * 100
+	sleepTime := (1 + rand.Intn(12)) * 100
 	sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 }
 
@@ -803,8 +803,6 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 	var lastErr error
 	if len(unusedNodeIDs) > 0 {
 		// Delete from Redis the inactive nodes.
-		// Leave the registry keys as there may be other in-flight transactions that need them
-		// for conflict resolution, to rollback or to fail their "reader" transaction.
 		deletedKeys := make([]string, sop.GetBlobPayloadCount(unusedNodeIDs))
 		ik := 0
 		for i := range unusedNodeIDs {
@@ -821,7 +819,7 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 			lastErr = err
 		}
 	}
-	// Delete from registry the requested entries.
+	// Delete from registry the deleted Registry IDs as well.
 	if err := t.registry.Remove(ctx, deletedRegistryIDs...); err != nil {
 		lastErr = err
 	}
