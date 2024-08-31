@@ -58,6 +58,7 @@ Below is a sample code, edited for brevity and to show the important parts.
 
 ```
 import (
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_cfs"
 	"github.com/SharedCode/sop/in_red_ck/cassandra"
 	"github.com/SharedCode/sop/redis"
@@ -197,6 +198,7 @@ This sample code is from the ```StreamingDataStore struct``` in package ```sop/s
 Sample code to use this ```StreamingDataStore```:
 ```
 import (
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_cfs"
 )
 
