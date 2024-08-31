@@ -1,4 +1,4 @@
-Horizontally Scaleable Objects Store
+Horizontally Scaleable Objects Persistence
 
 Scaleable Objects Persistence (SOP) Framework - Golang V2
 
