@@ -56,7 +56,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop
 				return err
 			}
 			fp := b.toFilePath(storeBlobs.BlobTable, blob.Key)
-			if !b.fileIO.DirExists(fp) {
+			if !b.fileIO.Exists(fp) {
 				if err := b.fileIO.MkdirAll(fp, permission); err != nil {
 					return err
 				}
@@ -80,6 +80,10 @@ func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPaylo
 		for _, blobID := range storeBlobIDs.Blobs {
 			fp := b.toFilePath(storeBlobIDs.BlobTable, blobID)
 			fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.ToString())
+			// Ok if file does not exist to return nil as it it was successfully removed.
+			if !b.fileIO.Exists(fn) {
+				return nil
+			}
 			if err := b.fileIO.Remove(fn); err != nil {
 				return err
 			}

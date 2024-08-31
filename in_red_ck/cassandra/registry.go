@@ -181,6 +181,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 		if len(paramQ) == 0 {
 			storesHandles = append(storesHandles, sop.RegistryPayload[sop.Handle]{
 				RegistryTable: storeLids.RegistryTable,
+				BlobTable: storeLids.BlobTable,
 				IDs:           handles,
 			})
 			continue
@@ -212,6 +213,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 		}
 		storesHandles = append(storesHandles, sop.RegistryPayload[sop.Handle]{
 			RegistryTable: storeLids.RegistryTable,
+			BlobTable: storeLids.BlobTable,
 			IDs:           handles,
 		})
 	}

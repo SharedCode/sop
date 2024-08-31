@@ -273,7 +273,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 }
 
 // Add prefix Test_ if wanting to run this test.
-func VolumeDeletes(t *testing.T) {
+func Test_VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 
@@ -318,7 +318,7 @@ func VolumeDeletes(t *testing.T) {
 
 // Mixed CRUD operations.
 // Add prefix Test_ if wanting to run this test.
-func MixedOperations(t *testing.T) {
+func Test_MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
 
