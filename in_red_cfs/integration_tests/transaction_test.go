@@ -453,7 +453,9 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	twoPhase := t1.GetPhasedTransaction()
 
 	if err := twoPhase.Phase1Commit(ctx); err == nil {
-		twoPhase.Rollback(ctx)
+		if err = twoPhase.Rollback(ctx); err != nil {
+			t.Errorf("Rollback error: %v", err)
+		}
 
 		t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
