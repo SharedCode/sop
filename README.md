@@ -22,9 +22,9 @@ SOP can be used in a wide, diverse storage usability scenarios. Ranging from gen
   * C. Streaming Data application domain enabling very large data storage - search and management, supporting multi-GBs record or item, limited only by your storage drive/sub-system. See sop/streaming_data package(in_red_cfs) for code & sample usage in test
   * D. High Performance Search Engine, alternative to ElasticSearch/SOLR but also has attributes of a real database engine, with ACID/two phase commit transactions
 
-Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3 & a DBMS like Postgres for indexing). But SOP supports all three of them out of the box.
+Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3 & a DBMS like Postgres for indexing). But SOP supports all four of them out of the box.
 
-In all of these, ACID transactions, high speed, scaleable searches and management comes built-in. As SOP turned M-Way Trie data structures & algorithms a commodity available in all of its usage scenarios. Horizontally scaleable in the cluster, meaning, there is no single point of failure. SOP offers a decentralized approach in searching & management of your data. It works with optimal efficiency in the cluster. It fully parallelize I/O in the cluster, only needing very lightweight "orchestration" to detect conflict and auto-merging of changes across transactions occuring simultaneously or in time.
+In all of these, ACID transactions, high speed, scaleable searches and management comes built-in. As SOP turned M-Way Trie data structures & algorithms a commodity available in all of its usage scenarios. Horizontally scaleable in the cluster, meaning, there is no single point of failure. SOP offers a decentralized approach in searching & management of your data. It works with optimal efficiency in the cluster. It fully parallelize I/O in the cluster, only needing very lightweight "orchestration"(see new "communication free" OOA algorithm secion below) to detect conflict and auto-merging of changes across transactions occuring simultaneously or in time.
 
 # Best Practices
 Following are the best practices using SOP outlined so you can get a good understanding of best outcome from SOP for your implementation use-cases:
@@ -48,18 +48,19 @@ However, there are rough edges that can be further refined(V3+ timeline), exampl
 
 Today, your code can prevent getting exposed to these edge cases by ensuring the transaction is not accessing huge contents of Btree stores to prevent out of memory conditions. Which is the best practice in general for transactions.
 
-# SOP in Cassandra & Redis
-M-Way Trie data structures & algorithms based Objects persistence, using Cassandra as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the ```Redis Lock API```, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
+# SOP in Redis, Cassandra & File System
+M-Way Trie data structures & algorithms based Objects persistence, using Cassandra for Registry, File System as backend storage of Blobs(see in_red_cfs package) & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the ```Redis Lock API```, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
 
 SOP has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your app. No need to have impedance mismatch.
 
 Requirements:
   * Cassandra
   * Redis
+  * Storage Drive or sub-system for Blobs
   * Golang that supports generics, currently set to 1.21.5 and higher
 
 ## Sample Code
-Below is a sample code, edited for brevity and to show the important parts.
+Below is a sample code, edited for brevity and to show the important parts. **NOTE**: below code shows using Cassandra(in_red_ck package) for storing blobs, but you can replace and use the in_red_cfs package instead, for storing blobs to a storage drive or your backend SAN storage sub-system so Cassandra is not taxed by the blobs management.
 
 ```
 import (
