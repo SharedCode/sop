@@ -20,6 +20,7 @@ SOP can be used in a wide, diverse storage usability scenarios. Ranging from gen
   * A. General purpose data/object storage management system
   * B. Large data storage and management, where your data is stored in its own data segment. See StoreInfo.IsValueDataInNodeSegment = false flag
   * C. Streaming Data application domain enabling very large data storage - search and management, supporting multi-GBs record or item, limited only by your storage drive/sub-system. See sop/streaming_data package(in_red_cfs) for code & sample usage in test
+  * D. High Performance Search Engine, alternative to ElasticSearch/SOLR but also has attributes of a real database engine, with ACID/two phase commit transactions
 
 Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3 & a DBMS like Postgres for indexing). But SOP supports all three of them out of the box.
 
