@@ -9,11 +9,11 @@ type FileIO interface {
 	WriteFile(name string, data []byte, perm os.FileMode) error
 	ReadFile(name string) ([]byte, error)
 	Remove(name string) error
+	Exists(path string) bool
 
 	// Directory API.
 	RemoveAll(path string) error
 	MkdirAll(path string, perm os.FileMode) error
-	DirExists(path string) bool
 }
 
 type DefaultFileIO struct {
@@ -35,7 +35,7 @@ func (dio DefaultFileIO) MkdirAll(path string, perm os.FileMode) error {
 func (dio DefaultFileIO) RemoveAll(path string) error {
 	return os.RemoveAll(path)
 }
-func (dio DefaultFileIO) DirExists(path string) bool {
+func (dio DefaultFileIO) Exists(path string) bool {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		return true
 	}
