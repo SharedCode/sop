@@ -4,6 +4,7 @@ package in_red_cfs
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
@@ -18,6 +19,9 @@ import (
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
+	if si.BlobStoreBaseFolderPath == "" {
+		return nil, fmt.Errorf("si.BlobStoreBaseFolderPath can't be empty string(\"\")")
+	}
 	return in_red_ck.NewBtree[TK, TV](ctx, si, t)
 }
 
@@ -48,6 +52,9 @@ func NewStoreRepository() sop.StoreRepository {
 //
 // Specify your blobStoreBaseFolderPath to an appropriate folder path that will be the base folder of blob files.
 func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string) (*sd.StreamingDataStore[TK], error) {
+	if blobStoreBaseFolderPath == "" {
+		return nil, fmt.Errorf("blobStoreBaseFolderPath can't be empty string(\"\")")
+	}
 	return sd.NewStreamingDataStoreExt[TK](ctx, name, trans, blobStoreBaseFolderPath)
 }
 
