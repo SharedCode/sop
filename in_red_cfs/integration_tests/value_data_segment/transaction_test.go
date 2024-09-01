@@ -61,7 +61,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath: dataPath,
+		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -146,7 +146,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath: dataPath,
+		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -212,7 +212,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath: dataPath,
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 
 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
@@ -236,7 +236,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-				BlobStoreBaseFolderPath: dataPath,
+				BlobStoreBaseFolderPath:  dataPath,
 			}, t1)
 		}
 	}
@@ -268,7 +268,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-				BlobStoreBaseFolderPath: dataPath,
+				BlobStoreBaseFolderPath:  dataPath,
 			}, t1)
 		}
 	}
@@ -288,7 +288,7 @@ func VolumeDeletes(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath: dataPath,
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 
 	// Populating 90,000 items took about few minutes, did not use Kafka based delete service.
@@ -314,7 +314,7 @@ func VolumeDeletes(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-				BlobStoreBaseFolderPath: dataPath,
+				BlobStoreBaseFolderPath:  dataPath,
 			}, t1)
 		}
 	}
@@ -335,7 +335,7 @@ func MixedOperations(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath: dataPath,
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 
 	lastNamePrefix := "zoltan"
@@ -376,7 +376,7 @@ func MixedOperations(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-				BlobStoreBaseFolderPath: dataPath,
+				BlobStoreBaseFolderPath:  dataPath,
 			}, t1)
 		}
 	}
@@ -420,7 +420,7 @@ func MixedOperations(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-				BlobStoreBaseFolderPath: dataPath,
+				BlobStoreBaseFolderPath:  dataPath,
 			}, t1)
 		}
 	}
@@ -437,7 +437,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath: dataPath,
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	originalCount := b3.Count()
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
@@ -475,7 +475,7 @@ func Test_IllegalBtreeStoreName(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath: dataPath,
+		BlobStoreBaseFolderPath:  dataPath,
 	}, t1); err == nil {
 		t.Error("NewBtree('2phase') failed, got nil, want err.")
 	}

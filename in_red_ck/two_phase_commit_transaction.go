@@ -802,7 +802,7 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 	deletedRegistryIDs []sop.RegistryPayload[sop.UUID], unusedNodeIDs []sop.BlobsPayload[sop.UUID]) error {
 	var lastErr error
 	if len(unusedNodeIDs) > 0 {
-		// Delete from Redis the inactive nodes.
+		// Delete from Redis & BlobStore the unused/inactive nodes.
 		deletedKeys := make([]string, sop.GetBlobPayloadCount(unusedNodeIDs))
 		ik := 0
 		for i := range unusedNodeIDs {
@@ -818,8 +818,9 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 		if err := t.blobStore.Remove(ctx, unusedNodeIDs...); err != nil {
 			lastErr = err
 		}
+		// End of block.
 	}
-	// Delete from registry the deleted Registry IDs as well.
+	// Delete from registry the deleted Registry IDs (it manages redis cache internally).
 	if err := t.registry.Remove(ctx, deletedRegistryIDs...); err != nil {
 		lastErr = err
 	}
