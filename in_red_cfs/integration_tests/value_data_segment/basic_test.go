@@ -42,7 +42,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath: dataPath,
+		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)
@@ -74,7 +74,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath: dataPath,
+		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)
