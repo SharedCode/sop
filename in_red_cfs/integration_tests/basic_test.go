@@ -29,6 +29,45 @@ func init() {
 
 var ctx = context.Background()
 
+// Create an empty store on 1st run, add one item(max) on succeeding runs.
+func Test_CreateEmptyStore(t *testing.T) {
+	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	trans.Begin()
+
+	b3, err := in_red_cfs.OpenBtree[int, string](ctx, "emptyStore", trans)
+	if err == nil {
+		if b3.Count() == 0 {
+			if ok, err := b3.Add(ctx, 123, "foobar"); !ok || err != nil {
+				t.Errorf("Failed, w/ error: %v", err)
+				return
+			}
+		}
+		trans.Commit(ctx)
+		return
+	}
+
+	b3, err = in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "emptyStore",
+		SlotLength:               8,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
+	}, trans)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if b3.Count() != 0 {
+		t.Error("b3 not empty, expected Count = 0")
+	}
+	trans.Commit(ctx)
+}
+
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
