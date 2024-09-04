@@ -50,7 +50,8 @@ SOP has all the bits required to be used like a golang map but which, has the fe
 Requirements:
   * Cassandra
   * Redis
-  * Storage Drive or sub-system for Blobs
+  * Storage Drive(s) or sub-system (paths) for Blobs
+  * Read/Write permissions(e.g. - 0777) to the drive(s)/storage path(s)
   * Golang that supports generics, currently set to 1.21.5 and higher
 
 ## Sample Code
