@@ -11,26 +11,30 @@ import (
 	"github.com/SharedCode/sop/redis"
 )
 
-// DateHourLayout format mask string.
-const DateHourLayout = "2006-01-02T15"
+const (
+	// DateHourLayout format mask string.
+	DateHourLayout = "2006-01-02T15"
+
+	// Transaction logging only needs the least consistency level because we only need the logs to aid in cleanup of 
+	// "hanged" transactions, which are rare and have no "cleanup" urgency requirement.
+	//
+	// Transactions are designed to auto cleanup their logs during commit or rollback.
+	transactionLoggingConsistency = gocql.LocalOne
+)
+
+// Now lambda to allow unit test to inject replayable time.Now.
+var Now = time.Now
 
 // NilUUID with gocql.UUID type.
 var NilUUID = gocql.UUID(sop.NilUUID)
-
-// This is a good plan, it will work optimally because we are reading entire transaction logs set
-// then deleting the entire partition when done. Use consistency of LOCAL_ONE when writing logs.
-
-type transactionLog struct {
-	hourLockKey *redis.LockKeys
-}
-
 // Returns true if id is nil or empty UUID, otherwise false.
 func IsNil(id gocql.UUID) bool {
 	return sop.UUID(id).IsNil()
 }
 
-// Now lambda to allow unit test to inject replayable time.Now.
-var Now = time.Now
+type transactionLog struct {
+	hourLockKey *redis.LockKeys
+}
 
 // NewBlobStore instantiates a new BlobStore instance.
 func NewTransactionLog() sop.TransactionLog {
@@ -96,7 +100,7 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 	hrid := gocql.UUIDFromTime(t)
 
 	selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
-	qry := connection.Session.Query(selectStatement, hrid).WithContext(ctx).Consistency(gocql.LocalOne)
+	qry := connection.Session.Query(selectStatement, hrid).WithContext(ctx).Consistency(transactionLoggingConsistency)
 
 	iter := qry.Iter()
 	var tid gocql.UUID
@@ -128,7 +132,7 @@ func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error
 	}
 
 	selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
-	qry := connection.Session.Query(selectStatement, cappedHourTID).WithContext(ctx).Consistency(gocql.LocalOne)
+	qry := connection.Session.Query(selectStatement, cappedHourTID).WithContext(ctx).Consistency(transactionLoggingConsistency)
 
 	iter := qry.Iter()
 	var tid gocql.UUID
@@ -146,7 +150,7 @@ func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([
 	}
 
 	selectStatement := fmt.Sprintf("SELECT c_f, c_f_p FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
-	qry := connection.Session.Query(selectStatement, tid).WithContext(ctx).Consistency(gocql.LocalOne)
+	qry := connection.Session.Query(selectStatement, tid).WithContext(ctx).Consistency(transactionLoggingConsistency)
 
 	iter := qry.Iter()
 	r := make([]sop.KeyValuePair[int, []byte], 0, iter.NumRows())
@@ -171,7 +175,7 @@ func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction 
 	}
 
 	insertStatement := fmt.Sprintf("INSERT INTO %s.t_log (id, c_f, c_f_p) VALUES(?,?,?);", connection.Config.Keyspace)
-	qry := connection.Session.Query(insertStatement, gocql.UUID(tid), commitFunction, payload).WithContext(ctx).Consistency(gocql.LocalOne)
+	qry := connection.Session.Query(insertStatement, gocql.UUID(tid), commitFunction, payload).WithContext(ctx).Consistency(transactionLoggingConsistency)
 	if err := qry.Exec(); err != nil {
 		return err
 	}
@@ -185,7 +189,7 @@ func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 	}
 
 	deleteStatement := fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
-	qry := connection.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(gocql.LocalOne)
+	qry := connection.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(transactionLoggingConsistency)
 	if err := qry.Exec(); err != nil {
 		return err
 	}
