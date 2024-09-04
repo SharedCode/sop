@@ -18,15 +18,15 @@ func NewBucket() sop.KeyValueStore[string, []byte] {
 }
 
 // Fetch bucket entry with a given name.
-func (s3 *s3Bucket)GetOne(ctx context.Context, name string) ([]byte, error) {
-	return nil, nil
-}
-func (s3 *s3Bucket)Add(ctx context.Context, entries ...sop.KeyValuePair[string, []byte]) error {
+func (s3 *s3Bucket)Get(ctx context.Context, names ...string) []sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
 	return nil
 }
-func (s3 *s3Bucket)Update(ctx context.Context, entries ...sop.KeyValuePair[string, []byte]) error {
+func (s3 *s3Bucket)Add(ctx context.Context, entries ...sop.KeyValuePair[string, []byte]) []sop.KeyValueStoreResponse[string] {
 	return nil
 }
-func (s3 *s3Bucket)Remove(ctx context.Context, names ...string) error {
+func (s3 *s3Bucket)Update(ctx context.Context, entries ...sop.KeyValuePair[string, []byte]) []sop.KeyValueStoreResponse[string] {
+	return nil
+}
+func (s3 *s3Bucket)Remove(ctx context.Context, names ...string) []sop.KeyValueStoreResponse[string] {
 	return nil
 }

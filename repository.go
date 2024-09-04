@@ -113,14 +113,20 @@ type Store[TK any, TV any] interface {
 	Remove(context.Context, ...TK) error
 }
 
+// KeyValue Store Response has the payload and the error, if in case an error occurred while doing CRUD operation.
+type KeyValueStoreResponse[T any] struct {
+	Payload T
+	Error error
+}
+
 // KeyValueStore is a general purpose Store interface specifying methods or CRUD operations on Key & Value pair.
 type KeyValueStore[TK any, TV any] interface {
-	// Fetch entry with a given name.
-	GetOne(context.Context, TK) (TV, error)
+	// Fetch entry(ies) with given name(s).
+	Get(context.Context, ...TK) []KeyValueStoreResponse[KeyValuePair[TK, TV]]
 	// Add entry(ies) to the store.
-	Add(context.Context, ...KeyValuePair[TK, TV]) error
+	Add(context.Context, ...KeyValuePair[TK, TV]) []KeyValueStoreResponse[TK]
 	// Update entry(ies) of the store.
-	Update(context.Context, ...KeyValuePair[TK, TV]) error
+	Update(context.Context, ...KeyValuePair[TK, TV]) []KeyValueStoreResponse[TK]
 	// Remove entry(ies) from the store given their names.
-	Remove(context.Context, ...TK) error
+	Remove(context.Context, ...TK) []KeyValueStoreResponse[TK]
 }
