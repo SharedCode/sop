@@ -120,6 +120,7 @@ type KeyValueStoreResponse[T any] struct {
 }
 
 // KeyValueStore is a general purpose Store interface specifying methods or CRUD operations on Key & Value pair.
+// Implementations don't need to be too fancy, it can be as simple as supporting partial success.
 type KeyValueStore[TK any, TV any] interface {
 	// Fetch entry(ies) with given name(s).
 	Get(context.Context, ...TK) []KeyValueStoreResponse[KeyValuePair[TK, TV]]
