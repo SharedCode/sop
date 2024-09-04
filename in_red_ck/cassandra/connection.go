@@ -41,6 +41,9 @@ type ConsistencyBook struct {
 	StoreUpdate     gocql.Consistency
 	StoreGet        gocql.Consistency
 	StoreRemove     gocql.Consistency
+
+	// Blob Store Consistency configs are only used if Blob Store backend is Cassandra,
+	// not used in others like File System.
 	BlobStoreAdd    gocql.Consistency
 	BlobStoreGet    gocql.Consistency
 	BlobStoreUpdate gocql.Consistency

@@ -34,15 +34,7 @@ type Registry interface {
 
 // StoreRepository interface specifies the store repository.
 type StoreRepository interface {
-	// Fetch store info with name.
-	Get(context.Context, ...string) ([]StoreInfo, error)
-	// Add store info & create related tables like for registry & for node blob.
-	Add(context.Context, ...StoreInfo) error
-	// Update store info. Update should also merge the Count of items between the incoming store info
-	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
-	Update(context.Context, ...StoreInfo) error
-	// Remove store info with name & drop related tables like for registry & for node blob.
-	Remove(context.Context, ...string) error
+	Store[string, StoreInfo]
 }
 
 // ManageBlobStore specifies the methods used to manage the Blob Store table(if in Cassandra) or folder path(if in File System).
@@ -105,4 +97,30 @@ type TransactionLog interface {
 	// Given a date hour, returns an available for cleanup set of transaction logs with their Transaction ID.
 	// Or nils if there is no more needing cleanup for this date hour.
 	GetLogsDetails(ctx context.Context, hour string) (UUID, []KeyValuePair[int, []byte], error)
+}
+
+// Store is a general purpose Store interface specifying methods or CRUD operations on Key & Value
+// where Value is implied to be superset of Key.
+type Store[TK any, TV any] interface {
+	// Fetch store info with name.
+	Get(context.Context, ...TK) ([]TV, error)
+	// Add store info & create related tables like for registry & for node blob.
+	Add(context.Context, ...TV) error
+	// Update store info. Update should also merge the Count of items between the incoming store info
+	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
+	Update(context.Context, ...TV) error
+	// Remove store info with name & drop related tables like for registry & for node blob.
+	Remove(context.Context, ...TK) error
+}
+
+// KeyValueStore is a general purpose Store interface specifying methods or CRUD operations on Key & Value pair.
+type KeyValueStore[TK any, TV any] interface {
+	// Fetch entry with a given name.
+	GetOne(context.Context, TK) (TV, error)
+	// Add entry(ies) to the store.
+	Add(context.Context, ...KeyValuePair[TK, TV]) error
+	// Update entry(ies) of the store.
+	Update(context.Context, ...KeyValuePair[TK, TV]) error
+	// Remove entry(ies) from the store given their names.
+	Remove(context.Context, ...TK) error
 }
