@@ -123,7 +123,11 @@ type KeyValueStoreResponse[T any] struct {
 // Implementations don't need to be too fancy, it can be as simple as supporting partial success.
 type KeyValueStore[TK any, TV any] interface {
 	// Fetch entry(ies) with given name(s).
-	Get(context.Context, ...TK) []KeyValueStoreResponse[KeyValuePair[TK, TV]]
+	// Fetch term is used here because this CRUD interface is NOT part of the B-Tree system, thus, the context is
+	// to "fetch" from the remote data storage sub-system like AWS S3.
+	Fetch(context.Context, ...TK) []KeyValueStoreResponse[KeyValuePair[TK, TV]]
+	// Fetch entry(ies) with given name(s).
+	FetchLargeObject(context.Context, TK) (TV, error)
 	// Add entry(ies) to the store.
 	Add(context.Context, ...KeyValuePair[TK, TV]) []KeyValueStoreResponse[TK]
 	// Update entry(ies) of the store.
