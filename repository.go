@@ -122,11 +122,11 @@ type KeyValueStoreResponse[T any] struct {
 // KeyValueStore is a general purpose Store interface specifying methods or CRUD operations on Key & Value pair.
 // Implementations don't need to be too fancy, it can be as simple as supporting partial success.
 type KeyValueStore[TK any, TV any] interface {
-	// Fetch entry(ies) with given name(s).
+	// Fetch entry(ies) with given key(s).
 	// Fetch term is used here because this CRUD interface is NOT part of the B-Tree system, thus, the context is
 	// to "fetch" from the remote data storage sub-system like AWS S3.
 	Fetch(context.Context, ...TK) []KeyValueStoreResponse[KeyValuePair[TK, TV]]
-	// Fetch a large entry with the given name.
+	// Fetch a large entry with the given key.
 	FetchLargeObject(context.Context, TK) (TV, error)
 	// Add entry(ies) to the store.
 	Add(context.Context, ...KeyValuePair[TK, TV]) []KeyValueStoreResponse[KeyValuePair[TK, TV]]

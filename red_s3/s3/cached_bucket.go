@@ -72,6 +72,16 @@ func NewCachedBucketExt(ctx context.Context, bucketName string, refreshInterval 
 // Fetch term is used here because this CRUD interface is NOT part of the B-Tree system, thus, the context is
 // to "fetch" from the remote data storage sub-system like AWS S3.
 func (b *cachedBucket)Fetch(ctx context.Context, names ...string) []sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
+	return b.fetch(ctx, false, names...)
+}
+
+// Fetch a large entry with the given name.
+func (b *cachedBucket)FetchLargeObject(ctx context.Context, name string) ([]byte, error) {
+	r := b.fetch(ctx, true, name)
+	return r[0].Payload.Value, r[0].Error
+}
+
+func (b *cachedBucket)fetch(ctx context.Context, isLargeObjects bool, names ...string) []sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
 	r := make([]sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]], len(names))
 	now := Now()
 	for i := range names {
@@ -128,64 +138,13 @@ func (b *cachedBucket)Fetch(ctx context.Context, names ...string) []sop.KeyValue
 			continue
 		}
 		// Different or unknown ETag, refetch and recache.
-		r[i] = b.fetchAndCache(ctx, names[i], now, false)
+		r[i] = b.fetchAndCache(ctx, names[i], now, isLargeObjects)
 		if r[i].Error != nil {
 			b.redisCache.Delete(ctx, b.formatKey(names[i]))
 		}
 	}
 
 	return r
-}
-
-// Fetch a large entry with the given name. NOTE: no caching, straight fetch from S3.
-func (b *cachedBucket)FetchLargeObject(ctx context.Context, name string) ([]byte, error) {
-	var t cacheObject
-	now := Now()
-	err := b.redisCache.GetStruct(ctx, b.formatKey(name), &t)
-	if redis.KeyNotFound(err) || err != nil{
-		r := b.fetchAndCache(ctx, name, now, true)
-		if r.Error != nil {
-			if !redis.KeyNotFound(err) {
-				b.redisCache.Delete(ctx, b.formatKey(name))
-			}
-		}
-		return r.Payload.Value, r.Error
-	}
-	// Package for return the cache copy since it is not time to refetch.
-	if now.Sub(t.LastRefreshTime) <= b.refreshInterval {
-		return t.Object.Data, nil
-	}
-	// Read object's ETag from S3 bucket.
-	result, err := b.bucketStore.S3Client.GetObjectAttributes(ctx, &s3.GetObjectAttributesInput{
-		Bucket: aws.String(b.bucketStore.bucketName),
-		Key:    aws.String(name),
-		ObjectAttributes: []types.ObjectAttributes{
-			types.ObjectAttributesEtag,
-		},
-	})
-	etag := ""
-	if err == nil {
-		etag = *result.ETag
-	}
-	// On error, etag will be set to empty thus, causing a refetch.
-
-	// If object's ETag is same then not time yet to refetch.
-	if etag == t.Object.ETag {
-		// Update cache's last refresh time.
-		cd := cacheObject{
-			Object: t.Object,
-			LastRefreshTime: now,
-		}
-		b.redisCache.SetStruct(ctx, b.formatKey(name), cd, b.cacheExpiry)
-
-		return t.Object.Data, nil
-	}
-	// Different ETag, refetch and recache.	
-	r := b.fetchAndCache(ctx, name, now, true)
-	if r.Error != nil {
-		b.redisCache.Delete(ctx, b.formatKey(name))
-	}
-	return r.Payload.Value, r.Error
 }
 
 func (b *cachedBucket)fetchAndCache(ctx context.Context, name string, now time.Time, isLargeObject bool) sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
