@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -20,15 +19,20 @@ const largeObjectMinSize = 10 * 1024 * 1024
 
 type s3Bucket struct {
 	bucketName string
-	s3Client *s3.Client
+	S3Client *s3.Client
 }
 
 type s3Object struct {
 	Data []byte
-	LastModified * time.Time
+	ETag string
 }
 
-func NewBucket(ctx context.Context, bucketName string) (sop.KeyValueStore[string, s3Object], error) {
+func NewBucket(ctx context.Context, bucketName string) (sop.KeyValueStore[string, *s3Object], error) {
+	b, err := newBucket(ctx, bucketName)
+	return b, err
+}
+
+func newBucket(ctx context.Context, bucketName string) (*s3Bucket, error) {
 	// AWS S3 SDK should be installed, configured in the host machine this code will be ran.
 	sdkConfig, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -39,13 +43,13 @@ func NewBucket(ctx context.Context, bucketName string) (sop.KeyValueStore[string
 	s3Client := s3.NewFromConfig(sdkConfig)
 	return &s3Bucket{
 		bucketName: bucketName,
-		s3Client: s3Client,
+		S3Client: s3Client,
 	}, nil
 }
 
 // Fetch bucket entry with a given name.
-func (b *s3Bucket)FetchLargeObject(ctx context.Context, name string) (s3Object, error) {
-	downloader := manager.NewDownloader(b.s3Client, func(d *manager.Downloader) {
+func (b *s3Bucket)FetchLargeObject(ctx context.Context, name string) (*s3Object, error) {
+	downloader := manager.NewDownloader(b.S3Client, func(d *manager.Downloader) {
 		d.PartSize = largeObjectMinSize
 	})
 	buffer := manager.NewWriteAtBuffer([]byte{})
@@ -54,24 +58,24 @@ func (b *s3Bucket)FetchLargeObject(ctx context.Context, name string) (s3Object, 
 		Key:    aws.String(name),
 	})
 	if err != nil {
-		return s3Object{}, err
+		return nil, err
 	}
-	return s3Object{
+	return &s3Object{
 		Data: buffer.Bytes(),
 	}, nil
 }
 
 // Fetch bucket entry with a given name.
-func (b *s3Bucket)Fetch(ctx context.Context, names ...string) []sop.KeyValueStoreResponse[sop.KeyValuePair[string, s3Object]] {
-	r := make([]sop.KeyValueStoreResponse[sop.KeyValuePair[string, s3Object]], len(names))
+func (b *s3Bucket)Fetch(ctx context.Context, names ...string) []sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]] {
+	r := make([]sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]], len(names))
 	for i, name := range names {
-		result, err := b.s3Client.GetObject(context.TODO(), &s3.GetObjectInput{
+		result, err := b.S3Client.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(b.bucketName),
 			Key:    aws.String(name),
 		})
 		if err != nil {
-			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, s3Object]] {
-				Payload: sop.KeyValuePair[string, s3Object]{
+			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]] {
+				Payload: sop.KeyValuePair[string, *s3Object]{
 					Key: name,
 				},
 				Error: err,
@@ -80,8 +84,8 @@ func (b *s3Bucket)Fetch(ctx context.Context, names ...string) []sop.KeyValueStor
 		}
 		body, err := io.ReadAll(result.Body)
 		if err != nil {
-			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, s3Object]] {
-				Payload: sop.KeyValuePair[string, s3Object]{
+			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]] {
+				Payload: sop.KeyValuePair[string, *s3Object]{
 					Key: name,
 				},
 				Error: err,
@@ -89,12 +93,12 @@ func (b *s3Bucket)Fetch(ctx context.Context, names ...string) []sop.KeyValueStor
 			continue
 		}
 		// Package the returned object's data and attribute(s).
-		r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, s3Object]] {
-			Payload: sop.KeyValuePair[string, s3Object]{
+		r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]] {
+			Payload: sop.KeyValuePair[string, *s3Object]{
 				Key: name,
-				Value: s3Object{
+				Value: &s3Object{
 					Data: body,
-					LastModified: result.LastModified,
+					ETag: *result.ETag,
 				},
 			},
 		}
@@ -103,14 +107,14 @@ func (b *s3Bucket)Fetch(ctx context.Context, names ...string) []sop.KeyValueStor
 
 	return r
 }
-func (b *s3Bucket)Add(ctx context.Context, entries ...sop.KeyValuePair[string, s3Object]) []sop.KeyValueStoreResponse[string] {
-	r := make([]sop.KeyValueStoreResponse[string], len(entries))
-	allSucceeded := true
+
+func (b *s3Bucket)Add(ctx context.Context, entries ...sop.KeyValuePair[string, *s3Object]) []sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]] {
+	r := make([]sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]], len(entries))
 	for i, entry := range entries {
 		// Upload the large object.
 		if isLargeObject(entry.Value.Data) {
 			largeBuffer := bytes.NewReader(entry.Value.Data)
-			uploader := manager.NewUploader(b.s3Client, func(u *manager.Uploader) {
+			uploader := manager.NewUploader(b.S3Client, func(u *manager.Uploader) {
 				u.PartSize = largeObjectMinSize
 			})
 			_, err := uploader.Upload(ctx, &s3.PutObjectInput{
@@ -119,36 +123,41 @@ func (b *s3Bucket)Add(ctx context.Context, entries ...sop.KeyValuePair[string, s
 				Body:   largeBuffer,
 			})
 			if err != nil {
-				allSucceeded = false
-				r[i] = sop.KeyValueStoreResponse[string] {
-					Payload: entry.Key,
+				r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]] {
+					Payload: sop.KeyValuePair[string,*s3Object]{Key: entry.Key},
 					Error: err,
 				}
 			}
 			continue
 		}
 		// Upload the (not large) object.
-		_, err := b.s3Client.PutObject(ctx, &s3.PutObjectInput{
+		res, err := b.S3Client.PutObject(ctx, &s3.PutObjectInput{
 			Bucket: aws.String(b.bucketName),
 			Key:    aws.String(entry.Key),
 			Body:   bytes.NewReader(entry.Value.Data),
 		})
 		if err != nil {
-			r[i] = sop.KeyValueStoreResponse[string] {
-				Payload: entry.Key,
+			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]] {
+				Payload: sop.KeyValuePair[string, *s3Object]{
+					Key: entry.Key,
+				},
 				Error: err,
 			}
-			allSucceeded = false
 			continue
 		}
-	}
-	if allSucceeded {
-		return nil
+		// Include the ETag on the item "PutObject" result (for return).
+		entry.Value.ETag = *res.ETag
+		r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]] {
+			Payload: sop.KeyValuePair[string, *s3Object]{
+				Key: entry.Key,
+				Value: entry.Value,
+			},
+		}
 	}
 	return r
 }
 
-func (b *s3Bucket)Update(ctx context.Context, entries ...sop.KeyValuePair[string, s3Object]) []sop.KeyValueStoreResponse[string] {
+func (b *s3Bucket)Update(ctx context.Context, entries ...sop.KeyValuePair[string, *s3Object]) []sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]] {
 	return b.Add(ctx, entries...)
 }
 
@@ -157,7 +166,7 @@ func (b *s3Bucket)Remove(ctx context.Context, names ...string) []sop.KeyValueSto
 	for _, key := range names {
 		objectIds = append(objectIds, types.ObjectIdentifier{Key: aws.String(key)})
 	}
-	output, _ := b.s3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+	output, _ := b.S3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 		Bucket: aws.String(b.bucketName),
 		Delete: &types.Delete{Objects: objectIds},
 	})

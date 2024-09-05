@@ -129,9 +129,9 @@ type KeyValueStore[TK any, TV any] interface {
 	// Fetch a large entry with the given name.
 	FetchLargeObject(context.Context, TK) (TV, error)
 	// Add entry(ies) to the store.
-	Add(context.Context, ...KeyValuePair[TK, TV]) []KeyValueStoreResponse[TK]
+	Add(context.Context, ...KeyValuePair[TK, TV]) []KeyValueStoreResponse[KeyValuePair[TK, TV]]
 	// Update entry(ies) of the store.
-	Update(context.Context, ...KeyValuePair[TK, TV]) []KeyValueStoreResponse[TK]
+	Update(context.Context, ...KeyValuePair[TK, TV]) []KeyValueStoreResponse[KeyValuePair[TK, TV]]
 	// Remove entry(ies) from the store given their names.
 	Remove(context.Context, ...TK) []KeyValueStoreResponse[TK]
 }
