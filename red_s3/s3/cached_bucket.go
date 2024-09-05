@@ -17,6 +17,8 @@ type cachedBucket struct {
 	redisCache redis.Cache
 	bucketStore *s3Bucket
 	refreshInterval time.Duration
+	cacheExpiry time.Duration
+	maxCacheableSize int
 }
 
 type cacheObject struct {
@@ -27,21 +29,42 @@ type cacheObject struct {
 // Now returns the current time and can be "synthesized" if needed.
 var Now = time.Now
 
-// NewCacheBucket returns a KeyValueStore that adds caching on top of the AWS S3 bucket "store".
-func NewCachedBucket(ctx context.Context, bucketName string, refreshInterval time.Duration) (sop.KeyValueStore[string, []byte], error) {
+// NewCacheBucket is synonymous to NewCacheBucketExt but sets to use default values for the extended parameters.
+func NewCachedBucket(ctx context.Context, bucketName string) (sop.KeyValueStore[string, []byte], error) {
+	return NewCachedBucketExt(ctx, bucketName, -1, -1, 0)
+}
+
+// NewCacheBucketExt returns a KeyValueStore that adds caching on top of the AWS S3 bucket "store".
+// Keep the bucketName short & set refreshInterval to decent period like ever 5mins "etag" check
+// and cacheExpiry to longer time(5 hrs?) or no expiry(0). maxCacheableSize defaults to 500MB.
+func NewCachedBucketExt(ctx context.Context, bucketName string, refreshInterval time.Duration, cacheExpiry time.Duration, maxCacheableSize int) (sop.KeyValueStore[string, []byte], error) {
+	if bucketName == "" {
+		return nil, fmt.Errorf("can't use empty string bucketName")
+	}
 	bs, err := newBucket(ctx, bucketName)
 	if err != nil {
 		return nil, err
 	}
 	// Minimum refresh interval is 5 seconds, if less then assign 5 minute refresh interval.
-	if refreshInterval > 0 && refreshInterval < time.Duration(5*time.Second) {
+	if refreshInterval < 0 || (refreshInterval > 0 && refreshInterval < time.Duration(5*time.Second)) {
 		refreshInterval = time.Duration(5*time.Minute)
+	}
+	// Defaults to 2hr cache expiry.
+	if cacheExpiry < 0 || (cacheExpiry > 0 && cacheExpiry < time.Duration(1*time.Minute)) {
+		cacheExpiry = time.Duration(2*time.Hour)
+	}
+
+	// Defaults cacheable size to 500MB.
+	if maxCacheableSize <= 0 {
+		maxCacheableSize = 500 * 1024 * 1024
 	}
 
 	return &cachedBucket{
 		redisCache: redis.NewClient(),
 		bucketStore: bs,
 		refreshInterval: refreshInterval,
+		cacheExpiry: cacheExpiry,
+		maxCacheableSize: maxCacheableSize,
 	}, nil
 }
 
@@ -53,12 +76,12 @@ func (b *cachedBucket)Fetch(ctx context.Context, names ...string) []sop.KeyValue
 	now := Now()
 	for i := range names {
 		var t cacheObject
-		err := b.redisCache.GetStruct(ctx, formatKey(names[i]), &t)
+		err := b.redisCache.GetStruct(ctx, b.formatKey(names[i]), &t)
 		if redis.KeyNotFound(err) || err != nil{
 			r[i] = b.fetchAndCache(ctx, names[i], now, false)
 			if r[i].Error != nil {
 				if !redis.KeyNotFound(err) {
-					b.redisCache.Delete(ctx, formatKey(names[i]))
+					b.redisCache.Delete(ctx, b.formatKey(names[i]))
 				}
 			}
 			continue
@@ -81,25 +104,20 @@ func (b *cachedBucket)Fetch(ctx context.Context, names ...string) []sop.KeyValue
 				types.ObjectAttributesEtag,
 			},
 		})
-		if err != nil {
-			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
-				Payload: sop.KeyValuePair[string, []byte]{
-					Key: names[i],
-				},
-				Error: err,
-			}
-			// Remove from Redis if S3 reported can't get Object attributes from the bucket.
-			b.redisCache.Delete(ctx, formatKey(names[i]))
-			continue
+		etag := ""
+		if err == nil {
+			etag = *result.ETag
 		}
+		// On error, etag will be set to empty thus, causing a refetch.
+
 		// If object's ETag is same then not time yet to refetch.
-		if *result.ETag == t.Object.ETag {
+		if etag == t.Object.ETag {
 			// Update cache's last refresh time.
 			cd := cacheObject{
 				Object: t.Object,
 				LastRefreshTime: now,
 			}
-			b.redisCache.SetStruct(ctx, formatKey(names[i]), cd, 0)
+			b.redisCache.SetStruct(ctx, b.formatKey(names[i]), cd, b.cacheExpiry)
 
 			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
 				Payload: sop.KeyValuePair[string, []byte]{
@@ -109,10 +127,10 @@ func (b *cachedBucket)Fetch(ctx context.Context, names ...string) []sop.KeyValue
 			}
 			continue
 		}
-		// Different ETag, refetch and recache.	
+		// Different or unknown ETag, refetch and recache.
 		r[i] = b.fetchAndCache(ctx, names[i], now, false)
 		if r[i].Error != nil {
-			b.redisCache.Delete(ctx, formatKey(names[i]))
+			b.redisCache.Delete(ctx, b.formatKey(names[i]))
 		}
 	}
 
@@ -123,12 +141,12 @@ func (b *cachedBucket)Fetch(ctx context.Context, names ...string) []sop.KeyValue
 func (b *cachedBucket)FetchLargeObject(ctx context.Context, name string) ([]byte, error) {
 	var t cacheObject
 	now := Now()
-	err := b.redisCache.GetStruct(ctx, formatKey(name), &t)
+	err := b.redisCache.GetStruct(ctx, b.formatKey(name), &t)
 	if redis.KeyNotFound(err) || err != nil{
 		r := b.fetchAndCache(ctx, name, now, true)
 		if r.Error != nil {
 			if !redis.KeyNotFound(err) {
-				b.redisCache.Delete(ctx, formatKey(name))
+				b.redisCache.Delete(ctx, b.formatKey(name))
 			}
 		}
 		return r.Payload.Value, r.Error
@@ -145,26 +163,27 @@ func (b *cachedBucket)FetchLargeObject(ctx context.Context, name string) ([]byte
 			types.ObjectAttributesEtag,
 		},
 	})
-	if err != nil {
-		// Remove from Redis if S3 reported can't get Object attributes from the bucket.
-		b.redisCache.Delete(ctx, formatKey(name))
-		return nil, err
+	etag := ""
+	if err == nil {
+		etag = *result.ETag
 	}
+	// On error, etag will be set to empty thus, causing a refetch.
+
 	// If object's ETag is same then not time yet to refetch.
-	if *result.ETag == t.Object.ETag {
+	if etag == t.Object.ETag {
 		// Update cache's last refresh time.
 		cd := cacheObject{
 			Object: t.Object,
 			LastRefreshTime: now,
 		}
-		b.redisCache.SetStruct(ctx, formatKey(name), cd, 0)
+		b.redisCache.SetStruct(ctx, b.formatKey(name), cd, b.cacheExpiry)
 
 		return t.Object.Data, nil
 	}
 	// Different ETag, refetch and recache.	
 	r := b.fetchAndCache(ctx, name, now, true)
 	if r.Error != nil {
-		b.redisCache.Delete(ctx, formatKey(name))
+		b.redisCache.Delete(ctx, b.formatKey(name))
 	}
 	return r.Payload.Value, r.Error
 }
@@ -193,13 +212,13 @@ func (b *cachedBucket)fetchAndCache(ctx context.Context, name string, now time.T
 			Error: res.Error,
 		}
 	}
-	if isCacheableSize(res.Payload.Value.Data) {
+	if b.isCacheableSize(res.Payload.Value.Data) {
 		// Cache to Redis if not a large object.
 		cd := cacheObject{
 			Object: res.Payload.Value,
 			LastRefreshTime: now,
 		}
-		b.redisCache.SetStruct(ctx, formatKey(name), cd, 0)
+		b.redisCache.SetStruct(ctx, b.formatKey(name), cd, b.cacheExpiry)
 	}
 	// Package to return the newly fetched object.
 	return sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
@@ -228,13 +247,13 @@ func (b *cachedBucket)Add(ctx context.Context, entries ...sop.KeyValuePair[strin
 
 		// Encache if there is no error.
 		if res[0].Error == nil {
-			if isCacheableSize(entries[i].Value) {
+			if b.isCacheableSize(entries[i].Value) {
 				// Cache to Redis if not a large object.
 				cd := cacheObject{
 					Object: res[0].Payload.Value,
 					LastRefreshTime: now,
 				}
-				b.redisCache.SetStruct(ctx, formatKey(entries[i].Key), cd, 0)
+				b.redisCache.SetStruct(ctx, b.formatKey(entries[i].Key), cd, b.cacheExpiry)
 			}
 		}
 	}
@@ -249,7 +268,7 @@ func (b *cachedBucket)Update(ctx context.Context, entries ...sop.KeyValuePair[st
 func (b *cachedBucket)Remove(ctx context.Context, names ...string) []sop.KeyValueStoreResponse[string] {
 	keys := make([]string, len(names))
 	for i, name := range names {
-		keys[i] = formatKey(name)
+		keys[i] = b.formatKey(name)
 	}
 	// Remove from cache.
 	b.redisCache.Delete(ctx, keys...)
@@ -257,11 +276,11 @@ func (b *cachedBucket)Remove(ctx context.Context, names ...string) []sop.KeyValu
 	return b.bucketStore.Remove(ctx, names...)
 }
 
-func formatKey(key string) string {
-	return fmt.Sprintf("AWSS3%s", key)
+func (b *cachedBucket)formatKey(key string) string {
+	return fmt.Sprintf("s3%s%s", b.bucketStore.bucketName, key)
 }
 
 // Cacheable size is < 500 MB.
-func isCacheableSize(data []byte) bool {
-	return len(data) <= 500 * 1024 * 1024
+func (b *cachedBucket)isCacheableSize(data []byte) bool {
+	return len(data) <= b.maxCacheableSize
 }
