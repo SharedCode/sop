@@ -27,6 +27,7 @@ type cacheObject struct {
 // Now returns the current time and can be "synthesized" if needed.
 var Now = time.Now
 
+// NewCacheBucket returns a KeyValueStore that adds caching on top of the AWS S3 bucket "store".
 func NewCachedBucket(ctx context.Context, bucketName string, refreshInterval time.Duration) (sop.KeyValueStore[string, []byte], error) {
 	bs, err := newBucket(ctx, bucketName)
 	if err != nil {
@@ -52,43 +53,18 @@ func (b *cachedBucket)Fetch(ctx context.Context, names ...string) []sop.KeyValue
 	now := Now()
 	for i := range names {
 		var t cacheObject
-
 		err := b.redisCache.GetStruct(ctx, formatKey(names[i]), &t)
 		if redis.KeyNotFound(err) || err != nil{
-			// Refetch, recache if not large and package for return.
-			res := b.bucketStore.Fetch(ctx, names[i])
-			if res[0].Error != nil {
-				r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
-					Payload: sop.KeyValuePair[string, []byte]{
-						Key: names[i],
-					},
-					Error: res[0].Error,
-				}
+			r[i] = b.fetchAndCache(ctx, names[i], now, false)
+			if r[i].Error != nil {
 				if !redis.KeyNotFound(err) {
 					b.redisCache.Delete(ctx, formatKey(names[i]))
 				}
-				continue
-			}
-			if !isLargeObject(res[0].Payload.Value.Data) {
-				// Cache to Redis if not a large object.
-				cd := cacheObject{
-					Object: res[0].Payload.Value,
-					LastRefreshTime: now,
-				}
-				b.redisCache.SetStruct(ctx, formatKey(names[i]), cd, 0)
-			}
-			// Package to return the newly fetched object.
-			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
-				Payload: sop.KeyValuePair[string, []byte]{
-					Key: names[i],
-					Value: res[0].Payload.Value.Data,
-				},
 			}
 			continue
 		}
 		// Package for return the cache copy since it is not time to refetch.
 		if now.Sub(t.LastRefreshTime) <= b.refreshInterval {
-			// Package to return the cached copy since it has not been changed.
 			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
 				Payload: sop.KeyValuePair[string, []byte]{
 					Key: names[i],
@@ -116,9 +92,8 @@ func (b *cachedBucket)Fetch(ctx context.Context, names ...string) []sop.KeyValue
 			b.redisCache.Delete(ctx, formatKey(names[i]))
 			continue
 		}
-		// If object's ETag is different then refetch it & update cache.
+		// If object's ETag is same then not time yet to refetch.
 		if *result.ETag == t.Object.ETag {
-			// Package to return the cached copy since it has not been changed.
 			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
 				Payload: sop.KeyValuePair[string, []byte]{
 					Key: names[i],
@@ -127,32 +102,10 @@ func (b *cachedBucket)Fetch(ctx context.Context, names ...string) []sop.KeyValue
 			}
 			continue
 		}
-		// Object had changed, refetch, recache if not large and package for return.
-		res := b.bucketStore.Fetch(ctx, names[i])
-		if res[0].Error != nil {
-			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
-				Payload: sop.KeyValuePair[string, []byte]{
-					Key: names[i],
-				},
-				Error: res[0].Error,
-			}
+		// Different ETag, refetch and recache.	
+		r[i] = b.fetchAndCache(ctx, names[i], now, false)
+		if r[i].Error != nil {
 			b.redisCache.Delete(ctx, formatKey(names[i]))
-			continue
-		}
-		if !isLargeObject(res[0].Payload.Value.Data) {
-			// Cache to Redis if not a large object.
-			cd := cacheObject{
-				Object: res[0].Payload.Value,
-				LastRefreshTime: now,
-			}
-			b.redisCache.SetStruct(ctx, formatKey(names[i]), cd, 0)
-		}
-		// Package to return the newly fetched object.
-		r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
-			Payload: sop.KeyValuePair[string, []byte]{
-				Key: names[i],
-				Value: res[0].Payload.Value.Data,
-			},
 		}
 	}
 
@@ -161,8 +114,86 @@ func (b *cachedBucket)Fetch(ctx context.Context, names ...string) []sop.KeyValue
 
 // Fetch a large entry with the given name. NOTE: no caching, straight fetch from S3.
 func (b *cachedBucket)FetchLargeObject(ctx context.Context, name string) ([]byte, error) {
-	r, err := b.bucketStore.FetchLargeObject(ctx, name)
-	return r.Data, err
+	var t cacheObject
+	now := Now()
+	err := b.redisCache.GetStruct(ctx, formatKey(name), &t)
+	if redis.KeyNotFound(err) || err != nil{
+		r := b.fetchAndCache(ctx, name, now, true)
+		if r.Error != nil {
+			if !redis.KeyNotFound(err) {
+				b.redisCache.Delete(ctx, formatKey(name))
+			}
+		}
+		return r.Payload.Value, r.Error
+	}
+	// Package for return the cache copy since it is not time to refetch.
+	if now.Sub(t.LastRefreshTime) <= b.refreshInterval {
+		return t.Object.Data, nil
+	}
+	// Read object's ETag from S3 bucket.
+	result, err := b.bucketStore.S3Client.GetObjectAttributes(ctx, &s3.GetObjectAttributesInput{
+		Bucket: aws.String(b.bucketStore.bucketName),
+		Key:    aws.String(name),
+		ObjectAttributes: []types.ObjectAttributes{
+			types.ObjectAttributesEtag,
+		},
+	})
+	if err != nil {
+		// Remove from Redis if S3 reported can't get Object attributes from the bucket.
+		b.redisCache.Delete(ctx, formatKey(name))
+		return nil, err
+	}
+	// If object's ETag is same then not time yet to refetch.
+	if *result.ETag == t.Object.ETag {
+		return t.Object.Data, nil
+	}
+	// Different ETag, refetch and recache.	
+	r := b.fetchAndCache(ctx, name, now, true)
+	if r.Error != nil {
+		b.redisCache.Delete(ctx, formatKey(name))
+	}
+	return r.Payload.Value, r.Error
+}
+
+func (b *cachedBucket)fetchAndCache(ctx context.Context, name string, now time.Time, isLargeObject bool) sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
+	// Refetch, recache if not large and package for return.
+	var res sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]]
+	if !isLargeObject {
+		r := b.bucketStore.Fetch(ctx, name)
+		res = r[0]
+	} else {
+		r, err := b.bucketStore.FetchLargeObject(ctx, name)
+		res = sop.KeyValueStoreResponse[sop.KeyValuePair[string, *s3Object]] {
+			Payload: sop.KeyValuePair[string, *s3Object]{
+				Key: name,
+				Value: r,
+			},
+			Error: err,
+		}
+	}
+	if res.Error != nil {
+		return sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
+			Payload: sop.KeyValuePair[string, []byte]{
+				Key: name,
+			},
+			Error: res.Error,
+		}
+	}
+	if isCacheableSize(res.Payload.Value.Data) {
+		// Cache to Redis if not a large object.
+		cd := cacheObject{
+			Object: res.Payload.Value,
+			LastRefreshTime: now,
+		}
+		b.redisCache.SetStruct(ctx, formatKey(name), cd, 0)
+	}
+	// Package to return the newly fetched object.
+	return sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
+		Payload: sop.KeyValuePair[string, []byte]{
+			Key: name,
+			Value: res.Payload.Value.Data,
+		},
+	}
 }
 
 func (b *cachedBucket)Add(ctx context.Context, entries ...sop.KeyValuePair[string, []byte]) []sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
@@ -183,7 +214,7 @@ func (b *cachedBucket)Add(ctx context.Context, entries ...sop.KeyValuePair[strin
 
 		// Encache if there is no error.
 		if res[0].Error == nil {
-			if !isLargeObject(entries[i].Value) {
+			if isCacheableSize(entries[i].Value) {
 				// Cache to Redis if not a large object.
 				cd := cacheObject{
 					Object: res[0].Payload.Value,
@@ -214,4 +245,9 @@ func (b *cachedBucket)Remove(ctx context.Context, names ...string) []sop.KeyValu
 
 func formatKey(key string) string {
 	return fmt.Sprintf("AWSS3%s", key)
+}
+
+// Cacheable size is < 500 MB.
+func isCacheableSize(data []byte) bool {
+	return len(data) <= 500 * 1024 * 1024
 }

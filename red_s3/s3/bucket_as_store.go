@@ -1,3 +1,4 @@
+// Package contains general store implementations for AWS S3 bueckt I/O.
 package s3
 
 import (
