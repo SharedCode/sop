@@ -1,4 +1,4 @@
-package s3
+package in_red_s3
 
 import (
 	"context"
