@@ -113,9 +113,16 @@ type Store[TK any, TV any] interface {
 	Remove(context.Context, ...TK) error
 }
 
-// KeyValue Store Response has the payload and the error, if in case an error occurred while doing CRUD operation.
-type KeyValueStoreResponse[T any] struct {
+// KeyValue Store Item Action Response has the payload and the error, if in case an error occurred while doing CRUD operation.
+type KeyValueStoreItemActionResponse[T any] struct {
 	Payload T
+	Error error
+}
+// KeyValue Store Overall Response has a summary error(if there is) and the details about each item action failure if there is.
+type KeyValueStoreResponse[T any] struct {
+	// Each Item action(or operation) result.
+	Details []KeyValueStoreItemActionResponse[T]
+	// Overall error if at least one item action (or operation) failed.
 	Error error
 }
 
@@ -125,13 +132,13 @@ type KeyValueStore[TK any, TV any] interface {
 	// Fetch entry(ies) with given key(s).
 	// Fetch term is used here because this CRUD interface is NOT part of the B-Tree system, thus, the context is
 	// to "fetch" from the remote data storage sub-system like AWS S3.
-	Fetch(context.Context, ...TK) []KeyValueStoreResponse[KeyValuePair[TK, TV]]
+	Fetch(context.Context, string, ...TK) KeyValueStoreResponse[KeyValuePair[TK, TV]]
 	// Fetch a large entry with the given key.
-	FetchLargeObject(context.Context, TK) (TV, error)
+	FetchLargeObject(context.Context, string, TK) (TV, error)
 	// Add entry(ies) to the store.
-	Add(context.Context, ...KeyValuePair[TK, TV]) []KeyValueStoreResponse[KeyValuePair[TK, TV]]
+	Add(context.Context, string, ...KeyValuePair[TK, TV]) KeyValueStoreResponse[KeyValuePair[TK, TV]]
 	// Update entry(ies) of the store.
-	Update(context.Context, ...KeyValuePair[TK, TV]) []KeyValueStoreResponse[KeyValuePair[TK, TV]]
+	Update(context.Context, string, ...KeyValuePair[TK, TV]) KeyValueStoreResponse[KeyValuePair[TK, TV]]
 	// Remove entry(ies) from the store given their names.
-	Remove(context.Context, ...TK) []KeyValueStoreResponse[TK]
+	Remove(context.Context, string, ...TK) KeyValueStoreResponse[TK]
 }
