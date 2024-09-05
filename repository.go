@@ -126,7 +126,7 @@ type KeyValueStore[TK any, TV any] interface {
 	// Fetch term is used here because this CRUD interface is NOT part of the B-Tree system, thus, the context is
 	// to "fetch" from the remote data storage sub-system like AWS S3.
 	Fetch(context.Context, ...TK) []KeyValueStoreResponse[KeyValuePair[TK, TV]]
-	// Fetch entry(ies) with given name(s).
+	// Fetch a large entry with the given name.
 	FetchLargeObject(context.Context, TK) (TV, error)
 	// Add entry(ies) to the store.
 	Add(context.Context, ...KeyValuePair[TK, TV]) []KeyValueStoreResponse[TK]
