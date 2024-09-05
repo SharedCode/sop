@@ -94,6 +94,13 @@ func (b *cachedBucket)Fetch(ctx context.Context, names ...string) []sop.KeyValue
 		}
 		// If object's ETag is same then not time yet to refetch.
 		if *result.ETag == t.Object.ETag {
+			// Update cache's last refresh time.
+			cd := cacheObject{
+				Object: t.Object,
+				LastRefreshTime: now,
+			}
+			b.redisCache.SetStruct(ctx, formatKey(names[i]), cd, 0)
+
 			r[i] = sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
 				Payload: sop.KeyValuePair[string, []byte]{
 					Key: names[i],
@@ -145,6 +152,13 @@ func (b *cachedBucket)FetchLargeObject(ctx context.Context, name string) ([]byte
 	}
 	// If object's ETag is same then not time yet to refetch.
 	if *result.ETag == t.Object.ETag {
+		// Update cache's last refresh time.
+		cd := cacheObject{
+			Object: t.Object,
+			LastRefreshTime: now,
+		}
+		b.redisCache.SetStruct(ctx, formatKey(name), cd, 0)
+
 		return t.Object.Data, nil
 	}
 	// Different ETag, refetch and recache.	
