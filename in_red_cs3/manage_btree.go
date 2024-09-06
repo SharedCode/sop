@@ -4,11 +4,11 @@ package in_red_cs3
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_red_cfs/fs"
+	"github.com/SharedCode/sop/in_red_cs3/s3"
+	red_s3 "github.com/SharedCode/sop/red_s3/s3"
 	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
 	sd "github.com/SharedCode/sop/streaming_data"
@@ -19,9 +19,6 @@ import (
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
-	if si.BlobStoreBaseFolderPath == "" {
-		return nil, fmt.Errorf("si.BlobStoreBaseFolderPath(\"\") needs to be a valid folder path")
-	}
 	return in_red_ck.NewBtree[TK, TV](ctx, si, t)
 }
 
@@ -35,27 +32,30 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 //
 // Use with care and only when you are sure to delete the tables.
 func RemoveBtree(ctx context.Context, name string) error {
-	sr := NewStoreRepository()
+	sr, err := NewStoreRepository(ctx, "")
+	if err != nil {
+		return err
+	}
 	return sr.Remove(ctx, name)
 }
 
 // NewStoreRepository is a convenience function to instantiate a repository with necessary File System
 // based blob store implementation.
-func NewStoreRepository() sop.StoreRepository {
-	fio := fs.DefaultFileIO{}
-	mbsf := fs.NewManageBlobStoreFolder(fio)
-	return cas.NewStoreRepositoryExt(mbsf)
+func NewStoreRepository(ctx context.Context, region string) (sop.StoreRepository, error) {
+	bs, err := s3.NewBlobStore(ctx, sop.NewMarshaler())
+	if err != nil {
+		return nil, err
+	}
+	mbs := red_s3.NewManageBucket(bs.BucketAsStore.(*red_s3.S3Bucket).S3Client, region)
+	return cas.NewStoreRepositoryExt(mbs), nil
 }
 
 // NewStreamingDataStore is a convenience function to easily instantiate a streaming data store that stores
 // blobs in File System.
 //
 // Specify your blobStoreBaseFolderPath to an appropriate folder path that will be the base folder of blob files.
-func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string) (*sd.StreamingDataStore[TK], error) {
-	if blobStoreBaseFolderPath == "" {
-		return nil, fmt.Errorf("blobStoreBaseFolderPath(\"\") needs to be a valid folder path")
-	}
-	return sd.NewStreamingDataStoreExt[TK](ctx, name, trans, blobStoreBaseFolderPath)
+func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*sd.StreamingDataStore[TK], error) {
+	return sd.NewStreamingDataStoreExt[TK](ctx, name, trans, "")
 }
 
 // OpenStreamingDataStore is a convenience function to open an existing data store for use in "streaming data".

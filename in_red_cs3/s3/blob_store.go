@@ -21,8 +21,8 @@ func NewBlobStore(ctx context.Context, marshaler sop.Marshaler) (*blobStore, err
 		return nil, err
 	}
 	return &blobStore{
-		marshaler:      marshaler,
-		BucketAsStore:  cb,
+		marshaler:     marshaler,
+		BucketAsStore: cb,
 	}, nil
 }
 

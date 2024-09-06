@@ -14,6 +14,7 @@ func Initialize(redisConfig redis.Options) error {
 	}
 	return nil
 }
+
 // Returns true if Redis is initialized(connected).
 func IsInitialized() bool {
 	return redis.IsConnectionInstantiated()

@@ -13,13 +13,13 @@ import (
 
 type manageBucket struct {
 	S3Client *s3.Client
-	region string
+	region   string
 }
 
 func NewManageBucket(S3Client *s3.Client, region string) sop.ManageBlobStore {
 	return &manageBucket{
 		S3Client: S3Client,
-		region: region,
+		region:   region,
 	}
 }
 
@@ -41,7 +41,7 @@ func (mb *manageBucket) RemoveBlobStore(ctx context.Context, bucketName string) 
 		Bucket: aws.String(bucketName),
 	})
 	if err != nil {
-		return fmt.Errorf("couldn't remove bucket %s in Region %s, details: %v", bucketName, mb.region, err)
+		return fmt.Errorf("couldn't remove bucket %s, details: %v", bucketName, err)
 	}
 	return nil
 }

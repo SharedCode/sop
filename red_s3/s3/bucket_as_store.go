@@ -18,21 +18,19 @@ import (
 
 const largeObjectMinSize = 10 * 1024 * 1024
 
+// S3 bucket wrapper, see methods below. S3Bucket implements sop.KeyValueStore interface.
 type S3Bucket struct {
 	S3Client *s3.Client
 }
 
+// S3 object contains the data & its ETag as generated from S3.
 type S3Object struct {
 	Data []byte
 	ETag string
 }
 
+// NewBucketAsStore returns the S3 bucket (wrapper) instance.
 func NewBucketAsStore(ctx context.Context) (*S3Bucket, error) {
-	b, err := newBucket(ctx)
-	return b, err
-}
-
-func newBucket(ctx context.Context) (*S3Bucket, error) {
 	// AWS S3 SDK should be installed, configured in the host machine this code will be ran.
 	sdkConfig, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -107,8 +105,8 @@ func (b *S3Bucket) Fetch(ctx context.Context, bucketName string, names ...string
 	if lastError != nil {
 		return sop.KeyValueStoreResponse[sop.KeyValuePair[string, *S3Object]]{
 			Details: r,
-			Error: fmt.Errorf("failed to completely fetch from bucket %s, last error: %v", bucketName, lastError),
-		}	
+			Error:   fmt.Errorf("failed to completely fetch from bucket %s, last error: %v", bucketName, lastError),
+		}
 	}
 	return sop.KeyValueStoreResponse[sop.KeyValuePair[string, *S3Object]]{
 		Details: r,
@@ -167,7 +165,7 @@ func (b *S3Bucket) Add(ctx context.Context, bucketName string, entries ...sop.Ke
 	if lastError != nil {
 		return sop.KeyValueStoreResponse[sop.KeyValuePair[string, *S3Object]]{
 			Details: r,
-			Error: fmt.Errorf("failed to completely add items to bucket %s, last error: %v", bucketName, lastError),
+			Error:   fmt.Errorf("failed to completely add items to bucket %s, last error: %v", bucketName, lastError),
 		}
 	}
 	return sop.KeyValueStoreResponse[sop.KeyValuePair[string, *S3Object]]{
@@ -206,8 +204,8 @@ func (b *S3Bucket) Remove(ctx context.Context, bucketName string, names ...strin
 			}
 			lastError = r[index].Error
 		}
-		return sop.KeyValueStoreResponse[string] {
-			Error: fmt.Errorf("failed to completely remove items from bucket %s, last error: %v", bucketName, lastError),
+		return sop.KeyValueStoreResponse[string]{
+			Error:   fmt.Errorf("failed to completely remove items from bucket %s, last error: %v", bucketName, lastError),
 			Details: r,
 		}
 	}

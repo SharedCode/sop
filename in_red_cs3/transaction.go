@@ -13,7 +13,6 @@ import (
 
 // NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
 func NewTransaction(ctx context.Context, mode sop.TransactionMode, maxTime time.Duration, logging bool, region string) (sop.Transaction, error) {
-	// mbsf := fs.NewManageBlobStoreFolder(fio)
 	bs, err := s3.NewBlobStore(ctx, sop.NewMarshaler())
 	if err != nil {
 		return nil, err

@@ -39,7 +39,7 @@ func NewCachedBucket(ctx context.Context) (sop.KeyValueStore[string, []byte], er
 // Keep the bucketName short & set refreshInterval to decent period like ever 5mins "etag" check
 // and cacheExpiry to longer time(5 hrs?) or no expiry(0). maxCacheableSize defaults to 500MB.
 func NewCachedBucketExt(ctx context.Context, refreshInterval time.Duration, cacheExpiry time.Duration, maxCacheableSize int) (sop.KeyValueStore[string, []byte], error) {
-	bs, err := newBucket(ctx)
+	bs, err := NewBucketAsStore(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func (b *cachedBucket) fetch(ctx context.Context, bucketName string, isLargeObje
 	}
 	if lastError != nil {
 		return sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]]{
-			Error: fmt.Errorf("failed to completely fetch(large:%v) from bucket %s, details: %v", isLargeObjects, bucketName, lastError),
+			Error:   fmt.Errorf("failed to completely fetch(large:%v) from bucket %s, details: %v", isLargeObjects, bucketName, lastError),
 			Details: r,
 		}
 	}
@@ -185,7 +185,7 @@ func (b *cachedBucket) fetchAndCache(ctx context.Context, bucketName string, nam
 	if res.Error != nil {
 		return sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]]{
 			Details: []sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, []byte]]{
-				sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, []byte]] {
+				sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, []byte]]{
 					Payload: sop.KeyValuePair[string, []byte]{
 						Key: name,
 					},
@@ -208,9 +208,9 @@ func (b *cachedBucket) fetchAndCache(ctx context.Context, bucketName string, nam
 	// Package to return the newly fetched object.
 	return sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]]{
 		Details: []sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, []byte]]{
-			sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, []byte]] {
+			{
 				Payload: sop.KeyValuePair[string, []byte]{
-					Key: name,
+					Key:   name,
 					Value: res.Payload.Value.Data,
 				},
 			},
@@ -253,7 +253,7 @@ func (b *cachedBucket) Add(ctx context.Context, bucketName string, entries ...so
 	}
 	if lastError != nil {
 		return sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]]{
-			Error: fmt.Errorf("failed to completely add items to bucket %s, last error: %v", bucketName, lastError),
+			Error:   fmt.Errorf("failed to completely add items to bucket %s, last error: %v", bucketName, lastError),
 			Details: r,
 		}
 	}

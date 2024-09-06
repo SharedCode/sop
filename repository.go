@@ -116,8 +116,9 @@ type Store[TK any, TV any] interface {
 // KeyValue Store Item Action Response has the payload and the error, if in case an error occurred while doing CRUD operation.
 type KeyValueStoreItemActionResponse[T any] struct {
 	Payload T
-	Error error
+	Error   error
 }
+
 // KeyValue Store Overall Response has a summary error(if there is) and the details about each item action failure if there is.
 type KeyValueStoreResponse[T any] struct {
 	// Each Item action(or operation) result.
