@@ -97,7 +97,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				newVersion--
 				if newVersion != h2.Version || !h.IsEqual(&h2) {
 					return &UpdateAllOrNothingError{
-						Err: fmt.Errorf("Registry Update failed, handle logical ID(%v) version conflict detected", h.LogicalID),
+						Err: fmt.Errorf("Registry Update failed, handle logical ID(%v) version conflict detected", h.LogicalID.ToString()),
 					}
 				}
 			}

@@ -6,7 +6,7 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_cfs/fs"
 	"github.com/SharedCode/sop/in_red_ck"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	cas "github.com/SharedCode/sop/cassandra"
 )
 
 // NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.

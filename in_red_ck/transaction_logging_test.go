@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	cas "github.com/SharedCode/sop/cassandra"
 )
 
 func Test_TLog_Rollback(t *testing.T) {

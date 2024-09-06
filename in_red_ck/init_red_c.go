@@ -1,7 +1,7 @@
 package in_red_ck
 
 import (
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/redis"
 )
 

@@ -10,7 +10,7 @@ import (
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_red_cfs/fs"
 	"github.com/SharedCode/sop/in_red_ck"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	cas "github.com/SharedCode/sop/cassandra"
 	sd "github.com/SharedCode/sop/streaming_data"
 )
 
