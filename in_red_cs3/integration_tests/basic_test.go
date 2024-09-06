@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_cs3"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_cs3"
 	"github.com/SharedCode/sop/redis"
 )
 
@@ -20,8 +20,6 @@ var redisConfig = redis.Options{
 	DB:                       0,  // use default DB
 	DefaultDurationInSeconds: 24 * 60 * 60,
 }
-
-const dataPath string = "/Users/grecinto/sop_data"
 
 func init() {
 	in_red_cs3.Initialize(cassConfig, redisConfig)
@@ -56,7 +54,6 @@ func Test_CreateEmptyStore(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)
@@ -81,7 +78,6 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)
@@ -113,7 +109,6 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)

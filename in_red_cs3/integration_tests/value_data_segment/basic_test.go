@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_cs3"
 	"github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_cs3"
 	"github.com/SharedCode/sop/redis"
 )
 
@@ -29,8 +29,6 @@ func init() {
 
 var ctx = context.Background()
 
-const dataPath string = "/Users/grecinto/sop_data"
-
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	trans, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
 	if err != nil {
@@ -44,7 +42,6 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)
@@ -76,7 +73,6 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)

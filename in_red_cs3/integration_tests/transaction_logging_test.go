@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_cs3"
 	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/in_red_cs3"
 )
 
 func MultipleExpiredTransCleanup(t *testing.T) {
@@ -29,7 +29,6 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 
 	for i := 0; i < 50; i++ {

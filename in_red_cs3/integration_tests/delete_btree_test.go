@@ -5,6 +5,7 @@ import (
 
 	"github.com/SharedCode/sop/in_red_cs3"
 )
+
 const region = "us-east-1"
 
 // Add Test_ prefix if you want to run this test.

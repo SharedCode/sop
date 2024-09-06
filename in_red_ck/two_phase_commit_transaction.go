@@ -243,7 +243,7 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 // Sleep in random milli-seconds to allow different conflicting (Node modifying) transactions
 // to retry on different times, thus, increasing chance to succeed one after the other.
 func randomSleep(ctx context.Context) {
-	sleepTime := (1 + rand.Intn(6)) * 100
+	sleepTime := (1 + rand.Intn(6)) * 250
 	sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 }
 

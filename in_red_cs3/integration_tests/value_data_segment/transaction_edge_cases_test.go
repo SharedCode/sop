@@ -28,7 +28,6 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
@@ -52,7 +51,6 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        false,
 			Description:              "",
-			BlobStoreBaseFolderPath:  dataPath,
 		}, t1)
 	}
 
@@ -63,7 +61,6 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t2)
 
 	// edit "peter parker" in both btrees.
@@ -95,7 +92,6 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	var person Person
 	b3.FindOne(ctx, pk2, false)
@@ -131,7 +127,6 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
@@ -155,7 +150,6 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        false,
 			Description:              "",
-			BlobStoreBaseFolderPath:  dataPath,
 		}, t1)
 	}
 
@@ -166,7 +160,6 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t2)
 
 	// edit both "pirellis" in both btrees, one each.
@@ -204,7 +197,6 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
@@ -228,7 +220,6 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        false,
 			Description:              "",
-			BlobStoreBaseFolderPath:  dataPath,
 		}, t1)
 	}
 
@@ -239,7 +230,6 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t2)
 
 	// Read both records.
@@ -278,7 +268,6 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
@@ -304,7 +293,6 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        false,
 			Description:              "",
-			BlobStoreBaseFolderPath:  dataPath,
 		}, t1)
 	}
 
@@ -315,7 +303,6 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t2)
 
 	// Read both records.
@@ -353,7 +340,6 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
@@ -383,7 +369,6 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        false,
 			Description:              "",
-			BlobStoreBaseFolderPath:  dataPath,
 		}, t1)
 	}
 
@@ -394,7 +379,6 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t2)
 
 	b3.FindOne(ctx, pk, false)
@@ -459,7 +443,6 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t1)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 500, "I am the value with 500 key.")
@@ -477,7 +460,6 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        true,
 			Description:              "",
-			BlobStoreBaseFolderPath:  dataPath,
 		}, t1)
 		b3.Add(ctx2, 5000, "I am the value with 5000 key.")
 		b3.Add(ctx2, 5001, "I am the value with 5001 key.")
@@ -495,7 +477,6 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        true,
 			Description:              "",
-			BlobStoreBaseFolderPath:  dataPath,
 		}, t2)
 		b32.Add(ctx2, 5500, "I am the value with 5000 key.")
 		b32.Add(ctx2, 5501, "I am the value with 5001 key.")
