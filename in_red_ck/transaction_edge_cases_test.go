@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop"
-	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/mocks"
 )
 
 // Covers all of these cases:
@@ -477,8 +477,8 @@ func Test_CommitThrowsException(t *testing.T) {
 	t2.blobStore = goodBlobStore
 
 	// Create an update & a Commit that fails. Pass true param to Mock Registry will induce error on Commit.
-	t2.registry = cas.NewMockRegistry(true)
-	t2.registry.(*cas.Mock_vid_registry).Lookup = goodRegistry.(*cas.Mock_vid_registry).Lookup
+	t2.registry = mocks.NewMockRegistry(true)
+	t2.registry.(*mocks.Mock_vid_registry).Lookup = goodRegistry.(*mocks.Mock_vid_registry).Lookup
 
 	trans.Begin()
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
@@ -493,7 +493,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	// Capture the repos' state which we will check for validity.
 	goodStoreRepository = t2.storeRepository
 	goodRegistry = t2.registry
-	goodRegistry.(*cas.Mock_vid_registry).InducedErrorOnUpdateAllOrNothing = false
+	goodRegistry.(*mocks.Mock_vid_registry).InducedErrorOnUpdateAllOrNothing = false
 	goodRedisCache = t2.redisCache
 	goodBlobStore = t2.blobStore
 

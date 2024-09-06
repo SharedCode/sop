@@ -5,16 +5,16 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
-	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/redis"
+	"github.com/SharedCode/sop/in_red_ck/mocks"
 )
 
 // Global mock repositories will allow us to simulate repositories that persists state
 // between transaction(commit).
-var mockStoreRepository = cas.NewMockStoreRepository()
-var mockRegistry = cas.NewMockRegistry(false)
+var mockStoreRepository = mocks.NewMockStoreRepository()
+var mockRegistry = mocks.NewMockRegistry(false)
 var mockRedisCache = redis.NewMockClient()
-var mockNodeBlobStore = cas.NewMockBlobStore()
+var mockNodeBlobStore = mocks.NewMockBlobStore()
 
 // newMockTransaction instantiates a mocked transaction, i.e. - it uses in-memory Repositories as backend, not Cassandra.
 func newMockTransaction(t *testing.T, mode sop.TransactionMode, maxTime time.Duration) (sop.Transaction, error) {
@@ -43,7 +43,7 @@ func newMockTwoPhaseCommitTransaction(t *testing.T, mode sop.TransactionMode, ma
 		registry:        mockRegistry,
 		redisCache:      mockRedisCache,
 		blobStore:       mockNodeBlobStore,
-		logger:          newTransactionLogger(cas.NewMockTransactionLog(), logging),
+		logger:          newTransactionLogger(mocks.NewMockTransactionLog(), logging),
 		phaseDone:       -1,
 	}, nil
 }
