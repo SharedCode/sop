@@ -1,4 +1,5 @@
-// Package Cassandra contains code for integration or inter-operation with Cassandra DB.
+// Package Cassandra contains code for integration or inter-operation with SOP's Cassandra DB.
+// This package manage contents on tables like Registry, StoreRepository, Transaction Log.
 package cassandra
 
 import (
