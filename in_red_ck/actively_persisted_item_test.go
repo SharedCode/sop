@@ -6,6 +6,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_ck/mocks"
 )
 
 func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
@@ -26,7 +27,7 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	sds.Add(ctx, "fooVideo2", "video content")
 
 	tidLogs := trans.GetPhasedTransaction().(*transaction).
-		logger.logger.(*cas.MockTransactionLog).GetTIDLogs(
+		logger.logger.(*mocks.MockTransactionLog).GetTIDLogs(
 		trans.GetPhasedTransaction().(*transaction).logger.transactionID)
 
 	if tidLogs == nil {
@@ -36,7 +37,7 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	trans.Rollback(ctx)
 
 	gotTidLogs := trans.GetPhasedTransaction().(*transaction).
-		logger.logger.(*cas.MockTransactionLog).GetTIDLogs(
+		logger.logger.(*mocks.MockTransactionLog).GetTIDLogs(
 		trans.GetPhasedTransaction().(*transaction).logger.transactionID)
 
 	if gotTidLogs != nil {

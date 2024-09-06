@@ -1,4 +1,4 @@
-package cassandra
+package mocks
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_memory"
+	cas "github.com/SharedCode/sop/cassandra"
 )
 
 type MockTransactionLog struct {
@@ -23,9 +24,9 @@ func NewMockTransactionLog() sop.TransactionLog {
 // GetOne returns the oldest transaction ID.
 func (tl *MockTransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
 	if tl.datesLogs.First() {
-		kt, _ := time.Parse(DateHourLayout, tl.datesLogs.GetCurrentKey())
+		kt, _ := time.Parse(cas.DateHourLayout, tl.datesLogs.GetCurrentKey())
 		// Cap the returned entries to older than an hour to safeguard ongoing transactions.
-		nt, _ := time.Parse(DateHourLayout, Now().Format(DateHourLayout))
+		nt, _ := time.Parse(cas.DateHourLayout, cas.Now().Format(cas.DateHourLayout))
 		cappedTime := nt.Add(-time.Duration(1 * time.Hour))
 		if kt.Unix() < cappedTime.Unix() {
 			v := tl.datesLogs.GetCurrentValue()
@@ -83,7 +84,7 @@ func (tl *MockTransactionLog) GetTIDLogs(tid sop.UUID) []sop.KeyValuePair[int, [
 
 // Add blob(s) to the Blob store.
 func (tl *MockTransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
-	date := Now().Format(DateHourLayout)
+	date := cas.Now().Format(cas.DateHourLayout)
 	found := tl.datesLogs.FindOne(date, false)
 	dayLogs := tl.datesLogs.GetCurrentValue()
 	if dayLogs == nil {
