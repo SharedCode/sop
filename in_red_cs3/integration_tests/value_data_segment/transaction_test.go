@@ -46,7 +46,7 @@ const nodeSlotLength = 500
 const batchSize = 200
 
 func Test_SimpleAddPerson(t *testing.T) {
-	trans, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	trans, err := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -92,12 +92,12 @@ func Test_SimpleAddPerson(t *testing.T) {
 }
 
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
-	trans, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	trans, err := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
-	trans2, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	trans2, err := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 
 	trans.Begin()
 	trans2.Begin()
@@ -132,7 +132,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 }
 
 func Test_AddAndSearchManyPersons(t *testing.T) {
-	trans, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	trans, err := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -167,7 +167,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	trans, err = in_red_cs3.NewTransaction(ctx, sop.ForReading, -1, false, region)
+	trans, err = in_red_cs3.NewTransaction(s3Client, sop.ForReading, -1, false, region)
 	if err != nil {
 		t.Errorf(err.Error())
 		t.Fail()
@@ -201,7 +201,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	t1, _ := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	t1.Begin()
 	b3, _ := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -224,7 +224,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+			t1, _ = in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 			t1.Begin()
 			b3, _ = in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
@@ -255,7 +255,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForReading, -1, false, region)
+			t1, _ = in_red_cs3.NewTransaction(s3Client, sop.ForReading, -1, false, region)
 			t1.Begin()
 			b3, _ = in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
@@ -274,7 +274,7 @@ func VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	t1, _ := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	t1.Begin()
 	b3, _ := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -299,7 +299,7 @@ func VolumeDeletes(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+			t1, _ = in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 			t1.Begin()
 			b3, _ = in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
@@ -319,7 +319,7 @@ func MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
 
-	t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	t1, _ := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	t1.Begin()
 	b3, _ := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -359,7 +359,7 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+			t1, _ = in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 			t1.Begin()
 			b3, _ = in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
@@ -402,7 +402,7 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+			t1, _ = in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 			t1.Begin()
 			b3, _ = in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 				Name:                     "persondb",
@@ -417,7 +417,7 @@ func MixedOperations(t *testing.T) {
 }
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
-	t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	t1, _ := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	t1.Begin()
 
 	b3, _ := in_red_cs3.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -441,7 +441,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	if err := twoPhase.Phase1Commit(ctx); err == nil {
 		twoPhase.Rollback(ctx)
 
-		t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+		t1, _ = in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 		t1.Begin()
 
 		b3, _ = in_red_cs3.OpenBtree[int, string](ctx, "twophase", t1)
@@ -454,7 +454,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 }
 
 func Test_IllegalBtreeStoreName(t *testing.T) {
-	t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	t1, _ := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	t1.Begin()
 
 	if _, err := in_red_cs3.NewBtree[int, string](ctx, sop.StoreOptions{

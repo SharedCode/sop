@@ -1,5 +1,4 @@
-// Package contains general store implementations for AWS S3 bueckt I/O.
-package s3
+package aws_s3
 
 import (
 	"bytes"
@@ -8,7 +7,6 @@ import (
 	"io"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -30,13 +28,10 @@ type S3Object struct {
 }
 
 // NewBucketAsStore returns the S3 bucket (wrapper) instance.
-func NewBucketAsStore(ctx context.Context) (*S3Bucket, error) {
-	// AWS S3 SDK should be installed, configured in the host machine this code will be ran.
-	sdkConfig, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't load default configuration, details: %v", err)
+func NewBucketAsStore(s3Client *s3.Client) (*S3Bucket, error) {
+	if s3Client == nil {
+		return nil, fmt.Errorf("s3Client parameter can't be nil")
 	}
-	s3Client := s3.NewFromConfig(sdkConfig)
 	return &S3Bucket{
 		S3Client: s3Client,
 	}, nil

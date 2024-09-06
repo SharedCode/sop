@@ -5,12 +5,13 @@ package in_red_cs3
 import (
 	"context"
 
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/cassandra"
-	"github.com/SharedCode/sop/in_red_cs3/s3"
-	red_s3 "github.com/SharedCode/sop/red_s3/s3"
+	"github.com/SharedCode/sop/aws_s3"
 	sd "github.com/SharedCode/sop/streaming_data"
 )
 
@@ -31,8 +32,8 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
 // Use with care and only when you are sure to delete the tables.
-func RemoveBtree(ctx context.Context, name string) error {
-	sr, err := NewStoreRepository(ctx, "")
+func RemoveBtree(ctx context.Context, s3Client *s3.Client, name string) error {
+	sr, err := NewStoreRepository(s3Client, "")
 	if err != nil {
 		return err
 	}
@@ -41,12 +42,11 @@ func RemoveBtree(ctx context.Context, name string) error {
 
 // NewStoreRepository is a convenience function to instantiate a repository with necessary File System
 // based blob store implementation.
-func NewStoreRepository(ctx context.Context, region string) (sop.StoreRepository, error) {
-	bs, err := s3.NewBlobStore(ctx, sop.NewMarshaler())
+func NewStoreRepository(s3Client *s3.Client, region string) (sop.StoreRepository, error) {
+	mbs, err := aws_s3.NewManageBucket(s3Client, region)
 	if err != nil {
 		return nil, err
 	}
-	mbs := red_s3.NewManageBucket(bs.BucketAsStore.(*red_s3.S3Bucket).S3Client, region)
 	return cas.NewStoreRepositoryExt(mbs), nil
 }
 

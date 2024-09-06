@@ -20,7 +20,7 @@ func DeleteBTree(t *testing.T) {
 		"emptyStore", "barstore2", "barstore1",
 	}
 	for _, tn := range tableList {
-		if err := in_red_cs3.RemoveBtree(ctx, tn); err != nil {
+		if err := in_red_cs3.RemoveBtree(ctx, s3Client, tn); err != nil {
 			t.Error(err)
 		}
 	}

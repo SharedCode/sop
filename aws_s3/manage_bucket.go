@@ -1,4 +1,4 @@
-package s3
+package aws_s3
 
 import (
 	"context"
@@ -16,11 +16,14 @@ type manageBucket struct {
 	region   string
 }
 
-func NewManageBucket(S3Client *s3.Client, region string) sop.ManageBlobStore {
-	return &manageBucket{
-		S3Client: S3Client,
-		region:   region,
+func NewManageBucket(s3Client *s3.Client, region string) (sop.ManageBlobStore, error) {
+	if s3Client == nil {
+		return nil, fmt.Errorf("s3Client parameter can't be nil")
 	}
+	return &manageBucket{
+		S3Client: s3Client,
+		region:   region,
+	}, nil
 }
 
 func (mb *manageBucket) CreateBlobStore(ctx context.Context, bucketName string) error {

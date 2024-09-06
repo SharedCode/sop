@@ -2,7 +2,11 @@ package integration_tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
@@ -21,15 +25,25 @@ var redisConfig = redis.Options{
 	DefaultDurationInSeconds: 24 * 60 * 60,
 }
 
+var s3Client *s3.Client
+
 func init() {
 	in_red_cs3.Initialize(cassConfig, redisConfig)
+
+	// AWS S3 SDK should be installed, configured in the host machine this code will be ran.
+	sdkConfig, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		fmt.Println("Couldn't load default configuration, AWS SDK seems not installed, details: %v", err)
+		panic(err)
+	}
+	s3Client = s3.NewFromConfig(sdkConfig)	
 }
 
 var ctx = context.Background()
 
 // Create an empty store on 1st run, add one item(max) on succeeding runs.
 func Test_CreateEmptyStore(t *testing.T) {
-	trans, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	trans, err := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -66,7 +80,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 }
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	trans, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	trans, err := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -97,7 +111,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	trans, err := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
