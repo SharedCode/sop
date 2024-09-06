@@ -15,7 +15,7 @@ const (
 	// DateHourLayout format mask string.
 	DateHourLayout = "2006-01-02T15"
 
-	// Transaction logging only needs the least consistency level because we only need the logs to aid in cleanup of 
+	// Transaction logging only needs the least consistency level because we only need the logs to aid in cleanup of
 	// "hanged" transactions, which are rare and have no "cleanup" urgency requirement.
 	//
 	// Transactions are designed to auto cleanup their logs during commit or rollback.
@@ -27,6 +27,7 @@ var Now = time.Now
 
 // NilUUID with gocql.UUID type.
 var NilUUID = gocql.UUID(sop.NilUUID)
+
 // Returns true if id is nil or empty UUID, otherwise false.
 func IsNil(id gocql.UUID) bool {
 	return sop.UUID(id).IsNil()

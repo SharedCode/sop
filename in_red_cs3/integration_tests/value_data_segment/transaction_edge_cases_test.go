@@ -1,10 +1,12 @@
-package in_red_ck
+package value_data_segment
 
 import (
 	"testing"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/SharedCode/sop"
-	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_cs3"
 )
 
 // Covers all of these cases:
@@ -13,23 +15,22 @@ import (
 // Transaction rolls back, new completes fine.
 // Reader transaction succeeds.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
-	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
+	t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	t2, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
 
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
+	b3, err := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
 	}, t1)
-
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -41,10 +42,10 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = newMockTransaction(t, sop.ForWriting, -1)
+		t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
 		t1.Begin()
-		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-			Name:                     "persondb",
+		b3, _ = in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+			Name:                     "persondb7",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
 			IsValueDataInNodeSegment: false,
@@ -53,8 +54,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		}, t1)
 	}
 
-	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
+	b32, _ := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -82,17 +83,16 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	if err2 == nil {
 		t.Error("Commit #2, got = succeess, want = fail.")
 	}
-	t1, _ = newMockTransaction(t, sop.ForReading, -1)
+	t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForReading, -1, false, region)
 	t1.Begin()
-	b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
+	b3, _ = in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
 	}, t1)
-
 	var person Person
 	b3.FindOne(ctx, pk2, false)
 	person, _ = b3.GetCurrentValue(ctx)
@@ -114,14 +114,14 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 // Two transactions updating different items with no collision but items'
 // keys are sequential/contiguous between the two.
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
-	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
+	t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	t2, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
 
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
+	b3, err := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -129,7 +129,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		Description:              "",
 	}, t1)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -141,10 +141,10 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = newMockTransaction(t, sop.ForWriting, -1)
+		t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
 		t1.Begin()
-		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-			Name:                     "persondb",
+		b3, _ = in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+			Name:                     "persondb7",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
 			IsValueDataInNodeSegment: false,
@@ -153,8 +153,8 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		}, t1)
 	}
 
-	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
+	b32, _ := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -174,41 +174,24 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	// Commit t1 & t2.
 	err1 := t1.Commit(ctx)
 	err2 := t2.Commit(ctx)
-	if err1 != nil || err2 != nil {
-		t.Error("got = commit failure, want = both commit success.")
+	if err1 != nil {
+		t.Error(err1)
 	}
-
-	t2, _ = newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
-	b32, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
-		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
-		IsValueDataInNodeSegment: false,
-		LeafLoadBalancing:        false,
-		Description:              "",
-	}, t2)
-	if found, err := b32.FindOne(ctx, pk2, false); err != nil {
-		t.Error(err)
-	} else if !found {
-		t.Errorf("FindOne(pk2) failed, got not found, want found")
-	}
-	p22, _ := b32.GetCurrentValue(ctx)
-	if p22.SSN != p2.SSN {
-		t.Errorf("UpdateCurrentItem failed, got %s, want %s", p22.SSN, p2.SSN)
+	if err2 != nil {
+		t.Error(err2)
 	}
 }
 
 // Reader transaction fails commit when an item read was modified by another transaction in-flight.
 func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
-	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2, _ := newMockTransaction(t, sop.ForReading, -1)
+	t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	t2, _ := in_red_cs3.NewTransaction(ctx, sop.ForReading, -1, false, region)
 
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
+	b3, err := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -216,7 +199,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		Description:              "",
 	}, t1)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -228,10 +211,10 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = newMockTransaction(t, sop.ForWriting, -1)
+		t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
 		t1.Begin()
-		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-			Name:                     "persondb",
+		b3, _ = in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+			Name:                     "persondb7",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
 			IsValueDataInNodeSegment: false,
@@ -240,8 +223,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		}, t1)
 	}
 
-	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
+	b32, _ := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -272,14 +255,14 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 // Node merging and row(or item) level conflict detection.
 // Case: Reader transaction succeeds commit, while another item in same Node got updated by another transaction.
 func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T) {
-	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2, _ := newMockTransaction(t, sop.ForReading, -1)
+	t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	t2, _ := in_red_cs3.NewTransaction(ctx, sop.ForReading, -1, false, region)
 
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
+	b3, err := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -287,7 +270,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		Description:              "",
 	}, t1)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -301,10 +284,10 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		b3.Add(ctx, pk2, p2)
 		b3.Add(ctx, pk3, p3)
 		t1.Commit(ctx)
-		t1, _ = newMockTransaction(t, sop.ForWriting, -1)
+		t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
 		t1.Begin()
-		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-			Name:                     "persondb",
+		b3, _ = in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+			Name:                     "persondb7",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
 			IsValueDataInNodeSegment: false,
@@ -313,8 +296,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		}, t1)
 	}
 
-	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
+	b32, _ := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -344,14 +327,14 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 
 // One transaction updates a colliding item in 1st and a 2nd trans.
 func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
-	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
+	t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	t2, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
 
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
+	b3, err := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -359,7 +342,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		Description:              "",
 	}, t1)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -377,10 +360,10 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		b3.Add(ctx, pk4, p4)
 		b3.Add(ctx, pk5, p5)
 		t1.Commit(ctx)
-		t1, _ = newMockTransaction(t, sop.ForWriting, -1)
+		t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
 		t1.Begin()
-		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-			Name:                     "persondb",
+		b3, _ = in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+			Name:                     "persondb7",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
 			IsValueDataInNodeSegment: false,
@@ -389,8 +372,8 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		}, t1)
 	}
 
-	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
+	b32, _ := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "persondb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -444,77 +427,95 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	}
 }
 
-func Test_CommitThrowsException(t *testing.T) {
-	// Commit successfully 1st so we can create a good data set that we can check if restored on commit failed.
-	trans, _ := newMockTransaction(t, sop.ForWriting, -1)
-	trans.Begin()
-	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
-		SlotLength:               nodeSlotLength,
+func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
+	sr, err := in_red_cs3.NewStoreRepository(ctx, region)
+	if err != nil {
+		t.Error(err)
+	}
+	sr.Remove(ctx, "twophase2")
+
+	t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	t1.Begin()
+	b3, _ := in_red_cs3.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "twophase2",
+		SlotLength:               8,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
-		LeafLoadBalancing:        false,
+		LeafLoadBalancing:        true,
 		Description:              "",
-	}, trans)
-	pk, p := newPerson("joe", "zhroeger", "male", "email", "phone")
-	b3.Add(ctx, pk, p)
-	trans.Commit(ctx)
+	}, t1)
+	// Add a single item so we persist "root node".
+	b3.Add(ctx, 500, "I am the value with 500 key.")
+	t1.Commit(ctx)
 
-	// Preserve the good, nicely populated repositories.
-	t2 := trans.GetPhasedTransaction().(*transaction)
+	eg, ctx2 := errgroup.WithContext(ctx)
 
-	goodStoreRepository := t2.storeRepository
-	goodRegistry := t2.registry
-	goodRedisCache := t2.redisCache
-	goodBlobStore := t2.blobStore
-
-	trans, _ = newMockTransaction(t, sop.ForWriting, -1)
-	t2 = trans.GetPhasedTransaction().(*transaction)
-
-	// Restore the populated repos.
-	t2.storeRepository = goodStoreRepository
-	t2.redisCache = goodRedisCache
-	t2.blobStore = goodBlobStore
-
-	// Create an update & a Commit that fails. Pass true param to Mock Registry will induce error on Commit.
-	t2.registry = cas.NewMockRegistry(true)
-	t2.registry.(*cas.Mock_vid_registry).Lookup = goodRegistry.(*cas.Mock_vid_registry).Lookup
-
-	trans.Begin()
-	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
-
-	pk, p = newPerson("joe", "zhroeger", "male2", "email2", "phone2")
-	b3.Add(ctx, pk, p)
-
-	if err := trans.Commit(ctx); err == nil {
-		t.Error("Expected Commit to fail, but succeeded.")
+	f1 := func() error {
+		t1, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+		t1.Begin()
+		b3, _ := in_red_cs3.NewBtree[int, string](ctx2, sop.StoreOptions{
+			Name:                     "twophase2",
+			SlotLength:               8,
+			IsUnique:                 false,
+			IsValueDataInNodeSegment: false,
+			LeafLoadBalancing:        true,
+			Description:              "",
+		}, t1)
+		b3.Add(ctx2, 5000, "I am the value with 5000 key.")
+		b3.Add(ctx2, 5001, "I am the value with 5001 key.")
+		b3.Add(ctx2, 5002, "I am also a value with 5000 key.")
+		return t1.Commit(ctx2)
 	}
 
-	// Capture the repos' state which we will check for validity.
-	goodStoreRepository = t2.storeRepository
-	goodRegistry = t2.registry
-	goodRegistry.(*cas.Mock_vid_registry).InducedErrorOnUpdateAllOrNothing = false
-	goodRedisCache = t2.redisCache
-	goodBlobStore = t2.blobStore
-
-	trans, _ = newMockTransaction(t, sop.ForReading, -1)
-	t2 = trans.GetPhasedTransaction().(*transaction)
-	t2.storeRepository = goodStoreRepository
-	t2.registry = goodRegistry
-	t2.redisCache = goodRedisCache
-	t2.blobStore = goodBlobStore
-
-	trans.Begin()
-	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
-	if ok, _ := b3.FindOne(ctx, pk, false); !ok {
-		t.Errorf("FindOne(%v) failed, got 'not found', want 'found'.", pk)
-		t.Fail()
+	f2 := func() error {
+		t2, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+		t2.Begin()
+		b32, _ := in_red_cs3.NewBtree[int, string](ctx2, sop.StoreOptions{
+			Name:                     "twophase2",
+			SlotLength:               8,
+			IsUnique:                 false,
+			IsValueDataInNodeSegment: false,
+			LeafLoadBalancing:        true,
+			Description:              "",
+		}, t2)
+		b32.Add(ctx2, 5500, "I am the value with 5000 key.")
+		b32.Add(ctx2, 5501, "I am the value with 5001 key.")
+		b32.Add(ctx2, 5502, "I am also a value with 5000 key.")
+		return t2.Commit(ctx2)
 	}
-	if v, _ := b3.GetCurrentValue(ctx); v.Email != "email" || v.Phone != "phone" {
-		t.Errorf("GetCurrentValue failed, got (%s, %s), want ('email', 'phone').", v.Email, v.Phone)
-		t.Fail()
+
+	eg.Go(f1)
+	eg.Go(f2)
+
+	if err := eg.Wait(); err != nil {
+		t.Error(err)
+		return
 	}
-	if err := trans.Commit(ctx); err != nil {
-		t.Errorf("Commit failed, error got %v, want nil.", err)
+
+	t1, _ = in_red_cs3.NewTransaction(ctx, sop.ForReading, -1, false, region)
+	t1.Begin()
+
+	b3, _ = in_red_cs3.OpenBtree[int, string](ctx, "twophase2", t1)
+
+	b3.First(ctx)
+	i := 1
+	for {
+		if ok, err := b3.Next(ctx); err != nil {
+			t.Error(err)
+		} else if !ok {
+			break
+		}
+		i++
+	}
+	if i < 6 {
+		t.Errorf("Failed, traversing/counting all records, got %d, want 6.", i)
 	}
 }
+
+/* TODO:
+- A commit with no conflict, #1.
+- A commit with partial conflict, on key 1.
+- A commit with full conflict, #1.
+- A commit with partial conflict, on key 2.
+- A commit with partial conflict, on key 3.
+*/

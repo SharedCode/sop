@@ -34,15 +34,7 @@ type Registry interface {
 
 // StoreRepository interface specifies the store repository.
 type StoreRepository interface {
-	// Fetch store info with name.
-	Get(context.Context, ...string) ([]StoreInfo, error)
-	// Add store info & create related tables like for registry & for node blob.
-	Add(context.Context, ...StoreInfo) error
-	// Update store info. Update should also merge the Count of items between the incoming store info
-	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
-	Update(context.Context, ...StoreInfo) error
-	// Remove store info with name & drop related tables like for registry & for node blob.
-	Remove(context.Context, ...string) error
+	Store[string, StoreInfo]
 }
 
 // ManageBlobStore specifies the methods used to manage the Blob Store table(if in Cassandra) or folder path(if in File System).
@@ -105,4 +97,49 @@ type TransactionLog interface {
 	// Given a date hour, returns an available for cleanup set of transaction logs with their Transaction ID.
 	// Or nils if there is no more needing cleanup for this date hour.
 	GetLogsDetails(ctx context.Context, hour string) (UUID, []KeyValuePair[int, []byte], error)
+}
+
+// Store is a general purpose Store interface specifying methods or CRUD operations on Key & Value
+// where Value is implied to be superset of Key.
+type Store[TK any, TV any] interface {
+	// Fetch store info with name.
+	Get(context.Context, ...TK) ([]TV, error)
+	// Add store info & create related tables like for registry & for node blob.
+	Add(context.Context, ...TV) error
+	// Update store info. Update should also merge the Count of items between the incoming store info
+	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
+	Update(context.Context, ...TV) error
+	// Remove store info with name & drop related tables like for registry & for node blob.
+	Remove(context.Context, ...TK) error
+}
+
+// KeyValue Store Item Action Response has the payload and the error, if in case an error occurred while doing CRUD operation.
+type KeyValueStoreItemActionResponse[T any] struct {
+	Payload T
+	Error   error
+}
+
+// KeyValue Store Overall Response has a summary error(if there is) and the details about each item action failure if there is.
+type KeyValueStoreResponse[T any] struct {
+	// Each Item action(or operation) result.
+	Details []KeyValueStoreItemActionResponse[T]
+	// Overall error if at least one item action (or operation) failed.
+	Error error
+}
+
+// KeyValueStore is a general purpose Store interface specifying methods or CRUD operations on Key & Value pair.
+// Implementations don't need to be too fancy, it can be as simple as supporting partial success.
+type KeyValueStore[TK any, TV any] interface {
+	// Fetch entry(ies) with given key(s).
+	// Fetch term is used here because this CRUD interface is NOT part of the B-Tree system, thus, the context is
+	// to "fetch" from the remote data storage sub-system like AWS S3.
+	Fetch(context.Context, string, ...TK) KeyValueStoreResponse[KeyValuePair[TK, TV]]
+	// Fetch a large entry with the given key.
+	FetchLargeObject(context.Context, string, TK) (TV, error)
+	// Add entry(ies) to the store.
+	Add(context.Context, string, ...KeyValuePair[TK, TV]) KeyValueStoreResponse[KeyValuePair[TK, TV]]
+	// Update entry(ies) of the store.
+	Update(context.Context, string, ...KeyValuePair[TK, TV]) KeyValueStoreResponse[KeyValuePair[TK, TV]]
+	// Remove entry(ies) from the store given their names.
+	Remove(context.Context, string, ...TK) KeyValueStoreResponse[TK]
 }

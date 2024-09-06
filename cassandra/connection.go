@@ -33,14 +33,17 @@ type Config struct {
 
 // Lists all the available API's consistency level that are settable in this package.
 type ConsistencyBook struct {
-	RegistryAdd     gocql.Consistency
-	RegistryUpdate  gocql.Consistency
-	RegistryGet     gocql.Consistency
-	RegistryRemove  gocql.Consistency
-	StoreAdd        gocql.Consistency
-	StoreUpdate     gocql.Consistency
-	StoreGet        gocql.Consistency
-	StoreRemove     gocql.Consistency
+	RegistryAdd    gocql.Consistency
+	RegistryUpdate gocql.Consistency
+	RegistryGet    gocql.Consistency
+	RegistryRemove gocql.Consistency
+	StoreAdd       gocql.Consistency
+	StoreUpdate    gocql.Consistency
+	StoreGet       gocql.Consistency
+	StoreRemove    gocql.Consistency
+
+	// Blob Store Consistency configs are only used if Blob Store backend is Cassandra,
+	// not used in others like File System.
 	BlobStoreAdd    gocql.Consistency
 	BlobStoreGet    gocql.Consistency
 	BlobStoreUpdate gocql.Consistency

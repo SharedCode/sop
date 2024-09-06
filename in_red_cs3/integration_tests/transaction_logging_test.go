@@ -6,23 +6,23 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_cs3"
 )
 
 func MultipleExpiredTransCleanup(t *testing.T) {
-	in_red_ck.RemoveBtree(ctx, "ztab1")
+	in_red_cs3.RemoveBtree(ctx, "ztab1")
 
 	// Seed with good records.
 	yesterday := time.Now().Add(time.Duration(-48 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
+	cas.Now = func() time.Time { return yesterday }
 
-	trans, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, true, region)
 	trans.Begin()
 
-	b3, _ := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+	b3, _ := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "ztab1",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -42,12 +42,11 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now().Add(time.Duration(-47 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_ck.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, true, region)
 	trans.Begin()
 
-	b3, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	b3, _ = in_red_cs3.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
 	pk, p := newPerson("joe", "krueger77", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
 
@@ -57,12 +56,11 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now().Add(time.Duration(-46 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_ck.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, true, region)
 	trans.Begin()
 
-	b3, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	b3, _ = in_red_cs3.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
 	pk, p = newPerson("joe", "krueger47", "male", "email2", "phone")
 	b3.Update(ctx, pk, p)
 
@@ -71,9 +69,8 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now()
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_ck.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ = in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, true, region)
 
 	// Cleanup should be launched from this call.
 	trans.Begin()
@@ -84,20 +81,18 @@ func Cleanup(t *testing.T) {
 	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ := in_red_ck.NewTransaction(sop.ForReading, -1, true)
+	trans, _ := in_red_cs3.NewTransaction(ctx, sop.ForReading, -1, true, region)
 	trans.Begin()
-	_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	_, _ = in_red_cs3.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
 	trans.Commit(ctx)
 
 	yesterday = time.Now().Add(-time.Duration(23*time.Hour + 54*time.Minute))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_ck.NewTransaction(sop.ForReading, -1, true)
+	trans, _ = in_red_cs3.NewTransaction(ctx, sop.ForReading, -1, true, region)
 	trans.Begin()
-	_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	_, _ = in_red_cs3.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
 	trans.Commit(ctx)
 }

@@ -7,7 +7,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	cas "github.com/SharedCode/sop/cassandra"
 )
 
 // Removes B-Tree with a given name from the backend storage. This involves dropping tables

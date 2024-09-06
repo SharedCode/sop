@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_cfs"
 	"github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_cs3"
 	"github.com/SharedCode/sop/redis"
 )
 
@@ -21,28 +21,27 @@ var redisConfig = redis.Options{
 	DefaultDurationInSeconds: 24 * 60 * 60,
 }
 
+const region = "us-east-1"
+
 func init() {
-	in_red_cfs.Initialize(cassConfig, redisConfig)
+	in_red_cs3.Initialize(cassConfig, redisConfig)
 }
 
 var ctx = context.Background()
 
-const dataPath string = "/Users/grecinto/sop_data"
-
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	trans, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_cs3.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore1",
 		SlotLength:               8,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)
@@ -52,7 +51,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
-	if _, err := in_red_cfs.OpenBtree[int, string](ctx, "fooStore22", trans); err == nil {
+	if _, err := in_red_cs3.OpenBtree[int, string](ctx, "fooStore22", trans); err == nil {
 		t.Logf("OpenBtree('fooStore', trans) failed, got nil want error.")
 	}
 }
@@ -62,19 +61,18 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	trans, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_cs3.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore2",
 		SlotLength:               8,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
 		t.Error(err)

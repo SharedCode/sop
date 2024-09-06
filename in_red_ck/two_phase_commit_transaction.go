@@ -10,7 +10,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/redis"
 )
 
@@ -243,12 +243,15 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 // Sleep in random milli-seconds to allow different conflicting (Node modifying) transactions
 // to retry on different times, thus, increasing chance to succeed one after the other.
 func randomSleep(ctx context.Context) {
-	sleepTime := (1 + rand.Intn(6)) * 100
+	sleepTime := rand.Intn(7) * 250
 	sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 }
 
 // sleep with context.
 func sleep(ctx context.Context, sleepTime time.Duration) {
+	if sleepTime <= 0 {
+		return
+	}
 	sleep, cancel := context.WithTimeout(ctx, sleepTime)
 	defer cancel()
 	<-sleep.Done()

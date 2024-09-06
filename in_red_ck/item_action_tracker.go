@@ -263,7 +263,7 @@ func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context) error
 		if readItem.Action == getAction && cachedItem.Action == getAction {
 			continue
 		}
-		return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
+		return fmt.Errorf("lock(item: %v) call detected conflict", uuid.ToString())
 	}
 	return nil
 }
@@ -292,9 +292,9 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Dura
 					continue
 				}
 				if readItem.LockID.IsNil() {
-					return fmt.Errorf("lock(item: %v) call can't attain a lock in Redis", uuid)
+					return fmt.Errorf("lock(item: %v) call can't attain a lock in Redis", uuid.ToString())
 				}
-				return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
+				return fmt.Errorf("lock(item: %v) call detected conflict", uuid.ToString())
 			}
 			// We got the item locked, ensure we can unlock it.
 			cachedItem.isLockOwner = true
@@ -309,7 +309,7 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Dura
 		if readItem.Action == getAction && cachedItem.Action == getAction {
 			continue
 		}
-		return fmt.Errorf("lock(item: %v) call detected conflict", uuid)
+		return fmt.Errorf("lock(item: %v) call detected conflict", uuid.ToString())
 	}
 	return nil
 }

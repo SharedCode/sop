@@ -70,7 +70,7 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 
 	// auto generate table names based off of store name.
 	registryTableName := FormatRegistryTable(name)
-	blobTableName := FormatBlobTable(name)
+	blobTableName := formatBlobTable(name)
 	if blobStoreBasePath != "" {
 		// Append the store name as suffix so blob folders will be separated from one another, if not yet.
 		if !strings.HasSuffix(blobStoreBasePath, name) {
@@ -108,7 +108,7 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 }
 
 // Format a given name into a blob table name by adding suffix.
-func FormatBlobTable(name string) string {
+func formatBlobTable(name string) string {
 	return fmt.Sprintf("%s_b", name)
 }
 

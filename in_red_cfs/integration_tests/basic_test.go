@@ -6,7 +6,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_cfs"
-	cas "github.com/SharedCode/sop/in_red_ck/cassandra"
+	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/redis"
 )
 
@@ -48,6 +48,8 @@ func Test_CreateEmptyStore(t *testing.T) {
 		trans.Commit(ctx)
 		return
 	}
+	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	trans.Begin()
 
 	b3, err = in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "emptyStore",
