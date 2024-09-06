@@ -2,13 +2,12 @@ package integration_tests
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/aws_s3"
 	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/in_red_cs3"
 	"github.com/SharedCode/sop/redis"
@@ -30,13 +29,13 @@ var s3Client *s3.Client
 func init() {
 	in_red_cs3.Initialize(cassConfig, redisConfig)
 
-	// AWS S3 SDK should be installed, configured in the host machine this code will be ran.
-	sdkConfig, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		fmt.Println("Couldn't load default configuration, AWS SDK seems not installed, details: %v", err)
-		panic(err)
-	}
-	s3Client = s3.NewFromConfig(sdkConfig)	
+	config := aws_s3.Config{
+			HostEndpointUrl: "http://127.0.0.1:9000",
+			Region: "us-east-1",
+			Username: "minio",
+			Password: "miniosecret",
+		}	
+	s3Client = aws_s3.Connect(config)
 }
 
 var ctx = context.Background()
@@ -61,8 +60,11 @@ func Test_CreateEmptyStore(t *testing.T) {
 		return
 	}
 
+	trans, _ = in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
+	trans.Begin()
+
 	b3, err = in_red_cs3.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "emptyStore",
+		Name:                     "emptystore",
 		SlotLength:               8,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,

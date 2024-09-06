@@ -458,14 +458,14 @@ func Test_IllegalBtreeStoreName(t *testing.T) {
 	t1.Begin()
 
 	if _, err := in_red_cs3.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "2phase",
+		Name:                     "2_phase",
 		SlotLength:               8,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
 	}, t1); err == nil {
-		t.Error("NewBtree('2phase') failed, got nil, want err.")
+		t.Error("NewBtree('2_phase') failed, got nil, want err.")
 	}
 	if t1.HasBegun() {
 		t.Error("Transaction is not rolledback.")

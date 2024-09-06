@@ -20,6 +20,8 @@ import (
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
+	// Use the Store name as the bucket name.
+	si.DisableBlobStoreFormatting = true
 	return in_red_ck.NewBtree[TK, TV](ctx, si, t)
 }
 
