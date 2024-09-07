@@ -172,6 +172,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 			storesHandles = append(storesHandles, sop.RegistryPayload[sop.Handle]{
 				RegistryTable: storeLids.RegistryTable,
 				BlobTable:     storeLids.BlobTable,
+				CacheDuration: storeLids.CacheDuration,
 				IDs:           handles,
 			})
 			continue
