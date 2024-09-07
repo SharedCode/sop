@@ -62,7 +62,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 		trans.Rollback(ctx)
 		return nil, err
 	}
-	ns := sop.NewStoreInfoExt(si.Name, si.SlotLength, si.IsUnique, si.IsValueDataInNodeSegment, si.IsValueDataActivelyPersisted, si.IsValueDataGloballyCached, si.LeafLoadBalancing, si.Description, si.BlobStoreBaseFolderPath)
+	ns := sop.NewStoreInfoExt(si.Name, si.SlotLength, si.IsUnique, si.IsValueDataInNodeSegment, si.IsValueDataActivelyPersisted, si.IsValueDataGloballyCached, si.LeafLoadBalancing, si.Description, si.BlobStoreBaseFolderPath, si.CacheConfig)
 	// Allow caller to use the same name for blob store and the store name.
 	if si.DisableBlobStoreFormatting {
 		ns.BlobTable = ns.Name

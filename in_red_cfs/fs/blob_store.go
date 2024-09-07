@@ -40,7 +40,7 @@ func NewBlobStoreExt(
 
 func (b *blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.UUID, target interface{}) error {
 	fp := b.toFilePath(blobFilePath, blobID)
-	fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.ToString())
+	fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.String())
 	ba, err := b.fileIO.ReadFile(fn)
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop
 				}
 			}
 			// WriteFile will add or replace existing file. 666 - gives R/W permission to everybody.
-			fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blob.Key.ToString())
+			fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blob.Key.String())
 			if err = b.fileIO.WriteFile(fn, ba, permission); err != nil {
 				return err
 			}
@@ -79,7 +79,7 @@ func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPaylo
 	for _, storeBlobIDs := range storesBlobsIDs {
 		for _, blobID := range storeBlobIDs.Blobs {
 			fp := b.toFilePath(storeBlobIDs.BlobTable, blobID)
-			fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.ToString())
+			fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.String())
 			// Ok if file does not exist to return nil as it it was successfully removed.
 			if !b.fileIO.Exists(fn) {
 				return nil

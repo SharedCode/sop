@@ -4,7 +4,21 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
+
+// Store Cache config specificaiton.
+type StoreCacheConfig struct {
+	// Specifies this store's Registry Objects' Redis cache duration.
+	RegistryCacheDuration time.Duration
+	// Specifies this store's Node's Redis cache duration.
+	NodeCacheDuration time.Duration
+	// Only used if IsValueDataInNodeSegment(false) & IsValueDataGloballyCached(true).
+	// Specifies this store's Item Value part Redis cache duration.
+	ValueDataCacheDuration time.Duration
+	// Specifies this store's Redis cache duration.
+	StoreCacheDuration time.Duration
+}
 
 // StoreInfo contains a given (B-Tree) store details.
 type StoreInfo struct {
@@ -42,6 +56,9 @@ type StoreInfo struct {
 	// If true, node load will be balanced by pushing items to sibling nodes if there are vacant slots,
 	// otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
 	LeafLoadBalancing bool
+	// Redis cache specification for this store's objects(registry, nodes, item value part).
+	// Defaults to the global specification and can be overriden for each store.
+	CacheConfig StoreCacheConfig
 }
 
 // NewStoreInfo instantiates a new Store, defaults extended parameters to typical use-case values. Please use NewStoreInfoExtended(..) function
@@ -52,13 +69,13 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 	if !isValueDataInNodeSegment {
 		isValueDataGloballyCached = true
 	}
-	return NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption, "")
+	return NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption, "", nil)
 }
 
 // NewStoreInfoExt instantiates a new Store and offers more parameters configurable to your desire.
 // blobStoreBasePath can be left blank("") and SOP will generate a name for it. This parameter is geared so one can specify
 // a base path folder for the blob store using the File System. If using Cassandra table, please specify blank("").
-func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string, blobStoreBasePath string) *StoreInfo {
+func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string, blobStoreBasePath string, cacheConfig *StoreCacheConfig) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if slotLength%2 != 0 {
 		slotLength--
@@ -93,6 +110,12 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		isValueDataActivelyPersisted = false
 	}
 
+	// Use the SOP default cache config if the parameter received is not set.
+	if cacheConfig == nil {
+		cc := GetDefaulCacheConfig()
+		cacheConfig = &cc
+	}
+
 	return &StoreInfo{
 		Name:                         name,
 		SlotLength:                   slotLength,
@@ -104,6 +127,7 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		IsValueDataActivelyPersisted: isValueDataActivelyPersisted,
 		IsValueDataGloballyCached:    isValueDataGloballyCached,
 		LeafLoadBalancing:            leafLoadBalancing,
+		CacheConfig: *cacheConfig,
 	}
 }
 

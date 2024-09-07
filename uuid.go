@@ -2,7 +2,6 @@ package sop
 
 import (
 	"bytes"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,15 +33,10 @@ func NewUUID() UUID {
 var NilUUID UUID
 
 func (id UUID) IsNil() bool {
-	return bytes.Compare(id[:], NilUUID[:]) == 0
+	return bytes.Equal(id[:], NilUUID[:])
 }
 
 // String converts UUID to its string representation.
 func (id UUID) String() string {
-	return string(id[:])
-}
-
-// ToString Returns format xxxx-yyyy-zzzz-rrrr-tttt
-func (id UUID) ToString() string {
-	return fmt.Sprintf("%x-%x-%x-%x-%x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:16])
+	return 	uuid.UUID(id).String()
 }

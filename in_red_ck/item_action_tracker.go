@@ -77,15 +77,15 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 			if t.storeInfo.IsValueDataGloballyCached {
 				if err := t.redisCache.GetStruct(ctx, formatItemKey(item.ID.String()), &v); err != nil {
 					if !redis.KeyNotFound(err) {
-						log.Error(err.Error())
+						log.Warn(err.Error())
 					}
 					// If item not found in Redis or an error fetching it, fetch from Blob store.
 					if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.ID, &v); err != nil {
 						return err
 					}
 					// Just log Redis error since it is just secondary.
-					if err := t.redisCache.SetStruct(ctx, formatItemKey(item.ID.String()), &v, nodeCacheDuration); err != nil {
-						log.Error(err.Error())
+					if err := t.redisCache.SetStruct(ctx, formatItemKey(item.ID.String()), &v, t.storeInfo.CacheConfig.ValueDataCacheDuration); err != nil {
+						log.Warn(err.Error())
 					}
 				}
 			} else {
@@ -143,7 +143,7 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 				return err
 			}
 			if t.storeInfo.IsValueDataGloballyCached {
-				t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), itemForAdd.Value, nodeCacheDuration)
+				t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), itemForAdd.Value, t.storeInfo.CacheConfig.ValueDataCacheDuration)
 			}
 		}
 	}
@@ -174,7 +174,7 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 					return err
 				}
 				if t.storeInfo.IsValueDataGloballyCached {
-					t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), itemForAdd.Value, nodeCacheDuration)
+					t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), itemForAdd.Value, t.storeInfo.CacheConfig.ValueDataCacheDuration)
 				}
 			}
 		}
@@ -263,7 +263,7 @@ func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context) error
 		if readItem.Action == getAction && cachedItem.Action == getAction {
 			continue
 		}
-		return fmt.Errorf("lock(item: %v) call detected conflict", uuid.ToString())
+		return fmt.Errorf("lock(item: %v) call detected conflict", uuid.String())
 	}
 	return nil
 }
@@ -292,9 +292,9 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Dura
 					continue
 				}
 				if readItem.LockID.IsNil() {
-					return fmt.Errorf("lock(item: %v) call can't attain a lock in Redis", uuid.ToString())
+					return fmt.Errorf("lock(item: %v) call can't attain a lock in Redis", uuid.String())
 				}
-				return fmt.Errorf("lock(item: %v) call detected conflict", uuid.ToString())
+				return fmt.Errorf("lock(item: %v) call detected conflict", uuid.String())
 			}
 			// We got the item locked, ensure we can unlock it.
 			cachedItem.isLockOwner = true
@@ -309,7 +309,7 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Dura
 		if readItem.Action == getAction && cachedItem.Action == getAction {
 			continue
 		}
-		return fmt.Errorf("lock(item: %v) call detected conflict", uuid.ToString())
+		return fmt.Errorf("lock(item: %v) call detected conflict", uuid.String())
 	}
 	return nil
 }

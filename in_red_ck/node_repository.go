@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	log "log/slog"
-	"time"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
@@ -21,16 +20,6 @@ type cacheNode struct {
 
 type nodeRepositoryTyped[TK btree.Comparable, TV any] struct {
 	realNodeRepository *nodeRepository
-}
-
-var nodeCacheDuration time.Duration = time.Duration(1 * time.Hour)
-
-// SetNodeCacheDuration allows node cache duration to get set globally.
-func SetNodeCacheDuration(duration time.Duration) {
-	if duration < time.Minute {
-		duration = time.Duration(20 * time.Minute)
-	}
-	nodeCacheDuration = duration
 }
 
 // Add will upsert node to the map.
@@ -136,8 +125,8 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 			return nil, err
 		}
 		target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
-		if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nodeCacheDuration); err != nil {
-			log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID, err))
+		if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
+			log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID.String(), err))
 		}
 		nr.nodeLocalCache[logicalID] = cacheNode{
 			action: defaultAction,
@@ -222,7 +211,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tu
 	for i := range nodes {
 		for ii := range nodes[i].Second {
 			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetActiveID().String()),
-				nodes[i].Second[ii], nodeCacheDuration); err != nil {
+				nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
 				return false, err
 			}
 		}
@@ -285,7 +274,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Second {
-			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveID().String()), nodes[i].Second[ii], nodeCacheDuration); err != nil {
+			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
 				return false, nil, err
 			}
 		}
@@ -352,7 +341,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tupl
 			blobs[i].Blobs[ii].Value = nodes[i].Second[ii]
 			handles[i].IDs[ii] = h
 			// Add node to Redis cache.
-			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(metaData.GetID().String()), nodes[i].Second[ii], nodeCacheDuration); err != nil {
+			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(metaData.GetID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
 				return err
 			}
 		}
@@ -603,6 +592,7 @@ func convertToRegistryRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interfa
 		vids[i] = sop.RegistryPayload[sop.UUID]{
 			RegistryTable: nodes[i].First.RegistryTable,
 			BlobTable:     nodes[i].First.BlobTable,
+			CacheDuration: nodes[i].First.CacheConfig.RegistryCacheDuration,
 			IDs:           make([]sop.UUID, len(nodes[i].Second)),
 		}
 		for ii := range nodes[i].Second {

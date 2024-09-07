@@ -29,13 +29,13 @@ func NewBlobStore(s3Client *s3.Client, marshaler sop.Marshaler) (*blobStore, err
 
 func (b *blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.UUID, target interface{}) error {
 	if b.isLargeObjects {
-		s3o, err := b.BucketAsStore.FetchLargeObject(ctx, blobFilePath, blobID.ToString())
+		s3o, err := b.BucketAsStore.FetchLargeObject(ctx, blobFilePath, blobID.String())
 		if err != nil {
 			return err
 		}
 		return b.marshaler.Unmarshal(s3o.Data, target)
 	}
-	s3o := b.BucketAsStore.Fetch(ctx, blobFilePath, blobID.ToString())
+	s3o := b.BucketAsStore.Fetch(ctx, blobFilePath, blobID.String())
 	if s3o.Error != nil {
 		return s3o.Error
 	}
@@ -50,7 +50,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop
 				return err
 			}
 			res := b.BucketAsStore.Add(ctx, storeBlobs.BlobTable, sop.KeyValuePair[string, *aws_s3.S3Object]{
-				Key:   blob.Key.ToString(),
+				Key:   blob.Key.String(),
 				Value: &aws_s3.S3Object{Data: ba},
 			})
 			if res.Error != nil {
@@ -69,7 +69,7 @@ func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPaylo
 	for _, storeBlobIDs := range storesBlobsIDs {
 		s3okeys := make([]string, len(storeBlobIDs.Blobs))
 		for i, blobID := range storeBlobIDs.Blobs {
-			s3okeys[i] = blobID.ToString()
+			s3okeys[i] = blobID.String()
 		}
 		res := b.BucketAsStore.Remove(ctx, storeBlobIDs.BlobTable, s3okeys...)
 		if res.Error != nil {
