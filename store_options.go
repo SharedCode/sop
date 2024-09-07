@@ -36,6 +36,9 @@ type StoreOptions struct {
 	// Set to true to allow use of the store name as the blob store name. Useful for integrating with systems like AWS S3 where
 	// strict bucket naming convention is applied.
 	DisableBlobStoreFormatting bool
+	// Redis cache specification for this store's objects(registry, nodes, item value part).
+	// Defaults to the global specification and can be overriden for each store.
+	CacheConfig StoreCacheConfig
 }
 
 // ValueDataSize enumeration.
@@ -54,6 +57,17 @@ const (
 	BigData
 )
 
+var defaultCacheConfig StoreCacheConfig
+
+// Assigns to the global default cache duration config.
+func SetDefaultCacheConfig(cacheDuration StoreCacheConfig) {
+	defaultCacheConfig = cacheDuration
+}
+// Returns the global default cache duration config.
+func GetDefaulCacheConfig() StoreCacheConfig {
+	return defaultCacheConfig
+}
+
 // Helper function to easily configure a store. Select the right valueDataSize matching your usage scenario.
 // blobStoreBaseFolderPath is only used if storing blobs in File System. This specified the base folder path of the directory to contain the blobs.
 //
@@ -70,6 +84,11 @@ func ConfigureStore(storeName string, uniqueKey bool, slotLength int, descriptio
 		IsValueDataInNodeSegment: true,
 		Description:              description,
 		BlobStoreBaseFolderPath:  blobStoreBaseFolderPath,
+		CacheConfig: StoreCacheConfig{
+			RegistryCacheDuration: defaultCacheConfig.RegistryCacheDuration,
+			NodeCacheDuration: defaultCacheConfig.NodeCacheDuration,
+			ValueDataCacheDuration: defaultCacheConfig.ValueDataCacheDuration,
+		},
 	}
 	if valueDataSize == MediumData {
 		so.IsValueDataInNodeSegment = false

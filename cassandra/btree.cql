@@ -29,7 +29,14 @@ create table store (
     -- is value data globally cached.
     vdgc boolean,
     -- leaf load balancing feature, defaults to false in Cassandra.
-    llb boolean);
+    llb boolean
+    -- store cache config fields.
+    -- registry cache duration.
+    rcd duration,
+    -- node cache duration.
+    ncd duration,
+    -- value data cache duration.
+    vdcd duration);
 
 -- Node Blob demo table 1.
 create table foo_b(

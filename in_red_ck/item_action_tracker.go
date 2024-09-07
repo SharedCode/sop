@@ -77,7 +77,7 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 			if t.storeInfo.IsValueDataGloballyCached {
 				if err := t.redisCache.GetStruct(ctx, formatItemKey(item.ID.String()), &v); err != nil {
 					if !redis.KeyNotFound(err) {
-						log.Error(err.Error())
+						log.Warn(err.Error())
 					}
 					// If item not found in Redis or an error fetching it, fetch from Blob store.
 					if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.ID, &v); err != nil {
@@ -85,7 +85,7 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 					}
 					// Just log Redis error since it is just secondary.
 					if err := t.redisCache.SetStruct(ctx, formatItemKey(item.ID.String()), &v, nodeCacheDuration); err != nil {
-						log.Error(err.Error())
+						log.Warn(err.Error())
 					}
 				}
 			} else {

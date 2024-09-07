@@ -42,7 +42,6 @@ func NewStoreRepositoryExt(manageBlobStore sop.ManageBlobStore) sop.StoreReposit
 }
 
 var storeCacheDuration = time.Duration(2 * time.Hour)
-
 // SetStoreCacheDuration allows store repository cache duration to get set globally.
 func SetStoreCacheDuration(duration time.Duration) {
 	if duration < time.Minute {
@@ -56,12 +55,13 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
-	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
+	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb, rcd, ncd, vdcd) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
 	for _, s := range stores {
 
 		// Add a new store record.
 		qry := connection.Session.Query(insertStatement, s.Name, gocql.UUID(s.RootNodeID), s.SlotLength, s.Count, s.IsUnique, s.Description,
-			s.RegistryTable, s.BlobTable, s.Timestamp, s.IsValueDataInNodeSegment, s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached, s.LeafLoadBalancing).WithContext(ctx)
+			s.RegistryTable, s.BlobTable, s.Timestamp, s.IsValueDataInNodeSegment, s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached,
+			s.LeafLoadBalancing, s.CacheConfig.RegistryCacheDuration, s.CacheConfig.NodeCacheDuration, s.CacheConfig.ValueDataCacheDuration).WithContext(ctx)
 		if connection.Config.ConsistencyBook.StoreAdd > gocql.Any {
 			qry.Consistency(connection.Config.ConsistencyBook.StoreAdd)
 		}
@@ -86,7 +86,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		}
 		// Tolerate error in Redis caching.
 		if err := sr.redisCache.SetStruct(ctx, s.Name, &s, storeCacheDuration); err != nil {
-			log.Error(fmt.Sprintf("StoreRepository Add failed (redis setstruct), details: %v", err))
+			log.Warn(fmt.Sprintf("StoreRepository Add failed (redis setstruct), details: %v", err))
 		}
 	}
 	return nil
@@ -182,7 +182,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	for i := range stores {
 		// Tolerate redis error since we've successfully updated the master table.
 		if err := sr.redisCache.SetStruct(ctx, stores[i].Name, &stores[i], storeCacheDuration); err != nil {
-			log.Error(fmt.Sprintf("StoreRepository Update (redis setstruct) failed, details: %v", err))
+			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) failed, details: %v", err))
 		}
 	}
 
@@ -201,7 +201,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 		store := sop.StoreInfo{}
 		if err := sr.redisCache.GetStruct(ctx, names[i], &store); err != nil {
 			if !redis.KeyNotFound(err) {
-				log.Error(fmt.Sprintf("StoreRepository Get (redis getstruct) failed, details: %v", err))
+				log.Warn(fmt.Sprintf("StoreRepository Get (redis getstruct) failed, details: %v", err))
 			}
 			paramQ = append(paramQ, "?")
 			namesAsIntf = append(namesAsIntf, interface{}(names[i]))
@@ -212,7 +212,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 	if len(paramQ) == 0 {
 		return stores, nil
 	}
-	selectStatement := fmt.Sprintf("SELECT name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb FROM %s.store  WHERE name in (%v);",
+	selectStatement := fmt.Sprintf("SELECT name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb, rcd, ncd, vdcd FROM %s.store  WHERE name in (%v);",
 		connection.Config.Keyspace, strings.Join(paramQ, ", "))
 
 	qry := connection.Session.Query(selectStatement, namesAsIntf...).WithContext(ctx)
@@ -224,11 +224,12 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 	store := sop.StoreInfo{}
 	var rid gocql.UUID
 	for iter.Scan(&store.Name, &rid, &store.SlotLength, &store.Count, &store.IsUnique,
-		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.IsValueDataActivelyPersisted, &store.IsValueDataGloballyCached, &store.LeafLoadBalancing) {
+		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.IsValueDataActivelyPersisted, &store.IsValueDataGloballyCached,
+		&store.LeafLoadBalancing, &store.CacheConfig.RegistryCacheDuration, &store.CacheConfig.NodeCacheDuration, &store.CacheConfig.ValueDataCacheDuration) {
 		store.RootNodeID = sop.UUID(rid)
 
 		if err := sr.redisCache.SetStruct(ctx, store.Name, &store, storeCacheDuration); err != nil {
-			log.Error(fmt.Sprintf("StoreRepository Get (redis setstruct) failed, details: %v", err))
+			log.Warn(fmt.Sprintf("StoreRepository Get (redis setstruct) failed, details: %v", err))
 		}
 
 		stores = append(stores, store)
@@ -271,7 +272,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	for i := range names {
 		// Tolerate Redis cache failure.
 		if err := sr.redisCache.Delete(ctx, names[i]); err != nil && !redis.KeyNotFound(err) {
-			log.Error(fmt.Sprintf("Registry Add (redis setstruct) failed, details: %v", err))
+			log.Warn(fmt.Sprintf("Registry Add (redis setstruct) failed, details: %v", err))
 		}
 	}
 

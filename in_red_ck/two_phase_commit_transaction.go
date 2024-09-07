@@ -816,7 +816,7 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 		}
 		if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
 			lastErr = err
-			log.Error(fmt.Sprintf("Redis delete failed, details: %v", err))
+			log.Warn(fmt.Sprintf("Redis delete failed, details: %v", err))
 		}
 		if err := t.blobStore.Remove(ctx, unusedNodeIDs...); err != nil {
 			lastErr = err
