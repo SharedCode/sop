@@ -97,6 +97,11 @@ func New[TK Comparable, TV any](storeInfo *sop.StoreInfo, si *StoreInterface[TK,
 	return &b3, nil
 }
 
+// Returns the details about this B-Tree.
+func (btree *Btree[TK, TV]) GetStoreInfo() sop.StoreInfo {
+	return *btree.StoreInfo
+}
+
 // Returns the number of items in this B-Tree.
 func (btree *Btree[TK, TV]) Count() int64 {
 	return btree.StoreInfo.Count

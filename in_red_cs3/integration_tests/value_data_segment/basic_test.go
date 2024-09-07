@@ -2,7 +2,11 @@ package value_data_segment
 
 import (
 	"context"
+	"fmt"
 	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/cassandra"
@@ -23,20 +27,29 @@ var redisConfig = redis.Options{
 
 const region = "us-east-1"
 
+var s3Client *s3.Client
+
 func init() {
 	in_red_cs3.Initialize(cassConfig, redisConfig)
+	// AWS S3 SDK should be installed, configured in the host machine this code will be ran.
+	sdkConfig, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		fmt.Println("Couldn't load default configuration, AWS SDK seems not installed, details: %v", err)
+		panic(err)
+	}
+	s3Client = s3.NewFromConfig(sdkConfig)	
 }
 
 var ctx = context.Background()
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	trans, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	trans, err := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
 	b3, err := in_red_cs3.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "fooStore1",
+		Name:                     "foostore1",
 		SlotLength:               8,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -61,13 +74,13 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans, err := in_red_cs3.NewTransaction(ctx, sop.ForWriting, -1, false, region)
+	trans, err := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
 	b3, err := in_red_cs3.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "fooStore2",
+		Name:                     "foostore2",
 		SlotLength:               8,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,

@@ -1,5 +1,4 @@
-// Package contains general store implementations for AWS S3 bueckt I/O.
-package s3
+package aws_s3
 
 import (
 	"bytes"
@@ -8,7 +7,6 @@ import (
 	"io"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -30,13 +28,10 @@ type S3Object struct {
 }
 
 // NewBucketAsStore returns the S3 bucket (wrapper) instance.
-func NewBucketAsStore(ctx context.Context) (*S3Bucket, error) {
-	// AWS S3 SDK should be installed, configured in the host machine this code will be ran.
-	sdkConfig, err := config.LoadDefaultConfig(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("couldn't load default configuration, details: %v", err)
+func NewBucketAsStore(s3Client *s3.Client) (*S3Bucket, error) {
+	if s3Client == nil {
+		return nil, fmt.Errorf("s3Client parameter can't be nil")
 	}
-	s3Client := s3.NewFromConfig(sdkConfig)
 	return &S3Bucket{
 		S3Client: s3Client,
 	}, nil
@@ -178,14 +173,24 @@ func (b *S3Bucket) Update(ctx context.Context, bucketName string, entries ...sop
 }
 
 func (b *S3Bucket) Remove(ctx context.Context, bucketName string, names ...string) sop.KeyValueStoreResponse[string] {
-	var objectIds []types.ObjectIdentifier
-	for _, key := range names {
-		objectIds = append(objectIds, types.ObjectIdentifier{Key: aws.String(key)})
+	if len(names) == 0 {
+		return sop.KeyValueStoreResponse[string]{}
 	}
-	output, _ := b.S3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+	objectIds := make([]types.ObjectIdentifier, len(names))
+	for i, key := range names {
+		objectIds[i] = types.ObjectIdentifier{Key: aws.String(key)}
+	}
+	output, err := b.S3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 		Bucket: aws.String(bucketName),
 		Delete: &types.Delete{Objects: objectIds},
 	})
+
+	// Return the error if one is encountered.
+	if err != nil {
+		return sop.KeyValueStoreResponse[string]{
+			Error:   fmt.Errorf("failed to remove items from bucket %s, last error: %v", bucketName, err),
+		}
+	}
 
 	// Package the errors that were encountered if there is.
 	if len(output.Errors) > 0 {

@@ -4,13 +4,15 @@ package in_red_cs3
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/aws_s3"
 	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/cassandra"
-	"github.com/SharedCode/sop/in_red_cs3/s3"
-	red_s3 "github.com/SharedCode/sop/red_s3/s3"
+	"github.com/SharedCode/sop/in_red_ck"
 	sd "github.com/SharedCode/sop/streaming_data"
 )
 
@@ -19,6 +21,8 @@ import (
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
+	// Use the Store name as the bucket name.
+	si.DisableBlobStoreFormatting = true
 	return in_red_ck.NewBtree[TK, TV](ctx, si, t)
 }
 
@@ -31,8 +35,13 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
 // Use with care and only when you are sure to delete the tables.
-func RemoveBtree(ctx context.Context, name string) error {
-	sr, err := NewStoreRepository(ctx, "")
+func RemoveBtree[TK btree.Comparable, TV any](ctx context.Context, s3Client *s3.Client, region string, name string) error {
+	// Delete B-Tree contents.
+	if err := removeBtreeContents[TK, TV](ctx, s3Client, region, name); err != nil {
+		return err
+	}
+	// Delete the B-Tree itself including its backend bits.
+	sr, err := NewStoreRepository(s3Client, region)
 	if err != nil {
 		return err
 	}
@@ -41,24 +50,69 @@ func RemoveBtree(ctx context.Context, name string) error {
 
 // NewStoreRepository is a convenience function to instantiate a repository with necessary File System
 // based blob store implementation.
-func NewStoreRepository(ctx context.Context, region string) (sop.StoreRepository, error) {
-	bs, err := s3.NewBlobStore(ctx, sop.NewMarshaler())
+func NewStoreRepository(s3Client *s3.Client, region string) (sop.StoreRepository, error) {
+	mbs, err := aws_s3.NewManageBucket(s3Client, region)
 	if err != nil {
 		return nil, err
 	}
-	mbs := red_s3.NewManageBucket(bs.BucketAsStore.(*red_s3.S3Bucket).S3Client, region)
 	return cas.NewStoreRepositoryExt(mbs), nil
 }
 
 // NewStreamingDataStore is a convenience function to easily instantiate a streaming data store that stores
-// blobs in File System.
-//
-// Specify your blobStoreBaseFolderPath to an appropriate folder path that will be the base folder of blob files.
+// blobs in AWS S3.
 func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*sd.StreamingDataStore[TK], error) {
-	return sd.NewStreamingDataStoreExt[TK](ctx, name, trans, "")
+	si := sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, "")
+	si.DisableBlobStoreFormatting = true
+	return sd.NewStreamingDataStoreOptions[TK](ctx, si, trans)
 }
 
 // OpenStreamingDataStore is a convenience function to open an existing data store for use in "streaming data".
 func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*sd.StreamingDataStore[TK], error) {
 	return sd.OpenStreamingDataStore[TK](ctx, name, trans)
+}
+
+func removeBtreeContents[TK btree.Comparable, TV any](ctx context.Context, s3Client *s3.Client, region string, name string) error {
+	const batchSize = 1000
+	for {
+		trans, err  := NewTransaction(s3Client, sop.ForWriting, -1, true, region)
+		if err != nil {
+			return err
+		}
+		trans.Begin()
+		btree, err := OpenBtree[TK, TV](ctx, name, trans)
+		if err != nil {
+			return err
+		}
+		if btree.Count() == 0 {
+			if err := trans.Commit(ctx); err != nil {
+				return err
+			}
+			break
+		}
+		for i :=0; i < batchSize; i++ {
+			if ok, err := btree.First(ctx); !ok || err != nil {
+				if err != nil {
+					return err
+				}
+				// Perhaps btree is empty?
+				break
+			}
+			if ok, err := btree.RemoveCurrentItem(ctx); !ok || err != nil {
+				if err != nil {
+					return err
+				}
+				if rerr := trans.Rollback(ctx); rerr != nil {
+					return fmt.Errorf("failed to RemoveCurrentItem from btree(%s) & failed to rollback, fail err: %v, rollback err: %v", name, err, rerr)
+				}
+				return fmt.Errorf("failed to RemoveCurrentItem from btree(%s), fail err: %v", name, err)
+			}
+		}
+		if err := trans.Commit(ctx); err != nil {
+			return err
+		}
+		if btree.Count() == 0 {
+			break
+		}
+	}
+	return nil
 }

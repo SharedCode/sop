@@ -33,6 +33,9 @@ type StoreOptions struct {
 	Description string
 	// For use by SOP in File System only. Specifies the base folder path of the blob store.
 	BlobStoreBaseFolderPath string
+	// Set to true to allow use of the store name as the blob store name. Useful for integrating with systems like AWS S3 where
+	// strict bucket naming convention is applied.
+	DisableBlobStoreFormatting bool
 }
 
 // ValueDataSize enumeration.

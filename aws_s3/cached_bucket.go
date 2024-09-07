@@ -1,4 +1,4 @@
-package s3
+package aws_s3
 
 import (
 	"context"
@@ -31,15 +31,15 @@ type cacheObject struct {
 var Now = time.Now
 
 // NewCacheBucket is synonymous to NewCacheBucketExt but sets to use default values for the extended parameters.
-func NewCachedBucket(ctx context.Context) (sop.KeyValueStore[string, []byte], error) {
-	return NewCachedBucketExt(ctx, -1, -1, 0)
+func NewCachedBucket(s3Client *s3.Client) (sop.KeyValueStore[string, []byte], error) {
+	return NewCachedBucketExt(s3Client, -1, -1, 0)
 }
 
 // NewCacheBucketExt returns a KeyValueStore that adds caching on top of the AWS S3 bucket "store".
 // Keep the bucketName short & set refreshInterval to decent period like ever 5mins "etag" check
 // and cacheExpiry to longer time(5 hrs?) or no expiry(0). maxCacheableSize defaults to 500MB.
-func NewCachedBucketExt(ctx context.Context, refreshInterval time.Duration, cacheExpiry time.Duration, maxCacheableSize int) (sop.KeyValueStore[string, []byte], error) {
-	bs, err := NewBucketAsStore(ctx)
+func NewCachedBucketExt(s3Client *s3.Client, refreshInterval time.Duration, cacheExpiry time.Duration, maxCacheableSize int) (sop.KeyValueStore[string, []byte], error) {
+	bs, err := NewBucketAsStore(s3Client)
 	if err != nil {
 		return nil, err
 	}
