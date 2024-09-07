@@ -127,7 +127,7 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		IsValueDataActivelyPersisted: isValueDataActivelyPersisted,
 		IsValueDataGloballyCached:    isValueDataGloballyCached,
 		LeafLoadBalancing:            leafLoadBalancing,
-		CacheConfig: *cacheConfig,
+		CacheConfig:                  *cacheConfig,
 	}
 }
 

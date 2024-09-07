@@ -60,16 +60,17 @@ const (
 )
 
 var defaultCacheConfig StoreCacheConfig = StoreCacheConfig{
-	StoreCacheDuration: time.Duration(12 * time.Hour),
-	RegistryCacheDuration: time.Duration(12 * time.Hour),
+	StoreCacheDuration:     time.Duration(12 * time.Hour),
+	RegistryCacheDuration:  time.Duration(12 * time.Hour),
 	ValueDataCacheDuration: time.Duration(12 * time.Hour),
-	NodeCacheDuration: time.Duration(12 * time.Hour),
+	NodeCacheDuration:      time.Duration(12 * time.Hour),
 }
 
 // Assigns to the global default cache duration config.
 func SetDefaultCacheConfig(cacheDuration StoreCacheConfig) {
 	defaultCacheConfig = cacheDuration
 }
+
 // Returns the global default cache duration config.
 func GetDefaulCacheConfig() StoreCacheConfig {
 	return defaultCacheConfig
@@ -92,10 +93,10 @@ func ConfigureStore(storeName string, uniqueKey bool, slotLength int, descriptio
 		Description:              description,
 		BlobStoreBaseFolderPath:  blobStoreBaseFolderPath,
 		CacheConfig: &StoreCacheConfig{
-			RegistryCacheDuration: defaultCacheConfig.RegistryCacheDuration,
-			NodeCacheDuration: defaultCacheConfig.NodeCacheDuration,
+			RegistryCacheDuration:  defaultCacheConfig.RegistryCacheDuration,
+			NodeCacheDuration:      defaultCacheConfig.NodeCacheDuration,
 			ValueDataCacheDuration: defaultCacheConfig.ValueDataCacheDuration,
-			StoreCacheDuration: defaultCacheConfig.StoreCacheDuration,
+			StoreCacheDuration:     defaultCacheConfig.StoreCacheDuration,
 		},
 	}
 	if valueDataSize == MediumData {

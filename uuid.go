@@ -38,5 +38,5 @@ func (id UUID) IsNil() bool {
 
 // String converts UUID to its string representation.
 func (id UUID) String() string {
-	return 	uuid.UUID(id).String()
+	return uuid.UUID(id).String()
 }
