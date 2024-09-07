@@ -32,11 +32,11 @@ func init() {
 	in_red_cs3.Initialize(cassConfig, redisConfig)
 
 	config := aws_s3.Config{
-			HostEndpointUrl: "http://127.0.0.1:9000",
-			Region: "us-east-1",
-			Username: "minio",
-			Password: "miniosecret",
-		}	
+		HostEndpointUrl: "http://127.0.0.1:9000",
+		Region:          "us-east-1",
+		Username:        "minio",
+		Password:        "miniosecret",
+	}
 	s3Client = aws_s3.Connect(config)
 }
 

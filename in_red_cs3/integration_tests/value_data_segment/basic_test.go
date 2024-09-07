@@ -37,7 +37,7 @@ func init() {
 		fmt.Println("Couldn't load default configuration, AWS SDK seems not installed, details: %v", err)
 		panic(err)
 	}
-	s3Client = s3.NewFromConfig(sdkConfig)	
+	s3Client = s3.NewFromConfig(sdkConfig)
 }
 
 var ctx = context.Background()

@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_ck"
 	"github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_ck"
 	"github.com/SharedCode/sop/redis"
 )
 

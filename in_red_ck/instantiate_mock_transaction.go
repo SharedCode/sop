@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/redis"
 	"github.com/SharedCode/sop/in_red_ck/mocks"
+	"github.com/SharedCode/sop/redis"
 )
 
 // Global mock repositories will allow us to simulate repositories that persists state

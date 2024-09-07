@@ -74,7 +74,7 @@ func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name strin
 func removeBtreeContents[TK btree.Comparable, TV any](ctx context.Context, s3Client *s3.Client, region string, name string) error {
 	const batchSize = 1000
 	for {
-		trans, err  := NewTransaction(s3Client, sop.ForWriting, -1, true, region)
+		trans, err := NewTransaction(s3Client, sop.ForWriting, -1, true, region)
 		if err != nil {
 			return err
 		}
@@ -89,7 +89,7 @@ func removeBtreeContents[TK btree.Comparable, TV any](ctx context.Context, s3Cli
 			}
 			break
 		}
-		for i :=0; i < batchSize; i++ {
+		for i := 0; i < batchSize; i++ {
 			if ok, err := btree.First(ctx); !ok || err != nil {
 				if err != nil {
 					return err
