@@ -58,6 +58,17 @@ func NewStreamingDataStoreExt[TK btree.Comparable](ctx context.Context, name str
 	}, nil
 }
 
+// Synonymous to NewStreamingDataStore but expects StoreOptions parameter.
+func NewStreamingDataStoreOptions[TK btree.Comparable](ctx context.Context, options sop.StoreOptions, trans sop.Transaction) (*StreamingDataStore[TK], error) {
+	btree, err := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, options, trans)
+	if err != nil {
+		return nil, err
+	}
+	return &StreamingDataStore[TK]{
+		btree: btree,
+	}, nil
+}
+
 // OpenStreamingDataStore opens an existing data store for use in "streaming data".
 func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*StreamingDataStore[TK], error) {
 	btree, err := in_red_ck.OpenBtree[StreamingDataKey[TK], []byte](ctx, name, trans)

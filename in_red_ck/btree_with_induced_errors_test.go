@@ -134,5 +134,9 @@ func (b3 b3WithInducedErrors[TK, TV]) Previous(ctx context.Context) (bool, error
 	return true, nil
 }
 
+func (b3 b3WithInducedErrors[TK, TV]) GetStoreInfo() sop.StoreInfo {
+	return sop.StoreInfo{}
+}
+
 func (b3 b3WithInducedErrors[TK, TV]) IsValueDataInNodeSegment() bool { return true }
 func (b3 b3WithInducedErrors[TK, TV]) IsUnique() bool                 { return true }

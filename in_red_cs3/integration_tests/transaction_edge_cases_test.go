@@ -416,11 +416,14 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	sr, _ := in_red_cs3.NewStoreRepository(s3Client, region)
-	sr.Remove(ctx, "twophase3")
+	err := sr.Remove(ctx, "twophase3")
+	if err != nil {
+		t.Error(err)
+	}
 
 	t1, _ := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	t1.Begin()
-	b3, _ := in_red_cs3.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_cs3.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase3",
 		SlotLength:               8,
 		IsUnique:                 false,
@@ -428,6 +431,9 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 		LeafLoadBalancing:        true,
 		Description:              "",
 	}, t1)
+	if err != nil {
+		t.Error(err)
+	}
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 500, "I am the value with 500 key.")
 	t1.Commit(ctx)

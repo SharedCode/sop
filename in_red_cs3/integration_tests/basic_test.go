@@ -13,6 +13,8 @@ import (
 	"github.com/SharedCode/sop/redis"
 )
 
+const region = "us-east-1"
+
 var cassConfig = cas.Config{
 	ClusterHosts: []string{"localhost:9042"},
 	Keyspace:     "btree",
