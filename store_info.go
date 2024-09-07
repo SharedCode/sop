@@ -16,6 +16,8 @@ type StoreCacheConfig struct {
 	// Only used if IsValueDataInNodeSegment(false) & IsValueDataGloballyCached(true).
 	// Specifies this store's Item Value part Redis cache duration.
 	ValueDataCacheDuration time.Duration
+	// Specifies this store's Redis cache duration.
+	StoreCacheDuration time.Duration
 }
 
 // StoreInfo contains a given (B-Tree) store details.

@@ -2,6 +2,7 @@ package sop
 
 import (
 	"context"
+	"time"
 )
 
 // Manage or fetch Virtual ID request/response payload.
@@ -10,6 +11,8 @@ type RegistryPayload[T Handle | UUID] struct {
 	RegistryTable string
 	// During Rollback and Commit, we need to get hold of the paired BlobTable(or blob base folder path if in FS).
 	BlobTable string
+	// CacheDuration to be used for Redis caching.
+	CacheDuration time.Duration
 	// IDs is an array containing the Virtual IDs details to be stored or to be fetched.
 	IDs []T
 }

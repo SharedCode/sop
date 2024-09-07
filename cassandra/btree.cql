@@ -36,7 +36,9 @@ create table store (
     -- node cache duration.
     ncd duration,
     -- value data cache duration.
-    vdcd duration);
+    vdcd duration,
+    -- store cache duration.
+    scd duration);
 
 -- Node Blob demo table 1.
 create table foo_b(

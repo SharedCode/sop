@@ -126,7 +126,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 		}
 		target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
 		if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
-			log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID.ToString(), err))
+			log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID.String(), err))
 		}
 		nr.nodeLocalCache[logicalID] = cacheNode{
 			action: defaultAction,
@@ -592,6 +592,7 @@ func convertToRegistryRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interfa
 		vids[i] = sop.RegistryPayload[sop.UUID]{
 			RegistryTable: nodes[i].First.RegistryTable,
 			BlobTable:     nodes[i].First.BlobTable,
+			CacheDuration: nodes[i].First.CacheConfig.RegistryCacheDuration,
 			IDs:           make([]sop.UUID, len(nodes[i].Second)),
 		}
 		for ii := range nodes[i].Second {

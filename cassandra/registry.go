@@ -7,7 +7,6 @@ import (
 	"fmt"
 	log "log/slog"
 	"strings"
-	"time"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/redis"
@@ -25,14 +24,12 @@ func (r *UpdateAllOrNothingError) Error() string {
 
 type registry struct {
 	redisCache redis.Cache
-	cacheDuration time.Duration
 }
 
 // NewRegistry manages the Handle in the store's Cassandra registry table.
-func NewRegistry(cacheDuration time.Duration) sop.Registry {
+func NewRegistry() sop.Registry {
 	return &registry{
 		redisCache: redis.NewClient(),
-		cacheDuration: cacheDuration,
 	}
 }
 
@@ -56,7 +53,7 @@ func (v *registry) Add(ctx context.Context, storesHandles ...sop.RegistryPayload
 				return err
 			}
 			// Tolerate Redis cache failure.
-			if err := v.redisCache.SetStruct(ctx, h.LogicalID.String(), &h, v.cacheDuration); err != nil {
+			if err := v.redisCache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Add (redis setstruct) failed, details: %v", err))
 			}
 		}
@@ -90,7 +87,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				newVersion--
 				if newVersion != h2.Version || !h.IsEqual(&h2) {
 					return &UpdateAllOrNothingError{
-						Err: fmt.Errorf("Registry Update failed, handle logical ID(%v) version conflict detected", h.LogicalID.ToString()),
+						Err: fmt.Errorf("Registry Update failed, handle logical ID(%v) version conflict detected", h.LogicalID.String()),
 					}
 				}
 			}
@@ -140,7 +137,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
 			// Tolerate Redis cache failure.
-			if err := v.redisCache.SetStruct(ctx, h.LogicalID.String(), &h, v.cacheDuration); err != nil {
+			if err := v.redisCache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
 			}
 		}
@@ -196,7 +193,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 			handle.PhysicalIDB = sop.UUID(idb)
 			handles = append(handles, handle)
 
-			if err := v.redisCache.SetStruct(ctx, handle.LogicalID.String(), &handle, v.cacheDuration); err != nil {
+			if err := v.redisCache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Get (redis setstruct) failed, details: %v", err))
 			}
 			handle = sop.Handle{}
@@ -207,6 +204,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 		storesHandles = append(storesHandles, sop.RegistryPayload[sop.Handle]{
 			RegistryTable: storeLids.RegistryTable,
 			BlobTable:     storeLids.BlobTable,
+			CacheDuration: storeLids.CacheDuration,
 			IDs:           handles,
 		})
 	}

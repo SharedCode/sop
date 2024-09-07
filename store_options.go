@@ -1,5 +1,7 @@
 package sop
 
+import "time"
+
 // StoreOptions contains field options settable when constructing a given (B-Tree).
 type StoreOptions struct {
 	// Short name of this (B-Tree store).
@@ -57,7 +59,12 @@ const (
 	BigData
 )
 
-var defaultCacheConfig StoreCacheConfig
+var defaultCacheConfig StoreCacheConfig = StoreCacheConfig{
+	StoreCacheDuration: time.Duration(12 * time.Hour),
+	RegistryCacheDuration: time.Duration(12 * time.Hour),
+	ValueDataCacheDuration: time.Duration(12 * time.Hour),
+	NodeCacheDuration: time.Duration(12 * time.Hour),
+}
 
 // Assigns to the global default cache duration config.
 func SetDefaultCacheConfig(cacheDuration StoreCacheConfig) {
@@ -88,6 +95,7 @@ func ConfigureStore(storeName string, uniqueKey bool, slotLength int, descriptio
 			RegistryCacheDuration: defaultCacheConfig.RegistryCacheDuration,
 			NodeCacheDuration: defaultCacheConfig.NodeCacheDuration,
 			ValueDataCacheDuration: defaultCacheConfig.ValueDataCacheDuration,
+			StoreCacheDuration: defaultCacheConfig.StoreCacheDuration,
 		},
 	}
 	if valueDataSize == MediumData {
