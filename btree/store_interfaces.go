@@ -67,7 +67,7 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// Returns the number of items in this B-Tree.
 	Count() int64
 
-	// StoreInfo contains the details about this B-Tree.
+	// Returns StoreInfo which contains the details about this B-Tree.
 	GetStoreInfo() sop.StoreInfo
 }
 

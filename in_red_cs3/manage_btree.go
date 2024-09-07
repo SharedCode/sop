@@ -37,6 +37,41 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // Use with care and only when you are sure to delete the tables.
 func RemoveBtree[TK btree.Comparable, TV any](ctx context.Context, s3Client *s3.Client, region string, name string) error {
 	// Delete B-Tree contents.
+	if err := removeBtreeContents[TK, TV](ctx, s3Client, region, name); err != nil {
+		return err
+	}
+	// Delete the B-Tree itself including its backend bits.
+	sr, err := NewStoreRepository(s3Client, region)
+	if err != nil {
+		return err
+	}
+	return sr.Remove(ctx, name)
+}
+
+// NewStoreRepository is a convenience function to instantiate a repository with necessary File System
+// based blob store implementation.
+func NewStoreRepository(s3Client *s3.Client, region string) (sop.StoreRepository, error) {
+	mbs, err := aws_s3.NewManageBucket(s3Client, region)
+	if err != nil {
+		return nil, err
+	}
+	return cas.NewStoreRepositoryExt(mbs), nil
+}
+
+// NewStreamingDataStore is a convenience function to easily instantiate a streaming data store that stores
+// blobs in AWS S3.
+func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*sd.StreamingDataStore[TK], error) {
+	si := sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, "")
+	si.DisableBlobStoreFormatting = true
+	return sd.NewStreamingDataStoreOptions[TK](ctx, si, trans)
+}
+
+// OpenStreamingDataStore is a convenience function to open an existing data store for use in "streaming data".
+func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*sd.StreamingDataStore[TK], error) {
+	return sd.OpenStreamingDataStore[TK](ctx, name, trans)
+}
+
+func removeBtreeContents[TK btree.Comparable, TV any](ctx context.Context, s3Client *s3.Client, region string, name string) error {
 	const batchSize = 1000
 	for {
 		trans, err  := NewTransaction(s3Client, sop.ForWriting, -1, true, region)
@@ -79,34 +114,5 @@ func RemoveBtree[TK btree.Comparable, TV any](ctx context.Context, s3Client *s3.
 			break
 		}
 	}
-
-	// Delete the B-Tree itself including its backend bits.
-	sr, err := NewStoreRepository(s3Client, "")
-	if err != nil {
-		return err
-	}
-	return sr.Remove(ctx, name)
-}
-
-// NewStoreRepository is a convenience function to instantiate a repository with necessary File System
-// based blob store implementation.
-func NewStoreRepository(s3Client *s3.Client, region string) (sop.StoreRepository, error) {
-	mbs, err := aws_s3.NewManageBucket(s3Client, region)
-	if err != nil {
-		return nil, err
-	}
-	return cas.NewStoreRepositoryExt(mbs), nil
-}
-
-// NewStreamingDataStore is a convenience function to easily instantiate a streaming data store that stores
-// blobs in AWS S3.
-func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*sd.StreamingDataStore[TK], error) {
-	si := sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, "")
-	si.DisableBlobStoreFormatting = true
-	return sd.NewStreamingDataStoreOptions[TK](ctx, si, trans)
-}
-
-// OpenStreamingDataStore is a convenience function to open an existing data store for use in "streaming data".
-func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*sd.StreamingDataStore[TK], error) {
-	return sd.OpenStreamingDataStore[TK](ctx, name, trans)
+	return nil
 }

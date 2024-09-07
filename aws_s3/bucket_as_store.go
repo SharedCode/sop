@@ -177,10 +177,17 @@ func (b *S3Bucket) Remove(ctx context.Context, bucketName string, names ...strin
 	for _, key := range names {
 		objectIds = append(objectIds, types.ObjectIdentifier{Key: aws.String(key)})
 	}
-	output, _ := b.S3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+	output, err := b.S3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 		Bucket: aws.String(bucketName),
 		Delete: &types.Delete{Objects: objectIds},
 	})
+
+	// Return the error if one is encountered.
+	if err != nil {
+		return sop.KeyValueStoreResponse[string]{
+			Error:   fmt.Errorf("failed to remove items from bucket %s, last error: %v", bucketName, err),
+		}
+	}
 
 	// Package the errors that were encountered if there is.
 	if len(output.Errors) > 0 {

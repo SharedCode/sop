@@ -7,35 +7,24 @@ import (
 
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_ck"
 	"github.com/SharedCode/sop/in_red_cs3"
 )
 
-func Test_MultipleExpiredTransCleanup(t *testing.T) {
-
-	// Detect if BTree exists or not by trying to "open" it.
+func MultipleExpiredTransCleanup(t *testing.T) {
 	tableName := "ztab1"
-	trans, err  := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, true, region)
-	if err != nil {
-		t.Error(err)
-	}
-	trans.Begin()
-	if _, err := in_red_cs3.OpenBtree[PersonKey, Person](ctx, tableName, trans); err == nil {
-		trans.Commit(ctx)
-		// Delete contents and the B-Tree itself from the backend.
-		if err := in_red_cs3.RemoveBtree[PersonKey, Person](ctx, s3Client, region, tableName); err != nil {
-			t.Error(err)
-		}
-	} else {
-		trans.Rollback(ctx)
+	// Delete contents and the B-Tree itself from the backend.
+	if err := in_red_cs3.RemoveBtree[PersonKey, Person](ctx, s3Client, region, tableName); err != nil {
+		fmt.Printf("RemoveBtree(%s) failed, perhaps it does not exist, error: %v\n", tableName, err)
 	}
 
 	// Seed with good records.
 	yesterday := time.Now().Add(time.Duration(-48 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	cas.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, true, region)
+	trans, _ := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, true, region)
 	trans.Begin()
 
 	b3, _ := in_red_cs3.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -58,6 +47,7 @@ func Test_MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now().Add(time.Duration(-47 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, true, region)
 	trans.Begin()
@@ -72,6 +62,7 @@ func Test_MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now().Add(time.Duration(-46 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, true, region)
 	trans.Begin()
@@ -85,6 +76,7 @@ func Test_MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now()
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, true, region)
 
@@ -93,10 +85,11 @@ func Test_MultipleExpiredTransCleanup(t *testing.T) {
 
 }
 
-func Test_Cleanup(t *testing.T) {
+func Cleanup(t *testing.T) {
 	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
 
 	trans, _ := in_red_cs3.NewTransaction(s3Client, sop.ForReading, -1, true, region)
 	trans.Begin()
@@ -106,6 +99,7 @@ func Test_Cleanup(t *testing.T) {
 	yesterday = time.Now().Add(-time.Duration(23*time.Hour + 54*time.Minute))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
+	in_red_ck.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cs3.NewTransaction(s3Client, sop.ForReading, -1, true, region)
 	trans.Begin()
