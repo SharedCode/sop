@@ -1,16 +1,16 @@
 package aws_s3
 
 import (
-    "github.com/aws/aws-sdk-go-v2/aws"
-    "github.com/aws/aws-sdk-go-v2/credentials"
-    "github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type Config struct {
 	// "http://127.0.0.1:9000"
 	HostEndpointUrl string
 	// "us-east-1"
-	Region string
+	Region   string
 	Username string
 	Password string
 }

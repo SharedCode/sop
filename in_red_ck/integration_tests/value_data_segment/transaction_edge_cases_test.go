@@ -6,8 +6,8 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_ck"
 )
 
 // Covers all of these cases:

@@ -6,9 +6,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_ck"
-	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/aws_s3"
+	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_ck"
 )
 
 // NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.

@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/SharedCode/sop"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/SharedCode/sop/aws_s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.

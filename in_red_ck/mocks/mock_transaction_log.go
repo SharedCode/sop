@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_memory"
 	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_memory"
 )
 
 type MockTransactionLog struct {

@@ -185,7 +185,7 @@ func (b *cachedBucket) fetchAndCache(ctx context.Context, bucketName string, nam
 	if res.Error != nil {
 		return sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]]{
 			Details: []sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, []byte]]{
-				sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, []byte]]{
+				{
 					Payload: sop.KeyValuePair[string, []byte]{
 						Key: name,
 					},

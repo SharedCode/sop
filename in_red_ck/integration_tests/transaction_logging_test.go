@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_ck"
 )
 
 func MultipleExpiredTransCleanup(t *testing.T) {

@@ -188,7 +188,7 @@ func (b *S3Bucket) Remove(ctx context.Context, bucketName string, names ...strin
 	// Return the error if one is encountered.
 	if err != nil {
 		return sop.KeyValueStoreResponse[string]{
-			Error:   fmt.Errorf("failed to remove items from bucket %s, last error: %v", bucketName, err),
+			Error: fmt.Errorf("failed to remove items from bucket %s, last error: %v", bucketName, err),
 		}
 	}
 

@@ -1,8 +1,8 @@
 package in_red_cs3
 
 import (
-	"github.com/SharedCode/sop/in_red_ck"
 	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_ck"
 	"github.com/SharedCode/sop/redis"
 )
 
