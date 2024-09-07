@@ -29,9 +29,7 @@ create table store (
     -- is value data globally cached.
     vdgc boolean,
     -- leaf load balancing feature, defaults to false in Cassandra.
-    llb boolean,
-    -- is_del true specifies this store had been marked logically deleted.
-    is_del boolean);
+    llb boolean);
 
 -- Node Blob demo table 1.
 create table foo_b(
