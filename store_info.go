@@ -69,13 +69,13 @@ func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeS
 	if !isValueDataInNodeSegment {
 		isValueDataGloballyCached = true
 	}
-	return NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption, "", GetDefaulCacheConfig())
+	return NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption, "", nil)
 }
 
 // NewStoreInfoExt instantiates a new Store and offers more parameters configurable to your desire.
 // blobStoreBasePath can be left blank("") and SOP will generate a name for it. This parameter is geared so one can specify
 // a base path folder for the blob store using the File System. If using Cassandra table, please specify blank("").
-func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string, blobStoreBasePath string, cacheConfig StoreCacheConfig) *StoreInfo {
+func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string, blobStoreBasePath string, cacheConfig *StoreCacheConfig) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if slotLength%2 != 0 {
 		slotLength--
@@ -110,6 +110,12 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		isValueDataActivelyPersisted = false
 	}
 
+	// Use the SOP default cache config if the parameter received is not set.
+	if cacheConfig == nil {
+		cc := GetDefaulCacheConfig()
+		cacheConfig = &cc
+	}
+
 	return &StoreInfo{
 		Name:                         name,
 		SlotLength:                   slotLength,
@@ -121,7 +127,7 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		IsValueDataActivelyPersisted: isValueDataActivelyPersisted,
 		IsValueDataGloballyCached:    isValueDataGloballyCached,
 		LeafLoadBalancing:            leafLoadBalancing,
-		CacheConfig: cacheConfig,
+		CacheConfig: *cacheConfig,
 	}
 }
 

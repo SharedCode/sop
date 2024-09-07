@@ -40,7 +40,7 @@ type StoreOptions struct {
 	DisableBlobStoreFormatting bool
 	// Redis cache specification for this store's objects(registry, nodes, item value part).
 	// Defaults to the global specification and can be overriden for each store.
-	CacheConfig StoreCacheConfig
+	CacheConfig *StoreCacheConfig
 }
 
 // ValueDataSize enumeration.
@@ -91,7 +91,7 @@ func ConfigureStore(storeName string, uniqueKey bool, slotLength int, descriptio
 		IsValueDataInNodeSegment: true,
 		Description:              description,
 		BlobStoreBaseFolderPath:  blobStoreBaseFolderPath,
-		CacheConfig: StoreCacheConfig{
+		CacheConfig: &StoreCacheConfig{
 			RegistryCacheDuration: defaultCacheConfig.RegistryCacheDuration,
 			NodeCacheDuration: defaultCacheConfig.NodeCacheDuration,
 			ValueDataCacheDuration: defaultCacheConfig.ValueDataCacheDuration,
