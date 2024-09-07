@@ -415,10 +415,9 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 }
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
-	sr, _ := in_red_cs3.NewStoreRepository(s3Client, region)
-	err := sr.Remove(ctx, "twophase3")
+	err := in_red_cs3.RemoveBtree[int, string](ctx, s3Client, region, "twophase3")
 	if err != nil {
-		t.Error(err)
+		fmt.Println(err)
 	}
 
 	t1, _ := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
@@ -508,11 +507,10 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 - A commit with full conflict: retry success
 */
 func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
-	sr, err := in_red_cs3.NewStoreRepository(s3Client, region)
+	err := in_red_cs3.RemoveBtree[int, string](ctx, s3Client, region, "tablex")
 	if err != nil {
-		t.Error(err)
+		fmt.Println(err)
 	}
-	sr.Remove(ctx, "tablex")
 
 	t1, _ := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	t1.Begin()
@@ -594,11 +592,10 @@ One or both of these two should fail:
 - A commit with full conflict.
 */
 func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
-	sr, err := in_red_cs3.NewStoreRepository(s3Client, region)
+	err := in_red_cs3.RemoveBtree[int, string](ctx, s3Client, region, "tablex2")
 	if err != nil {
-		t.Error(err)
+		fmt.Println(err)
 	}
-	sr.Remove(ctx, "tablex2")
 
 	t1, _ := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	t1.Begin()
@@ -681,11 +678,10 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 - A commit with full conflict on update: rollback
 */
 func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
-	sr, err := in_red_cs3.NewStoreRepository(s3Client, region)
+	err := in_red_cs3.RemoveBtree[int, string](ctx, s3Client, region, "tabley")
 	if err != nil {
-		t.Error(err)
+		fmt.Println(err)
 	}
-	sr.Remove(ctx, "tabley")
 
 	t1, _ := in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 	t1.Begin()

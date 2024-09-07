@@ -173,9 +173,12 @@ func (b *S3Bucket) Update(ctx context.Context, bucketName string, entries ...sop
 }
 
 func (b *S3Bucket) Remove(ctx context.Context, bucketName string, names ...string) sop.KeyValueStoreResponse[string] {
-	var objectIds []types.ObjectIdentifier
-	for _, key := range names {
-		objectIds = append(objectIds, types.ObjectIdentifier{Key: aws.String(key)})
+	if len(names) == 0 {
+		return sop.KeyValueStoreResponse[string]{}
+	}
+	objectIds := make([]types.ObjectIdentifier, len(names))
+	for i, key := range names {
+		objectIds[i] = types.ObjectIdentifier{Key: aws.String(key)}
 	}
 	output, err := b.S3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 		Bucket: aws.String(bucketName),
