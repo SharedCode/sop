@@ -27,6 +27,23 @@ type StoreCacheConfig struct {
 	// Is StoreInfoCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
 	IsStoreInfoCacheTTL bool
 }
+// Enforce SOP minimum rule on caching period. SOP relies on caching for many things including the critically needed "orchestration".
+func (scc *StoreCacheConfig)enforceMinimumRule() {
+	const minCachePeriod = time.Duration(5*time.Minute)
+	const defaultCachePeriod = time.Duration(15*time.Minute)
+	if scc.NodeCacheDuration > 0 && scc.NodeCacheDuration < minCachePeriod {
+		scc.NodeCacheDuration = defaultCachePeriod
+	}
+	if scc.RegistryCacheDuration > 0 && scc.RegistryCacheDuration < minCachePeriod {
+		scc.RegistryCacheDuration = defaultCachePeriod
+	}
+	if scc.StoreInfoCacheDuration > 0 && scc.StoreInfoCacheDuration < minCachePeriod {
+		scc.StoreInfoCacheDuration = defaultCachePeriod
+	}
+	if scc.ValueDataCacheDuration > 0 && scc.ValueDataCacheDuration < minCachePeriod {
+		scc.ValueDataCacheDuration = defaultCachePeriod
+	}
+}
 
 // StoreInfo contains a given (B-Tree) store details.
 type StoreInfo struct {
@@ -95,7 +112,7 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 
 	// auto generate table names based off of store name.
 	registryTableName := FormatRegistryTable(name)
-	blobTableName := formatBlobTable(name)
+	blobTableName := fmt.Sprintf("%s_b", name)
 	if blobStoreBasePath != "" {
 		// Append the store name as suffix so blob folders will be separated from one another, if not yet.
 		if !strings.HasSuffix(blobStoreBasePath, name) {
@@ -123,6 +140,8 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		cc := GetDefaulCacheConfig()
 		cacheConfig = &cc
 	}
+	// Apply SOP minimum caching rule if needed.
+	cacheConfig.enforceMinimumRule()
 
 	return &StoreInfo{
 		Name:                         name,
@@ -137,11 +156,6 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		LeafLoadBalancing:            leafLoadBalancing,
 		CacheConfig:                  *cacheConfig,
 	}
-}
-
-// Format a given name into a blob table name by adding suffix.
-func formatBlobTable(name string) string {
-	return fmt.Sprintf("%s_b", name)
 }
 
 // Format a given name into a registry table name by adding suffix.

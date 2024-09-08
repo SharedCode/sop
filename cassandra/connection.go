@@ -110,7 +110,7 @@ func OpenConnection(config Config) (*Connection, error) {
 		return nil, err
 	}
 	// Auto create the "store" table if not yet.
-	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.store (name text PRIMARY KEY, root_id UUID, slot_count int, count bigint, unique boolean, des text, reg_tbl text, blob_tbl text, ts bigint, vdins boolean, vdap boolean, vdgc boolean, llb boolean, rcd duration, rc_ttl boolean, ncd duration, nc_ttl boolean, vdcd duration, vdc_ttl boolean, scd duration, sc_ttl boolean);", config.Keyspace)).Exec(); err != nil {
+	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.store (name text PRIMARY KEY, root_id UUID, slot_count int, count bigint, unique boolean, des text, reg_tbl text, blob_tbl text, ts bigint, vdins boolean, vdap boolean, vdgc boolean, llb boolean, rcd bigint, rc_ttl boolean, ncd bigint, nc_ttl boolean, vdcd bigint, vdc_ttl boolean, scd bigint, sc_ttl boolean);", config.Keyspace)).Exec(); err != nil {
 		return nil, err
 	}
 	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.t_log (id UUID, c_f int, c_f_p blob, PRIMARY KEY(id, c_f));", config.Keyspace)).Exec(); err != nil {

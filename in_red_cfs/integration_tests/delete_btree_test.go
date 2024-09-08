@@ -10,7 +10,7 @@ import (
 // It drops the blob & registry tables of the B-Tree, thus, the test was removed from the set.
 func DeleteBTree(t *testing.T) {
 	tableList := []string{
-		"fooStore", "persondb", "twophase", "twophase2", "twophase3",
+		"fooStore", "fooStore1", "fooStore2", "persondb", "twophase", "twophase2", "twophase3",
 		"twophase22", "persondb7", "persondb77", "person2db", "barStore1",
 		"barStore2", "tabley", "tablex2", "tablex", "ztab1", "videoStore",
 		"videoStoreM", "videoStoreD", "videoStoreU", "xyz", "emptystore",

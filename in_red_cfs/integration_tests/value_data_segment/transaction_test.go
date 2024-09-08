@@ -229,15 +229,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 			t1.Begin()
-			b3, _ = in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-				Name:                     "persondb",
-				SlotLength:               nodeSlotLength,
-				IsUnique:                 false,
-				IsValueDataInNodeSegment: false,
-				LeafLoadBalancing:        false,
-				Description:              "",
-				BlobStoreBaseFolderPath:  dataPath,
-			}, t1)
+			b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1)
 		}
 	}
 
@@ -261,15 +253,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, false)
 			t1.Begin()
-			b3, _ = in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-				Name:                     "persondb",
-				SlotLength:               nodeSlotLength,
-				IsUnique:                 false,
-				IsValueDataInNodeSegment: false,
-				LeafLoadBalancing:        false,
-				Description:              "",
-				BlobStoreBaseFolderPath:  dataPath,
-			}, t1)
+			b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1)
 		}
 	}
 }
@@ -307,15 +291,7 @@ func VolumeDeletes(t *testing.T) {
 			}
 			t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 			t1.Begin()
-			b3, _ = in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-				Name:                     "persondb",
-				SlotLength:               nodeSlotLength,
-				IsUnique:                 false,
-				IsValueDataInNodeSegment: false,
-				LeafLoadBalancing:        false,
-				Description:              "",
-				BlobStoreBaseFolderPath:  dataPath,
-			}, t1)
+			b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1)
 		}
 	}
 }
@@ -369,15 +345,7 @@ func MixedOperations(t *testing.T) {
 			}
 			t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 			t1.Begin()
-			b3, _ = in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-				Name:                     "persondb",
-				SlotLength:               nodeSlotLength,
-				IsUnique:                 false,
-				IsValueDataInNodeSegment: false,
-				LeafLoadBalancing:        false,
-				Description:              "",
-				BlobStoreBaseFolderPath:  dataPath,
-			}, t1)
+			b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1)
 		}
 	}
 
@@ -413,15 +381,7 @@ func MixedOperations(t *testing.T) {
 			}
 			t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 			t1.Begin()
-			b3, _ = in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-				Name:                     "persondb",
-				SlotLength:               nodeSlotLength,
-				IsUnique:                 false,
-				IsValueDataInNodeSegment: false,
-				LeafLoadBalancing:        false,
-				Description:              "",
-				BlobStoreBaseFolderPath:  dataPath,
-			}, t1)
+			b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1)
 		}
 	}
 }
