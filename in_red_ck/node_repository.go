@@ -103,6 +103,8 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 	}
 	h, err := nr.transaction.registry.Get(ctx, sop.RegistryPayload[sop.UUID]{
 		RegistryTable: nr.storeInfo.RegistryTable,
+		CacheDuration: nr.storeInfo.CacheConfig.RegistryCacheDuration,
+		IsCacheTTL: nr.storeInfo.CacheConfig.IsRegistryCacheTTL,
 		IDs:           []sop.UUID{logicalID},
 	})
 	if err != nil {

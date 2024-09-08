@@ -3,6 +3,7 @@ package integration_tests
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
@@ -116,6 +117,114 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		LeafLoadBalancing:        true,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
+	}, trans)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
+		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		return
+	}
+
+	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		return
+	}
+	if k := b3.GetCurrentKey(); k != 1 {
+		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
+		trans.Rollback(ctx)
+		return
+	}
+	if v, err := b3.GetCurrentValue(ctx); v != "hello world" || err != nil {
+		t.Errorf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
+		return
+	}
+	t.Logf("Successfully added & found item with key 1.")
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+}
+
+func Test_StoreCaching(t *testing.T) {
+	// 1. Open a transaction
+	// 2. Instantiate a BTree
+	// 3. Do CRUD on BTree
+	// 4. Commit Transaction
+	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	trans.Begin()
+	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "storecaching",
+		SlotLength:               8,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: true,
+		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
+		CacheConfig: &sop.StoreCacheConfig{
+			RegistryCacheDuration: time.Duration(30*time.Minute),
+			NodeCacheDuration: time.Duration(30*time.Minute),
+			StoreInfoCacheDuration: time.Duration(30*time.Minute),
+		},
+	}, trans)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
+		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		return
+	}
+
+	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		return
+	}
+	if k := b3.GetCurrentKey(); k != 1 {
+		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
+		trans.Rollback(ctx)
+		return
+	}
+	if v, err := b3.GetCurrentValue(ctx); v != "hello world" || err != nil {
+		t.Errorf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
+		return
+	}
+	t.Logf("Successfully added & found item with key 1.")
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+}
+
+func Test_StoreCachingTTL(t *testing.T) {
+	// 1. Open a transaction
+	// 2. Instantiate a BTree
+	// 3. Do CRUD on BTree
+	// 4. Commit Transaction
+	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	trans.Begin()
+	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "storecachingttl",
+		SlotLength:               8,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: true,
+		Description:              "",
+		BlobStoreBaseFolderPath:  dataPath,
+		CacheConfig: &sop.StoreCacheConfig{
+			RegistryCacheDuration: time.Duration(30*time.Minute),
+			IsRegistryCacheTTL: true,
+			NodeCacheDuration: time.Duration(30*time.Minute),
+			IsNodeCacheTTL: true,
+			StoreInfoCacheDuration: time.Duration(30*time.Minute),
+			IsStoreInfoCacheTTL: true,
+			// No need to specify ValueDataCacheDuration & its TTL field because "IsValueDataInNodeSegment" is set to true.
+			// In this case, there is no separate Data Segment, data is stored in the B-Tree Node itself, thus
+			// ValueDataCacheDuration caching field is not used.
+		},
 	}, trans)
 	if err != nil {
 		t.Error(err)
