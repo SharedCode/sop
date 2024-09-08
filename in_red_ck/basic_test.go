@@ -2,6 +2,7 @@ package in_red_ck
 
 import (
 	"testing"
+	"time"
 
 	"github.com/SharedCode/sop"
 )
@@ -145,5 +146,64 @@ func Test_UniqueKeyBTreeOnMultipleCommits(t *testing.T) {
 		t.Errorf("Commit got nil, want error.")
 	} else {
 		t.Log(err)
+	}
+}
+
+func Test_StoreCachingMinRuleCheck(t *testing.T) {
+	trans, err := newMockTransaction(t, sop.ForWriting, -1)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	trans.Begin()
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "storecachingminrule",
+		SlotLength:               8,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: true,
+		Description:              "",
+		CacheConfig: &sop.StoreCacheConfig{
+			RegistryCacheDuration: time.Duration(1*time.Second),
+			NodeCacheDuration: time.Duration(30*time.Minute),
+			StoreInfoCacheDuration: time.Duration(1*time.Second),
+		},
+	}, trans)
+
+	// Check if minimum duration times were applied by SOP.
+	if b3.GetStoreInfo().CacheConfig.RegistryCacheDuration < time.Duration(15*time.Minute) {
+		t.Errorf("Minimum cache duration of 15mins enforcement failed for RegistryCacheDuration.")
+	}
+	if b3.GetStoreInfo().CacheConfig.NodeCacheDuration < time.Duration(15*time.Minute) {
+		t.Errorf("Minimum cache duration of 15mins enforcement failed for NodeCacheDuration.")
+	}
+	if b3.GetStoreInfo().CacheConfig.StoreInfoCacheDuration < time.Duration(15*time.Minute) {
+		t.Errorf("Minimum cache duration of 15mins enforcement failed for StoreInfoCacheDuration.")
+	}
+}
+
+func Test_StoreCachingDefaultCacheApplied(t *testing.T) {
+	trans, err := newMockTransaction(t, sop.ForWriting, -1)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	trans.Begin()
+	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "storecachingdefault",
+		SlotLength:               8,
+		IsUnique:                 false,
+		IsValueDataInNodeSegment: true,
+		Description:              "",
+	}, trans)
+
+	if b3.GetStoreInfo().CacheConfig.RegistryCacheDuration != sop.GetDefaulCacheConfig().RegistryCacheDuration {
+		t.Errorf("Default cache check failed for RegistryCacheDuration.")
+	}
+	if b3.GetStoreInfo().CacheConfig.NodeCacheDuration != sop.GetDefaulCacheConfig().NodeCacheDuration {
+		t.Errorf("Default cache check failed for NodeCacheDuration.")
+	}
+	if b3.GetStoreInfo().CacheConfig.StoreInfoCacheDuration != sop.GetDefaulCacheConfig().StoreInfoCacheDuration {
+		t.Errorf("Default cache check failed for StoreInfoCacheDuration.")
+	}
+	if b3.GetStoreInfo().CacheConfig.ValueDataCacheDuration != sop.GetDefaulCacheConfig().ValueDataCacheDuration {
+		t.Errorf("Default cache check failed for ValueDataCacheDuration.")
 	}
 }

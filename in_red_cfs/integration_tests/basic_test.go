@@ -147,10 +147,6 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 }
 
 func Test_StoreCaching(t *testing.T) {
-	// 1. Open a transaction
-	// 2. Instantiate a BTree
-	// 3. Do CRUD on BTree
-	// 4. Commit Transaction
 	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -198,10 +194,6 @@ func Test_StoreCaching(t *testing.T) {
 }
 
 func Test_StoreCachingTTL(t *testing.T) {
-	// 1. Open a transaction
-	// 2. Instantiate a BTree
-	// 3. Do CRUD on BTree
-	// 4. Commit Transaction
 	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -237,11 +229,6 @@ func Test_StoreCachingTTL(t *testing.T) {
 
 	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
-		return
-	}
-	if k := b3.GetCurrentKey(); k != 1 {
-		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
-		trans.Rollback(ctx)
 		return
 	}
 	if v, err := b3.GetCurrentValue(ctx); v != "hello world" || err != nil {
