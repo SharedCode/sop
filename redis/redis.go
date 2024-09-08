@@ -15,10 +15,14 @@ import (
 type Cache interface {
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
 	Get(ctx context.Context, key string) (string, error)
+	GetEx(ctx context.Context, key string, expiration time.Duration) (string, error)
+
 	// SetStruct upserts a given object with a key to it.
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
 	// GetStruct fetches a given object given a key.
 	GetStruct(ctx context.Context, key string, target interface{}) error
+	// GetStruct fetches a given object given a key in a TTL manner, that is, sliding time.
+	GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) error
 	// Delete removes the object given a key.
 	Delete(ctx context.Context, keys ...string) error
 	// Ping is a utility function to check if connection is good.
@@ -74,6 +78,13 @@ func (c client) Get(ctx context.Context, key string) (string, error) {
 	}
 	return connection.Client.Get(ctx, key).Result()
 }
+// Get executes the redis GetEx command
+func (c client) GetEx(ctx context.Context, key string, expiration time.Duration) (string, error) {
+	if connection == nil {
+		return "", fmt.Errorf("Redis connection is not open, 'can't create new client")
+	}
+	return connection.Client.GetEx(ctx, key, expiration).Result()
+}
 
 // SetStruct executes the redis Set command
 func (c client) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
@@ -104,8 +115,19 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) e
 	if err == nil {
 		err = Marshaler.Unmarshal(ba, target)
 	}
-	if err == redis.Nil {
-		return err
+	return err
+}
+// GetStructEx executes the redis GetEx command
+func (c client) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) error {
+	if connection == nil {
+		return fmt.Errorf("Redis connection is not open, 'can't create new client")
+	}
+	if target == nil {
+		return fmt.Errorf("target can't be nil")
+	}
+	ba, err := connection.Client.GetEx(ctx, key, expiration).Bytes()
+	if err == nil {
+		err = Marshaler.Unmarshal(ba, target)
 	}
 	return err
 }

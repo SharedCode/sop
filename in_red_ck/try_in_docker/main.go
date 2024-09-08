@@ -30,7 +30,7 @@ func main() {
 	storeInfo := *sop.NewStoreInfo("foobar", 4, true, true, true, "")
 	storeInfo.RootNodeID = sop.NewUUID()
 	repo := cas.NewStoreRepository()
-	sis, err := repo.Get(ctx, "foobar")
+	sis, err := repo.Get(ctx, false, 0, "foobar")
 	if err != nil {
 		writeAndExit("Cassandra repo Get failed, err: %v.", err)
 	}

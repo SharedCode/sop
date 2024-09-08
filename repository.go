@@ -9,10 +9,14 @@ import (
 type RegistryPayload[T Handle | UUID] struct {
 	// Registry table (name) where the Virtual IDs will be stored or fetched from.
 	RegistryTable string
+
 	// During Rollback and Commit, we need to get hold of the paired BlobTable(or blob base folder path if in FS).
 	BlobTable string
 	// CacheDuration to be used for Redis caching.
 	CacheDuration time.Duration
+	// true will use Redis' sliding time, a.k.a. TTL support.
+	IsCacheTTL bool
+
 	// IDs is an array containing the Virtual IDs details to be stored or to be fetched.
 	IDs []T
 }
@@ -105,8 +109,9 @@ type TransactionLog interface {
 // Store is a general purpose Store interface specifying methods or CRUD operations on Key & Value
 // where Value is implied to be superset of Key.
 type Store[TK any, TV any] interface {
-	// Fetch store info with name.
-	Get(context.Context, ...TK) ([]TV, error)
+	// Fetch store info with name(s). If StoreInfo is known to be cached in sliding time(TTL) then specify true on the 2nd bool param & the sliding time duration on the 3rd param.
+	// Otherwise it can be set to false and 0.
+	Get(context.Context, bool, time.Duration, ...TK) ([]TV, error)
 	// Add store info & create related tables like for registry & for node blob.
 	Add(context.Context, ...TV) error
 	// Update store info. Update should also merge the Count of items between the incoming store info

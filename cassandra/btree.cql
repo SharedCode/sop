@@ -32,13 +32,21 @@ create table store (
     llb boolean
     -- store cache config fields.
     -- registry cache duration.
-    rcd duration,
+    rcd bigint,
+    -- registry cache is sliding time or not.
+    rc_ttl boolean,
     -- node cache duration.
-    ncd duration,
+    ncd bigint,
+    -- node cache is sliding time or not.
+    nc_ttl boolean,
     -- value data cache duration.
-    vdcd duration,
+    vdcd bigint,
+    -- valud data cache is sliding time or not.
+     vdc_ttl boolean,
     -- store cache duration.
-    scd duration);
+    scd bigint,
+    -- store cache is sliding time or not.
+     sc_ttl boolean);
 
 -- Node Blob demo table 1.
 create table foo_b(

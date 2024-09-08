@@ -44,13 +44,14 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
-	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb, rcd, ncd, vdcd, scd) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
+	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb, rcd, rc_ttl, ncd, nc_ttl, vdcd, vdc_ttl, scd, sc_ttl) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
 	for _, s := range stores {
 
 		// Add a new store record.
 		qry := connection.Session.Query(insertStatement, s.Name, gocql.UUID(s.RootNodeID), s.SlotLength, s.Count, s.IsUnique, s.Description,
 			s.RegistryTable, s.BlobTable, s.Timestamp, s.IsValueDataInNodeSegment, s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached,
-			s.LeafLoadBalancing, s.CacheConfig.RegistryCacheDuration, s.CacheConfig.NodeCacheDuration, s.CacheConfig.ValueDataCacheDuration, s.CacheConfig.StoreCacheDuration).WithContext(ctx)
+			s.LeafLoadBalancing, s.CacheConfig.RegistryCacheDuration, s.CacheConfig.IsRegistryCacheTTL, s.CacheConfig.NodeCacheDuration, s.CacheConfig.IsNodeCacheTTL,
+			s.CacheConfig.ValueDataCacheDuration, s.CacheConfig.IsValueDataCacheTTL, s.CacheConfig.StoreInfoCacheDuration, s.CacheConfig.IsStoreInfoCacheTTL).WithContext(ctx)
 		if connection.Config.ConsistencyBook.StoreAdd > gocql.Any {
 			qry.Consistency(connection.Config.ConsistencyBook.StoreAdd)
 		}
@@ -74,7 +75,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 			return err
 		}
 		// Tolerate error in Redis caching.
-		if err := sr.redisCache.SetStruct(ctx, s.Name, &s, s.CacheConfig.StoreCacheDuration); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, s.Name, &s, s.CacheConfig.StoreInfoCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository Add failed (redis setstruct), details: %v", err))
 		}
 	}
@@ -143,7 +144,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	defer redis.Unlock(ctx, lockKeys...)
 
 	for i := range stores {
-		sis, err := sr.Get(ctx, stores[i].Name)
+		sis, err := sr.Get(ctx, stores[i].CacheConfig.IsStoreInfoCacheTTL, stores[i].CacheConfig.StoreInfoCacheDuration, stores[i].Name)
 		if len(sis) == 0 {
 			undo(beforeUpdateStores)
 			return err
@@ -170,7 +171,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	// Update redis since we've successfully updated Cassandra Store table.
 	for i := range stores {
 		// Tolerate redis error since we've successfully updated the master table.
-		if err := sr.redisCache.SetStruct(ctx, stores[i].Name, &stores[i], stores[i].CacheConfig.StoreCacheDuration); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, stores[i].Name, &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) failed, details: %v", err))
 		}
 	}
@@ -178,7 +179,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	return nil
 }
 
-func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
+func (sr *storeRepository) Get(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
 	if connection == nil {
 		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -188,7 +189,13 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 	paramQ := make([]string, 0, len(names))
 	for i := range names {
 		store := sop.StoreInfo{}
-		if err := sr.redisCache.GetStruct(ctx, names[i], &store); err != nil {
+		var err error
+		if isCacheTTL  {
+			err = sr.redisCache.GetStructEx(ctx, names[i], &store, cacheDuration)
+		} else {
+			err = sr.redisCache.GetStruct(ctx, names[i], &store)
+		}
+		if err != nil {
 			if !redis.KeyNotFound(err) {
 				log.Warn(fmt.Sprintf("StoreRepository Get (redis getstruct) failed, details: %v", err))
 			}
@@ -201,7 +208,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 	if len(paramQ) == 0 {
 		return stores, nil
 	}
-	selectStatement := fmt.Sprintf("SELECT name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb, rcd, ncd, vdcd, scd FROM %s.store  WHERE name in (%v);",
+	selectStatement := fmt.Sprintf("SELECT name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb, rcd, rc_ttl, ncd, nc_ttl, vdcd, vdc_ttl, scd, sc_ttl FROM %s.store  WHERE name in (%v);",
 		connection.Config.Keyspace, strings.Join(paramQ, ", "))
 
 	qry := connection.Session.Query(selectStatement, namesAsIntf...).WithContext(ctx)
@@ -214,10 +221,11 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 	var rid gocql.UUID
 	for iter.Scan(&store.Name, &rid, &store.SlotLength, &store.Count, &store.IsUnique,
 		&store.Description, &store.RegistryTable, &store.BlobTable, &store.Timestamp, &store.IsValueDataInNodeSegment, &store.IsValueDataActivelyPersisted, &store.IsValueDataGloballyCached,
-		&store.LeafLoadBalancing, &store.CacheConfig.RegistryCacheDuration, &store.CacheConfig.NodeCacheDuration, &store.CacheConfig.ValueDataCacheDuration, &store.CacheConfig.StoreCacheDuration) {
+		&store.LeafLoadBalancing, &store.CacheConfig.RegistryCacheDuration, &store.CacheConfig.IsRegistryCacheTTL, &store.CacheConfig.NodeCacheDuration, &store.CacheConfig.IsNodeCacheTTL,
+		&store.CacheConfig.ValueDataCacheDuration, &store.CacheConfig.IsValueDataCacheTTL, &store.CacheConfig.StoreInfoCacheDuration, &store.CacheConfig.IsStoreInfoCacheTTL) {
 		store.RootNodeID = sop.UUID(rid)
 
-		if err := sr.redisCache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreCacheDuration); err != nil {
+		if err := sr.redisCache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository Get (redis setstruct) failed, details: %v", err))
 		}
 
@@ -236,7 +244,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
-	sis, err := sr.Get(ctx, names...)
+	sis, err := sr.Get(ctx, false, 0, names...)
 	if err != nil {
 		return err
 	}

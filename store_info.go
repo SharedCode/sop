@@ -11,13 +11,38 @@ import (
 type StoreCacheConfig struct {
 	// Specifies this store's Registry Objects' Redis cache duration.
 	RegistryCacheDuration time.Duration
+	// Is RegistryCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	IsRegistryCacheTTL bool
 	// Specifies this store's Node's Redis cache duration.
 	NodeCacheDuration time.Duration
+	// Is NodeCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	IsNodeCacheTTL bool
 	// Only used if IsValueDataInNodeSegment(false) & IsValueDataGloballyCached(true).
 	// Specifies this store's Item Value part Redis cache duration.
 	ValueDataCacheDuration time.Duration
-	// Specifies this store's Redis cache duration.
-	StoreCacheDuration time.Duration
+	// Is ValueCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	IsValueDataCacheTTL bool
+	// Specifies this store's details(StoreInfo) Redis cache duration.
+	StoreInfoCacheDuration time.Duration
+	// Is StoreInfoCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	IsStoreInfoCacheTTL bool
+}
+// Enforce SOP minimum rule on caching period. SOP relies on caching for many things including the critically needed "orchestration".
+func (scc *StoreCacheConfig)enforceMinimumRule() {
+	const minCachePeriod = time.Duration(5*time.Minute)
+	const defaultCachePeriod = time.Duration(15*time.Minute)
+	if scc.NodeCacheDuration > 0 && scc.NodeCacheDuration < minCachePeriod {
+		scc.NodeCacheDuration = defaultCachePeriod
+	}
+	if scc.RegistryCacheDuration > 0 && scc.RegistryCacheDuration < minCachePeriod {
+		scc.RegistryCacheDuration = defaultCachePeriod
+	}
+	if scc.StoreInfoCacheDuration > 0 && scc.StoreInfoCacheDuration < minCachePeriod {
+		scc.StoreInfoCacheDuration = defaultCachePeriod
+	}
+	if scc.ValueDataCacheDuration > 0 && scc.ValueDataCacheDuration < minCachePeriod {
+		scc.ValueDataCacheDuration = defaultCachePeriod
+	}
 }
 
 // StoreInfo contains a given (B-Tree) store details.
@@ -87,7 +112,7 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 
 	// auto generate table names based off of store name.
 	registryTableName := FormatRegistryTable(name)
-	blobTableName := formatBlobTable(name)
+	blobTableName := fmt.Sprintf("%s_b", name)
 	if blobStoreBasePath != "" {
 		// Append the store name as suffix so blob folders will be separated from one another, if not yet.
 		if !strings.HasSuffix(blobStoreBasePath, name) {
@@ -115,6 +140,8 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		cc := GetDefaulCacheConfig()
 		cacheConfig = &cc
 	}
+	// Apply SOP minimum caching rule if needed.
+	cacheConfig.enforceMinimumRule()
 
 	return &StoreInfo{
 		Name:                         name,
@@ -129,11 +156,6 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 		LeafLoadBalancing:            leafLoadBalancing,
 		CacheConfig:                  *cacheConfig,
 	}
-}
-
-// Format a given name into a blob table name by adding suffix.
-func formatBlobTable(name string) string {
-	return fmt.Sprintf("%s_b", name)
 }
 
 // Format a given name into a registry table name by adding suffix.
