@@ -157,7 +157,13 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 		lidsAsIntfs := make([]interface{}, 0, len(storeLids.IDs))
 		for i := range storeLids.IDs {
 			h := sop.Handle{}
-			if err := v.redisCache.GetStruct(ctx, storeLids.IDs[i].String(), &h); err != nil {
+			var err error
+			if storeLids.IsCacheTTL {
+				err = v.redisCache.GetStructEx(ctx, storeLids.IDs[i].String(), &h, storeLids.CacheDuration)
+			} else {
+				err = v.redisCache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
+			}
+			if err != nil {
 				if !redis.KeyNotFound(err) {
 					log.Warn(fmt.Sprintf("Registry Get (redis getstruct) failed, details: %v", err))
 				}
@@ -173,6 +179,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 				RegistryTable: storeLids.RegistryTable,
 				BlobTable:     storeLids.BlobTable,
 				CacheDuration: storeLids.CacheDuration,
+				IsCacheTTL: storeLids.IsCacheTTL,
 				IDs:           handles,
 			})
 			continue
@@ -206,6 +213,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 			RegistryTable: storeLids.RegistryTable,
 			BlobTable:     storeLids.BlobTable,
 			CacheDuration: storeLids.CacheDuration,
+			IsCacheTTL: storeLids.IsCacheTTL,
 			IDs:           handles,
 		})
 	}

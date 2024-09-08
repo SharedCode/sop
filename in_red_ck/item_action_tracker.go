@@ -75,7 +75,13 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 		if item.Value == nil && item.ValueNeedsFetch {
 			var v TV
 			if t.storeInfo.IsValueDataGloballyCached {
-				if err := t.redisCache.GetStruct(ctx, formatItemKey(item.ID.String()), &v); err != nil {
+				var err error
+				if t.storeInfo.CacheConfig.IsValueDataCacheTTL {
+					err = t.redisCache.GetStructEx(ctx, formatItemKey(item.ID.String()), &v, t.storeInfo.CacheConfig.ValueDataCacheDuration)
+				} else {
+					err = t.redisCache.GetStruct(ctx, formatItemKey(item.ID.String()), &v)
+				}
+				if err != nil {
 					if !redis.KeyNotFound(err) {
 						log.Warn(err.Error())
 					}

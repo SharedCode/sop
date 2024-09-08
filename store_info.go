@@ -11,13 +11,21 @@ import (
 type StoreCacheConfig struct {
 	// Specifies this store's Registry Objects' Redis cache duration.
 	RegistryCacheDuration time.Duration
+	// Is RegistryCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	IsRegistryCacheTTL bool
 	// Specifies this store's Node's Redis cache duration.
 	NodeCacheDuration time.Duration
+	// Is NodeCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	IsNodeCacheTTL bool
 	// Only used if IsValueDataInNodeSegment(false) & IsValueDataGloballyCached(true).
 	// Specifies this store's Item Value part Redis cache duration.
 	ValueDataCacheDuration time.Duration
-	// Specifies this store's Redis cache duration.
-	StoreCacheDuration time.Duration
+	// Is ValueCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	IsValueDataCacheTTL bool
+	// Specifies this store's details(StoreInfo) Redis cache duration.
+	StoreInfoCacheDuration time.Duration
+	// Is StoreInfoCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	IsStoreInfoCacheTTL bool
 }
 
 // StoreInfo contains a given (B-Tree) store details.

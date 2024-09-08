@@ -25,6 +25,9 @@ func (m mockRedis) Set(ctx context.Context, key string, value string, expiration
 func (m mockRedis) Get(ctx context.Context, key string) (string, error) {
 	return "", nil
 }
+func (m mockRedis) GetEx(ctx context.Context, key string, expiration time.Duration) (string, error) {
+	return "", nil
+}
 func (m mockRedis) Ping(ctx context.Context) error {
 	return nil
 }
@@ -47,6 +50,11 @@ func (m *mockRedis) GetStruct(ctx context.Context, key string, target interface{
 	}
 	Marshaler.Unmarshal(ba, target)
 	return nil
+}
+
+// Mock only support GetStruct, GetStructEx just calls GetStruct ignoring expiration.
+func (m *mockRedis) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) error {
+	return m.GetStruct(ctx, key, target)
 }
 func (m *mockRedis) Delete(ctx context.Context, keys ...string) error {
 	var lastErr error

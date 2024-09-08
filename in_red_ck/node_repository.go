@@ -116,7 +116,12 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 		// Use active physical ID if in case different.
 		nodeID = h[0].IDs[0].GetActiveID()
 	}
-	if err := nr.transaction.redisCache.GetStruct(ctx, nr.formatKey(nodeID.String()), target); err != nil {
+	if nr.storeInfo.CacheConfig.IsNodeCacheTTL {
+		err = nr.transaction.redisCache.GetStructEx(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration)
+	} else {
+		err = nr.transaction.redisCache.GetStruct(ctx, nr.formatKey(nodeID.String()), target)
+	}
+	if err != nil {
 		if !redis.KeyNotFound(err) {
 			return nil, err
 		}
@@ -593,6 +598,7 @@ func convertToRegistryRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interfa
 			RegistryTable: nodes[i].First.RegistryTable,
 			BlobTable:     nodes[i].First.BlobTable,
 			CacheDuration: nodes[i].First.CacheConfig.RegistryCacheDuration,
+			IsCacheTTL: nodes[i].First.CacheConfig.IsRegistryCacheTTL,
 			IDs:           make([]sop.UUID, len(nodes[i].Second)),
 		}
 		for ii := range nodes[i].Second {
