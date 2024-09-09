@@ -31,7 +31,7 @@ Sample code for customization of store level caching:
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(0), false),
 	}, trans)
   ```
-* Store data cache is "sliding time"
+* Store data cache is "sliding window"
   
   NOTE: Setting 2nd param(isCacheTTL) true of sop.NewStoreCacheConfig(..) sets the store so each operation including fetch(get) will instruct Redis to extend the caching for the target data, a.k.a. "sliding time" or TTL
   ```
@@ -75,6 +75,8 @@ Sample code for customization of store level caching:
   ```
 After 2 hours, Registry, Node & StoreInfo meta data for this "storecaching" SOP store will expire and thus, reduce the data cached in Redis. BUT since the application data(ValueData) is set to do "sliding window" or TTL, then those that got accessed(including fetch!) will be retained, so future access to them will take it from Redis cache instead of reading from backend storage.
 You do need to set the StoreOption field **IsValueDataInNodeSegment** = false in order to make this to work. So the application data is stored in their data segments and not in the B-Tree Nodes themselves.
+
+Of course, you have to do fine tuning, determine what works best in your particular situation. As there are quite a few "knobs" you can tweak in SOP to achieve what you want. See below discussions for more details in this area.
 
 # Usability
 SOP can be used in a wide, diverse storage usability scenarios. Ranging from general purpose data storage - search & management, to highly scaleable and performant version of the same, to domain specific use-cases. As SOP has many feature knobs you can turn on or off, it can be used and get customized with very little to no coding required. Some examples bundled out of the box are:
