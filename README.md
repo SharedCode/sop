@@ -55,6 +55,26 @@ Sample code for customization of store level caching:
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), false),
 	}, trans)
   ```
+* Application data cache is "sliding time"
+  
+  NOTE: When you would like to conserve Redis cache and but still provide great level of caching of your application data, you can set the application data to do "sliding time"(TTL) and set store meta data to absolute expiray. Here is how to do it:
+  ```
+  	b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "storecaching",
+		SlotLength:               200,
+		IsValueDataInNodeSegment: false,
+		BlobStoreBaseFolderPath:  dataPath,
+		CacheConfig: &sop.StoreCacheConfig{
+			RegistryCacheDuration:  time.Duration(2 * time.Hour),
+			NodeCacheDuration:      time.Duration(2 * time.Hour),
+			StoreInfoCacheDuration: time.Duration(2 * time.Hour),
+  			ValueDataCacheDuration: time.Duration(7 * time.Hour),
+  			IsValueDataCacheTTL   : true,
+		},
+	}, trans)
+  ```
+After 2 hours, Registry, Node & StoreInfo meta data for this "storecaching" SOP store will expire and thus, reduce the data cached in Redis. BUT since the application data(ValueData) is set to do "sliding window" or TTL, then it will be retained, so future fetch to them will take it from Redis cache instead of reading from backend storage.
+You do need to set IsValueDataInNodeSegment = false in order to make this to work. So the application data is stored in their data segments and not in the B-Tree Nodes themselves.
 
 # Usability
 SOP can be used in a wide, diverse storage usability scenarios. Ranging from general purpose data storage - search & management, to highly scaleable and performant version of the same, to domain specific use-cases. As SOP has many feature knobs you can turn on or off, it can be used and get customized with very little to no coding required. Some examples bundled out of the box are:
