@@ -16,7 +16,7 @@ B-Tree, a Native of the Cluster: https://www.linkedin.com/pulse/b-tree-native-cl
 SOP in File System: https://www.linkedin.com/pulse/scaleable-object-persistencesop-file-system-gerardo-recinto-zplbc/?trackingId=jPp8ccwvQEydxt3pppa8eg%3D%3D
 
 # Quick Store Caching Config Guide
-At the latest release, V2 Beta 2.1.7+, SOP is able to achieve "persisted data & caching" virtualization. This is a very important milestone, because SOP further cemented its capabilities, estimate is, nothing in the market can compete with SOP for the things it provides & in the magnitude of its "horizontal scaling" & "data caching virtualization" capabilities. In fact, it is the only solution known that does this.
+At the latest release, V2 Beta 2.1.7+, SOP is able to achieve "persisted data & caching" virtualization. This is a very important milestone, because SOP further cemented its capabilities, estimate is, nothing in the market can compete with SOP for the things it provides & in the magnitude of its "horizontal & vertical scaling" & "data caching virtualization" capabilities. In fact, it is the only solution known that does this.
 
 Sample code for customization of store level caching:
 * Store data cache does not expire
