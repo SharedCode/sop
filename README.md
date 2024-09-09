@@ -15,6 +15,45 @@ B-Tree, a Native of the Cluster: https://www.linkedin.com/pulse/b-tree-native-cl
 
 SOP in File System: https://www.linkedin.com/pulse/scaleable-object-persistencesop-file-system-gerardo-recinto-zplbc/?trackingId=jPp8ccwvQEydxt3pppa8eg%3D%3D
 
+# Quick Store Caching Config Guide
+Sample code for customization of store level caching:
+* Store data cache does not expire
+  
+  NOTE: Setting duration to 0 achieves caching with no expiration
+  ```
+  	b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "storecaching",
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+		BlobStoreBaseFolderPath:  dataPath,
+		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(0), false),
+	}, trans)
+  ```
+* Store data cache is "sliding time"
+  
+  NOTE: Setting 2nd param(isCacheTTL) true of sop.NewStoreCacheConfig(..) sets the store so each operation including fetch(get) will instruct Redis to extend the caching for the target data, a.k.a. "sliding time" or TTL
+  ```
+  	b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "storecachingTTL",
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+		BlobStoreBaseFolderPath:  dataPath,
+		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), true),
+	}, trans)
+  ```
+* Store data cache has absolute expiration(default)
+  
+  NOTE: This is the default mode and is also achieved in the sop.NewStoreCacheConfig(..) call by passing false to the 2nd param(isCacheTTL) & a > 0 duration.
+  ```
+  	b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "storecaching",
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+		BlobStoreBaseFolderPath:  dataPath,
+		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), false),
+	}, trans)
+  ```
+
 # Usability
 SOP can be used in a wide, diverse storage usability scenarios. Ranging from general purpose data storage - search & management, to highly scaleable and performant version of the same, to domain specific use-cases. As SOP has many feature knobs you can turn on or off, it can be used and get customized with very little to no coding required. Some examples bundled out of the box are:
   * A. General purpose data/object storage management system
