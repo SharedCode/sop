@@ -25,7 +25,7 @@ Sample code for customization of store level caching:
   ```
   	b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecaching",
-		SlotLength:               8,
+		SlotLength:               200,
 		IsValueDataInNodeSegment: true,
 		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(0), false),
@@ -37,7 +37,7 @@ Sample code for customization of store level caching:
   ```
   	b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecachingTTL",
-		SlotLength:               8,
+		SlotLength:               200,
 		IsValueDataInNodeSegment: true,
 		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), true),
@@ -49,7 +49,7 @@ Sample code for customization of store level caching:
   ```
   	b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecaching",
-		SlotLength:               8,
+		SlotLength:               200,
 		IsValueDataInNodeSegment: true,
 		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), false),
