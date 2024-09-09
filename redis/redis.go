@@ -78,6 +78,7 @@ func (c client) Get(ctx context.Context, key string) (string, error) {
 	}
 	return connection.Client.Get(ctx, key).Result()
 }
+
 // Get executes the redis GetEx command
 func (c client) GetEx(ctx context.Context, key string, expiration time.Duration) (string, error) {
 	if connection == nil {
@@ -117,6 +118,7 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) e
 	}
 	return err
 }
+
 // GetStructEx executes the redis GetEx command
 func (c client) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) error {
 	if connection == nil {

@@ -179,7 +179,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 				RegistryTable: storeLids.RegistryTable,
 				BlobTable:     storeLids.BlobTable,
 				CacheDuration: storeLids.CacheDuration,
-				IsCacheTTL: storeLids.IsCacheTTL,
+				IsCacheTTL:    storeLids.IsCacheTTL,
 				IDs:           handles,
 			})
 			continue
@@ -213,7 +213,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 			RegistryTable: storeLids.RegistryTable,
 			BlobTable:     storeLids.BlobTable,
 			CacheDuration: storeLids.CacheDuration,
-			IsCacheTTL: storeLids.IsCacheTTL,
+			IsCacheTTL:    storeLids.IsCacheTTL,
 			IDs:           handles,
 		})
 	}

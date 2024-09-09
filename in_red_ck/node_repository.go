@@ -104,7 +104,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 	h, err := nr.transaction.registry.Get(ctx, sop.RegistryPayload[sop.UUID]{
 		RegistryTable: nr.storeInfo.RegistryTable,
 		CacheDuration: nr.storeInfo.CacheConfig.RegistryCacheDuration,
-		IsCacheTTL: nr.storeInfo.CacheConfig.IsRegistryCacheTTL,
+		IsCacheTTL:    nr.storeInfo.CacheConfig.IsRegistryCacheTTL,
 		IDs:           []sop.UUID{logicalID},
 	})
 	if err != nil {
@@ -600,7 +600,7 @@ func convertToRegistryRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interfa
 			RegistryTable: nodes[i].First.RegistryTable,
 			BlobTable:     nodes[i].First.BlobTable,
 			CacheDuration: nodes[i].First.CacheConfig.RegistryCacheDuration,
-			IsCacheTTL: nodes[i].First.CacheConfig.IsRegistryCacheTTL,
+			IsCacheTTL:    nodes[i].First.CacheConfig.IsRegistryCacheTTL,
 			IDs:           make([]sop.UUID, len(nodes[i].Second)),
 		}
 		for ii := range nodes[i].Second {

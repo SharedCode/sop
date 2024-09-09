@@ -94,13 +94,13 @@ func ConfigureStore(storeName string, uniqueKey bool, slotLength int, descriptio
 		BlobStoreBaseFolderPath:  blobStoreBaseFolderPath,
 		CacheConfig: &StoreCacheConfig{
 			RegistryCacheDuration:  defaultCacheConfig.RegistryCacheDuration,
-			IsRegistryCacheTTL: defaultCacheConfig.IsRegistryCacheTTL,
+			IsRegistryCacheTTL:     defaultCacheConfig.IsRegistryCacheTTL,
 			NodeCacheDuration:      defaultCacheConfig.NodeCacheDuration,
-			IsNodeCacheTTL: defaultCacheConfig.IsNodeCacheTTL,
+			IsNodeCacheTTL:         defaultCacheConfig.IsNodeCacheTTL,
 			ValueDataCacheDuration: defaultCacheConfig.ValueDataCacheDuration,
-			IsValueDataCacheTTL: defaultCacheConfig.IsValueDataCacheTTL,
+			IsValueDataCacheTTL:    defaultCacheConfig.IsValueDataCacheTTL,
 			StoreInfoCacheDuration: defaultCacheConfig.StoreInfoCacheDuration,
-			IsStoreInfoCacheTTL: defaultCacheConfig.IsStoreInfoCacheTTL,
+			IsStoreInfoCacheTTL:    defaultCacheConfig.IsStoreInfoCacheTTL,
 		},
 	}
 	if valueDataSize == MediumData {

@@ -159,11 +159,7 @@ func Test_StoreCaching(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-		CacheConfig: &sop.StoreCacheConfig{
-			RegistryCacheDuration: time.Duration(30*time.Minute),
-			NodeCacheDuration: time.Duration(30*time.Minute),
-			StoreInfoCacheDuration: time.Duration(30*time.Minute),
-		},
+		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(30*time.Minute), false),
 	}, trans)
 	if err != nil {
 		t.Error(err)
@@ -206,17 +202,7 @@ func Test_StoreCachingTTL(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-		CacheConfig: &sop.StoreCacheConfig{
-			RegistryCacheDuration: time.Duration(30*time.Minute),
-			IsRegistryCacheTTL: true,
-			NodeCacheDuration: time.Duration(30*time.Minute),
-			IsNodeCacheTTL: true,
-			StoreInfoCacheDuration: time.Duration(30*time.Minute),
-			IsStoreInfoCacheTTL: true,
-			// No need to specify ValueDataCacheDuration & its TTL field because "IsValueDataInNodeSegment" is set to true.
-			// In this case, there is no separate Data Segment, data is stored in the B-Tree Node itself, thus
-			// ValueDataCacheDuration caching field is not used.
-		},
+		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(30*time.Minute), true),
 	}, trans)
 	if err != nil {
 		t.Error(err)

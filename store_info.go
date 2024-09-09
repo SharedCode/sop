@@ -27,21 +27,58 @@ type StoreCacheConfig struct {
 	// Is StoreInfoCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
 	IsStoreInfoCacheTTL bool
 }
+
+const minCacheDuration = time.Duration(5 * time.Minute)
+const defaultCacheDuration = time.Duration(15 * time.Minute)
+
+// Create a new StoraceCacheConfig with common cache duration(& TTL setting) among its data parts.
+func NewStoreCacheConfig(cacheDuration time.Duration, isCacheTTL bool) *StoreCacheConfig {
+	if cacheDuration > 0 && cacheDuration < minCacheDuration {
+		cacheDuration = defaultCacheDuration
+	}
+	if cacheDuration == 0 && isCacheTTL {
+		isCacheTTL = false
+	}
+	return &StoreCacheConfig{
+		RegistryCacheDuration:  cacheDuration,
+		IsRegistryCacheTTL:     isCacheTTL,
+		NodeCacheDuration:      cacheDuration,
+		IsNodeCacheTTL:         isCacheTTL,
+		StoreInfoCacheDuration: cacheDuration,
+		IsStoreInfoCacheTTL:    isCacheTTL,
+		ValueDataCacheDuration: cacheDuration,
+		IsValueDataCacheTTL:    isCacheTTL,
+	}
+}
+
 // Enforce SOP minimum rule on caching period. SOP relies on caching for many things including the critically needed "orchestration".
-func (scc *StoreCacheConfig)enforceMinimumRule() {
-	const minCachePeriod = time.Duration(5*time.Minute)
-	const defaultCachePeriod = time.Duration(15*time.Minute)
-	if scc.NodeCacheDuration > 0 && scc.NodeCacheDuration < minCachePeriod {
-		scc.NodeCacheDuration = defaultCachePeriod
+func (scc *StoreCacheConfig) enforceMinimumRule() {
+	if scc.NodeCacheDuration > 0 && scc.NodeCacheDuration < minCacheDuration {
+		scc.NodeCacheDuration = defaultCacheDuration
 	}
-	if scc.RegistryCacheDuration > 0 && scc.RegistryCacheDuration < minCachePeriod {
-		scc.RegistryCacheDuration = defaultCachePeriod
+	if scc.NodeCacheDuration == 0 && scc.IsNodeCacheTTL {
+		scc.IsNodeCacheTTL = false
 	}
-	if scc.StoreInfoCacheDuration > 0 && scc.StoreInfoCacheDuration < minCachePeriod {
-		scc.StoreInfoCacheDuration = defaultCachePeriod
+
+	if scc.RegistryCacheDuration > 0 && scc.RegistryCacheDuration < minCacheDuration {
+		scc.RegistryCacheDuration = defaultCacheDuration
 	}
-	if scc.ValueDataCacheDuration > 0 && scc.ValueDataCacheDuration < minCachePeriod {
-		scc.ValueDataCacheDuration = defaultCachePeriod
+	if scc.RegistryCacheDuration == 0 && scc.IsRegistryCacheTTL {
+		scc.IsRegistryCacheTTL = false
+	}
+
+	if scc.StoreInfoCacheDuration > 0 && scc.StoreInfoCacheDuration < minCacheDuration {
+		scc.StoreInfoCacheDuration = defaultCacheDuration
+	}
+	if scc.StoreInfoCacheDuration == 0 && scc.IsStoreInfoCacheTTL {
+		scc.IsStoreInfoCacheTTL = false
+	}
+
+	if scc.ValueDataCacheDuration > 0 && scc.ValueDataCacheDuration < minCacheDuration {
+		scc.ValueDataCacheDuration = defaultCacheDuration
+	}
+	if scc.ValueDataCacheDuration == 0 && scc.IsValueDataCacheTTL {
+		scc.IsValueDataCacheTTL = false
 	}
 }
 

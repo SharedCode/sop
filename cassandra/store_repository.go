@@ -190,7 +190,7 @@ func (sr *storeRepository) Get(ctx context.Context, isCacheTTL bool, cacheDurati
 	for i := range names {
 		store := sop.StoreInfo{}
 		var err error
-		if isCacheTTL  {
+		if isCacheTTL {
 			err = sr.redisCache.GetStructEx(ctx, names[i], &store, cacheDuration)
 		} else {
 			err = sr.redisCache.GetStruct(ctx, names[i], &store)

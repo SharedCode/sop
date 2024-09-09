@@ -162,9 +162,9 @@ func Test_StoreCachingMinRuleCheck(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		Description:              "",
 		CacheConfig: &sop.StoreCacheConfig{
-			RegistryCacheDuration: time.Duration(1*time.Second),
-			NodeCacheDuration: time.Duration(30*time.Minute),
-			StoreInfoCacheDuration: time.Duration(1*time.Second),
+			RegistryCacheDuration:  time.Duration(1 * time.Second),
+			NodeCacheDuration:      time.Duration(30 * time.Minute),
+			StoreInfoCacheDuration: time.Duration(1 * time.Second),
 		},
 	}, trans)
 
