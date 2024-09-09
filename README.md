@@ -73,7 +73,7 @@ Sample code for customization of store level caching:
 	},
   }, trans)
   ```
-After 2 hours, Registry, Node & StoreInfo meta data for this "storecaching" SOP store will expire and thus, reduce the data cached in Redis. BUT since the application data(ValueData) is set to do "sliding window" or TTL, then those that got accessed(including fetch!) within the set duration will be retained, so future access to them will take it from Redis cache instead of reading from backend storage, and each access extending cache retention, a.k.a. - sliding window.
+After 2 hours, Registry, Node & StoreInfo meta data for this "storecaching" SOP store will expire and thus, reduce the data cached in Redis. BUT since the application data(ValueData) is set to do "sliding window" or TTL, then those that got accessed(including fetch!) within the set duration will be retained, so future access to them will take it from Redis cache instead of reading from backend storage, and each access extending cache retention, a.k.a. - "sliding window". Keeping the frequently accessed data in the cache.
 You do need to set the StoreOption field **IsValueDataInNodeSegment** = false in order to make this to work. So the application data is stored in their data segments and not in the B-Tree Nodes themselves.
 
 Of course, you have to do fine tuning as there are tradeoffs :), determine what works best in your particular situation. As there are quite a few "knobs" you can tweak in SOP to achieve what you want. See below discussions for more details in this area.
