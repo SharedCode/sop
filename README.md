@@ -55,9 +55,9 @@ Sample code for customization of store level caching:
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), false),
 	}, trans)
   ```
-* Application data cache is "sliding time"
+* Application data cache is "sliding window"
   
-  NOTE: When you would like to conserve Redis cache and but still provide great level of caching of your application data, you can set the application data to do "sliding time"(TTL) and set store meta data to absolute expiray. Here is how to do it:
+  NOTE: When you would like to conserve Redis cache and but still provide great level of caching of your application data, you can set the application data to do "sliding window"(TTL) and set store meta data to absolute expiray. Here is how to do it:
   ```
   	b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecaching",
