@@ -55,10 +55,8 @@ func Test_CreateEmptyStore(t *testing.T) {
 	b3, err = in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "emptyStore",
 		SlotLength:               8,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
@@ -80,10 +78,8 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstore2",
 		SlotLength:               8,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
@@ -112,10 +108,8 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstore1",
 		SlotLength:               8,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
 	}, trans)
 	if err != nil {
@@ -155,9 +149,7 @@ func Test_StoreCaching(t *testing.T) {
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecaching",
 		SlotLength:               8,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(30*time.Minute), false),
 	}, trans)
@@ -198,9 +190,7 @@ func Test_StoreCachingTTL(t *testing.T) {
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecachingttl",
 		SlotLength:               8,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(30*time.Minute), true),
 	}, trans)
