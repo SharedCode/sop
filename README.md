@@ -95,6 +95,89 @@ You do need to set the StoreOption field **IsValueDataInNodeSegment** = false in
 
 Of course, you have to do fine tuning as there are tradeoffs :), determine what works best in your particular situation. As there are quite a few "knobs" you can tweak in SOP to achieve what you want. See below discussions for more details in this area.
 
+# In File System(FS), in AWS S3 or in Cassandra Blobs
+SOP supports storing the data blobs(containing both SOP metadata, specifically the B-Tree Nodes & application data) either in FS, AWS S3 or in Cassandra (via Cassandra's support for blobs storage). Choose whichever you want. However, my favorite is the FS, as it is very lean. However, there is huge potential to accelerate using AWS S3 if you have a huge, super S3 cluster(via AWS or on-prem).
+
+Following are the package locations for the three:
+* in File System: sop/in_red_cfs
+* in AWS S3:      sop/in_red_cs3
+* in Cassandra:   sop/in_red_ck
+
+The API for each package to construct a new BTree, Open an existing one or Remove one are pretty much consistent across the three. Streaming Data Store API are also available across the three and consistent in shape too.
+
+# Data Partitioning
+* SOP in Cassandra stores a blob in its own dedicated partition, which is the optimal form.
+* SOP in AWS S3 uses UUID as the filename, which will fully take advantage of S3 bucket's recommended file naming convention for optimal I/O.
+* SOP in File System has the following to address data partitioning:
+  - Vertical partitioning is built-in, you can take advantage of this by specifying different drive in the directory path field of StoreOptions argument of the BTree constructor function. E.g. - for store1, specify "c://sop_data" and on store2, specify "d://sop_data". This will allow SOP to store the blob files for each store on its own drive. Thus, combined with SOP's efficient I/O(i.e. - 4 level "tree like" directory structuring) achieves super efficient parallel I/O, per store.
+  - Horizontal partitioning however, you need to do a little bit of customization, i.e. - specify a lambda expression that has the logic to carve into different drive(s) or storage path(s) per given blob file ID. You can pass in this function in the respective "in_red_xxx.NewTransactionExt(..)" function call and it will be utilized to drive where the file blob(s) will be stored. Sample functions that can allocate(or partition!) across different drives the file blobs are below.
+    
+Here is the SOP's **DefaultToFilePath** function(in package sop/in_red_cfs/fs) that drives storage of file blobs across passed in **base directory path** argument of StoreOptions in NewBtree call:
+```
+package fs
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/SharedCode/sop"
+)
+
+type ToFilePathFunc func(basePath string, id sop.UUID) string
+
+// ToFilePath is used for formatting a base folder path & a GUID into a file path & file name
+// optimized for efficient I/O. It can be a simple logic as the default function shown below
+// or you can implement as fancy as partitioning across many storage devices, e.g. - using
+// the 1st hex digit, apply modulo to distribute to your different storage devices.
+//
+// Or using the basePath to specify different storage path, this perhaps is the typical case(default).
+var ToFilePath ToFilePathFunc = DefaultToFilePath
+
+// Default file path formatter, given a base path & a GUID.
+func DefaultToFilePath(basePath string, id sop.UUID) string {
+	if len(basePath) > 0 && basePath[len(basePath)-1] == os.PathSeparator {
+		return fmt.Sprintf("%s%s", basePath, Apply4LevelHierarchy(id))
+	}
+	return fmt.Sprintf("%s%c%s", basePath, os.PathSeparator, Apply4LevelHierarchy(id))
+}
+
+// Support 4 level folders file distribution algorithm, a.k.a. tree like folder hierarchy.
+func Apply4LevelHierarchy(id sop.UUID) string {
+	s := id.String()
+	ps := os.PathSeparator
+	return fmt.Sprintf("%x%c%x%c%x%c%x", s[0], ps, s[1], ps, s[2], ps, s[3])
+}
+```
+
+And here is a sample to show how you can specify horizontally partitioned blob files:
+```
+type struct fileFormatter {
+	driveLookup map[int]string
+}
+// My File path formatter, given a base path & a GUID, use the GUID to specify 
+func (ff *fileFormatter)MyToFilePath(basePath string, id sop.UUID) string {
+	// assuming basePath contains a %s format char for the drive, e.g.: "%s://sop_data"
+	// then you can assemble a new drive/dir path that does horizontal partitioning based off of the 1st component of UUID.
+
+	drvIndex := id[0] % 4
+	return fmt.Spring(basePath, ff.driveLookup[drvIndex])
+}
+```
+
+And in your code where you construct the Transaction and Btree objects, here is how it looks like plugging in the new custom file formatter:
+```
+ff := fileFormatter{
+	driveLookup: map[int]string{
+		{0, "c"},
+		{1, "d"},
+		{2, "e"},
+		{3, "f"},
+	}
+}
+trans, _ := in_red_cfs.NewTransactionExt(ff.MyToFilePath, sop.ForWriting, -1, false)
+
+```
+
 # Usability
 SOP can be used in a wide, diverse storage usability scenarios. Ranging from general purpose data storage - search & management, to highly scaleable and performant version of the same, to domain specific use-cases. As SOP has many feature knobs you can turn on or off, it can be used and get customized with very little to no coding required. Some examples bundled out of the box are:
   * A. General purpose data/object storage management system
@@ -511,6 +594,10 @@ The Enterprise version V2 is in package "in_red_cfs"(& "in_red_ck" if wanting to
 
 ## Brief Background
 SOP is written in Go and is a full re-implementation of the c# version. A lot of key technical features of SOP got carried over and a lot more added. V2 support ACID transactions and turn any application using it into a high performance database server itself. If deployed in a cluster, turns the entire cluster into a well oiled application & database server combo cluster that is masterless and thus, hot-spot free & horizontally scalable.
+
+V1 written in c# dotnet was designed to be a data server. It can be used to create a server app where clients submit requests for data storage and mgmt. BUT realizing that this is not horizontally scaleable, I designed V2(this current version in Golang!) to address the horizontal scale, without sacrificing much of the vertical scaleability. I think I succeeded. :)
+
+A design where I broke apart the "server" data mgmt and introduced horizontal scale design without losing much of the scaleability and acceleration inherent for a "server" piece. It is not an outcome of luck, it is as designed from the ground up, leaving the legacy or traditional form and out with a new one! :)
 
 ## SOP in Memory
 SOP in-memory was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithms that will work irrespective of backend, be it in-memory or others, such as the "in Cassandra & Redis" implementation, as discussed above.
