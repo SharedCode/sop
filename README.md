@@ -267,7 +267,7 @@ V2 is in Beta 2 status and there is no known issue.
 But yeah, V2 is showing very good results. ACID, two phase commit transaction, and impressive performance as Redis is baked in. SOP V2 actually succeeded in turning M-Way Trie a native "resident" of the cluster. Each of the host running SOP, be it an application or a micro-service, is turned into a high performance database & rich search server. Each, a master, or shall I say, master-less. And, of course, it is objects persistence, thus, you just author your golang struct and SOP takes care of fast storage & ultra fast searches and in the order you specified. No need to worry whether you are hitting an index, because each SOP "store"(or B-Tree) is the index itself! :)
 
 Check out the "Sample Configuration" section below or the unit tests under "in_red_cfs" folder to get idea how to specify the configuration for Cassandra and Redis. The file system is easy, just give it a path to the folder you want to be base folder for each store, can be on a different drive/storage sub-system per store, for better throughput. Also, if you want to specify the Cassandra consistency level per API, you can take a look at the "ConsistencyBook" field of the Cassandra Config struct. Each of the Repository/Store API CRUD operation has Consistency level settable under the "ConsistencyBook", or you can just leave it and default for the session is, "local quorum".
-See here for code details: https://github.com/SharedCode/sop/blob/d473b66f294582dceab6bdf146178b3f00e3dd8d/in_red_ck/cassandra/connection.go#L35
+See here for code details: https://github.com/SharedCode/sop/blob/d473b66f294582dceab6bdf146178b3f00e3dd8d/cassandra/connection.go#L35
 
 ## Streaming Data
 As discussed above, the third usability scenario of SOP is support for very large data. Here is sample config code for creating a Btree that is fit for this use-case:
@@ -339,13 +339,9 @@ If you think about it, this is a very useful feature. For example, you can skip 
 
 And since our backing store is Cassandra, benefit from its replication feature across data centers. All free softwares and code is in your hands, 'can enhance it or request for enhancement that you need.
 
-## Cache Duration
-You can specify the Redis cache duration by using the following API:
-  * sop/cassandra/SetRegistryCacheDuration(duration) - defaults to 12 hrs, but you can specify if needs to cache the registry "virtual Ids" differently.
-  * sop/cassandra/SetStoreCacheDuration(duration) - defaults to 2 hrs caching of the "store" metadata record.
-  * sop/in_red_ck/SetNodeCacheDuration(duration) - defaults to 1 hr caching of the B-Tree Nodes that contains the Key/Value pairs application data.
-
-The Redis cache is minimally used because our primary is Cassandra DB, which is a very fast DB. BUT yeah, please do change if wanting to benefit with bigger Redis caching. Virtual Ids were set to 12 hrs by default but may need a shorter duration and instead, the Nodes where your application data resides needs a longer duration, for example.
+## Default & Custom Store Cache Config
+SOP comes with default cache config that are used by BTree constructor functions(NewBtree(...)) which is set to 12 hour absolute expiration for each data part of a given data store. If this is not acceptable as default, your code can change the default store cache config by using this API:
+  * sop/SetDefaultCacheConfig(StoreCacheConfig) - defaults to 12 hrs for all data parts of a store but you can specify different caching config if needed. After the update, future calls to B-Tree constructur (NewBtree(..)) function that has no specification for store cache config, will use this default value. And yes, it is just for those unspecified, because you can specify desired cache config setting per store creation(NewBtree call). This is just the default we are discussing here.
 
 ## Sample Configuration
 ```
