@@ -341,7 +341,9 @@ And since our backing store is Cassandra, benefit from its replication feature a
 
 ## Default & Custom Store Cache Config
 SOP comes with default cache config that are used by BTree constructor functions(NewBtree(...)) which is set to 12 hour absolute expiration for each data part of a given data store. If this is not acceptable as default, your code can change the default store cache config by using this API:
-  * sop/SetDefaultCacheConfig(StoreCacheConfig) - specify new default store caching config. After the update, future calls to B-Tree constructur (NewBtree(..)) function that has no specification for store cache config, will use this default value.
+  * sop/SetDefaultCacheConfig(StoreCacheConfig) - specify new default store caching config. After the update, future calls to B-Tree constructor(NewBtree(..)) function that has no specification for store cache config(nil), will use this default value.
+
+NOTE: This has no effect for those **NewBtree** calls where a store cache config is specified, see top section - quick guide for setting store cache config for more details.
 
 ## Sample Configuration
 ```
