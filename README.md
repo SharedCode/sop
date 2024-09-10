@@ -141,7 +141,7 @@ Below is a sample code, edited for brevity and to show the important parts.
 import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_cfs"
-	"github.com/SharedCode/sop/in_red_ck/cassandra"
+	"github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/redis"
 )
 
