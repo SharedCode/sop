@@ -624,6 +624,7 @@ func uploader() {
 	b3.Add(ctx, BigKey{filename: "bigfile", chunkIndex: 0}, []byte{..})
 
 	// ...
+	// Commit transaction every 500 inserts, then begin a new one...
 
 	// Add upp to 20,000 will store 1TB of data. :)
 	b3.Add(ctx, BigKey{filename: "bigfile", chunkIndex: 20000}, []byte{..})
