@@ -611,7 +611,14 @@ func (x BigKey) Compare(other interface{}) int {
 func uploader() {
 	t, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	t.Begin()
-	b3, _ := in_red_cfs.NewBtree[bigKey, []byte](ctx, "bigstore", t)
+	b3, _ := in_red_cfs.NewBtree[bigKey, []byte](ctx, sop.StoreOptions{
+		Name:                     "bigstore",
+		SlotLength:               500,
+		IsUnique:                 true,
+		IsValueDataActivelyPersisted: true,
+		BlobStoreBaseFolderPath:  dataPath,
+		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), true),
+	}, t)
 
 	// Add byte array of 50 MB chunk size.
 	b3.Add(ctx, BigKey{filename: "bigfile", chunkIndex: 0}, []byte{..})
