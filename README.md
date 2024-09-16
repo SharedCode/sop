@@ -575,6 +575,15 @@ And yes, there is no resource locking in above code & it is able to merge just f
 
 Check out the integration test that demonstrate this, here: https://github.com/SharedCode/sop/blob/493fba2d6d1ed810bfb4edc9ce568a1c98e159ff/in_red_cfs/integration_tests/transaction_edge_cases_test.go#L315C6-L315C41
 
+## ACID Transactions vs. Big Data
+It is well known to the database world that data engines are written to support being transactional or not. Transactions work best for non-big data management. And Big Data support typically has no support for transactions, specifically, ACID type of transactions. These perception change with SOP V2+. That is, SOP V2 supports ACID transactions and Big Data, together with "partial updates". Yes, full fidelity Big Data management protected by ACID transactions.
+
+How?
+Streaming Data Store was written for this. And if you are looking for Big Data partial updates, then you can use this Btree store. Remember, in Streaming Data Store, you are given the chance to upload/download big data in streaming fashion, like using the Encoder for upload & Decoder for download. If you have noticed, using this store you can do partial download. That is, go straight to a given chunk # then download that fragment or fragments 'til the end. Similarly, you can update a given set of chunk(s). Yes, you can also update one or more chunks part of a transaction and upon commit, these updated chunk(s) will replace the one stored in the backend.
+
+So, essentially, we have partial update support even for the Big Data with ACID transaction protection. :)
+Without exchanging anything or causing any weakness on any feature we have. So, all you have to do to take advantage of this feature is, to be able to design & organize your big data set into chunks that which, you can have option to update any part(s) of them.
+
 ## Tid Bits
 
 SOP is an object persistence based, modern database engine within a code library. Portability & integration is one of SOP's primary strengths. Code uses the Store API to store & manage key/value pairs of data.
