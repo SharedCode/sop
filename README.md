@@ -584,6 +584,51 @@ Streaming Data Store was written for this. And if you are looking for Big Data p
 So, essentially, we have partial update support even for the Big Data with ACID transaction protection. :)
 Without exchanging anything or causing any weakness on any feature we have. So, all you have to do to take advantage of this feature is, to be able to design & organize your big data set into chunks that which, you can have option to update any part(s) of them.
 
+Sample Project: Upload 1TB of big data
+```
+package big_data
+import(
+	github.com/SharedCode/sop/in_red_cfs
+)
+
+type BigKey struct {
+	filename string
+	chunkIndex int
+}
+
+// The Comparer function that defines sort order.
+func (x BigKey) Compare(other interface{}) int {
+	y := other.(BigKey)
+
+	// Sort by filename followed by chunk index.
+	i := cmp.Compare[string](x.filename, y.filename)
+	if i != 0 {
+		return i
+	}
+	return cmp.Compare[int](x.chunkIndex, y.chunkIndex)
+}
+
+func uploader() {
+	t, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
+	t.Begin()
+	b3, _ := in_red_cfs.NewBtree[bigKey, []byte](ctx, "bigstore", t)
+
+	// Add byte array of 50 MB chunk size.
+	b3.Add(ctx, BigKey{filename: "bigfile", chunkIndex: 0}, []byte{..})
+
+	// ...
+
+	// Add upp to 20,000 will store 1TB of data. :)
+	b3.Add(ctx, BigKey{filename: "bigfile", chunkIndex: 20000}, []byte{..})
+	t.Commit(ctx)
+}
+```
+
+Above is an example how to upload using a single thread of execution. Of course, since Golang support highly concurrent programming, you can instead write a Micro Service that has endpoint for upload and allows client to submit data files in similar fashion above, but now, you can put this Micro Service in a load balancer, and wala, suddenly, you can support a cluster of services that can do parallel uploads of big data files. Secured and surpassing anything on the market!
+Micro Service endpoint can be secured using OAuth and thus, the setup now can surpass whatever most scaleable "objects system" in the market, may compare or surpass(depends on your design/implementation) even the biggest AWS S3 one can afford.
+
+And all "richly searchable", "partially updateable" with better readable code, great concurrency model/control under your fingertips, like using Go channels and Go routines.
+
 ## Tid Bits
 
 SOP is an object persistence based, modern database engine within a code library. Portability & integration is one of SOP's primary strengths. Code uses the Store API to store & manage key/value pairs of data.
