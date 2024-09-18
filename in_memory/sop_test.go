@@ -45,6 +45,33 @@ func Test_FunctionalityTests(t *testing.T) {
 		t.Errorf("FindOne(1) failed, got true, want false.")
 	}
 
+	// Test Upsert.
+	b3.Upsert(1234, "I am the value with 1234 key.")
+	b3.Upsert(567, "I am the value with 567 key.")
+	if !b3.FindOne(1234, false) {
+		t.Errorf("Upsert(1234) failed, FindOne(1234) got false, want true.")
+	}
+	if !b3.FindOne(567, false) {
+		t.Errorf("Upsert(567) failed, FindOne(567) got false, want true.")
+	}
+	b3.Upsert(1234, "I am coolio.")
+	b3.Upsert(567, "I am hottie.")
+	if !b3.FindOne(1234, false) {
+		t.Errorf("Upsert(1234) #2 failed, FindOne(1234) got false, want true.")
+	}
+	if b3.GetCurrentValue() != "I am coolio." {
+		t.Errorf("Upsert(1234) #2 failed, GetCurrentValue got %s, want 'I am coolio.'", b3.GetCurrentValue())
+	}
+	if !b3.FindOne(567, false) {
+		t.Errorf("Upsert(567) failed, FindOne(567) got false, want true.")
+	}
+	if b3.GetCurrentValue() != "I am hottie." {
+		t.Errorf("Upsert(567) #2 failed, GetCurrentValue got %s, want 'I am hottie.'", b3.GetCurrentValue())
+	}
+	// Cleanup after the Upsert tests.
+	b3.Remove(1234)
+	b3.Remove(567)
+
 	// Populate with some values.
 	b3.Add(5000, "I am the value with 5000 key.")
 	b3.Add(5001, five001Value)
