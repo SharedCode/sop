@@ -66,6 +66,22 @@ func (b3 *btreeWithTransaction[TK, TV]) AddIfNotExist(ctx context.Context, key T
 	return r, err
 }
 
+// Upsert will add item if it does not exist or update it if it does.
+func (b3 *btreeWithTransaction[TK, TV]) Upsert(ctx context.Context, key TK, value TV) (bool, error) {
+	if !b3.transaction.HasBegun() {
+		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+	}
+	if b3.transaction.GetMode() != sop.ForWriting {
+		b3.transaction.Rollback(ctx)
+		return false, fmt.Errorf("can't update item, transaction is not for writing")
+	}
+	r, err := b3.btree.Upsert(ctx, key, value)
+	if err != nil {
+		b3.transaction.Rollback(ctx)
+	}
+	return r, err
+}
+
 // Update finds the item with key and update its value to the value argument.
 func (b3 *btreeWithTransaction[TK, TV]) Update(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
@@ -250,12 +266,6 @@ func (b3 *btreeWithTransaction[TK, TV]) Previous(ctx context.Context) (bool, err
 		b3.transaction.Rollback(ctx)
 	}
 	return r, err
-}
-
-// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's segment.
-// Otherwise is false.
-func (b3 *btreeWithTransaction[TK, TV]) IsValueDataInNodeSegment() bool {
-	return b3.btree.IsValueDataInNodeSegment()
 }
 
 // IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
