@@ -15,11 +15,15 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// This is useful for cases one wants to add an item without creating a duplicate entry.
 	AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error)
 
-	// Update finds the item with key and update its value to the value argument.
+	// Update finds the item with key and update its value to the incoming value argument.
 	Update(ctx context.Context, key TK, value TV) (bool, error)
 	// UpdateCurrentItem will update the Value of the current item.
 	// Key is read-only, thus, no argument for the key.
 	UpdateCurrentItem(ctx context.Context, newValue TV) (bool, error)
+
+	// Add if not exist or update item if it exists.
+	Upsert(ctx context.Context, key TK, value TV) (bool, error)
+
 	// Remove will find the item with a given key then remove that item.
 	Remove(ctx context.Context, key TK) (bool, error)
 	// RemoveCurrentItem will remove the current key/value pair from the store.
@@ -55,9 +59,6 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 	Previous(ctx context.Context) (bool, error)
 
-	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's segment.
-	// Otherwise is false.
-	IsValueDataInNodeSegment() bool
 
 	// IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
 	// Specifying uniqueness base on key makes the B-Tree permanently set. If you want just a temporary

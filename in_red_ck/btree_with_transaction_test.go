@@ -272,3 +272,19 @@ func Test_TransactionWithInducedErrorOnPrevious(t *testing.T) {
 		t.Error("Transaction is not rolled back.")
 	}
 }
+
+func Test_TransactionWithInducedErrorOnUpsert(t *testing.T) {
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
+	t2.Begin()
+
+	var t3 interface{} = t2.GetPhasedTransaction()
+	trans := t3.(*transaction)
+
+	b3 := newBTreeWithInducedErrors[int, string](t)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
+	b3.induceErrorOnMethod = 15
+	b3t.Upsert(ctx, 1, "foo")
+	if trans.HasBegun() {
+		t.Error("Transaction is not rolled back.")
+	}
+}

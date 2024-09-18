@@ -134,6 +134,14 @@ func (b3 b3WithInducedErrors[TK, TV]) Previous(ctx context.Context) (bool, error
 	return true, nil
 }
 
+func (b3 b3WithInducedErrors[TK, TV]) Upsert(ctx context.Context, key TK, value TV) (bool, error) {
+	b3.t.Helper()
+	if b3.induceErrorOnMethod == 15 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+
 func (b3 b3WithInducedErrors[TK, TV]) GetStoreInfo() sop.StoreInfo {
 	return sop.StoreInfo{}
 }

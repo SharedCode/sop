@@ -413,6 +413,18 @@ func (btree *Btree[TK, TV]) UpdateCurrentNodeItem(ctx context.Context, item *Ite
 	return true, nil
 }
 
+// Add if item not exist or update if it exists.
+func (btree *Btree[TK, TV]) Upsert(ctx context.Context, key TK, value TV) (bool, error) {
+	if ok, err := btree.AddIfNotExist(ctx, key, value); !ok || err != nil {
+		if err != nil {
+			return false, err
+		}
+		// It means item with key already exists, update it.
+		return btree.Update(ctx, key, value)
+	}
+	return true, nil
+}
+
 // Remove will find the item with given key and delete it.
 func (btree *Btree[TK, TV]) Remove(ctx context.Context, key TK) (bool, error) {
 	ok, err := btree.FindOne(ctx, key, false)
