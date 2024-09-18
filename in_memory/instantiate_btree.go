@@ -75,6 +75,12 @@ func (b3 BtreeInterface[TK, TV]) Update(key TK, value TV) bool {
 	return ok
 }
 
+// Upsert will add the item if not found or update it if it exists.
+func (b3 BtreeInterface[TK, TV]) Upsert(key TK, value TV) bool {
+	ok, _ := b3.btree.Upsert(nil, key, value)
+	return ok
+}
+
 // UpdateCurrentItem will update the Value of the current item.
 // Key is read-only, thus, no argument for the key.
 func (b3 BtreeInterface[TK, TV]) UpdateCurrentItem(newValue TV) bool {
