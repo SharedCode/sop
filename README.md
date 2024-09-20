@@ -637,6 +637,51 @@ Micro Service endpoint can be secured using OAuth and thus, the setup now can su
 
 And all "ACID transaction" guarded, "richly searchable", "partially updateable" with better readable code, great concurrency model/control under your fingertips, like using Go channels and Go routines.
 
+## Big Data Partial Updates
+Updating any part(s) of the Big Data file is of no special case, SOP Btree.Update(..) method will take care of updating the target part of the file needing modification. Sample code snippet is shown below for illustration.
+```
+package big_data
+import(
+	github.com/SharedCode/sop/in_red_cfs
+)
+
+type BigKey struct {
+	filename string
+	chunkIndex int
+}
+
+// The Comparer function that defines sort order.
+func (x BigKey) Compare(other interface{}) int {
+	y := other.(BigKey)
+
+	// Sort by filename followed by chunk index.
+	i := cmp.Compare[string](x.filename, y.filename)
+	if i != 0 {
+		return i
+	}
+	return cmp.Compare[int](x.chunkIndex, y.chunkIndex)
+}
+
+func updater(filename string, chunkIndex int) {
+	t, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
+	t.Begin()
+	b3, _ := in_red_cfs.NewBtree[bigKey, []byte](ctx, sop.StoreOptions{
+		Name:                     "bigstore",
+		SlotLength:               500,
+		IsUnique:                 true,
+		IsValueDataActivelyPersisted: true,
+		BlobStoreBaseFolderPath:  dataPath,
+		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), true),
+	}, t)
+
+	// Update chunk index # 100, with your new byte array of a given size.
+	b3.Update(ctx, BigKey{filename: "bigfile", chunkIndex: 100}, []byte{..})
+
+	// Commit the change.
+	t.Commit(ctx)
+}
+```
+
 ## Tid Bits
 
 SOP is an object persistence based, modern database engine within a code library. Portability & integration is one of SOP's primary strengths. Code uses the Store API to store & manage key/value pairs of data.
