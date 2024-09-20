@@ -665,14 +665,7 @@ func (x BigKey) Compare(other interface{}) int {
 func updater(filename string, chunkIndex int) {
 	t, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	t.Begin()
-	b3, _ := in_red_cfs.NewBtree[bigKey, []byte](ctx, sop.StoreOptions{
-		Name:                     "bigstore",
-		SlotLength:               500,
-		IsUnique:                 true,
-		IsValueDataActivelyPersisted: true,
-		BlobStoreBaseFolderPath:  dataPath,
-		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), true),
-	}, t)
+	b3, _ := in_red_cfs.OpenBtree[bigKey, []byte](ctx, "bigstore", t)
 
 	// Update chunk index # 100, with your new byte array of a given size.
 	b3.Update(ctx, BigKey{filename: "bigfile", chunkIndex: 100}, []byte{..})
