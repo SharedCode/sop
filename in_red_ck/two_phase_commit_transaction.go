@@ -155,6 +155,7 @@ func (t *transaction) Phase1Commit(ctx context.Context) error {
 		}
 		return fmt.Errorf("phase 1 commit failed, details: %v", err)
 	}
+	log.Debug("after phase1Commit call")
 	return nil
 }
 
@@ -243,7 +244,8 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 // Sleep in random milli-seconds to allow different conflicting (Node modifying) transactions
 // to retry on different times, thus, increasing chance to succeed one after the other.
 func randomSleep(ctx context.Context) {
-	sleepTime := rand.Intn(7) * 250
+	sleepTime := rand.Intn(5) * 20
+	log.Debug(fmt.Sprintf("sleep for %d millis", sleepTime))
 	sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
 }
 
@@ -284,6 +286,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	startTime := Now()
 	successful := false
 	for !successful {
+
+		log.Debug("inside phase1Commit forloop")
+
 		var err error
 		if err = t.timedOut(ctx, startTime); err != nil {
 			return err
@@ -410,6 +415,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
+	log.Debug("phase 1 commit ends")
 	// Populate the phase 2 commit required objects.
 	t.updatedNodeHandles = uh
 	t.removedNodeHandles = rh
@@ -646,6 +652,8 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 	// For a reader transaction, conflict check is enough.
 	startTime := Now()
 	for {
+		log.Debug("inside reader trans phase 2 commit")
+
 		if err := t.timedOut(ctx, startTime); err != nil {
 			return err
 		}

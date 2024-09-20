@@ -2,6 +2,8 @@ package integration_tests
 
 import (
 	"context"
+	log "log/slog"
+	"os"
 	"testing"
 	"time"
 
@@ -25,6 +27,11 @@ var redisConfig = redis.Options{
 const dataPath string = "/Users/grecinto/sop_data"
 
 func init() {
+	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
+		Level: log.LevelInfo,
+	}))
+	log.SetDefault(l) // configures log package to print with LevelInfo
+
 	in_red_cfs.Initialize(cassConfig, redisConfig)
 }
 
@@ -34,7 +41,7 @@ var ctx = context.Background()
 func Test_CreateEmptyStore(t *testing.T) {
 	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 
@@ -72,7 +79,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -102,7 +109,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 4. Commit Transaction
 	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -143,7 +150,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 func Test_StoreCaching(t *testing.T) {
 	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -184,7 +191,7 @@ func Test_StoreCaching(t *testing.T) {
 func Test_StoreCachingTTL(t *testing.T) {
 	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{

@@ -3,6 +3,8 @@ package sop
 
 import (
 	"context"
+	"fmt"
+	log "log/slog"
 	"time"
 )
 
@@ -114,6 +116,7 @@ func (t *singlePhaseTransaction) Commit(ctx context.Context) error {
 
 	// Phase 2 commit.
 	if err := t.sopPhaseCommitTransaction.Phase2Commit(ctx); err != nil {
+		log.Debug(fmt.Sprintf("Phase2Commit error: %v", err))
 		t.Rollback(ctx)
 		return err
 	}
