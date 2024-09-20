@@ -134,7 +134,6 @@ func (btree *Btree[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, er
 	btree.promote(ctx)
 
 	// Increment store's item count.
-	// TODO: Register StoreInfo change to transaction manager (on V2) so it can get persisted.
 	btree.StoreInfo.Count++
 
 	return true, nil
@@ -160,7 +159,6 @@ func (btree *Btree[TK, TV]) AddItem(ctx context.Context, item *Item[TK, TV]) (bo
 	btree.promote(ctx)
 
 	// Increment store's item count.
-	// TODO: Register StoreInfo change to transaction manager (on V2) so it can get persisted.
 	btree.StoreInfo.Count++
 
 	return true, nil

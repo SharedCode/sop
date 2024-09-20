@@ -246,6 +246,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 		blobs[i].BlobTable = nodes[i].First.BlobTable
 		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
 		for ii := range handles[i].IDs {
+			log.Debug(fmt.Sprintf("inside commitUpdatedNodes(%d:%d) forloop blobTable %s UUID %s trying to AllocateID", i, ii, blobs[i].BlobTable, handles[i].IDs[ii].LogicalID.String()))
 			// Node with such ID is marked deleted or had been updated since reading it.
 			if (handles[i].IDs[ii].IsDeleted && !handles[i].IDs[ii].IsExpiredInactive()) || handles[i].IDs[ii].Version != nodes[i].Second[ii].(btree.MetaDataType).GetVersion() {
 				return false, nil, nil
@@ -271,6 +272,8 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 			blobs[i].Blobs[ii].Value = nodes[i].Second[ii]
 		}
 	}
+	log.Debug("outside commitUpdatedNodes forloop trying to AllocateID")
+
 	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
 		return false, nil, err
 	}

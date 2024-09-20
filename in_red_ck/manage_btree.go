@@ -4,6 +4,7 @@ package in_red_ck
 import (
 	"context"
 	"fmt"
+	log "log/slog"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
@@ -157,6 +158,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 		b3.StoreInfo.RootNodeID = storeInfo[0].RootNodeID
 
 		for uuid, ci := range b3ModifiedItems {
+			log.Debug("inside refetchAndMergeClosure")
 			if ci.Action == addAction {
 				if !b3.StoreInfo.IsValueDataInNodeSegment {
 					if ok, err := b3.AddItem(ctx, ci.item); !ok || err != nil {
