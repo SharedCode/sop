@@ -645,22 +645,7 @@ import(
 	github.com/SharedCode/sop/in_red_cfs
 )
 
-type BigKey struct {
-	filename string
-	chunkIndex int
-}
-
-// The Comparer function that defines sort order.
-func (x BigKey) Compare(other interface{}) int {
-	y := other.(BigKey)
-
-	// Sort by filename followed by chunk index.
-	i := cmp.Compare[string](x.filename, y.filename)
-	if i != 0 {
-		return i
-	}
-	return cmp.Compare[int](x.chunkIndex, y.chunkIndex)
-}
+//...
 
 func updater(filename string, chunkIndex int) {
 	t, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
