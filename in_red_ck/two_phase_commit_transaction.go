@@ -188,6 +188,10 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 				log.Warn(err.Error() + ", will retry")
 
 				randomSleep(ctx)
+
+				if err = t.refetchAndMergeModifications(ctx); err != nil {
+					return err
+				}	
 				if err = t.phase1Commit(ctx); err != nil {
 					break
 				}
@@ -355,9 +359,9 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 		if !successful {
 			// Rollback partial changes.
-			t.rollback(ctx, false)
-			// Clear logs as we rolled back.
-			t.logger.removeLogs(ctx)
+			if rerr := t.rollback(ctx, false); rerr != nil {
+				return fmt.Errorf("phase 1 commit failed, then rollback errored with: %v", rerr)
+			}
 
 			randomSleep(ctx)
 
