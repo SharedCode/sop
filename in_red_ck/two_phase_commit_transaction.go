@@ -16,8 +16,8 @@ import (
 
 type btreeBackend struct {
 	nodeRepository *nodeRepository
-	// Following are function pointers because BTree is generic typed for Key & Value,
-	// and these functions being pointers allow the backend to deal without requiring knowing data types.
+	// Following are function references because BTree is generic typed for Key & Value,
+	// and these functions being references allow the backend to deal without requiring knowing data types.
 	refetchAndMerge    func(ctx context.Context) error
 	getStoreInfo       func() *sop.StoreInfo
 	hasTrackedItems    func() bool
