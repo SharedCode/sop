@@ -647,17 +647,16 @@ import(
 
 //...
 
-func updater(filename string, chunkIndex int) {
-	t, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
-	t.Begin()
-	b3, _ := in_red_cfs.OpenBtree[bigKey, []byte](ctx, "bigstore", t)
+t, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
+t.Begin()
+b3, _ := in_red_cfs.OpenBtree[bigKey, []byte](ctx, "bigstore", t)
 
-	// Update chunk index # 100, with your new byte array of a given size.
-	b3.Update(ctx, BigKey{filename: "bigfile", chunkIndex: 100}, []byte{..})
+// Update chunk index # 100, with your new byte array of a given size.
+b3.Update(ctx, BigKey{filename: "bigfile", chunkIndex: 100}, []byte{..})
 
-	// Commit the change.
-	t.Commit(ctx)
-}
+// Commit the change.
+t.Commit(ctx)
+
 ```
 
 ## Tid Bits
