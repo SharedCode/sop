@@ -302,7 +302,6 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 		}
 
 		// Remove the pre commit logs as not needed anymore from this point.
-		// TODO: finalize the logic here and the commit call above.
 		if preCommitTID != sop.NilUUID {
 			t.logger.logger.Remove(ctx, preCommitTID)
 			preCommitTID = sop.NilUUID

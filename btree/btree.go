@@ -498,7 +498,6 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 	}
 	// Make the current item pointer point to null since we just deleted the current item.
 	btree.setCurrentItemID(sop.NilUUID, 0)
-	// TODO: Register StoreInfo change to transaction manager (on V2) so it can get persisted.
 	// Not needed in in-memory (V1) version.
 	btree.StoreInfo.Count--
 
