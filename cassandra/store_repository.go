@@ -130,6 +130,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	undo := func(bus []sop.StoreInfo) {
 		// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
 		for ii := 0; ii < len(bus); ii++ {
+			log.Debug(fmt.Sprintf("undo occured for store %s", bus[ii].Name))
 			qry := connection.Session.Query(updateStatement, bus[ii].Count, bus[ii].Timestamp,
 				bus[ii].Name)
 			if connection.Config.ConsistencyBook.StoreUpdate > gocql.Any {

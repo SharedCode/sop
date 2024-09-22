@@ -429,7 +429,6 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 // phase2Commit finalizes the commit process and does cleanup afterwards.
 func (t *transaction) phase2Commit(ctx context.Context) error {
 
-	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
 	f := t.getToBeObsoleteEntries()
 	s := t.getObsoleteTrackedItemsValues()
 	var pl sop.Tuple[sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]], []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]]
@@ -439,9 +438,12 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 			Second: s,
 		}
 	}
+	// Log the "finalizeCommit" step & parameters, useful for rollback.
 	if err := t.logger.log(ctx, finalizeCommit, toByteArray(pl)); err != nil {
 		return err
 	}
+
+	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
 	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
 		return err
 	}

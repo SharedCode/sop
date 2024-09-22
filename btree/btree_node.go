@@ -747,7 +747,7 @@ func (node *Node[TK, TV]) getChildren(ctx context.Context, btree *Btree[TK, TV])
 
 // hasChildren returns true if node has children or not.
 func (node *Node[TK, TV]) hasChildren() bool {
-	return node.ChildrenIDs != nil && len(node.ChildrenIDs) > 0
+	return len(node.ChildrenIDs) > 0
 }
 
 // isRootNode returns true if node has no parent.

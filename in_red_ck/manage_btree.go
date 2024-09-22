@@ -154,7 +154,10 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 		if err != nil {
 			return err
 		}
+
+		// Reset the internal variables with value from backend Store DB.
 		b3.StoreInfo.Count = storeInfo[0].Count
+		si.backendNodeRepository.count = storeInfo[0].Count
 		b3.StoreInfo.RootNodeID = storeInfo[0].RootNodeID
 
 		for uuid, ci := range b3ModifiedItems {

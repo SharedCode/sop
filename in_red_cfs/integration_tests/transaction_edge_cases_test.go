@@ -594,6 +594,9 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	if i < 5 {
 		t.Errorf("Failed, traversing/counting all records, got %d, want 5.", i)
 	}
+	if b3.Count() > 9 {
+		t.Errorf("Failed, traversing/counting all records, got %d, but Count() returned %d.", i, b3.Count())
+	} 
 }
 
 /*
