@@ -132,9 +132,14 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 		for ii := 0; ii < endIndex; ii++ {
 			log.Debug(fmt.Sprintf("undo occured for store %s", stores[ii].Name))
 
-			si := stores[ii]
+			sis, _ := sr.Get(ctx, stores[ii].CacheConfig.IsStoreInfoCacheTTL, stores[ii].CacheConfig.StoreInfoCacheDuration, stores[ii].Name)
+			if len(sis) == 0 {
+				continue
+			}
+
+			si := sis[0]
 			// Reverse the count delta should restore to true count value.
-			si.Count = si.Count - si.CountDelta
+			si.Count = si.Count - stores[ii].CountDelta
 			si.Timestamp = original[ii].Timestamp
 
 			qry := connection.Session.Query(updateStatement, si.Count, si.Timestamp, si.Name)
@@ -172,15 +177,11 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			undo(i, beforeUpdateStores)
 			return err
 		}
-	}
-	// Update redis since we've successfully updated Cassandra Store table.
-	for i := range stores {
 		// Tolerate redis error since we've successfully updated the master table.
 		if err := sr.redisCache.SetStruct(ctx, stores[i].Name, &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) failed, details: %v", err))
 		}
 	}
-
 	return nil
 }
 
