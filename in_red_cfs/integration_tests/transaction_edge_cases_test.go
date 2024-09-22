@@ -421,10 +421,10 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		t.Errorf("T1 & T2 Commits got 2 success, want 1 fail.")
 	}
 	if err1 != nil {
-		t.Logf(err1.Error())
+		t.Log(err1.Error())
 	}
 	if err2 != nil {
-		t.Logf(err2.Error())
+		t.Log(err2.Error())
 	}
 }
 
