@@ -127,12 +127,17 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	}
 
 	updateStatement := fmt.Sprintf("UPDATE %s.store SET count = ?, ts = ? WHERE name = ?;", connection.Config.Keyspace)
-	undo := func(bus []sop.StoreInfo) {
+	undo := func(endIndex int, original []sop.StoreInfo) {
 		// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
-		for ii := 0; ii < len(bus); ii++ {
-			log.Debug(fmt.Sprintf("undo occured for store %s", bus[ii].Name))
-			qry := connection.Session.Query(updateStatement, bus[ii].Count, bus[ii].Timestamp,
-				bus[ii].Name)
+		for ii := 0; ii < endIndex; ii++ {
+			log.Debug(fmt.Sprintf("undo occured for store %s", stores[ii].Name))
+
+			si := stores[ii]
+			// Reverse the count delta should restore to true count value.
+			si.Count = si.Count - si.CountDelta
+			si.Timestamp = original[ii].Timestamp
+
+			qry := connection.Session.Query(updateStatement, si.Count, si.Timestamp, si.Name)
 			if connection.Config.ConsistencyBook.StoreUpdate > gocql.Any {
 				qry.Consistency(connection.Config.ConsistencyBook.StoreUpdate)
 			}
@@ -147,7 +152,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	for i := range stores {
 		sis, err := sr.Get(ctx, stores[i].CacheConfig.IsStoreInfoCacheTTL, stores[i].CacheConfig.StoreInfoCacheDuration, stores[i].Name)
 		if len(sis) == 0 {
-			undo(beforeUpdateStores)
+			undo(i, beforeUpdateStores)
 			return err
 		}
 		beforeUpdateStores = append(beforeUpdateStores, sis...)
@@ -155,7 +160,6 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 		si := sis[0]
 		// Merge or apply the "count delta".
 		stores[i].Count = si.Count + stores[i].CountDelta
-		stores[i].Timestamp = si.Timestamp
 
 		qry := connection.Session.Query(updateStatement, stores[i].Count, stores[i].Timestamp, stores[i].Name)
 		if connection.Config.ConsistencyBook.StoreUpdate > gocql.Any {
@@ -165,7 +169,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 		// Update store record.
 		if err := qry.Exec(); err != nil {
 			// Undo changes.
-			undo(beforeUpdateStores)
+			undo(i, beforeUpdateStores)
 			return err
 		}
 	}
