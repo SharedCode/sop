@@ -1,5 +1,3 @@
-Horizontally Scaleable Objects Persistence
-
 Scaleable Objects Persistence (SOP) Framework - Golang V2
 
 Code Coverage: https://app.codecov.io/github/SharedCode/sop
