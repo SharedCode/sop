@@ -146,7 +146,14 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			if connection.Config.ConsistencyBook.StoreUpdate > gocql.Any {
 				qry.Consistency(connection.Config.ConsistencyBook.StoreUpdate)
 			}
-			qry.Exec()
+			if err := qry.Exec(); err != nil {
+				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed, details: %v", si.Name, err))
+				continue
+			}
+			// Tolerate redis error since we've successfully updated the master table.
+			if err := sr.redisCache.SetStruct(ctx, si.Name, &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
+				log.Warn(fmt.Sprintf("StoreRepository Update Undo (redis setstruct) store %s failed, details: %v", si.Name, err))
+			}
 		}
 	}
 
