@@ -10,9 +10,6 @@ import (
 	"github.com/SharedCode/sop"
 )
 
-// Marshaler allows you to specify custom marshaler if needed. Defaults to the SOP default marshaler.
-var Marshaler sop.Marshaler = sop.NewMarshaler()
-
 type blobStore struct{}
 
 // NewBlobStore instantiates a new BlobStore instance.
@@ -21,9 +18,9 @@ func NewBlobStore() sop.BlobStore {
 }
 
 // GetOne fetches a blob from blob table.
-func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobID sop.UUID, target interface{}) error {
+func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobID sop.UUID) ([]byte, error) {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	selectStatement := fmt.Sprintf("SELECT node FROM %s.%s WHERE id in (?);", connection.Config.Keyspace, blobTable)
 	qry := connection.Session.Query(selectStatement, gocql.UUID(blobID)).WithContext(ctx)
@@ -35,22 +32,19 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobID sop.UUI
 	for iter.Scan(&ba) {
 	}
 	if err := iter.Close(); err != nil {
-		return err
+		return nil, err
 	}
-	return Marshaler.Unmarshal(ba, target)
+	return ba, nil
 }
 
 // Add blob(s) to the Blob store.
-func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
+func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	for i := range storesblobs {
 		for ii := range storesblobs[i].Blobs {
-			ba, err := Marshaler.Marshal(storesblobs[i].Blobs[ii].Value)
-			if err != nil {
-				return err
-			}
+			ba := storesblobs[i].Blobs[ii].Value
 			insertStatement := fmt.Sprintf("INSERT INTO %s.%s (id, node) VALUES(?,?);",
 				connection.Config.Keyspace, storesblobs[i].BlobTable)
 			qry := connection.Session.Query(insertStatement, gocql.UUID(storesblobs[i].Blobs[ii].Key), ba).WithContext(ctx)
@@ -66,16 +60,13 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop
 }
 
 // Update blob(s) in the Blob store.
-func (b *blobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
+func (b *blobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 	for i := range storesblobs {
 		for ii := range storesblobs[i].Blobs {
-			ba, err := Marshaler.Marshal(storesblobs[i].Blobs[ii].Value)
-			if err != nil {
-				return err
-			}
+			ba := storesblobs[i].Blobs[ii].Value
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET node = ? WHERE id = ?;", connection.Config.Keyspace, storesblobs[i].BlobTable)
 			qry := connection.Session.Query(updateStatement, ba, gocql.UUID(storesblobs[i].Blobs[ii].Key)).WithContext(ctx)
 			if connection.Config.ConsistencyBook.BlobStoreUpdate > gocql.Any {

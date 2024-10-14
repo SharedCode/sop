@@ -1,4 +1,4 @@
-package sop
+package encoding
 
 import (
 	"encoding/json"
@@ -12,7 +12,11 @@ type Marshaler interface {
 	Unmarshal(data []byte, v any) error
 }
 
-type defaultMarshaller struct{}
+// Global BlobMarshaler takes care of packing and unpacking to/from blob object & byte array.
+// You can replace with your desired Marshaler implementation if needed. Defaults to use JSON Marshal.
+var BlobMarshaler = NewMarshaler()
+
+type defaultMarshaler struct{}
 
 // Returns the default marshaller which uses the golang's json package.
 // Json encoding was chosen as default because it supports "streaming" feature,
@@ -23,15 +27,43 @@ type defaultMarshaller struct{}
 //
 // Streaming use-case: 2GB movie or a huge(2GB) data graph.
 func NewMarshaler() Marshaler {
-	return &defaultMarshaller{}
+	return &defaultMarshaler{}
 }
 
 // Encodes any object to a byte array.
-func (m defaultMarshaller) Marshal(v any) ([]byte, error) {
+func (m defaultMarshaler) Marshal(v any) ([]byte, error) {
 	return json.Marshal(v)
 }
 
 // Decodes a byte array back to its Object type.
-func (m defaultMarshaller) Unmarshal(data []byte, v any) error {
+func (m defaultMarshaler) Unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
+}
+
+// Marshal that can do byte array pass-through.
+func Marshal[T any](v T) ([]byte, error) {
+	switch any(v).(type) {
+	case []byte:
+		var intf interface{}
+		intf = v
+		return intf.([]byte), nil
+	default:
+		return BlobMarshaler.Marshal(v)
+	}
+}
+
+// Unmarshal that can do byte array pass-through.
+func Unmarshal[T any](ba []byte, v *T) error {
+	switch any(v).(type) {
+	case []byte:
+		var intf interface{}
+		intf = ba
+		*v = intf.(T)
+		return nil
+	default:
+		if err := BlobMarshaler.Unmarshal(ba, v); err != nil {
+			return err
+		}
+		return nil
+	}
 }

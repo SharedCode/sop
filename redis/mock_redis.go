@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/SharedCode/sop/encoding"
 )
 
 type mockRedis struct {
@@ -35,7 +37,7 @@ func (m mockRedis) Ping(ctx context.Context) error {
 // Mocks.
 func (m *mockRedis) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	// serialize User object to JSON
-	ba, err := Marshaler.Marshal(value)
+	ba, err := encoding.BlobMarshaler.Marshal(value)
 	if err != nil {
 		return err
 	}
@@ -48,7 +50,7 @@ func (m *mockRedis) GetStruct(ctx context.Context, key string, target interface{
 	if !ok {
 		return redis.Nil
 	}
-	Marshaler.Unmarshal(ba, target)
+	encoding.BlobMarshaler.Unmarshal(ba, target)
 	return nil
 }
 

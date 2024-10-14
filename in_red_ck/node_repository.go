@@ -7,6 +7,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/encoding"
 	"github.com/SharedCode/sop/redis"
 )
 
@@ -128,9 +129,11 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 			return nil, err
 		}
 		// Fetch from blobStore and cache to Redis/local.
-		if err = nr.transaction.blobStore.GetOne(ctx, nr.storeInfo.BlobTable, nodeID, target); err != nil {
+		var ba []byte
+		if ba, err = nr.transaction.blobStore.GetOne(ctx, nr.storeInfo.BlobTable, nodeID); err != nil {
 			return nil, err
 		}
+		encoding.BlobMarshaler.Unmarshal(ba, target)
 		target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
 		if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID.String(), err))
@@ -194,12 +197,12 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tu
 	if err != nil {
 		return false, err
 	}
-	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
+	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]], len(nodes))
 	for i := range handles {
 		if len(handles[i].IDs) == 0 {
 			handles[i].IDs = make([]sop.Handle, len(vids[i].IDs))
 		}
-		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
+		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, []byte], len(handles[i].IDs))
 		blobs[i].BlobTable = nodes[i].First.BlobTable
 		for ii := range handles[i].IDs {
 			// Check if a non-empty root node was found, fail to cause "re-sync & merge".
@@ -208,7 +211,11 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tu
 			}
 			handles[i].IDs[ii] = sop.NewHandle(vids[i].IDs[ii])
 			blobs[i].Blobs[ii].Key = handles[i].IDs[ii].GetActiveID()
-			blobs[i].Blobs[ii].Value = nodes[i].Second[ii]
+			ba, err := encoding.BlobMarshaler.Marshal(nodes[i].Second[ii])
+			if err != nil {
+				return false, err
+			}
+			blobs[i].Blobs[ii].Value = ba
 		}
 	}
 	// Persist the nodes blobs to blob store and redis cache.
@@ -241,10 +248,10 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 	if err != nil {
 		return false, nil, err
 	}
-	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
+	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]], len(nodes))
 	for i := range handles {
 		blobs[i].BlobTable = nodes[i].First.BlobTable
-		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
+		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, []byte], len(handles[i].IDs))
 		for ii := range handles[i].IDs {
 			log.Debug(fmt.Sprintf("inside commitUpdatedNodes(%d:%d) forloop blobTable %s UUID %s trying to AllocateID", i, ii, blobs[i].BlobTable, handles[i].IDs[ii].LogicalID.String()))
 			// Node with such ID is marked deleted or had been updated since reading it.
@@ -269,7 +276,11 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 				return false, nil, nil
 			}
 			blobs[i].Blobs[ii].Key = id
-			blobs[i].Blobs[ii].Value = nodes[i].Second[ii]
+			ba, err := encoding.BlobMarshaler.Marshal(nodes[i].Second[ii])
+			if err != nil {
+				return false, nil, err
+			}
+			blobs[i].Blobs[ii].Value = ba
 		}
 	}
 	log.Debug("outside commitUpdatedNodes forloop trying to AllocateID")
@@ -335,12 +346,12 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tupl
 		return nil
 	}
 	handles := make([]sop.RegistryPayload[sop.Handle], len(nodes))
-	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]], len(nodes))
+	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]], len(nodes))
 	for i := range nodes {
 		handles[i].RegistryTable = nodes[i].First.RegistryTable
 		handles[i].IDs = make([]sop.Handle, len(nodes[i].Second))
 		blobs[i].BlobTable = nodes[i].First.BlobTable
-		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, interface{}], len(handles[i].IDs))
+		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, []byte], len(handles[i].IDs))
 		for ii := range nodes[i].Second {
 			metaData := nodes[i].Second[ii].(btree.MetaDataType)
 			// Add node to blob store.
@@ -348,7 +359,11 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tupl
 			// Increment version.
 			h.Version++
 			blobs[i].Blobs[ii].Key = metaData.GetID()
-			blobs[i].Blobs[ii].Value = nodes[i].Second[ii]
+			ba, err := encoding.BlobMarshaler.Marshal(nodes[i].Second[ii])
+			if err != nil {
+				return err
+			}
+			blobs[i].Blobs[ii].Value = ba
 			handles[i].IDs[ii] = h
 			// Add node to Redis cache.
 			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(metaData.GetID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
