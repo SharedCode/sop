@@ -34,9 +34,10 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 			shardsWithMetadata[shardIndex] = ba
 			shardsMetaData[shardIndex] = ba[0:b.erasure.MetaDataSize()]
 			shards[shardIndex] = ba[b.erasure.MetaDataSize():]
-			tc <- true
+			<- tc
 			return nil
 		})
+		tc <- true
 	}
 	if err := eg.Wait(); err != nil {
 		return nil, err
@@ -112,11 +113,12 @@ func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[s
 					if err := b.fileIO.WriteFile(fn, buf, permission); err != nil {
 						return err
 					}
-					tc <- true
+					// Signal that a thread is freed up.
+					<- tc
 					return nil
 				})
+				tc <- true
 			}
-
 		}
 	}
 	defer close(tc)
@@ -146,9 +148,10 @@ func (b *blobStore) ecRemove(ctx context.Context, storesBlobsIDs ...sop.BlobsPay
 					if err := b.fileIO.Remove(fn); err != nil {
 						return err
 					}
-					tc <- true
+					<- tc
 					return nil
 				})
+				tc <- true
 			}
 
 		}

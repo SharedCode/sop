@@ -23,11 +23,7 @@ func JobProcessor(ctx context.Context, maxThreadCount int) (chan bool, *errgroup
 				log.Debug("ctx2 received a done signal")
 				return
 			default:
-				// Just free up space on the channel.
-				continueSignal, ok := <-workChannel
-				if !ok || !continueSignal{
-					return
-				}
+				log.Debug("JobProcessor is idle")
 			}
 		}
 	})()
