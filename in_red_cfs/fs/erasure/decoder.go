@@ -34,11 +34,9 @@ func (e *Erasure) Decode(shards [][]byte, shardsMetaData [][]byte) *DecodeResult
 	ok, _ := e.encoder.Verify(shards)
 	if !ok {
 		log.Info("Verification failed, reconstructing data.")
-		err := e.encoder.Reconstruct(shards)
-		if err != nil {
-			return &DecodeResult{
-				Error: fmt.Errorf("reconstruct failed, error: %v", err),
-			}
+		r = e.reconstructMissingShards(shards, shardsMetaData)
+		if r.Error != nil {
+			return r
 		}
 		ok, _ = e.encoder.Verify(shards)
 		if !ok {
@@ -100,4 +98,19 @@ func (e *Erasure) detectBadShardsThenReconstruct(shards [][]byte, shardsMetaData
 	return &DecodeResult{
 		ReconstructedShardsIndeces: corruptedShardsIndices,
 	}
+}
+func (e *Erasure) reconstructMissingShards(shards [][]byte, shardsMetaData [][]byte) *DecodeResult {
+	r := DecodeResult{}
+	requestReconstruction := make([]bool, len(shards))
+	// Fill in the missing shards so it can get repaired by the caller, if it gets reconstructed on this level.
+	for i := range shards {
+		if shards[i] == nil {
+			r.ReconstructedShardsIndeces = append(r.ReconstructedShardsIndeces, i)
+			requestReconstruction[i] = true
+		}
+	}
+	if err := e.encoder.ReconstructSome(shards, requestReconstruction); err != nil {
+		r.Error = err
+	}
+	return &r
 }

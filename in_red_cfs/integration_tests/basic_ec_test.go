@@ -12,9 +12,9 @@ import (
 
 func Test_Basic_EC(t *testing.T) {
 	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, false, &fs.ErasureCodingConfig{
-		DataShardsCount: 2,
+		DataShardsCount:   2,
 		ParityShardsCount: 1,
-		BaseFolderPathsAcrossDrives: []string {
+		BaseFolderPathsAcrossDrives: []string{
 			fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
 			fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
 			fmt.Sprintf("%s%cdisk3", dataPath, os.PathSeparator),
@@ -25,7 +25,7 @@ func Test_Basic_EC(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtreeEC[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_cfs.NewBtreeWithEC[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstoreec",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
@@ -60,21 +60,21 @@ func Test_Basic_EC(t *testing.T) {
 }
 
 func Test_Basic_EC_Get(t *testing.T) {
-	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForReading, -1, false, &fs.ErasureCodingConfig{
-		DataShardsCount: 2,
+	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, false, &fs.ErasureCodingConfig{
+		DataShardsCount:   2,
 		ParityShardsCount: 1,
-		BaseFolderPathsAcrossDrives: []string {
+		BaseFolderPathsAcrossDrives: []string{
 			fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
 			fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
 			fmt.Sprintf("%s%cdisk3", dataPath, os.PathSeparator),
 		},
-		RepairCorruptedShards: false,
+		RepairCorruptedShards: true,
 	})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtreeEC[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_cfs.NewBtreeWithEC[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstoreec",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,

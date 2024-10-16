@@ -49,12 +49,24 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 	if b.repairCorruptedShards && len(dr.ReconstructedShardsIndeces) > 0 {
 		// Repair corrupted or bitrot shards (a.k.a. damaged shards). Just do sequential processing as
 		// damaged shards should be typically one, residing in a drive that failed.
-		for i, _ := range dr.ReconstructedShardsIndeces {
+		for _, i := range dr.ReconstructedShardsIndeces {
 			baseFolderPath := fmt.Sprintf("%s%c%s", b.baseFolderPathsAcrossDrives[i], os.PathSeparator, blobFilePath)
 			blobKey := blobID
 	
 			fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
 			fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), i)
+
+			log.Debug(fmt.Sprintf("repairing file %s",fn))
+
+			md := b.erasure.ComputeShardMetadata(len(dr.DecodedData), shards, i)
+			buf := make([]byte, len(md) + len(shards[i]))
+
+			// TODO: refactor to write metadata then write the shard data so we don't use temp variable,
+			// more optimal if shard size is huge.
+			copy(buf, md)
+			copy(buf[len(md):], shards[i])
+			shardsWithMetadata[i] = buf
+
 			err := b.fileIO.WriteFile(fn, shardsWithMetadata[i], permission)
 			// Just log warning if damaged shard can't be repaired as we have reconstructed it part of return.
 			if err != nil {
