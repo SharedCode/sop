@@ -43,10 +43,7 @@ func (b *blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.
 func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
-			ba, err := sop.BlobMarshaler.Marshal(blob.Value)
-			if err != nil {
-				return err
-			}
+			ba := blob.Value
 			res := b.BucketAsStore.Add(ctx, storeBlobs.BlobTable, sop.KeyValuePair[string, *aws_s3.S3Object]{
 				Key:   blob.Key.String(),
 				Value: &aws_s3.S3Object{Data: ba},

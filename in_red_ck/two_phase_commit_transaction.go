@@ -191,7 +191,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 
 				if err = t.refetchAndMergeModifications(ctx); err != nil {
 					return err
-				}	
+				}
 				if err = t.phase1Commit(ctx); err != nil {
 					break
 				}

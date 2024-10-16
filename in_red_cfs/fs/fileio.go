@@ -2,10 +2,17 @@ package fs
 
 import (
 	"os"
+
+	"github.com/SharedCode/sop"
 )
 
 // Functions for File I/O defaults to "os" file I/O functions.
 type FileIO interface {
+
+	// ToFilePath is part of FileIO so we can allow implementations to drive
+	// generation of full path filename.
+	ToFilePath(basePath string, id sop.UUID) string
+
 	WriteFile(name string, data []byte, perm os.FileMode) error
 	ReadFile(name string) ([]byte, error)
 	Remove(name string) error
@@ -17,6 +24,17 @@ type FileIO interface {
 }
 
 type DefaultFileIO struct {
+	toFilePath ToFilePathFunc
+}
+
+func NewDefaultFileIO(toFilePath ToFilePathFunc) FileIO {
+	return &DefaultFileIO{
+		toFilePath: toFilePath,
+	}
+}
+
+func (dio DefaultFileIO) ToFilePath(basePath string, id sop.UUID) string {
+	return dio.toFilePath(basePath, id)
 }
 
 func (dio DefaultFileIO) WriteFile(name string, data []byte, perm os.FileMode) error {

@@ -59,7 +59,6 @@ type BtreeInterface[TK Comparable, TV any] interface {
 	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
 	Previous(ctx context.Context) (bool, error)
 
-
 	// IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
 	// Specifying uniqueness base on key makes the B-Tree permanently set. If you want just a temporary
 	// unique check during Add of an item, then you can use AddIfNotExist method for that.

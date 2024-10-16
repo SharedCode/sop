@@ -3,46 +3,48 @@
 package erasure
 
 import (
-	"fmt"
 	"crypto/md5"
+	"fmt"
 
 	"github.com/klauspost/reedsolomon"
 )
 
-type erasure struct {
-	dataShardsCount int
+type Erasure struct {
+	dataShardsCount   int
 	parityShardsCount int
+	encoder           reedsolomon.Encoder
 }
 
 // NewErasure instantiates an erasure encoder.
-func NewErasure(dataShards int, parityShards int) (erasure, error) {
+func NewErasure(dataShards int, parityShards int) (*Erasure, error) {
 	if (dataShards + parityShards) > 256 {
-		return erasure{}, fmt.Errorf("sum of data and parity shards cannot exceed 256")
+		return nil, fmt.Errorf("sum of data and parity shards cannot exceed 256")
 	}
-	return erasure {
-		dataShardsCount: dataShards,
-		parityShardsCount: parityShards,
-	}, nil
-}
-
-// Encode erasure encodes data into a given set of data & parity shards & returns it, 
-// or an error if there is an error encountered.
-func (e *erasure)Encode(data []byte) ([][]byte, error) {
-
-	// Create encoding matrix.
-	enc, err := reedsolomon.New(e.dataShardsCount, e.parityShardsCount)
+	enc, err := reedsolomon.New(dataShards, parityShards)
 	if err != nil {
 		return nil, err
 	}
+	return &Erasure{
+		dataShardsCount:   dataShards,
+		parityShardsCount: parityShards,
+		encoder:           enc,
+	}, nil
+}
+
+// Encode erasure encodes data into a given set of data & parity shards & returns it,
+// or an error if there is an error encountered.
+func (e *Erasure) Encode(data []byte) ([][]byte, error) {
+
+	// Create encoding matrix.
 
 	// Split the file into equally sized shards.
-	shards, err := enc.Split(data)
+	shards, err := e.encoder.Split(data)
 	if err != nil {
 		return nil, err
 	}
 
 	// Encode parity
-	err = enc.Encode(shards)
+	err = e.encoder.Encode(shards)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +55,7 @@ func (e *erasure)Encode(data []byte) ([][]byte, error) {
 // ComputeShardMetadata returns a given shard's (computed) metadata.
 // dataSize specifies the known data size,
 // shardIndex is the index of the shard we need to compute metadata of.
-func (e *erasure)ComputeShardMetadata(dataSize int, shards [][]byte, shardIndex int) ([]byte, error) {
+func (e *Erasure) ComputeShardMetadata(dataSize int, shards [][]byte, shardIndex int) ([]byte, error) {
 	if dataSize <= 0 {
 		return nil, fmt.Errorf("dataSize(%d) is invalid", dataSize)
 	}
@@ -64,9 +66,11 @@ func (e *erasure)ComputeShardMetadata(dataSize int, shards [][]byte, shardIndex 
 		return nil, fmt.Errorf("shards can't be empty or nil")
 	}
 	checksum := md5.Sum(shards[shardIndex])
-	r := make([]byte, 1 + len(checksum))
+	r := make([]byte, 1+len(checksum))
 	// Add the last shard stuffed zeroes count as 1st byte.
-	r[0] = byte(e.dataShardsCount - dataSize % e.dataShardsCount)
+	if dataSize%e.dataShardsCount != 0 {
+		r[0] = byte(e.dataShardsCount - dataSize%e.dataShardsCount)
+	}
 	// Add the checksum bytes.
 	copy(r[1:], checksum[0:])
 

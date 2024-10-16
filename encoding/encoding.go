@@ -43,6 +43,12 @@ func (m defaultMarshaler) Unmarshal(data []byte, v any) error {
 // Marshal that can do byte array pass-through.
 func Marshal[T any](v T) ([]byte, error) {
 	switch any(v).(type) {
+	case *[]byte:
+		var intf interface{}
+		var v2 interface{} = v
+		var ba *[]byte = v2.(*[]byte)
+		intf = *ba
+		return intf.([]byte), nil
 	case []byte:
 		var intf interface{}
 		intf = v
@@ -55,6 +61,11 @@ func Marshal[T any](v T) ([]byte, error) {
 // Unmarshal that can do byte array pass-through.
 func Unmarshal[T any](ba []byte, v *T) error {
 	switch any(v).(type) {
+	case *[]byte:
+		var intf interface{}
+		intf = ba
+		*v = intf.(T)
+		return nil
 	case []byte:
 		var intf interface{}
 		intf = ba

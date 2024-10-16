@@ -20,8 +20,8 @@ func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging boo
 //
 // See SOP FileSystem(sop/in_red-cfs/fs) package's DefaultToFilePath function for an example how to implement one.
 func NewTransactionExt(toFilePath fs.ToFilePathFunc, mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
-	fio := fs.DefaultFileIO{}
-	bs := fs.NewBlobStoreExt(toFilePath, fio)
+	fio := fs.NewDefaultFileIO(toFilePath)
+	bs := fs.NewBlobStoreExt(fio, nil)
 	mbsf := fs.NewManageBlobStoreFolder(fio)
 	twoPT, err := in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepositoryExt(mbsf))
 	if err != nil {
