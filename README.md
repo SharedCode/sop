@@ -13,6 +13,11 @@ B-Tree, a Native of the Cluster: https://www.linkedin.com/pulse/b-tree-native-cl
 
 SOP in File System: https://www.linkedin.com/pulse/scaleable-object-persistencesop-file-system-gerardo-recinto-zplbc/?trackingId=jPp8ccwvQEydxt3pppa8eg%3D%3D
 
+# Software Based Efficient Replication
+Quick update, SOP now sports very efficient software based replication via Reed Solomon algorithm erasure coding. SOP's Registry data already had replication via Cassandra & now, the data blobs stored in File System (see sop/in_red_cfs) are safe having very efficient software based modern replication.
+The feature is complete, it has auto-repair of detected missing or bitrot shards, if the RepairCorruptedShards flag (passed in the sop/in_red_cfs/NewTransactionWithEC erasure config) is turned on.
+Use-case, you can set this flag of then upon disk drive failure detection, you can replace the drive turn on this flag then restart the app. Then SOP will automatically repair damaged, missing or bitrot shard files that can get reconstructed from the available shards.
+
 # Quick Store Caching Config Guide
 At the latest release, V2 Beta 2.1.7+, SOP is able to achieve "persisted data & caching" virtualization. This is a very important milestone, because SOP further cemented its capabilities, estimate is, nothing in the market can compete with SOP for the things it provides & in the magnitude of its "horizontal & vertical scaling" & "data caching virtualization" capabilities. In fact, it is the only solution known that does this.
 
