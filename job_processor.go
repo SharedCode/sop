@@ -10,8 +10,8 @@ import (
 // JobProcessor function launches a task (thread) spinner & returns a channel (& errgroup)
 // you can use to enqueue function tasks(the channel) and for awaiting
 // completion(the errgroup) of all "spinned off" threads from the tasks enqueued.
-func JobProcessor(ctx context.Context, maxThreadCount int) (chan func() error, *errgroup.Group) {
-	workChannel := make(chan func() error, maxThreadCount)
+func JobProcessor(ctx context.Context, maxThreadCount int) (chan bool, *errgroup.Group) {
+	workChannel := make(chan bool, maxThreadCount)
 
 	eg, ctx2 := errgroup.WithContext(ctx)
 
@@ -20,14 +20,14 @@ func JobProcessor(ctx context.Context, maxThreadCount int) (chan func() error, *
 		for {
 			select {
 			case <-ctx2.Done():
-				log.Debug("ctx2 receieved a done signal")
+				log.Debug("ctx2 received a done signal")
 				return
 			default:
-				task, ok := <-workChannel
-				if !ok {
+				// Just free up space on the channel.
+				continueSignal, ok := <-workChannel
+				if !ok || !continueSignal{
 					return
 				}
-				eg.Go(task)
 			}
 		}
 	})()

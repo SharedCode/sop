@@ -20,14 +20,12 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 		baseFolderPath := fmt.Sprintf("%s%c%s", b.baseFolderPathsAcrossDrives[i], os.PathSeparator, blobFilePath)
 		blobKey := blobID
 
-		fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
-		fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), i)
-
 		shardIndex := i
+		fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
+		fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), shardIndex)
 
-		task := func() error {
-
-			log.Debug(fmt.Sprintf("readinf from file %s",fn))
+		eg.Go(func() error {
+			log.Debug(fmt.Sprintf("reading from file %s",fn))
 
 			ba, err := b.fileIO.ReadFile(fn)
 			if err != nil {
@@ -36,14 +34,14 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 			shardsWithMetadata[shardIndex] = ba
 			shardsMetaData[shardIndex] = ba[0:b.erasure.MetaDataSize()]
 			shards[shardIndex] = ba[b.erasure.MetaDataSize():]
+			tc <- true
 			return nil
-		}
-		tc <- task
+		})
 	}
-	close(tc)
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+	close(tc)
 
 	dr := b.erasure.Decode(shards, shardsMetaData)
 	if dr.Error != nil {
@@ -87,9 +85,10 @@ func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[s
 			for i := range shards {
 				baseFolderPath := fmt.Sprintf("%s%c%s", b.baseFolderPathsAcrossDrives[i], os.PathSeparator, storeBlobs.BlobTable)
 				blobKey := blob.Key
+				shardIndex := i
 
 				// Task WriteFile will add or replace existing file.
-				task := func() error {
+				eg.Go(func() error {
 					fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
 					if !b.fileIO.Exists(fp) {
 						if err := b.fileIO.MkdirAll(fp, permission); err != nil {
@@ -99,28 +98,28 @@ func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[s
 
 					log.Debug(fmt.Sprintf("writing to file %s",fp))
 
-					fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), i)
+					fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), shardIndex)
 
 					// Prefix the shard w/ metadata.
-					md := b.erasure.ComputeShardMetadata(contentsSize, shards, i)
-					buf := make([]byte, len(md) + len(shards[i]))
+					md := b.erasure.ComputeShardMetadata(contentsSize, shards, shardIndex)
+					buf := make([]byte, len(md) + len(shards[shardIndex]))
 
 					// TODO: refactor to write metadata then write the shard data so we don't use temp variable,
 					// more optimal if shard size is huge.
 					copy(buf, md)
-					copy(buf[len(md):], shards[i])
+					copy(buf[len(md):], shards[shardIndex])
 		
 					if err := b.fileIO.WriteFile(fn, buf, permission); err != nil {
 						return err
 					}
+					tc <- true
 					return nil
-				}
-				tc <- task
+				})
 			}
 
 		}
 	}
-	close(tc)
+	defer close(tc)
 	return eg.Wait()
 }
 
@@ -143,17 +142,17 @@ func (b *blobStore) ecRemove(ctx context.Context, storesBlobsIDs ...sop.BlobsPay
 					continue
 				}
 
-				task := func() error {
+				eg.Go(func() error {
 					if err := b.fileIO.Remove(fn); err != nil {
 						return err
 					}
-					return nil	
-				}
-				tc <- task
+					tc <- true
+					return nil
+				})
 			}
 
 		}
 	}
-	close(tc)
+	defer close(tc)
 	return eg.Wait()
 }
