@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/SharedCode/sop"
-	cas "github.com/SharedCode/sop/cassandra"
 )
 
 type mockBlobStore struct {
@@ -18,33 +17,27 @@ func NewMockBlobStore() sop.BlobStore {
 	}
 }
 
-func (b *mockBlobStore) GetOne(ctx context.Context, blobName string, blobID sop.UUID, target interface{}) error {
+func (b *mockBlobStore) GetOne(ctx context.Context, blobName string, blobID sop.UUID) ([]byte, error) {
 	if ba, ok := b.lookup[blobID]; ok {
-		return cas.Marshaler.Unmarshal(ba, target)
+		return ba, nil
 	}
-	return nil
+	return nil, nil
 }
 
-func (b *mockBlobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
+func (b *mockBlobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
-			ba, err := cas.Marshaler.Marshal(blob.Value)
-			if err != nil {
-				return err
-			}
+			ba := blob.Value
 			b.lookup[blob.Key] = ba
 		}
 	}
 	return nil
 }
 
-func (b *mockBlobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) error {
+func (b *mockBlobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
-			ba, err := cas.Marshaler.Marshal(blob.Value)
-			if err != nil {
-				return err
-			}
+			ba := blob.Value
 			b.lookup[blob.Key] = ba
 		}
 	}

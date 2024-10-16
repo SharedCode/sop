@@ -28,7 +28,7 @@ const dataPath string = "/Users/grecinto/sop_data"
 
 func init() {
 	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
-		Level: log.LevelInfo,
+		Level: log.LevelDebug,
 	}))
 	log.SetDefault(l) // configures log package to print with LevelInfo
 
@@ -99,6 +99,36 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	}
 	if _, err := in_red_cfs.OpenBtree[int, string](ctx, "barStore22", trans); err == nil {
 		t.Logf("OpenBtree('barStore', trans) failed, got nil want error.")
+	}
+}
+
+func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
+	// 1. Open a transaction
+	// 2. Instantiate a BTree
+	// 3. Do CRUD on BTree
+	// 4. Commit Transaction
+	trans, err := in_red_cfs.NewTransaction(sop.ForReading, -1, false)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	trans.Begin()
+	b3, err := in_red_cfs.OpenBtree[int, string](ctx, "barstore1", trans)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		return
+	}
+	if k := b3.GetCurrentKey(); k != 1 {
+		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
+		trans.Rollback(ctx)
+		return
+	}
+	if v, err := b3.GetCurrentValue(ctx); v != "hello world" || err != nil {
+		t.Errorf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
+		return
 	}
 }
 

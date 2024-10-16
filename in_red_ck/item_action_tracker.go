@@ -8,6 +8,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/encoding"
 	"github.com/SharedCode/sop/redis"
 )
 
@@ -86,16 +87,28 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 						log.Warn(err.Error())
 					}
 					// If item not found in Redis or an error fetching it, fetch from Blob store.
-					if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.ID, &v); err != nil {
+					var ba []byte
+					if ba, err = t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.ID); err != nil {
 						return err
 					}
+					err = encoding.Unmarshal[TV](ba, &v)
+					if err != nil {
+						return err
+					}
+
 					// Just log Redis error since it is just secondary.
 					if err := t.redisCache.SetStruct(ctx, formatItemKey(item.ID.String()), &v, t.storeInfo.CacheConfig.ValueDataCacheDuration); err != nil {
 						log.Warn(err.Error())
 					}
 				}
 			} else {
-				if err := t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.ID, &v); err != nil {
+				var ba []byte
+				var err error
+				if ba, err = t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.ID); err != nil {
+					return err
+				}
+				err = encoding.Unmarshal[TV](ba, &v)
+				if err != nil {
 					return err
 				}
 			}
@@ -132,11 +145,15 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 
 	if t.storeInfo.IsValueDataActivelyPersisted {
 		// Actively persist the item.
-		itemsForAdd := sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
+		itemsForAdd := sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 			BlobTable: t.storeInfo.BlobTable,
-			Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 1),
+			Blobs:     make([]sop.KeyValuePair[sop.UUID, []byte], 0, 1),
 		}
-		itemForAdd := t.manage(item.ID, cachedItem)
+		iv := item.Value
+		itemForAdd, err := t.manage(item.ID, cachedItem)
+		if err != nil {
+			return err
+		}
 		if itemForAdd != nil {
 			itemsForAdd.Blobs = append(itemsForAdd.Blobs, *itemForAdd)
 		}
@@ -149,7 +166,7 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 				return err
 			}
 			if t.storeInfo.IsValueDataGloballyCached {
-				t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), itemForAdd.Value, t.storeInfo.CacheConfig.ValueDataCacheDuration)
+				t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), iv, t.storeInfo.CacheConfig.ValueDataCacheDuration)
 			}
 		}
 	}
@@ -163,11 +180,15 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 	activelyPersist := func(v cacheItem[TK, TV]) error {
 		if t.storeInfo.IsValueDataActivelyPersisted {
 			// Actively persist the item.
-			itemsForAdd := sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]{
+			itemsForAdd := sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 				BlobTable: t.storeInfo.BlobTable,
-				Blobs:     make([]sop.KeyValuePair[sop.UUID, interface{}], 0, 1),
+				Blobs:     make([]sop.KeyValuePair[sop.UUID, []byte], 0, 1),
 			}
-			itemForAdd := t.manage(item.ID, v)
+			iv := v.item.Value
+			itemForAdd, err := t.manage(item.ID, v)
+			if err != nil {
+				return err
+			}
 			if itemForAdd != nil {
 				itemsForAdd.Blobs = append(itemsForAdd.Blobs, *itemForAdd)
 			}
@@ -180,7 +201,7 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 					return err
 				}
 				if t.storeInfo.IsValueDataGloballyCached {
-					t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), itemForAdd.Value, t.storeInfo.CacheConfig.ValueDataCacheDuration)
+					t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), iv, t.storeInfo.CacheConfig.ValueDataCacheDuration)
 				}
 			}
 		}
@@ -236,7 +257,7 @@ func (t *itemActionTracker[TK, TV]) Remove(ctx context.Context, item *btree.Item
 	return nil
 }
 
-func extractRequestPayloadIDs(payload *sop.BlobsPayload[sop.KeyValuePair[sop.UUID, interface{}]]) []byte {
+func extractRequestPayloadIDs(payload *sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) []byte {
 	var r sop.BlobsPayload[sop.UUID]
 	r.BlobTable = payload.BlobTable
 	r.Blobs = make([]sop.UUID, len(payload.Blobs))

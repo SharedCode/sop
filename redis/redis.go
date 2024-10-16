@@ -7,7 +7,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/encoding"
 )
 
 // Cache interface specifies the methods implemented for Redis caching.
@@ -28,9 +28,6 @@ type Cache interface {
 	// Ping is a utility function to check if connection is good.
 	Ping(ctx context.Context) error
 }
-
-// Marshaler allows you to specify custom marshaler if needed. Defaults to the SOP default marshaler.
-var Marshaler sop.Marshaler = sop.NewMarshaler()
 
 type client struct{}
 
@@ -93,7 +90,7 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
 	// serialize User object to JSON
-	ba, err := Marshaler.Marshal(value)
+	ba, err := encoding.BlobMarshaler.Marshal(value)
 	if err != nil {
 		return err
 	}
@@ -114,7 +111,7 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) e
 	}
 	ba, err := connection.Client.Get(ctx, key).Bytes()
 	if err == nil {
-		err = Marshaler.Unmarshal(ba, target)
+		err = encoding.BlobMarshaler.Unmarshal(ba, target)
 	}
 	return err
 }
@@ -129,7 +126,7 @@ func (c client) GetStructEx(ctx context.Context, key string, target interface{},
 	}
 	ba, err := connection.Client.GetEx(ctx, key, expiration).Bytes()
 	if err == nil {
-		err = Marshaler.Unmarshal(ba, target)
+		err = encoding.BlobMarshaler.Unmarshal(ba, target)
 	}
 	return err
 }

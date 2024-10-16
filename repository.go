@@ -58,17 +58,17 @@ type ManageBlobStore interface {
 // like AWS S3, or file system, a Cassandra partition, etc...
 type BlobStore interface {
 	// Get or fetch a blob given an ID.
-	GetOne(ctx context.Context, blobTable string, blobID UUID, target interface{}) error
+	GetOne(ctx context.Context, blobTable string, blobID UUID) ([]byte, error)
 	// Add blobs to store.
-	Add(ctx context.Context, blobs ...BlobsPayload[KeyValuePair[UUID, interface{}]]) error
+	Add(ctx context.Context, blobs ...BlobsPayload[KeyValuePair[UUID, []byte]]) error
 	// Update blobs in store.
-	Update(ctx context.Context, blobs ...BlobsPayload[KeyValuePair[UUID, interface{}]]) error
+	Update(ctx context.Context, blobs ...BlobsPayload[KeyValuePair[UUID, []byte]]) error
 	// Remove blobs in store with given IDs.
 	Remove(ctx context.Context, blobsIDs ...BlobsPayload[UUID]) error
 }
 
 // Manage or fetch node blobs request/response payload.
-type BlobsPayload[T UUID | KeyValuePair[UUID, interface{}]] struct {
+type BlobsPayload[T UUID | KeyValuePair[UUID, []byte]] struct {
 	// Blob store table name.
 	BlobTable string
 	// Blobs contains the blobs IDs and blobs data for upsert to the store or the blobs IDs to be removed.

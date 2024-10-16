@@ -13,7 +13,7 @@ import (
 
 // NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
 func NewTransaction(s3Client *s3.Client, mode sop.TransactionMode, maxTime time.Duration, logging bool, region string) (sop.Transaction, error) {
-	bs, err := NewBlobStore(s3Client, sop.NewMarshaler())
+	bs, err := NewBlobStore(s3Client)
 	if err != nil {
 		return nil, err
 	}

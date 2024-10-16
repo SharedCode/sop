@@ -1,7 +1,10 @@
 package in_red_cfs
 
 import (
+	"fmt"
 	"time"
+
+	log "log/slog"
 
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
@@ -20,8 +23,30 @@ func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging boo
 //
 // See SOP FileSystem(sop/in_red-cfs/fs) package's DefaultToFilePath function for an example how to implement one.
 func NewTransactionExt(toFilePath fs.ToFilePathFunc, mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
-	fio := fs.DefaultFileIO{}
-	bs := fs.NewBlobStoreExt(toFilePath, fio, sop.NewMarshaler())
+	fio := fs.NewDefaultFileIO(toFilePath)
+	bs := fs.NewBlobStore(fio)
+	mbsf := fs.NewManageBlobStoreFolder(fio)
+	twoPT, err := in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepositoryExt(mbsf))
+	if err != nil {
+		return nil, err
+	}
+	return sop.NewTransaction(mode, twoPT, maxTime, logging)
+}
+
+// Create a transaction that supports Erasure Coding file IO.
+func NewTransactionWithEC(mode sop.TransactionMode, maxTime time.Duration, logging bool, erasureConfig *fs.ErasureCodingConfig) (sop.Transaction, error) {
+	if erasureConfig == nil {
+		return nil, fmt.Errorf("erasureConfig can't be nil")
+	}
+	fio := fs.NewDefaultFileIO(fs.DefaultToFilePath)
+	if mode != sop.ForWriting && erasureConfig.RepairCorruptedShards {
+		log.Warn("erasureConfig.RepairCorruptedShards can only be true if transaction is in ForWriting mode, setting it to false")
+		erasureConfig.RepairCorruptedShards = false
+	}
+	bs, err := fs.NewBlobStoreExt(fio, erasureConfig)
+	if err != nil {
+		return nil, err
+	}
 	mbsf := fs.NewManageBlobStoreFolder(fio)
 	twoPT, err := in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepositoryExt(mbsf))
 	if err != nil {
