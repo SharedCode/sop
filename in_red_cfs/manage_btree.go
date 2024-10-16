@@ -25,6 +25,13 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 	return in_red_ck.NewBtree[TK, TV](ctx, si, t)
 }
 
+// NewBtreeEC is geared for enforcing the Blobs base folder path to generate good folder path that works with Erasure Coding I/O.
+func NewBtreeEC[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
+	// Force blob base folder path to be the name of the store so we generate good folder path.
+	si.BlobStoreBaseFolderPath = si.Name
+	return in_red_ck.NewBtree[TK, TV](ctx, si, t)
+}
+
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
 func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
 	return in_red_ck.OpenBtree[TK, TV](ctx, name, t)

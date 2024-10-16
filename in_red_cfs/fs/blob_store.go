@@ -6,12 +6,22 @@ import (
 	"os"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/in_red_cfs/fs/erasure"
 )
+
+type ErasureCodingConfig struct {
+	DataShardsCount int
+	ParityShardsCount int
+	BaseFolderPathsAcrossDrives []string
+	RepairCorruptedShards bool
+}
 
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
 type blobStore struct {
 	fileIO        FileIO
-	erasureCoding *ErasureCoding
+	erasure                     *erasure.Erasure
+	baseFolderPathsAcrossDrives []string
+	repairCorruptedShards       bool
 }
 
 // Directory/File permission.
@@ -19,26 +29,46 @@ const permission os.FileMode = os.ModeSticky | os.ModePerm
 
 // NewBlobStoreUsingDefaults is synonymous to NewBlobStore but uses default implementations of
 // necessary parameter interfaces like for file IO, to file path formatter.
-func NewBlobStore() sop.BlobStore {
-	return NewBlobStoreExt(nil, nil)
+func NewBlobStore(fileIO FileIO) sop.BlobStore {
+	bs, _ := NewBlobStoreExt(fileIO, nil)
+	return bs
 }
 
 // NewBlobStore instantiates a new blobstore for File System storage.
 // Parameters are specified for abstractions to things like File IO, filename formatter for efficient storage
 // and access of files on directories.
-func NewBlobStoreExt(fileIO FileIO, ec *ErasureCoding) sop.BlobStore {
-	// If ec is supplied, override with Erasure Coding (FileIO & ToFilePath) implementations.
-	if ec != nil {
-		fileIO = ec
-	}
+func NewBlobStoreExt(fileIO FileIO, erasureConfig *ErasureCodingConfig) (sop.BlobStore, error) {
+	var e *erasure.Erasure
+	var baseFolderPathsAcrossDrives []string
+	var repairCorruptedShards bool
 
+	if erasureConfig != nil {
+		var err error
+		e, err = erasure.NewErasure(erasureConfig.DataShardsCount, erasureConfig.ParityShardsCount)
+		if err != nil {
+			return nil, err
+		}
+		baseFolderPathsAcrossDrives = erasureConfig.BaseFolderPathsAcrossDrives
+		repairCorruptedShards = erasureConfig.RepairCorruptedShards
+		if e.DataShardsCount() + e.ParityShardsCount() != len(baseFolderPathsAcrossDrives) {
+			return nil, fmt.Errorf("baseFolderPaths array elements count should match the sum of dataShardsCount & parityShardsCount")
+		}
+	}
+	if fileIO == nil {
+		fileIO = DefaultFileIO{}
+	}
 	return &blobStore{
 		fileIO:        fileIO,
-		erasureCoding: ec,
-	}
+		erasure: e,
+		baseFolderPathsAcrossDrives: baseFolderPathsAcrossDrives,
+		repairCorruptedShards: repairCorruptedShards,
+	}, nil
 }
 
 func (b *blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
+	if b.isErasureEncoding() {
+		return b.ecGetOne(ctx, blobFilePath, blobID)
+	}
 	fp := b.fileIO.ToFilePath(blobFilePath, blobID)
 	fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.String())
 	ba, err := b.fileIO.ReadFile(fn)
@@ -49,9 +79,9 @@ func (b *blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.
 }
 
 func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
-
-	// Spin up a job processor of 5 tasks (threads) maximum.
-	tc, eg := sop.JobProcessor(ctx, 5)
+	if b.isErasureEncoding() {
+		return b.ecAdd(ctx, storesblobs...)
+	}
 
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
@@ -63,19 +93,12 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop
 				}
 			}
 			fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blob.Key.String())
-
-			// Task WriteFile will add or replace existing file.
-			task := func() error {
-				if err := b.fileIO.WriteFile(fn, ba, permission); err != nil {
-					return err
-				}
-				return nil
+			if err := b.fileIO.WriteFile(fn, ba, permission); err != nil {
+				return err
 			}
-			tc <- task
 		}
 	}
-	close(tc)
-	return eg.Wait()
+	return nil
 }
 
 func (b *blobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
@@ -83,10 +106,9 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[
 }
 
 func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
-
-	// Spin up a job processor of 5 tasks (threads) maximum.
-	tc, eg := sop.JobProcessor(ctx, 5)
-
+	if b.isErasureEncoding() {
+		return b.ecRemove(ctx, storesBlobsIDs...)
+	}
 	for _, storeBlobIDs := range storesBlobsIDs {
 		for _, blobID := range storeBlobIDs.Blobs {
 			fp := b.fileIO.ToFilePath(storeBlobIDs.BlobTable, blobID)
@@ -96,16 +118,14 @@ func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPaylo
 				continue
 			}
 
-			// Task Remove will delete existing file (or files if using Erasure Coding).
-			task := func() error {
-				if err := b.fileIO.Remove(fn); err != nil {
-					return err
-				}
-				return nil
+			if err := b.fileIO.Remove(fn); err != nil {
+				return err
 			}
-			tc <- task
 		}
 	}
-	close(tc)
-	return eg.Wait()
+	return nil
+}
+
+func (b *blobStore) isErasureEncoding() bool {
+	return b.erasure != nil
 }

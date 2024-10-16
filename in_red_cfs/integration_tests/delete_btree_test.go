@@ -14,7 +14,7 @@ func DeleteBTree(t *testing.T) {
 		"twophase22", "persondb7", "persondb77", "person2db", "barStore1",
 		"barStore2", "tabley", "tablex2", "tablex", "ztab1", "videoStore",
 		"videoStoreM", "videoStoreD", "videoStoreU", "xyz", "emptystore",
-		"videoStore2", "videoStore3", "videoStore4", "videoStore5", "baStore",
+		"videoStore2", "videoStore3", "videoStore4", "videoStore5", "baStore", "barstoreec",
 		"emptyStore", "barstore2", "barstore1", "storecaching", "storecachingttl",
 	}
 

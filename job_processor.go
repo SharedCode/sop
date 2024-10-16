@@ -7,11 +7,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// JobProcessor function launches a task (thread) spinner & returns a channel (errgroup)
-// you can use to enqueue function tasks and for awaiting completion
-// of all "spinned off" threads from the tasks enqueued.
-func JobProcessor(ctx context.Context, bufferSize int) (chan func() error, *errgroup.Group) {
-	workChannel := make(chan func() error, bufferSize)
+// JobProcessor function launches a task (thread) spinner & returns a channel (& errgroup)
+// you can use to enqueue function tasks(the channel) and for awaiting
+// completion(the errgroup) of all "spinned off" threads from the tasks enqueued.
+func JobProcessor(ctx context.Context, maxThreadCount int) (chan func() error, *errgroup.Group) {
+	workChannel := make(chan func() error, maxThreadCount)
 
 	eg, ctx2 := errgroup.WithContext(ctx)
 

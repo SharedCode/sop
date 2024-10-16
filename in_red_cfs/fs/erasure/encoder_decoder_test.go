@@ -15,7 +15,7 @@ func Test_Encode_Decode(t *testing.T) {
 	sm := make([][]byte, len(shards))
 	var stuffZeroCount int
 	for i := range shards {
-		md, _ := e.ComputeShardMetadata(len(d), shards, 0)
+		md := e.ComputeShardMetadata(len(d), shards, 0)
 		stuffZeroCount = int(md[0])
 		sm[i] = md
 	}
@@ -42,7 +42,7 @@ func Test_bitrot(t *testing.T) {
 	}
 	sm := make([][]byte, len(shards))
 	for i := range shards {
-		md, _ := e.ComputeShardMetadata(len(d), shards, i)
+		md := e.ComputeShardMetadata(len(d), shards, i)
 		sm[i] = md
 	}
 

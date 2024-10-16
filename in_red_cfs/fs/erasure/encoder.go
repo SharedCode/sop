@@ -55,16 +55,7 @@ func (e *Erasure) Encode(data []byte) ([][]byte, error) {
 // ComputeShardMetadata returns a given shard's (computed) metadata.
 // dataSize specifies the known data size,
 // shardIndex is the index of the shard we need to compute metadata of.
-func (e *Erasure) ComputeShardMetadata(dataSize int, shards [][]byte, shardIndex int) ([]byte, error) {
-	if dataSize <= 0 {
-		return nil, fmt.Errorf("dataSize(%d) is invalid", dataSize)
-	}
-	if shardIndex < 0 || shardIndex >= len(shards) {
-		return nil, fmt.Errorf("shardIndex(%d) is invalid", shardIndex)
-	}
-	if len(shards) == 0 {
-		return nil, fmt.Errorf("shards can't be empty or nil")
-	}
+func (e *Erasure) ComputeShardMetadata(dataSize int, shards [][]byte, shardIndex int) []byte {
 	checksum := md5.Sum(shards[shardIndex])
 	r := make([]byte, 1+len(checksum))
 	// Add the last shard stuffed zeroes count as 1st byte.
@@ -74,5 +65,17 @@ func (e *Erasure) ComputeShardMetadata(dataSize int, shards [][]byte, shardIndex
 	// Add the checksum bytes.
 	copy(r[1:], checksum[0:])
 
-	return r, nil
+	return r
+}
+
+// MetaDataSize is 1 byte + checksum(16 bytes) = 17 bytes.
+func (e *Erasure) MetaDataSize() int {
+	return 17
+}
+
+func (e *Erasure) DataShardsCount() int {
+	return e.dataShardsCount
+}
+func (e *Erasure) ParityShardsCount() int {
+	return e.parityShardsCount
 }
