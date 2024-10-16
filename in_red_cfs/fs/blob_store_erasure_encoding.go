@@ -11,7 +11,7 @@ import (
 
 func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
 	// Spin up a job processor of 5 tasks (threads) maximum.
-	tc, eg := sop.JobProcessor(ctx, 5)
+	tr := sop.NewTaskRunner(ctx, 5)
 
 	shards := make([][]byte, len(b.baseFolderPathsAcrossDrives))
 	shardsWithMetadata := make([][]byte, len(b.baseFolderPathsAcrossDrives))
@@ -24,7 +24,7 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 		fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
 		fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), shardIndex)
 
-		eg.Go(func() error {
+		tr.Go(func() error {
 			log.Debug(fmt.Sprintf("reading from file %s",fn))
 
 			ba, err := b.fileIO.ReadFile(fn)
@@ -34,15 +34,12 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 			shardsWithMetadata[shardIndex] = ba
 			shardsMetaData[shardIndex] = ba[0:b.erasure.MetaDataSize()]
 			shards[shardIndex] = ba[b.erasure.MetaDataSize():]
-			<- tc
 			return nil
 		})
-		tc <- true
 	}
-	if err := eg.Wait(); err != nil {
+	if err := tr.Wait(); err != nil {
 		return nil, err
 	}
-	close(tc)
 
 	dr := b.erasure.Decode(shards, shardsMetaData)
 	if dr.Error != nil {
@@ -71,7 +68,7 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 
 func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	// Spin up a job processor of 5 tasks (threads) maximum.
-	tc, eg := sop.JobProcessor(ctx, 5)
+	tr := sop.NewTaskRunner(ctx, 5)
 
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
@@ -89,7 +86,7 @@ func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[s
 				shardIndex := i
 
 				// Task WriteFile will add or replace existing file.
-				eg.Go(func() error {
+				tr.Go(func() error {
 					fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
 					if !b.fileIO.Exists(fp) {
 						if err := b.fileIO.MkdirAll(fp, permission); err != nil {
@@ -113,21 +110,17 @@ func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[s
 					if err := b.fileIO.WriteFile(fn, buf, permission); err != nil {
 						return err
 					}
-					// Signal that a thread is freed up.
-					<- tc
 					return nil
 				})
-				tc <- true
 			}
 		}
 	}
-	defer close(tc)
-	return eg.Wait()
+	return tr.Wait()
 }
 
 func (b *blobStore) ecRemove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
 	// Spin up a job processor of 5 tasks (threads) maximum.
-	tc, eg := sop.JobProcessor(ctx, 5)
+	tr := sop.NewTaskRunner(ctx, 5)
 
 	for _, storeBlobIDs := range storesBlobsIDs {
 		for _, blobID := range storeBlobIDs.Blobs {
@@ -144,18 +137,15 @@ func (b *blobStore) ecRemove(ctx context.Context, storesBlobsIDs ...sop.BlobsPay
 					continue
 				}
 
-				eg.Go(func() error {
+				tr.Go(func() error {
 					if err := b.fileIO.Remove(fn); err != nil {
 						return err
 					}
-					<- tc
 					return nil
 				})
-				tc <- true
 			}
 
 		}
 	}
-	defer close(tc)
-	return eg.Wait()
+	return tr.Wait()
 }
