@@ -18,7 +18,7 @@ Quick update, SOP now sports very efficient software based replication via Reed 
 The feature is complete, it has auto-repair of detected missing or bitrot shards, if the RepairCorruptedShards flag (passed in the sop/in_red_cfs/NewTransactionWithEC erasure config) is turned on.
 Use-case, you can set this flag off then upon disk drive failure detection, you can replace the drive turn on this flag then restart the app. SOP will then automatically repair the missing shard files (on the newly reinstated drive) that can get reconstructed from the available shards.
 
-If left untouched, SOP can operate even with drive(s) failures so long as data can be reconstructed from the available shards. The sample I made(see in_red_cfs/integration_tests/basic_ec_test.go) uses 2 data shards and 1 parity shard. Yes, you can use minimal replication and it will work to your desire, if enough to support drive(s) failure.
+If left untouched, SOP can operate(read-only) even with drive(s) failures so long as data can be reconstructed from the available shards. The sample I made(see in_red_cfs/integration_tests/basic_ec_test.go) uses 2 data shards and 1 parity shard. Yes, you can use minimal replication and it will work to your desire, if enough to support drive(s) failure.
 
 # Quick Store Caching Config Guide
 At the latest release, V2 Beta 2.1.7+, SOP is able to achieve "persisted data & caching" virtualization. This is a very important milestone, because SOP further cemented its capabilities, estimate is, nothing in the market can compete with SOP for the things it provides & in the magnitude of its "horizontal & vertical scaling" & "data caching virtualization" capabilities. In fact, it is the only solution known that does this.
