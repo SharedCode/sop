@@ -30,7 +30,7 @@ func (tr *TaskRunner) GetContext() context.Context {
 func (tr *TaskRunner) Go(task func() error) {
 	t := func() error {
 		err := task()
-		if err == nil {
+		if err != nil {
 			return err
 		}
 		// Free up this thread slot.

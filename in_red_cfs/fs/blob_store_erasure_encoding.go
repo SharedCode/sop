@@ -16,6 +16,7 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 	shards := make([][]byte, len(b.baseFolderPathsAcrossDrives))
 	shardsWithMetadata := make([][]byte, len(b.baseFolderPathsAcrossDrives))
 	shardsMetaData := make([][]byte, len(b.baseFolderPathsAcrossDrives))
+	var lastErr error
 	for i := range b.baseFolderPathsAcrossDrives {
 		baseFolderPath := fmt.Sprintf("%s%c%s", b.baseFolderPathsAcrossDrives[i], os.PathSeparator, blobFilePath)
 		blobKey := blobID
@@ -29,6 +30,7 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 
 			ba, err := b.fileIO.ReadFile(fn)
 			if err != nil {
+				lastErr = err
 				log.Error("failed reading from file %s, error: %v", fn, err)
 				log.Info("if there are enough shards to reconstruct data, 'reader' may still work")
 				return nil
@@ -43,6 +45,10 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 		return nil, err
 	}
 
+	// Just return the (last) error if shards is empty.
+	if isShardsEmpty(shards) && lastErr != nil{
+		return nil, lastErr
+	}
 	dr := b.erasure.Decode(shards, shardsMetaData)
 	if dr.Error != nil {
 		return nil, dr.Error
@@ -78,6 +84,15 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 	}
 
 	return dr.DecodedData, nil
+}
+
+func isShardsEmpty(shards [][]byte) bool {
+	for i := range shards {
+		if shards[i] != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
@@ -136,6 +151,7 @@ func (b *blobStore) ecRemove(ctx context.Context, storesBlobsIDs ...sop.BlobsPay
 	// Spin up a job processor of 5 tasks (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, 5)
 
+	var lastErr error
 	for _, storeBlobIDs := range storesBlobsIDs {
 		for _, blobID := range storeBlobIDs.Blobs {
 
@@ -153,7 +169,7 @@ func (b *blobStore) ecRemove(ctx context.Context, storesBlobsIDs ...sop.BlobsPay
 
 				tr.Go(func() error {
 					if err := b.fileIO.Remove(fn); err != nil {
-						return err
+						lastErr = err
 					}
 					return nil
 				})
@@ -161,5 +177,8 @@ func (b *blobStore) ecRemove(ctx context.Context, storesBlobsIDs ...sop.BlobsPay
 
 		}
 	}
-	return tr.Wait()
+	if err := tr.Wait(); err != nil {
+		return err
+	}
+	return lastErr
 }
