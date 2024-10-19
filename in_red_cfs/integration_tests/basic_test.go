@@ -28,7 +28,7 @@ const dataPath string = "/Users/grecinto/sop_data"
 
 func init() {
 	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
-		Level: log.LevelDebug,
+		Level: log.LevelInfo,
 	}))
 	log.SetDefault(l) // configures log package to print with LevelInfo
 

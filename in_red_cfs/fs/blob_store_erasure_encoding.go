@@ -29,7 +29,9 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 
 			ba, err := b.fileIO.ReadFile(fn)
 			if err != nil {
-				return err
+				log.Error("failed reading from file %s, error: %v", fn, err)
+				log.Info("if there are enough shards to reconstruct data, 'reader' may still work")
+				return nil
 			}
 			shardsWithMetadata[shardIndex] = ba
 			shardsMetaData[shardIndex] = ba[0:b.erasure.MetaDataSize()]
