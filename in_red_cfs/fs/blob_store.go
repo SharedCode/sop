@@ -10,15 +10,15 @@ import (
 )
 
 type ErasureCodingConfig struct {
-	DataShardsCount int
-	ParityShardsCount int
+	DataShardsCount             int
+	ParityShardsCount           int
 	BaseFolderPathsAcrossDrives []string
-	RepairCorruptedShards bool
+	RepairCorruptedShards       bool
 }
 
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
 type blobStore struct {
-	fileIO        FileIO
+	fileIO                      FileIO
 	erasure                     *erasure.Erasure
 	baseFolderPathsAcrossDrives []string
 	repairCorruptedShards       bool
@@ -50,7 +50,7 @@ func NewBlobStoreExt(fileIO FileIO, erasureConfig *ErasureCodingConfig) (sop.Blo
 		}
 		baseFolderPathsAcrossDrives = erasureConfig.BaseFolderPathsAcrossDrives
 		repairCorruptedShards = erasureConfig.RepairCorruptedShards
-		if e.DataShardsCount() + e.ParityShardsCount() != len(baseFolderPathsAcrossDrives) {
+		if e.DataShardsCount()+e.ParityShardsCount() != len(baseFolderPathsAcrossDrives) {
 			return nil, fmt.Errorf("baseFolderPaths array elements count should match the sum of dataShardsCount & parityShardsCount")
 		}
 	}
@@ -58,10 +58,10 @@ func NewBlobStoreExt(fileIO FileIO, erasureConfig *ErasureCodingConfig) (sop.Blo
 		fileIO = DefaultFileIO{}
 	}
 	return &blobStore{
-		fileIO:        fileIO,
-		erasure: e,
+		fileIO:                      fileIO,
+		erasure:                     e,
 		baseFolderPathsAcrossDrives: baseFolderPathsAcrossDrives,
-		repairCorruptedShards: repairCorruptedShards,
+		repairCorruptedShards:       repairCorruptedShards,
 	}, nil
 }
 

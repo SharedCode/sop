@@ -23,18 +23,18 @@ func TestECAddThenRead(t *testing.T) {
 	fileIO := newFileIOSim()
 	bs, _ := NewBlobStoreExt(fileIO, ec)
 	id := sop.NewUUID()
-	eba := []byte{1,2,3}
+	eba := []byte{1, 2, 3}
 	bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id,
+				Key:   id,
 				Value: eba,
 			},
 		},
 	})
 
-	ba, err :=bs.GetOne(ctx, "b1", id)
+	ba, err := bs.GetOne(ctx, "b1", id)
 	if err != nil {
 		t.Error(err)
 	}
@@ -56,12 +56,12 @@ func TestECAddRemoveRead(t *testing.T) {
 	fileIO := newFileIOSim()
 	bs, _ := NewBlobStoreExt(fileIO, ec)
 	id := sop.NewUUID()
-	eba := []byte{1,2,3}
+	eba := []byte{1, 2, 3}
 	bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id,
+				Key:   id,
 				Value: eba,
 			},
 		},
@@ -69,10 +69,10 @@ func TestECAddRemoveRead(t *testing.T) {
 
 	bs.Remove(ctx, sop.BlobsPayload[sop.UUID]{
 		BlobTable: "b1",
-		Blobs: []sop.UUID{id},
+		Blobs:     []sop.UUID{id},
 	})
 
-	_, err :=bs.GetOne(ctx, "b1", id)
+	_, err := bs.GetOne(ctx, "b1", id)
 	if err == nil {
 		t.Error("GetOne succeeded, expected to fail")
 	}
@@ -91,25 +91,25 @@ func TestECerrorOnAdd(t *testing.T) {
 	fileIO := newFileIOSim()
 	bs, _ := NewBlobStoreExt(fileIO, ec)
 	id := sop.NewUUID()
-	eba := []byte{1,2,3}
+	eba := []byte{1, 2, 3}
 	bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id,
+				Key:   id,
 				Value: eba,
 			},
 		},
 	})
 
 	id2 := sop.NewUUID()
-	eba2 := []byte{1,2,3}
+	eba2 := []byte{1, 2, 3}
 	fileIO.errorOnSuffixNumber = 1
 	err := bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id2,
+				Key:   id2,
 				Value: eba2,
 			},
 		},
@@ -132,25 +132,25 @@ func TestECerrorOnRemove(t *testing.T) {
 	fileIO := newFileIOSim()
 	bs, _ := NewBlobStoreExt(fileIO, ec)
 	id := sop.NewUUID()
-	eba := []byte{1,2,3}
+	eba := []byte{1, 2, 3}
 	bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id,
+				Key:   id,
 				Value: eba,
 			},
 		},
 	})
 
 	id2 := sop.NewUUID()
-	eba2 := []byte{1,2,3}
+	eba2 := []byte{1, 2, 3}
 	//fileIO.errorOnSuffixNumber = 1
 	err := bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id2,
+				Key:   id2,
 				Value: eba2,
 			},
 		},
@@ -162,7 +162,7 @@ func TestECerrorOnRemove(t *testing.T) {
 	fileIO.errorOnSuffixNumber = 1
 	err = bs.Remove(ctx, sop.BlobsPayload[sop.UUID]{
 		BlobTable: "b1",
-		Blobs: []sop.UUID{id},
+		Blobs:     []sop.UUID{id},
 	})
 	if err == nil {
 		t.Error("got nil, expected error")
@@ -182,24 +182,24 @@ func TestECerrorOnReadButReconstructed(t *testing.T) {
 	fileIO := newFileIOSim()
 	bs, _ := NewBlobStoreExt(fileIO, ec)
 	id := sop.NewUUID()
-	eba := []byte{1,2,3}
+	eba := []byte{1, 2, 3}
 	bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id,
+				Key:   id,
 				Value: eba,
 			},
 		},
 	})
 
 	id2 := sop.NewUUID()
-	eba2 := []byte{1,2,3}
+	eba2 := []byte{1, 2, 3}
 	err := bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id2,
+				Key:   id2,
 				Value: eba2,
 			},
 		},
@@ -228,24 +228,24 @@ func TestECerrorOnReadNotReconstructed(t *testing.T) {
 	fileIO := newFileIOSim()
 	bs, _ := NewBlobStoreExt(fileIO, ec)
 	id := sop.NewUUID()
-	eba := []byte{1,2,3}
+	eba := []byte{1, 2, 3}
 	bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id,
+				Key:   id,
 				Value: eba,
 			},
 		},
 	})
 
 	id2 := sop.NewUUID()
-	eba2 := []byte{1,2,3}
+	eba2 := []byte{1, 2, 3}
 	err := bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id2,
+				Key:   id2,
 				Value: eba2,
 			},
 		},
@@ -276,24 +276,24 @@ func TestECerrorOnRepair(t *testing.T) {
 	fileIO := newFileIOSim()
 	bs, _ := NewBlobStoreExt(fileIO, ec)
 	id := sop.NewUUID()
-	eba := []byte{1,2,3}
+	eba := []byte{1, 2, 3}
 	bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id,
+				Key:   id,
 				Value: eba,
 			},
 		},
 	})
 
 	id2 := sop.NewUUID()
-	eba2 := []byte{1,2,3}
+	eba2 := []byte{1, 2, 3}
 	err := bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
-				Key: id2,
+				Key:   id2,
 				Value: eba2,
 			},
 		},
@@ -308,4 +308,62 @@ func TestECerrorOnRepair(t *testing.T) {
 	if err == nil {
 		t.Error("got nil, expected error")
 	}
+}
+
+func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
+	ec := &ErasureCodingConfig{
+		DataShardsCount:   2,
+		ParityShardsCount: 1,
+		BaseFolderPathsAcrossDrives: []string{
+			"disk1",
+			"disk2",
+			"disk3",
+		},
+	}
+	fileIO := newFileIOSim()
+	bs, _ := NewBlobStoreExt(fileIO, ec)
+
+	tr := sop.NewTaskRunner(ctx, 5)
+
+	const iterations = 500
+
+	task := func() error {
+		fileIO.errorOnSuffixNumber = -1
+		fileIO.errorOnSuffixNumber2 = -1
+		id := sop.NewUUID()
+		eba := []byte{1, 2, 3}
+		bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+			BlobTable: "b1",
+			Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
+				{
+					Key:   id,
+					Value: eba,
+				},
+			},
+		})
+
+		id2 := sop.NewUUID()
+		eba2 := []byte{1, 2, 3}
+		bs.Add(ctx, sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+			BlobTable: "b1",
+			Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
+				{
+					Key:   id2,
+					Value: eba2,
+				},
+			},
+		})
+
+		fileIO.errorOnSuffixNumber = 1
+		ba, _ := bs.GetOne(ctx, "b1", id)
+		if !bytes.Equal(ba, eba) {
+			t.Errorf("got %v, expected %v", ba, eba)
+		}
+		return nil
+	}
+
+	for i := 0; i < iterations; i++ {
+		tr.Go(task)
+	}
+
 }

@@ -8,18 +8,18 @@ import (
 
 type TaskRunner struct {
 	maxThreadCount int
-	eg *errgroup.Group
-	limiterChan chan bool
-	context context .Context
+	eg             *errgroup.Group
+	limiterChan    chan bool
+	context        context.Context
 }
 
 func NewTaskRunner(ctx context.Context, maxThreadCount int) *TaskRunner {
 	eg, ctx2 := errgroup.WithContext(ctx)
 	return &TaskRunner{
 		maxThreadCount: maxThreadCount,
-		limiterChan: make(chan bool, maxThreadCount),
-		eg: eg,
-		context: ctx2,
+		limiterChan:    make(chan bool, maxThreadCount),
+		eg:             eg,
+		context:        ctx2,
 	}
 }
 
@@ -34,7 +34,7 @@ func (tr *TaskRunner) Go(task func() error) {
 			return err
 		}
 		// Free up this thread slot.
-		<- tr.limiterChan
+		<-tr.limiterChan
 		return nil
 	}
 	tr.eg.Go(t)

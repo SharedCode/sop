@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	log "log/slog"
 	"github.com/SharedCode/sop"
+	log "log/slog"
 )
 
 func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
@@ -26,7 +26,7 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 		fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), shardIndex)
 
 		tr.Go(func() error {
-			log.Debug(fmt.Sprintf("reading from file %s",fn))
+			log.Debug(fmt.Sprintf("reading from file %s", fn))
 
 			ba, err := b.fileIO.ReadFile(fn)
 			if err != nil {
@@ -46,7 +46,7 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 	}
 
 	// Just return the (last) error if shards is empty.
-	if isShardsEmpty(shards) && lastErr != nil{
+	if isShardsEmpty(shards) && lastErr != nil {
 		return nil, lastErr
 	}
 	dr := b.erasure.Decode(shards, shardsMetaData)
@@ -60,14 +60,14 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 		for _, i := range dr.ReconstructedShardsIndeces {
 			baseFolderPath := fmt.Sprintf("%s%c%s", b.baseFolderPathsAcrossDrives[i], os.PathSeparator, blobFilePath)
 			blobKey := blobID
-	
+
 			fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
 			fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), i)
 
-			log.Debug(fmt.Sprintf("repairing file %s",fn))
+			log.Debug(fmt.Sprintf("repairing file %s", fn))
 
 			md := b.erasure.ComputeShardMetadata(len(dr.DecodedData), shards, i)
-			buf := make([]byte, len(md) + len(shards[i]))
+			buf := make([]byte, len(md)+len(shards[i]))
 
 			// TODO: refactor to write metadata then write the shard data so we don't use temp variable,
 			// more optimal if shard size is huge.
@@ -123,19 +123,19 @@ func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[s
 						}
 					}
 
-					log.Debug(fmt.Sprintf("writing to file %s",fp))
+					log.Debug(fmt.Sprintf("writing to file %s", fp))
 
 					fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), shardIndex)
 
 					// Prefix the shard w/ metadata.
 					md := b.erasure.ComputeShardMetadata(contentsSize, shards, shardIndex)
-					buf := make([]byte, len(md) + len(shards[shardIndex]))
+					buf := make([]byte, len(md)+len(shards[shardIndex]))
 
 					// TODO: refactor to write metadata then write the shard data so we don't use temp variable,
 					// more optimal if shard size is huge.
 					copy(buf, md)
 					copy(buf[len(md):], shards[shardIndex])
-		
+
 					if err := b.fileIO.WriteFile(fn, buf, permission); err != nil {
 						return err
 					}
