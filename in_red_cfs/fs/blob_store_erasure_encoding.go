@@ -9,9 +9,13 @@ import (
 	log "log/slog"
 )
 
+const(
+	maxThreadCount = 7
+)
+
 func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
-	// Spin up a job processor of 5 tasks (threads) maximum.
-	tr := sop.NewTaskRunner(ctx, 5)
+	// Spin up a job processor of max thread count (threads) maximum.
+	tr := sop.NewTaskRunner(ctx, maxThreadCount)
 
 	shards := make([][]byte, len(b.baseFolderPathsAcrossDrives))
 	shardsWithMetadata := make([][]byte, len(b.baseFolderPathsAcrossDrives))
@@ -96,8 +100,8 @@ func isShardsEmpty(shards [][]byte) bool {
 }
 
 func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
-	// Spin up a job processor of 5 tasks (threads) maximum.
-	tr := sop.NewTaskRunner(ctx, 5)
+	// Spin up a job processor of max thread count (threads) maximum.
+	tr := sop.NewTaskRunner(ctx, maxThreadCount)
 
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
@@ -148,8 +152,8 @@ func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[s
 }
 
 func (b *blobStore) ecRemove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
-	// Spin up a job processor of 5 tasks (threads) maximum.
-	tr := sop.NewTaskRunner(ctx, 5)
+	// Spin up a job processor of max thread count (threads) maximum.
+	tr := sop.NewTaskRunner(ctx, maxThreadCount)
 
 	var lastErr error
 	for _, storeBlobIDs := range storesBlobsIDs {
