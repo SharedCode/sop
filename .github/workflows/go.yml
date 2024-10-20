@@ -22,10 +22,10 @@ jobs:
         go-version: '1.21.6'
 
     - name: Build
-      run: go build -v ./in_memory ./in_red_ck ./streaming_data
+      run: go build -v ./in_memory ./in_red_ck ./streaming_data ./in_red_cfs
 
     - name: Test
-      run: go test -timeout 600s -race -covermode=atomic -coverprofile=coverage.out -coverpkg ./btree/... ./in_memory/... ./in_red_ck
+      run: go test -timeout 600s -race -covermode=atomic -coverprofile=coverage.out -coverpkg ./btree/... ./in_memory/... ./in_red_ck ./in_red_cfs/fs
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3

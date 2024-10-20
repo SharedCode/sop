@@ -3,9 +3,11 @@ package fs
 import (
 	"bytes"
 	"context"
+	"fmt"
+
+	"testing"
 
 	"github.com/SharedCode/sop"
-	"testing"
 )
 
 var ctx context.Context = context.Background()
@@ -303,10 +305,13 @@ func TestECerrorOnRepair(t *testing.T) {
 	}
 
 	fileIO.errorOnSuffixNumber = 1
-	_, err = bs.GetOne(ctx, "b1", id)
+	ba, err := bs.GetOne(ctx, "b1", id)
 	// GetOne will still succeed, but warning should be logged.
-	if err == nil {
-		t.Error("got nil, expected error")
+	if err != nil {
+		t.Error("got err, expected nil")
+	}
+	if !bytes.Equal(ba, eba) {
+		t.Errorf("got %v, expected %v", ba, eba)
 	}
 }
 
@@ -357,7 +362,8 @@ func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
 		fileIO.errorOnSuffixNumber = 1
 		ba, _ := bs.GetOne(ctx, "b1", id)
 		if !bytes.Equal(ba, eba) {
-			t.Errorf("got %v, expected %v", ba, eba)
+			err := fmt.Errorf("got %v, expected %v", ba, eba)
+			return err
 		}
 		return nil
 	}
@@ -366,4 +372,7 @@ func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
 		tr.Go(task)
 	}
 
+	if err := tr.Wait(); err != nil {
+		t.Error(err)
+	}
 }
