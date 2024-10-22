@@ -30,7 +30,13 @@ import (
 // ...
 
 	// Make sure not to change the ErasureCodingConfig, once set this should be permanent.
-	// Otherwise you have to rebuild entire data set to use new configuration.
+	// Otherwise you have to rebuild entire data set to use new configuration. The EC config
+	// is specific to a given transaction and any btree you create within this transaction(s)
+	// will share the same disk drives and base folder paths specified for the transaction.
+	//
+	// And yes, you are free to use different EC config including different storage data paths
+	// across different transactions. It is up to you/your code to maintain the separate data
+	// boundaries.
 	trans, _ := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, true, &fs.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
