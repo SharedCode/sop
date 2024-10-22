@@ -20,6 +20,41 @@ Use-case, you can set this flag off then upon disk drive failure detection, you 
 
 If left untouched, SOP can operate(read-only) even with drive(s) failures so long as data can be reconstructed from the available shards. The sample I made(see in_red_cfs/integration_tests/basic_ec_test.go) uses 2 data shards and 1 parity shard. Yes, you can use minimal replication and it will work to your desire, if enough to support drive(s) failure.
 
+Sample code to use this Erasure Coding based replication feature:
+```
+import (
+	"github.com/SharedCode/sop/in_red_cfs"
+	"github.com/SharedCode/sop/in_red_cfs/fs"
+)
+
+// ...
+
+	// Make sure not to change the ErasureCodingConfig, once set this should be permanent.
+	// Otherwise you have to rebuild entire data set to use new configuration.
+	trans, _ := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, true, &fs.ErasureCodingConfig{
+		DataShardsCount:   2,
+		ParityShardsCount: 1,
+		BaseFolderPathsAcrossDrives: []string{
+			"c://sop_data",
+			"d://sop_data",
+			"e://sop_data",
+		},
+		RepairCorruptedShards: false,
+	})
+	trans.Begin()
+	b3, _ := in_red_cfs.NewBtreeWithEC[int, string](ctx, sop.StoreOptions{
+		Name:                     "foobar",
+		SlotLength:               200,
+		// nothing special, use your judgement whether to save on Btree node or a separate segment.
+		IsValueDataInNodeSegment: true,
+	}, trans)
+
+	// Nothing special, use B-Tree interface methods to manage your data then call
+	// trans.Commit to finalize changes, like the usual SOP usage.
+	b3.Add(ctx, 1, "hello world")
+
+```
+
 # Quick Store Caching Config Guide
 At the latest release, V2 Beta 2.1.7+, SOP is able to achieve "persisted data & caching" virtualization. This is a very important milestone, because SOP further cemented its capabilities, estimate is, nothing in the market can compete with SOP for the things it provides & in the magnitude of its "horizontal & vertical scaling" & "data caching virtualization" capabilities. In fact, it is the only solution known that does this.
 
