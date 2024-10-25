@@ -573,7 +573,7 @@ If you are or you know of an investor, perhaps this is the time you dial that nu
 ## Concurrent or Parallel Commits
 SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record or row level "locking". If not then it means your transaction has conflicting change with another transaction commit elsewhere in the  cluster, and thus, it will be rolled back, or the other one, depends on who got to the final commit step first. SOP uses a combination of algorithmic ingredients like "optimistic locking", intelligent "merging", etc... doing its magic with the M-Way trie and Redis & Cassandra.
 
-The magic will start to happen after you have created the Btree(s) (& transaction committed them) you will be using. Having such enables a lot of the "cool commits merging" features. Typically, you should have "initializer" code block or function somewhere in your app/microservice where you instantiate the B-Tree stores analogous to creating your tables in RDBMS. Right, you issue DDL scripts to create the tables before running your application logic that populates the tables, i.e. - DML scripts.
+The magic will start to happen after you have created the Btree(s) (& transaction committed them) you will be using. Having such enables a lot of the "cool commits merging" features. Typically, you should have "initializer" code block or function somewhere in your app/microservice where you instantiate the B-Tree stores analogous to creating your tables in RDBMS. You run DDL scripts to create the tables before running your application logic that populates the tables, i.e. - DML scripts.
 
 Sample code to illustrate this:
 ```
@@ -581,8 +581,6 @@ t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 t1.Begin()
 b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.ConfigureStore("twoPhase2", true, 50, "", sop.SmallData, "/your/blobs/basefolder/here"), t1)
 
-// *** Add a single item then commit so we persist "root node".
-b3.Add(ctx, 500, "I am the value with 500 key.")
 t1.Commit(ctx)
 // ***
 
@@ -620,6 +618,7 @@ if err := eg.Wait(); err != nil {
 And yes, there is no resource locking in above code & it is able to merge just fine those records added across different transaction commits that ran concurrently. :)
 
 Check out the integration test that demonstrate this, here: https://github.com/SharedCode/sop/blob/493fba2d6d1ed810bfb4edc9ce568a1c98e159ff/in_red_cfs/integration_tests/transaction_edge_cases_test.go#L315C6-L315C41
+(the sample adds one record but it is not needed, empty Btree will work just fine)
 
 ## ACID Transactions vs. Big Data
 It is well known to the database world that data engines are written to support being transactional or not. Transactions work best for non-big data management. And Big Data support typically has no support for transactions, specifically, ACID type of transactions. These perception change with SOP V2+. That is, SOP V2 supports ACID transactions and Big Data, together with "partial updates". Yes, full fidelity Big Data management protected by ACID transactions.
@@ -679,7 +678,7 @@ func uploader() {
 ```
 
 Above is an example how to upload using a single thread of execution. Of course, since Golang supports highly concurrent programming, you can instead write a Micro Service that has endpoint for upload and allows client to submit data files in similar fashion above, but now, you can put this Micro Service in a load balancer, and wala, suddenly, you can support a cluster of services that can do parallel uploads of big data files. Secured and surpassing anything on the market!
-Micro Service endpoint can be secured using OAuth and thus, the setup now can surpass whatever most scaleable "objects system" in the market, may compare or surpass(depends on your design/implementation) even the biggest AWS S3 one can afford.
+Micro Service endpoint can be secured using OAuth and thus, the setup now can surpass whatever most scaleable "objects system" in the market, may compare or surpass(depends on your design/implementation) even the biggest AWS S3 (or Oracle RDMS, if it can do Big data!) one can afford.
 
 And all "ACID transaction" guarded, "richly searchable", "partially updateable" with better readable code, great concurrency model/control under your fingertips, like using Go channels and Go routines.
 
