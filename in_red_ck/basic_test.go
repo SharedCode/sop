@@ -17,12 +17,12 @@ func Test_OpenVsNewBTree(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, trans)
+	}, trans, nil)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
-	if _, err := OpenBtree[int, string](ctx, "fooStore22", trans); err == nil {
+	if _, err := OpenBtree[int, string](ctx, "fooStore22", trans, nil); err == nil {
 		t.Logf("OpenBtree('fooStore', trans) failed, got nil want error.")
 	}
 }
@@ -37,7 +37,7 @@ func Test_SingleBTree(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, trans)
+	}, trans, nil)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
@@ -74,7 +74,7 @@ func Test_UniqueKeyBTree(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, trans)
+	}, trans, nil)
 	b3.Add(ctx, 1, "hello world")
 	b3.Add(ctx, 2, "foo bar")
 
@@ -97,7 +97,7 @@ func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t1)
+	}, t1, nil)
 	b3.Add(ctx, 1, "hello world")
 	b3.Add(ctx, 2, "foo bar")
 
@@ -108,7 +108,7 @@ func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 	// Open the same trie created above.
-	b32, _ := OpenBtree[int, string](ctx, "fooWorld2", t2)
+	b32, _ := OpenBtree[int, string](ctx, "fooWorld2", t2, nil)
 	if ok, _ := b32.Add(ctx, 1, "hello world"); ok {
 		t.Errorf("Add(1) failed, got true, want false, as key 1 exists.")
 	}
@@ -129,14 +129,14 @@ func Test_UniqueKeyBTreeOnMultipleCommits(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t1)
+	}, t1, nil)
 	b3.Add(ctx, 1, "hello world")
 	b3.Add(ctx, 2, "foo bar")
 
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
 	// Open the same trie created above.
-	b32, _ := OpenBtree[int, string](ctx, "fooWorld3", t2)
+	b32, _ := OpenBtree[int, string](ctx, "fooWorld3", t2, nil)
 	b32.Add(ctx, 1, "hello world")
 
 	if err := t1.Commit(ctx); err != nil {
@@ -166,7 +166,7 @@ func Test_StoreCachingMinRuleCheck(t *testing.T) {
 			NodeCacheDuration:      time.Duration(30 * time.Minute),
 			StoreInfoCacheDuration: time.Duration(1 * time.Second),
 		},
-	}, trans)
+	}, trans, nil)
 
 	// Check if minimum duration times were applied by SOP.
 	if b3.GetStoreInfo().CacheConfig.RegistryCacheDuration < time.Duration(15*time.Minute) {
@@ -192,7 +192,7 @@ func Test_StoreCachingDefaultCacheApplied(t *testing.T) {
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
 		Description:              "",
-	}, trans)
+	}, trans, nil)
 
 	if b3.GetStoreInfo().CacheConfig.RegistryCacheDuration != sop.GetDefaulCacheConfig().RegistryCacheDuration {
 		t.Errorf("Default cache check failed for RegistryCacheDuration.")

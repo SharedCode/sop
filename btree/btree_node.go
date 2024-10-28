@@ -115,7 +115,7 @@ func (node *Node[TK, TV]) add(ctx context.Context, btree *Btree[TK, TV], item *I
 		if index > 0 && index >= currentNode.Count {
 			currItemIndex--
 		}
-		if Compare(currentNode.Slots[currItemIndex].Key, item.Key) == 0 {
+		if btree.Compare(currentNode.Slots[currItemIndex].Key, item.Key) == 0 {
 			// set the Current item pointer to the discovered existing item.
 			btree.setCurrentItemID(currentNode.ID, currItemIndex)
 			return false, nil
@@ -312,10 +312,10 @@ func (node *Node[TK, TV]) find(ctx context.Context, btree *Btree[TK, TV], key TK
 		index = 0
 		if n.Count > 0 {
 			index = sort.Search(n.Count, func(index int) bool {
-				return Compare(n.Slots[index].Key, key) >= 0
+				return btree.Compare(n.Slots[index].Key, key) >= 0
 			})
 			// If key is found in node n.
-			if index < n.Count && Compare(n.Slots[index].Key, key) == 0 {
+			if index < n.Count && btree.Compare(n.Slots[index].Key, key) == 0 {
 				// Make the found node & item index the "current item" of btree.
 				foundNodeID = n.ID
 				foundItemIndex = index
@@ -704,7 +704,7 @@ func (node *Node[TK, TV]) getIndexToInsertTo(btree *Btree[TK, TV], item *Item[TK
 		return 0, false
 	}
 	index := sort.Search(node.Count, func(index int) bool {
-		return Compare(node.Slots[index].Key, item.Key) >= 0
+		return btree.Compare(node.Slots[index].Key, item.Key) >= 0
 	})
 	if btree.isUnique() {
 		i := index
@@ -713,7 +713,7 @@ func (node *Node[TK, TV]) getIndexToInsertTo(btree *Btree[TK, TV], item *Item[TK
 		}
 		// Returns index in slot that is available for insert to.
 		// Also returns true if an existing item with such key is found.
-		return index, Compare(node.Slots[i].Key, item.Key) == 0
+		return index, btree.Compare(node.Slots[i].Key, item.Key) == 0
 	}
 	// Returns index in slot that is available for insert to.
 	return index, false

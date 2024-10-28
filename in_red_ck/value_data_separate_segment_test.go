@@ -20,7 +20,7 @@ func Test_ValueDataInSeparateSegment_Rollback(t *testing.T) {
 		IsValueDataGloballyCached:    true,
 		LeafLoadBalancing:            true,
 		Description:                  "",
-	}, trans)
+	}, trans, Compare)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
@@ -37,7 +37,7 @@ func Test_ValueDataInSeparateSegment_Rollback(t *testing.T) {
 
 	trans, _ = newMockTransaction(t, sop.ForReading, -1)
 	trans.Begin()
-	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", trans)
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", trans, Compare)
 	pk, _ = newPerson("joe", "shroeger", "male", "email", "phone")
 
 	b3.FindOne(ctx, pk, false)
@@ -67,7 +67,7 @@ func Test_ValueDataInSeparateSegment_SimpleAddPerson(t *testing.T) {
 		IsValueDataGloballyCached:    true,
 		LeafLoadBalancing:            true,
 		Description:                  "",
-	}, trans)
+	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -118,7 +118,7 @@ func Test_ValueDataInSeparateSegment_TwoTransactionsWithNoConflict(t *testing.T)
 		IsValueDataGloballyCached:    true,
 		LeafLoadBalancing:            true,
 		Description:                  "",
-	}, trans)
+	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -137,7 +137,7 @@ func Test_ValueDataInSeparateSegment_TwoTransactionsWithNoConflict(t *testing.T)
 		IsValueDataGloballyCached:    true,
 		LeafLoadBalancing:            true,
 		Description:                  "",
-	}, trans)
+	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -171,7 +171,7 @@ func Test_ValueDataInSeparateSegment_AddAndSearchManyPersons(t *testing.T) {
 		IsValueDataGloballyCached:    true,
 		LeafLoadBalancing:            true,
 		Description:                  "",
-	}, trans)
+	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -206,7 +206,7 @@ func Test_ValueDataInSeparateSegment_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	b3, err = OpenBtree[PersonKey, Person](ctx, "persondb7", trans)
+	b3, err = OpenBtree[PersonKey, Person](ctx, "persondb7", trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -237,7 +237,7 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 		IsValueDataGloballyCached:    true,
 		LeafLoadBalancing:            true,
 		Description:                  "",
-	}, t1)
+	}, t1, Compare)
 
 	for i := start; i <= end; i++ {
 		pk, p := newPerson("jack", fmt.Sprintf("reepper%d", i), "male", "email very very long long long", "phone123")
@@ -251,7 +251,7 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
 			t1.Begin()
-			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1)
+			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
 		}
 	}
 
@@ -274,7 +274,7 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 			}
 			t1, _ = newMockTransaction(t, sop.ForReading, -1)
 			t1.Begin()
-			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1)
+			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
 		}
 	}
 }
@@ -294,7 +294,7 @@ func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 		IsValueDataGloballyCached:    true,
 		LeafLoadBalancing:            true,
 		Description:                  "",
-	}, t1)
+	}, t1, Compare)
 
 	for i := start; i <= end; i++ {
 		pk, _ := newPerson("jack", fmt.Sprintf("reepper%d", i), "male", "email very very long long long", "phone123")
@@ -311,7 +311,7 @@ func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 			}
 			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
 			t1.Begin()
-			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1)
+			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
 		}
 	}
 }
@@ -332,7 +332,7 @@ func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 		IsValueDataGloballyCached:    true,
 		LeafLoadBalancing:            true,
 		Description:                  "",
-	}, t1)
+	}, t1, Compare)
 
 	lastNamePrefix := "zoltan"
 	firstName := "jack"
@@ -365,7 +365,7 @@ func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 			}
 			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
 			t1.Begin()
-			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1)
+			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
 		}
 	}
 
@@ -401,7 +401,7 @@ func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 			}
 			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
 			t1.Begin()
-			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1)
+			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
 		}
 	}
 }

@@ -26,7 +26,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
@@ -50,7 +50,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        false,
 			Description:              "",
-		}, t1)
+		}, t1, Compare)
 	}
 
 	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -60,7 +60,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t2)
+	}, t2, Compare)
 
 	// edit "peter parker" in both btrees.
 	pk3, p3 := newPerson("gokue", "kakarot", "male", "email", "phone")
@@ -91,7 +91,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 
 	var person Person
 	b3.FindOne(ctx, pk2, false)
@@ -127,7 +127,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
 		t.Fail()
@@ -150,7 +150,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        false,
 			Description:              "",
-		}, t1)
+		}, t1, Compare)
 	}
 
 	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -160,7 +160,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t2)
+	}, t2, Compare)
 
 	// edit both "pirellis" in both btrees, one each.
 	b3.FindOne(ctx, pk, false)
@@ -187,7 +187,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t2)
+	}, t2, Compare)
 	if found, err := b32.FindOne(ctx, pk2, false); err != nil {
 		t.Error(err)
 	} else if !found {
@@ -214,7 +214,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
 		t.Fail()
@@ -237,7 +237,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        false,
 			Description:              "",
-		}, t1)
+		}, t1, Compare)
 	}
 
 	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -247,7 +247,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t2)
+	}, t2, Compare)
 
 	// Read both records.
 	b32.FindOne(ctx, pk2, false)
@@ -285,7 +285,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
 		t.Fail()
@@ -310,7 +310,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        false,
 			Description:              "",
-		}, t1)
+		}, t1, Compare)
 	}
 
 	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -320,7 +320,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t2)
+	}, t2, Compare)
 
 	// Read both records.
 	b32.FindOne(ctx, pk2, false)
@@ -357,7 +357,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb" b-tree store has not been created yet.
 		t.Fail()
@@ -386,7 +386,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        false,
 			Description:              "",
-		}, t1)
+		}, t1, nil)
 	}
 
 	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -396,7 +396,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t2)
+	}, t2, Compare)
 
 	b3.FindOne(ctx, pk, false)
 	ci, _ := b3.GetCurrentItem(ctx)
@@ -455,7 +455,7 @@ func Test_CommitThrowsException(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 	pk, p := newPerson("joe", "zhroeger", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
 	trans.Commit(ctx)
@@ -481,7 +481,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	t2.registry.(*mocks.Mock_vid_registry).Lookup = goodRegistry.(*mocks.Mock_vid_registry).Lookup
 
 	trans.Begin()
-	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
 
 	pk, p = newPerson("joe", "zhroeger", "male2", "email2", "phone2")
 	b3.Add(ctx, pk, p)
@@ -505,7 +505,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	t2.blobStore = goodBlobStore
 
 	trans.Begin()
-	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
 	if ok, _ := b3.FindOne(ctx, pk, false); !ok {
 		t.Errorf("FindOne(%v) failed, got 'not found', want 'found'.", pk)
 		t.Fail()

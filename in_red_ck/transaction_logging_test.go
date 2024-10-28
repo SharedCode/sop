@@ -19,7 +19,7 @@ func Test_TLog_Rollback(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
@@ -36,7 +36,7 @@ func Test_TLog_Rollback(t *testing.T) {
 
 	trans, _ = newMockTransactionWithLogging(t, sop.ForReading, -1)
 	trans.Begin()
-	b3, _ = OpenBtree[PersonKey, Person](ctx, "tlogtable", trans)
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "tlogtable", trans, Compare)
 	pk, _ = newPerson("joe", "shroeger", "male", "email", "phone")
 
 	b3.FindOne(ctx, pk, false)
@@ -65,7 +65,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
@@ -75,7 +75,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
-	b3, _ = OpenBtree[PersonKey, Person](ctx, "tlogtable", trans)
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "tlogtable", trans, Compare)
 	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
 	b3.Update(ctx, pk, p)
 

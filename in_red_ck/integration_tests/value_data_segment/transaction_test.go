@@ -33,8 +33,7 @@ func newPerson(fname string, lname string, gender string, email string, phone st
 			SSN:    "1234",
 		}
 }
-func (x PersonKey) Compare(other interface{}) int {
-	y := other.(PersonKey)
+func Compare(x PersonKey, y PersonKey) int {
 	i := cmp.Compare[string](x.Lastname, y.Lastname)
 	if i != 0 {
 		return i
@@ -61,7 +60,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -103,7 +102,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	trans2.Begin()
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
-	b3, err := in_red_ck.OpenBtree[PersonKey, Person](ctx, "persondb", trans)
+	b3, err := in_red_ck.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -113,7 +112,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		return
 	}
 
-	b32, err := in_red_ck.OpenBtree[PersonKey, Person](ctx, "persondb", trans2)
+	b32, err := in_red_ck.OpenBtree[PersonKey, Person](ctx, "persondb", trans2, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -145,7 +144,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -180,7 +179,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	b3, err = in_red_ck.OpenBtree[PersonKey, Person](ctx, "persondb", trans)
+	b3, err = in_red_ck.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -210,7 +209,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 
 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
 	// for scheduled batch deletes.
@@ -233,7 +232,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-			}, t1)
+			}, t1, Compare)
 		}
 	}
 
@@ -264,7 +263,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-			}, t1)
+			}, t1, Compare)
 		}
 	}
 }
@@ -283,7 +282,7 @@ func VolumeDeletes(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 
 	// Populating 90,000 items took about few minutes, did not use Kafka based delete service.
 	for i := start; i <= end; i++ {
@@ -308,7 +307,7 @@ func VolumeDeletes(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-			}, t1)
+			}, t1, Compare)
 		}
 	}
 }
@@ -328,7 +327,7 @@ func MixedOperations(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 
 	lastNamePrefix := "zoltan"
 	firstName := "jack"
@@ -368,7 +367,7 @@ func MixedOperations(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-			}, t1)
+			}, t1, Compare)
 		}
 	}
 
@@ -411,7 +410,7 @@ func MixedOperations(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-			}, t1)
+			}, t1, Compare)
 		}
 	}
 }
@@ -427,7 +426,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t1)
+	}, t1, nil)
 	originalCount := b3.Count()
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
@@ -444,7 +443,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 		t1, _ = in_red_ck.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
 
-		b3, _ = in_red_ck.OpenBtree[int, string](ctx, "twophase", t1)
+		b3, _ = in_red_ck.OpenBtree[int, string](ctx, "twophase", t1, nil)
 		if b3.Count() != originalCount {
 			t.Errorf("Rollback Count() failed, got %v, want %v", b3.Count(), originalCount)
 		}
@@ -464,7 +463,7 @@ func Test_IllegalBtreeStoreName(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t1); err == nil {
+	}, t1, nil); err == nil {
 		t.Error("NewBtree('2phase') failed, got nil, want err.")
 	}
 	if t1.HasBegun() {

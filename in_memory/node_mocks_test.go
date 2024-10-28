@@ -20,7 +20,7 @@ func TestMockNodeWithLeftNilChild(t *testing.T) {
 		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := btree.New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si, nil)
 
 	for i := 0; i < 25; i++ {
 		x := i * 5
@@ -97,7 +97,7 @@ func TestMockNodeWithRightNilChild(t *testing.T) {
 		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := btree.New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si, nil)
 
 	for i := 0; i < 25; i++ {
 		x := i * 5
@@ -174,7 +174,7 @@ func TestMockNodeWithLeftNilChild2(t *testing.T) {
 		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := btree.New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si, nil)
 
 	for i := 1; i <= 5; i++ {
 		x := i * 5
@@ -234,7 +234,7 @@ func TestMockNodeWithMidNilChildMoveNext(t *testing.T) {
 		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := btree.New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si, nil)
 
 	for i := 1; i <= 5; i++ {
 		x := i * 5
@@ -277,7 +277,7 @@ func TestMockNodeWithMidNilChildMovePrevious(t *testing.T) {
 		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := btree.New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si, nil)
 
 	for i := 1; i <= 5; i++ {
 		x := i * 5
@@ -320,7 +320,7 @@ func TestMockNodeWithRightNilChildMoveNext(t *testing.T) {
 		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := btree.New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si, nil)
 
 	for i := 1; i <= 5; i++ {
 		x := i * 5
@@ -363,7 +363,7 @@ func TestMockNodeWithRightNilChildAnd3LevelsMoveNext(t *testing.T) {
 		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := btree.New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si, nil)
 
 	for i := 1; i <= 7; i++ {
 		x := i * 5
@@ -409,7 +409,7 @@ func TestMockNodeHasNilChild(t *testing.T) {
 		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := btree.New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si, nil)
 
 	for i := 1; i <= 9; i++ {
 		x := i * 5
@@ -456,7 +456,7 @@ func TestMockNodeWithLeftNilChildMovePrevious(t *testing.T) {
 		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := btree.New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si, nil)
 
 	for i := 1; i <= 5; i++ {
 		x := i * 5
@@ -499,7 +499,7 @@ func TestMockNodeWithLeftNilChildAnd3LevelsMovePrevious(t *testing.T) {
 		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := btree.New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si, nil)
 
 	for i := 1; i <= 7; i++ {
 		x := i * 5
@@ -544,7 +544,7 @@ func TestMockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 		NodeRepository:    newNodeRepository[int, string](),
 		ItemActionTracker: newDumbItemActionTracker[int, string](),
 	}
-	b3, _ := btree.New[int, string](&store, &si)
+	b3, _ := btree.New[int, string](&store, &si, nil)
 
 	for i := 0; i < 25; i++ {
 		x := i * 5

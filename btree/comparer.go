@@ -11,6 +11,9 @@ type Comparer interface {
 	Compare(other interface{}) int
 }
 
+// ComparerFunc allows code to specify explicit comparer separate than the key object.
+type ComparerFunc[TK any] func(a TK, b TK) int
+
 // Comparable interface is used as a B-Tree store (generics) constraint for Key types.
 type Comparable interface {
 	cmp.Ordered | *Comparer | any

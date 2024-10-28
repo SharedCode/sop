@@ -44,7 +44,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		LeafLoadBalancing:        true,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, trans)
+	}, trans, nil)
 	if err != nil {
 		t.Error(err)
 		return
@@ -53,7 +53,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
-	if _, err := in_red_cfs.OpenBtree[int, string](ctx, "fooStore22", trans); err == nil {
+	if _, err := in_red_cfs.OpenBtree[int, string](ctx, "fooStore22", trans, nil); err == nil {
 		t.Logf("OpenBtree('fooStore', trans) failed, got nil want error.")
 	}
 }
@@ -76,7 +76,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		LeafLoadBalancing:        true,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, trans)
+	}, trans, nil)
 	if err != nil {
 		t.Error(err)
 		return
@@ -118,7 +118,7 @@ func Test_ByteArrayValue(t *testing.T) {
 		LeafLoadBalancing:       true,
 		Description:             "",
 		BlobStoreBaseFolderPath: dataPath,
-	}, trans)
+	}, trans, nil)
 	if err != nil {
 		t.Error(err)
 		return
@@ -160,7 +160,7 @@ func Test_ByteArrayValueGet(t *testing.T) {
 		LeafLoadBalancing:       true,
 		Description:             "",
 		BlobStoreBaseFolderPath: dataPath,
-	}, trans)
+	}, trans, nil)
 	if err != nil {
 		t.Error(err)
 		return

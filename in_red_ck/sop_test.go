@@ -15,7 +15,7 @@ func Test_HelloWorld(t *testing.T) {
 
 	so := sop.ConfigureStore("inmymemory", false, 8, "", sop.SmallData, "")
 	so.LeafLoadBalancing = true
-	b3, _ := NewBtree[int, string](ctx, so, t1)
+	b3, _ := NewBtree[int, string](ctx, so, t1, nil)
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
@@ -45,7 +45,7 @@ func Test_FunctionalityTests(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t1)
+	}, t1, nil)
 
 	const five001Value = "I am the value with 5001 key."
 
@@ -136,7 +136,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t1)
+	}, t1, nil)
 
 	// Simple IsUnique check.
 	if !b3.IsUnique() {
@@ -317,7 +317,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 
 	t1, _ = newMockTransaction(t, sop.ForReading, -1)
 	t1.Begin()
-	b3, _ = OpenBtree[int, string](ctx, "inmymemory2", t1)
+	b3, _ = OpenBtree[int, string](ctx, "inmymemory2", t1, nil)
 
 	// Find those items populated in previous transaction.
 	for _, test := range tests {
@@ -345,7 +345,7 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 
 	so := sop.ConfigureStore("inmymemory3", false, 8, "", sop.SmallData, "")
 	so.LeafLoadBalancing = true
-	b3, _ := NewBtree[string, string](ctx, so, t1)
+	b3, _ := NewBtree[string, string](ctx, so, t1, nil)
 
 	tests := []struct {
 		name       string
@@ -430,7 +430,7 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 
 	t1, _ = newMockTransaction(t, sop.ForReading, -1)
 	t1.Begin()
-	b3, _ = OpenBtree[string, string](ctx, "inmymemory3", t1)
+	b3, _ = OpenBtree[string, string](ctx, "inmymemory3", t1, nil)
 
 	for _, test := range tests {
 		t.Logf("Test %s started.", test.name)

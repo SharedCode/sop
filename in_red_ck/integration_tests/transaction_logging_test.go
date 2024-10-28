@@ -29,7 +29,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 
 	for i := 0; i < 50; i++ {
 		pk, p := newPerson("joe", fmt.Sprintf("krueger%d", i), "male", "email", "phone")
@@ -47,7 +47,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	trans, _ = in_red_ck.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
 
-	b3, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	b3, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	pk, p := newPerson("joe", "krueger77", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
 
@@ -62,7 +62,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	trans, _ = in_red_ck.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
 
-	b3, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	b3, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	pk, p = newPerson("joe", "krueger47", "male", "email2", "phone")
 	b3.Update(ctx, pk, p)
 
@@ -88,7 +88,7 @@ func Cleanup(t *testing.T) {
 
 	trans, _ := in_red_ck.NewTransaction(sop.ForReading, -1, true)
 	trans.Begin()
-	_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	trans.Commit(ctx)
 
 	yesterday = time.Now().Add(-time.Duration(23*time.Hour + 54*time.Minute))
@@ -98,6 +98,6 @@ func Cleanup(t *testing.T) {
 
 	trans, _ = in_red_ck.NewTransaction(sop.ForReading, -1, true)
 	trans.Begin()
-	_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans)
+	_, _ = in_red_ck.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	trans.Commit(ctx)
 }

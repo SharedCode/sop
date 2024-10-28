@@ -35,6 +35,7 @@ type Btree[TK Comparable, TV any] struct {
 	currentItem        *Item[TK, TV]
 	distributeAction   distributeAction[TK, TV]
 	promoteAction      promoteAction[TK, TV]
+	comparer           ComparerFunc[TK]
 }
 
 // currentItemRef contains node ID & item slot index position in the node.
@@ -72,8 +73,8 @@ type promoteAction[TK Comparable, TV any] struct {
 	slotIndex  int
 }
 
-// New creates a new B-Tree instance.
-func New[TK Comparable, TV any](storeInfo *sop.StoreInfo, si *StoreInterface[TK, TV]) (*Btree[TK, TV], error) {
+// New creates a new B-Tree instance with support for explicit comparer separate than the key object.
+func New[TK Comparable, TV any](storeInfo *sop.StoreInfo, si *StoreInterface[TK, TV], comparer ComparerFunc[TK]) (*Btree[TK, TV], error) {
 	// Return nil B-Tree to signify failure if there is not enough info to create an instance.
 	if si == nil {
 		return nil, fmt.Errorf("can't create a b-tree with nil StoreInterface parameter")
@@ -93,6 +94,7 @@ func New[TK Comparable, TV any](storeInfo *sop.StoreInfo, si *StoreInterface[TK,
 		tempSlots:          make([]*Item[TK, TV], storeInfo.SlotLength+1),
 		tempChildren:       make([]sop.UUID, storeInfo.SlotLength+2),
 		tempParentChildren: make([]sop.UUID, 2),
+		comparer:           comparer,
 	}
 	return &b3, nil
 }
@@ -164,6 +166,15 @@ func (btree *Btree[TK, TV]) AddItem(ctx context.Context, item *Item[TK, TV]) (bo
 	return true, nil
 }
 
+// Compare function of the Btree delegates comparison to the right function either the explicit comparer
+// or the implicit Key object comparer.
+func (btree *Btree[TK, TV]) Compare(a TK, b TK) int {
+	if btree.comparer != nil {
+		return btree.comparer(a, b)
+	}
+	return Compare[TK](a, b)
+}
+
 // FindOne will traverse the tree to find an item with such key.
 func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
 	// return default value & no error if B-Tree is empty.
@@ -176,7 +187,7 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 		if err != nil {
 			return false, err
 		}
-		if !firstItemWithKey && Compare[TK](ci.Key, key) == 0 {
+		if !firstItemWithKey && btree.Compare(ci.Key, key) == 0 {
 			return true, nil
 		}
 	}

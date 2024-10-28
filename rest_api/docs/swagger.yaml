@@ -1,0 +1,716 @@
+basePath: /api/v1
+definitions:
+  jobs.Job:
+    properties:
+      description:
+        maxLength: 256
+        type: string
+      id_of_code_to_run:
+        description: 'TODO: define Job schedule if we want to support scheduling running
+          of jobs.'
+        maxLength: 60
+        minLength: 1
+        type: string
+      name:
+        description: Short name of the Job, needs to be unique.
+        maxLength: 16
+        minLength: 1
+        type: string
+      parameters:
+        description: 'TODO: finalize Job parameters data types.'
+        items:
+          type: string
+        type: array
+      run_as:
+        maxLength: 25
+        type: string
+      timeout_seconds:
+        description: If -1 means no timeout, 0 means instantly timeout, > 0 means
+          timeout that amount in seconds.
+        minimum: -1
+        type: integer
+    type: object
+  jobs.JobRun:
+    properties:
+      end_date_time:
+        description: Job run end time.
+        type: string
+      error:
+        type: string
+      id:
+        maxLength: 60
+        minLength: 1
+        type: string
+      input:
+        description: Input data as passed in by the "code runner".
+        items:
+          type: integer
+        type: array
+      job_name:
+        maxLength: 16
+        minLength: 1
+        type: string
+      language_runtime:
+        description: |-
+          Should say either Java or Python. System can extract this from when it finds the code artifact to run,
+          IDofCodeToRun should specify an ID of a "code deployment" with details about language runtime.
+        maxLength: 16
+        minLength: 1
+        type: string
+      output:
+        description: Output data as returned by the job code that got ran and persisted
+          by the "code runner".
+        items:
+          type: integer
+        type: array
+      start_date_time:
+        description: Job run start time.
+        type: string
+      status:
+        description: 'Status can be one of: succeeded, failed, running, cancelled,
+          timedout, etc...'
+        maxLength: 25
+        minLength: 1
+        type: string
+    type: object
+  jobs.Pipeline:
+    properties:
+      description:
+        maxLength: 256
+        type: string
+      flow_state:
+        description: |-
+          FlowState true means "code runner" will check output of a job and make that as input
+          to the next job in line. Otherwise will not. Asynchronous is recommended to be set to
+          false of PipelineJob where this data flow needs to occur.
+        type: boolean
+      jobs:
+        items:
+          $ref: '#/definitions/jobs.PipelineJob'
+        type: array
+      name:
+        description: Short name of the Pipeline, needs to be unique.
+        maxLength: 16
+        minLength: 1
+        type: string
+      pin_run_to_single_host:
+        type: boolean
+    type: object
+  jobs.PipelineJob:
+    properties:
+      asynchronous:
+        description: |-
+          If true then code runner can run the Job or Pipeline asynchronously, meaning, concurrently
+          with other unit(s). Code runner takes care of doing "wait for completion" for the entire Pipeline.
+        type: boolean
+      is_job:
+        description: If true, then this Name pertains to a Job, otherwise to a Pipeline.
+        type: boolean
+      name:
+        description: Name of a Job or Pipeline.
+        maxLength: 16
+        minLength: 1
+        type: string
+    type: object
+  jobs.PipelineJobRun:
+    properties:
+      asynchronous:
+        description: |-
+          If true then code runner can run the Job or Pipeline asynchronously, meaning, multi-threaded
+          in concurrence with other unit(s). Code runner takes care of doing an "await" for the Pipeline.
+        type: boolean
+      is_job:
+        description: If true, then this Name pertains to a Job, otherwise to a Pipeline.
+        type: boolean
+      name:
+        description: Name of a Job or Pipeline.
+        maxLength: 16
+        minLength: 1
+        type: string
+      run_id:
+        description: Job or Pipeline run ID.
+        maxLength: 60
+        minLength: 1
+        type: string
+    type: object
+  jobs.PipelineRun:
+    properties:
+      end_date_time:
+        description: Pipeline run end time.
+        type: string
+      error:
+        type: string
+      flowState:
+        description: |-
+          FlowState true means "code runner" will check output of a job and make that as input
+          to the next job in line. Otherwise will not. Asynchronous is recommended to be set to
+          false of PipelineJob where this data flow needs to occur.
+        type: boolean
+      id:
+        maxLength: 60
+        minLength: 1
+        type: string
+      job_runs:
+        items:
+          $ref: '#/definitions/jobs.PipelineJobRun'
+        type: array
+      pin_run_to_single_host:
+        type: boolean
+      pipeline_name:
+        maxLength: 16
+        minLength: 1
+        type: string
+      start_date_time:
+        description: Pipeline run start time.
+        type: string
+      status:
+        description: 'Status can be one of: succeeded, failed, running, cancelled,
+          timedout, etc...'
+        maxLength: 25
+        minLength: 1
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /jobruns:
+    get:
+      consumes:
+      - application/json
+      description: GetLatestJobRuns responds with the list of all jobs' latest job
+        runs as JSON.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/jobs.JobRun'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: GetLatestJobRuns returns latest job runs
+      tags:
+      - JobRuns
+  /jobruns/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: DeleteJobRun deletes a job run with a given job run ID.
+      parameters:
+      - description: ID of job run to fetch
+        in: path
+        maxLength: 60
+        minLength: 1
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: DeleteJobRun deletes job run with ID
+      tags:
+      - JobRuns
+    get:
+      consumes:
+      - application/json
+      description: GetJobRun locates the job run with a given job run ID then return
+        it as JSON response.
+      parameters:
+      - description: ID of job run to fetch
+        in: path
+        maxLength: 60
+        minLength: 1
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jobs.JobRun'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: GetJobRun returns job run details
+      tags:
+      - JobRuns
+    patch:
+      consumes:
+      - application/json
+      description: CancelJobRun should find a job run from store given its job run
+        ID, then trigger cancel of that job run if not yet.
+      parameters:
+      - description: ID of job run to cancel
+        in: path
+        maxLength: 60
+        minLength: 1
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jobs.JobRun'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: CancelJobRun cancels a job run
+      tags:
+      - JobRuns
+  /jobruns/{name}:
+    post:
+      consumes:
+      - application/json
+      description: StartJobRun should find a job from store given its name, then start
+        or trigger a job run for this job.
+      parameters:
+      - description: Name of job to run
+        in: path
+        maxLength: 16
+        minLength: 1
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: StartJobRun starts a job run
+      tags:
+      - JobRuns
+  /jobs:
+    get:
+      consumes:
+      - application/json
+      description: GetJobs responds with the list of all jobs as JSON.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/jobs.Job'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: GetJobs returns list of jobs
+      tags:
+      - Jobs
+    post:
+      consumes:
+      - application/json
+      description: PostJob adds a job from JSON received in the request body.
+      parameters:
+      - description: Job Data
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/jobs.Job'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jobs.Job'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: PostJob adds a job
+      tags:
+      - Jobs
+  /jobs/{name}:
+    delete:
+      consumes:
+      - application/json
+      description: DeleteJobByName locates the job whose Name value matches the name
+        parameter sent by the client, then deletes that job.
+      parameters:
+      - description: Name of job to delete
+        in: path
+        maxLength: 16
+        minLength: 1
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: DeleteJobByName deletes job with a given name
+      tags:
+      - Jobs
+    get:
+      consumes:
+      - application/json
+      description: GetJobByName locates the job whose Name value matches the name
+        parameter sent by the client, then returns that job as a response.
+      parameters:
+      - description: Name of job to fetch
+        in: path
+        maxLength: 16
+        minLength: 1
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jobs.Job'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: GetJobsByName returns job with a given name
+      tags:
+      - Jobs
+  /pipelineruns:
+    get:
+      consumes:
+      - application/json
+      description: GetLatestPipelineRuns responds with the list of all pipelines'
+        latest runs as JSON.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/jobs.PipelineRun'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: GetLatestPipelineRuns returns latest pipeline runs
+      tags:
+      - PipelineRuns
+  /pipelineruns/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: DeletePipelineRun deletes a pipeline Run with a given pipeline
+        run ID.
+      parameters:
+      - description: ID of pipeline run to delete
+        in: path
+        maxLength: 60
+        minLength: 1
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: DeletePipelineRun deletes a pipeline run
+      tags:
+      - PipelineRuns
+    get:
+      consumes:
+      - application/json
+      description: GetPipelineRun locates the pipeline run with a given pipeline run
+        ID then return it as JSON response.
+      parameters:
+      - description: ID of pipeline run to fetch
+        in: path
+        maxLength: 60
+        minLength: 1
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jobs.PipelineRun'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: GetPipelineRun gets a pipeline run
+      tags:
+      - PipelineRuns
+    patch:
+      consumes:
+      - application/json
+      description: CancelPipelineRun should find a pipeline run from store given its
+        PipelineRun ID, then trigger cancel of that pipeline run if not yet.
+      parameters:
+      - description: ID of pipeline run to cancel
+        in: path
+        maxLength: 60
+        minLength: 1
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jobs.PipelineRun'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: CancelPipelineRun cancels a pipeline run
+      tags:
+      - PipelineRuns
+  /pipelineruns/{name}:
+    post:
+      consumes:
+      - application/json
+      description: StartPipelineRun should find a pipeline from store given its name,
+        then start or trigger a run for this pipeline.
+      parameters:
+      - description: Name of pipeline to run
+        in: path
+        maxLength: 16
+        minLength: 1
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: StartPipelineRun starts a pipeline run
+      tags:
+      - PipelineRuns
+  /pipelines:
+    get:
+      consumes:
+      - application/json
+      description: GetPipelines responds with the list of all pipelines as JSON.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/jobs.Pipeline'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: GetPipelines returns list of pipelines
+      tags:
+      - Pipelines
+    post:
+      consumes:
+      - application/json
+      description: PostPipeline extracts pipeline details from JSON of request body
+        then adds this as new record in pipeline repository.
+      parameters:
+      - description: Pipeline Data
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/jobs.Pipeline'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jobs.Pipeline'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: PostPipeline adds a new pipeline record in DB
+      tags:
+      - Pipelines
+  /pipelines/{name}:
+    delete:
+      consumes:
+      - application/json
+      description: DeletePipelineByName locates the job whose Name value matches the
+        name parameter sent by the client, then deletes that pipeline.
+      parameters:
+      - description: Name of pipeline to delete
+        in: path
+        maxLength: 16
+        minLength: 1
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: DeletePipelineByName deletes the pipeline with a given name
+      tags:
+      - Pipelines
+    get:
+      consumes:
+      - application/json
+      description: GetPipelineByName locates the job whose Name value matches the
+        name parameter sent by the client, then returns that pipeline as a response.
+      parameters:
+      - description: Name of job to fetch
+        in: path
+        maxLength: 16
+        minLength: 1
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jobs.Pipeline'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: GetPipelineByName returns pipeline with a given name
+      tags:
+      - Pipelines
+securityDefinitions:
+  Bearer:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

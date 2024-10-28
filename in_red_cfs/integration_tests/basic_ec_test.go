@@ -30,7 +30,7 @@ func Test_Basic_EC(t *testing.T) {
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-	}, trans)
+	}, trans, nil)
 	if err != nil {
 		t.Error(err)
 		return
@@ -79,7 +79,7 @@ func Test_Basic_EC_Get(t *testing.T) {
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-	}, trans)
+	}, trans, nil)
 	if err != nil {
 		t.Error(err)
 		return

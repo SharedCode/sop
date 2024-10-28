@@ -45,7 +45,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 	}
 	trans.Begin()
 
-	b3, err := in_red_cfs.OpenBtree[int, string](ctx, "emptyStore", trans)
+	b3, err := in_red_cfs.OpenBtree[int, string](ctx, "emptyStore", trans, nil)
 	if err == nil {
 		if b3.Count() == 0 {
 			if ok, err := b3.Add(ctx, 123, "foobar"); !ok || err != nil {
@@ -65,7 +65,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		BlobStoreBaseFolderPath:  dataPath,
-	}, trans)
+	}, trans, nil)
 	if err != nil {
 		t.Error(err)
 		return
@@ -88,7 +88,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		BlobStoreBaseFolderPath:  dataPath,
-	}, trans)
+	}, trans, nil)
 	if err != nil {
 		t.Error(err)
 		return
@@ -97,7 +97,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
-	if _, err := in_red_cfs.OpenBtree[int, string](ctx, "barStore22", trans); err == nil {
+	if _, err := in_red_cfs.OpenBtree[int, string](ctx, "barStore22", trans, nil); err == nil {
 		t.Logf("OpenBtree('barStore', trans) failed, got nil want error.")
 	}
 }
@@ -112,7 +112,7 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.OpenBtree[int, string](ctx, "barstore1", trans)
+	b3, err := in_red_cfs.OpenBtree[int, string](ctx, "barstore1", trans, nil)
 	if err != nil {
 		t.Error(err)
 		return
@@ -148,7 +148,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		BlobStoreBaseFolderPath:  dataPath,
-	}, trans)
+	}, trans, nil)
 	if err != nil {
 		t.Error(err)
 		return
@@ -189,7 +189,7 @@ func Test_StoreCaching(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(30*time.Minute), false),
-	}, trans)
+	}, trans, nil)
 	if err != nil {
 		t.Error(err)
 		return
@@ -230,7 +230,7 @@ func Test_StoreCachingTTL(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(30*time.Minute), true),
-	}, trans)
+	}, trans, nil)
 	if err != nil {
 		t.Error(err)
 		return

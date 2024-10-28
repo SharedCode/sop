@@ -37,8 +37,8 @@ func (x StreamingDataKey[TK]) Compare(other interface{}) int {
 }
 
 // NewStreamingDataStore is synonymous to NewStreamingDataStore but is geared for storing blobs in blob table in Cassandra.
-func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*StreamingDataStore[TK], error) {
-	return NewStreamingDataStoreExt[TK](ctx, name, trans, "")
+func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[StreamingDataKey[TK]]) (*StreamingDataStore[TK], error) {
+	return NewStreamingDataStoreExt[TK](ctx, name, trans, "", comparer)
 }
 
 // NewStreamingDataStoreExt instantiates a new Data Store for use in "streaming data".
@@ -48,8 +48,8 @@ func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string
 //
 // This behaviour makes this store ideal for data management of huge blobs, like movies or huge data graphs.
 // Supports parameter for blobStoreBaseFolderPath which is useful in File System based blob storage.
-func NewStreamingDataStoreExt[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string) (*StreamingDataStore[TK], error) {
-	btree, err := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, blobStoreBaseFolderPath), trans)
+func NewStreamingDataStoreExt[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string, comparer btree.ComparerFunc[StreamingDataKey[TK]]) (*StreamingDataStore[TK], error) {
+	btree, err := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, blobStoreBaseFolderPath), trans, comparer)
 	if err != nil {
 		return nil, err
 	}
@@ -59,8 +59,8 @@ func NewStreamingDataStoreExt[TK btree.Comparable](ctx context.Context, name str
 }
 
 // Synonymous to NewStreamingDataStore but expects StoreOptions parameter.
-func NewStreamingDataStoreOptions[TK btree.Comparable](ctx context.Context, options sop.StoreOptions, trans sop.Transaction) (*StreamingDataStore[TK], error) {
-	btree, err := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, options, trans)
+func NewStreamingDataStoreOptions[TK btree.Comparable](ctx context.Context, options sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[StreamingDataKey[TK]]) (*StreamingDataStore[TK], error) {
+	btree, err := in_red_ck.NewBtree[StreamingDataKey[TK], []byte](ctx, options, trans, comparer)
 	if err != nil {
 		return nil, err
 	}
@@ -70,8 +70,8 @@ func NewStreamingDataStoreOptions[TK btree.Comparable](ctx context.Context, opti
 }
 
 // OpenStreamingDataStore opens an existing data store for use in "streaming data".
-func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction) (*StreamingDataStore[TK], error) {
-	btree, err := in_red_ck.OpenBtree[StreamingDataKey[TK], []byte](ctx, name, trans)
+func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[StreamingDataKey[TK]]) (*StreamingDataStore[TK], error) {
+	btree, err := in_red_ck.OpenBtree[StreamingDataKey[TK], []byte](ctx, name, trans, comparer)
 	if err != nil {
 		return nil, err
 	}

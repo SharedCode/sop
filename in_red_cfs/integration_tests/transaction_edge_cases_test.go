@@ -30,7 +30,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		LeafLoadBalancing:        false,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t1)
+	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
 		t.Fail()
@@ -46,10 +46,10 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
-		b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb77", t1)
+		b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb77", t1, Compare)
 	}
 
-	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb77", t2)
+	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb77", t2, Compare)
 
 	// edit "peter parker" in both btrees.
 	pk3, p3 := newPerson("gokue", "kakarot", "male", "email", "phone")
@@ -81,7 +81,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		LeafLoadBalancing:        false,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t1)
+	}, t1, Compare)
 	var person Person
 	b3.FindOne(ctx, pk2, false)
 	person, _ = b3.GetCurrentValue(ctx)
@@ -117,7 +117,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		LeafLoadBalancing:        false,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t1)
+	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
 		t.Fail()
@@ -141,7 +141,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 			LeafLoadBalancing:        false,
 			Description:              "",
 			BlobStoreBaseFolderPath:  dataPath,
-		}, t1)
+		}, t1, Compare)
 	}
 
 	b32, _ := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -152,7 +152,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		LeafLoadBalancing:        false,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t2)
+	}, t2, Compare)
 
 	// edit both "pirellis" in both btrees, one each.
 	b3.FindOne(ctx, pk, false)
@@ -190,7 +190,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		LeafLoadBalancing:        false,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t1)
+	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
 		t.Fail()
@@ -214,7 +214,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 			LeafLoadBalancing:        false,
 			Description:              "",
 			BlobStoreBaseFolderPath:  dataPath,
-		}, t1)
+		}, t1, Compare)
 	}
 
 	b32, _ := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -225,7 +225,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		LeafLoadBalancing:        false,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t2)
+	}, t2, Compare)
 
 	// Read both records.
 	b32.FindOne(ctx, pk2, false)
@@ -264,7 +264,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		LeafLoadBalancing:        false,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t1)
+	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
 		t.Fail()
@@ -290,7 +290,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 			LeafLoadBalancing:        false,
 			Description:              "",
 			BlobStoreBaseFolderPath:  dataPath,
-		}, t1)
+		}, t1, Compare)
 	}
 
 	b32, _ := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -301,7 +301,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		LeafLoadBalancing:        false,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t2)
+	}, t2, Compare)
 
 	// Read both records.
 	b32.FindOne(ctx, pk2, false)
@@ -339,7 +339,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		LeafLoadBalancing:        false,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t1)
+	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
 		t.Fail()
@@ -369,7 +369,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 			LeafLoadBalancing:        false,
 			Description:              "",
 			BlobStoreBaseFolderPath:  dataPath,
-		}, t1)
+		}, t1, Compare)
 	}
 
 	b32, _ := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -380,7 +380,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		LeafLoadBalancing:        false,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t2)
+	}, t2, Compare)
 
 	b3.FindOne(ctx, pk, false)
 	ci, _ := b3.GetCurrentItem(ctx)
@@ -442,7 +442,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 		LeafLoadBalancing:        true,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t1)
+	}, t1, nil)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 500, "I am the value with 500 key.")
 	t1.Commit(ctx)
@@ -460,7 +460,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 			LeafLoadBalancing:        true,
 			Description:              "",
 			BlobStoreBaseFolderPath:  dataPath,
-		}, t1)
+		}, t1, nil)
 		b3.Add(ctx2, 5000, "I am the value with 5000 key.")
 		b3.Add(ctx2, 5001, "I am the value with 5001 key.")
 		b3.Add(ctx2, 5002, "I am also a value with 5000 key.")
@@ -478,7 +478,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 			LeafLoadBalancing:        true,
 			Description:              "",
 			BlobStoreBaseFolderPath:  dataPath,
-		}, t2)
+		}, t2, nil)
 		b32.Add(ctx2, 5500, "I am the value with 5000 key.")
 		b32.Add(ctx2, 5501, "I am the value with 5001 key.")
 		b32.Add(ctx2, 5502, "I am also a value with 5000 key.")
@@ -496,7 +496,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	t1, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, false)
 	t1.Begin()
 
-	b3, _ = in_red_cfs.OpenBtree[int, string](ctx, "twophase3", t1)
+	b3, _ = in_red_cfs.OpenBtree[int, string](ctx, "twophase3", t1, nil)
 
 	b3.First(ctx)
 	i := 1
@@ -532,7 +532,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 		LeafLoadBalancing:        true,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t1)
+	}, t1, nil)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 1, "I am the value with 500 key.")
 	t1.Commit(ctx)
@@ -542,7 +542,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	f1 := func() error {
 		t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
-		b3, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex", t1)
+		b3, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex", t1, nil)
 		b3.Add(ctx2, 50, "I am the value with 5000 key.")
 		b3.Add(ctx2, 51, "I am the value with 5001 key.")
 		b3.Add(ctx2, 52, "I am also a value with 5000 key.")
@@ -552,7 +552,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	f2 := func() error {
 		t2, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t2.Begin()
-		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex", t2)
+		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex", t2, nil)
 		b32.Add(ctx2, 550, "I am the value with 5000 key.")
 		b32.Add(ctx2, 551, "I am the value with 5001 key.")
 		b32.Add(ctx2, 552, "I am the value with 5001 key.")
@@ -562,7 +562,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	f3 := func() error {
 		t3, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t3.Begin()
-		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex", t3)
+		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex", t3, nil)
 		b32.Add(ctx2, 550, "random foo.")
 		b32.Add(ctx2, 551, "bar hello.")
 		return t3.Commit(ctx2)
@@ -580,7 +580,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	t1, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, false)
 	t1.Begin()
 
-	b3, _ = in_red_cfs.OpenBtree[int, string](ctx, "tablex", t1)
+	b3, _ = in_red_cfs.OpenBtree[int, string](ctx, "tablex", t1, nil)
 	b3.First(ctx)
 	i := 1
 	for {
@@ -619,7 +619,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 		LeafLoadBalancing:        true,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t1)
+	}, t1, nil)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 1, "I am the value with 500 key.")
 	t1.Commit(ctx)
@@ -629,7 +629,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	f1 := func() error {
 		t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
-		b3, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex2", t1)
+		b3, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex2", t1, nil)
 		b3.Add(ctx2, 50, "I am the value with 5000 key.")
 		b3.Add(ctx2, 51, "I am the value with 5001 key.")
 		b3.Add(ctx2, 52, "I am also a value with 5000 key.")
@@ -639,7 +639,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	f2 := func() error {
 		t2, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t2.Begin()
-		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex2", t2)
+		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex2", t2, nil)
 		b32.Add(ctx2, 550, "I am the value with 5000 key.")
 		b32.Add(ctx2, 551, "I am the value with 5001 key.")
 		b32.Add(ctx2, 552, "I am the value with 5001 key.")
@@ -649,7 +649,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	f3 := func() error {
 		t3, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t3.Begin()
-		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex2", t3)
+		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tablex2", t3, nil)
 		b32.Add(ctx2, 550, "random foo.")
 		b32.Add(ctx2, 551, "bar hello.")
 		return t3.Commit(ctx2)
@@ -667,7 +667,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	t1, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, false)
 	t1.Begin()
 
-	b3, _ = in_red_cfs.OpenBtree[int, string](ctx, "tablex2", t1)
+	b3, _ = in_red_cfs.OpenBtree[int, string](ctx, "tablex2", t1, nil)
 	b3.First(ctx)
 	i := 1
 	for {
@@ -704,7 +704,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 		LeafLoadBalancing:        true,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
-	}, t1)
+	}, t1, nil)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 1, "I am the value with 500 key.")
 	b3.Add(ctx, 550, "I am the value with 5000 key.")
@@ -718,7 +718,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	f1 := func() error {
 		t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
-		b3, _ := in_red_cfs.OpenBtree[int, string](ctx3, "tabley", t1)
+		b3, _ := in_red_cfs.OpenBtree[int, string](ctx3, "tabley", t1, nil)
 		b3.Add(ctx3, 50, "I am the value with 5000 key.")
 		b3.Add(ctx3, 51, "I am the value with 5001 key.")
 		b3.Add(ctx3, 52, "I am also a value with 5000 key.")
@@ -728,7 +728,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	f2 := func() error {
 		t2, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t2.Begin()
-		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tabley", t2)
+		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tabley", t2, nil)
 		b32.Update(ctx2, 550, "I am the value with 5000 key.")
 		b32.Update(ctx2, 551, "I am the value with 5001 key.")
 		b32.Update(ctx2, 552, "I am the value with 5001 key.")
@@ -738,7 +738,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	f3 := func() error {
 		t3, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t3.Begin()
-		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tabley", t3)
+		b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "tabley", t3, nil)
 		b32.Update(ctx2, 550, "random foo.")
 		b32.Update(ctx2, 551, "bar hello.")
 		return t3.Commit(ctx2)
@@ -760,7 +760,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	t1, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, false)
 	t1.Begin()
 
-	b3, _ = in_red_cfs.OpenBtree[int, string](ctx, "tabley", t1)
+	b3, _ = in_red_cfs.OpenBtree[int, string](ctx, "tabley", t1, nil)
 	b3.First(ctx)
 	i := 1
 	for {

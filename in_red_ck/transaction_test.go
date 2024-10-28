@@ -24,8 +24,7 @@ func newPerson(fname string, lname string, gender string, email string, phone st
 	return PersonKey{fname, lname}, Person{gender, email, phone, "1234"}
 }
 
-func (x PersonKey) Compare(other interface{}) int {
-	y := other.(PersonKey)
+func Compare(x PersonKey, y PersonKey) int {
 	i := cmp.Compare[string](x.Lastname, y.Lastname)
 	if i != 0 {
 		return i
@@ -47,7 +46,7 @@ func Test_Rollback(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
@@ -71,7 +70,7 @@ func Test_Rollback(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 
 	pk, _ = newPerson("joe", "shroeger", "male", "email", "phone")
 
@@ -100,7 +99,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -147,7 +146,7 @@ func Test_NoCheckCommitAddFail(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 
 	if _, err := b3.Add(ctx, pk, p); err == nil {
 		t.Errorf("Add('joe') failed, got(ok, err) = nil, want = err, nil.")
@@ -170,7 +169,7 @@ func Test_NoCheckCommit(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 
 	if _, err := b3.Add(ctx, pk, p); err != nil {
 		t.Errorf("Add('joe') failed, got(ok, err) = %v, want = nil.", err)
@@ -183,7 +182,7 @@ func Test_NoCheckCommit(t *testing.T) {
 	}
 	trans.Begin()
 
-	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondbnc", trans)
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondbnc", trans, Compare)
 	b3.FindOne(ctx, pk, false)
 
 	trans.Commit(ctx)
@@ -208,7 +207,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -226,7 +225,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -259,7 +258,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, trans)
+	}, trans, Compare)
 
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -295,7 +294,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	b3, err = OpenBtree[PersonKey, Person](ctx, "persondb", trans)
+	b3, err = OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -325,7 +324,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 
 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
 	// for scheduled batch deletes.
@@ -348,7 +347,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-			}, t1)
+			}, t1, Compare)
 		}
 	}
 
@@ -379,7 +378,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-			}, t1)
+			}, t1, Compare)
 		}
 	}
 }
@@ -397,7 +396,7 @@ func Test_VolumeDeletes(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 
 	// Populating 90,000 items took about few minutes, did not use Kafka based delete service.
 	for i := start; i <= end; i++ {
@@ -422,7 +421,7 @@ func Test_VolumeDeletes(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-			}, t1)
+			}, t1, Compare)
 		}
 	}
 }
@@ -441,7 +440,7 @@ func Test_MixedOperations(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-	}, t1)
+	}, t1, Compare)
 
 	lastNamePrefix := "zoltan"
 	firstName := "jack"
@@ -481,7 +480,7 @@ func Test_MixedOperations(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-			}, t1)
+			}, t1, Compare)
 		}
 	}
 
@@ -524,7 +523,7 @@ func Test_MixedOperations(t *testing.T) {
 				IsValueDataInNodeSegment: false,
 				LeafLoadBalancing:        false,
 				Description:              "",
-			}, t1)
+			}, t1, Compare)
 		}
 	}
 }
