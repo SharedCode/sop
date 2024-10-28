@@ -2,6 +2,7 @@ package in_red_ck
 
 import (
 	"context"
+	"cmp"
 	"testing"
 
 	"github.com/SharedCode/sop"
@@ -31,7 +32,7 @@ func Test_TransactionInducedErrorOnNew(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t2, nil)
+	}, t2, cmp.Compare)
 	if trans.HasBegun() {
 		t.Error("Transaction is not rolled back after an error on NewBtree")
 	}
@@ -43,7 +44,7 @@ func Test_TransactionInducedErrorOnOpen(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	trans.Begin()
-	OpenBtree[int, string](ctx, "fooStore33", trans, nil)
+	OpenBtree[int, string](ctx, "fooStore33", trans, cmp.Compare)
 	if trans.HasBegun() {
 		t.Error("Transaction is not rolled back after an error on OpenBtree")
 	}

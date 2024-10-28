@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"cmp"
 	"encoding/json"
 
 	"github.com/SharedCode/sop"
@@ -66,7 +67,7 @@ func main() {
 		Name:                     "mapstring",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
-	}, trans)
+	}, trans, Compare)
 
 	k := PersonKey{FirstName: "joe"}
 	p := Person{}
@@ -82,8 +83,6 @@ func main() {
 
 	b3.Add(ctx, ki, pi)
 
-
-	b3.
 
 
 }

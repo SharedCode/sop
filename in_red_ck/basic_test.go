@@ -1,6 +1,7 @@
 package in_red_ck
 
 import (
+	"cmp"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ func Test_OpenVsNewBTree(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, trans, nil)
+	}, trans, cmp.Compare)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
@@ -37,7 +38,7 @@ func Test_SingleBTree(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, trans, nil)
+	}, trans, cmp.Compare)
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
@@ -97,7 +98,7 @@ func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t1, nil)
+	}, t1, cmp.Compare)
 	b3.Add(ctx, 1, "hello world")
 	b3.Add(ctx, 2, "foo bar")
 
@@ -129,7 +130,7 @@ func Test_UniqueKeyBTreeOnMultipleCommits(t *testing.T) {
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t1, nil)
+	}, t1, cmp.Compare)
 	b3.Add(ctx, 1, "hello world")
 	b3.Add(ctx, 2, "foo bar")
 
@@ -166,7 +167,7 @@ func Test_StoreCachingMinRuleCheck(t *testing.T) {
 			NodeCacheDuration:      time.Duration(30 * time.Minute),
 			StoreInfoCacheDuration: time.Duration(1 * time.Second),
 		},
-	}, trans, nil)
+	}, trans, cmp.Compare)
 
 	// Check if minimum duration times were applied by SOP.
 	if b3.GetStoreInfo().CacheConfig.RegistryCacheDuration < time.Duration(15*time.Minute) {
@@ -192,7 +193,7 @@ func Test_StoreCachingDefaultCacheApplied(t *testing.T) {
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
 		Description:              "",
-	}, trans, nil)
+	}, trans, cmp.Compare)
 
 	if b3.GetStoreInfo().CacheConfig.RegistryCacheDuration != sop.GetDefaulCacheConfig().RegistryCacheDuration {
 		t.Errorf("Default cache check failed for RegistryCacheDuration.")

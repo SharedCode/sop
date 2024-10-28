@@ -166,9 +166,9 @@ func (btree *Btree[TK, TV]) AddItem(ctx context.Context, item *Item[TK, TV]) (bo
 	return true, nil
 }
 
-// Compare function of the Btree delegates comparison to the right function either the explicit comparer
+// compare function of the Btree delegates comparison to the right function either the explicit comparer
 // or the implicit Key object comparer.
-func (btree *Btree[TK, TV]) Compare(a TK, b TK) int {
+func (btree *Btree[TK, TV]) compare(a TK, b TK) int {
 	if btree.comparer != nil {
 		return btree.comparer(a, b)
 	}
@@ -187,7 +187,7 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 		if err != nil {
 			return false, err
 		}
-		if !firstItemWithKey && btree.Compare(ci.Key, key) == 0 {
+		if !firstItemWithKey && btree.compare(ci.Key, key) == 0 {
 			return true, nil
 		}
 	}

@@ -1,6 +1,7 @@
 package in_red_ck
 
 import (
+	"cmp"
 	"fmt"
 	"testing"
 
@@ -18,7 +19,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t1, nil)
+	}, t1, cmp.Compare)
 
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
@@ -48,7 +49,7 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t1, nil)
+	}, t1, cmp.Compare)
 
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
@@ -65,7 +66,7 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 
 		t1, _ = newMockTransaction(t, sop.ForReading, -1)
 		t1.Begin()
-		b3, _ = OpenBtree[int, string](ctx, "twophase1", t1, nil)
+		b3, _ = OpenBtree[int, string](ctx, "twophase1", t1, cmp.Compare)
 		twoPhase = t1.GetPhasedTransaction()
 
 		if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey() != 5000 {
@@ -100,7 +101,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		Description:              "",
-	}, t1, nil)
+	}, t1, cmp.Compare)
 
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
@@ -123,7 +124,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 				IsValueDataInNodeSegment: true,
 				LeafLoadBalancing:        true,
 				Description:              "",
-			}, t1, nil)
+			}, t1, cmp.Compare)
 
 			b3.Add(ctx, 5000, "I am the value with 5000 key.")
 			b3.Add(ctx, 5001, "I am the value with 5001 key.")
