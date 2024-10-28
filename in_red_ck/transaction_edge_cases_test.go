@@ -386,7 +386,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 			IsValueDataInNodeSegment: false,
 			LeafLoadBalancing:        false,
 			Description:              "",
-		}, t1, nil)
+		}, t1, Compare)
 	}
 
 	b32, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{

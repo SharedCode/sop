@@ -56,7 +56,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	trans.Begin()
 
 	so := sop.ConfigureStore("xyz2", false, 8, "Streaming data", sop.BigData, "")
-	b3, _ := NewBtree[PersonKey, Person](ctx, so, trans, nil)
+	b3, _ := NewBtree[PersonKey, Person](ctx, so, trans, Compare)
 
 	pk, p := newPerson("joe", "shroeger", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
@@ -66,7 +66,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
 
-	b3, _ = OpenBtree[PersonKey, Person](ctx, "xyz2", trans, nil)
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "xyz2", trans, Compare)
 	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
 	b3.Update(ctx, pk, p)
 
@@ -102,7 +102,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	trans, _ = newMockTransactionWithLogging(t, sop.ForReading, -1)
 	trans.Begin()
 
-	b3, _ = OpenBtree[PersonKey, Person](ctx, "xyz2", trans, nil)
+	b3, _ = OpenBtree[PersonKey, Person](ctx, "xyz2", trans, Compare)
 
 	b3.First(ctx)
 	k := b3.GetCurrentKey()
