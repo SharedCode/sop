@@ -19,7 +19,7 @@ func NewStoresRestApi() *storesRestApi {
 // @Summary GetStores returns list of stores
 // @Schemes
 // @Description GetStores responds with the list of all stores as JSON.
-// @Tags Jobs
+// @Tags Stores
 // @Accept json
 // @Produce json
 // @Failure 404 {object} map[string]any

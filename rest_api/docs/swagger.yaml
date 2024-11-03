@@ -25,7 +25,7 @@ paths:
       - Bearer: []
       summary: GetStores returns list of stores
       tags:
-      - Jobs
+      - Stores
 securityDefinitions:
   Bearer:
     description: Type "Bearer" followed by a space and JWT token.

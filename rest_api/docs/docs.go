@@ -30,7 +30,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Jobs"
+                    "Stores"
                 ],
                 "summary": "GetStores returns list of stores",
                 "responses": {
