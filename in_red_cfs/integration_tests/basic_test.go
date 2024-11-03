@@ -2,6 +2,7 @@ package integration_tests
 
 import (
 	"context"
+	"fmt"
 	log "log/slog"
 	"os"
 	"testing"
@@ -36,6 +37,16 @@ func init() {
 }
 
 var ctx = context.Background()
+
+func Test_GetStoreList(t *testing.T) {
+	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	stores, _ := trans.GetStores(ctx)
+
+	log.Info(fmt.Sprintf( "Store count: %d", len(stores)))
+}
 
 // Create an empty store on 1st run, add one item(max) on succeeding runs.
 func Test_CreateEmptyStore(t *testing.T) {

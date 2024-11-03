@@ -31,7 +31,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*transaction)
-	stores, err := trans.storeRepository.Get(ctx, false, 0, name)
+	stores, err := trans.storeRepository.Get(ctx, name)
 	if len(stores) == 0 || stores[0].IsEmpty() || err != nil {
 		if err == nil {
 			trans.Rollback(ctx)
@@ -61,9 +61,9 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 	var stores []sop.StoreInfo
 	var err error
 	if si.CacheConfig != nil {
-		stores, err = trans.storeRepository.Get(ctx, si.CacheConfig.IsStoreInfoCacheTTL, si.CacheConfig.StoreInfoCacheDuration, si.Name)
+		stores, err = trans.storeRepository.GetWithTTL(ctx, si.CacheConfig.IsStoreInfoCacheTTL, si.CacheConfig.StoreInfoCacheDuration, si.Name)
 	} else {
-		stores, err = trans.storeRepository.Get(ctx, false, 0, si.Name)
+		stores, err = trans.storeRepository.Get(ctx, si.Name)
 	}
 	if err != nil {
 		trans.Rollback(ctx)
@@ -150,7 +150,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 		si.ItemActionTracker.(*itemActionTracker[TK, TV]).items = make(map[sop.UUID]cacheItem[TK, TV])
 		si.backendNodeRepository.nodeLocalCache = make(map[sop.UUID]cacheNode)
 		// Reset StoreInfo of B-Tree in prep to replay the "actions".
-		storeInfo, err := sr.Get(ctx, b3.StoreInfo.CacheConfig.IsStoreInfoCacheTTL, b3.StoreInfo.CacheConfig.StoreInfoCacheDuration, b3.StoreInfo.Name)
+		storeInfo, err := sr.GetWithTTL(ctx, b3.StoreInfo.CacheConfig.IsStoreInfoCacheTTL, b3.StoreInfo.CacheConfig.StoreInfoCacheDuration, b3.StoreInfo.Name)
 		if err != nil {
 			return err
 		}

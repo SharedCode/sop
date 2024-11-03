@@ -1,8 +1,8 @@
 package in_red_ck
 
 import (
-	"context"
 	"cmp"
+	"context"
 	"testing"
 
 	"github.com/SharedCode/sop"

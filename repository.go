@@ -109,9 +109,12 @@ type TransactionLog interface {
 // Store is a general purpose Store interface specifying methods or CRUD operations on Key & Value
 // where Value is implied to be superset of Key.
 type Store[TK any, TV any] interface {
-	// Fetch store info with name(s). If StoreInfo is known to be cached in sliding time(TTL) then specify true on the 2nd bool param & the sliding time duration on the 3rd param.
-	// Otherwise it can be set to false and 0.
-	Get(context.Context, bool, time.Duration, ...TK) ([]TV, error)
+	// Fetch store info with name(s).
+	Get(context.Context, ...TK) ([]TV, error)
+	// Fetch store info with name(s) & option to specify (caching) sliding time(TTL) duration.
+	GetWithTTL(context.Context, bool, time.Duration, ...TK) ([]TV, error)
+	// GetAll returns list of stores available in the backend.
+	GetAll(context.Context) ([]string, error)
 	// Add store info & create related tables like for registry & for node blob.
 	Add(context.Context, ...TV) error
 	// Update store info. Update should also merge the Count of items between the incoming store info
