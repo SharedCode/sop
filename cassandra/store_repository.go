@@ -132,7 +132,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 		for ii := 0; ii < endIndex; ii++ {
 			log.Debug(fmt.Sprintf("undo occured for store %s", stores[ii].Name))
 
-			sis, _ := sr.Get(ctx, stores[ii].CacheConfig.IsStoreInfoCacheTTL, stores[ii].CacheConfig.StoreInfoCacheDuration, stores[ii].Name)
+			sis, _ := sr.GetWithTTL(ctx, stores[ii].CacheConfig.IsStoreInfoCacheTTL, stores[ii].CacheConfig.StoreInfoCacheDuration, stores[ii].Name)
 			if len(sis) == 0 {
 				continue
 			}
@@ -162,7 +162,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	defer redis.Unlock(ctx, lockKeys...)
 
 	for i := range stores {
-		sis, err := sr.Get(ctx, stores[i].CacheConfig.IsStoreInfoCacheTTL, stores[i].CacheConfig.StoreInfoCacheDuration, stores[i].Name)
+		sis, err := sr.GetWithTTL(ctx, stores[i].CacheConfig.IsStoreInfoCacheTTL, stores[i].CacheConfig.StoreInfoCacheDuration, stores[i].Name)
 		if len(sis) == 0 {
 			undo(i, beforeUpdateStores)
 			return err
@@ -192,7 +192,36 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	return nil
 }
 
-func (sr *storeRepository) Get(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
+func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
+	return sr.GetWithTTL(ctx, false, 0, names...)
+}
+
+// Returns all stores' names available in the backend (in Cassandra store table).
+func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
+	if connection == nil {
+		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+	}
+	selectStatement := fmt.Sprintf("SELECT name FROM %s.store;", connection.Config.Keyspace)
+
+	qry := connection.Session.Query(selectStatement).WithContext(ctx)
+	if connection.Config.ConsistencyBook.StoreGet > gocql.Any {
+		qry.Consistency(connection.Config.ConsistencyBook.StoreGet)
+	}
+
+	iter := qry.Iter()
+	var storeNames []string
+	var storeName string
+	for iter.Scan(&storeName) {
+		storeNames = append(storeNames, storeName)
+	}
+	if err := iter.Close(); err != nil {
+		return nil, err
+	}
+
+	return storeNames, nil
+}
+
+func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
 	if connection == nil {
 		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -257,7 +286,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
-	sis, err := sr.Get(ctx, false, 0, names...)
+	sis, err := sr.Get(ctx, names...)
 	if err != nil {
 		return err
 	}

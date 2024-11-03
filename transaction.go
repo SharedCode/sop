@@ -38,6 +38,9 @@ type Transaction interface {
 	GetPhasedTransaction() TwoPhaseCommitTransaction
 	// Add your two phases commit implementation for managing your/3rd party database transaction.
 	AddPhasedTransaction(otherTransaction ...TwoPhaseCommitTransaction)
+
+	// Returns list of all Btree stores available in the backend.
+	GetStores(ctx context.Context) ([]string, error)
 }
 
 // TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.
@@ -54,6 +57,9 @@ type TwoPhaseCommitTransaction interface {
 	HasBegun() bool
 	// Returns the Transaction mode, it can be for reading or for writing.
 	GetMode() TransactionMode
+
+	// Returns all Btree stores available in the backend.
+	GetStores(ctx context.Context) ([]string, error)
 }
 
 // Enduser facing Transaction (wrapper) implementation.
@@ -161,4 +167,8 @@ func (t *singlePhaseTransaction) GetPhasedTransaction() TwoPhaseCommitTransactio
 // Add your two phases commit implementation for managing your/3rd party database transaction.
 func (t *singlePhaseTransaction) AddPhasedTransaction(otherTransaction ...TwoPhaseCommitTransaction) {
 	t.otherTransactions = append(t.otherTransactions, otherTransaction...)
+}
+
+func (t *singlePhaseTransaction) GetStores(ctx context.Context) ([]string, error) {
+	return t.sopPhaseCommitTransaction.GetStores(ctx)
 }

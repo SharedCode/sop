@@ -9,7 +9,7 @@ import (
 	log "log/slog"
 )
 
-const(
+const (
 	maxThreadCount = 7
 )
 

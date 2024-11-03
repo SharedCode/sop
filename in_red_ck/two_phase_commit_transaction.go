@@ -235,6 +235,11 @@ func (t *transaction) HasBegun() bool {
 	return t.phaseDone >= 0 && t.phaseDone < 2
 }
 
+func (t *transaction) GetStores(ctx context.Context) ([]string, error) {
+	return t.storeRepository.GetAll(ctx)
+}
+
+
 func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 	if ctx.Err() != nil {
 		return ctx.Err()

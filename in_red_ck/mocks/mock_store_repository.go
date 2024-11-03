@@ -37,8 +37,20 @@ func (sr *mockStoreRepository) Update(ctx context.Context, stores ...sop.StoreIn
 	}
 	return nil
 }
+func (sr *mockStoreRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
+	return sr.GetWithTTL(ctx, false, 0, names...)
+}
+func (sr *mockStoreRepository) GetAll(ctx context.Context) ([]string, error) {
+	storeNames := make([]string, len(sr.lookup))
+	var i = 0
+	for k := range sr.lookup {
+		storeNames[i] = k
+		i++
+	}
+	return storeNames, nil
+}
 
-func (sr *mockStoreRepository) Get(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
+func (sr *mockStoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
 	stores := make([]sop.StoreInfo, len(names))
 	for i, name := range names {
 		v := sr.lookup[name]

@@ -1,0 +1,35 @@
+basePath: /api/v1
+info:
+  contact: {}
+paths:
+  /stores:
+    get:
+      consumes:
+      - application/json
+      description: GetStores responds with the list of all stores as JSON.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              type: string
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: GetStores returns list of stores
+      tags:
+      - Stores
+securityDefinitions:
+  Bearer:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
