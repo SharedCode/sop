@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -11,10 +12,10 @@ import (
 	swaggerfiles "github.com/swaggo/files"     // swagger embed files
 	ginSwagger "github.com/swaggo/gin-swagger" // gin-swagger middleware
 
-	"github.com/SharedCode/sop/rest_api/docs"
-	"github.com/SharedCode/sop/in_red_cfs"
 	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_cfs"
 	"github.com/SharedCode/sop/redis"
+	"github.com/SharedCode/sop/rest_api/docs"
 )
 
 var ctx = context.TODO()
@@ -40,13 +41,19 @@ var toValidate = map[string]string{
 // Verify the bearer token in header.
 func verify(c *gin.Context) bool {
 	status := true
+
+	// Allow easy debugging on dev.
+	if os.Getenv("SOP_ENV") == "DEV" {
+		return true
+	}
+
 	token := c.Request.Header.Get("Authorization")
 	if strings.HasPrefix(token, "Bearer ") {
 		token = strings.TrimPrefix(token, "Bearer ")
 
-		// Allow easy debugging, bypass Okta based OAuth2 token verification w/ simple token equality check.
-		if os.Getenv("SOP_ENV") == "DEV" {
-			devToken := os.Getenv("SOP_DEV_TOKEN")
+		// Allow easy QA, bypass Okta based OAuth2 token verification w/ simple token equality check.
+		if os.Getenv("SOP_ENV") == "QA" {
+			devToken := os.Getenv("SOP_QA_TOKEN")
 			if token == devToken {
 				return true
 			}
@@ -104,17 +111,32 @@ func main() {
 	docs.SwaggerInfo.BasePath = "/api/v1"
 
 	stores := NewStoresRestApi()
+	// Register the (main) Stores' REST Api.
+	RegisterMethod(GET, "/stores", stores.GetStores)
+	RegisterMethod(GET, "/stores/:name", stores.GetStoreByName)
 
 	v1 := router.Group("/api/v1")
 	{
-		// List stores.
-		v1.GET("/stores", verifyHeaderToken(stores.GetStores))
+		for _, rm := range restMethods {
+			switch(rm.Verb) {
+			case GET:
+				fallthrough
+			case GET_ONE:
+				v1.GET(rm.Path, verifyHeaderToken(rm.handler))
+			case DELETE:
+				v1.DELETE(rm.Path, verifyHeaderToken(rm.handler))
+			case POST:
+				v1.POST(rm.Path, verifyHeaderToken(rm.handler))
+			case PUT:
+				v1.PUT(rm.Path, verifyHeaderToken(rm.handler))
+			case PATCH:
+				v1.PATCH(rm.Path, verifyHeaderToken(rm.handler))
+			default:
+				panic(fmt.Sprintf("HTTP verb %d not supported", rm.Verb))
+			}
+		}
 
 		/*
-		// Get store by name.
-		v1.GET("/stores/:name", verifyHeaderToken(stores.GetStoreByName))
-		// Delete store by name.
-		v1.DELETE("/stores/:name", verifyHeaderToken(stores.DeleteStoreByName))
 		// Add store.
 		v1.POST("/stores", verifyHeaderToken(stores.PostStore))
 		*/

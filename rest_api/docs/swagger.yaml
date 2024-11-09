@@ -1,4 +1,140 @@
 basePath: /api/v1
+definitions:
+  sop.StoreCacheConfig:
+    properties:
+      is_node_cache_ttl:
+        description: Is NodeCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+        type: boolean
+      is_registry_cache_ttl:
+        description: Is RegistryCache sliding time(TTL) or not. If true, needs Redis
+          6.2.0+.
+        type: boolean
+      is_store_info_cache_ttl:
+        description: Is StoreInfoCache sliding time(TTL) or not. If true, needs Redis
+          6.2.0+.
+        type: boolean
+      is_value_data_cache_ttl:
+        description: Is ValueCache sliding time(TTL) or not. If true, needs Redis
+          6.2.0+.
+        type: boolean
+      node_cache_duration:
+        allOf:
+        - $ref: '#/definitions/time.Duration'
+        description: Specifies this store's Node's Redis cache duration.
+      registry_cache_duration:
+        allOf:
+        - $ref: '#/definitions/time.Duration'
+        description: Specifies this store's Registry Objects' Redis cache duration.
+      store_info_cache_duration:
+        allOf:
+        - $ref: '#/definitions/time.Duration'
+        description: Specifies this store's details(StoreInfo) Redis cache duration.
+      value_data_cache_duration:
+        allOf:
+        - $ref: '#/definitions/time.Duration'
+        description: |-
+          Only used if IsValueDataInNodeSegment(false) & IsValueDataGloballyCached(true).
+          Specifies this store's Item Value part Redis cache duration.
+    type: object
+  sop.StoreInfo:
+    properties:
+      blob_table:
+        description: Blob table name if using a table or (base) file path if storing
+          blobs in File System.
+        maxLength: 300
+        minLength: 1
+        type: string
+      cache_config:
+        allOf:
+        - $ref: '#/definitions/sop.StoreCacheConfig'
+        description: |-
+          Redis cache specification for this store's objects(registry, nodes, item value part).
+          Defaults to the global specification and can be overriden for each store.
+      count:
+        description: Total count of items stored.
+        type: integer
+      description:
+        description: (optional) Description of the Store.
+        maxLength: 250
+        type: string
+      is_unique:
+        description: IsUnique tells whether key/value pair (items) of this tree should
+          be unique on key.
+        type: boolean
+      is_value_data_actively_persisted:
+        description: |-
+          If true, each Btree Add(..) method call will persist the item value's data to another partition, then on commit,
+          it will then be a very quick action as item(s) values' data were already saved on backend.
+          This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
+        type: boolean
+      is_value_data_globally_cached:
+        description: |-
+          If true, the Value data will be cached in Redis, otherwise not. This is used when 'IsValueDataInNodeSegment'
+          is set to false. Typically set to false if 'IsValueDataActivelyPersisted' is true, as value data is expected
+          to be huge rendering caching it in Redis to affect Redis performance due to the drastic size of data per item.
+        type: boolean
+      is_value_data_in_node_segment:
+        description: |-
+          IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's data segment.
+          Otherwise is false.
+        type: boolean
+      leaf_load_balancing:
+        description: |-
+          If true, node load will be balanced by pushing items to sibling nodes if there are vacant slots,
+          otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
+        type: boolean
+      name:
+        description: Short name of this (B-Tree store).
+        maxLength: 20
+        minLength: 1
+        type: string
+      registry_table:
+        description: Virtual ID registry table name.
+        maxLength: 20
+        minLength: 1
+        type: string
+      root_node_id:
+        description: RootNodeID is the root node's ID.
+        type: string
+      slot_length:
+        description: Count of items that can be stored on a given node.
+        type: integer
+      timestamp:
+        description: Add or update timestamp in milliseconds.
+        type: integer
+    type: object
+  time.Duration:
+    enum:
+    - -9223372036854775808
+    - 9223372036854775807
+    - 1
+    - 1000
+    - 1000000
+    - 1000000000
+    - 60000000000
+    - 3600000000000
+    - 1
+    - 1000
+    - 1000000
+    - 1000000000
+    - 60000000000
+    - 3600000000000
+    type: integer
+    x-enum-varnames:
+    - minDuration
+    - maxDuration
+    - Nanosecond
+    - Microsecond
+    - Millisecond
+    - Second
+    - Minute
+    - Hour
+    - Nanosecond
+    - Microsecond
+    - Millisecond
+    - Second
+    - Minute
+    - Hour
 info:
   contact: {}
 paths:
@@ -24,6 +160,38 @@ paths:
       security:
       - Bearer: []
       summary: GetStores returns list of stores
+      tags:
+      - Stores
+  /stores/{name}:
+    get:
+      consumes:
+      - application/json
+      description: GetStoreByName responds with the details of the matching store
+        as JSON.
+      parameters:
+      - description: Name of store to fetch
+        in: path
+        maxLength: 20
+        minLength: 1
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/sop.StoreInfo'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: GetStoreByName returns details of a store having its name matching
+        the name parameter.
       tags:
       - Stores
 securityDefinitions:

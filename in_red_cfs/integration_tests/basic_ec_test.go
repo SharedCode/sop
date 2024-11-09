@@ -1,6 +1,7 @@
 package integration_tests
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"testing"
@@ -30,7 +31,7 @@ func Test_Basic_EC(t *testing.T) {
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-	}, trans, nil)
+	}, trans, cmp.Compare)
 	if err != nil {
 		t.Error(err)
 		return
@@ -79,7 +80,7 @@ func Test_Basic_EC_Get(t *testing.T) {
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-	}, trans, nil)
+	}, trans, cmp.Compare)
 	if err != nil {
 		t.Error(err)
 		return
