@@ -1,4 +1,4 @@
-package main
+package rest_api
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ const(
 type RestMethod struct {
 	Verb HTTPVerb
 	Path string
-	handler func(c *gin.Context)
+	Handler func(c *gin.Context)
 }
 
 var restMethods = make(map[string]RestMethod)
@@ -30,7 +30,7 @@ func RegisterMethod(verb HTTPVerb, path string, h func(c *gin.Context)) error {
 	m := RestMethod{
 		Verb: verb,
 		Path: path,
-		handler: h,
+		Handler: h,
 	}
 	return Register(m)
 }
@@ -43,4 +43,9 @@ func Register(m RestMethod) error {
 	}
 	restMethods[key] = m
 	return nil
+}
+
+// Returns the registered REST Methods map.
+func RestMethods() map[string]RestMethod {
+	return restMethods
 }

@@ -1,4 +1,4 @@
-package main
+package rest_api
 
 import (
 	"fmt"
@@ -9,45 +9,6 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_cfs"
 )
-
-type storesRestApi struct{}
-
-func NewStoresRestApi() *storesRestApi {
-	return &storesRestApi{}
-}
-
-
-/*
-const dataPath string = "/Users/grecinto/sop_data"
-
-func RegisterIt() error {
-
-	beginTrans := func(mode sop.TransactionMode, timeOut time.Duration) (sop.Transaction, error) {
-		trans, err := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, false, &fs.ErasureCodingConfig{
-			DataShardsCount:   2,
-			ParityShardsCount: 1,
-			BaseFolderPathsAcrossDrives: []string{
-				fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
-				fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
-				fmt.Sprintf("%s%cdisk3", dataPath, os.PathSeparator),
-			},
-			RepairCorruptedShards: true,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if err = trans.Begin(); err != nil {
-			return nil, err
-		}
-		return trans, nil
-	}
-
-	b3, err := in_red_cfs.OpenBtree[int, string](ctx, "barstoreec", trans, cmp.Compare)
-	
-
-	trans.Commit(ctx)
-}
-*/
 
 // GetStores godoc
 // @Summary GetStores returns list of stores
@@ -60,12 +21,12 @@ func RegisterIt() error {
 // @Success 200 {object} []string
 // @Router /stores [get]
 // @Security Bearer
-func (sra *storesRestApi) GetStores(c *gin.Context) {
+func GetStores(c *gin.Context) {
 	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "new transaction call in fetching stores list failed"})
 	}
-	stores, err := trans.GetStores(ctx)
+	stores, err := trans.GetStores(c)
 	if err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "fetching stores list failed"})
 	}
@@ -84,7 +45,7 @@ func (sra *storesRestApi) GetStores(c *gin.Context) {
 // @Success 200 {object} sop.StoreInfo
 // @Router /stores/{name} [get]
 // @Security Bearer
-func (sra *storesRestApi) GetStoreByName(c *gin.Context) {
+func GetStoreByName(c *gin.Context) {
 	storeName := c.Param("name")
 
 	trans, err := in_red_cfs.NewTransaction(sop.ForReading, -1, false)
@@ -97,9 +58,9 @@ func (sra *storesRestApi) GetStoreByName(c *gin.Context) {
 	}
 
 	// Just end the transaction, rollback does nothing.
-	defer trans.Rollback(ctx)
+	defer trans.Rollback(c)
 
-	b3,err :=in_red_cfs.OpenBtree[interface{}, interface{}](ctx, storeName, trans, nil)
+	b3,err :=in_red_cfs.OpenBtree[interface{}, interface{}](c, storeName, trans, nil)
 	if err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("fetching store %s failed, error: %v", storeName, err)})
 		return

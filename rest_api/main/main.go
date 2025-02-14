@@ -1,7 +1,8 @@
+// Package contains reference or sample implementation of a REST API that surfaces SOP object stores.
+// Please feel free to reuse or copy-paste it to implement your own REST API.
 package main
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,20 +13,66 @@ import (
 	swaggerfiles "github.com/swaggo/files"     // swagger embed files
 	ginSwagger "github.com/swaggo/gin-swagger" // gin-swagger middleware
 
-	cas "github.com/SharedCode/sop/cassandra"
-	"github.com/SharedCode/sop/in_red_cfs"
-	"github.com/SharedCode/sop/redis"
+	"github.com/SharedCode/sop/rest_api"
 	"github.com/SharedCode/sop/rest_api/docs"
 )
 
-var ctx = context.TODO()
+// @BasePath /api/v1
+
+// @securityDefinitions.apikey Bearer
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
+func main() {
+
+	// Simple closure to for header token verification.
+	verifyHeaderToken := func(realHandler func(c *gin.Context)) func(c *gin.Context) {
+		return func(c *gin.Context) {
+			if verify(c) {
+				realHandler(c)
+			}
+		}
+	}
+
+	router := gin.Default()
+	docs.SwaggerInfo.BasePath = "/api/v1"
+
+	// Register the (main) Stores' REST methods.
+	rest_api.RegisterMethod(rest_api.GET, "/stores", rest_api.GetStores)
+	rest_api.RegisterMethod(rest_api.GET, "/stores/:name", rest_api.GetStoreByName)
+	registerStores()
+
+	v1 := router.Group("/api/v1")
+	{
+		restMethods := rest_api.RestMethods()
+		for _, rm := range restMethods {
+			switch(rm.Verb) {
+			case rest_api.GET:
+				fallthrough
+			case rest_api.GET_ONE:
+				v1.GET(rm.Path, verifyHeaderToken(rm.Handler))
+			case rest_api.DELETE:
+				v1.DELETE(rm.Path, verifyHeaderToken(rm.Handler))
+			case rest_api.POST:
+				v1.POST(rm.Path, verifyHeaderToken(rm.Handler))
+			case rest_api.PUT:
+				v1.PUT(rm.Path, verifyHeaderToken(rm.Handler))
+			case rest_api.PATCH:
+				v1.PATCH(rm.Path, verifyHeaderToken(rm.Handler))
+			default:
+				panic(fmt.Sprintf("HTTP verb %d not supported", rm.Verb))
+			}
+		}
+	}
+
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
+	router.Run("localhost:8080")
+}
 
 // USE REST API to surface SOP Transactions & BTrees.
 // USE cel-go to support scripting. Example, to provide "comparer" function to SOP's BTree.
 // To provide search functionality, etc...
 // The solution enables existing REST API tools such as curl, Postman, etc... for data browsing and management!
-
-// @BasePath /api/v1
 
 // See goth package for OAuth2 based authentication: https://github.com/markbates/goth
 // See oauth2 token verifier (& VueJS based token injection in Header)
@@ -75,74 +122,4 @@ func verify(c *gin.Context) bool {
 		status = false
 	}
 	return status
-}
-
-var cassConfig = cas.Config{
-	ClusterHosts: []string{"localhost:9042"},
-	Keyspace:     "btree",
-}
-var redisConfig = redis.Options{
-	Address:                  "localhost:6379",
-	Password:                 "", // no password set
-	DB:                       0,  // use default DB
-	DefaultDurationInSeconds: 24 * 60 * 60,
-}
-
-func init() {
-	in_red_cfs.Initialize(cassConfig, redisConfig)
-}
-
-// @securityDefinitions.apikey Bearer
-// @in header
-// @name Authorization
-// @description Type "Bearer" followed by a space and JWT token.
-func main() {
-
-	// Simple closure to for header token verification.
-	verifyHeaderToken := func(realHandler func(c *gin.Context)) func(c *gin.Context) {
-		return func(c *gin.Context) {
-			if verify(c) {
-				realHandler(c)
-			}
-		}
-	}
-
-	router := gin.Default()
-	docs.SwaggerInfo.BasePath = "/api/v1"
-
-	stores := NewStoresRestApi()
-	// Register the (main) Stores' REST Api.
-	RegisterMethod(GET, "/stores", stores.GetStores)
-	RegisterMethod(GET, "/stores/:name", stores.GetStoreByName)
-
-	v1 := router.Group("/api/v1")
-	{
-		for _, rm := range restMethods {
-			switch(rm.Verb) {
-			case GET:
-				fallthrough
-			case GET_ONE:
-				v1.GET(rm.Path, verifyHeaderToken(rm.handler))
-			case DELETE:
-				v1.DELETE(rm.Path, verifyHeaderToken(rm.handler))
-			case POST:
-				v1.POST(rm.Path, verifyHeaderToken(rm.handler))
-			case PUT:
-				v1.PUT(rm.Path, verifyHeaderToken(rm.handler))
-			case PATCH:
-				v1.PATCH(rm.Path, verifyHeaderToken(rm.handler))
-			default:
-				panic(fmt.Sprintf("HTTP verb %d not supported", rm.Verb))
-			}
-		}
-
-		/*
-		// Add store.
-		v1.POST("/stores", verifyHeaderToken(stores.PostStore))
-		*/
-
-	}
-
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerfiles.Handler))
-	router.Run("localhost:8080")
 }
