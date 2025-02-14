@@ -6,6 +6,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Task Runner struct.
 type TaskRunner struct {
 	maxThreadCount int
 	eg             *errgroup.Group
@@ -13,6 +14,7 @@ type TaskRunner struct {
 	context        context.Context
 }
 
+// Create a new task runner.
 func NewTaskRunner(ctx context.Context, maxThreadCount int) *TaskRunner {
 	eg, ctx2 := errgroup.WithContext(ctx)
 	return &TaskRunner{
@@ -23,10 +25,12 @@ func NewTaskRunner(ctx context.Context, maxThreadCount int) *TaskRunner {
 	}
 }
 
+// Returns the contexr.
 func (tr *TaskRunner) GetContext() context.Context {
 	return tr.context
 }
 
+// Spin up a new go thread to run a task function.
 func (tr *TaskRunner) Go(task func() error) {
 	t := func() error {
 		err := task()
@@ -37,9 +41,9 @@ func (tr *TaskRunner) Go(task func() error) {
 		<-tr.limiterChan
 		return nil
 	}
-	tr.eg.Go(t)
 	// Occupy a thread slot.
 	tr.limiterChan <- true
+	tr.eg.Go(t)
 }
 
 // Wrapper to errgroup.Wait.
