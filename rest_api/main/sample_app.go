@@ -195,6 +195,7 @@ func addItem(c *gin.Context) {
 	}
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": fmt.Sprintf("update value of item with key %s failed", itemKey)})
+		trans.Rollback(c)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("update value of item with key %s succeeded", itemKey)})
