@@ -12,7 +12,8 @@ import (
 )
 
 func Test_Basic_EC(t *testing.T) {
-	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, false, &fs.ErasureCodingConfig{
+	ec := make(map[string]fs.ErasureCodingConfig)
+	ec["barstoreec"] = fs.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -21,7 +22,8 @@ func Test_Basic_EC(t *testing.T) {
 			fmt.Sprintf("%s%cdisk3", dataPath, os.PathSeparator),
 		},
 		RepairCorruptedShards: true,
-	})
+	}
+	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, false, ec)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -61,7 +63,8 @@ func Test_Basic_EC(t *testing.T) {
 }
 
 func Test_Basic_EC_Get(t *testing.T) {
-	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, false, &fs.ErasureCodingConfig{
+	ec := make(map[string]fs.ErasureCodingConfig)
+	ec["barstoreec"] = fs.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -70,7 +73,8 @@ func Test_Basic_EC_Get(t *testing.T) {
 			fmt.Sprintf("%s%cdisk3", dataPath, os.PathSeparator),
 		},
 		RepairCorruptedShards: true,
-	})
+	}
+	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, false, ec)
 	if err != nil {
 		t.Fatal(err.Error())
 	}

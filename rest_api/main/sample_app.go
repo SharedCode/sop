@@ -49,7 +49,9 @@ func init() {
 
 // Create the "objects" btree store.
 func createStores() error {
-	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, false, &fs.ErasureCodingConfig{
+	ec := make(map[string]fs.ErasureCodingConfig)
+	// Specifying blank filename ("") means to use the same EC config across different filenames or blob table.
+	ec[""] = fs.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -59,7 +61,8 @@ func createStores() error {
 			"/Users/grecinto/sop_data/disk3",
 		},
 		RepairCorruptedShards: false,
-	})
+	}
+	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, false, ec)
 	if err != nil {
 		return err
 	}

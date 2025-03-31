@@ -13,7 +13,8 @@ import (
 var ctx context.Context = context.Background()
 
 func TestECAddThenRead(t *testing.T) {
-	ec := &ErasureCodingConfig{
+	ec := make(map[string]ErasureCodingConfig)
+	ec["b1"] = ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -46,7 +47,8 @@ func TestECAddThenRead(t *testing.T) {
 }
 
 func TestECAddRemoveRead(t *testing.T) {
-	ec := &ErasureCodingConfig{
+	ec := make(map[string]ErasureCodingConfig)
+	ec["b1"] = ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -81,7 +83,8 @@ func TestECAddRemoveRead(t *testing.T) {
 }
 
 func TestECerrorOnAdd(t *testing.T) {
-	ec := &ErasureCodingConfig{
+	ec := make(map[string]ErasureCodingConfig)
+	ec["b1"] = ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -122,7 +125,8 @@ func TestECerrorOnAdd(t *testing.T) {
 }
 
 func TestECerrorOnRemove(t *testing.T) {
-	ec := &ErasureCodingConfig{
+	ec := make(map[string]ErasureCodingConfig)
+	ec["b1"] = ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -172,7 +176,8 @@ func TestECerrorOnRemove(t *testing.T) {
 }
 
 func TestECerrorOnReadButReconstructed(t *testing.T) {
-	ec := &ErasureCodingConfig{
+	ec := make(map[string]ErasureCodingConfig)
+	ec["b1"] = ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -218,7 +223,8 @@ func TestECerrorOnReadButReconstructed(t *testing.T) {
 }
 
 func TestECerrorOnReadNotReconstructed(t *testing.T) {
-	ec := &ErasureCodingConfig{
+	ec := make(map[string]ErasureCodingConfig)
+	ec["b1"] = ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -265,7 +271,8 @@ func TestECerrorOnReadNotReconstructed(t *testing.T) {
 }
 
 func TestECerrorOnRepair(t *testing.T) {
-	ec := &ErasureCodingConfig{
+	ec := make(map[string]ErasureCodingConfig)
+	ec["b1"] = ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -316,7 +323,8 @@ func TestECerrorOnRepair(t *testing.T) {
 }
 
 func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
-	ec := &ErasureCodingConfig{
+	ec := make(map[string]ErasureCodingConfig)
+	ec["b1"] = ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{

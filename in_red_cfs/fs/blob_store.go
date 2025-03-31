@@ -9,18 +9,11 @@ import (
 	"github.com/SharedCode/sop/in_red_cfs/fs/erasure"
 )
 
-type ErasureCodingConfig struct {
-	DataShardsCount             int
-	ParityShardsCount           int
-	BaseFolderPathsAcrossDrives []string
-	RepairCorruptedShards       bool
-}
-
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
 type blobStore struct {
 	fileIO                      FileIO
-	erasure                     *erasure.Erasure
-	baseFolderPathsAcrossDrives []string
+	erasure                     map[string]*erasure.Erasure
+	baseFolderPathsAcrossDrives map[string][]string
 	repairCorruptedShards       bool
 }
 
@@ -37,21 +30,25 @@ func NewBlobStore(fileIO FileIO) sop.BlobStore {
 // NewBlobStore instantiates a new blobstore for File System storage.
 // Parameters are specified for abstractions to things like File IO, filename formatter for efficient storage
 // and access of files on directories.
-func NewBlobStoreExt(fileIO FileIO, erasureConfig *ErasureCodingConfig) (sop.BlobStore, error) {
-	var e *erasure.Erasure
-	var baseFolderPathsAcrossDrives []string
+func NewBlobStoreExt(fileIO FileIO, erasureConfig map[string]ErasureCodingConfig) (sop.BlobStore, error) {
+	var e map[string]*erasure.Erasure
+	var baseFolderPathsAcrossDrives map[string][]string
 	var repairCorruptedShards bool
 
 	if erasureConfig != nil {
-		var err error
-		e, err = erasure.NewErasure(erasureConfig.DataShardsCount, erasureConfig.ParityShardsCount)
-		if err != nil {
-			return nil, err
-		}
-		baseFolderPathsAcrossDrives = erasureConfig.BaseFolderPathsAcrossDrives
-		repairCorruptedShards = erasureConfig.RepairCorruptedShards
-		if e.DataShardsCount()+e.ParityShardsCount() != len(baseFolderPathsAcrossDrives) {
-			return nil, fmt.Errorf("baseFolderPaths array elements count should match the sum of dataShardsCount & parityShardsCount")
+		e = make(map[string]*erasure.Erasure, len(erasureConfig))
+		baseFolderPathsAcrossDrives = make(map[string][]string, len(erasureConfig))
+		for k,v := range erasureConfig {
+			ec, err := erasure.NewErasure(v.DataShardsCount, v.ParityShardsCount)
+			if err != nil {
+				return nil, err
+			}
+			repairCorruptedShards = v.RepairCorruptedShards
+			if ec.DataShardsCount()+ec.ParityShardsCount() != len(v.BaseFolderPathsAcrossDrives) {
+				return nil, fmt.Errorf("baseFolderPaths array elements count should match the sum of dataShardsCount & parityShardsCount")
+			}
+			e[k] = ec
+			baseFolderPathsAcrossDrives[k] = v.BaseFolderPathsAcrossDrives
 		}
 	}
 	if fileIO == nil {

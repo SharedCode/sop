@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	log "log/slog"
 
 	"github.com/SharedCode/sop"
-	log "log/slog"
+	"github.com/SharedCode/sop/in_red_cfs/fs/erasure"
 )
 
 const (
@@ -17,12 +18,21 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)
 
-	shards := make([][]byte, len(b.baseFolderPathsAcrossDrives))
-	shardsWithMetadata := make([][]byte, len(b.baseFolderPathsAcrossDrives))
-	shardsMetaData := make([][]byte, len(b.baseFolderPathsAcrossDrives))
+	// Get the blob table (blobFilePath) specific erasure configuration.
+	baseFolderPathsAcrossDrives, erasure := b.ecGetBaseFolderPathsAndErasureConfig(blobFilePath)
+	if baseFolderPathsAcrossDrives == nil {
+		err := fmt.Errorf("can't find Erasure Config setting for file %s", blobFilePath)
+		log.Error(err.Error())
+		return nil, err
+	}
+
+	shards := make([][]byte, len(baseFolderPathsAcrossDrives))
+	shardsWithMetadata := make([][]byte, len(baseFolderPathsAcrossDrives))
+	shardsMetaData := make([][]byte, len(baseFolderPathsAcrossDrives))
 	var lastErr error
-	for i := range b.baseFolderPathsAcrossDrives {
-		baseFolderPath := fmt.Sprintf("%s%c%s", b.baseFolderPathsAcrossDrives[i], os.PathSeparator, blobFilePath)
+
+	for i := range baseFolderPathsAcrossDrives {
+		baseFolderPath := fmt.Sprintf("%s%c%s", baseFolderPathsAcrossDrives[i], os.PathSeparator, blobFilePath)
 		blobKey := blobID
 
 		shardIndex := i
@@ -40,8 +50,8 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 				return nil
 			}
 			shardsWithMetadata[shardIndex] = ba
-			shardsMetaData[shardIndex] = ba[0:b.erasure.MetaDataSize()]
-			shards[shardIndex] = ba[b.erasure.MetaDataSize():]
+			shardsMetaData[shardIndex] = ba[0:erasure.MetaDataSize()]
+			shards[shardIndex] = ba[erasure.MetaDataSize():]
 			return nil
 		})
 	}
@@ -53,7 +63,7 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 	if isShardsEmpty(shards) && lastErr != nil {
 		return nil, lastErr
 	}
-	dr := b.erasure.Decode(shards, shardsMetaData)
+	dr := erasure.Decode(shards, shardsMetaData)
 	if dr.Error != nil {
 		return nil, dr.Error
 	}
@@ -62,7 +72,7 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 		// Repair corrupted or bitrot shards (a.k.a. damaged shards). Just do sequential processing as
 		// damaged shards should be typically one, residing in a drive that failed.
 		for _, i := range dr.ReconstructedShardsIndeces {
-			baseFolderPath := fmt.Sprintf("%s%c%s", b.baseFolderPathsAcrossDrives[i], os.PathSeparator, blobFilePath)
+			baseFolderPath := fmt.Sprintf("%s%c%s", baseFolderPathsAcrossDrives[i], os.PathSeparator, blobFilePath)
 			blobKey := blobID
 
 			fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
@@ -70,7 +80,7 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 
 			log.Debug(fmt.Sprintf("repairing file %s", fn))
 
-			md := b.erasure.ComputeShardMetadata(len(dr.DecodedData), shards, i)
+			md := erasure.ComputeShardMetadata(len(dr.DecodedData), shards, i)
 			buf := make([]byte, len(md)+len(shards[i]))
 
 			// TODO: refactor to write metadata then write the shard data so we don't use temp variable,
@@ -99,22 +109,42 @@ func isShardsEmpty(shards [][]byte) bool {
 	return true
 }
 
+func (b *blobStore) ecGetBaseFolderPathsAndErasureConfig(blobTable string) ([]string, *erasure.Erasure) {
+	// Get the blob table specific erasure configuration.
+	baseFolderPathsAcrossDrives := b.baseFolderPathsAcrossDrives[blobTable]
+	erasure := b.erasure[blobTable]
+
+	if baseFolderPathsAcrossDrives == nil {
+		baseFolderPathsAcrossDrives = b.baseFolderPathsAcrossDrives[""]
+		erasure = b.erasure[""]
+	}
+	return baseFolderPathsAcrossDrives, erasure
+}
+
 func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)
 
 	for _, storeBlobs := range storesblobs {
+		// Get the blob table specific erasure configuration.
+		baseFolderPathsAcrossDrives, erasure := b.ecGetBaseFolderPathsAndErasureConfig(storeBlobs.BlobTable)
+		if baseFolderPathsAcrossDrives == nil {
+			err := fmt.Errorf("can't find Erasure Config setting for file %s", storeBlobs.BlobTable)
+			log.Error(err.Error())
+			return err
+		}
+	
 		for _, blob := range storeBlobs.Blobs {
 			ba := blob.Value
 			contentsSize := len(ba)
 
-			shards, err := b.erasure.Encode(ba)
+			shards, err := erasure.Encode(ba)
 			if err != nil {
 				return err
 			}
 
 			for i := range shards {
-				baseFolderPath := fmt.Sprintf("%s%c%s", b.baseFolderPathsAcrossDrives[i], os.PathSeparator, storeBlobs.BlobTable)
+				baseFolderPath := fmt.Sprintf("%s%c%s", baseFolderPathsAcrossDrives[i], os.PathSeparator, storeBlobs.BlobTable)
 				blobKey := blob.Key
 				shardIndex := i
 
@@ -132,7 +162,7 @@ func (b *blobStore) ecAdd(ctx context.Context, storesblobs ...sop.BlobsPayload[s
 					fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), shardIndex)
 
 					// Prefix the shard w/ metadata.
-					md := b.erasure.ComputeShardMetadata(contentsSize, shards, shardIndex)
+					md := erasure.ComputeShardMetadata(contentsSize, shards, shardIndex)
 					buf := make([]byte, len(md)+len(shards[shardIndex]))
 
 					// TODO: refactor to write metadata then write the shard data so we don't use temp variable,
@@ -157,10 +187,18 @@ func (b *blobStore) ecRemove(ctx context.Context, storesBlobsIDs ...sop.BlobsPay
 
 	var lastErr error
 	for _, storeBlobIDs := range storesBlobsIDs {
+		// Get the blob table specific erasure configuration.
+		baseFolderPathsAcrossDrives, _ := b.ecGetBaseFolderPathsAndErasureConfig(storeBlobIDs.BlobTable)
+		if baseFolderPathsAcrossDrives == nil {
+			err := fmt.Errorf("can't find Erasure Config setting for file %s", storeBlobIDs.BlobTable)
+			log.Error(err.Error())
+			return err
+		}
+			
 		for _, blobID := range storeBlobIDs.Blobs {
 
-			for i := range b.baseFolderPathsAcrossDrives {
-				baseFolderPath := fmt.Sprintf("%s%c%s", b.baseFolderPathsAcrossDrives[i], os.PathSeparator, storeBlobIDs.BlobTable)
+			for i := range baseFolderPathsAcrossDrives {
+				baseFolderPath := fmt.Sprintf("%s%c%s", baseFolderPathsAcrossDrives[i], os.PathSeparator, storeBlobIDs.BlobTable)
 				blobKey := blobID
 
 				fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
