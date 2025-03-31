@@ -28,8 +28,14 @@ func NewBlobStore(fileIO FileIO) sop.BlobStore {
 }
 
 // NewBlobStore instantiates a new blobstore for File System storage.
-// Parameters are specified for abstractions to things like File IO, filename formatter for efficient storage
-// and access of files on directories.
+// Parameters are specified for abstractions to things like File IO & erasure config (EC) including filename
+// formatter for efficient storage and access of files across directories.
+//
+// erasureConfig param allows code the flexibility to specify different EC & base folder paths across disk drives
+// per blob Table, if needed. It is a map which has blob table name as key and EC as value.
+// You can use the empty string ("") key as default, used like a fallback, if EC is not found for a given blob table name.
+// SOP will use that entry's EC. Also, you are free to use the same EC for a given set of keys, thus, sharing the same
+// disk drives and base folders is supported.
 func NewBlobStoreExt(fileIO FileIO, erasureConfig map[string]ErasureCodingConfig) (sop.BlobStore, error) {
 	var e map[string]*erasure.Erasure
 	var baseFolderPathsAcrossDrives map[string][]string
