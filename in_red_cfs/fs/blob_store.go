@@ -23,7 +23,7 @@ const permission os.FileMode = os.ModeSticky | os.ModePerm
 // NewBlobStoreUsingDefaults is synonymous to NewBlobStore but uses default implementations of
 // necessary parameter interfaces like for file IO, to file path formatter.
 func NewBlobStore(fileIO FileIO) sop.BlobStore {
-	bs, _ := NewBlobStoreExt(fileIO, nil)
+	bs, _ := newBlobStoreExt(fileIO, nil)
 	return bs
 }
 
@@ -40,13 +40,16 @@ func NewBlobStore(fileIO FileIO) sop.BlobStore {
 // If erasureConfig is nil, SOP will attempt to use the value assigned in 'globalErasureConfig', so, you can optionally
 // pass in nil if your app had assigned the (global) erasureConfig using the SetGlobalErasureConfig helper function.
 func NewBlobStoreExt(fileIO FileIO, erasureConfig map[string]ErasureCodingConfig) (sop.BlobStore, error) {
-	var e map[string]*erasure.Erasure
-	var baseFolderPathsAcrossDrives map[string][]string
-	var repairCorruptedShards bool
-
 	if erasureConfig == nil {
 		erasureConfig = globalErasureConfig
 	}
+	return newBlobStoreExt(fileIO, erasureConfig)
+}
+
+func newBlobStoreExt(fileIO FileIO, erasureConfig map[string]ErasureCodingConfig) (sop.BlobStore, error) {
+	var e map[string]*erasure.Erasure
+	var baseFolderPathsAcrossDrives map[string][]string
+	var repairCorruptedShards bool
 
 	if erasureConfig != nil {
 		e = make(map[string]*erasure.Erasure, len(erasureConfig))

@@ -36,7 +36,10 @@ func NewTransactionExt(toFilePath fs.ToFilePathFunc, mode sop.TransactionMode, m
 // Create a transaction that supports Erasure Coding file IO.
 func NewTransactionWithEC(mode sop.TransactionMode, maxTime time.Duration, logging bool, erasureConfig map[string]fs.ErasureCodingConfig) (sop.Transaction, error) {
 	if erasureConfig == nil {
-		return nil, fmt.Errorf("erasureConfig can't be nil")
+		erasureConfig = fs.GetGlobalErasureConfig()
+		if erasureConfig == nil {
+			return nil, fmt.Errorf("erasureConfig can't be nil")
+		}
 	}
 	fio := fs.NewDefaultFileIO(fs.DefaultToFilePath)
 	for _,ecc := range erasureConfig {

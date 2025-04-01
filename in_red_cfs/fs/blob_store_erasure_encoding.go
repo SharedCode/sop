@@ -23,6 +23,11 @@ func SetGlobalErasureConfig(erasureConfig map[string]ErasureCodingConfig) {
 	globalErasureConfig = erasureConfig
 }
 
+// Returns the global Erasure Coding config.
+func GetGlobalErasureConfig() map[string]ErasureCodingConfig {
+	return globalErasureConfig
+}
+
 func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)
