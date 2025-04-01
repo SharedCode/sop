@@ -36,6 +36,9 @@ func NewBlobStore(fileIO FileIO) sop.BlobStore {
 // You can use the empty string ("") key as default, used like a fallback, if EC is not found for a given blob table name.
 // SOP will use that entry's EC. Also, you are free to use the same EC for a given set of keys, thus, sharing the same
 // disk drives and base folders is supported.
+//
+// If erasureConfig is nil, SOP will attempt to use the value assigned in 'globalErasureConfig', so, you can optionally
+// pass in nil if your app had assigned the (global) erasureConfig using the SetGlobalErasureConfig helper function.
 func NewBlobStoreExt(fileIO FileIO, erasureConfig map[string]ErasureCodingConfig) (sop.BlobStore, error) {
 	var e map[string]*erasure.Erasure
 	var baseFolderPathsAcrossDrives map[string][]string
