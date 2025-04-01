@@ -41,6 +41,10 @@ func NewBlobStoreExt(fileIO FileIO, erasureConfig map[string]ErasureCodingConfig
 	var baseFolderPathsAcrossDrives map[string][]string
 	var repairCorruptedShards bool
 
+	if erasureConfig == nil {
+		erasureConfig = globalErasureConfig
+	}
+
 	if erasureConfig != nil {
 		e = make(map[string]*erasure.Erasure, len(erasureConfig))
 		baseFolderPathsAcrossDrives = make(map[string][]string, len(erasureConfig))

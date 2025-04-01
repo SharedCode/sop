@@ -14,6 +14,15 @@ const (
 	maxThreadCount = 7
 )
 
+// Allows app to specify a global Erasure Coding Config once and allow code to simply don't bother
+// specifying it again.
+var globalErasureConfig map[string]ErasureCodingConfig
+
+// Invoke SetGlobalErasureConfig to set the application global Erasure Coding Config lookup.
+func SetGlobalErasureConfig(erasureConfig map[string]ErasureCodingConfig) {
+	globalErasureConfig = erasureConfig
+}
+
 func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)
