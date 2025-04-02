@@ -39,11 +39,6 @@ type Registry interface {
 	Remove(context.Context, ...RegistryPayload[UUID]) error
 }
 
-// StoreRepository interface specifies the store repository.
-type StoreRepository interface {
-	Store[string, StoreInfo]
-}
-
 // ManageBlobStore specifies the methods used to manage the Blob Store table(if in Cassandra) or folder path(if in File System).
 type ManageBlobStore interface {
 	// Creaate the blob store table or folder.
@@ -106,22 +101,21 @@ type TransactionLog interface {
 	GetLogsDetails(ctx context.Context, hour string) (UUID, []KeyValuePair[int, []byte], error)
 }
 
-// Store is a general purpose Store interface specifying methods or CRUD operations on Key & Value
-// where Value is implied to be superset of Key.
-type Store[TK any, TV any] interface {
+// StoreRepository specifies CRUD methods for StoreInfo (storage &) management.
+type StoreRepository interface {
 	// Fetch store info with name(s).
-	Get(context.Context, ...TK) ([]TV, error)
+	Get(context.Context, ...string) ([]StoreInfo, error)
 	// Fetch store info with name(s) & option to specify (caching) sliding time(TTL) duration.
-	GetWithTTL(context.Context, bool, time.Duration, ...TK) ([]TV, error)
+	GetWithTTL(context.Context, bool, time.Duration, ...string) ([]StoreInfo, error)
 	// GetAll returns list of stores available in the backend.
 	GetAll(context.Context) ([]string, error)
 	// Add store info & create related tables like for registry & for node blob.
-	Add(context.Context, ...TV) error
+	Add(context.Context, ...StoreInfo) error
 	// Update store info. Update should also merge the Count of items between the incoming store info
 	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
-	Update(context.Context, ...TV) error
+	Update(context.Context, ...StoreInfo) error
 	// Remove store info with name & drop related tables like for registry & for node blob.
-	Remove(context.Context, ...TK) error
+	Remove(context.Context, ...string) error
 }
 
 // KeyValue Store Item Action Response has the payload and the error, if in case an error occurred while doing CRUD operation.

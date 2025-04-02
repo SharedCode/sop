@@ -15,7 +15,7 @@ func DeleteBTree(t *testing.T) {
 		"barStore2", "tabley", "tablex2", "tablex", "ztab1", "videoStore",
 		"videoStoreM", "videoStoreD", "videoStoreU", "xyz", "emptystore",
 		"videoStore2", "videoStore3", "videoStore4", "videoStore5", "baStore", "barstoreec",
-		"emptyStore", "barstore2", "barstore1", "storecaching", "storecachingttl",
+		"emptyStore", "barstore2", "barstore1", "storecaching", "storecachingttl", "personvdb7",
 	}
 
 	for _, tn := range tableList {

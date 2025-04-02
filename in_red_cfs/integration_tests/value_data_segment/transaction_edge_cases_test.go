@@ -22,7 +22,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t2.Begin()
 
 	b3, err := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb7",
+		Name:                     "personvdb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -31,7 +31,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		BlobStoreBaseFolderPath:  dataPath,
 	}, t1, Compare)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "personvdb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -46,7 +46,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
 		b3, _ = in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-			Name:                     "persondb7",
+			Name:                     "personvdb7",
 			SlotLength:               nodeSlotLength,
 			IsUnique:                 false,
 			IsValueDataInNodeSegment: false,
@@ -57,7 +57,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	}
 
 	b32, _ := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb7",
+		Name:                     "personvdb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -88,7 +88,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	}
 	t1, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, false)
 	t1.Begin()
-	b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
+	b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	var person Person
 	b3.FindOne(ctx, pk2, false)
 	person, _ = b3.GetCurrentValue(ctx)
@@ -117,7 +117,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	t2.Begin()
 
 	b3, err := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb7",
+		Name:                     "personvdb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -126,7 +126,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		BlobStoreBaseFolderPath:  dataPath,
 	}, t1, Compare)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "personvdb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -140,10 +140,10 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
-		b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
+		b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
 
-	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb7", t2, Compare)
+	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t2, Compare)
 
 	// edit both "pirellis" in both btrees, one each.
 	b3.FindOne(ctx, pk, false)
@@ -174,7 +174,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	t2.Begin()
 
 	b3, err := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb7",
+		Name:                     "personvdb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -183,7 +183,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		BlobStoreBaseFolderPath:  dataPath,
 	}, t1, Compare)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "personvdb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -197,10 +197,10 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
-		b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
+		b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
 
-	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb7", t2, Compare)
+	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t2, Compare)
 
 	// Read both records.
 	b32.FindOne(ctx, pk2, false)
@@ -232,7 +232,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	t2.Begin()
 
 	b3, err := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb7",
+		Name:                     "personvdb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -241,7 +241,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		BlobStoreBaseFolderPath:  dataPath,
 	}, t1, Compare)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "personvdb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -257,10 +257,10 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		t1.Commit(ctx)
 		t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
-		b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
+		b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
 
-	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb7", t2, Compare)
+	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t2, Compare)
 
 	// Read both records.
 	b32.FindOne(ctx, pk2, false)
@@ -291,7 +291,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	t2.Begin()
 
 	b3, err := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb7",
+		Name:                     "personvdb7",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
@@ -300,7 +300,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		BlobStoreBaseFolderPath:  dataPath,
 	}, t1, Compare)
 	if err != nil {
-		t.Error(err.Error()) // most likely, the "persondb7" b-tree store has not been created yet.
+		t.Error(err.Error()) // most likely, the "personvdb7" b-tree store has not been created yet.
 		t.Fail()
 	}
 
@@ -320,10 +320,10 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		t1.Commit(ctx)
 		t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 		t1.Begin()
-		b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
+		b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
 
-	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb7", t2, Compare)
+	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t2, Compare)
 
 	b3.FindOne(ctx, pk, false)
 	ci, _ := b3.GetCurrentItem(ctx)
