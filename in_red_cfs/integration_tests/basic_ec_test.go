@@ -12,7 +12,11 @@ import (
 )
 
 func init() {
+	// Erasure Coding configuration lookup table (map).
 	ec := make(map[string]fs.ErasureCodingConfig)
+
+	// Erasure Coding config for "barstoreec" table uses three base folder paths that mimicks three disks.
+	// Two data shards and one parity shard.
 	ec["barstoreec"] = fs.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
@@ -67,7 +71,7 @@ func Test_Basic_EC(t *testing.T) {
 }
 
 func Test_Basic_EC_Get(t *testing.T) {
-	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, false, nil)
+	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForReading, -1, false, nil)
 	if err != nil {
 		t.Fatal(err.Error())
 	}

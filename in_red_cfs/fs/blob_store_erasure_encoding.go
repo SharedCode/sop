@@ -97,7 +97,7 @@ func (b *blobStore) ecGetOne(ctx context.Context, blobFilePath string, blobID so
 			md := erasure.ComputeShardMetadata(len(dr.DecodedData), shards, i)
 			buf := make([]byte, len(md)+len(shards[i]))
 
-			// TODO: refactor to write metadata then write the shard data so we don't use temp variable,
+			// Tip: consider refactor to write metadata then write the shard data so we don't use temp variable,
 			// more optimal if shard size is huge.
 			copy(buf, md)
 			copy(buf[len(md):], shards[i])

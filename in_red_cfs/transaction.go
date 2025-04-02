@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	log "log/slog"
-
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/in_red_cfs/fs"
@@ -42,12 +40,6 @@ func NewTransactionWithEC(mode sop.TransactionMode, maxTime time.Duration, loggi
 		}
 	}
 	fio := fs.NewDefaultFileIO(fs.DefaultToFilePath)
-	for _,ecc := range erasureConfig {
-		if mode != sop.ForWriting && ecc.RepairCorruptedShards {
-			log.Warn("erasureConfig.RepairCorruptedShards can only be true if transaction is in ForWriting mode, setting it to false")
-			ecc.RepairCorruptedShards = false
-		}
-	}
 	bs, err := fs.NewBlobStoreExt(fio, erasureConfig)
 	if err != nil {
 		return nil, err

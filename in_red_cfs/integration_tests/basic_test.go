@@ -14,10 +14,12 @@ import (
 	"github.com/SharedCode/sop/redis"
 )
 
+// Cassandra config.
 var cassConfig = cas.Config{
 	ClusterHosts: []string{"localhost:9042"},
 	Keyspace:     "btree",
 }
+// Redis config.
 var redisConfig = redis.Options{
 	Address:                  "localhost:6379",
 	Password:                 "", // no password set
