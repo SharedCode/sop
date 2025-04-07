@@ -6,6 +6,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/common"
+	"github.com/SharedCode/sop/in_red_cfs/fs"
 	repo "github.com/SharedCode/sop/in_red_fs/repositories"
 	"github.com/SharedCode/sop/redis"
 )
@@ -27,5 +28,6 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 	if !IsInitialized() {
 		return nil, fmt.Errorf("Redis was not initialized")
 	}
-	return common.NewTwoPhaseCommitTransaction(mode, maxTime, logging, repo.NewBlobStore(), repo.NewStoreRepository(), repo.NewRegistry(), redis.NewClient(), repo.NewTransactionLog())
+	return common.NewTwoPhaseCommitTransaction(mode, maxTime, logging, fs.NewBlobStore(nil), 
+		repo.NewStoreRepository(), repo.NewRegistry(), redis.NewClient(), repo.NewTransactionLog())
 }

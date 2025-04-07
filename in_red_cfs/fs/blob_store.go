@@ -68,7 +68,7 @@ func newBlobStoreExt(fileIO FileIO, erasureConfig map[string]ErasureCodingConfig
 		}
 	}
 	if fileIO == nil {
-		fileIO = DefaultFileIO{}
+		fileIO = NewDefaultFileIO(DefaultToFilePath)
 	}
 	return &blobStore{
 		fileIO:                      fileIO,
