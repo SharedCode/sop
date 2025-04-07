@@ -256,6 +256,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 			log.Debug(fmt.Sprintf("inside commitUpdatedNodes(%d:%d) forloop blobTable %s UUID %s trying to AllocateID", i, ii, blobs[i].BlobTable, handles[i].IDs[ii].LogicalID.String()))
 			// Node with such ID is marked deleted or had been updated since reading it.
 			if (handles[i].IDs[ii].IsDeleted && !handles[i].IDs[ii].IsExpiredInactive()) || handles[i].IDs[ii].Version != nodes[i].Second[ii].(btree.MetaDataType).GetVersion() {
+				log.Debug(fmt.Sprintf("inside commitUpdatedNodes(%d:%d), exiting, ID marked deleted or was updated since read", i, ii))
 				return false, nil, nil
 			}
 			if handles[i].IDs[ii].IsDeleted && handles[i].IDs[ii].IsExpiredInactive() {
@@ -273,6 +274,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 			}
 			if id == sop.NilUUID {
 				// Return false as there is an ongoing update on node by another transaction.
+				log.Debug(fmt.Sprintf("inside commitUpdatedNodes(%d:%d), exiting, as another transaction has ongoing update", i, ii))
 				return false, nil, nil
 			}
 			blobs[i].Blobs[ii].Key = id
@@ -286,16 +288,19 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 	log.Debug("outside commitUpdatedNodes forloop trying to AllocateID")
 
 	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
+		log.Debug(fmt.Sprintf("failed registry.Update, details: %v", err))
 		return false, nil, err
 	}
 
 	// 2nd pass, persist the nodes blobs to blob store and redis cache.
 	if err := nr.transaction.blobStore.Add(ctx, blobs...); err != nil {
+		log.Debug(fmt.Sprintf("failed blobStore.Add, details: %v", err))
 		return false, nil, err
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Second {
 			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
+				log.Debug(fmt.Sprintf("failed redisCache.SetStruct, details: %v", err))
 				return false, nil, err
 			}
 		}
