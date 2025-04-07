@@ -1,4 +1,4 @@
-package in_red_ck
+package common
 
 import (
 	"context"
@@ -314,7 +314,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Tu
 	if err != nil {
 		return false, nil, err
 	}
-	rightNow := Now().UnixMilli()
+	rightNow := sop.Now().UnixMilli()
 	for i := range handles {
 		for ii := range handles[i].IDs {
 			// Node with such ID is already marked deleted, is in-flight change or had been updated since reading it,

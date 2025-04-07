@@ -16,7 +16,7 @@ import (
 )
 
 type storeRepository struct {
-	redisCache      redis.Cache
+	cache      sop.Cache
 	manageBlobStore sop.ManageBlobStore
 }
 
@@ -29,7 +29,7 @@ func NewStoreRepository() sop.StoreRepository {
 // for managing Blob Store table in Cassandra.
 func NewStoreRepositoryExt(manageBlobStore sop.ManageBlobStore) sop.StoreRepository {
 	r := &storeRepository{
-		redisCache:      redis.NewClient(),
+		cache:      redis.NewClient(),
 		manageBlobStore: manageBlobStore,
 	}
 	// Default to an implementation of this Store Repository for managing the blob table in Cassandra.
@@ -75,7 +75,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 			return err
 		}
 		// Tolerate error in Redis caching.
-		if err := sr.redisCache.SetStruct(ctx, s.Name, &s, s.CacheConfig.StoreInfoCacheDuration); err != nil {
+		if err := sr.cache.SetStruct(ctx, s.Name, &s, s.CacheConfig.StoreInfoCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository Add failed (redis setstruct), details: %v", err))
 		}
 	}
@@ -151,7 +151,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 				continue
 			}
 			// Tolerate redis error since we've successfully updated the master table.
-			if err := sr.redisCache.SetStruct(ctx, si.Name, &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
+			if err := sr.cache.SetStruct(ctx, si.Name, &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("StoreRepository Update Undo (redis setstruct) store %s failed, details: %v", si.Name, err))
 			}
 		}
@@ -185,7 +185,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			return err
 		}
 		// Tolerate redis error since we've successfully updated the master table.
-		if err := sr.redisCache.SetStruct(ctx, stores[i].Name, &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
+		if err := sr.cache.SetStruct(ctx, stores[i].Name, &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) failed, details: %v", err))
 		}
 	}
@@ -233,9 +233,9 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 		store := sop.StoreInfo{}
 		var err error
 		if isCacheTTL {
-			err = sr.redisCache.GetStructEx(ctx, names[i], &store, cacheDuration)
+			err = sr.cache.GetStructEx(ctx, names[i], &store, cacheDuration)
 		} else {
-			err = sr.redisCache.GetStruct(ctx, names[i], &store)
+			err = sr.cache.GetStruct(ctx, names[i], &store)
 		}
 		if err != nil {
 			if !redis.KeyNotFound(err) {
@@ -267,7 +267,7 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 		&store.CacheConfig.ValueDataCacheDuration, &store.CacheConfig.IsValueDataCacheTTL, &store.CacheConfig.StoreInfoCacheDuration, &store.CacheConfig.IsStoreInfoCacheTTL) {
 		store.RootNodeID = sop.UUID(rid)
 
-		if err := sr.redisCache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
+		if err := sr.cache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository Get (redis setstruct) failed, details: %v", err))
 		}
 
@@ -310,7 +310,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	// Delete the store records in Redis.
 	for i := range names {
 		// Tolerate Redis cache failure.
-		if err := sr.redisCache.Delete(ctx, names[i]); err != nil && !redis.KeyNotFound(err) {
+		if err := sr.cache.Delete(ctx, names[i]); err != nil && !redis.KeyNotFound(err) {
 			log.Warn(fmt.Sprintf("Registry Add (redis setstruct) failed, details: %v", err))
 		}
 	}

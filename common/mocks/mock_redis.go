@@ -1,4 +1,4 @@
-package redis
+package mocks
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
 )
 
@@ -14,7 +15,7 @@ type mockRedis struct {
 }
 
 // Returns a new Redis mock client.
-func NewMockClient() Cache {
+func NewMockClient() sop.Cache {
 	return &mockRedis{
 		lookup: make(map[string][]byte),
 	}
