@@ -1,19 +1,18 @@
-package in_red_ck
+package common
 
 import (
 	"testing"
 	"time"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_ck/mocks"
-	"github.com/SharedCode/sop/redis"
+	"github.com/SharedCode/sop/common/mocks"
 )
 
 // Global mock repositories will allow us to simulate repositories that persists state
 // between transaction(commit).
 var mockStoreRepository = mocks.NewMockStoreRepository()
 var mockRegistry = mocks.NewMockRegistry(false)
-var mockRedisCache = redis.NewMockClient()
+var mockRedisCache = mocks.NewMockClient()
 var mockNodeBlobStore = mocks.NewMockBlobStore()
 
 // newMockTransaction instantiates a mocked transaction, i.e. - it uses in-memory Repositories as backend, not Cassandra.

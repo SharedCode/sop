@@ -1,4 +1,4 @@
-package in_red_ck
+package common
 
 import (
 	"testing"
@@ -53,7 +53,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	Now = func() time.Time { return yesterday }
+	//Now = func() time.Time { return yesterday }
 
 	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
 	trans.Begin()
@@ -94,7 +94,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	today := time.Now()
 	cas.Now = func() time.Time { return today }
 	sop.Now = func() time.Time { return today }
-	Now = func() time.Time { return today }
+	//Now = func() time.Time { return today }
 
 	tid, _, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
 	if tid.IsNil() {

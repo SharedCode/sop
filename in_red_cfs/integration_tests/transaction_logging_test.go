@@ -8,7 +8,6 @@ import (
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/in_red_cfs"
-	"github.com/SharedCode/sop/in_red_ck"
 )
 
 func MultipleExpiredTransCleanup(t *testing.T) {
@@ -18,7 +17,6 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday := time.Now().Add(time.Duration(-48 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
 
 	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
@@ -44,7 +42,6 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now().Add(time.Duration(-47 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
@@ -59,7 +56,6 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now().Add(time.Duration(-46 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 	trans.Begin()
@@ -73,7 +69,6 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now()
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
 
@@ -86,7 +81,6 @@ func Cleanup(t *testing.T) {
 	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
 
 	trans, _ := in_red_cfs.NewTransaction(sop.ForReading, -1, true)
 	trans.Begin()
@@ -96,7 +90,6 @@ func Cleanup(t *testing.T) {
 	yesterday = time.Now().Add(-time.Duration(23*time.Hour + 54*time.Minute))
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
-	in_red_ck.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, true)
 	trans.Begin()

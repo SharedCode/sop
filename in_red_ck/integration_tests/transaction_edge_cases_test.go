@@ -8,6 +8,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/common"
 	"github.com/SharedCode/sop/in_red_ck"
 )
 
@@ -23,7 +24,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t1.Begin()
 	t2.Begin()
 
-	b3, err := in_red_ck.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+	b3, err := common.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,

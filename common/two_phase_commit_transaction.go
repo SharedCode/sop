@@ -1,4 +1,4 @@
-package in_red_ck
+package common
 
 import (
 	"context"
@@ -36,7 +36,7 @@ type transaction struct {
 	btreesBackend []btreeBackend
 	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
 	blobStore       sop.BlobStore
-	redisCache      redis.Cache
+	redisCache      sop.Cache
 	storeRepository sop.StoreRepository
 	// VirtualIDRegistry manages the virtual IDs, a.k.a. "handle".
 	registry sop.Registry
@@ -51,23 +51,12 @@ type transaction struct {
 	removedNodeHandles []sop.RegistryPayload[sop.Handle]
 }
 
-// Use lambda for time.Now so automated test can replace with replayable time if needed.
-var Now = time.Now
-
-// NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
-func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
-	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging, cas.NewBlobStore(), cas.NewStoreRepository())
-	if err != nil {
-		return nil, err
-	}
-	return sop.NewTransaction(mode, twoPT, maxTime, logging)
-}
-
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
 // If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
 // However, without logging, the transaction commit can execute faster because there is no data getting logged.
-func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool, blobStore sop.BlobStore, storeRepository sop.StoreRepository) (sop.TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool,
+	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, cache sop.Cache, transactionLog sop.TransactionLog) (sop.TwoPhaseCommitTransaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
 		maxTime = time.Duration(15 * time.Minute)
@@ -76,17 +65,14 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 	if maxTime > time.Duration(1*time.Hour) {
 		maxTime = time.Duration(1 * time.Hour)
 	}
-	if !IsInitialized() {
-		return nil, fmt.Errorf("Redis and/or Cassandra bits were not initialized")
-	}
 	return &transaction{
 		mode:            mode,
 		maxTime:         maxTime,
 		storeRepository: storeRepository,
-		registry:        cas.NewRegistry(),
-		redisCache:      redis.NewClient(),
+		registry:        registry,
+		redisCache:      cache,
 		blobStore:       blobStore,
-		logger:          newTransactionLogger(nil, logging),
+		logger:          newTransactionLogger(transactionLog, logging),
 		phaseDone:       -1,
 	}, nil
 }
@@ -117,12 +103,12 @@ func (t *transaction) onIdle(ctx context.Context) {
 	if hourBeingProcessed != "" {
 		interval = 5
 	}
-	nextRunTime := Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
+	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
 	if lastOnIdleRunTime < nextRunTime {
 		runTime := false
 		locker.Lock()
 		if lastOnIdleRunTime < nextRunTime {
-			lastOnIdleRunTime = Now().UnixMilli()
+			lastOnIdleRunTime = sop.Now().UnixMilli()
 			runTime = true
 		}
 		locker.Unlock()
@@ -175,7 +161,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 	}
 	if err := t.phase2Commit(ctx); err != nil {
 		if _, ok := err.(*cas.UpdateAllOrNothingError); ok {
-			startTime := Now()
+			startTime :=sop.Now()
 			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
 			// until it succeeds or timeout.
 			for {
@@ -244,7 +230,7 @@ func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if Now().Sub(startTime).Minutes() > float64(t.maxTime) {
+	if sop.Now().Sub(startTime).Minutes() > float64(t.maxTime) {
 		return fmt.Errorf("transaction timed out(maxTime=%v)", t.maxTime)
 	}
 	return nil
@@ -292,7 +278,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
 	var updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]
 
-	startTime := Now()
+	startTime := sop.Now()
 	successful := false
 	for !successful {
 
@@ -660,7 +646,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 		return nil
 	}
 	// For a reader transaction, conflict check is enough.
-	startTime := Now()
+	startTime := sop.Now()
 	for {
 		log.Debug("inside reader trans phase 2 commit")
 
@@ -763,7 +749,7 @@ func (t *transaction) commitStores(ctx context.Context) error {
 		s2 := *store
 		// Compute the count delta so Store Repository can reconcile for commit.
 		s2.CountDelta = s2.Count - t.btreesBackend[i].nodeRepository.count
-		s2.Timestamp = Now().UnixMilli()
+		s2.Timestamp = sop.Now().UnixMilli()
 		stores[i] = s2
 	}
 	return t.storeRepository.Update(ctx, stores...)

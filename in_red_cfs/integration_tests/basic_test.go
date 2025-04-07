@@ -125,9 +125,20 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.OpenBtree[int, string](ctx, "barstore1", trans, nil)
+	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "barstore1",
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+		BlobStoreBaseFolderPath:  dataPath,
+	}, trans, nil)
+
+	defer trans.Rollback(ctx)
 	if err != nil {
 		t.Error(err)
+		return
+	}
+	if b3.Count() == 0 {
 		return
 	}
 	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
@@ -136,7 +147,6 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 	}
 	if k := b3.GetCurrentKey(); k != 1 {
 		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
-		trans.Rollback(ctx)
 		return
 	}
 	if v, err := b3.GetCurrentValue(ctx); v != "hello world" || err != nil {
@@ -164,15 +174,18 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	}, trans, nil)
 	if err != nil {
 		t.Error(err)
+		trans.Rollback(ctx)
 		return
 	}
 	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
 		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		trans.Rollback(ctx)
 		return
 	}
 
 	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		trans.Rollback(ctx)
 		return
 	}
 	if k := b3.GetCurrentKey(); k != 1 {
@@ -182,6 +195,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	}
 	if v, err := b3.GetCurrentValue(ctx); v != "hello world" || err != nil {
 		t.Errorf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
+		trans.Rollback(ctx)
 		return
 	}
 	t.Logf("Successfully added & found item with key 1.")

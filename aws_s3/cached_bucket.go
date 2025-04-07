@@ -15,7 +15,7 @@ import (
 )
 
 type cachedBucket struct {
-	redisCache       redis.Cache
+	redisCache       sop.Cache
 	bucketStore      *S3Bucket
 	refreshInterval  time.Duration
 	cacheExpiry      time.Duration

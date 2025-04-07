@@ -1,11 +1,10 @@
-package in_red_ck
+package common
 
 import (
 	"context"
 	"encoding/json"
 
 	"github.com/SharedCode/sop"
-	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/gocql/gocql"
 )
 
@@ -41,20 +40,16 @@ type transactionLog struct {
 
 // Instantiate a transaction logger.
 func newTransactionLogger(logger sop.TransactionLog, logging bool) *transactionLog {
-	if logger == nil {
-		logger = cas.NewTransactionLog()
-	}
-
 	return &transactionLog{
 		logger:        logger,
 		logging:       logging,
-		transactionID: sop.UUID(gocql.UUIDFromTime(Now().UTC())),
+		transactionID: sop.UUID(gocql.UUIDFromTime(sop.Now().UTC())),
 	}
 }
 
 // Assign new UUID to the transactionID field.
 func (tl *transactionLog) setNewTID() {
-	tl.transactionID = sop.UUID(gocql.UUIDFromTime(Now().UTC()))
+	tl.transactionID = sop.UUID(gocql.UUIDFromTime(sop.Now().UTC()))
 }
 
 // Log the about to be committed function state.

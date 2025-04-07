@@ -7,33 +7,15 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
 )
-
-// Cache interface specifies the methods implemented for Redis caching.
-// String key and interface{} value are the supported types.
-type Cache interface {
-	Set(ctx context.Context, key string, value string, expiration time.Duration) error
-	Get(ctx context.Context, key string) (string, error)
-	GetEx(ctx context.Context, key string, expiration time.Duration) (string, error)
-
-	// SetStruct upserts a given object with a key to it.
-	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
-	// GetStruct fetches a given object given a key.
-	GetStruct(ctx context.Context, key string, target interface{}) error
-	// GetStruct fetches a given object given a key in a TTL manner, that is, sliding time.
-	GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) error
-	// Delete removes the object given a key.
-	Delete(ctx context.Context, keys ...string) error
-	// Ping is a utility function to check if connection is good.
-	Ping(ctx context.Context) error
-}
 
 type client struct{}
 
 // Checks if Redis connection is open and returns the client interface if it is,
 // otherwise returns an error.
-func NewClient() Cache {
+func NewClient() sop.Cache {
 	return &client{}
 }
 

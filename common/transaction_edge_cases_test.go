@@ -1,10 +1,10 @@
-package in_red_ck
+package common
 
 import (
 	"testing"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_ck/mocks"
+	"github.com/SharedCode/sop/common/mocks"
 )
 
 // Covers all of these cases:

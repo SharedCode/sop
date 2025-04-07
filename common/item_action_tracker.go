@@ -1,4 +1,4 @@
-package in_red_ck
+package common
 
 import (
 	"context"
@@ -39,13 +39,13 @@ type itemActionTracker[TK btree.Comparable, TV any] struct {
 	storeInfo        *sop.StoreInfo
 	items            map[sop.UUID]cacheItem[TK, TV]
 	forDeletionItems []sop.UUID
-	redisCache       redis.Cache
+	redisCache       sop.Cache
 	blobStore        sop.BlobStore
 	tlogger          *transactionLog
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
-func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *sop.StoreInfo, redisCache redis.Cache, blobStore sop.BlobStore, tl *transactionLog) *itemActionTracker[TK, TV] {
+func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *sop.StoreInfo, redisCache sop.Cache, blobStore sop.BlobStore, tl *transactionLog) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
 		storeInfo:  storeInfo,
 		items:      make(map[sop.UUID]cacheItem[TK, TV]),
