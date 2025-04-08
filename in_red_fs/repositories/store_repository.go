@@ -7,6 +7,8 @@ import (
 	"github.com/SharedCode/sop"
 )
 
+// TODO: use hash map on disk algorithm for StoreRepository & Registry.
+
 // mockStoreRepository is a simple in-memory implementation of store repository to demonstrate
 // or mockup the structure composition, so we can define it in preparation of v2.
 type mockStoreRepository struct {

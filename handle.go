@@ -20,7 +20,7 @@ type Handle struct {
 	// true if active ID is physicalIDB, otherwise false.
 	IsActiveIDB bool
 	// Current state(active ID, final deleted state) version.
-	Version int
+	Version int32
 	// Work in progress(inactive ID, non final deleted state) timestamp in milliseconds.
 	WorkInProgressTimestamp int64
 	// IsDeleted is used for "logical" deletes.
