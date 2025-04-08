@@ -6,7 +6,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/common"
-	"github.com/SharedCode/sop/in_red_cfs/fs"
+	"github.com/SharedCode/sop/fs"
 	repo "github.com/SharedCode/sop/in_red_fs/repositories"
 	"github.com/SharedCode/sop/redis"
 )

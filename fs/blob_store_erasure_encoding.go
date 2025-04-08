@@ -7,7 +7,7 @@ import (
 	log "log/slog"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_cfs/fs/erasure"
+	"github.com/SharedCode/sop/fs/erasure"
 )
 
 const (

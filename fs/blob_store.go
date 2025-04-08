@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_cfs/fs/erasure"
+	"github.com/SharedCode/sop/fs/erasure"
 )
 
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.

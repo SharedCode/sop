@@ -9,7 +9,7 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/cassandra"
-	"github.com/SharedCode/sop/in_red_cfs/fs"
+	"github.com/SharedCode/sop/fs"
 	"github.com/SharedCode/sop/in_red_ck"
 	sd "github.com/SharedCode/sop/streaming_data"
 )
