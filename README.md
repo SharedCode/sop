@@ -12,6 +12,7 @@ Anatomy of a Video Blob: https://www.linkedin.com/pulse/sop-anatomy-video-blob-g
 B-Tree, a Native of the Cluster: https://www.linkedin.com/pulse/b-tree-native-cluster-gerardo-recinto-chmjc/?trackingId=oZmC6tUHSiCBcYXUqwfGUQ%3D%3D
 
 SOP in File System: https://www.linkedin.com/pulse/scaleable-object-persistencesop-file-system-gerardo-recinto-zplbc/?trackingId=jPp8ccwvQEydxt3pppa8eg%3D%3D
+
 Hash Map on Disk: https://www.linkedin.com/posts/coolguru_hash-map-on-a-file-can-offer-up-to-13-activity-7313645523024891905-8yem?utm_source=share&utm_medium=member_desktop&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
 
 # Software Based Efficient Replication
