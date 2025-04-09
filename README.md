@@ -208,7 +208,7 @@ func (ff *fileFormatter)MyToFilePath(basePath string, id sop.UUID) string {
 	// then you can assemble a new drive/dir path that does horizontal partitioning based off of the 1st component of UUID.
 
 	drvIndex := id[0] % 4
-	return fmt.Spring(basePath, ff.driveLookup[drvIndex])
+	return fmt.Sprintf(basePath, ff.driveLookup[drvIndex])
 }
 ```
 
