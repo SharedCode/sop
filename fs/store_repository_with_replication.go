@@ -16,18 +16,21 @@ type storeRepositoryWithReplication struct {
 	cache       sop.Cache
 	fileIO FileIO
 	manageStore sop.ManageStore
-	// Replication across two folders.
-	storesBaseFolders []string
+	// For use in replication across two folders.
+	storesFolders []string
 }
 
 // NewStoreRepository manages the StoreInfo in a File System.
-func NewStoreRepositoryWithReplication(storesBaseFolders []string, manageStore sop.ManageStore, cache sop.Cache) sop.StoreRepository {
+func NewStoreRepositoryWithReplication(storesFolders []string, manageStore sop.ManageStore, cache sop.Cache) (sop.StoreRepository, error) {
+	if len(storesFolders) != 2 {
+		return nil, fmt.Errorf("storesFolders needs to be exactly two elements")
+	}
 	return &storeRepositoryWithReplication{
 		cache:       cache,
 		manageStore: manageStore,
 		fileIO: NewDefaultFileIO(DefaultToFilePath),
-		storesBaseFolders : storesBaseFolders,
-	}
+		storesFolders : storesFolders,
+	}, nil
 }
 
 func (sr *storeRepositoryWithReplication) Add(ctx context.Context, stores ...sop.StoreInfo) error {

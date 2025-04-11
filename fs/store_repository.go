@@ -20,13 +20,16 @@ type storeRepository struct {
 }
 
 // NewStoreRepository manages the StoreInfo in a File System.
-func NewStoreRepository(storesBaseFolder string, manageStore sop.ManageStore, cache sop.Cache) sop.StoreRepository {
+func NewStoreRepository(storesBaseFolder string, manageStore sop.ManageStore, cache sop.Cache) (sop.StoreRepository, error) {
+	if storesBaseFolder == "" {
+		return nil, fmt.Errorf("storesBaseFolder can't be empty string")
+	}
 	return &storeRepository{
 		cache:       cache,
 		manageStore: manageStore,
 		fileIO: NewDefaultFileIO(DefaultToFilePath),
 		storesBaseFolder: storesBaseFolder,
-	}
+	}, nil
 }
 
 func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
@@ -34,7 +37,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		if err := sr.manageStore.CreateStore(ctx, store.BlobTable); err != nil {
 			return err
 		}
-		// Persiste store info into a JSON text file.
+		// Persist store info into a JSON text file.
 		fn := fmt.Sprintf("%s%cstoreinfo.txt", store.BlobTable, os.PathSeparator)
 		ba, err := json.Marshal(store)
 		if err != nil {

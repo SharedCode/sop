@@ -11,7 +11,7 @@ import (
 	"github.com/SharedCode/sop/fs"
 )
 
-func init() {
+func initErasureCoding() {
 	// Erasure Coding configuration lookup table (map).
 	ec := make(map[string]fs.ErasureCodingConfig)
 

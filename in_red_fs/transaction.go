@@ -30,12 +30,25 @@ func NewTwoPhaseCommitTransaction(storesBaseFolder string, mode sop.TransactionM
 	if cache == nil {
 		cache = redis.NewClient()
 	}
-	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, fs.NewBlobStore(nil),
-		fs.NewStoreRepository(storesBaseFolder, nil, cache), fs.NewRegistry(), cache, fs.NewTransactionLog())
+	sr, err := fs.NewStoreRepository(storesBaseFolder, nil, cache)
+	if err != nil {
+		return nil, err
+	}
+	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, fs.NewBlobStore(nil), sr, fs.NewRegistry(), cache, fs.NewTransactionLog())
 }
 
 // Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
 func NewTransactionWithReplication(storesBaseFolders []string, mode sop.TransactionMode, maxTime time.Duration, cache sop.Cache, erasureConfig map[string]fs.ErasureCodingConfig) (sop.Transaction, error) {
+	twoPT, err := NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders, mode, maxTime, cache, erasureConfig)
+	if err != nil {
+		return nil, err
+	}
+	return sop.NewTransaction(mode, twoPT, maxTime, true)
+}
+
+// Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
+// Returns sop.TwoPhaseCommitTransaction type useful for integration with your custom application transaction where code would like to get access to SOP's two phase commit transaction API.
+func NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders []string, mode sop.TransactionMode, maxTime time.Duration, cache sop.Cache, erasureConfig map[string]fs.ErasureCodingConfig) (sop.TwoPhaseCommitTransaction, error) {
 	if erasureConfig == nil {
 		erasureConfig = fs.GetGlobalErasureConfig()
 		if erasureConfig == nil {
@@ -55,10 +68,9 @@ func NewTransactionWithReplication(storesBaseFolders []string, mode sop.Transact
 	if !IsInitialized() {
 		return nil, fmt.Errorf("Redis was not initialized")
 	}
-	twoPT, err := common.NewTwoPhaseCommitTransaction(mode, maxTime, true, bs,
-		fs.NewStoreRepositoryWithReplication(storesBaseFolders, mbsf, cache), fs.NewRegistry(), cache, fs.NewTransactionLog())
+	sr, err := fs.NewStoreRepositoryWithReplication(storesBaseFolders, mbsf, cache)
 	if err != nil {
 		return nil, err
 	}
-	return sop.NewTransaction(mode, twoPT, maxTime, true)
+	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, bs, sr, fs.NewRegistry(), cache, fs.NewTransactionLog())
 }

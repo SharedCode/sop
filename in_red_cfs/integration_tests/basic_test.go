@@ -37,6 +37,9 @@ func init() {
 	log.SetDefault(l) // configures log package to print with LevelInfo
 
 	in_red_cfs.Initialize(cassConfig, redisConfig)
+
+	// Initialize Erasure Coding (EC) for the EC tests.
+	initErasureCoding()
 }
 
 var ctx = context.Background()
