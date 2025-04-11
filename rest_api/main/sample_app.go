@@ -12,7 +12,7 @@ import (
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/in_red_cfs"
-	"github.com/SharedCode/sop/in_red_cfs/fs"
+	"github.com/SharedCode/sop/fs"
 	"github.com/SharedCode/sop/redis"
 
 	"github.com/SharedCode/sop/rest_api"

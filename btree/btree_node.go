@@ -13,9 +13,9 @@ type MetaDataType interface {
 	// Returns the object's ID.
 	GetID() sop.UUID
 	// Returns the object's version.
-	GetVersion() int
+	GetVersion() int32
 	// Applies a version to the object.
-	SetVersion(v int)
+	SetVersion(v int32)
 }
 
 // Item contains key & value pair, plus the version number.
@@ -31,7 +31,7 @@ type Item[TK Comparable, TV any] struct {
 	// otherwise it should point to the actual data and persisted in B-Tree Node segment together with the Key.
 	Value *TV
 	// Version is used for conflict resolution among (in-flight) transactions.
-	Version int
+	Version int32
 	// flag that tells B-Tree whether value data needs fetching or not.
 	// Applicable only for B-Tree where 'IsValueDataInNodeSegment' is false use-case.
 	ValueNeedsFetch bool
@@ -56,7 +56,7 @@ type Node[TK Comparable, TV any] struct {
 	// Count of items in this node.
 	Count int
 	// Version of this node.
-	Version int
+	Version int32
 	// Children IDs of this node.
 	ChildrenIDs []sop.UUID
 	indexOfNode int
@@ -65,10 +65,10 @@ type Node[TK Comparable, TV any] struct {
 func (n *Node[TK, TV]) GetID() sop.UUID {
 	return n.ID
 }
-func (n *Node[TK, TV]) GetVersion() int {
+func (n *Node[TK, TV]) GetVersion() int32 {
 	return n.Version
 }
-func (n *Node[TK, TV]) SetVersion(v int) {
+func (n *Node[TK, TV]) SetVersion(v int32) {
 	n.Version = v
 }
 

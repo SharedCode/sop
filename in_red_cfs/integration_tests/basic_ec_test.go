@@ -8,10 +8,10 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_cfs"
-	"github.com/SharedCode/sop/in_red_cfs/fs"
+	"github.com/SharedCode/sop/fs"
 )
 
-func init() {
+func initErasureCoding() {
 	// Erasure Coding configuration lookup table (map).
 	ec := make(map[string]fs.ErasureCodingConfig)
 

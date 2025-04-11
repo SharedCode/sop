@@ -6,7 +6,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
-	"github.com/SharedCode/sop/in_red_cfs/fs"
+	"github.com/SharedCode/sop/fs"
 	"github.com/SharedCode/sop/in_red_ck"
 )
 
@@ -19,12 +19,12 @@ func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging boo
 // that can allow you to implement your logic to partition the blob files into different storage drives for example, of your liking.
 // Perhaps based on the first hex letter of the GUID and/or in combination of the blob store's base folder path.
 //
-// See SOP FileSystem(sop/in_red-cfs/fs) package's DefaultToFilePath function for an example how to implement one.
+// See SOP FileSystem(sop/fs) package's DefaultToFilePath function for an example how to implement one.
 func NewTransactionExt(toFilePath fs.ToFilePathFunc, mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
 	fio := fs.NewDefaultFileIO(toFilePath)
 	bs := fs.NewBlobStore(fio)
-	mbsf := fs.NewManageBlobStoreFolder(fio)
-	twoPT, err := in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepositoryExt(mbsf))
+	mbsf := fs.NewManageStoreFolder(fio)
+	twoPT, err := in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepository(mbsf))
 	if err != nil {
 		return nil, err
 	}
@@ -40,12 +40,12 @@ func NewTransactionWithEC(mode sop.TransactionMode, maxTime time.Duration, loggi
 		}
 	}
 	fio := fs.NewDefaultFileIO(fs.DefaultToFilePath)
-	bs, err := fs.NewBlobStoreExt(fio, erasureConfig)
+	bs, err := fs.NewBlobStoreWithEC(fio, erasureConfig)
 	if err != nil {
 		return nil, err
 	}
-	mbsf := fs.NewManageBlobStoreFolder(fio)
-	twoPT, err := in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepositoryExt(mbsf))
+	mbsf := fs.NewManageStoreFolder(fio)
+	twoPT, err := in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepository(mbsf))
 	if err != nil {
 		return nil, err
 	}

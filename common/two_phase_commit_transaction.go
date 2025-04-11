@@ -161,7 +161,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 	}
 	if err := t.phase2Commit(ctx); err != nil {
 		if _, ok := err.(*cas.UpdateAllOrNothingError); ok {
-			startTime :=sop.Now()
+			startTime := sop.Now()
 			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
 			// until it succeeds or timeout.
 			for {
@@ -224,7 +224,6 @@ func (t *transaction) HasBegun() bool {
 func (t *transaction) GetStores(ctx context.Context) ([]string, error) {
 	return t.storeRepository.GetAll(ctx)
 }
-
 
 func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
 	if ctx.Err() != nil {
@@ -354,6 +353,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 				return fmt.Errorf("phase 1 commit failed, then rollback errored with: %v", rerr)
 			}
 
+			log.Debug("commit failed, refetch, remerge & another commit try will occur after randomSleep")
 			randomSleep(ctx)
 
 			if err = t.refetchAndMergeModifications(ctx); err != nil {

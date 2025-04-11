@@ -9,7 +9,7 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/cassandra"
-	"github.com/SharedCode/sop/in_red_cfs/fs"
+	"github.com/SharedCode/sop/fs"
 	"github.com/SharedCode/sop/in_red_ck"
 	sd "github.com/SharedCode/sop/streaming_data"
 )
@@ -50,8 +50,8 @@ func RemoveBtree(ctx context.Context, name string) error {
 // based blob store implementation.
 func NewStoreRepository() sop.StoreRepository {
 	fio := fs.DefaultFileIO{}
-	mbsf := fs.NewManageBlobStoreFolder(fio)
-	return cas.NewStoreRepositoryExt(mbsf)
+	mbsf := fs.NewManageStoreFolder(fio)
+	return cas.NewStoreRepository(mbsf)
 }
 
 // NewStreamingDataStore is a convenience function to easily instantiate a streaming data store that stores

@@ -429,7 +429,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 }
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
-	sr := cas.NewStoreRepository()
+	sr := cas.NewStoreRepository(nil)
 	sr.Remove(ctx, "twophase2")
 
 	t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)

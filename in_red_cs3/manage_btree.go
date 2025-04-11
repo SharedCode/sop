@@ -55,7 +55,7 @@ func NewStoreRepository(s3Client *s3.Client, region string) (sop.StoreRepository
 	if err != nil {
 		return nil, err
 	}
-	return cas.NewStoreRepositoryExt(mbs), nil
+	return cas.NewStoreRepository(mbs), nil
 }
 
 // NewStreamingDataStore is a convenience function to easily instantiate a streaming data store that stores

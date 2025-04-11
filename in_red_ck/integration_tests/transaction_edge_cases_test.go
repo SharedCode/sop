@@ -417,7 +417,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 }
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
-	sr := cas.NewStoreRepository()
+	sr := cas.NewStoreRepository(nil)
 	sr.Remove(ctx, "twophase3")
 
 	t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
@@ -504,7 +504,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 - A commit with full conflict: retry success
 */
 func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
-	sr := cas.NewStoreRepository()
+	sr := cas.NewStoreRepository(nil)
 	sr.Remove(ctx, "tablex")
 
 	t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
@@ -587,7 +587,7 @@ One or both of these two should fail:
 - A commit with full conflict.
 */
 func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
-	sr := cas.NewStoreRepository()
+	sr := cas.NewStoreRepository(nil)
 	sr.Remove(ctx, "tablex2")
 
 	t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
@@ -671,7 +671,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 - A commit with full conflict on update: rollback
 */
 func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
-	sr := cas.NewStoreRepository()
+	sr := cas.NewStoreRepository(nil)
 	sr.Remove(ctx, "tabley")
 
 	t1, _ := in_red_ck.NewTransaction(sop.ForWriting, -1, false)
