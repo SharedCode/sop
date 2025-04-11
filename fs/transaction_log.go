@@ -1,4 +1,4 @@
-package repositories
+package fs
 
 import (
 	"context"

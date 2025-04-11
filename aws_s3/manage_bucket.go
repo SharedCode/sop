@@ -16,7 +16,7 @@ type manageBucket struct {
 	region   string
 }
 
-func NewManageBucket(s3Client *s3.Client, region string) (sop.ManageBlobStore, error) {
+func NewManageBucket(s3Client *s3.Client, region string) (sop.ManageStore, error) {
 	if s3Client == nil {
 		return nil, fmt.Errorf("s3Client parameter can't be nil")
 	}
@@ -26,7 +26,7 @@ func NewManageBucket(s3Client *s3.Client, region string) (sop.ManageBlobStore, e
 	}, nil
 }
 
-func (mb *manageBucket) CreateBlobStore(ctx context.Context, bucketName string) error {
+func (mb *manageBucket) CreateStore(ctx context.Context, bucketName string) error {
 	_, err := mb.S3Client.CreateBucket(ctx, &s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),
 		CreateBucketConfiguration: &types.CreateBucketConfiguration{
@@ -39,7 +39,7 @@ func (mb *manageBucket) CreateBlobStore(ctx context.Context, bucketName string) 
 	return nil
 }
 
-func (mb *manageBucket) RemoveBlobStore(ctx context.Context, bucketName string) error {
+func (mb *manageBucket) RemoveStore(ctx context.Context, bucketName string) error {
 	if err := mb.removeContents(ctx, bucketName); err != nil {
 		return err
 	}

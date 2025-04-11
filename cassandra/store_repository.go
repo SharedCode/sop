@@ -16,20 +16,16 @@ import (
 )
 
 type storeRepository struct {
-	cache      sop.Cache
-	manageBlobStore sop.ManageBlobStore
-}
-
-func NewStoreRepository() sop.StoreRepository {
-	return NewStoreRepositoryExt(nil)
+	cache           sop.Cache
+	manageBlobStore sop.ManageStore
 }
 
 // NewStoreRepository manages the StoreInfo in Cassandra table.
 // Passing in nil to "managedBlobStore" will use default implementation in StoreRepository itself
 // for managing Blob Store table in Cassandra.
-func NewStoreRepositoryExt(manageBlobStore sop.ManageBlobStore) sop.StoreRepository {
+func NewStoreRepository(manageBlobStore sop.ManageStore) sop.StoreRepository {
 	r := &storeRepository{
-		cache:      redis.NewClient(),
+		cache:           redis.NewClient(),
 		manageBlobStore: manageBlobStore,
 	}
 	// Default to an implementation of this Store Repository for managing the blob table in Cassandra.
@@ -60,7 +56,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		}
 
 		// Create a new Blob table.
-		if err := sr.manageBlobStore.CreateBlobStore(ctx, s.BlobTable); err != nil {
+		if err := sr.manageBlobStore.CreateStore(ctx, s.BlobTable); err != nil {
 			return err
 		}
 
@@ -318,7 +314,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	for i, n := range names {
 		// Drop Blob table.
 		if i < len(sis) {
-			if err := sr.manageBlobStore.RemoveBlobStore(ctx, sis[i].BlobTable); err != nil {
+			if err := sr.manageBlobStore.RemoveStore(ctx, sis[i].BlobTable); err != nil {
 				return err
 			}
 		}
@@ -336,7 +332,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	return nil
 }
 
-func (sr *storeRepository) CreateBlobStore(ctx context.Context, blobStoreName string) error {
+func (sr *storeRepository) CreateStore(ctx context.Context, blobStoreName string) error {
 	// Create a new Blob table.
 	createNewBlobTable := fmt.Sprintf("CREATE TABLE %s.%s(id UUID PRIMARY KEY, node blob);", connection.Config.Keyspace, blobStoreName)
 	qry := connection.Session.Query(createNewBlobTable).WithContext(ctx)
@@ -349,7 +345,7 @@ func (sr *storeRepository) CreateBlobStore(ctx context.Context, blobStoreName st
 	return nil
 }
 
-func (sr *storeRepository) RemoveBlobStore(ctx context.Context, blobStoreName string) error {
+func (sr *storeRepository) RemoveStore(ctx context.Context, blobStoreName string) error {
 	// Drop Blob table.
 	dropBlobTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, blobStoreName)
 

@@ -39,12 +39,12 @@ type Registry interface {
 	Remove(context.Context, ...RegistryPayload[UUID]) error
 }
 
-// ManageBlobStore specifies the methods used to manage the Blob Store table(if in Cassandra) or folder path(if in File System).
-type ManageBlobStore interface {
-	// Creaate the blob store table or folder.
-	CreateBlobStore(context.Context, string) error
-	// Remove the blob store table or folder.
-	RemoveBlobStore(context.Context, string) error
+// ManageStore specifies the methods used to manage the Store(s) container.
+type ManageStore interface {
+	// Create the store(s) container (e.g. - folder if in file system).
+	CreateStore(context.Context, string) error
+	// Remove the store(s) container (e.g. - folder if in file system).
+	RemoveStore(context.Context, string) error
 }
 
 // BlobStore specifies the backend blob store interface used for storing & managing data blobs.

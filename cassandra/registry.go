@@ -103,13 +103,14 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
 				connection.Config.Keyspace, sh.RegistryTable)
 			for _, h := range sh.IDs {
-				// Update registry record.
+				// Enqueue update registry record cmd.
 				batch.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
 					h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalID))
 			}
 		}
-		// Failed update all, thus, return err to cause rollback.
+		// Execute the batch query, all or nothing.
 		if err := connection.Session.ExecuteBatch(batch); err != nil {
+			// Failed update all, thus, return err to cause rollback.
 			return err
 		}
 	} else {

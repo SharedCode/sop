@@ -10,6 +10,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/fs"
 	"github.com/SharedCode/sop/in_red_cfs"
 	"github.com/SharedCode/sop/redis"
 )
@@ -155,12 +156,20 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 	}
 }
 
+// My File path formatter, given a base path & a GUID.
+// basePath parameter contains the blob store BlobStore Base FolderPath + the blob store (file) name.
+// id parameter is the GUID of the blob to be written to the disk.
+func MyToFilePath(basePath string, id sop.UUID) string {
+	if len(basePath) > 0 && basePath[len(basePath)-1] == os.PathSeparator {
+		return fmt.Sprintf("%s%s", basePath, fs.Apply4LevelHierarchy(id))
+	}
+	return fmt.Sprintf("%s%c%s", basePath, os.PathSeparator, fs.Apply4LevelHierarchy(id))
+}
+
 func Test_TransactionStory_SingleBTree(t *testing.T) {
-	// 1. Open a transaction
-	// 2. Instantiate a BTree
-	// 3. Do CRUD on BTree
-	// 4. Commit Transaction
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+
+	// Demo NewTransactionExt specifying custom "to file path" lambda function.
+	trans, err := in_red_cfs.NewTransactionExt(MyToFilePath, sop.ForWriting, -1, false)
 	if err != nil {
 		t.Fatal(err.Error())
 	}

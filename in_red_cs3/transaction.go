@@ -21,7 +21,7 @@ func NewTransaction(s3Client *s3.Client, mode sop.TransactionMode, maxTime time.
 	if err != nil {
 		return nil, err
 	}
-	twoPT, err := in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepositoryExt(mbs))
+	twoPT, err := in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepository(mbs))
 	if err != nil {
 		return nil, err
 	}
