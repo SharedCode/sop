@@ -465,7 +465,7 @@ func Test_CommitThrowsException(t *testing.T) {
 
 	goodStoreRepository := t2.storeRepository
 	goodRegistry := t2.registry
-	goodRedisCache := t2.redisCache
+	goodRedisCache := t2.cache
 	goodBlobStore := t2.blobStore
 
 	trans, _ = newMockTransaction(t, sop.ForWriting, -1)
@@ -473,7 +473,7 @@ func Test_CommitThrowsException(t *testing.T) {
 
 	// Restore the populated repos.
 	t2.storeRepository = goodStoreRepository
-	t2.redisCache = goodRedisCache
+	t2.cache = goodRedisCache
 	t2.blobStore = goodBlobStore
 
 	// Create an update & a Commit that fails. Pass true param to Mock Registry will induce error on Commit.
@@ -494,14 +494,14 @@ func Test_CommitThrowsException(t *testing.T) {
 	goodStoreRepository = t2.storeRepository
 	goodRegistry = t2.registry
 	goodRegistry.(*mocks.Mock_vid_registry).InducedErrorOnUpdateAllOrNothing = false
-	goodRedisCache = t2.redisCache
+	goodRedisCache = t2.cache
 	goodBlobStore = t2.blobStore
 
 	trans, _ = newMockTransaction(t, sop.ForReading, -1)
 	t2 = trans.GetPhasedTransaction().(*transaction)
 	t2.storeRepository = goodStoreRepository
 	t2.registry = goodRegistry
-	t2.redisCache = goodRedisCache
+	t2.cache = goodRedisCache
 	t2.blobStore = goodBlobStore
 
 	trans.Begin()

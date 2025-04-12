@@ -103,7 +103,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	}
 
 	// Create lock IDs that we can use to logically lock and prevent other updates.
-	lockKeys := redis.CreateLockKeys(keys...)
+	lockKeys := sr.cache.CreateLockKeys(keys...)
 
 	// 15 minutes to lock, merge/update details then unlock.
 	duration := time.Duration(15 * time.Minute)
@@ -111,14 +111,14 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 
 	// Lock all keys.
 	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
-		if err := redis.Lock(ctx, duration, lockKeys...); err != nil {
+		if err := sr.cache.Lock(ctx, duration, lockKeys...); err != nil {
 			log.Warn(err.Error() + ", will retry")
 			return retry.RetryableError(err)
 		}
 		return nil
 	}); err != nil {
 		// Unlock all keys since we failed locking them.
-		redis.Unlock(ctx, lockKeys...)
+		sr.cache.Unlock(ctx, lockKeys...)
 		return err
 	}
 
@@ -155,7 +155,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 
 	beforeUpdateStores := make([]sop.StoreInfo, 0, len(stores))
 	// Unlock all keys before going out of scope.
-	defer redis.Unlock(ctx, lockKeys...)
+	defer sr.cache.Unlock(ctx, lockKeys...)
 
 	for i := range stores {
 		sis, err := sr.GetWithTTL(ctx, stores[i].CacheConfig.IsStoreInfoCacheTTL, stores[i].CacheConfig.StoreInfoCacheDuration, stores[i].Name)
@@ -234,7 +234,7 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 			err = sr.cache.GetStruct(ctx, names[i], &store)
 		}
 		if err != nil {
-			if !redis.KeyNotFound(err) {
+			if !sr.cache.KeyNotFound(err) {
 				log.Warn(fmt.Sprintf("StoreRepository Get (redis getstruct) failed, details: %v", err))
 			}
 			paramQ = append(paramQ, "?")
@@ -306,7 +306,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	// Delete the store records in Redis.
 	for i := range names {
 		// Tolerate Redis cache failure.
-		if err := sr.cache.Delete(ctx, names[i]); err != nil && !redis.KeyNotFound(err) {
+		if err := sr.cache.Delete(ctx, names[i]); err != nil && !sr.cache.KeyNotFound(err) {
 			log.Warn(fmt.Sprintf("Registry Add (redis setstruct) failed, details: %v", err))
 		}
 	}

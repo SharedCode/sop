@@ -70,3 +70,30 @@ func (m *mockRedis) Delete(ctx context.Context, keys ...string) error {
 	}
 	return lastErr
 }
+
+
+// Unimplemented and is not used in this mock.
+
+func (c *mockRedis)FormatLockKey(k string) string {
+	return k
+}
+
+func (m *mockRedis)KeyNotFound(err error) bool {
+	return false
+}
+
+func (m *mockRedis)CreateLockKeys(keys ...string) []*sop.LockKeys {
+	return nil
+}
+
+func (m *mockRedis)Lock(ctx context.Context, duration time.Duration, lockKeys ...*sop.LockKeys) error {
+	return nil
+}
+
+func (m *mockRedis)IsLocked(ctx context.Context, lockKeys ...*sop.LockKeys) error {
+	return nil
+}
+
+func (m *mockRedis)Unlock(ctx context.Context, lockKeys ...*sop.LockKeys) error {
+	return nil
+}

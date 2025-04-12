@@ -11,7 +11,6 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	cas "github.com/SharedCode/sop/cassandra"
-	"github.com/SharedCode/sop/redis"
 )
 
 type btreeBackend struct {
@@ -36,7 +35,7 @@ type transaction struct {
 	btreesBackend []btreeBackend
 	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
 	blobStore       sop.BlobStore
-	redisCache      sop.Cache
+	cache           sop.Cache
 	storeRepository sop.StoreRepository
 	// VirtualIDRegistry manages the virtual IDs, a.k.a. "handle".
 	registry sop.Registry
@@ -70,7 +69,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 		maxTime:         maxTime,
 		storeRepository: storeRepository,
 		registry:        registry,
-		redisCache:      cache,
+		cache:           cache,
 		blobStore:       blobStore,
 		logger:          newTransactionLogger(transactionLog, logging),
 		phaseDone:       -1,
@@ -625,7 +624,7 @@ func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDele
 		// First field of the Tuple specifies whether we need to delete from Redis cache the blob IDs specified in Second.
 		if itemsForDelete[i].First {
 			for ii := range itemsForDelete[i].Second.Blobs {
-				if err := t.redisCache.Delete(ctx, formatItemKey(itemsForDelete[i].Second.Blobs[ii].String())); err != nil {
+				if err := t.cache.Delete(ctx, formatItemKey(itemsForDelete[i].Second.Blobs[ii].String())); err != nil {
 					lastErr = err
 				}
 			}
@@ -818,7 +817,7 @@ func (t *transaction) deleteObsoleteEntries(ctx context.Context,
 				ik++
 			}
 		}
-		if err := t.redisCache.Delete(ctx, deletedKeys...); err != nil && !redis.KeyNotFound(err) {
+		if err := t.cache.Delete(ctx, deletedKeys...); err != nil && !t.cache.KeyNotFound(err) {
 			lastErr = err
 			log.Warn(fmt.Sprintf("Redis delete failed, details: %v", err))
 		}

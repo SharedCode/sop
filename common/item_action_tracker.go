@@ -9,7 +9,6 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/encoding"
-	"github.com/SharedCode/sop/redis"
 )
 
 type actionType int
@@ -39,7 +38,7 @@ type itemActionTracker[TK btree.Comparable, TV any] struct {
 	storeInfo        *sop.StoreInfo
 	items            map[sop.UUID]cacheItem[TK, TV]
 	forDeletionItems []sop.UUID
-	redisCache       sop.Cache
+	cache            sop.Cache
 	blobStore        sop.BlobStore
 	tlogger          *transactionLog
 }
@@ -47,11 +46,11 @@ type itemActionTracker[TK btree.Comparable, TV any] struct {
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
 func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *sop.StoreInfo, redisCache sop.Cache, blobStore sop.BlobStore, tl *transactionLog) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
-		storeInfo:  storeInfo,
-		items:      make(map[sop.UUID]cacheItem[TK, TV]),
-		redisCache: redisCache,
-		blobStore:  blobStore,
-		tlogger:    tl,
+		storeInfo: storeInfo,
+		items:     make(map[sop.UUID]cacheItem[TK, TV]),
+		cache:     redisCache,
+		blobStore: blobStore,
+		tlogger:   tl,
 	}
 }
 
@@ -78,12 +77,12 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 			if t.storeInfo.IsValueDataGloballyCached {
 				var err error
 				if t.storeInfo.CacheConfig.IsValueDataCacheTTL {
-					err = t.redisCache.GetStructEx(ctx, formatItemKey(item.ID.String()), &v, t.storeInfo.CacheConfig.ValueDataCacheDuration)
+					err = t.cache.GetStructEx(ctx, formatItemKey(item.ID.String()), &v, t.storeInfo.CacheConfig.ValueDataCacheDuration)
 				} else {
-					err = t.redisCache.GetStruct(ctx, formatItemKey(item.ID.String()), &v)
+					err = t.cache.GetStruct(ctx, formatItemKey(item.ID.String()), &v)
 				}
 				if err != nil {
-					if !redis.KeyNotFound(err) {
+					if !t.cache.KeyNotFound(err) {
 						log.Warn(err.Error())
 					}
 					// If item not found in Redis or an error fetching it, fetch from Blob store.
@@ -97,7 +96,7 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 					}
 
 					// Just log Redis error since it is just secondary.
-					if err := t.redisCache.SetStruct(ctx, formatItemKey(item.ID.String()), &v, t.storeInfo.CacheConfig.ValueDataCacheDuration); err != nil {
+					if err := t.cache.SetStruct(ctx, formatItemKey(item.ID.String()), &v, t.storeInfo.CacheConfig.ValueDataCacheDuration); err != nil {
 						log.Warn(err.Error())
 					}
 				}
@@ -166,7 +165,7 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 				return err
 			}
 			if t.storeInfo.IsValueDataGloballyCached {
-				t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), iv, t.storeInfo.CacheConfig.ValueDataCacheDuration)
+				t.cache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), iv, t.storeInfo.CacheConfig.ValueDataCacheDuration)
 			}
 		}
 	}
@@ -201,7 +200,7 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 					return err
 				}
 				if t.storeInfo.IsValueDataGloballyCached {
-					t.redisCache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), iv, t.storeInfo.CacheConfig.ValueDataCacheDuration)
+					t.cache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), iv, t.storeInfo.CacheConfig.ValueDataCacheDuration)
 				}
 			}
 		}
@@ -279,7 +278,7 @@ func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context) error
 			continue
 		}
 		var readItem lockRecord
-		if err := t.redisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
+		if err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); err != nil {
 			return err
 		}
 		// Item found in Redis.
@@ -303,16 +302,16 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Dura
 			continue
 		}
 		var readItem lockRecord
-		if err := t.redisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
-			if !redis.KeyNotFound(err) {
+		if err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); err != nil {
+			if !t.cache.KeyNotFound(err) {
 				return err
 			}
 			// Item does not exist, upsert it.
-			if err := t.redisCache.SetStruct(ctx, redis.FormatLockKey(uuid.String()), &(cachedItem.lockRecord), duration); err != nil {
+			if err := t.cache.SetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &(cachedItem.lockRecord), duration); err != nil {
 				return err
 			}
 			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-			if err := t.redisCache.GetStruct(ctx, redis.FormatLockKey(uuid.String()), &readItem); err != nil {
+			if err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); err != nil {
 				return err
 			} else if readItem.LockID != cachedItem.LockID {
 				if readItem.Action == getAction && cachedItem.Action == getAction {
@@ -351,7 +350,7 @@ func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context) error {
 		if !cachedItem.isLockOwner {
 			continue
 		}
-		if err := t.redisCache.Delete(ctx, redis.FormatLockKey(uuid.String())); err != nil {
+		if err := t.cache.Delete(ctx, t.cache.FormatLockKey(uuid.String())); err != nil {
 			lastErr = err
 		}
 	}

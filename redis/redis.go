@@ -20,7 +20,7 @@ func NewClient() sop.Cache {
 }
 
 // KeyNotFound will detect whether error signifies key not found by Redis.
-func KeyNotFound(err error) bool {
+func (c client)KeyNotFound(err error) bool {
 	return err == redis.Nil
 }
 

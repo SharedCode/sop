@@ -15,7 +15,7 @@ import (
 )
 
 type cachedBucket struct {
-	redisCache       sop.Cache
+	cache       sop.Cache
 	bucketStore      *S3Bucket
 	refreshInterval  time.Duration
 	cacheExpiry      time.Duration
@@ -58,7 +58,7 @@ func NewCachedBucketExt(s3Client *s3.Client, refreshInterval time.Duration, cach
 	}
 
 	return &cachedBucket{
-		redisCache:       redis.NewClient(),
+		cache:       redis.NewClient(),
 		bucketStore:      bs,
 		refreshInterval:  refreshInterval,
 		cacheExpiry:      cacheExpiry,
@@ -85,15 +85,15 @@ func (b *cachedBucket) fetch(ctx context.Context, bucketName string, isLargeObje
 	var lastError error
 	for i := range names {
 		var t cacheObject
-		err := b.redisCache.GetStruct(ctx, b.formatKey(bucketName, names[i]), &t)
-		if redis.KeyNotFound(err) || err != nil {
+		err := b.cache.GetStruct(ctx, b.formatKey(bucketName, names[i]), &t)
+		if b.cache.KeyNotFound(err) || err != nil {
 			res := b.fetchAndCache(ctx, bucketName, names[i], now, false)
 			r[i] = res.Details[0]
 			if r[i].Error != nil {
-				if !redis.KeyNotFound(err) {
+				if !b.cache.KeyNotFound(err) {
 					// Tolerate Redis cache failure.
 					k := b.formatKey(bucketName, names[i])
-					if err := b.redisCache.Delete(ctx, k); err != nil {
+					if err := b.cache.Delete(ctx, k); err != nil {
 						log.Warn(fmt.Sprintf("redis delete for key %s failed, details: %v", k, err))
 					}
 				}
@@ -133,7 +133,7 @@ func (b *cachedBucket) fetch(ctx context.Context, bucketName string, isLargeObje
 				LastRefreshTime: now,
 			}
 			k := b.formatKey(bucketName, names[i])
-			if err := b.redisCache.SetStruct(ctx, k, cd, b.cacheExpiry); err != nil {
+			if err := b.cache.SetStruct(ctx, k, cd, b.cacheExpiry); err != nil {
 				log.Warn(fmt.Sprintf("redis setstruct for key %s failed, details: %v", k, err))
 			}
 			r[i] = sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, []byte]]{
@@ -149,7 +149,7 @@ func (b *cachedBucket) fetch(ctx context.Context, bucketName string, isLargeObje
 		r[i] = res.Details[0]
 		if r[i].Error != nil {
 			k := b.formatKey(bucketName, names[i])
-			if err := b.redisCache.Delete(ctx, k); err != nil {
+			if err := b.cache.Delete(ctx, k); err != nil {
 				log.Warn(fmt.Sprintf("redis setstruct for key %s failed, details: %v", k, err))
 			}
 			lastError = r[i].Error
@@ -201,7 +201,7 @@ func (b *cachedBucket) fetchAndCache(ctx context.Context, bucketName string, nam
 			LastRefreshTime: now,
 		}
 		k := b.formatKey(bucketName, name)
-		if err := b.redisCache.SetStruct(ctx, k, cd, b.cacheExpiry); err != nil {
+		if err := b.cache.SetStruct(ctx, k, cd, b.cacheExpiry); err != nil {
 			log.Warn(fmt.Sprintf("redis setstruct for key %s failed, details: %v", k, err))
 		}
 	}
@@ -243,7 +243,7 @@ func (b *cachedBucket) Add(ctx context.Context, bucketName string, entries ...so
 					LastRefreshTime: now,
 				}
 				k := b.formatKey(bucketName, entries[i].Key)
-				if err := b.redisCache.SetStruct(ctx, k, cd, b.cacheExpiry); err != nil {
+				if err := b.cache.SetStruct(ctx, k, cd, b.cacheExpiry); err != nil {
 					log.Warn(fmt.Sprintf("redis setstruct for key %s failed, details: %v", k, err))
 				}
 			}
@@ -272,7 +272,7 @@ func (b *cachedBucket) Remove(ctx context.Context, bucketName string, names ...s
 		keys[i] = b.formatKey(bucketName, name)
 	}
 	// Remove from cache.
-	err := b.redisCache.Delete(ctx, keys...)
+	err := b.cache.Delete(ctx, keys...)
 	if err != nil {
 		log.Warn(fmt.Sprintf("redis deletes for bucket %s failed, details: %v", bucketName, err))
 	}
