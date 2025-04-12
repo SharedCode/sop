@@ -165,7 +165,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 				err = v.cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
 			}
 			if err != nil {
-				if !redis.KeyNotFound(err) {
+				if !v.cache.KeyNotFound(err) {
 					log.Warn(fmt.Sprintf("Registry Get (redis getstruct) failed, details: %v", err))
 				}
 				paramQ = append(paramQ, "?")
@@ -239,7 +239,7 @@ func (v *registry) Remove(ctx context.Context, storesLids ...sop.RegistryPayload
 		// Flush out the failing records from cache.
 		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
 			for _, id := range storeLids.IDs {
-				if err := v.cache.Delete(ctx, id.String()); err != nil && !redis.KeyNotFound(err) {
+				if err := v.cache.Delete(ctx, id.String()); err != nil && !v.cache.KeyNotFound(err) {
 					log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
 				}
 			}

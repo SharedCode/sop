@@ -37,7 +37,7 @@ func (t *itemActionTracker[TK, TV]) commitTrackedItemsValues(ctx context.Context
 	// Add to cache since succeeded to add to the blob store.
 	if t.storeInfo.IsValueDataGloballyCached {
 		for i, kvp := range itemsForAdd.Blobs {
-			t.redisCache.SetStruct(ctx, formatItemKey(kvp.Key.String()), itemsForAddValues[i], t.storeInfo.CacheConfig.ValueDataCacheDuration)
+			t.cache.SetStruct(ctx, formatItemKey(kvp.Key.String()), itemsForAddValues[i], t.storeInfo.CacheConfig.ValueDataCacheDuration)
 		}
 	}
 	return nil

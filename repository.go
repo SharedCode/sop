@@ -107,7 +107,7 @@ type StoreRepository interface {
 	Get(context.Context, ...string) ([]StoreInfo, error)
 	// Fetch store info with name(s) & option to specify (caching) sliding time(TTL) duration.
 	GetWithTTL(context.Context, bool, time.Duration, ...string) ([]StoreInfo, error)
-	// GetAll returns list of stores available in the backend.
+	// GetAll returns list of store names available in the backend.
 	GetAll(context.Context) ([]string, error)
 	// Add store info & create related tables like for registry & for node blob.
 	Add(context.Context, ...StoreInfo) error
@@ -149,6 +149,13 @@ type KeyValueStore[TK any, TV any] interface {
 	Remove(context.Context, string, ...TK) KeyValueStoreResponse[TK]
 }
 
+// LockKeys contain fields to allow locking and unlocking of a set of cache (e.g. - redis) keys.
+type LockKeys struct {
+	Key         string
+	LockID      UUID
+	IsLockOwner bool
+}
+
 // Cache interface specifies the methods implemented for Redis caching.
 // String key and interface{} value are the supported types.
 type Cache interface {
@@ -166,4 +173,17 @@ type Cache interface {
 	Delete(ctx context.Context, keys ...string) error
 	// Ping is a utility function to check if connection is good.
 	Ping(ctx context.Context) error
+
+	// Returns true if error signifies "key not found", otherwise false.
+	KeyNotFound(err error) bool
+	// Formats a given string as a lock key.
+	FormatLockKey(k string) string
+	// Create lock keys.
+	CreateLockKeys(keys ...string) []*LockKeys
+	// Lock a set of keys.
+	Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKeys) error
+	// Returns whether a set of keys are all locked.
+	IsLocked(ctx context.Context, lockKeys ...*LockKeys) error
+	// Unlock a given set of keys.
+	Unlock(ctx context.Context, lockKeys ...*LockKeys) error
 }

@@ -64,6 +64,7 @@ type nodeRepository struct {
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
 	nodeLocalCache map[sop.UUID]cacheNode
 	storeInfo      *sop.StoreInfo
+	cache          sop.Cache
 	count          int64
 }
 
@@ -73,6 +74,7 @@ func newNodeRepository[TK btree.Comparable, TV any](t *transaction, storeInfo *s
 		transaction:    t,
 		nodeLocalCache: make(map[sop.UUID]cacheNode),
 		storeInfo:      storeInfo,
+		cache:          redis.NewClient(),
 		count:          storeInfo.Count,
 	}
 	return &nodeRepositoryTyped[TK, TV]{
@@ -120,12 +122,12 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 		nodeID = h[0].IDs[0].GetActiveID()
 	}
 	if nr.storeInfo.CacheConfig.IsNodeCacheTTL {
-		err = nr.transaction.redisCache.GetStructEx(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration)
+		err = nr.transaction.cache.GetStructEx(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration)
 	} else {
-		err = nr.transaction.redisCache.GetStruct(ctx, nr.formatKey(nodeID.String()), target)
+		err = nr.transaction.cache.GetStruct(ctx, nr.formatKey(nodeID.String()), target)
 	}
 	if err != nil {
-		if !redis.KeyNotFound(err) {
+		if !nr.cache.KeyNotFound(err) {
 			return nil, err
 		}
 		// Fetch from blobStore and cache to Redis/local.
@@ -135,7 +137,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 		}
 		encoding.BlobMarshaler.Unmarshal(ba, target)
 		target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
-		if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
+		if err := nr.transaction.cache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID.String(), err))
 		}
 		nr.nodeLocalCache[logicalID] = cacheNode{
@@ -224,7 +226,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tu
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Second {
-			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetActiveID().String()),
+			if err := nr.transaction.cache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetActiveID().String()),
 				nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
 				return false, err
 			}
@@ -299,7 +301,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Second {
-			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
+			if err := nr.transaction.cache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
 				log.Debug(fmt.Sprintf("failed redisCache.SetStruct, details: %v", err))
 				return false, nil, err
 			}
@@ -371,7 +373,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tupl
 			blobs[i].Blobs[ii].Value = ba
 			handles[i].IDs[ii] = h
 			// Add node to Redis cache.
-			if err := nr.transaction.redisCache.SetStruct(ctx, nr.formatKey(metaData.GetID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
+			if err := nr.transaction.cache.SetStruct(ctx, nr.formatKey(metaData.GetID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
 				return err
 			}
 		}
@@ -429,7 +431,7 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData
 	}
 	for i := range vids {
 		for ii := range vids[i].IDs {
-			if err := nr.transaction.redisCache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].String())); err != nil && !redis.KeyNotFound(err) {
+			if err := nr.transaction.cache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].String())); err != nil && !nr.cache.KeyNotFound(err) {
 				err = fmt.Errorf("unable to undo new root nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -470,7 +472,7 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData i
 	// Remove nodes from Redis cache.
 	for i := range vids {
 		for ii := range vids[i].IDs {
-			if err := nr.transaction.redisCache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].String())); err != nil && !redis.KeyNotFound(err) {
+			if err := nr.transaction.cache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].String())); err != nil && !nr.cache.KeyNotFound(err) {
 				err = fmt.Errorf("unable to undo added nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -518,7 +520,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, vids []sop.R
 	// Undo changes in redis.
 	for i := range blobsIDs {
 		for ii := range blobsIDs[i].Blobs {
-			if err = nr.transaction.redisCache.Delete(ctx, nr.formatKey(blobsIDs[i].Blobs[ii].String())); err != nil && !redis.KeyNotFound(err) {
+			if err = nr.transaction.cache.Delete(ctx, nr.formatKey(blobsIDs[i].Blobs[ii].String())); err != nil && !nr.cache.KeyNotFound(err) {
 				err = fmt.Errorf("unable to undo updated nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err

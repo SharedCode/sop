@@ -30,7 +30,7 @@ func NewTwoPhaseCommitTransaction(storesBaseFolder string, mode sop.TransactionM
 	if cache == nil {
 		cache = redis.NewClient()
 	}
-	sr, err := fs.NewStoreRepository(storesBaseFolder, nil, cache)
+	sr, err := fs.NewStoreRepository([]string{storesBaseFolder}, nil, cache, false)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders []string, mod
 	if !IsInitialized() {
 		return nil, fmt.Errorf("Redis was not initialized")
 	}
-	sr, err := fs.NewStoreRepositoryWithReplication(storesBaseFolders, mbsf, cache)
+	sr, err := fs.NewStoreRepository(storesBaseFolders, mbsf, cache, true)
 	if err != nil {
 		return nil, err
 	}
