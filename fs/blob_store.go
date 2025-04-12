@@ -10,7 +10,7 @@ import (
 
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
 type blobStore struct {
-	fileIO                      FileIO
+	fileIO FileIO
 }
 
 // Directory/File permission.
@@ -22,7 +22,7 @@ func NewBlobStore(fileIO FileIO) sop.BlobStore {
 		fileIO = NewDefaultFileIO(DefaultToFilePath)
 	}
 	return &blobStore{
-		fileIO:                      fileIO,
+		fileIO: fileIO,
 	}
 }
 

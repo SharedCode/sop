@@ -20,6 +20,7 @@ var cassConfig = cas.Config{
 	ClusterHosts: []string{"localhost:9042"},
 	Keyspace:     "btree",
 }
+
 // Redis config.
 var redisConfig = redis.Options{
 	Address:                  "localhost:6379",
@@ -51,7 +52,7 @@ func Test_GetStoreList(t *testing.T) {
 	}
 	stores, _ := trans.GetStores(ctx)
 
-	log.Info(fmt.Sprintf( "Store count: %d", len(stores)))
+	log.Info(fmt.Sprintf("Store count: %d", len(stores)))
 }
 
 // Create an empty store on 1st run, add one item(max) on succeeding runs.

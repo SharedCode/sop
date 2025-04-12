@@ -14,21 +14,20 @@ import (
 // storeRepository is a simple in-memory implementation of store repository to demonstrate
 // or mockup the structure composition, so we can define it in preparation of v2.
 type storeRepository struct {
-	cache            sop.Cache
-	fileIO           FileIO
-	manageStore      sop.ManageStore
+	cache       sop.Cache
+	fileIO      FileIO
+	manageStore sop.ManageStore
 	// Array so we can use in replication across two folders, if in replication mode.
 	storesBaseFolders []string
 	// If true, folder as specified in storesFolders[0] will be the active folder, otherwise the 2nd folder, as specified in storesFolders[1].
 	isFirstFolderActive bool
-	replicate bool
+	replicate           bool
 }
 
 const (
 	lockStoreListKey = "sr_infs"
 	lockDuration     = 5 * time.Minute
 )
-
 
 // NewStoreRepository manages the StoreInfo in a File System.
 func NewStoreRepository(storesBaseFolder []string, manageStore sop.ManageStore, cache sop.Cache, replicate bool) (sop.StoreRepository, error) {
@@ -40,11 +39,11 @@ func NewStoreRepository(storesBaseFolder []string, manageStore sop.ManageStore, 
 		isFirstFolderActive = detectIfFirstIsActiveFolder(storesBaseFolder)
 	}
 	return &storeRepository{
-		cache:            cache,
-		manageStore:      manageStore,
-		fileIO:           NewDefaultFileIO(DefaultToFilePath),
-		storesBaseFolders: storesBaseFolder,
-		replicate: replicate,
+		cache:               cache,
+		manageStore:         manageStore,
+		fileIO:              NewDefaultFileIO(DefaultToFilePath),
+		storesBaseFolders:   storesBaseFolder,
+		replicate:           replicate,
 		isFirstFolderActive: isFirstFolderActive,
 	}, nil
 }
@@ -210,7 +209,7 @@ func (sr *storeRepository) getAll(ctx context.Context) (map[string]byte, error) 
 	return m, nil
 }
 
-func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {	
+func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
 	fn := fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[0], os.PathSeparator)
 	if sr.replicate && !sr.isFirstFolderActive {
 		fn = fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[1], os.PathSeparator)

@@ -9,12 +9,12 @@ import (
 )
 
 // Add prefix to the lock key so it becomes unique.
-func (c client)FormatLockKey(k string) string {
+func (c client) FormatLockKey(k string) string {
 	return fmt.Sprintf("L%s", k)
 }
 
 // Create a set of lock keys.
-func (c client)CreateLockKeys(keys ...string) []*sop.LockKeys {
+func (c client) CreateLockKeys(keys ...string) []*sop.LockKeys {
 	lockKeys := make([]*sop.LockKeys, len(keys))
 	for i := range keys {
 		lockKeys[i] = &sop.LockKeys{
@@ -27,7 +27,7 @@ func (c client)CreateLockKeys(keys ...string) []*sop.LockKeys {
 }
 
 // Lock a set of keys.
-func(c client)Lock(ctx context.Context, duration time.Duration, lockKeys ...*sop.LockKeys) error {
+func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys ...*sop.LockKeys) error {
 	for _, lk := range lockKeys {
 		readItem, err := c.Get(ctx, lk.Key)
 		if err != nil {
@@ -58,7 +58,7 @@ func(c client)Lock(ctx context.Context, duration time.Duration, lockKeys ...*sop
 }
 
 // Returns true if lockKeys have claimed lock equivalent.
-func (c client)IsLocked(ctx context.Context, lockKeys ...*sop.LockKeys) error {
+func (c client) IsLocked(ctx context.Context, lockKeys ...*sop.LockKeys) error {
 	for _, lk := range lockKeys {
 		readItem, err := c.Get(ctx, lk.Key)
 		if err != nil {
@@ -78,7 +78,7 @@ func (c client)IsLocked(ctx context.Context, lockKeys ...*sop.LockKeys) error {
 }
 
 // Unlock a set of keys.
-func (c client)Unlock(ctx context.Context, lockKeys ...*sop.LockKeys) error {
+func (c client) Unlock(ctx context.Context, lockKeys ...*sop.LockKeys) error {
 	var lastErr error
 	for _, lk := range lockKeys {
 		if !lk.IsLockOwner {

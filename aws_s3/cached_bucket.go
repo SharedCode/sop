@@ -15,7 +15,7 @@ import (
 )
 
 type cachedBucket struct {
-	cache       sop.Cache
+	cache            sop.Cache
 	bucketStore      *S3Bucket
 	refreshInterval  time.Duration
 	cacheExpiry      time.Duration
@@ -58,7 +58,7 @@ func NewCachedBucketExt(s3Client *s3.Client, refreshInterval time.Duration, cach
 	}
 
 	return &cachedBucket{
-		cache:       redis.NewClient(),
+		cache:            redis.NewClient(),
 		bucketStore:      bs,
 		refreshInterval:  refreshInterval,
 		cacheExpiry:      cacheExpiry,

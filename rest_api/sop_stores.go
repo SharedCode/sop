@@ -34,7 +34,7 @@ func GetStores(c *gin.Context) {
 }
 
 // GetStoreByName godoc
-// @Summary GetStoreByName returns details of a store having its name matching the name parameter. 
+// @Summary GetStoreByName returns details of a store having its name matching the name parameter.
 // @Schemes
 // @Description GetStoreByName responds with the details of the matching store as JSON.
 // @Tags Stores
@@ -60,12 +60,12 @@ func GetStoreByName(c *gin.Context) {
 	// Just end the transaction, rollback does nothing.
 	defer trans.Rollback(c)
 
-	b3,err :=in_red_cfs.OpenBtree[interface{}, interface{}](c, storeName, trans, nil)
+	b3, err := in_red_cfs.OpenBtree[interface{}, interface{}](c, storeName, trans, nil)
 	if err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("fetching store %s failed, error: %v", storeName, err)})
 		return
 	}
 
-	si := b3.GetStoreInfo();
+	si := b3.GetStoreInfo()
 	c.IndentedJSON(http.StatusOK, si)
 }

@@ -1,17 +1,17 @@
 package fs
 
 type fileWriter struct {
-	filenames   []string
-	tempFilenames   []string
-	tempNameSuffix string
-	replicate bool
+	filenames            []string
+	tempFilenames        []string
+	tempNameSuffix       string
+	replicate            bool
 	replicateToFilenames []string
 }
 
 func newFileWriterAndReplicator(replicate bool) *fileWriter {
 	return &fileWriter{
 		tempNameSuffix: "tmp",
-		replicate: replicate,
+		replicate:      replicate,
 	}
 }
 

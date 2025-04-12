@@ -3,8 +3,8 @@ package fs
 import (
 	"context"
 	"fmt"
-	"os"
 	log "log/slog"
+	"os"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/fs/erasure"
@@ -49,7 +49,7 @@ func NewBlobStoreWithEC(fileIO FileIO, erasureConfig map[string]ErasureCodingCon
 	if erasureConfig != nil {
 		e = make(map[string]*erasure.Erasure, len(erasureConfig))
 		baseFolderPathsAcrossDrives = make(map[string][]string, len(erasureConfig))
-		for k,v := range erasureConfig {
+		for k, v := range erasureConfig {
 			ec, err := erasure.NewErasure(v.DataShardsCount, v.ParityShardsCount)
 			if err != nil {
 				return nil, err
@@ -196,7 +196,7 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs ...sop.BlobsPaylo
 			log.Error(err.Error())
 			return err
 		}
-	
+
 		for _, blob := range storeBlobs.Blobs {
 			ba := blob.Value
 			contentsSize := len(ba)
@@ -257,7 +257,7 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs ...sop.Blob
 			log.Error(err.Error())
 			return err
 		}
-			
+
 		for _, blobID := range storeBlobIDs.Blobs {
 
 			for i := range baseFolderPathsAcrossDrives {

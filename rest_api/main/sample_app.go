@@ -11,8 +11,8 @@ import (
 
 	"github.com/SharedCode/sop"
 	cas "github.com/SharedCode/sop/cassandra"
-	"github.com/SharedCode/sop/in_red_cfs"
 	"github.com/SharedCode/sop/fs"
+	"github.com/SharedCode/sop/in_red_cfs"
 	"github.com/SharedCode/sop/redis"
 
 	"github.com/SharedCode/sop/rest_api"
@@ -27,6 +27,7 @@ var cassConfig = cas.Config{
 	ClusterHosts: []string{"localhost:9042"},
 	Keyspace:     "btree",
 }
+
 // Regis Config, please update with your Redis cluster config.
 var redisConfig = redis.Options{
 	Address:                  "localhost:6379",
@@ -35,7 +36,7 @@ var redisConfig = redis.Options{
 	DefaultDurationInSeconds: 24 * 60 * 60,
 }
 
-var ctx = context.TODO();
+var ctx = context.TODO()
 
 func init() {
 	in_red_cfs.Initialize(cassConfig, redisConfig)
@@ -72,9 +73,9 @@ func createStores() error {
 
 	// Just ensure we have "objects" store created in SOP db.
 	_, err = in_red_cfs.NewBtreeWithEC[string, []byte](ctx, sop.StoreOptions{
-		Name:                     objectsStore,
-		SlotLength:               200,
-		IsUnique: true,
+		Name:                      objectsStore,
+		SlotLength:                200,
+		IsUnique:                  true,
 		IsValueDataGloballyCached: true,
 	}, trans, cmp.Compare)
 	if err != nil {
@@ -95,7 +96,7 @@ func registerStores() {
 }
 
 // getByKey godoc
-// @Summary getByKey returns an item from the store with a given key. 
+// @Summary getByKey returns an item from the store with a given key.
 // @Schemes
 // @Description getByKey responds with the details of the matching item as JSON.
 // @Tags StoreItems
@@ -121,7 +122,7 @@ func getByKey(c *gin.Context) {
 	// Ensure to commit the transaction before going out of scope.
 	defer trans.Commit(c)
 
-	b3,err :=in_red_cfs.OpenBtree[string, []byte](c, objectsStore, trans, cmp.Compare)
+	b3, err := in_red_cfs.OpenBtree[string, []byte](c, objectsStore, trans, cmp.Compare)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("opening store %s failed, error: %v", objectsStore, err)})
 		return
@@ -146,7 +147,7 @@ func getByKey(c *gin.Context) {
 }
 
 // addItem godoc
-// @Summary addItem adds an item to the store with a given key & value pair. 
+// @Summary addItem adds an item to the store with a given key & value pair.
 // @Schemes
 // @Description addItem adds an item to the store with a given key & value pair received from POST.
 // @Tags StoreItems
@@ -171,7 +172,7 @@ func addItem(c *gin.Context) {
 		return
 	}
 
-	b3,err :=in_red_cfs.OpenBtree[string, []byte](c, objectsStore, trans, cmp.Compare)
+	b3, err := in_red_cfs.OpenBtree[string, []byte](c, objectsStore, trans, cmp.Compare)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("opening store %s failed, error: %v", objectsStore, err)})
 		trans.Rollback(c)

@@ -7,7 +7,8 @@ import (
 )
 
 type HTTPVerb int
-const(
+
+const (
 	Unknown = iota
 	GET
 	GET_ONE
@@ -18,8 +19,8 @@ const(
 )
 
 type RestMethod struct {
-	Verb HTTPVerb
-	Path string
+	Verb    HTTPVerb
+	Path    string
 	Handler func(c *gin.Context)
 }
 
@@ -28,8 +29,8 @@ var restMethods = make(map[string]RestMethod)
 // RegisterMethod is a helper function for Register.
 func RegisterMethod(verb HTTPVerb, path string, h func(c *gin.Context)) error {
 	m := RestMethod{
-		Verb: verb,
-		Path: path,
+		Verb:    verb,
+		Path:    path,
 		Handler: h,
 	}
 	return Register(m)

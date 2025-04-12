@@ -46,7 +46,7 @@ func main() {
 	{
 		restMethods := rest_api.RestMethods()
 		for _, rm := range restMethods {
-			switch(rm.Verb) {
+			switch rm.Verb {
 			case rest_api.GET:
 				fallthrough
 			case rest_api.GET_ONE:

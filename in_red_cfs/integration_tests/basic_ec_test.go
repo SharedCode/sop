@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_cfs"
 	"github.com/SharedCode/sop/fs"
+	"github.com/SharedCode/sop/in_red_cfs"
 )
 
 func initErasureCoding() {

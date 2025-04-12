@@ -35,14 +35,14 @@ func IsNil(id gocql.UUID) bool {
 
 type transactionLog struct {
 	hourLockKey *sop.LockKeys
-	cache sop.Cache
+	cache       sop.Cache
 }
 
 // NewBlobStore instantiates a new BlobStore instance.
 func NewTransactionLog() sop.TransactionLog {
 	c := redis.NewClient()
 	return &transactionLog{
-		cache: c,
+		cache:       c,
 		hourLockKey: c.CreateLockKeys("HBP")[0],
 	}
 }
