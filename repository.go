@@ -41,9 +41,9 @@ type Registry interface {
 
 // ManageStore specifies the methods used to manage the Store(s) container.
 type ManageStore interface {
-	// Create the store(s) container (e.g. - folder if in file system).
+	// Create the store(s) container, e.g. - folder if in file system.
 	CreateStore(context.Context, string) error
-	// Remove the store(s) container (e.g. - folder if in file system).
+	// Remove the store(s) container, e.g. - folder if in file system.
 	RemoveStore(context.Context, string) error
 }
 
@@ -149,15 +149,15 @@ type KeyValueStore[TK any, TV any] interface {
 	Remove(context.Context, string, ...TK) KeyValueStoreResponse[TK]
 }
 
-// LockKeys contain fields to allow locking and unlocking of a set of cache (e.g. - redis) keys.
-type LockKeys struct {
+// LockKey contain fields to allow locking and unlocking of a set of cache (e.g. - redis) keys.
+type LockKey struct {
 	Key         string
 	LockID      UUID
 	IsLockOwner bool
 }
 
-// Cache interface specifies the methods implemented for Redis caching.
-// String key and interface{} value are the supported types.
+// Cache interface specifies the methods implemented for out of memory caching, e.g. - Redis based.
+// String key and interface{} value are the supported types. Also specifies methods useful for locking.
 type Cache interface {
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
 	Get(ctx context.Context, key string) (string, error)
@@ -179,11 +179,11 @@ type Cache interface {
 	// Formats a given string as a lock key.
 	FormatLockKey(k string) string
 	// Create lock keys.
-	CreateLockKeys(keys ...string) []*LockKeys
+	CreateLockKeys(keys ...string) []*LockKey
 	// Lock a set of keys.
-	Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKeys) error
+	Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKey) error
 	// Returns whether a set of keys are all locked.
-	IsLocked(ctx context.Context, lockKeys ...*LockKeys) error
+	IsLocked(ctx context.Context, lockKeys ...*LockKey) error
 	// Unlock a given set of keys.
-	Unlock(ctx context.Context, lockKeys ...*LockKeys) error
+	Unlock(ctx context.Context, lockKeys ...*LockKey) error
 }

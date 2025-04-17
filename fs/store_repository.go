@@ -11,15 +11,15 @@ import (
 	"github.com/SharedCode/sop/encoding"
 )
 
-// storeRepository is a simple in-memory implementation of store repository to demonstrate
-// or mockup the structure composition, so we can define it in preparation of v2.
+// storeRepository is a File System based implementation of store repository.
 type storeRepository struct {
 	cache       sop.Cache
 	fileIO      FileIO
 	manageStore sop.ManageStore
 	// Array so we can use in replication across two folders, if in replication mode.
 	storesBaseFolders []string
-	// If true, folder as specified in storesFolders[0] will be the active folder, otherwise the 2nd folder, as specified in storesFolders[1].
+	// If true, folder as specified in storesBaseFolders[0] will be the active folder,
+	// otherwise the 2nd folder, as specified in storesBaseFolders[1].
 	isFirstFolderActive bool
 	replicate           bool
 }
@@ -53,7 +53,6 @@ func detectIfFirstIsActiveFolder(storesBaseFolders []string) bool {
 }
 
 func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
-
 	/*
 		1. Lock Store List
 		2. Get Store List
@@ -69,7 +68,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	if err := sr.cache.Lock(ctx, lockDuration, lk...); err != nil {
 		return err
 	}
-	//defer sr.cache.Unlock(ctx, lk...)
+	defer sr.cache.Unlock(ctx, lk...)
 
 	storesLookup, err := sr.getAll(ctx)
 	if err != nil {
@@ -85,7 +84,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	}
 
 	// Write Store List to tmp file.
-	storeListWriter := newFileWriterAndReplicator(sr.replicate)
+	storeWriter := newFileWriterWithReplication(sr.replicate, sr.cache)
 	storeList := make([]string, len(storesLookup))
 	i := 0
 	for k, _ := range storesLookup {
@@ -95,50 +94,38 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	slfn1 := fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[0], os.PathSeparator)
 	slfn2 := ""
 	if sr.replicate {
-		slfn2 = fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[0], os.PathSeparator)
+		slfn2 = fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[1], os.PathSeparator)
 	}
 	ba, _ := encoding.Marshal(storeList)
-	storeListWriter.writeToTemp(ba, slfn1, slfn2)
+	storeWriter.writeToTemp(ba, slfn1, slfn2)
 
 	// Create folders and write store info to its tmp file, for each added item
-	if err := sr.Update(ctx, stores...); err != nil {
-		return err
-	}
+	for _, store := range stores {
+		// Create the store sub-folder.
+		sifn1 := fmt.Sprintf("%s%c%s", sr.storesBaseFolders[0], os.PathSeparator, store.Name)
+		sr.manageStore.CreateStore(ctx, sifn1)
+		sifn2 := ""
+		if sr.replicate {
+			sifn2 = fmt.Sprintf("%s%c%s", sr.storesBaseFolders[1], os.PathSeparator, store.Name)
+			sr.manageStore.CreateStore(ctx, sifn2)
+		}
 
+		// Persist store info into a JSON text file.
+		ba, err := json.Marshal(store)
+		if err != nil {
+			return err
+		}
+		sifn1 = fmt.Sprintf("%s%c%s%cstoreinfo.txt", sr.storesBaseFolders[0], os.PathSeparator, store.Name, os.PathSeparator)
+		if sr.replicate {
+			sifn2 = fmt.Sprintf("%s%c%s%cstoreinfo.txt", sr.storesBaseFolders[1], os.PathSeparator, store.Name, os.PathSeparator)
+		}
+		if err := storeWriter.writeToTemp(ba, sifn1, sifn2); err != nil {
+			return err
+		}
+	}
+	
 	// Finalize added items' tmp files. Ensure to delete items' tmp files
-
-	// 7. Finalize Store List tmp file. Ensure to delete Store List tmp file
-	// 8. Unlock Store List
-
-	if err := storeListWriter.finalize(); err != nil {
-
-	}
-
-	// // Persist stores info into a JSON text file.
-	// ba, err := json.Marshal(stores)
-	// if err != nil {
-	// 	return err
-	// }
-	// if err := sr.fileIO.WriteFile(fn, ba, permission); err != nil {
-	// 	return err
-	// }
-
-	// for _, store := range stores {
-	// 	if err := sr.manageStore.CreateStore(ctx, store.BlobTable); err != nil {
-	// 		return err
-	// 	}
-	// 	// Persist store info into a JSON text file.
-	// 	fn := fmt.Sprintf("%s%cstoreinfo.txt", store.BlobTable, os.PathSeparator)
-	// 	ba, err := json.Marshal(store)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	if err := sr.fileIO.WriteFile(fn, ba, permission); err != nil {
-	// 		return err
-	// 	}
-	// 	// TODO: add to cache.
-	// }
-	return nil
+	return storeWriter.finalize()
 }
 
 func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) error {

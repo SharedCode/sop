@@ -1,17 +1,21 @@
 package fs
 
+import "github.com/SharedCode/sop"
+
 type fileWriter struct {
 	filenames            []string
 	tempFilenames        []string
 	tempNameSuffix       string
 	replicate            bool
 	replicateToFilenames []string
+	cache sop.Cache
 }
 
-func newFileWriterAndReplicator(replicate bool) *fileWriter {
+func newFileWriterWithReplication(replicate bool, cache sop.Cache) *fileWriter {
 	return &fileWriter{
 		tempNameSuffix: "tmp",
 		replicate:      replicate,
+		cache: cache,
 	}
 }
 
@@ -20,5 +24,10 @@ func (fw *fileWriter) writeToTemp(contents []byte, filename string, replicateToF
 }
 
 func (fw *fileWriter) finalize() error {
+
+	// TODO: rename temp files to target filenames.
+	// TODO: add to cache.
+	// TODO: Replicate to replicate path/filenames.
+
 	return nil
 }

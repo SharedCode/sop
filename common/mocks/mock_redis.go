@@ -81,18 +81,18 @@ func (m *mockRedis) KeyNotFound(err error) bool {
 	return false
 }
 
-func (m *mockRedis) CreateLockKeys(keys ...string) []*sop.LockKeys {
+func (m *mockRedis) CreateLockKeys(keys ...string) []*sop.LockKey {
 	return nil
 }
 
-func (m *mockRedis) Lock(ctx context.Context, duration time.Duration, lockKeys ...*sop.LockKeys) error {
+func (m *mockRedis) Lock(ctx context.Context, duration time.Duration, lockKeys ...*sop.LockKey) error {
 	return nil
 }
 
-func (m *mockRedis) IsLocked(ctx context.Context, lockKeys ...*sop.LockKeys) error {
+func (m *mockRedis) IsLocked(ctx context.Context, lockKeys ...*sop.LockKey) error {
 	return nil
 }
 
-func (m *mockRedis) Unlock(ctx context.Context, lockKeys ...*sop.LockKeys) error {
+func (m *mockRedis) Unlock(ctx context.Context, lockKeys ...*sop.LockKey) error {
 	return nil
 }

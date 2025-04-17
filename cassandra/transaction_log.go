@@ -34,7 +34,7 @@ func IsNil(id gocql.UUID) bool {
 }
 
 type transactionLog struct {
-	hourLockKey *sop.LockKeys
+	hourLockKey *sop.LockKey
 	cache       sop.Cache
 }
 
