@@ -76,19 +76,34 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		// together with the logged batch update as shown below.
 
 		// Enforce a Redis based version check as Cassandra logged transaction does not allow "conditional" check across partitions.
+		objectKeys := make([]*sop.LockKey, 0)
+
 		for _, sh := range storesHandles {
 			for _, h := range sh.IDs {
 				var h2 sop.Handle
 				if err := v.cache.GetStruct(ctx, h.LogicalID.String(), &h2); err != nil {
+					// Unlock the object Keys before return.
+					v.cache.Unlock(ctx, objectKeys...)
 					return err
 				}
 				newVersion := h.Version
 				// Version ID is incremental, 'thus we can compare with -1 the previous.
 				newVersion--
 				if newVersion != h2.Version || !h.IsEqual(&h2) {
+					// Unlock the object Keys before return.
+					v.cache.Unlock(ctx, objectKeys...)
 					return &UpdateAllOrNothingError{
 						Err: fmt.Errorf("Registry Update failed, handle logical ID(%v) version conflict detected", h.LogicalID.String()),
 					}
+				}
+				// Attempt to lock in Redis the registry object, if we can't attain a lock, it means there is another transaction elsewhere
+				// that already attained a lock, thus, we can cause rollback of this transaction due to conflict).
+				lk := v.cache.CreateLockKeys(h.LogicalID.String())
+				objectKeys = append(objectKeys, lk[0])
+				if err := v.cache.Lock(ctx, -1, lk[0]); err != nil {
+					// Unlock the object Keys before return.
+					v.cache.Unlock(ctx, objectKeys...)
+					return err
 				}
 			}
 		}
@@ -110,9 +125,13 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		}
 		// Execute the batch query, all or nothing.
 		if err := connection.Session.ExecuteBatch(batch); err != nil {
+			// Unlock the object Keys before return.
+			v.cache.Unlock(ctx, objectKeys...)
 			// Failed update all, thus, return err to cause rollback.
 			return err
 		}
+		// Unlock the object Keys before return.
+		v.cache.Unlock(ctx, objectKeys...)
 	} else {
 		for _, sh := range storesHandles {
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
