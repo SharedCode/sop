@@ -115,13 +115,13 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 		// 15 minutes to lock, merge/update details then unlock.
 		if err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); err != nil {
 			log.Warn(err.Error() + ", will retry")
-			// Unlock keys since we failed locking all of them.
-			sr.cache.Unlock(ctx, lockKeys...)
 			return retry.RetryableError(err)
 		}
 		return nil
 	}); err != nil {
 		log.Warn(err.Error() + ", gave up")
+		// Unlock keys since we failed locking all of them.
+		sr.cache.Unlock(ctx, lockKeys...)
 		return err
 	}
 
