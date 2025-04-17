@@ -146,10 +146,12 @@ Of course, you have to do fine tuning as there are tradeoffs :), determine what 
 # In File System(FS), in AWS S3 or in Cassandra Blobs
 SOP supports storing the data blobs(containing both SOP metadata, specifically the B-Tree Nodes & application data) either in FS, AWS S3 or in Cassandra (via Cassandra's support for blobs storage). Choose whichever you want. However, my favorite is the FS, as it is very lean. However, there is huge potential to accelerate using AWS S3 if you have a huge, super S3 cluster(via AWS or on-prem).
 
-Following are the package locations for the three:
-* in File System: sop/in_red_cfs
-* in AWS S3:      sop/in_red_cs3
-* in Cassandra:   sop/in_red_ck
+Following are the package locations for the different flavors:
+* in File System w/ registry in Cassandra: 	sop/in_red_cfs
+* in AWS S3:					sop/in_red_cs3
+* in Cassandra:   				sop/in_red_ck
+* in File System (under construction!): 	sop/in_red_fs
+NOTE: **in_red_fs** (under construction) will not require any external system as SOP replaces Cassandra based registry with a more optimal hash map on disk implementation. Redis for caching is still available.
 
 The API for each package to construct a new BTree, Open an existing one or Remove one are pretty much consistent across the three. Streaming Data Store API are also available across the three and consistent in shape too.
 
