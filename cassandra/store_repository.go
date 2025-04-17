@@ -20,6 +20,9 @@ type storeRepository struct {
 	manageBlobStore sop.ManageStore
 }
 
+// Lock time out for the cache based locking of update store set function.
+const updateStoresLockDuration = time.Duration(15 * time.Minute)
+
 // NewStoreRepository manages the StoreInfo in Cassandra table.
 // Passing in nil to "managedBlobStore" will use default implementation in StoreRepository itself
 // for managing Blob Store table in Cassandra.
@@ -105,20 +108,20 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	// Create lock IDs that we can use to logically lock and prevent other updates.
 	lockKeys := sr.cache.CreateLockKeys(keys...)
 
-	// 15 minutes to lock, merge/update details then unlock.
-	duration := time.Duration(15 * time.Minute)
 	b := retry.NewFibonacci(1 * time.Second)
 
 	// Lock all keys.
 	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
-		if err := sr.cache.Lock(ctx, duration, lockKeys...); err != nil {
+		// 15 minutes to lock, merge/update details then unlock.
+		if err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); err != nil {
 			log.Warn(err.Error() + ", will retry")
+			// Unlock keys since we failed locking all of them.
+			sr.cache.Unlock(ctx, lockKeys...)
 			return retry.RetryableError(err)
 		}
 		return nil
 	}); err != nil {
-		// Unlock all keys since we failed locking them.
-		sr.cache.Unlock(ctx, lockKeys...)
+		log.Warn(err.Error() + ", gave up")
 		return err
 	}
 
