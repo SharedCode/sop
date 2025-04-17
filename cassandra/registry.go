@@ -7,6 +7,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"strings"
+	"time"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/redis"
@@ -25,6 +26,9 @@ func (r *UpdateAllOrNothingError) Error() string {
 type registry struct {
 	cache sop.Cache
 }
+
+// Lock time out for the cache based conflict check routine in update (handles) function.
+const updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10*time.Minute)
 
 // NewRegistry manages the Handle in the store's Cassandra registry table.
 func NewRegistry() sop.Registry {
@@ -76,14 +80,14 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		// together with the logged batch update as shown below.
 
 		// Enforce a Redis based version check as Cassandra logged transaction does not allow "conditional" check across partitions.
-		objectKeys := make([]*sop.LockKey, 0)
+		handleKeys := make([]*sop.LockKey, 0)
 
 		for _, sh := range storesHandles {
 			for _, h := range sh.IDs {
 				var h2 sop.Handle
 				if err := v.cache.GetStruct(ctx, h.LogicalID.String(), &h2); err != nil {
 					// Unlock the object Keys before return.
-					v.cache.Unlock(ctx, objectKeys...)
+					v.cache.Unlock(ctx, handleKeys...)
 					return err
 				}
 				newVersion := h.Version
@@ -91,7 +95,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				newVersion--
 				if newVersion != h2.Version || !h.IsEqual(&h2) {
 					// Unlock the object Keys before return.
-					v.cache.Unlock(ctx, objectKeys...)
+					v.cache.Unlock(ctx, handleKeys...)
 					return &UpdateAllOrNothingError{
 						Err: fmt.Errorf("Registry Update failed, handle logical ID(%v) version conflict detected", h.LogicalID.String()),
 					}
@@ -99,10 +103,11 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				// Attempt to lock in Redis the registry object, if we can't attain a lock, it means there is another transaction elsewhere
 				// that already attained a lock, thus, we can cause rollback of this transaction due to conflict).
 				lk := v.cache.CreateLockKeys(h.LogicalID.String())
-				objectKeys = append(objectKeys, lk[0])
-				if err := v.cache.Lock(ctx, -1, lk[0]); err != nil {
+				handleKeys = append(handleKeys, lk[0])
+
+				if err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); err != nil {
 					// Unlock the object Keys before return.
-					v.cache.Unlock(ctx, objectKeys...)
+					v.cache.Unlock(ctx, handleKeys...)
 					return err
 				}
 			}
@@ -126,12 +131,12 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		// Execute the batch query, all or nothing.
 		if err := connection.Session.ExecuteBatch(batch); err != nil {
 			// Unlock the object Keys before return.
-			v.cache.Unlock(ctx, objectKeys...)
+			v.cache.Unlock(ctx, handleKeys...)
 			// Failed update all, thus, return err to cause rollback.
 			return err
 		}
 		// Unlock the object Keys before return.
-		v.cache.Unlock(ctx, objectKeys...)
+		v.cache.Unlock(ctx, handleKeys...)
 	} else {
 		for _, sh := range storesHandles {
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
