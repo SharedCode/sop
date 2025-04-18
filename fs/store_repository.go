@@ -27,6 +27,8 @@ type storeRepository struct {
 const (
 	lockStoreListKey = "sr_infs"
 	lockDuration     = 5 * time.Minute
+	storeListFilename = "storelist.txt"
+	storeInfoFilename = "storeinfo.txt"
 )
 
 // NewStoreRepository manages the StoreInfo in a File System.
@@ -63,19 +65,20 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		7. Finalize Store List tmp file. Ensure to delete Store List tmp file
 		8. Unlock Store List
 	*/
-
+	// 1. Lock Store List.
 	lk := sr.cache.CreateLockKeys(lockStoreListKey)
 	if err := sr.cache.Lock(ctx, lockDuration, lk...); err != nil {
 		return err
 	}
 	defer sr.cache.Unlock(ctx, lk...)
 
+	// 2. Get Store List.
 	storesLookup, err := sr.getAll(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Only allow add of store with unique name.
+	// 3. Merge added items to Store List. Only allow add of store with unique name.
 	for _, store := range stores {
 		if _, ok := storesLookup[store.Name]; ok {
 			return fmt.Errorf("can't add store %s, an existing item with such name exists", store.Name)
@@ -83,31 +86,26 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		storesLookup[store.Name] = 1
 	}
 
-	// Write Store List to tmp file.
-	storeWriter := newFileWriterWithReplication(sr.replicate, sr.cache)
+	// 4. Write Store List to tmp file.
+	storeWriter := newFileWriterWithReplication(sr.replicate, sr.cache, sr.manageStore)
 	storeList := make([]string, len(storesLookup))
 	i := 0
-	for k, _ := range storesLookup {
+	for k := range storesLookup {
 		storeList[i] = k
 		i++
 	}
-	slfn1 := fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[0], os.PathSeparator)
-	slfn2 := ""
-	if sr.replicate {
-		slfn2 = fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[1], os.PathSeparator)
-	}
 	ba, _ := encoding.Marshal(storeList)
-	storeWriter.writeToTemp(ba, slfn1, slfn2)
+	storeWriter.writeToTemp(ba, sr.storesBaseFolders, storeListFilename)
 
-	// Create folders and write store info to its tmp file, for each added item
+	// 5-6. Create folders and write store info to its tmp file, for each added item.
+	// Finalize added items' tmp files. Ensure to delete items' tmp files.
 	for _, store := range stores {
 		// Create the store sub-folder.
-		sifn1 := fmt.Sprintf("%s%c%s", sr.storesBaseFolders[0], os.PathSeparator, store.Name)
-		sr.manageStore.CreateStore(ctx, sifn1)
-		sifn2 := ""
-		if sr.replicate {
-			sifn2 = fmt.Sprintf("%s%c%s", sr.storesBaseFolders[1], os.PathSeparator, store.Name)
-			sr.manageStore.CreateStore(ctx, sifn2)
+		// sifn1 := fmt.Sprintf("%s%c%s", sr.storesBaseFolders[0], os.PathSeparator, store.Name)
+		// sr.manageStore.CreateStore(ctx, sifn1)
+		// sifn2 := ""
+		if err := storeWriter.createStore(ctx, sr.storesBaseFolders, store.Name); err != nil {
+			return err
 		}
 
 		// Persist store info into a JSON text file.
@@ -115,19 +113,20 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		if err != nil {
 			return err
 		}
-		sifn1 = fmt.Sprintf("%s%c%s%cstoreinfo.txt", sr.storesBaseFolders[0], os.PathSeparator, store.Name, os.PathSeparator)
-		if sr.replicate {
-			sifn2 = fmt.Sprintf("%s%c%s%cstoreinfo.txt", sr.storesBaseFolders[1], os.PathSeparator, store.Name, os.PathSeparator)
-		}
-		if err := storeWriter.writeToTemp(ba, sifn1, sifn2); err != nil {
+
+		if err := storeWriter.writeToTemp(ba, sr.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, store.Name, os.PathSeparator, storeInfoFilename)); err != nil {
 			return err
 		}
 	}
 	
-	// Finalize added items' tmp files. Ensure to delete items' tmp files
+	// 7. Finalize added items' tmp files. Ensure to delete items' tmp files.
 	return storeWriter.finalize()
+
+	// 8. Unlock Store List. The defer statement will unlock store list.
 }
 
+
+// TODO: (next up)
 func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) error {
 	for _, store := range stores {
 		si, err := sr.Get(ctx, store.Name)

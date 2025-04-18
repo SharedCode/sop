@@ -1,25 +1,34 @@
 package fs
 
-import "github.com/SharedCode/sop"
+import (
+	"context"
+
+	"github.com/SharedCode/sop"
+)
 
 type fileWriter struct {
-	filenames            []string
+	filenames            [][]string
 	tempFilenames        []string
-	tempNameSuffix       string
 	replicate            bool
-	replicateToFilenames []string
 	cache sop.Cache
+	manageStore sop.ManageStore
 }
 
-func newFileWriterWithReplication(replicate bool, cache sop.Cache) *fileWriter {
+const tempNameSuffix = "tmp"
+
+func newFileWriterWithReplication(replicate bool, cache sop.Cache, manageStore sop.ManageStore) *fileWriter {
 	return &fileWriter{
-		tempNameSuffix: "tmp",
 		replicate:      replicate,
 		cache: cache,
+		manageStore: manageStore,
 	}
 }
 
-func (fw *fileWriter) writeToTemp(contents []byte, filename string, replicateToFilename string) error {
+func (fw *fileWriter) writeToTemp(contents []byte, targetFolders []string, targetFilename string) error {
+	return nil
+}
+
+func (fw *fileWriter) createStore(ctx context.Context, targetFolders []string, folderName string) error {
 	return nil
 }
 
