@@ -8,23 +8,19 @@ import (
 
 type fileIO struct {
 	filenames     [][]string
-	tempFilenames []string
-	isReplicate   bool
-	cache         sop.Cache
 	manageStore   sop.ManageStore
+	replicatorTracker  *replicationTracker
 }
 
-const tempNameSuffix = "tmp"
-
-func newFileIOWithReplication(replicate bool, cache sop.Cache, manageStore sop.ManageStore) *fileIO {
+func newFileIOWithReplication(replicationTracker *replicationTracker, manageStore sop.ManageStore) *fileIO {
 	return &fileIO{
-		isReplicate: replicate,
-		cache:       cache,
 		manageStore: manageStore,
+		replicatorTracker: replicationTracker,
 	}
 }
 
 func (fio *fileIO) write(contents []byte, targetFolders []string, targetFilename string) error {
+	
 	return nil
 }
 

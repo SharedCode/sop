@@ -30,7 +30,8 @@ func NewTwoPhaseCommitTransaction(storesBaseFolder string, mode sop.TransactionM
 	if cache == nil {
 		cache = redis.NewClient()
 	}
-	sr, err := fs.NewStoreRepository([]string{storesBaseFolder}, nil, cache, false)
+	replicator := fs.NewReplicatorTracker([]string{storesBaseFolder}, false)
+	sr, err := fs.NewStoreRepository(replicator, nil, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -56,6 +57,7 @@ func NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders []string, mod
 		}
 	}
 	fio := fs.NewDefaultFileIO(fs.DefaultToFilePath)
+	replicator := fs.NewReplicatorTracker(storesBaseFolders, true)
 	bs, err := fs.NewBlobStoreWithEC(fio, erasureConfig)
 	if err != nil {
 		return nil, err
@@ -68,7 +70,7 @@ func NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders []string, mod
 	if !IsInitialized() {
 		return nil, fmt.Errorf("Redis was not initialized")
 	}
-	sr, err := fs.NewStoreRepository(storesBaseFolders, mbsf, cache, true)
+	sr, err := fs.NewStoreRepository(replicator, mbsf, cache)
 	if err != nil {
 		return nil, err
 	}
