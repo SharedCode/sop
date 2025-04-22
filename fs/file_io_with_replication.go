@@ -9,7 +9,7 @@ import (
 type fileIO struct {
 	filenames     [][]string
 	tempFilenames []string
-	replicate     bool
+	isReplicate   bool
 	cache         sop.Cache
 	manageStore   sop.ManageStore
 }
@@ -18,7 +18,7 @@ const tempNameSuffix = "tmp"
 
 func newFileIOWithReplication(replicate bool, cache sop.Cache, manageStore sop.ManageStore) *fileIO {
 	return &fileIO{
-		replicate:   replicate,
+		isReplicate: replicate,
 		cache:       cache,
 		manageStore: manageStore,
 	}
@@ -44,7 +44,7 @@ func (fio *fileIO) createStore(ctx context.Context, targetFolders []string, fold
 	return nil
 }
 
-func (fio *fileIO) finalize() error {
+func (fio *fileIO) replicate() error {
 
 	// TODO: Replicate to replicate path/filenames.
 	// TODO: decide whether failure on replication will be persisted, logged and thus, prevent future replication to occur.

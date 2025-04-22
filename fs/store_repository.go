@@ -2,7 +2,6 @@ package fs
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	log "log/slog"
 	"os"
@@ -108,7 +107,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		}
 
 		// Persist store info into a JSON text file.
-		ba, err := json.Marshal(store)
+		ba, err := encoding.Marshal(store)
 		if err != nil {
 			return err
 		}
@@ -118,8 +117,8 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		}
 	}
 
-	// 7. Finalize added items' tmp files. Ensure to delete items' tmp files.
-	if err := storeWriter.finalize(); err != nil {
+	// 7. Replicate the files if configured to.
+	if err := storeWriter.replicate(); err != nil {
 		return err
 	}
 
@@ -190,7 +189,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			si.Timestamp = original[ii].Timestamp
 
 			// Persist store info into a JSON text file.
-			ba, err := json.Marshal(si)
+			ba, err := encoding.Marshal(si)
 			if err != nil {
 				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed Marshal, details: %v", si.Name, err))
 				continue
@@ -225,7 +224,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 		stores[i].Count = si.Count + stores[i].CountDelta
 
 		// Persist store info into a JSON text file.
-		ba, err := json.Marshal(si)
+		ba, err := encoding.Marshal(si)
 		if err != nil {
 			// Undo changes.
 			undo(i, beforeUpdateStores)
@@ -239,8 +238,8 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 		}
 	}
 
-	// Finalize added items' tmp files.
-	if err := storeWriter.finalize(); err != nil {
+	// Replicate the files if configured to.
+	if err := storeWriter.replicate(); err != nil {
 		return err
 	}
 
@@ -271,21 +270,106 @@ func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
 }
 
 func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
-	// stores := make([]sop.StoreInfo, len(names))
-	// for i, name := range names {
-	// 	v := sr.lookup[name]
-	// 	stores[i] = v
-	// }
-	// return stores, nil
-	return nil, nil
+	stores := make([]sop.StoreInfo, 0, len(names))
+	storesNotInCache := make([]string, 0)
+	for i := range names {
+		store := sop.StoreInfo{}
+		var err error
+		if isCacheTTL {
+			err = sr.cache.GetStructEx(ctx, names[i], &store, cacheDuration)
+		} else {
+			err = sr.cache.GetStruct(ctx, names[i], &store)
+		}
+		if err != nil {
+			if !sr.cache.KeyNotFound(err) {
+				log.Warn(fmt.Sprintf("StoreRepository Get (redis getstruct) failed, details: %v", err))
+			}
+			storesNotInCache = append(storesNotInCache, names[i])
+			continue
+		}
+		stores = append(stores, store)
+	}
+	if len(storesNotInCache) == 0 {
+		return stores, nil
+	}
+
+	sio := newFileIOWithReplication(sr.replicate, sr.cache, sr.manageStore)
+	for _, s := range storesNotInCache {
+
+		ba, err := sio.read(sr.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, s, os.PathSeparator, storeInfoFilename))
+		if err != nil {
+			return nil, err
+		}
+
+		var store sop.StoreInfo
+		if err = encoding.Unmarshal(ba, &store); err != nil {
+			return nil, err
+		}
+
+		if err := sr.cache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
+			log.Warn(fmt.Sprintf("StoreRepository GetWithTTL (redis setstruct) failed, details: %v", err))
+		}
+
+		stores = append(stores, store)
+	}
+
+	return stores, nil
 }
 
-func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
-	for _, name := range names {
-		if err := sr.manageStore.RemoveStore(ctx, name); err != nil {
+// Remove is destructive and shold only be done in an exclusive (admin only) operation.
+// Any deleted tables can't be rolled back. This is equivalent to DDL SQL script, which we
+// don't do part of a transaction.
+func (sr *storeRepository) Remove(ctx context.Context, storeNames ...string) error {
+	lk := sr.cache.CreateLockKeys(lockStoreListKey)
+	defer sr.cache.Unlock(ctx, lk...)
+	if err := sr.cache.Lock(ctx, lockDuration, lk...); err != nil {
+		return err
+	}
+
+	// Get Store List & convert to a map for lookup.
+	sl, err := sr.GetAll(ctx)
+	if err != nil {
+		return err
+	}
+	storesLookup := make(map[string]byte, len(sl))
+	for _, s := range sl {
+		storesLookup[s] = 1
+	}
+
+	// Remove store(s) that exists.
+	for _, storeName := range storeNames {
+		if _, ok := storesLookup[storeName]; !ok {
+			log.Warn(fmt.Sprintf("can't remove store %s, there is no item with such name", storeName))
+			continue
+		}
+
+		// Tolerate Redis cache failure.
+		if err := sr.cache.Delete(ctx, storeName); err != nil && !sr.cache.KeyNotFound(err) {
+			log.Warn(fmt.Sprintf("StoreRepository Remove (redis Delete) failed, details: %v", err))
+		}
+		// Delete store folder (contains blobs, store config & registry data files).
+		if err := sr.manageStore.RemoveStore(ctx, storeName); err != nil {
 			return err
 		}
-		// TODO: remove from cache.
+
+		delete(storesLookup, storeName)
 	}
+
+	// Update Store list file of removed entries.
+	storeWriter := newFileIOWithReplication(sr.replicate, sr.cache, sr.manageStore)
+	storeList := make([]string, len(storesLookup))
+	i := 0
+	for k := range storesLookup {
+		storeList[i] = k
+		i++
+	}
+	ba, _ := encoding.Marshal(storeList)
+	storeWriter.write(ba, sr.storesBaseFolders, storeListFilename)
+
+	// Replicate the files if configured to.
+	if err := storeWriter.replicate(); err != nil {
+		return err
+	}
+
 	return nil
 }
