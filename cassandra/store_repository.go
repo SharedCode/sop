@@ -310,7 +310,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	for i := range names {
 		// Tolerate Redis cache failure.
 		if err := sr.cache.Delete(ctx, names[i]); err != nil && !sr.cache.KeyNotFound(err) {
-			log.Warn(fmt.Sprintf("Registry Add (redis setstruct) failed, details: %v", err))
+			log.Warn(fmt.Sprintf("StoreRepository Remove (redis Delete) failed, details: %v", err))
 		}
 	}
 
