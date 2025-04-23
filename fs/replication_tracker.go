@@ -9,7 +9,7 @@ type replicationTracker struct {
 	replicate           bool
 }
 
-func NewReplicatorTracker(storesBaseFolders []string, replicate bool) *replicationTracker {
+func NewReplicationTracker(storesBaseFolders []string, replicate bool) *replicationTracker {
 	isFirstFolderActive := true
 	if replicate {
 		isFirstFolderActive = detectIfFirstIsActiveFolder(storesBaseFolders)

@@ -9,13 +9,13 @@ import (
 type fileIO struct {
 	filenames     [][]string
 	manageStore   sop.ManageStore
-	replicatorTracker  *replicationTracker
+	replicationTracker  *replicationTracker
 }
 
 func newFileIOWithReplication(replicationTracker *replicationTracker, manageStore sop.ManageStore) *fileIO {
 	return &fileIO{
 		manageStore: manageStore,
-		replicatorTracker: replicationTracker,
+		replicationTracker: replicationTracker,
 	}
 }
 
