@@ -2,13 +2,16 @@ package fs
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	log "log/slog"
 	"os"
 	"time"
 
+	retry "github.com/sethvargo/go-retry"
+
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
+	"github.com/SharedCode/sop/in_memory"
 )
 
 // storeRepository is a File System based implementation of store repository.
@@ -16,66 +19,54 @@ type storeRepository struct {
 	cache       sop.Cache
 	fileIO      FileIO
 	manageStore sop.ManageStore
-	// Array so we can use in replication across two folders, if in replication mode.
-	storesBaseFolders []string
-	// If true, folder as specified in storesBaseFolders[0] will be the active folder,
-	// otherwise the 2nd folder, as specified in storesBaseFolders[1].
-	isFirstFolderActive bool
-	replicate           bool
+	replicatorTracker  *replicationTracker
 }
 
 const (
-	lockStoreListKey = "sr_infs"
-	lockDuration     = 5 * time.Minute
+	lockStoreListKey      = "sr_infs"
+	lockStoreListDuration = time.Duration(10 * time.Minute)
+	storeListFilename     = "storelist.txt"
+	storeInfoFilename     = "storeinfo.txt"
+	// Lock time out for the cache based locking of update store set function.
+	updateStoresLockDuration = time.Duration(15 * time.Minute)
 )
 
 // NewStoreRepository manages the StoreInfo in a File System.
-func NewStoreRepository(storesBaseFolder []string, manageStore sop.ManageStore, cache sop.Cache, replicate bool) (sop.StoreRepository, error) {
-	if replicate && len(storesBaseFolder) != 2 {
-		return nil, fmt.Errorf("'storesBaseFolder' needs to be exactly two elements if 'replicate' parameter is true")
-	}
-	isFirstFolderActive := true
-	if replicate {
-		isFirstFolderActive = detectIfFirstIsActiveFolder(storesBaseFolder)
+func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cache sop.Cache) (sop.StoreRepository, error) {
+	if rt.replicate && len(rt.storesBaseFolders) != 2 {
+		return nil, fmt.Errorf("'storesBaseFolders' needs to be exactly two elements if 'replicate' parameter is true")
 	}
 	return &storeRepository{
-		cache:               cache,
-		manageStore:         manageStore,
-		fileIO:              NewDefaultFileIO(DefaultToFilePath),
-		storesBaseFolders:   storesBaseFolder,
-		replicate:           replicate,
-		isFirstFolderActive: isFirstFolderActive,
+		cache:       cache,
+		manageStore: manageStore,
+		fileIO:      NewDefaultFileIO(DefaultToFilePath),
+		replicatorTracker:  rt,
 	}, nil
 }
 
-func detectIfFirstIsActiveFolder(storesBaseFolders []string) bool {
-	return true
-}
-
+// In the File System implementation, Add function manages the store list in its own file in the base folder
+// each store is allocated a sub-folder where store info file is persisted.
+//
+// Store list is not cached since adding/removing store(s) are rare events.
 func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
-	/*
-		1. Lock Store List
-		2. Get Store List
-		3. Merge added items to Store List
-		4. Write Store List to tmp file
-		5. Create folders and write store info to its tmp file, for each added item
-		6. Finalize added items' tmp files. Ensure to delete items' tmp files
-		7. Finalize Store List tmp file. Ensure to delete Store List tmp file
-		8. Unlock Store List
-	*/
-
+	// 1. Lock Store List.
 	lk := sr.cache.CreateLockKeys(lockStoreListKey)
-	if err := sr.cache.Lock(ctx, lockDuration, lk...); err != nil {
+	defer sr.cache.Unlock(ctx, lk...)
+	if err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); err != nil {
 		return err
 	}
-	defer sr.cache.Unlock(ctx, lk...)
 
-	storesLookup, err := sr.getAll(ctx)
+	// 2. Get Store List & convert to a map for lookup.
+	sl, err := sr.GetAll(ctx)
 	if err != nil {
 		return err
 	}
+	storesLookup := make(map[string]byte, len(sl))
+	for _, s := range sl {
+		storesLookup[s] = 1
+	}
 
-	// Only allow add of store with unique name.
+	// 3. Merge added items to Store List. Only allow add of store with unique name.
 	for _, store := range stores {
 		if _, ok := storesLookup[store.Name]; ok {
 			return fmt.Errorf("can't add store %s, an existing item with such name exists", store.Name)
@@ -83,100 +74,167 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		storesLookup[store.Name] = 1
 	}
 
-	// Write Store List to tmp file.
-	storeWriter := newFileWriterWithReplication(sr.replicate, sr.cache)
+	// 4. Write Store List to tmp file.
+	storeWriter := newFileIOWithReplication(sr.replicatorTracker, sr.manageStore)
 	storeList := make([]string, len(storesLookup))
 	i := 0
-	for k, _ := range storesLookup {
+	for k := range storesLookup {
 		storeList[i] = k
 		i++
 	}
-	slfn1 := fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[0], os.PathSeparator)
-	slfn2 := ""
-	if sr.replicate {
-		slfn2 = fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[1], os.PathSeparator)
-	}
 	ba, _ := encoding.Marshal(storeList)
-	storeWriter.writeToTemp(ba, slfn1, slfn2)
+	storeWriter.write(ba, sr.replicatorTracker.storesBaseFolders, storeListFilename)
 
-	// Create folders and write store info to its tmp file, for each added item
+	// 5-6. Create folders and write store info to its tmp file, for each added item.
 	for _, store := range stores {
-		// Create the store sub-folder.
-		sifn1 := fmt.Sprintf("%s%c%s", sr.storesBaseFolders[0], os.PathSeparator, store.Name)
-		sr.manageStore.CreateStore(ctx, sifn1)
-		sifn2 := ""
-		if sr.replicate {
-			sifn2 = fmt.Sprintf("%s%c%s", sr.storesBaseFolders[1], os.PathSeparator, store.Name)
-			sr.manageStore.CreateStore(ctx, sifn2)
+		if err := storeWriter.createStore(ctx, sr.replicatorTracker.storesBaseFolders, store.Name); err != nil {
+			return err
 		}
 
 		// Persist store info into a JSON text file.
-		ba, err := json.Marshal(store)
+		ba, err := encoding.Marshal(store)
 		if err != nil {
 			return err
 		}
-		sifn1 = fmt.Sprintf("%s%c%s%cstoreinfo.txt", sr.storesBaseFolders[0], os.PathSeparator, store.Name, os.PathSeparator)
-		if sr.replicate {
-			sifn2 = fmt.Sprintf("%s%c%s%cstoreinfo.txt", sr.storesBaseFolders[1], os.PathSeparator, store.Name, os.PathSeparator)
-		}
-		if err := storeWriter.writeToTemp(ba, sifn1, sifn2); err != nil {
+
+		if err := storeWriter.write(ba, sr.replicatorTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, store.Name, os.PathSeparator, storeInfoFilename)); err != nil {
 			return err
 		}
 	}
-	
-	// Finalize added items' tmp files. Ensure to delete items' tmp files
-	return storeWriter.finalize()
+
+	// 7. Replicate the files if configured to.
+	if err := storeWriter.replicate(); err != nil {
+		return err
+	}
+
+	// Cache each of the stores.
+	for _, store := range stores {
+		if err := sr.cache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
+			log.Warn(fmt.Sprintf("StoreRepository Add failed (redis setstruct), details: %v", err))
+		}
+	}
+	return nil
+	// 8. Unlock Store List. The defer statement will unlock store list.
 }
 
 func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) error {
-	for _, store := range stores {
-		si, err := sr.Get(ctx, store.Name)
-		if err != nil {
-			return err
-		}
-		// Merge or apply the "count delta".
-		store.Count = si[0].Count + store.CountDelta
-		store.CountDelta = 0
-		if err := sr.Update(ctx, store); err != nil {
-			return err
-		}
-		// Persiste store info into a JSON text file.
-		fn := fmt.Sprintf("%s%cstoreinfo.txt", store.BlobTable, os.PathSeparator)
-		ba, err := json.Marshal(store)
-		if err != nil {
-			return err
-		}
-		if err := sr.fileIO.WriteFile(fn, ba, permission); err != nil {
-			return err
-		}
-		// TODO: add to cache.
+	// Sort the stores info so we can commit them in same sort order across transactions,
+	// thus, reduced chance of deadlock.
+	b3 := in_memory.NewBtree[string, sop.StoreInfo](true)
+	for i := range stores {
+		b3.Add(stores[i].Name, stores[i])
 	}
-	return nil
-}
+	b3.First()
+	keys := make([]string, len(stores))
+	i := 0
+	for {
+		keys[i] = b3.GetCurrentKey()
+		stores[i] = b3.GetCurrentValue()
+		if !b3.Next() {
+			break
+		}
+		i++
+	}
 
-func (sr *storeRepository) update(ctx context.Context, stores ...sop.StoreInfo) error {
-	for _, store := range stores {
-		si, err := sr.Get(ctx, store.Name)
-		if err != nil {
-			return err
+	// Create lock IDs that we can use to logically lock and prevent other updates.
+	lockKeys := sr.cache.CreateLockKeys(keys...)
+
+	b := retry.NewFibonacci(1 * time.Second)
+
+	// Lock all keys.
+	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
+		// 15 minutes to lock, merge/update details then unlock.
+		if err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); err != nil {
+			log.Warn(err.Error() + ", will retry")
+			return retry.RetryableError(err)
 		}
-		// Merge or apply the "count delta".
-		store.Count = si[0].Count + store.CountDelta
-		store.CountDelta = 0
-		if err := sr.Update(ctx, store); err != nil {
-			return err
-		}
-		// Persiste store info into a JSON text file.
-		fn := fmt.Sprintf("%s%cstoreinfo.txt", store.BlobTable, os.PathSeparator)
-		ba, err := json.Marshal(store)
-		if err != nil {
-			return err
-		}
-		if err := sr.fileIO.WriteFile(fn, ba, permission); err != nil {
-			return err
-		}
-		// TODO: add to cache.
+		return nil
+	}); err != nil {
+		log.Warn(err.Error() + ", gave up")
+		// Unlock keys since we failed locking all of them.
+		sr.cache.Unlock(ctx, lockKeys...)
+		return err
 	}
+
+	storeWriter := newFileIOWithReplication(sr.replicatorTracker, sr.manageStore)
+
+	undo := func(endIndex int, original []sop.StoreInfo) {
+		// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
+		for ii := 0; ii < endIndex; ii++ {
+			log.Debug(fmt.Sprintf("undo occured for store %s", stores[ii].Name))
+
+			sis, _ := sr.GetWithTTL(ctx, stores[ii].CacheConfig.IsStoreInfoCacheTTL, stores[ii].CacheConfig.StoreInfoCacheDuration, stores[ii].Name)
+			if len(sis) == 0 {
+				continue
+			}
+
+			si := sis[0]
+			// Reverse the count delta should restore to true count value.
+			si.Count = si.Count - stores[ii].CountDelta
+			si.Timestamp = original[ii].Timestamp
+
+			// Persist store info into a JSON text file.
+			ba, err := encoding.Marshal(si)
+			if err != nil {
+				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed Marshal, details: %v", si.Name, err))
+				continue
+			}
+
+			if err := storeWriter.write(ba, sr.replicatorTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename)); err != nil {
+				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed write, details: %v", si.Name, err))
+				continue
+			}
+
+			// Tolerate redis error since we've successfully updated the master table.
+			if err := sr.cache.SetStruct(ctx, si.Name, &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
+				log.Warn(fmt.Sprintf("StoreRepository Update Undo (redis setstruct) store %s failed, details: %v", si.Name, err))
+			}
+		}
+	}
+
+	beforeUpdateStores := make([]sop.StoreInfo, 0, len(stores))
+	// Unlock all keys before going out of scope.
+	defer sr.cache.Unlock(ctx, lockKeys...)
+
+	for i := range stores {
+		sis, err := sr.GetWithTTL(ctx, stores[i].CacheConfig.IsStoreInfoCacheTTL, stores[i].CacheConfig.StoreInfoCacheDuration, stores[i].Name)
+		if len(sis) == 0 {
+			undo(i, beforeUpdateStores)
+			return err
+		}
+		beforeUpdateStores = append(beforeUpdateStores, sis...)
+
+		si := sis[0]
+		// Merge or apply the "count delta".
+		stores[i].Count = si.Count + stores[i].CountDelta
+
+		// Persist store info into a JSON text file.
+		ba, err := encoding.Marshal(si)
+		if err != nil {
+			// Undo changes.
+			undo(i, beforeUpdateStores)
+			return err
+		}
+
+		if err := storeWriter.write(ba, sr.replicatorTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename)); err != nil {
+			// Undo changes.
+			undo(i, beforeUpdateStores)
+			return err
+		}
+	}
+
+	// Replicate the files if configured to.
+	if err := storeWriter.replicate(); err != nil {
+		return err
+	}
+
+	// Cache each of the stores.
+	for _, store := range stores {
+		if err := sr.cache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
+			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) failed, details: %v", err))
+		}
+	}
+
 	return nil
 }
 
@@ -184,28 +242,12 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 	return sr.GetWithTTL(ctx, false, 0, names...)
 }
 
-func (sr *storeRepository) getAll(ctx context.Context) (map[string]byte, error) {
-	sl, err := sr.GetAll(ctx)
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[string]byte, len(sl))
-	for _, s := range sl {
-		m[s] = 1
-	}
-	return m, nil
-}
-
 func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
-	fn := fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[0], os.PathSeparator)
-	if sr.replicate && !sr.isFirstFolderActive {
-		fn = fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[1], os.PathSeparator)
-	}
-	ba, err := sr.fileIO.ReadFile(fn)
+	fio := newFileIOWithReplication(sr.replicatorTracker, sr.manageStore)
+	ba, err := fio.read(sr.replicatorTracker.storesBaseFolders, storeListFilename)
 	if err != nil {
 		return nil, err
 	}
-
 	var storeList []string
 	err = encoding.Unmarshal(ba, &storeList)
 	// No need to cache the store list. (by intent, for now)
@@ -213,21 +255,106 @@ func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
 }
 
 func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
-	// stores := make([]sop.StoreInfo, len(names))
-	// for i, name := range names {
-	// 	v := sr.lookup[name]
-	// 	stores[i] = v
-	// }
-	// return stores, nil
-	return nil, nil
+	stores := make([]sop.StoreInfo, 0, len(names))
+	storesNotInCache := make([]string, 0)
+	for i := range names {
+		store := sop.StoreInfo{}
+		var err error
+		if isCacheTTL {
+			err = sr.cache.GetStructEx(ctx, names[i], &store, cacheDuration)
+		} else {
+			err = sr.cache.GetStruct(ctx, names[i], &store)
+		}
+		if err != nil {
+			if !sr.cache.KeyNotFound(err) {
+				log.Warn(fmt.Sprintf("StoreRepository Get (redis getstruct) failed, details: %v", err))
+			}
+			storesNotInCache = append(storesNotInCache, names[i])
+			continue
+		}
+		stores = append(stores, store)
+	}
+	if len(storesNotInCache) == 0 {
+		return stores, nil
+	}
+
+	sio := newFileIOWithReplication(sr.replicatorTracker, sr.manageStore)
+	for _, s := range storesNotInCache {
+
+		ba, err := sio.read(sr.replicatorTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, s, os.PathSeparator, storeInfoFilename))
+		if err != nil {
+			return nil, err
+		}
+
+		var store sop.StoreInfo
+		if err = encoding.Unmarshal(ba, &store); err != nil {
+			return nil, err
+		}
+
+		if err := sr.cache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
+			log.Warn(fmt.Sprintf("StoreRepository GetWithTTL (redis setstruct) failed, details: %v", err))
+		}
+
+		stores = append(stores, store)
+	}
+
+	return stores, nil
 }
 
-func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
-	for _, name := range names {
-		if err := sr.manageStore.RemoveStore(ctx, name); err != nil {
+// Remove is destructive and shold only be done in an exclusive (admin only) operation.
+// Any deleted tables can't be rolled back. This is equivalent to DDL SQL script, which we
+// don't do part of a transaction.
+func (sr *storeRepository) Remove(ctx context.Context, storeNames ...string) error {
+	lk := sr.cache.CreateLockKeys(lockStoreListKey)
+	defer sr.cache.Unlock(ctx, lk...)
+	if err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); err != nil {
+		return err
+	}
+
+	// Get Store List & convert to a map for lookup.
+	sl, err := sr.GetAll(ctx)
+	if err != nil {
+		return err
+	}
+	storesLookup := make(map[string]byte, len(sl))
+	for _, s := range sl {
+		storesLookup[s] = 1
+	}
+
+	// Remove store(s) that exists.
+	for _, storeName := range storeNames {
+		if _, ok := storesLookup[storeName]; !ok {
+			log.Warn(fmt.Sprintf("can't remove store %s, there is no item with such name", storeName))
+			continue
+		}
+
+		// Tolerate Redis cache failure.
+		if err := sr.cache.Delete(ctx, storeName); err != nil && !sr.cache.KeyNotFound(err) {
+			log.Warn(fmt.Sprintf("StoreRepository Remove (redis Delete) failed, details: %v", err))
+		}
+		// Delete store folder (contains blobs, store config & registry data files).
+		if err := sr.manageStore.RemoveStore(ctx, storeName); err != nil {
 			return err
 		}
-		// TODO: remove from cache.
+
+		delete(storesLookup, storeName)
 	}
+
+	// Update Store list file of removed entries.
+	storeWriter := newFileIOWithReplication(sr.replicatorTracker, sr.manageStore)
+	storeList := make([]string, len(storesLookup))
+	i := 0
+	for k := range storesLookup {
+		storeList[i] = k
+		i++
+	}
+	ba, _ := encoding.Marshal(storeList)
+	storeWriter.write(ba, sr.replicatorTracker.storesBaseFolders, storeListFilename)
+
+	// Replicate the files if configured to.
+	if err := storeWriter.replicate(); err != nil {
+		return err
+	}
+
 	return nil
 }

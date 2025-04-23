@@ -30,11 +30,12 @@ func NewTwoPhaseCommitTransaction(storesBaseFolder string, mode sop.TransactionM
 	if cache == nil {
 		cache = redis.NewClient()
 	}
-	sr, err := fs.NewStoreRepository([]string{storesBaseFolder}, nil, cache, false)
+	replicationTracker := fs.NewReplicationTracker([]string{storesBaseFolder}, false)
+	sr, err := fs.NewStoreRepository(replicationTracker, nil, cache)
 	if err != nil {
 		return nil, err
 	}
-	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, fs.NewBlobStore(nil), sr, fs.NewRegistry(), cache, fs.NewTransactionLog())
+	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, fs.NewBlobStore(nil), sr, fs.NewRegistry(replicationTracker), cache, fs.NewTransactionLog())
 }
 
 // Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
@@ -56,6 +57,7 @@ func NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders []string, mod
 		}
 	}
 	fio := fs.NewDefaultFileIO(fs.DefaultToFilePath)
+	replicationTracker := fs.NewReplicationTracker(storesBaseFolders, true)
 	bs, err := fs.NewBlobStoreWithEC(fio, erasureConfig)
 	if err != nil {
 		return nil, err
@@ -68,9 +70,9 @@ func NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders []string, mod
 	if !IsInitialized() {
 		return nil, fmt.Errorf("Redis was not initialized")
 	}
-	sr, err := fs.NewStoreRepository(storesBaseFolders, mbsf, cache, true)
+	sr, err := fs.NewStoreRepository(replicationTracker, mbsf, cache)
 	if err != nil {
 		return nil, err
 	}
-	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, bs, sr, fs.NewRegistry(), cache, fs.NewTransactionLog())
+	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, bs, sr, fs.NewRegistry(replicationTracker), cache, fs.NewTransactionLog())
 }
