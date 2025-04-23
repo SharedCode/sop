@@ -20,11 +20,12 @@ func newFileIOWithReplication(replicationTracker *replicationTracker, manageStor
 }
 
 func (fio *fileIO) write(contents []byte, targetFolders []string, targetFilename string) error {
-	
+	// TODO
 	return nil
 }
 
 func (fio *fileIO) read(sourceFolders []string, filename string) ([]byte, error) {
+	// TODO
 	// fn := fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[0], os.PathSeparator)
 	// if sr.replicate && !sr.isFirstFolderActive {
 	// 	fn = fmt.Sprintf("%s%cstorelist.txt", sr.storesBaseFolders[1], os.PathSeparator)

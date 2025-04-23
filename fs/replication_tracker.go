@@ -26,5 +26,6 @@ func (r *replicationTracker) SwitchActive() {
 }
 
 func detectIfFirstIsActiveFolder(storesBaseFolders []string) bool {
+	// TODO
 	return true
 }
