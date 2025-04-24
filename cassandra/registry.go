@@ -14,15 +14,6 @@ import (
 	"github.com/gocql/gocql"
 )
 
-// UpdateAllOrNothingError is a special error type that will allow caller to handle it differently than normal errors.
-type UpdateAllOrNothingError struct {
-	Err error
-}
-
-func (r *UpdateAllOrNothingError) Error() string {
-	return r.Err.Error()
-}
-
 type registry struct {
 	cache sop.Cache
 }
@@ -96,7 +87,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				if newVersion != h2.Version || !h.IsEqual(&h2) {
 					// Unlock the object Keys before return.
 					v.cache.Unlock(ctx, handleKeys...)
-					return &UpdateAllOrNothingError{
+					return &sop.UpdateAllOrNothingError{
 						Err: fmt.Errorf("Registry Update failed, handle logical ID(%v) version conflict detected", h.LogicalID.String()),
 					}
 				}

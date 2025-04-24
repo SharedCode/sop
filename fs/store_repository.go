@@ -19,7 +19,7 @@ type storeRepository struct {
 	cache       sop.Cache
 	fileIO      FileIO
 	manageStore sop.ManageStore
-	replicatorTracker  *replicationTracker
+	replicationTracker  *replicationTracker
 }
 
 const (
@@ -40,7 +40,7 @@ func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cac
 		cache:       cache,
 		manageStore: manageStore,
 		fileIO:      NewDefaultFileIO(DefaultToFilePath),
-		replicatorTracker:  rt,
+		replicationTracker:  rt,
 	}, nil
 }
 
@@ -75,7 +75,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	}
 
 	// 4. Write Store List to tmp file.
-	storeWriter := newFileIOWithReplication(sr.replicatorTracker, sr.manageStore)
+	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
 	storeList := make([]string, len(storesLookup))
 	i := 0
 	for k := range storesLookup {
@@ -83,11 +83,11 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		i++
 	}
 	ba, _ := encoding.Marshal(storeList)
-	storeWriter.write(ba, sr.replicatorTracker.storesBaseFolders, storeListFilename)
+	storeWriter.write(ba, sr.replicationTracker.storesBaseFolders, storeListFilename)
 
 	// 5-6. Create folders and write store info to its tmp file, for each added item.
 	for _, store := range stores {
-		if err := storeWriter.createStore(ctx, sr.replicatorTracker.storesBaseFolders, store.Name); err != nil {
+		if err := storeWriter.createStore(ctx, sr.replicationTracker.storesBaseFolders, store.Name); err != nil {
 			return err
 		}
 
@@ -97,7 +97,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 			return err
 		}
 
-		if err := storeWriter.write(ba, sr.replicatorTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, store.Name, os.PathSeparator, storeInfoFilename)); err != nil {
+		if err := storeWriter.write(ba, sr.replicationTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, store.Name, os.PathSeparator, storeInfoFilename)); err != nil {
 			return err
 		}
 	}
@@ -156,7 +156,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 		return err
 	}
 
-	storeWriter := newFileIOWithReplication(sr.replicatorTracker, sr.manageStore)
+	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
 
 	undo := func(endIndex int, original []sop.StoreInfo) {
 		// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
@@ -180,7 +180,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 				continue
 			}
 
-			if err := storeWriter.write(ba, sr.replicatorTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename)); err != nil {
+			if err := storeWriter.write(ba, sr.replicationTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename)); err != nil {
 				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed write, details: %v", si.Name, err))
 				continue
 			}
@@ -216,7 +216,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			return err
 		}
 
-		if err := storeWriter.write(ba, sr.replicatorTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename)); err != nil {
+		if err := storeWriter.write(ba, sr.replicationTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename)); err != nil {
 			// Undo changes.
 			undo(i, beforeUpdateStores)
 			return err
@@ -243,8 +243,8 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 }
 
 func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
-	fio := newFileIOWithReplication(sr.replicatorTracker, sr.manageStore)
-	ba, err := fio.read(sr.replicatorTracker.storesBaseFolders, storeListFilename)
+	fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
+	ba, err := fio.read(sr.replicationTracker.storesBaseFolders, storeListFilename)
 	if err != nil {
 		return nil, err
 	}
@@ -278,10 +278,10 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 		return stores, nil
 	}
 
-	sio := newFileIOWithReplication(sr.replicatorTracker, sr.manageStore)
+	sio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
 	for _, s := range storesNotInCache {
 
-		ba, err := sio.read(sr.replicatorTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, s, os.PathSeparator, storeInfoFilename))
+		ba, err := sio.read(sr.replicationTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, s, os.PathSeparator, storeInfoFilename))
 		if err != nil {
 			return nil, err
 		}
@@ -341,7 +341,7 @@ func (sr *storeRepository) Remove(ctx context.Context, storeNames ...string) err
 	}
 
 	// Update Store list file of removed entries.
-	storeWriter := newFileIOWithReplication(sr.replicatorTracker, sr.manageStore)
+	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
 	storeList := make([]string, len(storesLookup))
 	i := 0
 	for k := range storesLookup {
@@ -349,7 +349,7 @@ func (sr *storeRepository) Remove(ctx context.Context, storeNames ...string) err
 		i++
 	}
 	ba, _ := encoding.Marshal(storeList)
-	storeWriter.write(ba, sr.replicatorTracker.storesBaseFolders, storeListFilename)
+	storeWriter.write(ba, sr.replicationTracker.storesBaseFolders, storeListFilename)
 
 	// Replicate the files if configured to.
 	if err := storeWriter.replicate(); err != nil {

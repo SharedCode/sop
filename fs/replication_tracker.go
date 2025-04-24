@@ -21,7 +21,7 @@ func NewReplicationTracker(storesBaseFolders []string, replicate bool) *replicat
 	}
 }
 
-func (r *replicationTracker) SwitchActive() {
+func (r *replicationTracker) Failover() {
 	r.isFirstFolderActive = !r.isFirstFolderActive
 }
 

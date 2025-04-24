@@ -21,6 +21,14 @@ type RegistryPayload[T Handle | UUID] struct {
 	IDs []T
 }
 
+// UpdateAllOrNothingError is a special error type that will allow caller to handle it differently than normal errors.
+type UpdateAllOrNothingError struct {
+	Err error
+}
+func (r *UpdateAllOrNothingError) Error() string {
+	return r.Err.Error()
+}
+
 // Virtual ID registry is essential in our support for all or nothing (sub)feature,
 // which is essential for fault tolerance.
 //

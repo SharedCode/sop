@@ -10,7 +10,6 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/cassandra"
 )
 
 type btreeBackend struct {
@@ -159,7 +158,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
-		if _, ok := err.(*cas.UpdateAllOrNothingError); ok {
+		if _, ok := err.(*sop.UpdateAllOrNothingError); ok {
 			startTime := sop.Now()
 			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
 			// until it succeeds or timeout.
@@ -182,7 +181,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 				}
 				if err = t.phase2Commit(ctx); err == nil {
 					return nil
-				} else if _, ok := err.(*cas.UpdateAllOrNothingError); !ok {
+				} else if _, ok := err.(*sop.UpdateAllOrNothingError); !ok {
 					break
 				}
 			}
