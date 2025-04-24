@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"fmt"
+	"io"
 	log "log/slog"
 	"math/rand"
 	"sync"
@@ -154,6 +155,18 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 2
+
+	// Do registry cleanup, e.g. - close all opened files.
+	defer func() {
+		if t.registry == nil {
+			return
+		}
+		if closeable, ok := t.registry.(io.Closer); ok {
+			closeable.Close()
+			t.registry = nil
+		}
+	}()
+
 	if t.mode != sop.ForWriting {
 		return nil
 	}

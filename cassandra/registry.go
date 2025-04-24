@@ -218,7 +218,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 			handles = append(handles, handle)
 
 			if err := v.cache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
-				log.Warn(fmt.Sprintf("Registry Get (redis setstruct) failed, details: %v", err))
+				log.Warn(fmt.Sprintf("Registry Set (redis setstruct) failed, details: %v", err))
 			}
 			handle = sop.Handle{}
 		}

@@ -3,38 +3,50 @@ package fs
 import (
 	"context"
 	"fmt"
+	"io"
 	log "log/slog"
+	"time"
 
 	"github.com/SharedCode/sop"
 )
 
 type registryOnDisk struct {
-	hashmap *hashmap[sop.UUID, sop.Handle]
+	hashmap *hashmap
 	replicatorTracker                *replicationTracker
 	cache sop.Cache
 }
 
+// Registry interface needs to be closed when not needed anymore, e.g. transaction is completed.
+type Registry interface {
+	sop.Registry
+	io.Closer
+}
+
 const(
-	registryFilename = "registry"
 	// Study whether we need this configurable.
 	hashModValue = 250000
+	// Lock time out for the cache based conflict check routine in update (handles) function.
+	updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10*time.Minute)
 )
 
-// TODO: Implement this to do "hash map on disk" (file based) registry entries storage & management.
-
 // NewRegistry manages the Handle in memory for mocking.
-func NewRegistry(rt *replicationTracker, cache sop.Cache) sop.Registry {
+func NewRegistry(rt *replicationTracker, cache sop.Cache) Registry {
 	return &registryOnDisk{
-		hashmap: newHashmap(registryFilename, hashModValue, rt),
+		hashmap: newHashmap(hashModValue, rt),
 		replicatorTracker: rt,
 		cache: cache,
 	}
 }
 
+// Close all opened file handles.
+func (r *registryOnDisk) Close() error {
+	return r.hashmap.close()
+}
+
 func (r *registryOnDisk) Add(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
-			if err := r.hashmap.set(h.LogicalID, h); err != nil {
+			if err := r.hashmap.set(false, sop.Tuple[string,[]sop.Handle]{ First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 				return err
 			}
 			// Tolerate Redis cache failure.
@@ -51,22 +63,16 @@ func (r *registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHa
 		return nil
 	}
 
-	//TODO
-
 	// Logged batch will do all or nothing. This is the only one "all or nothing" operation in the Commit process.
 	if allOrNothing {
-		// For now, keep it simple and rely on transaction commit's optimistic locking & multi-phase checks,
-		// together with the logged batch update as shown below.
-
-		// Enforce a Redis based version check as Cassandra logged transaction does not allow "conditional" check across partitions.
 		handleKeys := make([]*sop.LockKey, 0)
 
 		for _, sh := range storesHandles {
 			for _, h := range sh.IDs {
 				var h2 sop.Handle
-				if err := v.cache.GetStruct(ctx, h.LogicalID.String(), &h2); err != nil {
+				if err := r.cache.GetStruct(ctx, h.LogicalID.String(), &h2); err != nil {
 					// Unlock the object Keys before return.
-					v.cache.Unlock(ctx, handleKeys...)
+					r.cache.Unlock(ctx, handleKeys...)
 					return err
 				}
 				newVersion := h.Version
@@ -74,63 +80,44 @@ func (r *registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHa
 				newVersion--
 				if newVersion != h2.Version || !h.IsEqual(&h2) {
 					// Unlock the object Keys before return.
-					v.cache.Unlock(ctx, handleKeys...)
+					r.cache.Unlock(ctx, handleKeys...)
 					return &sop.UpdateAllOrNothingError{
 						Err: fmt.Errorf("Registry Update failed, handle logical ID(%v) version conflict detected", h.LogicalID.String()),
 					}
 				}
 				// Attempt to lock in Redis the registry object, if we can't attain a lock, it means there is another transaction elsewhere
 				// that already attained a lock, thus, we can cause rollback of this transaction due to conflict).
-				lk := v.cache.CreateLockKeys(h.LogicalID.String())
+				lk := r.cache.CreateLockKeys(h.LogicalID.String())
 				handleKeys = append(handleKeys, lk[0])
 
-				if err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); err != nil {
+				if err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); err != nil {
 					// Unlock the object Keys before return.
-					v.cache.Unlock(ctx, handleKeys...)
+					r.cache.Unlock(ctx, handleKeys...)
 					return err
 				}
 			}
 		}
 
-		// Do the actual batch logged transaction update in Cassandra.
-		batch := connection.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
-		if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
-			batch.SetConsistency(connection.Config.ConsistencyBook.RegistryUpdate)
+		batch := make([]sop.Tuple[string, []sop.Handle], 0)
+		for _, sh := range storesHandles {
+			batch = append(batch, sop.Tuple[string, []sop.Handle]{ First: sh.RegistryTable, Second: sh.IDs})
 		}
 
-		for _, sh := range storesHandles {
-			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
-				connection.Config.Keyspace, sh.RegistryTable)
-			for _, h := range sh.IDs {
-				// Enqueue update registry record cmd.
-				batch.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
-					h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalID))
-			}
-		}
-		// Execute the batch query, all or nothing.
-		if err := connection.Session.ExecuteBatch(batch); err != nil {
+		// Execute the batch set, all or nothing.
+		if err := r.hashmap.set( true, batch...); err != nil {
 			// Unlock the object Keys before return.
-			v.cache.Unlock(ctx, handleKeys...)
+			r.cache.Unlock(ctx, handleKeys...)
 			// Failed update all, thus, return err to cause rollback.
 			return err
 		}
 		// Unlock the object Keys before return.
-		v.cache.Unlock(ctx, handleKeys...)
-	} else {
+		r.cache.Unlock(ctx, handleKeys...)
+	} else {	
 		for _, sh := range storesHandles {
-			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
-				connection.Config.Keyspace, sh.RegistryTable)
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
-
-				qry := connection.Session.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
-					h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalID)).WithContext(ctx)
-				if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
-					qry.Consistency(connection.Config.ConsistencyBook.RegistryUpdate)
-				}
-
 				// Update registry record.
-				if err := qry.Exec(); err != nil {
+				if err := r.hashmap.set(false, sop.Tuple[string,[]sop.Handle]{ First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 					return err
 				}
 			}
@@ -141,7 +128,7 @@ func (r *registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHa
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
 			// Tolerate Redis cache failure.
-			if err := v.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+			if err := r.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
 			}
 		}
@@ -150,8 +137,75 @@ func (r *registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHa
 }
 
 func (r *registryOnDisk) Get(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
-	return nil, nil
+	storesHandles := make([]sop.RegistryPayload[sop.Handle], 0, len(storesLids))
+	for _, storeLids := range storesLids {
+		handles := make([]sop.Handle, 0, len(storeLids.IDs))
+		lids := make([]sop.UUID, 0, len(storeLids.IDs))
+		for i := range storeLids.IDs {
+			h := sop.Handle{}
+			var err error
+			if storeLids.IsCacheTTL {
+				err = r.cache.GetStructEx(ctx, storeLids.IDs[i].String(), &h, storeLids.CacheDuration)
+			} else {
+				err = r.cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
+			}
+			if err != nil {
+				if !r.cache.KeyNotFound(err) {
+					log.Warn(fmt.Sprintf("Registry Get (redis getstruct) failed, details: %v", err))
+				}
+				lids = append(lids, storeLids.IDs[i])
+				continue
+			}
+			handles = append(handles, h)
+		}
+
+		if len(lids) == 0 {
+			storesHandles = append(storesHandles, sop.RegistryPayload[sop.Handle]{
+				RegistryTable: storeLids.RegistryTable,
+				BlobTable:     storeLids.BlobTable,
+				CacheDuration: storeLids.CacheDuration,
+				IsCacheTTL:    storeLids.IsCacheTTL,
+				IDs:           handles,
+			})
+			continue
+		}
+
+		mh, err := r.hashmap.get(sop.Tuple[string, []sop.UUID]{ First: storeLids.RegistryTable, Second: lids})
+		if err != nil {
+			return nil, err
+		}
+
+		for _, handle := range mh  {
+			handles = append(handles, handle)
+			if err := r.cache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
+				log.Warn(fmt.Sprintf("Registry Set (redis setstruct) failed, details: %v", err))
+			}
+		}
+		storesHandles = append(storesHandles, sop.RegistryPayload[sop.Handle]{
+			RegistryTable: storeLids.RegistryTable,
+			BlobTable:     storeLids.BlobTable,
+			CacheDuration: storeLids.CacheDuration,
+			IsCacheTTL:    storeLids.IsCacheTTL,
+			IDs:           handles,
+		})
+	}
+	return storesHandles, nil
 }
 func (r *registryOnDisk) Remove(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) error {
+	for _, storeLids := range storesLids {
+		// Flush out the failing records from cache.
+		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
+			for _, id := range storeLids.IDs {
+				if err := r.cache.Delete(ctx, id.String()); err != nil && !r.cache.KeyNotFound(err) {
+					log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
+				}
+			}
+		}
+		if err := r.hashmap.remove(sop.Tuple[string, []sop.UUID]{ First: storeLids.RegistryTable, Second: storeLids.IDs}); err != nil {
+			deleteFromCache(storeLids)
+			return err
+		}
+		deleteFromCache(storeLids)
+	}
 	return nil
 }
