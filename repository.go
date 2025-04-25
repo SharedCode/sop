@@ -25,6 +25,7 @@ type RegistryPayload[T Handle | UUID] struct {
 type UpdateAllOrNothingError struct {
 	Err error
 }
+
 func (r *UpdateAllOrNothingError) Error() string {
 	return r.Err.Error()
 }

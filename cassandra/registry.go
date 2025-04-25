@@ -19,7 +19,7 @@ type registry struct {
 }
 
 // Lock time out for the cache based conflict check routine in update (handles) function.
-const updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10*time.Minute)
+const updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 
 // NewRegistry manages the Handle in the store's Cassandra registry table.
 func NewRegistry() sop.Registry {

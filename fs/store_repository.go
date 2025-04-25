@@ -16,10 +16,10 @@ import (
 
 // storeRepository is a File System based implementation of store repository.
 type storeRepository struct {
-	cache       sop.Cache
-	fileIO      FileIO
-	manageStore sop.ManageStore
-	replicationTracker  *replicationTracker
+	cache              sop.Cache
+	fileIO             FileIO
+	manageStore        sop.ManageStore
+	replicationTracker *replicationTracker
 }
 
 const (
@@ -37,10 +37,10 @@ func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cac
 		return nil, fmt.Errorf("'storesBaseFolders' needs to be exactly two elements if 'replicate' parameter is true")
 	}
 	return &storeRepository{
-		cache:       cache,
-		manageStore: manageStore,
-		fileIO:      NewDefaultFileIO(DefaultToFilePath),
-		replicationTracker:  rt,
+		cache:              cache,
+		manageStore:        manageStore,
+		fileIO:             NewDefaultFileIO(DefaultToFilePath),
+		replicationTracker: rt,
 	}, nil
 }
 
@@ -83,11 +83,11 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		i++
 	}
 	ba, _ := encoding.Marshal(storeList)
-	storeWriter.write(ba, sr.replicationTracker.storesBaseFolders, storeListFilename)
+	storeWriter.write(storeListFilename, ba)
 
 	// 5-6. Create folders and write store info to its tmp file, for each added item.
 	for _, store := range stores {
-		if err := storeWriter.createStore(ctx, sr.replicationTracker.storesBaseFolders, store.Name); err != nil {
+		if err := storeWriter.createStore(store.Name); err != nil {
 			return err
 		}
 
@@ -97,7 +97,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 			return err
 		}
 
-		if err := storeWriter.write(ba, sr.replicationTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, store.Name, os.PathSeparator, storeInfoFilename)); err != nil {
+		if err := storeWriter.write(fmt.Sprintf("%c%s%c%s", os.PathSeparator, store.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
 			return err
 		}
 	}
@@ -180,7 +180,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 				continue
 			}
 
-			if err := storeWriter.write(ba, sr.replicationTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename)); err != nil {
+			if err := storeWriter.write(fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
 				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed write, details: %v", si.Name, err))
 				continue
 			}
@@ -216,7 +216,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			return err
 		}
 
-		if err := storeWriter.write(ba, sr.replicationTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename)); err != nil {
+		if err := storeWriter.write(fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
 			// Undo changes.
 			undo(i, beforeUpdateStores)
 			return err
@@ -244,7 +244,7 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 
 func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
 	fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
-	ba, err := fio.read(sr.replicationTracker.storesBaseFolders, storeListFilename)
+	ba, err := fio.read(storeListFilename)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +281,7 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 	sio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
 	for _, s := range storesNotInCache {
 
-		ba, err := sio.read(sr.replicationTracker.storesBaseFolders, fmt.Sprintf("%c%s%c%s", os.PathSeparator, s, os.PathSeparator, storeInfoFilename))
+		ba, err := sio.read(fmt.Sprintf("%c%s%c%s", os.PathSeparator, s, os.PathSeparator, storeInfoFilename))
 		if err != nil {
 			return nil, err
 		}
@@ -349,7 +349,7 @@ func (sr *storeRepository) Remove(ctx context.Context, storeNames ...string) err
 		i++
 	}
 	ba, _ := encoding.Marshal(storeList)
-	storeWriter.write(ba, sr.replicationTracker.storesBaseFolders, storeListFilename)
+	storeWriter.write(storeListFilename, ba)
 
 	// Replicate the files if configured to.
 	if err := storeWriter.replicate(); err != nil {

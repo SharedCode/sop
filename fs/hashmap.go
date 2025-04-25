@@ -7,8 +7,8 @@ import (
 )
 
 type hashmap struct {
-	hashModValue int
-	replicationTracker  *replicationTracker
+	hashModValue       int
+	replicationTracker *replicationTracker
 	// File handles of all known (traversed & opened) data segment file of the hash map.
 	fileHandles map[string]*os.File
 }
@@ -18,13 +18,13 @@ type hashmap struct {
 
 func newHashmap(hashModValue int, replicationTracker *replicationTracker) *hashmap {
 	return &hashmap{
-		hashModValue: hashModValue,
+		hashModValue:       hashModValue,
 		replicationTracker: replicationTracker,
-		fileHandles: make(map[string]*os.File),
+		fileHandles:        make(map[string]*os.File),
 	}
 }
 
-func (h *hashmap)get(keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Handle, error) {
+func (h *hashmap) get(keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Handle, error) {
 	// f, err := os.Open(h.filename)
 	// if err != nil {
 	// 	return TV{}, nil
@@ -32,24 +32,22 @@ func (h *hashmap)get(keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Handle, error
 	return nil, nil
 }
 
-func (h *hashmap)set(allOrNothing bool, items ...sop.Tuple[string, []sop.Handle]) error {
+func (h *hashmap) set(allOrNothing bool, items ...sop.Tuple[string, []sop.Handle]) error {
 	return nil
 }
 
-func (h *hashmap)remove(keys ...sop.Tuple[string, []sop.UUID]) error {
+func (h *hashmap) remove(keys ...sop.Tuple[string, []sop.UUID]) error {
 	return nil
 }
 
-func (h *hashmap)close() error {
+func (h *hashmap) close() error {
 	var lastError error
-	if h.fileHandles == nil {
-		return nil
-	}
 	for _, f := range h.fileHandles {
 		if err := f.Close(); err != nil {
 			lastError = err
 		}
 	}
-	h.fileHandles = nil
+	// Clear the file handles for cleanup.
+	h.fileHandles = map[string]*os.File{}
 	return lastError
 }

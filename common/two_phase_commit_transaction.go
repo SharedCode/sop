@@ -158,12 +158,8 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 
 	// Do registry cleanup, e.g. - close all opened files.
 	defer func() {
-		if t.registry == nil {
-			return
-		}
 		if closeable, ok := t.registry.(io.Closer); ok {
 			closeable.Close()
-			t.registry = nil
 		}
 	}()
 
@@ -217,7 +213,15 @@ func (t *transaction) Rollback(ctx context.Context) error {
 	// Reset transaction status and mark done to end it without persisting any change.
 	t.phaseDone = 2
 	if err := t.rollback(ctx, true); err != nil {
+		// Do registry cleanup, e.g. - close all opened files.
+		if closeable, ok := t.registry.(io.Closer); ok {
+			closeable.Close()
+		}
 		return fmt.Errorf("rollback failed, details: %v", err)
+	}
+	// Do registry cleanup, e.g. - close all opened files.
+	if closeable, ok := t.registry.(io.Closer); ok {
+		closeable.Close()
 	}
 	return nil
 }

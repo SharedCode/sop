@@ -11,30 +11,30 @@ import (
 )
 
 type registryOnDisk struct {
-	hashmap *hashmap
-	replicatorTracker                *replicationTracker
-	cache sop.Cache
+	hashmap            *hashmap
+	replicationTracker *replicationTracker
+	cache              sop.Cache
 }
 
-// Registry interface needs to be closed when not needed anymore, e.g. transaction is completed.
+// Registry interface needs to have close method so registry can get closed when not needed anymore, e.g. transaction is completed.
 type Registry interface {
 	sop.Registry
 	io.Closer
 }
 
-const(
+const (
 	// Study whether we need this configurable.
 	hashModValue = 250000
 	// Lock time out for the cache based conflict check routine in update (handles) function.
-	updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10*time.Minute)
+	updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 )
 
 // NewRegistry manages the Handle in memory for mocking.
 func NewRegistry(rt *replicationTracker, cache sop.Cache) Registry {
 	return &registryOnDisk{
-		hashmap: newHashmap(hashModValue, rt),
-		replicatorTracker: rt,
-		cache: cache,
+		hashmap:            newHashmap(hashModValue, rt),
+		replicationTracker: rt,
+		cache:              cache,
 	}
 }
 
@@ -46,7 +46,7 @@ func (r *registryOnDisk) Close() error {
 func (r *registryOnDisk) Add(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
-			if err := r.hashmap.set(false, sop.Tuple[string,[]sop.Handle]{ First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+			if err := r.hashmap.set(false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 				return err
 			}
 			// Tolerate Redis cache failure.
@@ -100,11 +100,11 @@ func (r *registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHa
 
 		batch := make([]sop.Tuple[string, []sop.Handle], 0)
 		for _, sh := range storesHandles {
-			batch = append(batch, sop.Tuple[string, []sop.Handle]{ First: sh.RegistryTable, Second: sh.IDs})
+			batch = append(batch, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs})
 		}
 
 		// Execute the batch set, all or nothing.
-		if err := r.hashmap.set( true, batch...); err != nil {
+		if err := r.hashmap.set(true, batch...); err != nil {
 			// Unlock the object Keys before return.
 			r.cache.Unlock(ctx, handleKeys...)
 			// Failed update all, thus, return err to cause rollback.
@@ -112,12 +112,12 @@ func (r *registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHa
 		}
 		// Unlock the object Keys before return.
 		r.cache.Unlock(ctx, handleKeys...)
-	} else {	
+	} else {
 		for _, sh := range storesHandles {
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
 				// Update registry record.
-				if err := r.hashmap.set(false, sop.Tuple[string,[]sop.Handle]{ First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+				if err := r.hashmap.set(false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 					return err
 				}
 			}
@@ -170,12 +170,12 @@ func (r *registryOnDisk) Get(ctx context.Context, storesLids ...sop.RegistryPayl
 			continue
 		}
 
-		mh, err := r.hashmap.get(sop.Tuple[string, []sop.UUID]{ First: storeLids.RegistryTable, Second: lids})
+		mh, err := r.hashmap.get(sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: lids})
 		if err != nil {
 			return nil, err
 		}
 
-		for _, handle := range mh  {
+		for _, handle := range mh {
 			handles = append(handles, handle)
 			if err := r.cache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Set (redis setstruct) failed, details: %v", err))
@@ -201,7 +201,7 @@ func (r *registryOnDisk) Remove(ctx context.Context, storesLids ...sop.RegistryP
 				}
 			}
 		}
-		if err := r.hashmap.remove(sop.Tuple[string, []sop.UUID]{ First: storeLids.RegistryTable, Second: storeLids.IDs}); err != nil {
+		if err := r.hashmap.remove(sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: storeLids.IDs}); err != nil {
 			deleteFromCache(storeLids)
 			return err
 		}
