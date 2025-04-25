@@ -14,21 +14,12 @@ import (
 	"github.com/gocql/gocql"
 )
 
-// UpdateAllOrNothingError is a special error type that will allow caller to handle it differently than normal errors.
-type UpdateAllOrNothingError struct {
-	Err error
-}
-
-func (r *UpdateAllOrNothingError) Error() string {
-	return r.Err.Error()
-}
-
 type registry struct {
 	cache sop.Cache
 }
 
 // Lock time out for the cache based conflict check routine in update (handles) function.
-const updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10*time.Minute)
+const updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 
 // NewRegistry manages the Handle in the store's Cassandra registry table.
 func NewRegistry() sop.Registry {
@@ -96,7 +87,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				if newVersion != h2.Version || !h.IsEqual(&h2) {
 					// Unlock the object Keys before return.
 					v.cache.Unlock(ctx, handleKeys...)
-					return &UpdateAllOrNothingError{
+					return &sop.UpdateAllOrNothingError{
 						Err: fmt.Errorf("Registry Update failed, handle logical ID(%v) version conflict detected", h.LogicalID.String()),
 					}
 				}
@@ -227,7 +218,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 			handles = append(handles, handle)
 
 			if err := v.cache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
-				log.Warn(fmt.Sprintf("Registry Get (redis setstruct) failed, details: %v", err))
+				log.Warn(fmt.Sprintf("Registry Set (redis setstruct) failed, details: %v", err))
 			}
 			handle = sop.Handle{}
 		}

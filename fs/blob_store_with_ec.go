@@ -224,12 +224,10 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs ...sop.BlobsPaylo
 
 					fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), shardIndex)
 
-					// Prefix the shard w/ metadata.
 					md := erasure.ComputeShardMetadata(contentsSize, shards, shardIndex)
 					buf := make([]byte, len(md)+len(shards[shardIndex]))
 
-					// TODO: refactor to write metadata then write the shard data so we don't use temp variable,
-					// more optimal if shard size is huge.
+					// Prefix the shard w/ metadata followed by metadata.
 					copy(buf, md)
 					copy(buf[len(md):], shards[shardIndex])
 

@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"fmt"
+	"io"
 	log "log/slog"
 	"math/rand"
 	"sync"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/cassandra"
 )
 
 type btreeBackend struct {
@@ -155,11 +155,19 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 2
+
+	// Do registry cleanup, e.g. - close all opened files.
+	defer func() {
+		if closeable, ok := t.registry.(io.Closer); ok {
+			closeable.Close()
+		}
+	}()
+
 	if t.mode != sop.ForWriting {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
-		if _, ok := err.(*cas.UpdateAllOrNothingError); ok {
+		if _, ok := err.(*sop.UpdateAllOrNothingError); ok {
 			startTime := sop.Now()
 			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
 			// until it succeeds or timeout.
@@ -182,7 +190,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 				}
 				if err = t.phase2Commit(ctx); err == nil {
 					return nil
-				} else if _, ok := err.(*cas.UpdateAllOrNothingError); !ok {
+				} else if _, ok := err.(*sop.UpdateAllOrNothingError); !ok {
 					break
 				}
 			}
@@ -205,7 +213,15 @@ func (t *transaction) Rollback(ctx context.Context) error {
 	// Reset transaction status and mark done to end it without persisting any change.
 	t.phaseDone = 2
 	if err := t.rollback(ctx, true); err != nil {
+		// Do registry cleanup, e.g. - close all opened files.
+		if closeable, ok := t.registry.(io.Closer); ok {
+			closeable.Close()
+		}
 		return fmt.Errorf("rollback failed, details: %v", err)
+	}
+	// Do registry cleanup, e.g. - close all opened files.
+	if closeable, ok := t.registry.(io.Closer); ok {
+		closeable.Close()
 	}
 	return nil
 }

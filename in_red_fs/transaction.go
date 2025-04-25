@@ -35,7 +35,7 @@ func NewTwoPhaseCommitTransaction(storesBaseFolder string, mode sop.TransactionM
 	if err != nil {
 		return nil, err
 	}
-	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, fs.NewBlobStore(nil), sr, fs.NewRegistry(replicationTracker), cache, fs.NewTransactionLog())
+	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, fs.NewBlobStore(nil), sr, fs.NewRegistry(replicationTracker, cache), cache, fs.NewTransactionLog())
 }
 
 // Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
@@ -74,5 +74,5 @@ func NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders []string, mod
 	if err != nil {
 		return nil, err
 	}
-	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, bs, sr, fs.NewRegistry(replicationTracker), cache, fs.NewTransactionLog())
+	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, bs, sr, fs.NewRegistry(replicationTracker, cache), cache, fs.NewTransactionLog())
 }
