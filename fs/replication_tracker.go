@@ -1,5 +1,11 @@
 package fs
 
+import (
+	"fmt"
+	"os"
+	"strings"
+)
+
 type replicationTracker struct {
 	// Array so we can use in replication across two folders, if in replication mode.
 	storesBaseFolders []string
@@ -21,8 +27,25 @@ func NewReplicationTracker(storesBaseFolders []string, replicate bool) *replicat
 	}
 }
 
-func (r *replicationTracker) Failover() {
+func (r *replicationTracker) failover() {
 	r.isFirstFolderActive = !r.isFirstFolderActive
+}
+
+func (r *replicationTracker) getActiveBaseFolder() string {
+	if r.isFirstFolderActive {
+		return r.storesBaseFolders[0]
+	}
+	return r.storesBaseFolders[1]
+}
+
+func (r *replicationTracker) formatActiveFolderFilename(filename string) string {
+	bf := r.getActiveBaseFolder()
+
+	if strings.HasSuffix(bf, string(os.PathSeparator)) {
+		return fmt.Sprintf("%s%s", bf, filename)
+	} else {
+		return fmt.Sprintf("%s%c%s", bf, os.PathSeparator, filename)
+	}
 }
 
 func detectIfFirstIsActiveFolder(storesBaseFolders []string) bool {

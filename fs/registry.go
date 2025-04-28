@@ -30,9 +30,9 @@ const (
 )
 
 // NewRegistry manages the Handle in memory for mocking.
-func NewRegistry(rt *replicationTracker, cache sop.Cache) Registry {
+func NewRegistry(rt *replicationTracker, cache sop.Cache, readWrite bool) Registry {
 	return &registryOnDisk{
-		hashmap:            newHashmap(hashModValue, rt),
+		hashmap:            newHashmap(hashModValue, rt, readWrite),
 		replicationTracker: rt,
 		cache:              cache,
 	}
@@ -175,7 +175,8 @@ func (r *registryOnDisk) Get(ctx context.Context, storesLids ...sop.RegistryPayl
 			return nil, err
 		}
 
-		for _, handle := range mh {
+		// Add to the handles list the "missing from cache" handles read from registry file.
+		for _, handle := range mh[0].Second {
 			handles = append(handles, handle)
 			if err := r.cache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Set (redis setstruct) failed, details: %v", err))
