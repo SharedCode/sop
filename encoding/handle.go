@@ -42,11 +42,11 @@ func encode(w *bytes.Buffer, h sop.Handle) (int, error) {
 	w.Write([]byte{b})
 
     var dummy4 [4]byte
-	binary.BigEndian.PutUint32(dummy4[:], uint32(h.Version))
+	binary.LittleEndian.PutUint32(dummy4[:], uint32(h.Version))
 	w.Write(dummy4[:])
 
     var dummy8 [8]byte
-	binary.BigEndian.PutUint64(dummy8[:], uint64(h.WorkInProgressTimestamp))
+	binary.LittleEndian.PutUint64(dummy8[:], uint64(h.WorkInProgressTimestamp))
 	w.Write(dummy8[:])
 
 	b = 0
@@ -83,8 +83,8 @@ func decode(r *bytes.Buffer) (sop.Handle, error) {
 		result.IsActiveIDB = true
 	}
 
-	result.Version = int32(binary.BigEndian.Uint32(r.Next(4)))
-	result.WorkInProgressTimestamp = int64(binary.BigEndian.Uint64(r.Next(8)))
+	result.Version = int32(binary.LittleEndian.Uint32(r.Next(4)))
+	result.WorkInProgressTimestamp = int64(binary.LittleEndian.Uint64(r.Next(8)))
 
 	b = r.Next(1)[0]
 	if b == 1 {

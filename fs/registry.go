@@ -47,7 +47,7 @@ func (r *registryOnDisk) Close() error {
 func (r *registryOnDisk) Add(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
-			if err := r.hashmap.set(false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+			if err := r.hashmap.set(false, nil, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 				return err
 			}
 			// Tolerate Redis cache failure.
@@ -66,7 +66,7 @@ func (r *registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHa
 
 	// Logged batch will do all or nothing. This is the only one "all or nothing" operation in the Commit process.
 	if allOrNothing {
-		handleKeys := make([]*sop.LockKey, 0)
+		handleKeys := make([]*sop.LockKey, 0, len(storesHandles)*4)
 
 		for _, sh := range storesHandles {
 			for _, h := range sh.IDs {
@@ -99,13 +99,18 @@ func (r *registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHa
 			}
 		}
 
-		batch := make([]sop.Tuple[string, []sop.Handle], 0)
+		batch := make([]sop.Tuple[string, []sop.Handle], 0, len(storesHandles))
 		for _, sh := range storesHandles {
 			batch = append(batch, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs})
 		}
 
+		// Package the batch keys' lock check as lambda so it can get invoked queasily in hashmap.set.
+		areItemsLocked := func() error {
+			return r.cache.IsLocked(ctx, handleKeys...)
+		}
+
 		// Execute the batch set, all or nothing.
-		if err := r.hashmap.set(true, batch...); err != nil {
+		if err := r.hashmap.set(true, areItemsLocked, batch...); err != nil {
 			// Unlock the object Keys before return.
 			r.cache.Unlock(ctx, handleKeys...)
 			// Failed update all, thus, return err to cause rollback.
@@ -118,7 +123,7 @@ func (r *registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHa
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
 				// Update registry record.
-				if err := r.hashmap.set(false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+				if err := r.hashmap.set(false, nil, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 					return err
 				}
 			}

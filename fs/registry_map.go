@@ -29,35 +29,57 @@ func getIDs(items ...sop.Handle) []sop.UUID {
 	return IDs
 }
 
-func (hm *registryMap) set(allOrNothing bool, items ...sop.Tuple[string, []sop.Handle]) error {
+func (hm *registryMap) set(allOrNothing bool, areItemsLocked func() error, items ...sop.Tuple[string, []sop.Handle]) error {
 	if allOrNothing {
+		unlockItemFileRegions := func(items ...sop.Tuple[string, []sop.Handle]) error {
+			var lastErr error
+			for _, item := range items {
+				if err := hm.unlockFileRegion(item.First, getIDs(item.Second...)...); err != nil {
+					lastErr = err
+				}
+			}
+			return lastErr
+		}
+		lockedItems := make([]sop.Tuple[string, []sop.Handle], 0, len(items))
 		for _, item := range items {
 			if err := hm.lockFileRegion(true, item.First, getIDs(item.Second...)...); err != nil {
+				unlockItemFileRegions(lockedItems...)
+				return err
+			}
+			lockedItems = append(lockedItems, item)
+		}
+		if areItemsLocked != nil {
+			// Ensure the batch are all locked as seen in Redis, to address race condition.
+			// This is the 4th letter R in the (SOP proprietary) Redis RSRR algorithm.
+			//
+			// NOTE: Redis exclusive lock check for this implementation is more rigid because there is no other
+			// "all or nothing" guarantee except our algorithm check in Redis and the hashmap.set implementation
+			// which relies on NFS' distributed file lock support. We want to be 200% sure no race condition. :)
+			if err := areItemsLocked(); err != nil {
+				unlockItemFileRegions(lockedItems...)
 				return err
 			}
 		}
 		for _, item := range items {
 			if err := hm.updateFileRegion(item.First, item.Second...); err != nil {
+				unlockItemFileRegions(lockedItems...)
 				return err
 			}
 		}
-		for _, item := range items {
-			if err := hm.unlockFileRegion(item.First, getIDs(item.Second...)...); err != nil {
-				return err
-			}
-		}
-		return nil
+		return unlockItemFileRegions(lockedItems...)
 	}
 	// Individually manage/update the file area occupied by the handle so we don't create "lock pressure".
 	for _, item := range items {
 		for _, h := range item.Second {
-			if err := hm.lockFileRegion(true, item.First, getIDs(h)...); err != nil {
+			itemID := getIDs(h)
+			if err := hm.lockFileRegion(true, item.First, itemID...); err != nil {
 				return err
 			}
 			if err := hm.updateFileRegion(item.First, h); err != nil {
+				hm.unlockFileRegion(item.First, itemID...)
 				return err
 			}
-			if err := hm.unlockFileRegion(item.First, getIDs(h)...); err != nil {
+			if err := hm.unlockFileRegion(item.First, itemID...); err != nil {
 				return err
 			}
 		}
