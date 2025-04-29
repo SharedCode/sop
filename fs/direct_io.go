@@ -14,9 +14,13 @@ import (
 type directIO struct {
 	file *os.File
 }
+const (
+	blockSize = directio.BlockSize
+)
 
 var errBlocked = errors.New("acquiring lock is blocked by another process")
 
+// Instantiate a direct File IO object.
 func newDirectIO() *directIO {
 	return &directIO{}
 }
@@ -24,7 +28,7 @@ func newDirectIO() *directIO {
 // Open the file with a given filename.
 func (dio *directIO) open(filename string, flag int, permission os.FileMode) error {
 	if dio.file != nil {
-		return nil
+		return fmt.Errorf("there is an opened file for this directIO object, 'not allowed to open file again")
 	}
 	f, err := directio.OpenFile(filename, flag, permission)
 	if err != nil {

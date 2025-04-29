@@ -53,8 +53,13 @@ func (hm *registryMap) set(allOrNothing bool, areItemsLocked func() error, items
 			// This is the 4th letter R in the (SOP proprietary) Redis RSRR algorithm.
 			//
 			// NOTE: Redis exclusive lock check for this implementation is more rigid because there is no other
-			// "all or nothing" guarantee except our algorithm check in Redis and the hashmap.set implementation
+			// "all or nothing" guarantee except our algorithm check in Redis and the hashmap.updateFileRegion implementation
 			// which relies on NFS' distributed file lock support. We want to be 200% sure no race condition. :)
+			// As can be seen, the Redis "items locked" check is done after the "lockFileRegion" call, which means,
+			// code had given plenty of time for race condition not to occur. If network is flaky or slow, it will
+			// fail in the "lockFileRegion" call and if it passes, it is sure there is absolutely no race condition caused
+			// item to get double locked by two or more different processes.
+			// Relativity theory in action.
 			if err := areItemsLocked(); err != nil {
 				unlockItemFileRegions(lockedItems...)
 				return err

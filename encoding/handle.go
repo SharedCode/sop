@@ -11,27 +11,29 @@ import (
 
 type handleEncoder struct {}
 
+// Instantiates a Handler Marshaler.
 func NewHandleMarshaler() Marshaler {
 	return &handleEncoder{}
 }
 
-// Encodes any object to byte array.
+// Encodes handler to byte array.
 func (he handleEncoder) Marshal(v any) ([]byte, error) {
-	w := bytes.Buffer{}
-	encode(&w, v.(sop.Handle))
+	w := bytes.NewBuffer(make([]byte, 0, sop.HandleSizeInBytes))
+	pv := v.(sop.Handle)
+	encode(w, &pv)
 	return w.Bytes(), nil
 }
 
-// Decodes byte array back to its Object type.
+// Decodes byte array back to a handler type.
 func (he handleEncoder) Unmarshal(data []byte, v any) error {
 	r := bytes.NewBuffer(data)
 	h, err := decode(r)
 	target := v.(*sop.Handle)
-	*target = h
+	*target = *h
 	return err
 }
 
-func encode(w *bytes.Buffer, h sop.Handle) (int, error) {
+func encode(w *bytes.Buffer, h *sop.Handle) (int, error) {
 	w.Write(h.LogicalID[:])
 	w.Write(h.PhysicalIDA[:])
 	w.Write(h.PhysicalIDB[:])
@@ -58,23 +60,23 @@ func encode(w *bytes.Buffer, h sop.Handle) (int, error) {
     return w.Len(), nil
 }
 
-func decode(r *bytes.Buffer) (sop.Handle, error) {
+func decode(r *bytes.Buffer) (*sop.Handle, error) {
 	var result sop.Handle
 	h, err := uuid.FromBytes(r.Next(16))
 	if err != nil {
-		return result, err
+		return &result, err
 	}
 	result.LogicalID = sop.UUID(h)
 
 	h, err = uuid.FromBytes(r.Next(16))
 	if err != nil {
-		return result, err
+		return &result, err
 	}
 	result.PhysicalIDA = sop.UUID(h)
 
 	h, err = uuid.FromBytes(r.Next(16))
 	if err != nil {
-		return result, err
+		return &result, err
 	}
 	result.PhysicalIDB = sop.UUID(h)
 
@@ -91,5 +93,5 @@ func decode(r *bytes.Buffer) (sop.Handle, error) {
 		result.IsDeleted = true
 	}
 
-    return result, nil
+    return &result, nil
 }
