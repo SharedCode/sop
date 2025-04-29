@@ -1,10 +1,6 @@
 package fs
 
 import (
-	"fmt"
-	"os"
-	"strings"
-
 	"github.com/SharedCode/sop"
 )
 
@@ -23,45 +19,20 @@ func newFileIOWithReplication(replicationTracker *replicationTracker, manageStor
 
 func (fio *fileIO) write(targetFilename string, contents []byte) error {
 	f := NewDefaultFileIO(nil)
-	filename := fio.replicationTracker.storesBaseFolders[0]
-	if !fio.replicationTracker.isFirstFolderActive {
-		filename = fio.replicationTracker.storesBaseFolders[1]
-	}
-	if strings.HasSuffix(filename, string(os.PathSeparator)) {
-		filename = fmt.Sprintf("%s%s", filename, targetFilename)
-	} else {
-		filename = fmt.Sprintf("%s%c%s", filename, os.PathSeparator, targetFilename)
-	}
+	filename := fio.replicationTracker.formatActiveFolderFilename(targetFilename)
 	fio.filenames = append(fio.filenames, targetFilename)
 	return f.WriteFile(filename, contents, permission)
 }
 
 func (fio *fileIO) read(sourceFilename string) ([]byte, error) {
 	f := NewDefaultFileIO(nil)
-	filename := fio.replicationTracker.storesBaseFolders[0]
-	if !fio.replicationTracker.isFirstFolderActive {
-		filename = fio.replicationTracker.storesBaseFolders[1]
-	}
-	if strings.HasSuffix(filename, string(os.PathSeparator)) {
-		filename = fmt.Sprintf("%s%s", filename, sourceFilename)
-	} else {
-		filename = fmt.Sprintf("%s%c%s", filename, os.PathSeparator, sourceFilename)
-	}
-
+	filename := fio.replicationTracker.formatActiveFolderFilename(sourceFilename)
 	return f.ReadFile(filename)
 }
 
 func (fio *fileIO) createStore(folderName string) error {
 	f := NewDefaultFileIO(nil)
-	filename := fio.replicationTracker.storesBaseFolders[0]
-	if !fio.replicationTracker.isFirstFolderActive {
-		filename = fio.replicationTracker.storesBaseFolders[1]
-	}
-	if strings.HasSuffix(filename, string(os.PathSeparator)) {
-		filename = fmt.Sprintf("%s%s", filename, folderName)
-	} else {
-		filename = fmt.Sprintf("%s%c%s", filename, os.PathSeparator, folderName)
-	}
+	filename := fio.replicationTracker.formatActiveFolderFilename(folderName)
 	return f.MkdirAll(filename, permission)
 }
 

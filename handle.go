@@ -27,6 +27,11 @@ type Handle struct {
 	IsDeleted bool
 }
 
+const (
+	// Size of a Handle struct, in bytes.
+	HandleSizeInBytes = 62
+)
+
 // NewHandle creates a new Handle given a logical ID.
 func NewHandle(id UUID) Handle {
 	return Handle{
