@@ -12,7 +12,6 @@ import (
 )
 
 type directIO struct {
-	filename string
 	file *os.File
 }
 
@@ -32,7 +31,6 @@ func (dio *directIO) open(filename string, flag int, permission os.FileMode) err
 		return err
 	}
 	dio.file = f
-	dio.filename = filename
 	return nil
 }
 
@@ -96,7 +94,32 @@ func (dio *directIO)lockFileRegion(readWrite bool, offset int64, length int64, t
 	}
 }
 
-func (dio *directIO)unlockFileRegion(file *os.File, offset int64, length int64) error {
+func (dio *directIO)isRegionLocked(readWrite bool, offset int64, length int64) (bool, error) {
+	if dio.file == nil {
+		return false, fmt.Errorf("can't check if region is locked, there is no opened file")
+	}
+	var t int16 = syscall.F_WRLCK
+	if !readWrite {
+		t = syscall.F_RDLCK
+	}
+	flock := syscall.Flock_t{
+		Type:   t,
+		Start:  offset,
+		Len:    length,
+		Pid:    0,
+		Whence: 0,
+	}
+
+	err := syscall.FcntlFlock(dio.file.Fd(), syscall.F_GETLK, &flock)
+	if err != nil {
+		return false, err
+	}
+
+	// If lock.Type is F_UNLCK, no lock exists
+	return flock.Type != syscall.F_UNLCK, nil
+}
+
+func (dio *directIO)unlockFileRegion(offset int64, length int64) error {
 	if dio.file == nil {
 		return fmt.Errorf("can't unlock file region, there is no opened file")
 	}
@@ -107,7 +130,7 @@ func (dio *directIO)unlockFileRegion(file *os.File, offset int64, length int64) 
 		Pid:    int32(syscall.Getpid()),
 	}
 
-	return syscall.FcntlFlock(file.Fd(), syscall.F_SETLK, &flock)
+	return syscall.FcntlFlock(dio.file.Fd(), syscall.F_SETLK, &flock)
 }
 
 func (dio *directIO) close() error {

@@ -11,7 +11,7 @@ import (
 )
 
 type registryOnDisk struct {
-	hashmap            *hashmap
+	hashmap            *registryMap
 	replicationTracker *replicationTracker
 	cache              sop.Cache
 }
@@ -23,16 +23,17 @@ type Registry interface {
 }
 
 const (
-	// Study whether we need this configurable.
-	hashModValue = 250000
 	// Lock time out for the cache based conflict check routine in update (handles) function.
 	updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 )
 
 // NewRegistry manages the Handle in memory for mocking.
-func NewRegistry(rt *replicationTracker, cache sop.Cache, readWrite bool) Registry {
+func NewRegistry(rt *replicationTracker, cache sop.Cache, readWrite bool, hashModValue int) Registry {
+	if hashModValue <= 0 {
+		hashModValue = 250000
+	}
 	return &registryOnDisk{
-		hashmap:            newHashmap(hashModValue, rt, readWrite),
+		hashmap:            newRegistryMap(hashModValue, rt, readWrite),
 		replicationTracker: rt,
 		cache:              cache,
 	}

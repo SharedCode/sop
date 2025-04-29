@@ -47,7 +47,7 @@ type itemActionTracker[TK btree.Comparable, TV any] struct {
 func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *sop.StoreInfo, redisCache sop.Cache, blobStore sop.BlobStore, tl *transactionLog) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
 		storeInfo: storeInfo,
-		items:     make(map[sop.UUID]cacheItem[TK, TV]),
+		items:     make(map[sop.UUID]cacheItem[TK, TV], 10),
 		cache:     redisCache,
 		blobStore: blobStore,
 		tlogger:   tl,
@@ -229,7 +229,7 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 		versionInDB: item.Version,
 	}
 	t.items[item.ID] = v
-	// Update upsert time, now that we have kept its DB value intact, for use in conflict resolution.
+	// Up the version # since item got updated.
 	item.Version++
 	return activelyPersist(v)
 }

@@ -1,6 +1,8 @@
 package fs
 
 import (
+	"time"
+
 	"github.com/SharedCode/sop"
 )
 
@@ -25,94 +27,43 @@ func newHashmap(hashModValue int, replicationTracker *replicationTracker, readWr
 	}
 }
 
-func getIDs(items ...sop.Handle) []sop.UUID {
-	IDs := make([]sop.UUID, len(items))
-	for i := range items {
-		IDs[i] = items[i].LogicalID
-	}
-	return IDs
-}
-
-func (hm *hashmap) set(allOrNothing bool, items ...sop.Tuple[string, []sop.Handle]) error {
-	if allOrNothing {
-		for _, item := range items {
-			if err := hm.lockFileRegion(true, item.First, getIDs(item.Second...)...); err != nil {
-				return err
-			}
-		}
-		for _, item := range items {
-			if err := hm.updateFileRegion(item.First, item.Second...); err != nil {
-				return err
-			}
-		}
-		for _, item := range items {
-			if err := hm.unlockFileRegion(item.First, getIDs(item.Second...)...); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-	// Individually manage/update the file area occupied by the handle so we don't create "lock pressure".
-	for _, item := range items {
-		for _, h := range item.Second {
-			if err := hm.lockFileRegion(true, item.First, getIDs(h)...); err != nil {
-				return err
-			}
-			if err := hm.updateFileRegion(item.First, h); err != nil {
-				return err
-			}
-			if err := hm.unlockFileRegion(item.First, getIDs(h)...); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (hm *hashmap) get(keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[string, []sop.Handle], error) {	
-	// Individually manage/update the file area occupied by the handle so we don't create "lock pressure".
-	result := make([]sop.Tuple[string, []sop.Handle], len(keys), 0)
-	for _, k := range keys {
-		for _, h := range k.Second {
-			if err := hm.lockFileRegion(false, k.First, h); err != nil {
-				return nil, err
-			}
-			d, err := hm.readFileRegion(k.First, h)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, sop.Tuple[string, []sop.Handle]{
-				First: k.First,
-				Second: d,
-			})
-			if err := hm.unlockFileRegion(k.First, h); err != nil {
-				return nil, err
-			}
-		}
-	}
-	return result, nil
-}
-
-func (hm *hashmap) remove(keys ...sop.Tuple[string, []sop.UUID]) error {
-	return nil
-}
-
-// TODO:
-func (hm *hashmap) lockFileRegion(forWriting bool, filename string, id ...sop.UUID) error {
+func (hm *hashmap) findBlockLocation(forWriting bool, filename string, id sop.UUID) (*directIO, int64) {
 	var dio *directIO
-	if f, ok := hm.fileHandles[filename]; ok {
-		dio = f
-	} else {
-		dio = newDirectIO()
-		//fn := hm.replicationTracker.getActiveFolderFilename(filename)
-		//dio.open(fn, )
-		hm.fileHandles[filename] = dio
+
+	// fn := hm.replicationTracker.formatActiveFolderFilename(filename)
+
+	// if f, ok := hm.fileHandles[fn]; ok {
+	// 	dio = f
+	// } else {
+	// 	dio = newDirectIO()
+	// 	dio.open(fn, , fullPermission)
+	// 	hm.fileHandles[fn] = dio
+	// }
+	return dio, 0
+}
+
+func (hm *hashmap) lockFileRegion(forWriting bool, filename string, ids ...sop.UUID) error {
+	undo := func(items []sop.Tuple[*directIO, int64]) {
+		for _, item := range items {
+			item.First.unlockFileRegion(item.Second, sop.HandleSizeInBytes)
+		}
 	}
-
-	//dio.lockFileRegion(hm.readWrite, )
-
+	completedItems := make([]sop.Tuple[*directIO, int64], 0, len(ids))
+	for _, id := range ids {
+		dio, offset := hm.findBlockLocation(hm.readWrite, filename, id)
+		if ok, err := dio.isRegionLocked(hm.readWrite, offset, sop.HandleSizeInBytes); ok || err != nil {
+			undo(completedItems)
+			return err
+		}
+		if err := dio.lockFileRegion(hm.readWrite, offset, sop.HandleSizeInBytes, time.Duration(5*time.Minute)); err != nil {
+			undo(completedItems)
+			return err
+		}
+		completedItems = append(completedItems, sop.Tuple[*directIO, int64]{First:dio, Second:offset})
+	}
 	return nil
 }
+
 func (hm *hashmap) unlockFileRegion(filename string, id ...sop.UUID) error {
 	return nil
 }
