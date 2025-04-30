@@ -14,9 +14,13 @@ import (
 type directIO struct {
 	file *os.File
 }
+const (
+	blockSize = directio.BlockSize
+)
 
 var errBlocked = errors.New("acquiring lock is blocked by another process")
 
+// Instantiate a direct File IO object.
 func newDirectIO() *directIO {
 	return &directIO{}
 }
@@ -24,7 +28,7 @@ func newDirectIO() *directIO {
 // Open the file with a given filename.
 func (dio *directIO) open(filename string, flag int, permission os.FileMode) error {
 	if dio.file != nil {
-		return nil
+		return fmt.Errorf("there is an opened file for this directIO object, 'not allowed to open file again")
 	}
 	f, err := directio.OpenFile(filename, flag, permission)
 	if err != nil {
@@ -35,30 +39,30 @@ func (dio *directIO) open(filename string, flag int, permission os.FileMode) err
 }
 
 // Create a buffer that is aligned to the file sector size, usable as buffer for reading file data, directly.
-func (dio *directIO) createAlignedBlock() []byte {
+func (dio directIO) createAlignedBlock() []byte {
 	return dio.createAlignedBlockOfSize(directio.BlockSize)
 }
 
 // Create a buffer that is aligned to the file sector size, usable as buffer for reading file data, directly.
-func (dio *directIO) createAlignedBlockOfSize(blockSize int) []byte {
+func (dio directIO) createAlignedBlockOfSize(blockSize int) []byte {
 	return directio.AlignedBlock(blockSize)
 }
 
-func (dio *directIO) writeAt(block []byte, offset int64) (int, error) {
+func (dio directIO) writeAt(block []byte, offset int64) (int, error) {
 	if dio.file == nil {
 		return 0, fmt.Errorf("can't write, there is no opened file")
 	}
 	return dio.file.WriteAt(block, offset)
 }
 
-func (dio *directIO) readAt(block []byte, offset int64) (int, error) {
+func (dio directIO) readAt(block []byte, offset int64) (int, error) {
 	if dio.file == nil {
 		return 0, fmt.Errorf("can't read, there is no opened file")
 	}
 	return dio.file.ReadAt(block, offset)
 }
 
-func (dio *directIO)lockFileRegion(readWrite bool, offset int64, length int64, timeout time.Duration,) error {
+func (dio directIO)lockFileRegion(readWrite bool, offset int64, length int64, timeout time.Duration,) error {
 	if dio.file == nil {
 		return fmt.Errorf("can't lock file region, there is no opened file")
 	}
@@ -94,7 +98,7 @@ func (dio *directIO)lockFileRegion(readWrite bool, offset int64, length int64, t
 	}
 }
 
-func (dio *directIO)isRegionLocked(readWrite bool, offset int64, length int64) (bool, error) {
+func (dio directIO)isRegionLocked(readWrite bool, offset int64, length int64) (bool, error) {
 	if dio.file == nil {
 		return false, fmt.Errorf("can't check if region is locked, there is no opened file")
 	}
@@ -119,7 +123,7 @@ func (dio *directIO)isRegionLocked(readWrite bool, offset int64, length int64) (
 	return flock.Type != syscall.F_UNLCK, nil
 }
 
-func (dio *directIO)unlockFileRegion(offset int64, length int64) error {
+func (dio directIO)unlockFileRegion(offset int64, length int64) error {
 	if dio.file == nil {
 		return fmt.Errorf("can't unlock file region, there is no opened file")
 	}

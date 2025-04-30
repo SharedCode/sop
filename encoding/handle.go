@@ -11,27 +11,29 @@ import (
 
 type handleEncoder struct {}
 
+// Instantiates a Handler Marshaler.
 func NewHandleMarshaler() Marshaler {
 	return &handleEncoder{}
 }
 
-// Encodes any object to byte array.
+// Encodes handler to byte array.
 func (he handleEncoder) Marshal(v any) ([]byte, error) {
-	w := bytes.Buffer{}
-	encode(&w, v.(sop.Handle))
+	w := bytes.NewBuffer(make([]byte, 0, sop.HandleSizeInBytes))
+	pv := v.(sop.Handle)
+	encode(w, &pv)
 	return w.Bytes(), nil
 }
 
-// Decodes byte array back to its Object type.
+// Decodes byte array back to a handler type.
 func (he handleEncoder) Unmarshal(data []byte, v any) error {
 	r := bytes.NewBuffer(data)
 	h, err := decode(r)
 	target := v.(*sop.Handle)
-	*target = h
+	*target = *h
 	return err
 }
 
-func encode(w *bytes.Buffer, h sop.Handle) (int, error) {
+func encode(w *bytes.Buffer, h *sop.Handle) (int, error) {
 	w.Write(h.LogicalID[:])
 	w.Write(h.PhysicalIDA[:])
 	w.Write(h.PhysicalIDB[:])
@@ -42,11 +44,11 @@ func encode(w *bytes.Buffer, h sop.Handle) (int, error) {
 	w.Write([]byte{b})
 
     var dummy4 [4]byte
-	binary.BigEndian.PutUint32(dummy4[:], uint32(h.Version))
+	binary.LittleEndian.PutUint32(dummy4[:], uint32(h.Version))
 	w.Write(dummy4[:])
 
     var dummy8 [8]byte
-	binary.BigEndian.PutUint64(dummy8[:], uint64(h.WorkInProgressTimestamp))
+	binary.LittleEndian.PutUint64(dummy8[:], uint64(h.WorkInProgressTimestamp))
 	w.Write(dummy8[:])
 
 	b = 0
@@ -58,23 +60,23 @@ func encode(w *bytes.Buffer, h sop.Handle) (int, error) {
     return w.Len(), nil
 }
 
-func decode(r *bytes.Buffer) (sop.Handle, error) {
+func decode(r *bytes.Buffer) (*sop.Handle, error) {
 	var result sop.Handle
 	h, err := uuid.FromBytes(r.Next(16))
 	if err != nil {
-		return result, err
+		return &result, err
 	}
 	result.LogicalID = sop.UUID(h)
 
 	h, err = uuid.FromBytes(r.Next(16))
 	if err != nil {
-		return result, err
+		return &result, err
 	}
 	result.PhysicalIDA = sop.UUID(h)
 
 	h, err = uuid.FromBytes(r.Next(16))
 	if err != nil {
-		return result, err
+		return &result, err
 	}
 	result.PhysicalIDB = sop.UUID(h)
 
@@ -83,13 +85,13 @@ func decode(r *bytes.Buffer) (sop.Handle, error) {
 		result.IsActiveIDB = true
 	}
 
-	result.Version = int32(binary.BigEndian.Uint32(r.Next(4)))
-	result.WorkInProgressTimestamp = int64(binary.BigEndian.Uint64(r.Next(8)))
+	result.Version = int32(binary.LittleEndian.Uint32(r.Next(4)))
+	result.WorkInProgressTimestamp = int64(binary.LittleEndian.Uint64(r.Next(8)))
 
 	b = r.Next(1)[0]
 	if b == 1 {
 		result.IsDeleted = true
 	}
 
-    return result, nil
+    return &result, nil
 }
