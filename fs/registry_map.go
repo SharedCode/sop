@@ -5,48 +5,35 @@ import (
 )
 
 type registryMap struct {
-	hashModValue       int
-	replicationTracker *replicationTracker
-	readWrite          bool
-	// File handles of all known (traversed & opened) data segment file of the hash map.
-	fileHandles map[string]*directIO
+	hashmap *hashmap
 }
 
 func newRegistryMap(hashModValue int, replicationTracker *replicationTracker, readWrite bool) *registryMap {
 	return &registryMap{
-		hashModValue:       hashModValue,
-		replicationTracker: replicationTracker,
-		readWrite:          readWrite,
-		fileHandles:        make(map[string]*directIO, 5),
+		hashmap: newHashmap(hashModValue, replicationTracker, readWrite),
 	}
 }
 
-func getIDs(items ...sop.Handle) []sop.UUID {
-	IDs := make([]sop.UUID, len(items))
-	for i := range items {
-		IDs[i] = items[i].LogicalID
-	}
-	return IDs
-}
-
-func (hm *registryMap) set(allOrNothing bool, areItemsLocked func() error, items ...sop.Tuple[string, []sop.Handle]) error {
+func (rm registryMap) set(allOrNothing bool, areItemsLocked func() error, items ...sop.Tuple[string, []sop.Handle]) error {
 	if allOrNothing {
-		unlockItemFileRegions := func(items ...sop.Tuple[string, []sop.Handle]) error {
-			var lastErr error
-			for _, item := range items {
-				if err := hm.unlockFileRegion(item.First, getIDs(item.Second...)...); err != nil {
-					lastErr = err
-				}
+		unlockItemFileRegions := func(items ...fileRegionDetails) error {
+			if err := rm.hashmap.unlockFileRegion(items...); err != nil {
+				return err
 			}
-			return lastErr
+			return nil
 		}
-		lockedItems := make([]sop.Tuple[string, []sop.Handle], 0, len(items))
+		lockedItems := make([]fileRegionDetails, 0, len(items))
 		for _, item := range items {
-			if err := hm.lockFileRegion(true, item.First, getIDs(item.Second...)...); err != nil {
+			frds, err := rm.hashmap.lockFileRegion(true, item.First, getIDs(item.Second...)...)
+			if err != nil {
 				unlockItemFileRegions(lockedItems...)
 				return err
 			}
-			lockedItems = append(lockedItems, item)
+			// Update the Handles read w/ the items' values.
+			for i := 0; i < len(frds); i++ {
+				frds[i].handle = item.Second[i]
+			}
+			lockedItems = append(lockedItems, frds...)
 		}
 		if areItemsLocked != nil {
 			// Ensure the batch are all locked as seen in Redis, to address race condition.
@@ -65,96 +52,71 @@ func (hm *registryMap) set(allOrNothing bool, areItemsLocked func() error, items
 				return err
 			}
 		}
-		for _, item := range items {
-			if err := hm.updateFileRegion(item.First, item.Second...); err != nil {
-				unlockItemFileRegions(lockedItems...)
-				return err
-			}
+		if err := rm.hashmap.updateFileRegion(lockedItems...); err != nil {
+			unlockItemFileRegions(lockedItems...)
+			return err
 		}
 		return unlockItemFileRegions(lockedItems...)
 	}
 	// Individually manage/update the file area occupied by the handle so we don't create "lock pressure".
 	for _, item := range items {
-		for _, h := range item.Second {
-			itemID := getIDs(h)
-			if err := hm.lockFileRegion(true, item.First, itemID...); err != nil {
-				return err
-			}
-			if err := hm.updateFileRegion(item.First, h); err != nil {
-				hm.unlockFileRegion(item.First, itemID...)
-				return err
-			}
-			if err := hm.unlockFileRegion(item.First, itemID...); err != nil {
-				return err
-			}
+		frds, err := rm.hashmap.lockFileRegion(true, item.First, getIDs(item.Second...)...)
+		if err != nil {
+			return err
+		}
+		for i := range frds {
+			frds[i].handle = item.Second[i]
+		}
+		if err := rm.hashmap.updateFileRegion(frds...); err != nil {
+			rm.hashmap.unlockFileRegion(frds...)
+			return err
+		}
+		if err := rm.hashmap.unlockFileRegion(frds...); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (hm *registryMap) get(keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[string, []sop.Handle], error) {	
+func (rm registryMap) get(keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[string, []sop.Handle], error) {	
 	// Individually manage/update the file area occupied by the handle so we don't create "lock pressure".
 	result := make([]sop.Tuple[string, []sop.Handle], len(keys), 0)
 	for _, k := range keys {
-		for _, h := range k.Second {
-			if err := hm.lockFileRegion(false, k.First, h); err != nil {
-				return nil, err
-			}
-			d, err := hm.readFileRegion(k.First, h)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, sop.Tuple[string, []sop.Handle]{
-				First: k.First,
-				Second: d,
-			})
-			if err := hm.unlockFileRegion(k.First, h); err != nil {
-				return nil, err
-			}
+		frds, err := rm.hashmap.lockFileRegion(false, k.First, k.Second...)
+		if err != nil {
+			return nil, err
 		}
+
+		if err := rm.hashmap.unlockFileRegion(frds...); err != nil {
+			return nil, err
+		}
+
+		handles := make([]sop.Handle, 0, len(k.Second))
+		for i := 0; i < len(frds); i++ {
+			handles = append(handles, frds[i].handle)
+		}
+
+		result = append(result, sop.Tuple[string, []sop.Handle]{
+			First: k.First,
+			Second: handles,
+		})
 	}
 	return result, nil
 }
 
-func (hm *registryMap) remove(keys ...sop.Tuple[string, []sop.UUID]) error {
+func (rm registryMap) remove(keys ...sop.Tuple[string, []sop.UUID]) error {
 	return nil
-}
-
-// TODO:
-func (hm *registryMap) lockFileRegion(forWriting bool, filename string, id ...sop.UUID) error {
-	var dio *directIO
-	if f, ok := hm.fileHandles[filename]; ok {
-		dio = f
-	} else {
-		dio = newDirectIO()
-		//fn := hm.replicationTracker.getActiveFolderFilename(filename)
-		//dio.open(fn, )
-		hm.fileHandles[filename] = dio
-	}
-
-	//dio.lockFileRegion(hm.readWrite, )
-
-	return nil
-}
-func (hm *registryMap) unlockFileRegion(filename string, id ...sop.UUID) error {
-	return nil
-}
-func (hm *registryMap) updateFileRegion(filename string, h ...sop.Handle) error {
-	return nil
-}
-func (hm *registryMap) readFileRegion(filename string, id ...sop.UUID) ([]sop.Handle, error) {
-	return nil, nil
 }
 
 // Close all files opened by this hashmap on disk.
-func (hm *registryMap) close() error {
-	var lastError error
-	for _, f := range hm.fileHandles {
-		if err := f.close(); err != nil {
-			lastError = err
-		}
+func (rm registryMap) close() error {
+	return rm.hashmap.close()
+}
+
+func getIDs(items ...sop.Handle) []sop.UUID {
+	IDs := make([]sop.UUID, len(items))
+	for i := range items {
+		IDs[i] = items[i].LogicalID
 	}
-	// Clear the file handles for cleanup.
-	hm.fileHandles = make(map[string]*directIO)
-	return lastError
+	return IDs
 }

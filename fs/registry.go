@@ -40,11 +40,11 @@ func NewRegistry(rt *replicationTracker, cache sop.Cache, readWrite bool, hashMo
 }
 
 // Close all opened file handles.
-func (r *registryOnDisk) Close() error {
+func (r registryOnDisk) Close() error {
 	return r.hashmap.close()
 }
 
-func (r *registryOnDisk) Add(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
+func (r registryOnDisk) Add(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
 			if err := r.hashmap.set(false, nil, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
@@ -59,7 +59,7 @@ func (r *registryOnDisk) Add(ctx context.Context, storesHandles ...sop.RegistryP
 	return nil
 }
 
-func (r *registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
+func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	if len(storesHandles) == 0 {
 		return nil
 	}
@@ -142,7 +142,7 @@ func (r *registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHa
 	return nil
 }
 
-func (r *registryOnDisk) Get(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
+func (r registryOnDisk) Get(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	storesHandles := make([]sop.RegistryPayload[sop.Handle], 0, len(storesLids))
 	for _, storeLids := range storesLids {
 		handles := make([]sop.Handle, 0, len(storeLids.IDs))
@@ -198,7 +198,7 @@ func (r *registryOnDisk) Get(ctx context.Context, storesLids ...sop.RegistryPayl
 	}
 	return storesHandles, nil
 }
-func (r *registryOnDisk) Remove(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) error {
+func (r registryOnDisk) Remove(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) error {
 	for _, storeLids := range storesLids {
 		// Flush out the failing records from cache.
 		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
