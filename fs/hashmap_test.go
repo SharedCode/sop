@@ -10,7 +10,6 @@ import (
 
 const (
 	hashModValue = 500000
-	blockItemCount = 66
 )
 // This hashing algorithm tend to be denser as more data segment file is used. At two, it can fill around 66% avg.
 // At one segment file, it fills up around 55%. SOP b-tree (w/ load distribution)
@@ -18,7 +17,7 @@ const (
 // At 4, it should be able to fill 75%.
 
 func TestHashModDistribution(t *testing.T) {
-	hashTable1 := make([][blockItemCount]sop.UUID, hashModValue)
+	hashTable1 := make([][handlesPerBlock]sop.UUID, hashModValue)
 	//hashTable2 := make([][66]sop.UUID, hashModValue)
 	collisionCount := 0
 	fmt.Printf("Start %v", time.Now())
@@ -37,7 +36,7 @@ func TestHashModDistribution(t *testing.T) {
 		}
 
 		bucket := high % hashModValue 
-		bucketOffset := low%blockItemCount
+		bucketOffset := low%handlesPerBlock
 
 		if hashTable1[bucket][bucketOffset] != sop.NilUUID {
 			foundASlot := false
@@ -76,7 +75,7 @@ func TestHashModDistribution(t *testing.T) {
 	notFoundCount := 0
 
 	for i := 0; i < len(hashTable1); i++ {
-		for ii := 0; ii < blockItemCount; ii++ {
+		for ii := 0; ii < handlesPerBlock; ii++ {
 			if hashTable1[i][ii] == sop.NilUUID {
 				notUsedSlot++
 				continue
@@ -102,7 +101,7 @@ func TestHashModDistribution(t *testing.T) {
 	fmt.Printf("End %v", time.Now())
 }
 
-func findItem(ht [][blockItemCount]sop.UUID, id sop.UUID) bool {
+func findItem(ht [][handlesPerBlock]sop.UUID, id sop.UUID) bool {
 	bytes := id[:]
 	var high uint64
 	for i := 0; i < 8; i++ {
@@ -114,12 +113,12 @@ func findItem(ht [][blockItemCount]sop.UUID, id sop.UUID) bool {
 	}
 
 	bucket := high % hashModValue 
-	bucketOffset := low%blockItemCount
+	bucketOffset := low%handlesPerBlock
 
 	if ht[bucket][bucketOffset] == id {
 		return true
 	}
-	for i := 0; i < blockItemCount; i++ {
+	for i := 0; i < handlesPerBlock; i++ {
 		if ht[bucket][i] == id {
 			return true
 		}

@@ -11,7 +11,7 @@ import (
 )
 
 // NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
-func NewTransaction(storesBaseFolder string, mode sop.TransactionMode, maxTime time.Duration, registryHashModValue int) (sop.Transaction, error) {
+func NewTransaction(storesBaseFolder string, mode sop.TransactionMode, maxTime time.Duration, registryHashModValue fs.HashModValueType) (sop.Transaction, error) {
 	twoPT, err := NewTwoPhaseCommitTransaction(storesBaseFolder, mode, maxTime, nil, registryHashModValue)
 	if err != nil {
 		return nil, err
@@ -21,7 +21,7 @@ func NewTransaction(storesBaseFolder string, mode sop.TransactionMode, maxTime t
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
-func NewTwoPhaseCommitTransaction(storesBaseFolder string, mode sop.TransactionMode, maxTime time.Duration, cache sop.Cache, registryHashModValue int) (sop.TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransaction(storesBaseFolder string, mode sop.TransactionMode, maxTime time.Duration, cache sop.Cache, registryHashModValue fs.HashModValueType) (sop.TwoPhaseCommitTransaction, error) {
 	if !IsInitialized() {
 		return nil, fmt.Errorf("Redis was not initialized")
 	}
@@ -33,11 +33,11 @@ func NewTwoPhaseCommitTransaction(storesBaseFolder string, mode sop.TransactionM
 	if err != nil {
 		return nil, err
 	}
-	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, fs.NewBlobStore(nil), sr, fs.NewRegistry(replicationTracker, cache, mode == sop.ForWriting, registryHashModValue), cache, fs.NewTransactionLog())
+	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, fs.NewBlobStore(nil), sr, fs.NewRegistry(mode == sop.ForWriting, replicationTracker, cache, registryHashModValue), cache, fs.NewTransactionLog())
 }
 
 // Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
-func NewTransactionWithReplication(storesBaseFolders []string, mode sop.TransactionMode, maxTime time.Duration, cache sop.Cache, registryHashModValue int, erasureConfig map[string]fs.ErasureCodingConfig) (sop.Transaction, error) {
+func NewTransactionWithReplication(storesBaseFolders []string, mode sop.TransactionMode, maxTime time.Duration, cache sop.Cache, registryHashModValue fs.HashModValueType, erasureConfig map[string]fs.ErasureCodingConfig) (sop.Transaction, error) {
 	twoPT, err := NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders, mode, maxTime, cache, registryHashModValue, erasureConfig)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func NewTransactionWithReplication(storesBaseFolders []string, mode sop.Transact
 
 // Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
 // Returns sop.TwoPhaseCommitTransaction type useful for integration with your custom application transaction where code would like to get access to SOP's two phase commit transaction API.
-func NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders []string, mode sop.TransactionMode, maxTime time.Duration, cache sop.Cache, registryHashModValue int, erasureConfig map[string]fs.ErasureCodingConfig) (sop.TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders []string, mode sop.TransactionMode, maxTime time.Duration, cache sop.Cache, registryHashModValue fs.HashModValueType, erasureConfig map[string]fs.ErasureCodingConfig) (sop.TwoPhaseCommitTransaction, error) {
 	if erasureConfig == nil {
 		erasureConfig = fs.GetGlobalErasureConfig()
 		if erasureConfig == nil {
@@ -72,5 +72,5 @@ func NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders []string, mod
 	if err != nil {
 		return nil, err
 	}
-	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, bs, sr, fs.NewRegistry(replicationTracker, cache, mode == sop.ForWriting, registryHashModValue), cache, fs.NewTransactionLog())
+	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, bs, sr, fs.NewRegistry(mode == sop.ForWriting, replicationTracker, cache, registryHashModValue), cache, fs.NewTransactionLog())
 }

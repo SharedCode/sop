@@ -38,6 +38,14 @@ func (dio *directIO) open(filename string, flag int, permission os.FileMode) err
 	return nil
 }
 
+func (dio directIO) isFileEmpty(filePath string) (bool, error) {
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return false, err
+	}
+	return fileInfo.Size() == 0, nil
+}
+
 // Create a buffer that is aligned to the file sector size, usable as buffer for reading file data, directly.
 func (dio directIO) createAlignedBlock() []byte {
 	return dio.createAlignedBlockOfSize(directio.BlockSize)

@@ -28,12 +28,9 @@ const (
 )
 
 // NewRegistry manages the Handle in memory for mocking.
-func NewRegistry(rt *replicationTracker, cache sop.Cache, readWrite bool, hashModValue int) Registry {
-	if hashModValue <= 0 {
-		hashModValue = 250000
-	}
+func NewRegistry(readWrite bool, rt *replicationTracker, cache sop.Cache, hashModValue HashModValueType) Registry {
 	return &registryOnDisk{
-		hashmap:            newRegistryMap(hashModValue, rt, readWrite),
+		hashmap:            newRegistryMap(readWrite, hashModValue, rt),
 		replicationTracker: rt,
 		cache:              cache,
 	}

@@ -9,14 +9,28 @@ import (
 	"github.com/SharedCode/sop/encoding"
 )
 
+/*
+	Hashmap on disk manages registry on file. Each Handle record is persisted to a block and the address of this block is determined using 
+	"modulo hash". Each block can store up to 66 Handles with the last 4 bytes optionally containing a file offset to the "extended blocks"
+	location beyond the file segment. Extended blocks' location is an area of the file beyond the regular border of the file segment. This
+	area is allocated half of the file segment.
+
+	To give illustration, for example, if the computed file segment is 1GB, the total will be 1.5GB including the extended location. This gives
+	some hash mod number to have from 1 to 3 allocated blocks. The extended area was designed to accommodate "module hash collision" edge cases.
+	This should allow "denser" file segments & reduce empty or unused space.
+*/
+
 type hashmap struct {
-	hashModValue       int
+	hashModValue       HashModValueType
 	replicationTracker *replicationTracker
 	readWrite          bool
 	// File handles of all known (traversed & opened) data segment file of the hash map.
 	fileHandles map[string]directIO
 }
 
+// File reqion details is a response struct of 'findAndLock' function. It puts together
+// details about discovered (file &) location, i.e. - file offset, of a given UUID & its current record's 
+// value (unmarshalled to a Handle) read from the file.
 type fileRegionDetails struct {
 	dio directIO
 	offset int64
@@ -24,12 +38,23 @@ type fileRegionDetails struct {
 }
 
 const(
-	fullPermission = 0666
+	fullPermission = 0644
 	handlesPerBlock = 66
 	lockFileRegionTimeout = time.Duration(5 * time.Minute)
 )
 
-func newHashmap(hashModValue int, replicationTracker *replicationTracker, readWrite bool) *hashmap {
+type HashModValueType int
+const(
+	MinimumModValue = 100000	// 100k, should generate 400MB file segment, 600MB total
+	DefaultModValue = 200000	// 200k, should generate 800M file segment, 1.2GB total
+	TinyModValue =    250000	// 250k, should generate 1GB file segment, 1.5GB total
+	SmallModValue =   300000	// 300k, should generate 1.2GB file segment, 1.8GB total
+	MediumModValue =  500000	// 500k, 2GB file segment, 3GB total
+	BigModValue =    1000000	// 1mil, 4GB file segment, 6GB total
+)
+
+// Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
+func newHashmap(readWrite bool, hashModValue HashModValueType, replicationTracker *replicationTracker) *hashmap {
 	return &hashmap{
 		hashModValue:       hashModValue,
 		replicationTracker: replicationTracker,
@@ -45,8 +70,9 @@ func newHashmap(hashModValue int, replicationTracker *replicationTracker, readWr
 // slot length of 500.
 func (hm *hashmap) findAndLock(forWriting bool, filename string, id sop.UUID) (fileRegionDetails, error) {
 	var dio directIO
-
 	var result fileRegionDetails
+	var createdNewFile bool
+
 	i := 1
 	for {
 		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s-%d.reg",filename,i))
@@ -58,8 +84,19 @@ func (hm *hashmap) findAndLock(forWriting bool, filename string, id sop.UUID) (f
 			if !hm.readWrite {
 				flag = os.O_RDONLY
 			}
+			fileEmpty, err := dio.isFileEmpty(fn)
+			if err != nil {
+				return result, err
+			}
 			if err := dio.open(fn, flag, fullPermission); err != nil {
 				return result, err
+			}
+			// Pre-allocate if new file.
+			if forWriting && fileEmpty {
+				if err := dio.file.Truncate(int64(hm.hashModValue) * blockSize); err != nil {
+					return result, err
+				}
+				createdNewFile = true
 			}
 			hm.fileHandles[fn] = dio
 		}
@@ -79,23 +116,26 @@ func (hm *hashmap) findAndLock(forWriting bool, filename string, id sop.UUID) (f
 		blockOffset := high % int64(hm.hashModValue)
 		offsetInBlock := low % handlesPerBlock
 
+		// Compute bucket file offset.
 		offset := (blockOffset * blockSize) + (offsetInBlock*sop.HandleSizeInBytes)
-		ba := make([]byte, sop.HandleSizeInBytes)
+		ba := dio.createAlignedBlock()
+
 		n, err := dio.readAt(ba, offset)
 		if err != nil {
-			//if err == io.EOF 
 			return result, err
 		}
 		if n != len(ba) {
+			return result, fmt.Errorf("only able to read partially (%d bytes) the Handle record at offset %v", n, offset)
+		}
+
+		// Handle empty block.
+		if isZeroData(ba) {
+			result.offset = offset
+			result.dio = dio
 			return result, nil
 		}
 
-		// for i := 0; i < len(ba); i++ {
-		// 	if buffer[i] != 0 {
-		// 		return false, nil // Found a non-zero byte
-		// 	}
-		// }
-
+		// Unmarshal and check if this is the Handler record we are looking for.
 		m := encoding.NewHandleMarshaler()
 		var h sop.Handle
 		if err := m.Unmarshal(ba, &h); err != nil {
@@ -118,7 +158,8 @@ func (hm *hashmap) findAndLock(forWriting bool, filename string, id sop.UUID) (f
 		}
 
 		i++
-		if i > 1000 {
+		// Stop the loop of we've just created a new file segment or reaching ridiculous file check.
+		if i > 1000 || createdNewFile {
 			break
 		}
 	}
@@ -166,4 +207,13 @@ func (hm *hashmap) close() error {
 	// Clear the file handles for cleanup.
 	hm.fileHandles = make(map[string]directIO)
 	return lastError
+}
+
+func isZeroData(data []byte) bool {
+    for _, b := range data {
+        if b != 0 {
+            return false
+        }
+    }
+    return true
 }

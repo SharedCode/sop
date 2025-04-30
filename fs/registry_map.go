@@ -8,9 +8,9 @@ type registryMap struct {
 	hashmap *hashmap
 }
 
-func newRegistryMap(hashModValue int, replicationTracker *replicationTracker, readWrite bool) *registryMap {
+func newRegistryMap(readWrite bool, hashModValue HashModValueType, replicationTracker *replicationTracker) *registryMap {
 	return &registryMap{
-		hashmap: newHashmap(hashModValue, replicationTracker, readWrite),
+		hashmap: newHashmap(readWrite, hashModValue, replicationTracker),
 	}
 }
 
@@ -79,7 +79,6 @@ func (rm registryMap) set(allOrNothing bool, areItemsLocked func() error, items 
 }
 
 func (rm registryMap) get(keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[string, []sop.Handle], error) {	
-	// Individually manage/update the file area occupied by the handle so we don't create "lock pressure".
 	result := make([]sop.Tuple[string, []sop.Handle], len(keys), 0)
 	for _, k := range keys {
 		frds, err := rm.hashmap.lockFileRegion(false, k.First, k.Second...)
