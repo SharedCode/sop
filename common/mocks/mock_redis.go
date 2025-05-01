@@ -93,6 +93,10 @@ func (m *mockRedis) IsLocked(ctx context.Context, lockKeys ...*sop.LockKey) erro
 	return nil
 }
 
+func (m *mockRedis) IsLockedByOthers(ctx context.Context, lockKeys ...string) (bool, error) {
+	return false, nil
+}
+
 func (m *mockRedis) Unlock(ctx context.Context, lockKeys ...*sop.LockKey) error {
 	return nil
 }
