@@ -10,13 +10,13 @@ import (
 )
 
 /*
-	Hashmap on disk manages registry on file. Each Handle record is persisted to a block and the address of this block is determined using 
+	Hashmap on disk manages registry on file. Each Handle record is persisted to a block and the address of this block is determined using
 	"modulo hash". Each block can store up to 66 Handles with the last 4 bytes optionally containing a file offset to the "extended blocks"
 	location beyond the file segment. Extended blocks' location is an area of the file beyond the regular border of the file segment. This
 	area is allocated half of the file segment.
 
 	To give illustration, for example, if the computed file segment is 1GB, the total will be 1.5GB including the extended location. This gives
-	some hash mod number to have from 1 to 3 allocated blocks. The extended area was designed to accommodate "module hash collision" edge cases.
+	some hash mod number to have a "linked list" of allocated blocks. The extended area was designed to accommodate "module hash collision" edge cases.
 	This should allow "denser" file segments & reduce empty or unused space.
 */
 
@@ -29,28 +29,32 @@ type hashmap struct {
 }
 
 // File reqion details is a response struct of 'findAndLock' function. It puts together
-// details about discovered (file &) location, i.e. - file offset, of a given UUID & its current record's 
+// details about discovered (file &) location, i.e. - file offset, of a given UUID & its current record's
 // value (unmarshalled to a Handle) read from the file.
 type fileRegionDetails struct {
-	dio directIO
+	dio    directIO
 	offset int64
 	handle sop.Handle
 }
 
-const(
-	fullPermission = 0644
-	handlesPerBlock = 66
+const (
+	fullPermission        = 0644
+	handlesPerBlock       = 66
 	lockFileRegionTimeout = time.Duration(5 * time.Minute)
 )
 
 type HashModValueType int
-const(
-	MinimumModValue = 100000	// 100k, should generate 400MB file segment, 600MB total
-	DefaultModValue = 200000	// 200k, should generate 800M file segment, 1.2GB total
-	TinyModValue =    250000	// 250k, should generate 1GB file segment, 1.5GB total
-	SmallModValue =   300000	// 300k, should generate 1.2GB file segment, 1.8GB total
-	MediumModValue =  500000	// 500k, 2GB file segment, 3GB total
-	BigModValue =    1000000	// 1mil, 4GB file segment, 6GB total
+
+const (
+	MinimumModValue   = 100000 // 100k, should generate 400MB file segment, 600MB total
+	SuperTinyModValue = 125000 // 125k, should generate 500MB file segment, 750MB total
+	TinyModValue      = 200000 // 200k, should generate 800MB file segment, 1.2GB total
+	DefaultModValue   = TinyModValue
+	SmallModValue     = 250000  // 250k, should generate 1GB file segment, 1.5GB total
+	MediumModValue    = 300000  // 300k, should generate 1.2GB file segment, 1.8GB total
+	LargeModValue     = 500000  // 500k, 2GB file segment, 3GB total
+	XLModValue        = 750000  // 750k, 3GB file segment, 4.5GB total
+	DoubleXLModValue  = 1000000 // 1m, 4GB file segment, 6GB total
 )
 
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
@@ -61,6 +65,18 @@ func newHashmap(readWrite bool, hashModValue HashModValueType, replicationTracke
 		readWrite:          readWrite,
 		fileHandles:        make(map[string]directIO, 5),
 	}
+}
+
+// Total file size is hash mod value X 4096 X 3. We pre-allocate the file to have three segments.
+// That is up to three blocks to accommodate collisions. A block can contain 66 handles, that means
+// 66 * 3 = 198 slots to accomodate collisions before triggering to add a new file.
+func (hm *hashmap) getTotalFileSize() int64 {
+	smfs := hm.getSegmentFileSize()
+	return smfs + (smfs / 2)
+}
+
+func (hm *hashmap) getSegmentFileSize() int64 {
+	return int64(hm.hashModValue) * blockSize
 }
 
 // Iterate through the entire set of hashmap (bucket) files, from 1 to the last bucket file.
@@ -75,12 +91,12 @@ func (hm *hashmap) findAndLock(forWriting bool, filename string, id sop.UUID) (f
 
 	i := 1
 	for {
-		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s-%d.reg",filename,i))
+		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s-%d.reg", filename, i))
 		if f, ok := hm.fileHandles[fn]; ok {
 			dio = f
 		} else {
 			dio = *newDirectIO()
-			flag := os.O_CREATE|os.O_RDWR
+			flag := os.O_CREATE | os.O_RDWR
 			if !hm.readWrite {
 				flag = os.O_RDONLY
 			}
@@ -93,7 +109,7 @@ func (hm *hashmap) findAndLock(forWriting bool, filename string, id sop.UUID) (f
 			}
 			// Pre-allocate if new file.
 			if forWriting && fileEmpty {
-				if err := dio.file.Truncate(int64(hm.hashModValue) * blockSize); err != nil {
+				if err := dio.file.Truncate(hm.getTotalFileSize()); err != nil {
 					return result, err
 				}
 				createdNewFile = true
@@ -117,7 +133,7 @@ func (hm *hashmap) findAndLock(forWriting bool, filename string, id sop.UUID) (f
 		offsetInBlock := low % handlesPerBlock
 
 		// Compute bucket file offset.
-		offset := (blockOffset * blockSize) + (offsetInBlock*sop.HandleSizeInBytes)
+		offset := (blockOffset * blockSize) + (offsetInBlock * sop.HandleSizeInBytes)
 		ba := dio.createAlignedBlock()
 
 		n, err := dio.readAt(ba, offset)
@@ -169,7 +185,7 @@ func (hm *hashmap) findAndLock(forWriting bool, filename string, id sop.UUID) (f
 
 // Lock file region(s) that a set of UUIDs correlate to and return these region(s)' offsett/Handle if in case
 // useful to the caller.
-func (hm *hashmap) lockFileRegion(forWriting bool, filename string, ids ...sop.UUID) ([]fileRegionDetails,error) {
+func (hm *hashmap) lockFileRegion(forWriting bool, filename string, ids ...sop.UUID) ([]fileRegionDetails, error) {
 	undo := func(items []fileRegionDetails) {
 		for _, item := range items {
 			item.dio.unlockFileRegion(item.offset, sop.HandleSizeInBytes)
@@ -210,10 +226,10 @@ func (hm *hashmap) close() error {
 }
 
 func isZeroData(data []byte) bool {
-    for _, b := range data {
-        if b != 0 {
-            return false
-        }
-    }
-    return true
+	for _, b := range data {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
 }

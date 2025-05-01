@@ -9,7 +9,7 @@ import (
 	"github.com/SharedCode/sop"
 )
 
-type handleEncoder struct {}
+type handleEncoder struct{}
 
 // Instantiates a Handler Marshaler.
 func NewHandleMarshaler() Marshaler {
@@ -43,11 +43,11 @@ func encode(w *bytes.Buffer, h *sop.Handle) (int, error) {
 	}
 	w.Write([]byte{b})
 
-    var dummy4 [4]byte
+	var dummy4 [4]byte
 	binary.LittleEndian.PutUint32(dummy4[:], uint32(h.Version))
 	w.Write(dummy4[:])
 
-    var dummy8 [8]byte
+	var dummy8 [8]byte
 	binary.LittleEndian.PutUint64(dummy8[:], uint64(h.WorkInProgressTimestamp))
 	w.Write(dummy8[:])
 
@@ -57,7 +57,7 @@ func encode(w *bytes.Buffer, h *sop.Handle) (int, error) {
 	}
 	w.Write([]byte{b})
 
-    return w.Len(), nil
+	return w.Len(), nil
 }
 
 func decode(r *bytes.Buffer) (*sop.Handle, error) {
@@ -93,5 +93,5 @@ func decode(r *bytes.Buffer) (*sop.Handle, error) {
 		result.IsDeleted = true
 	}
 
-    return &result, nil
+	return &result, nil
 }

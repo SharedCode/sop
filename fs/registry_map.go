@@ -78,7 +78,7 @@ func (rm registryMap) set(allOrNothing bool, areItemsLocked func() error, items 
 	return nil
 }
 
-func (rm registryMap) get(keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[string, []sop.Handle], error) {	
+func (rm registryMap) get(keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[string, []sop.Handle], error) {
 	result := make([]sop.Tuple[string, []sop.Handle], len(keys), 0)
 	for _, k := range keys {
 		frds, err := rm.hashmap.lockFileRegion(false, k.First, k.Second...)
@@ -96,7 +96,7 @@ func (rm registryMap) get(keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[st
 		}
 
 		result = append(result, sop.Tuple[string, []sop.Handle]{
-			First: k.First,
+			First:  k.First,
 			Second: handles,
 		})
 	}

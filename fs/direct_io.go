@@ -14,6 +14,7 @@ import (
 type directIO struct {
 	file *os.File
 }
+
 const (
 	blockSize = directio.BlockSize
 )
@@ -70,7 +71,7 @@ func (dio directIO) readAt(block []byte, offset int64) (int, error) {
 	return dio.file.ReadAt(block, offset)
 }
 
-func (dio directIO)lockFileRegion(readWrite bool, offset int64, length int64, timeout time.Duration,) error {
+func (dio directIO) lockFileRegion(readWrite bool, offset int64, length int64, timeout time.Duration) error {
 	if dio.file == nil {
 		return fmt.Errorf("can't lock file region, there is no opened file")
 	}
@@ -79,10 +80,10 @@ func (dio directIO)lockFileRegion(readWrite bool, offset int64, length int64, ti
 		t = syscall.F_RDLCK
 	}
 	flock := syscall.Flock_t{
-		Type:   t,
-		Start:  offset,
-		Len:    length,
-		Pid:    int32(syscall.Getpid()),
+		Type:  t,
+		Start: offset,
+		Len:   length,
+		Pid:   int32(syscall.Getpid()),
 	}
 
 	if timeout <= 0 {
@@ -106,7 +107,7 @@ func (dio directIO)lockFileRegion(readWrite bool, offset int64, length int64, ti
 	}
 }
 
-func (dio directIO)isRegionLocked(readWrite bool, offset int64, length int64) (bool, error) {
+func (dio directIO) isRegionLocked(readWrite bool, offset int64, length int64) (bool, error) {
 	if dio.file == nil {
 		return false, fmt.Errorf("can't check if region is locked, there is no opened file")
 	}
@@ -131,15 +132,15 @@ func (dio directIO)isRegionLocked(readWrite bool, offset int64, length int64) (b
 	return flock.Type != syscall.F_UNLCK, nil
 }
 
-func (dio directIO)unlockFileRegion(offset int64, length int64) error {
+func (dio directIO) unlockFileRegion(offset int64, length int64) error {
 	if dio.file == nil {
 		return fmt.Errorf("can't unlock file region, there is no opened file")
 	}
 	flock := syscall.Flock_t{
-		Type:   syscall.F_UNLCK, // Unlock
-		Start:  offset,
-		Len:    length,
-		Pid:    int32(syscall.Getpid()),
+		Type:  syscall.F_UNLCK, // Unlock
+		Start: offset,
+		Len:   length,
+		Pid:   int32(syscall.Getpid()),
 	}
 
 	return syscall.FcntlFlock(dio.file.Fd(), syscall.F_SETLK, &flock)
