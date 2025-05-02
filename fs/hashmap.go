@@ -32,28 +32,32 @@ type fileRegionDetails struct {
 	dio    *directIO
 	offset int64
 	handle sop.Handle
+	// If the region had been locked, lockKey should contain the lock details useful for unlocking it.
+	lockKey *sop.LockKey
 }
 
 const (
 	fullPermission        = 0644
 	handlesPerBlock       = 66
 	lockFileRegionTimeout = time.Duration(5 * time.Minute)
+	registryFileIOLockKey = "infs_reg"
 	// Growing the file needs more time to complete.
 	lockPreallocateFileTimeout = time.Duration(25 * time.Minute)
-	registryFileIOLockKey      = "infs_reg"
+	lockFileRegionKeyPrefix    = "infs"
+	lockFileRegionDuration     = time.Duration(15 * time.Minute)
 )
 
 type HashModValueType int
 
 const (
-	MinimumModValue   = 100000  // 100k, should generate 400MB file segment
-	SuperTinyModValue = 125000  // 125k, should generate 500MB file segment
-	TinyModValue      = 200000  // 200k, should generate 800MB file segment
-	SmallModValue     = 250000  // 250k, should generate 1GB file segment
-	MediumModValue    = 350000  // 350k, should generate 1.4GB file segment
-	LargeModValue     = 500000  // 500k, 2GB file segment
-	XLModValue        = 750000  // 750k, 3GB file segment
-	XXLModValue       = 1000000 // 1m, 4GB file segment
+	MinimumModValue   = 75000  // 75k, should generate 300MB file segment
+	SuperTinyModValue = 100000 // 100k, should generate 400MB file segment
+	TinyModValue      = 125000 // 125k, should generate 500MB file segment
+	SmallModValue     = 200000 // 200k, should generate 800MB file segment
+	MediumModValue    = 250000 // 250k, should generate 1GB file segment
+	LargeModValue     = 350000 // 350k, should generate 1.4GB file segment
+	XLargeModValue    = 500000 // 500k, 2GB file segment
+	XXLModValue       = 750000 // 750k, 3GB file segment
 )
 
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
@@ -66,13 +70,6 @@ func newHashmap(readWrite bool, hashModValue HashModValueType, replicationTracke
 		cache:                      cache,
 		useCacheForFileRegionLocks: useCacheForFileRegionLocks,
 	}
-}
-
-// Maximum file size is segment file size (hash mod value X 4096) + (.5 of segment file size).
-// Upon reaching this max file size, hashmap should create a new file on succeeding block insert.
-func (hm *hashmap) getMaxFileSize() int64 {
-	smfs := hm.getSegmentFileSize()
-	return smfs + (smfs / 2)
 }
 
 func (hm *hashmap) getSegmentFileSize() int64 {
@@ -99,6 +96,53 @@ func (hm *hashmap) getBlockOffsetAndHandleInBlockOffset(id sop.UUID) (int64, int
 	return blockOffset * blockSize, offsetInBlock * sop.HandleSizeInBytes
 }
 
+func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename string, id sop.UUID, dio *directIO) (fileRegionDetails, error) {
+	var result fileRegionDetails
+	if !forWriting {
+		return result, fmt.Errorf("can't read a registry file(%s) that is missing", filename)
+	}
+
+	flag := os.O_CREATE | os.O_RDWR
+	if !hm.readWrite {
+		flag = os.O_RDONLY
+	}
+
+	lk := hm.cache.CreateLockKeys(registryFileIOLockKey)
+	if err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk...); err != nil {
+		return result, err
+	}
+
+	if err := dio.open(filename, flag, fullPermission); err != nil {
+		hm.cache.Unlock(ctx, lk...)
+		return result, err
+	}
+
+	// Handle properly a newly created file.
+	// Pre-allocate entire segment if new file. Should we Redis lock to allow only one process to win Truncate?
+	// NFS should be able to allow one and others to fail, error out.
+	if err := dio.file.Truncate(hm.getSegmentFileSize()); err != nil {
+		hm.cache.Unlock(ctx, lk...)
+		return result, err
+	}
+	hm.cache.Unlock(ctx, lk...)
+
+	hm.fileHandles[filename] = dio
+	// New file, 'prepare to let caller write the new handle to this block's first slot.
+	blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
+	result.offset = blockOffset + handleInBlockOffset
+	if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+		if ok {
+			err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+		}
+		return result, err
+	}
+	result.dio = dio
+	if err := hm.lockFoundFileRegion(ctx, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
 // Iterate through the entire set of hashmap (bucket) files, from 1 to the last bucket file.
 // Each bucket file is allocated about 250,000 "sector blocks"(configurable) and in total, contains ~16,650,000
 // addressable virtual IDs (handles). Typically, there should be only one bucket file as this file
@@ -107,7 +151,6 @@ func (hm *hashmap) getBlockOffsetAndHandleInBlockOffset(id sop.UUID) (int64, int
 func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename string, id sop.UUID) (fileRegionDetails, error) {
 	var dio *directIO
 	var result fileRegionDetails
-	var createdNewFile bool
 
 	i := 1
 	for {
@@ -116,50 +159,9 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 			dio = f
 		} else {
 			dio = newDirectIO(hm.cache, hm.useCacheForFileRegionLocks)
-			flag := os.O_CREATE | os.O_RDWR
-			if !hm.readWrite {
-				flag = os.O_RDONLY
-			}
 			fileExists := dio.fileExists(fn)
 			if !fileExists {
-				if !forWriting {
-					return result, fmt.Errorf("can't read a registry file(%s) that is missing", fn)
-				}
-
-				lk := hm.cache.CreateLockKeys(registryFileIOLockKey)
-				if err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk...); err != nil {
-					return result, err
-				}
-
-				if err := dio.open(fn, flag, fullPermission); err != nil {
-					hm.cache.Unlock(ctx, lk...)
-					return result, err
-				}
-
-				// Handle properly a newly created file.
-				// Pre-allocate entire segment if new file. Should we Redis lock to allow only one process to win Truncate?
-				// NFS should be able to allow one and others to fail, error out.
-				if err := dio.file.Truncate(hm.getSegmentFileSize()); err != nil {
-					hm.cache.Unlock(ctx, lk...)
-					return result, err
-				}
-				hm.cache.Unlock(ctx, lk...)
-
-				hm.fileHandles[fn] = dio
-				// New file, 'prepare to let caller write the new handle to this block's first slot.
-				blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
-				result.offset = blockOffset + handleInBlockOffset
-				if ok, err := dio.isRegionLocked(ctx, forWriting, result.offset, sop.HandleSizeInBytes); ok || err != nil {
-					if ok {
-						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
-					}
-					return result, err
-				}
-				if err := dio.lockFileRegion(ctx, forWriting, result.offset, sop.HandleSizeInBytes, lockFileRegionTimeout); err != nil {
-					return result, err
-				}
-				result.dio = dio
-				return result, nil
+				return hm.setupNewFile(ctx, forWriting, fn, id, dio)
 			}
 			hm.fileHandles[fn] = dio
 		}
@@ -179,82 +181,132 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 
 		// Unmarshal and check if this is the Handler record we are looking for.
 		m := encoding.NewHandleMarshaler()
-		bao := 0
-		for i := 0; i < handlesPerBlock; i++ {
-			var h sop.Handle
-			hbuf := ba[bao : bao+sop.HandleSizeInBytes]
+		var h sop.Handle
 
-			// Handle properly a zero block.
-			if isZeroData(hbuf) {
-				if !forWriting {
-					return result, fmt.Errorf("can't lock for reading, handle record at %v is zero block", blockOffset+int64(bao))
-				}
-
-				// Try to lock (for writing) the block.
-				if ok, err := dio.isRegionLocked(ctx, forWriting, blockOffset+int64(bao), sop.HandleSizeInBytes); ok || err != nil {
+		// Special process for the ideal id location (handle in block offset).
+		hbuf := ba[handleInBlockOffset : handleInBlockOffset+sop.HandleSizeInBytes]
+		if isZeroData(hbuf) {
+			if forWriting {
+				result.offset = blockOffset + handleInBlockOffset
+				if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
 					if ok {
-						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, blockOffset+int64(bao))
+						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
 					}
 					return result, err
 				}
-				if err := dio.lockFileRegion(forWriting, blockOffset+int64(bao), sop.HandleSizeInBytes, lockFileRegionTimeout); err != nil {
+				result.dio = dio
+				return result, hm.lockFoundFileRegion(ctx, &result)
+			}
+		} else {
+			if lid, err := m.UnmarshalLogicalID(hbuf); err != nil {
+				return result, err
+			} else if lid == id {
+				// Found the handle block, read, deserialize, lock if for writing and return it.
+				if !forWriting {
+					if err := m.Unmarshal(hbuf, &h); err != nil {
+						return result, err
+					}
+					result.handle = h
+					return result, err
+				}
+				result.offset = blockOffset + handleInBlockOffset
+				if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+					if ok {
+						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+					}
 					return result, err
 				}
 				result.dio = dio
-				result.offset = blockOffset + +int64(bao)
-				return result, nil
-
+				return result, hm.lockFoundFileRegion(ctx, &result)
 			}
-			if err := m.Unmarshal(hbuf, &h); err != nil {
-				return result, err
+		}
+
+		// Falling through here means the ideal block is not it.
+		var bao int64
+		result.dio = dio
+		for i := 0; i < handlesPerBlock; i++ {
+
+			// handleInBlockOffset had already been processed above and it's not it, skip it.
+			if bao == handleInBlockOffset {
+				continue
+			}
+
+			hbuf := ba[bao : bao+sop.HandleSizeInBytes]
+			result.offset = blockOffset + int64(bao)
+
+			if isZeroData(hbuf) {
+				if forWriting {
+					result.offset = blockOffset + handleInBlockOffset
+					if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+						if ok {
+							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+						}
+						return result, err
+					}
+					result.dio = dio
+					return result, hm.lockFoundFileRegion(ctx, &result)
+				}
+			} else {
+				if lid, err := m.UnmarshalLogicalID(hbuf); err != nil {
+					return result, err
+				} else if lid == id {
+					// Found the handle block, read, deserialize, lock if for writing and return it.
+					if !forWriting {
+						if err := m.Unmarshal(hbuf, &h); err != nil {
+							return result, err
+						}
+						result.handle = h
+						return result, err
+					}
+					result.offset = blockOffset + handleInBlockOffset
+					if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+						if ok {
+							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+						}
+						return result, err
+					}
+					result.dio = dio
+					return result, hm.lockFoundFileRegion(ctx, &result)
+				}
 			}
 
 			bao += sop.HandleSizeInBytes
 		}
 
-		// Unmarshal and check if this is the Handler record we are looking for.
-		m := encoding.NewHandleMarshaler()
-		var h sop.Handle
-		if err := m.Unmarshal(ba, &h); err != nil {
-			return result, err
-		}
-		if h.LogicalID == id {
-			result.offset = offset
-			result.handle = h
-			if ok, err := dio.isRegionLocked(ctx, forWriting, offset, sop.HandleSizeInBytes); ok || err != nil {
-				if ok {
-					err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, offset)
-				}
-				return result, err
-			}
-			if err := dio.lockFileRegion(ctx, forWriting, offset, sop.HandleSizeInBytes, lockFileRegionTimeout); err != nil {
-				return result, err
-			}
-			result.dio = dio
-			return result, nil
-		}
-
+		// Not found or there is no space left in the block, try (or create if writing) other file segments.
 		i++
 		// Stop the loop of we've just created a new file segment or reaching ridiculous file check.
-		if i > 1000 || createdNewFile {
+		if i > 1000 {
 			break
 		}
 	}
-	result.dio = dio
+
 	return result, nil
+}
+
+func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([]sop.Handle, error) {
+	completedItems := make([]sop.Handle, 0, len(ids))
+	for _, id := range ids {
+		frd, err := hm.findAndLock(ctx, false, filename, id)
+		if err != nil {
+			return nil, err
+		}
+		completedItems = append(completedItems, frd.handle)
+	}
+	return completedItems, nil
 }
 
 // Lock file region(s) that a set of UUIDs correlate to and return these region(s)' offsett/Handle if in case
 // useful to the caller.
-func (hm *hashmap) lockFileRegion(ctx context.Context, forWriting bool, filename string, ids ...sop.UUID) ([]fileRegionDetails, error) {
+func (hm *hashmap) lockFileRegion(ctx context.Context, filename string, ids ...sop.UUID) ([]fileRegionDetails, error) {
 	undo := func(items []fileRegionDetails) {
 		for _, item := range items {
-			item.dio.unlockFileRegion(ctx, item.offset, sop.HandleSizeInBytes)
+			hm.unlockFileRegion(ctx, item)
 		}
 	}
 	completedItems := make([]fileRegionDetails, 0, len(ids))
 	for _, id := range ids {
-		frd, err := hm.findAndLock(ctx, hm.readWrite, filename, id)
+		frd, err := hm.findAndLock(ctx, true, filename, id)
 		if err != nil {
 			undo(completedItems)
 			return nil, err
@@ -262,16 +314,6 @@ func (hm *hashmap) lockFileRegion(ctx context.Context, forWriting bool, filename
 		completedItems = append(completedItems, frd)
 	}
 	return completedItems, nil
-}
-
-// Unlock file region(s).
-func (hm *hashmap) unlockFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
-
-	return nil
-}
-
-func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
-	return nil
 }
 
 // Close all files opened by this hashmap on disk.
@@ -283,7 +325,7 @@ func (hm *hashmap) close() error {
 		}
 	}
 	// Clear the file handles for cleanup.
-	hm.fileHandles = make(map[string]directIO)
+	hm.fileHandles = make(map[string]*directIO)
 	return lastError
 }
 

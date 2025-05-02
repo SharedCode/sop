@@ -13,16 +13,13 @@ import (
 )
 
 type directIO struct {
-	file                       *os.File
-	filename                   string
-	cache                      sop.Cache
-	useCacheForFileRegionLocks bool
+	file     *os.File
+	filename string
+	cache    sop.Cache
 }
 
 const (
-	blockSize              = directio.BlockSize
-	lockKeyPrefix          = "infs"
-	lockFileRegionDuration = time.Duration(15 * time.Minute)
+	blockSize = directio.BlockSize
 )
 
 var errBlocked = errors.New("acquiring lock is blocked by another process")
@@ -30,8 +27,7 @@ var errBlocked = errors.New("acquiring lock is blocked by another process")
 // Instantiate a direct File IO object.
 func newDirectIO(cache sop.Cache, useCacheForFileRegionLocks bool) *directIO {
 	return &directIO{
-		cache:                      cache,
-		useCacheForFileRegionLocks: useCacheForFileRegionLocks,
+		cache: cache,
 	}
 }
 
@@ -83,14 +79,6 @@ func (dio *directIO) lockFileRegion(ctx context.Context, readWrite bool, offset 
 		return fmt.Errorf("can't lock file region, there is no opened file")
 	}
 
-	if dio.useCacheForFileRegionLocks {
-		lk := dio.cache.CreateLockKeys(fmt.Sprintf("%s%s%v", lockKeyPrefix, dio.filename, offset))
-		if err := dio.cache.Lock(ctx, lockFileRegionDuration, lk...); err != nil {
-			return err
-		}
-		return nil
-	}
-
 	var t int16 = syscall.F_WRLCK
 	if !readWrite {
 		t = syscall.F_RDLCK
@@ -128,11 +116,6 @@ func (dio *directIO) isRegionLocked(ctx context.Context, readWrite bool, offset 
 		return false, fmt.Errorf("can't check if region is locked, there is no opened file")
 	}
 
-	if dio.useCacheForFileRegionLocks {
-		lk := dio.cache.FormatLockKey(fmt.Sprintf("%s%s%v", lockKeyPrefix, dio.filename, offset))
-		return dio.cache.IsLockedByOthers(ctx, lk)
-	}
-
 	var t int16 = syscall.F_WRLCK
 	if !readWrite {
 		t = syscall.F_RDLCK
@@ -157,14 +140,6 @@ func (dio *directIO) isRegionLocked(ctx context.Context, readWrite bool, offset 
 func (dio *directIO) unlockFileRegion(ctx context.Context, offset int64, length int64) error {
 	if dio.file == nil {
 		return fmt.Errorf("can't unlock file region, there is no opened file")
-	}
-
-	if dio.useCacheForFileRegionLocks {
-		lk := dio.cache.CreateLockKeys(fmt.Sprintf("%s%s%v", lockKeyPrefix, dio.filename, offset))
-		if err := dio.cache.Unlock(ctx, lk...); err != nil {
-			return err
-		}
-		return nil
 	}
 
 	flock := syscall.Flock_t{

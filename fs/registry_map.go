@@ -27,7 +27,7 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, areItemsLocked
 		}
 		lockedItems := make([]fileRegionDetails, 0, len(items))
 		for _, item := range items {
-			frds, err := rm.hashmap.lockFileRegion(ctx, true, item.First, getIDs(item.Second...)...)
+			frds, err := rm.hashmap.lockFileRegion(ctx, item.First, getIDs(item.Second...)...)
 			if err != nil {
 				unlockItemFileRegions(lockedItems...)
 				return err
@@ -64,7 +64,7 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, areItemsLocked
 	// Individually manage/update the file area occupied by the handle so we don't create "lock pressure".
 	// Support Update & Add of new Handle record(s).
 	for _, item := range items {
-		frds, err := rm.hashmap.lockFileRegion(ctx, true, item.First, getIDs(item.Second...)...)
+		frds, err := rm.hashmap.lockFileRegion(ctx, item.First, getIDs(item.Second...)...)
 		if err != nil {
 			return err
 		}
@@ -85,20 +85,10 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, areItemsLocked
 func (rm registryMap) get(ctx context.Context, keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[string, []sop.Handle], error) {
 	result := make([]sop.Tuple[string, []sop.Handle], len(keys), 0)
 	for _, k := range keys {
-		frds, err := rm.hashmap.lockFileRegion(ctx, false, k.First, k.Second...)
+		handles, err := rm.hashmap.get(ctx, k.First, k.Second...)
 		if err != nil {
 			return nil, err
 		}
-
-		if err := rm.hashmap.unlockFileRegion(ctx, frds...); err != nil {
-			return nil, err
-		}
-
-		handles := make([]sop.Handle, 0, len(k.Second))
-		for i := 0; i < len(frds); i++ {
-			handles = append(handles, frds[i].handle)
-		}
-
 		result = append(result, sop.Tuple[string, []sop.Handle]{
 			First:  k.First,
 			Second: handles,
