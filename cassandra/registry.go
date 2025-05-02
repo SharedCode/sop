@@ -119,6 +119,14 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 					h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalID))
 			}
 		}
+
+		if err := v.cache.IsLocked(ctx, handleKeys...); err != nil {
+			// Unlock the object Keys before return.
+			v.cache.Unlock(ctx, handleKeys...)
+			// Failed locking the batch.
+			return err
+		}
+
 		// Execute the batch query, all or nothing.
 		if err := connection.Session.ExecuteBatch(batch); err != nil {
 			// Unlock the object Keys before return.

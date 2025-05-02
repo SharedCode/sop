@@ -9,20 +9,20 @@ import (
 )
 
 const (
-	hashModValue = 500000
-	blockItemCount = 66
+	hashModValue = SmallModValue
 )
+
 // This hashing algorithm tend to be denser as more data segment file is used. At two, it can fill around 66% avg.
 // At one segment file, it fills up around 55%. SOP b-tree (w/ load distribution)
 // can fill up around 55%-67%, so, this is at par. BUT better because each Handle is a very small sized data (record).
 // At 4, it should be able to fill 75%.
 
 func TestHashModDistribution(t *testing.T) {
-	hashTable1 := make([][blockItemCount]sop.UUID, hashModValue)
+	hashTable1 := make([][handlesPerBlock * 3]sop.UUID, hashModValue)
 	//hashTable2 := make([][66]sop.UUID, hashModValue)
 	collisionCount := 0
 	fmt.Printf("Start %v", time.Now())
-	for i := 0; i < 23000000; i++ {
+	for i := 0; i < (hashModValue*handlesPerBlock*2)+2000000; i++ {
 		// Split UUID into high & low int64 parts.
 		id := sop.NewUUID()
 		bytes := id[:]
@@ -36,12 +36,12 @@ func TestHashModDistribution(t *testing.T) {
 			low = low<<8 | uint64(bytes[i])
 		}
 
-		bucket := high % hashModValue 
-		bucketOffset := low%blockItemCount
+		bucket := high % hashModValue
+		bucketOffset := low % uint64(len(hashTable1[0]))
 
 		if hashTable1[bucket][bucketOffset] != sop.NilUUID {
 			foundASlot := false
-			for ii := 0; ii < 66; ii++ {
+			for ii := 0; ii < len(hashTable1[0]); ii++ {
 				if hashTable1[bucket][ii] == sop.NilUUID {
 					hashTable1[bucket][ii] = id
 					foundASlot = true
@@ -76,7 +76,7 @@ func TestHashModDistribution(t *testing.T) {
 	notFoundCount := 0
 
 	for i := 0; i < len(hashTable1); i++ {
-		for ii := 0; ii < blockItemCount; ii++ {
+		for ii := 0; ii < len(hashTable1[0]); ii++ {
 			if hashTable1[i][ii] == sop.NilUUID {
 				notUsedSlot++
 				continue
@@ -102,7 +102,7 @@ func TestHashModDistribution(t *testing.T) {
 	fmt.Printf("End %v", time.Now())
 }
 
-func findItem(ht [][blockItemCount]sop.UUID, id sop.UUID) bool {
+func findItem(ht [][handlesPerBlock * 3]sop.UUID, id sop.UUID) bool {
 	bytes := id[:]
 	var high uint64
 	for i := 0; i < 8; i++ {
@@ -113,13 +113,13 @@ func findItem(ht [][blockItemCount]sop.UUID, id sop.UUID) bool {
 		low = low<<8 | uint64(bytes[i])
 	}
 
-	bucket := high % hashModValue 
-	bucketOffset := low%blockItemCount
+	bucket := high % hashModValue
+	bucketOffset := low % uint64(len(ht[0]))
 
 	if ht[bucket][bucketOffset] == id {
 		return true
 	}
-	for i := 0; i < blockItemCount; i++ {
+	for i := 0; i < len(ht[0]); i++ {
 		if ht[bucket][i] == id {
 			return true
 		}

@@ -23,7 +23,7 @@ type storeRepository struct {
 }
 
 const (
-	lockStoreListKey      = "sr_infs"
+	lockStoreListKey      = "infs_sr"
 	lockStoreListDuration = time.Duration(10 * time.Minute)
 	storeListFilename     = "storelist.txt"
 	storeInfoFilename     = "storeinfo.txt"

@@ -73,6 +73,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 	}
 	// Check one more time to remove race condition issue.
 	if err := tl.cache.IsLocked(ctx, tl.hourLockKey); err != nil {
+		tl.cache.Unlock(ctx, tl.hourLockKey)
 		// Just return nils as we can't attain a lock.
 		return sop.NilUUID, "", nil, nil
 	}

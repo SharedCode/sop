@@ -28,12 +28,9 @@ const (
 )
 
 // NewRegistry manages the Handle in memory for mocking.
-func NewRegistry(rt *replicationTracker, cache sop.Cache, readWrite bool, hashModValue int) Registry {
-	if hashModValue <= 0 {
-		hashModValue = 250000
-	}
+func NewRegistry(readWrite bool, hashModValue HashModValueType, rt *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) Registry {
 	return &registryOnDisk{
-		hashmap:            newRegistryMap(hashModValue, rt, readWrite),
+		hashmap:            newRegistryMap(readWrite, hashModValue, rt, cache, useCacheForFileRegionLocks),
 		replicationTracker: rt,
 		cache:              cache,
 	}
@@ -47,7 +44,7 @@ func (r registryOnDisk) Close() error {
 func (r registryOnDisk) Add(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
-			if err := r.hashmap.set(false, nil, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+			if err := r.hashmap.set(ctx, false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 				return err
 			}
 			// Tolerate Redis cache failure.
@@ -104,13 +101,15 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 			batch = append(batch, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs})
 		}
 
-		// Package the batch keys' lock check as lambda so it can get invoked queasily in hashmap.set.
-		areItemsLocked := func() error {
-			return r.cache.IsLocked(ctx, handleKeys...)
+		// Check the locks to cater for potential race condition.
+		if err := r.cache.IsLocked(ctx, handleKeys...); err != nil {
+			// Unlock the object Keys before return.
+			r.cache.Unlock(ctx, handleKeys...)
+			return err
 		}
 
 		// Execute the batch set, all or nothing.
-		if err := r.hashmap.set(true, areItemsLocked, batch...); err != nil {
+		if err := r.hashmap.set(ctx, true, batch...); err != nil {
 			// Unlock the object Keys before return.
 			r.cache.Unlock(ctx, handleKeys...)
 			// Failed update all, thus, return err to cause rollback.
@@ -123,7 +122,7 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
 				// Update registry record.
-				if err := r.hashmap.set(false, nil, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+				if err := r.hashmap.set(ctx, false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 					return err
 				}
 			}
@@ -176,7 +175,7 @@ func (r registryOnDisk) Get(ctx context.Context, storesLids ...sop.RegistryPaylo
 			continue
 		}
 
-		mh, err := r.hashmap.get(sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: lids})
+		mh, err := r.hashmap.get(ctx, sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: lids})
 		if err != nil {
 			return nil, err
 		}
@@ -208,7 +207,7 @@ func (r registryOnDisk) Remove(ctx context.Context, storesLids ...sop.RegistryPa
 				}
 			}
 		}
-		if err := r.hashmap.remove(sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: storeLids.IDs}); err != nil {
+		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: storeLids.IDs}); err != nil {
 			deleteFromCache(storeLids)
 			return err
 		}

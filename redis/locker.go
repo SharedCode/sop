@@ -77,6 +77,21 @@ func (c client) IsLocked(ctx context.Context, lockKeys ...*sop.LockKey) error {
 	return nil
 }
 
+// Returns true if lockKeyNames are all locked.
+func (c client) IsLockedByOthers(ctx context.Context, lockKeyNames ...string) (bool, error) {
+	for _, lkn := range lockKeyNames {
+		_, err := c.Get(ctx, lkn)
+		if err != nil {
+			if c.KeyNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		// Item found in Redis means other process has a lock on it.
+	}
+	return true, nil
+}
+
 // Unlock a set of keys.
 func (c client) Unlock(ctx context.Context, lockKeys ...*sop.LockKey) error {
 	var lastErr error

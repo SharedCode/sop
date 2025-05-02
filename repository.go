@@ -193,6 +193,9 @@ type Cache interface {
 	Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKey) error
 	// Returns whether a set of keys are all locked.
 	IsLocked(ctx context.Context, lockKeys ...*LockKey) error
+	// Returns true if a set of keys are all locked, most likely by other processes.
+	// Use-case is for checking if a certain set of keys are locked by other processes.
+	IsLockedByOthers(ctx context.Context, lockKeyNames ...string) (bool, error)
 	// Unlock a given set of keys.
 	Unlock(ctx context.Context, lockKeys ...*LockKey) error
 }

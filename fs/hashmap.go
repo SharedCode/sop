@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -9,134 +10,234 @@ import (
 	"github.com/SharedCode/sop/encoding"
 )
 
+/*
+	Hashmap on disk manages registry on file. Each Handle record is persisted to a block and the address of this block is determined using
+	"modulo hash" operator. Each block can store up to 66 Handle "records". A registry can span across one or more segment files.
+*/
+
 type hashmap struct {
-	hashModValue       int
+	hashModValue       HashModValueType
 	replicationTracker *replicationTracker
 	readWrite          bool
 	// File handles of all known (traversed & opened) data segment file of the hash map.
-	fileHandles map[string]directIO
+	fileHandles                map[string]*directIO
+	cache                      sop.Cache
+	useCacheForFileRegionLocks bool
 }
 
+// File reqion details is a response struct of 'findAndLock' function. It puts together
+// details about discovered (file &) location, i.e. - file offset, of a given UUID & its current record's
+// value (unmarshalled to a Handle) read from the file.
 type fileRegionDetails struct {
-	dio directIO
+	dio    *directIO
 	offset int64
 	handle sop.Handle
+	// If the region had been locked, lockKey should contain the lock details useful for unlocking it.
+	lockKey *sop.LockKey
 }
 
-const(
-	fullPermission = 0666
+const (
+	fullPermission  = 0644
 	handlesPerBlock = 66
-	lockFileRegionTimeout = time.Duration(5 * time.Minute)
+	// Keep the attempt to lock file region short since if it is locked, we want to fail right away & cause transaction rollback.
+	lockFileRegionAttemptTimeout = time.Duration(1 * time.Second)
+	registryFileIOLockKey        = "infs_reg"
+	// Growing the file needs more time to complete.
+	lockPreallocateFileTimeout = time.Duration(25 * time.Minute)
+	lockFileRegionKeyPrefix    = "infs"
+	lockFileRegionDuration     = time.Duration(15 * time.Minute)
 )
 
-func newHashmap(hashModValue int, replicationTracker *replicationTracker, readWrite bool) *hashmap {
+type HashModValueType int
+
+const (
+	MinimumModValue   = 75000  // 75k, should generate 300MB file segment
+	SuperTinyModValue = 100000 // 100k, should generate 400MB file segment
+	TinyModValue      = 125000 // 125k, should generate 500MB file segment
+	SmallModValue     = 200000 // 200k, should generate 800MB file segment
+	MediumModValue    = 250000 // 250k, should generate 1GB file segment
+	LargeModValue     = 350000 // 350k, should generate 1.4GB file segment
+	XLargeModValue    = 500000 // 500k, 2GB file segment
+	XXLModValue       = 750000 // 750k, 3GB file segment
+)
+
+// Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
+func newHashmap(readWrite bool, hashModValue HashModValueType, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *hashmap {
 	return &hashmap{
-		hashModValue:       hashModValue,
-		replicationTracker: replicationTracker,
-		readWrite:          readWrite,
-		fileHandles:        make(map[string]directIO, 5),
+		hashModValue:               hashModValue,
+		replicationTracker:         replicationTracker,
+		readWrite:                  readWrite,
+		fileHandles:                make(map[string]*directIO, 5),
+		cache:                      cache,
+		useCacheForFileRegionLocks: useCacheForFileRegionLocks,
 	}
 }
 
 // Iterate through the entire set of hashmap (bucket) files, from 1 to the last bucket file.
-// Each bucket file is allocated about 250,000 "sector blocks" and in total, contains ~16,650,000
-// addressable virtual ID (handle). Typically, there should be only one bucket file as this file
+// Each bucket file is allocated about 250,000 "sector blocks"(configurable) and in total, contains ~16,650,000
+// addressable virtual IDs (handles). Typically, there should be only one bucket file as this file
 // with the default numbers shown, can be used to hold 825 million items of the B-Tree, given a
 // slot length of 500.
-func (hm *hashmap) findAndLock(forWriting bool, filename string, id sop.UUID) (fileRegionDetails, error) {
-	var dio directIO
-
+func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename string, id sop.UUID) (fileRegionDetails, error) {
+	var dio *directIO
 	var result fileRegionDetails
+
 	i := 1
 	for {
-		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s-%d.reg",filename,i))
+		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s-%d.reg", filename, i))
 		if f, ok := hm.fileHandles[fn]; ok {
 			dio = f
 		} else {
-			dio = *newDirectIO()
-			flag := os.O_CREATE|os.O_RDWR
-			if !hm.readWrite {
-				flag = os.O_RDONLY
-			}
-			if err := dio.open(fn, flag, fullPermission); err != nil {
-				return result, err
+			dio = newDirectIO(hm.cache)
+			fileExists := dio.fileExists(fn)
+			if !fileExists {
+				if !forWriting {
+					return result, fmt.Errorf("can't read a registry file(%s) that is missing", fn)
+				}
+				return hm.setupNewFile(ctx, forWriting, fn, id, dio)
 			}
 			hm.fileHandles[fn] = dio
 		}
 
-		// Split UUID into high & low int64 parts.
-		bytes := id[:]
+		// Read entire block for the ID hash mod, deserialize each Handle and check if anyone matches the one we are trying to find.
+		// For add use-case with "collision", when there is no more slot on the block, we need to automatically create a new segment file.
+		ba := dio.createAlignedBlock()
+		blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
 
-		var high int64
-		for i := 0; i < 8; i++ {
-			high = high<<8 | int64(bytes[i])
-		}
-		var low int64
-		for i := 8; i < 16; i++ {
-			low = low<<8 | int64(bytes[i])
-		}
-
-		blockOffset := high % int64(hm.hashModValue)
-		offsetInBlock := low % handlesPerBlock
-
-		offset := (blockOffset * blockSize) + (offsetInBlock*sop.HandleSizeInBytes)
-		ba := make([]byte, sop.HandleSizeInBytes)
-		n, err := dio.readAt(ba, offset)
+		n, err := dio.readAt(ba, blockOffset)
 		if err != nil {
-			//if err == io.EOF 
 			return result, err
 		}
 		if n != len(ba) {
-			return result, nil
+			return result, fmt.Errorf("only able to read partially (%d bytes) the block record at offset %v", n, blockOffset)
 		}
 
-		// for i := 0; i < len(ba); i++ {
-		// 	if buffer[i] != 0 {
-		// 		return false, nil // Found a non-zero byte
-		// 	}
-		// }
-
+		// Unmarshal and check if this is the Handler record we are looking for.
 		m := encoding.NewHandleMarshaler()
 		var h sop.Handle
-		if err := m.Unmarshal(ba, &h); err != nil {
-			return result, err
-		}
-		if h.LogicalID == id {
-			result.offset = offset
-			result.handle = h
-			if ok, err := dio.isRegionLocked(forWriting, offset, sop.HandleSizeInBytes); ok || err != nil {
-				if ok {
-					err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %d as it is locked", forWriting, offset)
+
+		// Special process for the ideal id location (handle in block offset).
+		hbuf := ba[handleInBlockOffset : handleInBlockOffset+sop.HandleSizeInBytes]
+		if isZeroData(hbuf) {
+			if forWriting {
+				result.offset = blockOffset + handleInBlockOffset
+				if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+					if ok {
+						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+					}
+					return result, err
 				}
-				return result, err
+				result.dio = dio
+				return result, hm.lockFoundFileRegion(ctx, &result)
 			}
-			if err := dio.lockFileRegion(forWriting, offset, sop.HandleSizeInBytes, lockFileRegionTimeout); err != nil {
+		} else {
+			if lid, err := m.UnmarshalLogicalID(hbuf); err != nil {
 				return result, err
+			} else if lid == id {
+				// Found the handle block, read, deserialize, lock if for writing and return it.
+				if !forWriting {
+					if err := m.Unmarshal(hbuf, &h); err != nil {
+						return result, err
+					}
+					result.handle = h
+					return result, err
+				}
+				result.offset = blockOffset + handleInBlockOffset
+				if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+					if ok {
+						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+					}
+					return result, err
+				}
+				result.dio = dio
+				return result, hm.lockFoundFileRegion(ctx, &result)
 			}
-			result.dio = dio
-			return result, nil
 		}
 
+		// Falling through here means the ideal block is not it.
+		var bao int64
+		result.dio = dio
+		for i := 0; i < handlesPerBlock; i++ {
+
+			// handleInBlockOffset had already been processed above and it's not it, skip it.
+			if bao == handleInBlockOffset {
+				continue
+			}
+
+			hbuf := ba[bao : bao+sop.HandleSizeInBytes]
+			result.offset = blockOffset + int64(bao)
+
+			if isZeroData(hbuf) {
+				if forWriting {
+					result.offset = blockOffset + handleInBlockOffset
+					if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+						if ok {
+							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+						}
+						return result, err
+					}
+					result.dio = dio
+					return result, hm.lockFoundFileRegion(ctx, &result)
+				}
+			} else {
+				if lid, err := m.UnmarshalLogicalID(hbuf); err != nil {
+					return result, err
+				} else if lid == id {
+					// Found the handle block, read, deserialize, lock if for writing and return it.
+					if !forWriting {
+						if err := m.Unmarshal(hbuf, &h); err != nil {
+							return result, err
+						}
+						result.handle = h
+						return result, err
+					}
+					result.offset = blockOffset + handleInBlockOffset
+					if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+						if ok {
+							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+						}
+						return result, err
+					}
+					result.dio = dio
+					return result, hm.lockFoundFileRegion(ctx, &result)
+				}
+			}
+
+			bao += sop.HandleSizeInBytes
+		}
+
+		// Not found or there is no space left in the block, try (or create if writing) other file segments.
 		i++
+		// Stop the loop of we've just created a new file segment or reaching ridiculous file check.
 		if i > 1000 {
-			break
+			return result, fmt.Errorf("reached the maximum numer of segment files (1000), can't create another one")
 		}
 	}
-	result.dio = dio
-	return result, nil
+}
+
+func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([]sop.Handle, error) {
+	completedItems := make([]sop.Handle, 0, len(ids))
+	for _, id := range ids {
+		frd, err := hm.findAndLock(ctx, false, filename, id)
+		if err != nil {
+			return nil, err
+		}
+		completedItems = append(completedItems, frd.handle)
+	}
+	return completedItems, nil
 }
 
 // Lock file region(s) that a set of UUIDs correlate to and return these region(s)' offsett/Handle if in case
 // useful to the caller.
-func (hm *hashmap) lockFileRegion(forWriting bool, filename string, ids ...sop.UUID) ([]fileRegionDetails,error) {
+func (hm *hashmap) findAndLockFileRegion(ctx context.Context, filename string, ids ...sop.UUID) ([]fileRegionDetails, error) {
 	undo := func(items []fileRegionDetails) {
 		for _, item := range items {
-			item.dio.unlockFileRegion(item.offset, sop.HandleSizeInBytes)
+			hm.unlockFileRegion(ctx, item)
 		}
 	}
 	completedItems := make([]fileRegionDetails, 0, len(ids))
 	for _, id := range ids {
-		frd, err := hm.findAndLock(hm.readWrite, filename, id)
+		frd, err := hm.findAndLock(ctx, true, filename, id)
 		if err != nil {
 			undo(completedItems)
 			return nil, err
@@ -144,15 +245,6 @@ func (hm *hashmap) lockFileRegion(forWriting bool, filename string, ids ...sop.U
 		completedItems = append(completedItems, frd)
 	}
 	return completedItems, nil
-}
-
-// Unlock file region(s).
-func (hm *hashmap) unlockFileRegion(fileRegionDetails ...fileRegionDetails) error {
-	return nil
-}
-
-func (hm *hashmap) updateFileRegion(fileRegionDetails ...fileRegionDetails) error {
-	return nil
 }
 
 // Close all files opened by this hashmap on disk.
@@ -164,6 +256,82 @@ func (hm *hashmap) close() error {
 		}
 	}
 	// Clear the file handles for cleanup.
-	hm.fileHandles = make(map[string]directIO)
+	hm.fileHandles = make(map[string]*directIO)
 	return lastError
+}
+
+func (hm *hashmap) getBlockOffsetAndHandleInBlockOffset(id sop.UUID) (int64, int64) {
+	// Split UUID into high & low int64 parts.
+	bytes := id[:]
+
+	var high int64
+	for i := 0; i < 8; i++ {
+		high = high<<8 | int64(bytes[i])
+	}
+
+	var low int64
+	for i := 8; i < 16; i++ {
+		low = low<<8 | int64(bytes[i])
+	}
+
+	blockOffset := high % int64(hm.hashModValue)
+	offsetInBlock := low % handlesPerBlock
+
+	return blockOffset * blockSize, offsetInBlock * sop.HandleSizeInBytes
+}
+
+func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename string, id sop.UUID, dio *directIO) (fileRegionDetails, error) {
+	var result fileRegionDetails
+	flag := os.O_CREATE | os.O_RDWR
+	if !hm.readWrite {
+		flag = os.O_RDONLY
+	}
+
+	lk := hm.cache.CreateLockKeys(registryFileIOLockKey)
+	if err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk...); err != nil {
+		return result, err
+	}
+
+	if err := dio.open(filename, flag, fullPermission); err != nil {
+		hm.cache.Unlock(ctx, lk...)
+		return result, err
+	}
+
+	// Handle properly a newly created file.
+	// Pre-allocate entire segment if new file. Should we Redis lock to allow only one process to win Truncate?
+	// NFS should be able to allow one and others to fail, error out.
+	if err := dio.file.Truncate(hm.getSegmentFileSize()); err != nil {
+		hm.cache.Unlock(ctx, lk...)
+		return result, err
+	}
+	hm.cache.Unlock(ctx, lk...)
+
+	hm.fileHandles[filename] = dio
+	// New file, 'prepare to let caller write the new handle to this block's first slot.
+	blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
+	result.offset = blockOffset + handleInBlockOffset
+	if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+		if ok {
+			err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+		}
+		return result, err
+	}
+	result.dio = dio
+	if err := hm.lockFoundFileRegion(ctx, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func isZeroData(data []byte) bool {
+	for _, b := range data {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (hm *hashmap) getSegmentFileSize() int64 {
+	return int64(hm.hashModValue) * blockSize
 }
