@@ -15,7 +15,6 @@ import (
 type directIO struct {
 	file     *os.File
 	filename string
-	cache    sop.Cache
 }
 
 const (
@@ -26,9 +25,7 @@ var errBlocked = errors.New("acquiring lock is blocked by another process")
 
 // Instantiate a direct File IO object.
 func newDirectIO(cache sop.Cache) *directIO {
-	return &directIO{
-		cache: cache,
-	}
+	return &directIO{}
 }
 
 // Open the file with a given filename.
