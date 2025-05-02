@@ -88,7 +88,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 		if f, ok := hm.fileHandles[fn]; ok {
 			dio = f
 		} else {
-			dio = newDirectIO(hm.cache)
+			dio = newDirectIO()
 			fileExists := dio.fileExists(fn)
 			if !fileExists {
 				if !forWriting {

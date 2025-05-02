@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SharedCode/sop"
 	"github.com/ncw/directio"
 )
 
@@ -24,7 +23,7 @@ const (
 var errBlocked = errors.New("acquiring lock is blocked by another process")
 
 // Instantiate a direct File IO object.
-func newDirectIO(cache sop.Cache) *directIO {
+func newDirectIO() *directIO {
 	return &directIO{}
 }
 
