@@ -1,15 +1,13 @@
 package fs
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/encoding"
 )
-
-func (hm *hashmap) formatLockKey(filename string, offset int64) string {
-	return hm.cache.FormatLockKey(fmt.Sprintf("%s%s%v", lockFileRegionKeyPrefix, filename, offset))
-}
 
 func (hm *hashmap) lockFoundFileRegion(ctx context.Context, fileRegionDetails ...*fileRegionDetails) error {
 	for _, frd := range fileRegionDetails {
@@ -20,7 +18,7 @@ func (hm *hashmap) lockFoundFileRegion(ctx context.Context, fileRegionDetails ..
 			}
 			continue
 		}
-		if err := frd.dio.lockFileRegion(ctx, hm.readWrite, frd.offset, sop.HandleSizeInBytes, lockFileRegionTimeout); err != nil {
+		if err := frd.dio.lockFileRegion(ctx, hm.readWrite, frd.offset, sop.HandleSizeInBytes, lockFileRegionAttemptTimeout); err != nil {
 			return err
 		}
 	}
@@ -52,8 +50,32 @@ func (hm *hashmap) isRegionLocked(ctx context.Context, dio *directIO, offset int
 }
 
 func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
-	// for _, frd := range fileRegionDetails {
-	// 	frd.dio.writeAt()
-	// }
+	m := encoding.NewHandleMarshaler()
+	for _, frd := range fileRegionDetails {
+		ba, _ := m.Marshal(frd.handle)
+		if n, err := frd.dio.writeAt(ba, frd.offset); n != len(ba) || err != nil {
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("only partially (n=%d) wrote at offset %v, data: %v", n, frd.offset, frd.handle)
+		}
+	}
 	return nil
+}
+
+func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
+	ba := bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)
+	for _, frd := range fileRegionDetails {
+		if n, err := frd.dio.writeAt(ba, frd.offset); n != len(ba) || err != nil {
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("only partially (n=%d) wrote 0s at offset %v", n, frd.offset)
+		}
+	}
+	return nil
+}
+
+func (hm *hashmap) formatLockKey(filename string, offset int64) string {
+	return hm.cache.FormatLockKey(fmt.Sprintf("%s%s%v", lockFileRegionKeyPrefix, filename, offset))
 }

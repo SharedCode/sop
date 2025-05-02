@@ -57,36 +57,6 @@ func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys ...*s
 	return nil
 }
 
-// Lock (shared mode) a set of keys.
-func (c client) SharedLock(ctx context.Context, duration time.Duration, lockKeys ...*sop.LockKey) error {
-	for _, lk := range lockKeys {
-		readItem, err := c.Get(ctx, lk.Key)
-		if err != nil {
-			if !c.KeyNotFound(err) {
-				return err
-			}
-			// Item does not exist, upsert it.
-			if err := c.Set(ctx, lk.Key, lk.LockID.String(), duration); err != nil {
-				return err
-			}
-			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-			if readItem2, err := c.Get(ctx, lk.Key); err != nil {
-				return err
-			} else if readItem2 == lk.LockID.String() {
-				// We got the item locked, ensure we can unlock it.
-				lk.IsLockOwner = true
-			}
-			continue
-		}
-		// Item found in Redis.
-		if readItem == lk.LockID.String() {
-			lk.IsLockOwner = true
-		}
-	}
-	// Successfully locked.
-	return nil
-}
-
 // Returns true if lockKeys have claimed lock equivalent.
 func (c client) IsLocked(ctx context.Context, lockKeys ...*sop.LockKey) error {
 	for _, lk := range lockKeys {

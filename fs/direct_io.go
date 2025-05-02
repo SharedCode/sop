@@ -25,7 +25,7 @@ const (
 var errBlocked = errors.New("acquiring lock is blocked by another process")
 
 // Instantiate a direct File IO object.
-func newDirectIO(cache sop.Cache, useCacheForFileRegionLocks bool) *directIO {
+func newDirectIO(cache sop.Cache) *directIO {
 	return &directIO{
 		cache: cache,
 	}
@@ -94,7 +94,7 @@ func (dio *directIO) lockFileRegion(ctx context.Context, readWrite bool, offset 
 		return syscall.FcntlFlock(dio.file.Fd(), syscall.F_SETLK, &flock)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	sleep, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	done := make(chan error, 1)
@@ -106,7 +106,7 @@ func (dio *directIO) lockFileRegion(ctx context.Context, readWrite bool, offset 
 	select {
 	case err := <-done:
 		return err
-	case <-ctx.Done():
+	case <-sleep.Done():
 		return errBlocked
 	}
 }

@@ -16,7 +16,7 @@ func newRegistryMap(readWrite bool, hashModValue HashModValueType, replicationTr
 	}
 }
 
-func (rm registryMap) set(ctx context.Context, allOrNothing bool, areItemsLocked func() error, items ...sop.Tuple[string, []sop.Handle]) error {
+func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.Tuple[string, []sop.Handle]) error {
 	if allOrNothing {
 		// Supports update (including update to prepare for deleting) of Handle records.
 		unlockItemFileRegions := func(items ...fileRegionDetails) error {
@@ -27,7 +27,7 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, areItemsLocked
 		}
 		lockedItems := make([]fileRegionDetails, 0, len(items))
 		for _, item := range items {
-			frds, err := rm.hashmap.lockFileRegion(ctx, item.First, getIDs(item.Second...)...)
+			frds, err := rm.hashmap.findAndLockFileRegion(ctx, item.First, getIDs(item.Second...)...)
 			if err != nil {
 				unlockItemFileRegions(lockedItems...)
 				return err
@@ -38,23 +38,6 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, areItemsLocked
 			}
 			lockedItems = append(lockedItems, frds...)
 		}
-		if areItemsLocked != nil {
-			// Ensure the batch are all locked as seen in Redis, to address race condition.
-			// This is the 4th letter R in the (SOP proprietary) Redis RSRR algorithm.
-			//
-			// NOTE: Redis exclusive lock check for this implementation is more rigid because there is no other
-			// "all or nothing" guarantee except our algorithm check in Redis and the hashmap.updateFileRegion implementation
-			// which relies on NFS' distributed file lock support. We want to be 200% sure no race condition. :)
-			// As can be seen, the Redis "items locked" check is done after the "lockFileRegion" call, which means,
-			// code had given plenty of time for race condition not to occur. If network is flaky or slow, it will
-			// fail in the "lockFileRegion" call and if it passes, it is sure there is absolutely no race condition caused
-			// item to get double locked by two or more different processes.
-			// Relativity theory in action.
-			if err := areItemsLocked(); err != nil {
-				unlockItemFileRegions(lockedItems...)
-				return err
-			}
-		}
 		if err := rm.hashmap.updateFileRegion(ctx, lockedItems...); err != nil {
 			unlockItemFileRegions(lockedItems...)
 			return err
@@ -64,19 +47,19 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, areItemsLocked
 	// Individually manage/update the file area occupied by the handle so we don't create "lock pressure".
 	// Support Update & Add of new Handle record(s).
 	for _, item := range items {
-		frds, err := rm.hashmap.lockFileRegion(ctx, item.First, getIDs(item.Second...)...)
-		if err != nil {
-			return err
-		}
-		for i := range frds {
-			frds[i].handle = item.Second[i]
-		}
-		if err := rm.hashmap.updateFileRegion(ctx, frds...); err != nil {
-			rm.hashmap.unlockFileRegion(ctx, frds...)
-			return err
-		}
-		if err := rm.hashmap.unlockFileRegion(ctx, frds...); err != nil {
-			return err
+		for _, h := range item.Second {
+			frd, err := rm.hashmap.findAndLockFileRegion(ctx, item.First, h.LogicalID)
+			if err != nil {
+				return err
+			}
+			frd[0].handle = h
+			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
+				rm.hashmap.unlockFileRegion(ctx, frd...)
+				return err
+			}
+			if err := rm.hashmap.unlockFileRegion(ctx, frd...); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -98,6 +81,22 @@ func (rm registryMap) get(ctx context.Context, keys ...sop.Tuple[string, []sop.U
 }
 
 func (rm registryMap) remove(ctx context.Context, keys ...sop.Tuple[string, []sop.UUID]) error {
+	// Individually delete the file area occupied by the handle so we don't create "lock pressure".
+	for _, key := range keys {
+		for _, id := range key.Second {
+			frd, err := rm.hashmap.findAndLockFileRegion(ctx, key.First, id)
+			if err != nil {
+				return err
+			}
+			if err := rm.hashmap.markDeleteFileRegion(ctx, frd...); err != nil {
+				rm.hashmap.unlockFileRegion(ctx, frd...)
+				return err
+			}
+			if err := rm.hashmap.unlockFileRegion(ctx, frd...); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

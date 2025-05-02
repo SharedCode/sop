@@ -44,7 +44,7 @@ func (r registryOnDisk) Close() error {
 func (r registryOnDisk) Add(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
-			if err := r.hashmap.set(ctx, false, nil, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+			if err := r.hashmap.set(ctx, false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 				return err
 			}
 			// Tolerate Redis cache failure.
@@ -101,13 +101,15 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 			batch = append(batch, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs})
 		}
 
-		// Package the batch keys' lock check as lambda so it can get invoked queasily in hashmap.set.
-		areItemsLocked := func() error {
-			return r.cache.IsLocked(ctx, handleKeys...)
+		// Check the locks to cater for potential race condition.
+		if err := r.cache.IsLocked(ctx, handleKeys...); err != nil {
+			// Unlock the object Keys before return.
+			r.cache.Unlock(ctx, handleKeys...)
+			return err
 		}
 
 		// Execute the batch set, all or nothing.
-		if err := r.hashmap.set(ctx, true, areItemsLocked, batch...); err != nil {
+		if err := r.hashmap.set(ctx, true, batch...); err != nil {
 			// Unlock the object Keys before return.
 			r.cache.Unlock(ctx, handleKeys...)
 			// Failed update all, thus, return err to cause rollback.
@@ -120,7 +122,7 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
 				// Update registry record.
-				if err := r.hashmap.set(ctx, false, nil, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+				if err := r.hashmap.set(ctx, false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 					return err
 				}
 			}
