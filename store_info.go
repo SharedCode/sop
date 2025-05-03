@@ -34,7 +34,7 @@ const defaultCacheDuration = time.Duration(15 * time.Minute)
 // Create a new StoraceCacheConfig with common cache duration(& TTL setting) among its data parts.
 func NewStoreCacheConfig(cacheDuration time.Duration, isCacheTTL bool) *StoreCacheConfig {
 	if cacheDuration > 0 && cacheDuration < minCacheDuration {
-		cacheDuration = defaultCacheDuration
+		cacheDuration = minCacheDuration
 	}
 	if cacheDuration == 0 && isCacheTTL {
 		isCacheTTL = false
@@ -54,10 +54,13 @@ func NewStoreCacheConfig(cacheDuration time.Duration, isCacheTTL bool) *StoreCac
 // Enforce SOP minimum rule on caching period. SOP relies on caching for many things including the critically needed "orchestration".
 func (scc *StoreCacheConfig) enforceMinimumRule() {
 	if scc.NodeCacheDuration > 0 && scc.NodeCacheDuration < minCacheDuration {
-		scc.NodeCacheDuration = defaultCacheDuration
+		scc.NodeCacheDuration = minCacheDuration
 	}
 	if scc.NodeCacheDuration == 0 && scc.IsNodeCacheTTL {
 		scc.IsNodeCacheTTL = false
+	}
+	if scc.NodeCacheDuration == 0 {
+		scc.NodeCacheDuration = time.Duration(2 * time.Minute)
 	}
 
 	if scc.RegistryCacheDuration > 0 && scc.RegistryCacheDuration < minCacheDuration {
@@ -66,6 +69,12 @@ func (scc *StoreCacheConfig) enforceMinimumRule() {
 	if scc.RegistryCacheDuration == 0 && scc.IsRegistryCacheTTL {
 		scc.IsRegistryCacheTTL = false
 	}
+	if scc.RegistryCacheDuration == 0 {
+		// Registry cache duration needs to be decent, 15 mins or 10 mins. It has to minimally last
+		// entire transaction commit period as Registry entries are used for implementing core engine
+		// functionalities like conflict detection & btree contents' auto-merge.
+		scc.RegistryCacheDuration = time.Duration(10 * time.Minute)
+	}
 
 	if scc.StoreInfoCacheDuration > 0 && scc.StoreInfoCacheDuration < minCacheDuration {
 		scc.StoreInfoCacheDuration = defaultCacheDuration
@@ -73,12 +82,18 @@ func (scc *StoreCacheConfig) enforceMinimumRule() {
 	if scc.StoreInfoCacheDuration == 0 && scc.IsStoreInfoCacheTTL {
 		scc.IsStoreInfoCacheTTL = false
 	}
+	if scc.StoreInfoCacheDuration == 0 {
+		scc.StoreInfoCacheDuration = minCacheDuration
+	}
 
 	if scc.ValueDataCacheDuration > 0 && scc.ValueDataCacheDuration < minCacheDuration {
 		scc.ValueDataCacheDuration = defaultCacheDuration
 	}
 	if scc.ValueDataCacheDuration == 0 && scc.IsValueDataCacheTTL {
 		scc.IsValueDataCacheTTL = false
+	}
+	if scc.ValueDataCacheDuration == 0 {
+		scc.ValueDataCacheDuration = minCacheDuration
 	}
 }
 

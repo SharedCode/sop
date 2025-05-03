@@ -60,10 +60,10 @@ const (
 )
 
 var defaultCacheConfig StoreCacheConfig = StoreCacheConfig{
-	StoreInfoCacheDuration: time.Duration(12 * time.Hour),
-	RegistryCacheDuration:  time.Duration(12 * time.Hour),
-	ValueDataCacheDuration: time.Duration(12 * time.Hour),
-	NodeCacheDuration:      time.Duration(12 * time.Hour),
+	StoreInfoCacheDuration: time.Duration(15 * time.Minute),
+	RegistryCacheDuration:  time.Duration(30 * time.Minute),
+	ValueDataCacheDuration: time.Duration(30 * time.Minute),
+	NodeCacheDuration:      time.Duration(20 * time.Minute),
 }
 
 // Assigns to the global default cache duration config.
