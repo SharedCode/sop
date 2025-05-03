@@ -46,6 +46,11 @@ func (dio *directIO) fileExists(filePath string) bool {
 	return !os.IsNotExist(err)
 }
 
+func (dio *directIO) getFileSize(filePath string) (int64, error) {
+	s, err := os.Stat(filePath)
+	return s.Size(), err
+}
+
 // Create a buffer that is aligned to the file sector size, usable as buffer for reading file data, directly.
 func (dio *directIO) createAlignedBlock() []byte {
 	return dio.createAlignedBlockOfSize(directio.BlockSize)

@@ -40,7 +40,7 @@ const (
 	fullPermission  = 0644
 	handlesPerBlock = 66
 	// Keep the attempt to lock file region short since if it is locked, we want to fail right away & cause transaction rollback.
-	lockFileRegionAttemptTimeout = time.Duration(1 * time.Second)
+	lockFileRegionAttemptTimeout = time.Duration(2 * time.Second)
 	registryFileIOLockKey        = "infs_reg"
 	// Growing the file needs more time to complete.
 	lockPreallocateFileTimeout = time.Duration(25 * time.Minute)
@@ -84,17 +84,29 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 
 	i := 1
 	for {
-		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s-%d.reg", filename, i))
+		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s%c%s-%d.reg", filename, os.PathSeparator, filename, i))
 		if f, ok := hm.fileHandles[fn]; ok {
 			dio = f
 		} else {
 			dio = newDirectIO()
 			fileExists := dio.fileExists(fn)
-			if !fileExists {
+			var fs int64
+			if fileExists {
+				fs, _ = dio.getFileSize(fn)
+			}
+			if !fileExists || fs < hm.getSegmentFileSize() {
 				if !forWriting {
 					return result, fmt.Errorf("can't read a registry file(%s) that is missing", fn)
 				}
 				return hm.setupNewFile(ctx, forWriting, fn, id, dio)
+			} else {
+				flag := os.O_CREATE | os.O_RDWR
+				if !forWriting {
+					flag = os.O_RDONLY
+				}
+				if err := dio.open(filename, flag, fullPermission); err != nil {
+					return result, err
+				}
 			}
 			hm.fileHandles[fn] = dio
 		}
@@ -264,26 +276,26 @@ func (hm *hashmap) getBlockOffsetAndHandleInBlockOffset(id sop.UUID) (int64, int
 	// Split UUID into high & low int64 parts.
 	bytes := id[:]
 
-	var high int64
+	var high uint64
 	for i := 0; i < 8; i++ {
-		high = high<<8 | int64(bytes[i])
+		high = high<<8 | uint64(bytes[i])
 	}
 
-	var low int64
+	var low uint64
 	for i := 8; i < 16; i++ {
-		low = low<<8 | int64(bytes[i])
+		low = low<<8 | uint64(bytes[i])
 	}
 
-	blockOffset := high % int64(hm.hashModValue)
-	offsetInBlock := low % handlesPerBlock
+	blockOffset := high % uint64(hm.hashModValue)
+	offsetInBlock := low % uint64(handlesPerBlock)
 
-	return blockOffset * blockSize, offsetInBlock * sop.HandleSizeInBytes
+	return int64(blockOffset * blockSize), int64(offsetInBlock * sop.HandleSizeInBytes)
 }
 
 func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename string, id sop.UUID, dio *directIO) (fileRegionDetails, error) {
 	var result fileRegionDetails
 	flag := os.O_CREATE | os.O_RDWR
-	if !hm.readWrite {
+	if !forWriting {
 		flag = os.O_RDONLY
 	}
 
