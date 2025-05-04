@@ -41,7 +41,7 @@ const (
 	handlesPerBlock = 66
 	// Keep the attempt to lock file region short since if it is locked, we want to fail right away & cause transaction rollback.
 	lockFileRegionAttemptTimeout = time.Duration(2 * time.Second)
-	preallocateFileLockKey        = "infs_reg"
+	preallocateFileLockKey       = "infs_reg"
 	// Growing the file needs more time to complete.
 	lockPreallocateFileTimeout = time.Duration(25 * time.Minute)
 	lockFileRegionKeyPrefix    = "infs"
@@ -93,7 +93,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 			return result, fmt.Errorf("reached the maximum numer of segment files (1000), can't create another one")
 		}
 
-		segmentFilename := fmt.Sprintf("%s-%d.reg",filename, i)
+		segmentFilename := fmt.Sprintf("%s-%d.reg", filename, i)
 		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename))
 		if f, ok := hm.fileHandles[segmentFilename]; ok {
 			dio = f

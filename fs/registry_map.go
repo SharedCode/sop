@@ -3,7 +3,6 @@ package fs
 import (
 	"context"
 	"fmt"
-	log "log/slog"
 
 	"github.com/SharedCode/sop"
 )
@@ -26,6 +25,13 @@ func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.
 			if err != nil {
 				return err
 			}
+
+			// Fail if item exists in target.
+			if !frd[0].handle.IsEmpty() {
+				rm.hashmap.unlockFileRegion(ctx, frd...)
+				return fmt.Errorf("registryMap.add failed, can't overwrite an item at offset=%v, item details: %v", frd[0].offset, frd[0].handle)
+			}
+
 			frd[0].handle = h
 			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
@@ -124,10 +130,9 @@ func (rm registryMap) remove(ctx context.Context, keys ...sop.Tuple[string, []so
 			}
 			// If read handle is empty, it means the item is already marked deleted in disk.
 			if frd[0].handle.IsEmpty() {
-				if err := rm.hashmap.unlockFileRegion(ctx, frd...); err != nil {
-					log.Warn(fmt.Sprintf("registryMap.remove's unlock file region call returned an error(ignored as noop), details: %v", err))
-				}
-				continue
+				// Fail if there is no record on target, can't delete a missing item.
+				rm.hashmap.unlockFileRegion(ctx, frd...)
+				return fmt.Errorf("registryMap.remove failed, an item at offset=%v was not found, can't delete a missing item", frd[0].offset)
 			}
 			if err := rm.hashmap.markDeleteFileRegion(ctx, frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
