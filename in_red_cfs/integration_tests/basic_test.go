@@ -230,7 +230,7 @@ func Test_RegistryZeroDurationCache(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 		BlobStoreBaseFolderPath:  dataPath,
-		CacheConfig: &so,
+		CacheConfig:              &so,
 	}, trans, nil)
 	if err != nil {
 		t.Error(err)

@@ -41,7 +41,7 @@ const (
 	handlesPerBlock = 66
 	// Keep the attempt to lock file region short since if it is locked, we want to fail right away & cause transaction rollback.
 	lockFileRegionAttemptTimeout = time.Duration(2 * time.Second)
-	registryFileIOLockKey        = "infs_reg"
+	preallocateFileLockKey        = "infs_reg"
 	// Growing the file needs more time to complete.
 	lockPreallocateFileTimeout = time.Duration(25 * time.Minute)
 	lockFileRegionKeyPrefix    = "infs"
@@ -51,14 +51,16 @@ const (
 type HashModValueType int
 
 const (
-	MinimumModValue   = 75000  // 75k, should generate 300MB file segment
-	SuperTinyModValue = 100000 // 100k, should generate 400MB file segment
-	TinyModValue      = 125000 // 125k, should generate 500MB file segment
-	SmallModValue     = 200000 // 200k, should generate 800MB file segment
-	MediumModValue    = 250000 // 250k, should generate 1GB file segment
-	LargeModValue     = 350000 // 350k, should generate 1.4GB file segment
-	XLargeModValue    = 500000 // 500k, 2GB file segment
-	XXLModValue       = 750000 // 750k, 3GB file segment
+	MinimumModValue     = 25000  // 25k, should generate 100MB file segment
+	XXSuperTinyModValue = 50000  // 50k, should generate 200MB file segment
+	XSuperTinyModValue  = 75000  // 75k, should generate 300MB file segment
+	SuperTinyModValue   = 100000 // 100k, should generate 400MB file segment
+	TinyModValue        = 125000 // 125k, should generate 500MB file segment
+	SmallModValue       = 200000 // 200k, should generate 800MB file segment
+	MediumModValue      = 250000 // 250k, should generate 1GB file segment
+	LargeModValue       = 350000 // 350k, should generate 1.4GB file segment
+	XLargeModValue      = 500000 // 500k, 2GB file segment
+	XXLModValue         = 750000 // 750k, 3GB file segment
 )
 
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
@@ -82,10 +84,18 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 	var dio *directIO
 	var result fileRegionDetails
 
-	i := 1
+	i := 0
 	for {
-		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s%c%s-%d.reg", filename, os.PathSeparator, filename, i))
-		if f, ok := hm.fileHandles[fn]; ok {
+		// Not found or there is no space left in the block, try (or create if writing) other file segments.
+		i++
+		// Stop the loop of we've just created a new file segment or reaching ridiculous file check.
+		if i > 1000 {
+			return result, fmt.Errorf("reached the maximum numer of segment files (1000), can't create another one")
+		}
+
+		segmentFilename := fmt.Sprintf("%s-%d.reg",filename, i)
+		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename))
+		if f, ok := hm.fileHandles[segmentFilename]; ok {
 			dio = f
 		} else {
 			dio = newDirectIO()
@@ -98,17 +108,23 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 				if !forWriting {
 					return result, fmt.Errorf("can't read a registry file(%s) that is missing", fn)
 				}
-				return hm.setupNewFile(ctx, forWriting, fn, id, dio)
+				frd, err := hm.setupNewFile(ctx, forWriting, fn, id, dio)
+				if dio.file != nil {
+					dio.filename = segmentFilename
+					hm.fileHandles[segmentFilename] = dio
+				}
+				return frd, err
 			} else {
-				flag := os.O_CREATE | os.O_RDWR
+				flag := os.O_RDWR
 				if !forWriting {
 					flag = os.O_RDONLY
 				}
-				if err := dio.open(filename, flag, fullPermission); err != nil {
+				if err := dio.open(fn, flag, fullPermission); err != nil {
 					return result, err
 				}
+				dio.filename = segmentFilename
 			}
-			hm.fileHandles[fn] = dio
+			hm.fileHandles[segmentFilename] = dio
 		}
 
 		// Read entire block for the ID hash mod, deserialize each Handle and check if anyone matches the one we are trying to find.
@@ -118,7 +134,23 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 
 		n, err := dio.readAt(ba, blockOffset)
 		if err != nil {
-			return result, err
+			if dio.isEOF(err) {
+				if forWriting {
+					result.offset = blockOffset + handleInBlockOffset
+					if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+						if ok {
+							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+						}
+						return result, err
+					}
+					result.dio = dio
+					return result, hm.lockFoundFileRegion(ctx, &result)
+				}
+				// If for read, check the next file or break the loop if this is the last file segment.
+				continue
+			} else {
+				return result, err
+			}
 		}
 		if n != len(ba) {
 			return result, fmt.Errorf("only able to read partially (%d bytes) the block record at offset %v", n, blockOffset)
@@ -217,13 +249,6 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 
 			bao += sop.HandleSizeInBytes
 		}
-
-		// Not found or there is no space left in the block, try (or create if writing) other file segments.
-		i++
-		// Stop the loop of we've just created a new file segment or reaching ridiculous file check.
-		if i > 1000 {
-			return result, fmt.Errorf("reached the maximum numer of segment files (1000), can't create another one")
-		}
 	}
 }
 
@@ -299,7 +324,7 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 		flag = os.O_RDONLY
 	}
 
-	lk := hm.cache.CreateLockKeys(registryFileIOLockKey)
+	lk := hm.cache.CreateLockKeys(preallocateFileLockKey)
 	if err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk...); err != nil {
 		return result, err
 	}
@@ -318,7 +343,6 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 	}
 	hm.cache.Unlock(ctx, lk...)
 
-	hm.fileHandles[filename] = dio
 	// New file, 'prepare to let caller write the new handle to this block's first slot.
 	blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
 	result.offset = blockOffset + handleInBlockOffset

@@ -34,7 +34,7 @@ func (hm *hashmap) unlockFileRegion(ctx context.Context, fileRegionDetails ...fi
 			}
 			continue
 		}
-		if err := frd.dio.unlockFileRegion(ctx, frd.offset, sop.HandleSizeInBytes); err != nil {
+		if err := frd.dio.unlockFileRegion(frd.offset, sop.HandleSizeInBytes); err != nil {
 			return err
 		}
 	}

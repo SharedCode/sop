@@ -40,7 +40,7 @@ func DefaultOptions() Options {
 		Address:                  "localhost:6379",
 		Password:                 "", // no password set
 		DB:                       0,  // use default DB
-		DefaultDurationInSeconds: int(30*time.Minute),
+		DefaultDurationInSeconds: int(30 * time.Minute),
 	}
 }
 
