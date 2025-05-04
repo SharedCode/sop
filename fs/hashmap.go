@@ -252,6 +252,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 	}
 }
 
+// Fetch the Handle record with a given UUID (LogicalID) from a given file, without locking the file region it resides in.
 func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([]sop.Handle, error) {
 	completedItems := make([]sop.Handle, 0, len(ids))
 	for _, id := range ids {

@@ -64,6 +64,8 @@ func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails ...fi
 }
 
 func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
+	// Study whether we want to zero out only the "Logical ID" part. For now, zero out entire Handle block
+	// which could aid in cleaner deleted blocks(as marked w/ all zeroes). Negligible difference in IO.
 	ba := bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)
 	for _, frd := range fileRegionDetails {
 		if n, err := frd.dio.writeAt(ba, frd.offset); n != len(ba) || err != nil {

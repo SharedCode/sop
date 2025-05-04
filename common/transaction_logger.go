@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/SharedCode/sop"
-	"github.com/gocql/gocql"
 )
 
 type commitFunction int
@@ -43,13 +42,13 @@ func newTransactionLogger(logger sop.TransactionLog, logging bool) *transactionL
 	return &transactionLog{
 		logger:        logger,
 		logging:       logging,
-		transactionID: sop.UUID(gocql.UUIDFromTime(sop.Now().UTC())),
+		transactionID: logger.NewUUID(),
 	}
 }
 
 // Assign new UUID to the transactionID field.
 func (tl *transactionLog) setNewTID() {
-	tl.transactionID = sop.UUID(gocql.UUIDFromTime(sop.Now().UTC()))
+	tl.transactionID = tl.logger.NewUUID()
 }
 
 // Log the about to be committed function state.

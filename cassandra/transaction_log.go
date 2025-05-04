@@ -201,3 +201,8 @@ func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 
 	return nil
 }
+
+// Generates a new UUID based on time.
+func (tl *transactionLog) NewUUID() sop.UUID {
+	return sop.UUID(gocql.UUIDFromTime(Now().UTC()))
+}

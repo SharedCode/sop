@@ -125,3 +125,8 @@ func (tl *MockTransactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 	}
 	return nil
 }
+
+// Generates a new UUID based on time.
+func (tl *MockTransactionLog) NewUUID() sop.UUID {
+	return sop.NewUUID()
+}

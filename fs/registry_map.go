@@ -17,6 +17,7 @@ func newRegistryMap(readWrite bool, hashModValue HashModValueType, replicationTr
 	}
 }
 
+// Add a given set of Handle(s) record(s) on file(s) where they are supposed to get stored in.
 func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.Handle]) error {
 	// Individually write to the file area occupied by the handle so we don't create "lock pressure".
 	for _, item := range items {
@@ -45,6 +46,7 @@ func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.
 	return nil
 }
 
+// Update a given set of Handle(s) record(s) on file(s) where they are stored in.
 func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.Tuple[string, []sop.Handle]) error {
 	if allOrNothing {
 		// Supports update (including update to prepare for deleting) of Handle records.
@@ -105,6 +107,7 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 	return nil
 }
 
+// Fetch the Handle record(s) from a given set of file(s) & their UUID(s).
 func (rm registryMap) get(ctx context.Context, keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[string, []sop.Handle], error) {
 	result := make([]sop.Tuple[string, []sop.Handle], 0, len(keys))
 	for _, k := range keys {
@@ -120,6 +123,7 @@ func (rm registryMap) get(ctx context.Context, keys ...sop.Tuple[string, []sop.U
 	return result, nil
 }
 
+// Mark the Handle record(s) on file to be deleted & reuse ready.
 func (rm registryMap) remove(ctx context.Context, keys ...sop.Tuple[string, []sop.UUID]) error {
 	// Individually delete the file area occupied by the handle so we don't create "lock pressure".
 	for _, key := range keys {
