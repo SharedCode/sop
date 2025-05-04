@@ -2,6 +2,8 @@ package fs
 
 import (
 	"context"
+	"fmt"
+	log "log/slog"
 
 	"github.com/SharedCode/sop"
 )
@@ -14,6 +16,27 @@ func newRegistryMap(readWrite bool, hashModValue HashModValueType, replicationTr
 	return &registryMap{
 		hashmap: newHashmap(readWrite, hashModValue, replicationTracker, cache, useCacheForFileRegionLocks),
 	}
+}
+
+func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.Handle]) error {
+	// Individually write to the file area occupied by the handle so we don't create "lock pressure".
+	for _, item := range items {
+		for _, h := range item.Second {
+			frd, err := rm.hashmap.findAndLockFileRegion(ctx, item.First, h.LogicalID)
+			if err != nil {
+				return err
+			}
+			frd[0].handle = h
+			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
+				rm.hashmap.unlockFileRegion(ctx, frd...)
+				return err
+			}
+			if err := rm.hashmap.unlockFileRegion(ctx, frd...); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.Tuple[string, []sop.Handle]) error {
@@ -34,6 +57,13 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 			}
 			// Update the Handles read w/ the items' values.
 			for i := 0; i < len(frds); i++ {
+				// Implement check if there is a record in the target file region that will be updated.
+				if frds[i].handle.IsEmpty() {
+					// Fail if there is no record on target.
+					lockedItems = append(lockedItems, frds...)
+					unlockItemFileRegions(lockedItems...)
+					return fmt.Errorf("registryMap.set failed, an item at offset=%v was found empty", frds[i].offset)
+				}
 				frds[i].handle = item.Second[i]
 			}
 			lockedItems = append(lockedItems, frds...)
@@ -45,12 +75,16 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 		return unlockItemFileRegions(lockedItems...)
 	}
 	// Individually manage/update the file area occupied by the handle so we don't create "lock pressure".
-	// Support Update & Add of new Handle record(s).
 	for _, item := range items {
 		for _, h := range item.Second {
 			frd, err := rm.hashmap.findAndLockFileRegion(ctx, item.First, h.LogicalID)
 			if err != nil {
 				return err
+			}
+			if frd[0].handle.IsEmpty() {
+				// Fail if there is no record on target.
+				rm.hashmap.unlockFileRegion(ctx, frd...)
+				return fmt.Errorf("registryMap.set failed, an item at offset=%v was found empty", frd[0].offset)
 			}
 			frd[0].handle = h
 			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
@@ -87,6 +121,13 @@ func (rm registryMap) remove(ctx context.Context, keys ...sop.Tuple[string, []so
 			frd, err := rm.hashmap.findAndLockFileRegion(ctx, key.First, id)
 			if err != nil {
 				return err
+			}
+			// If read handle is empty, it means the item is already marked deleted in disk.
+			if frd[0].handle.IsEmpty() {
+				if err := rm.hashmap.unlockFileRegion(ctx, frd...); err != nil {
+					log.Warn(fmt.Sprintf("registryMap.remove's unlock file region call returned an error(ignored as noop), details: %v", err))
+				}
+				continue
 			}
 			if err := rm.hashmap.markDeleteFileRegion(ctx, frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)

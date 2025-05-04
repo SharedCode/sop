@@ -7,6 +7,22 @@ import (
 	"github.com/SharedCode/sop/redis"
 )
 
+func TestRegistryMapAdd(t *testing.T) {
+	r := newRegistryMap(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false),
+	redis.NewClient(), false)
+
+	h := sop.NewHandle(uuid)
+
+	if err := r.add(ctx, sop.Tuple[string, []sop.Handle]{
+		First: "regtest",
+		Second: []sop.Handle{h},
+	}); err != nil {
+		t.Error(err.Error())
+	}
+
+	r.close()
+}
+
 
 func TestRegistryMapSet(t *testing.T) {
 	r := newRegistryMap(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false),
@@ -55,3 +71,64 @@ func TestRegistryMapRemove(t *testing.T) {
 	
 	r.close()
 }
+
+func TestRegistryMapFailedSet(t *testing.T) {
+	r := newRegistryMap(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false),
+	redis.NewClient(), false)
+
+	h := sop.NewHandle(uuid)
+
+	if err := r.add(ctx, sop.Tuple[string, []sop.Handle]{
+		First: "regtest",
+		Second: []sop.Handle{h},
+	}); err != nil {
+		t.Error(err.Error())
+	}
+
+	if err := r.remove(ctx, sop.Tuple[string, []sop.UUID]{
+		First: "regtest",
+		Second: []sop.UUID{uuid},
+	}); err != nil {
+		t.Error(err.Error())
+	}
+
+	if err := r.set(ctx, false, sop.Tuple[string, []sop.Handle]{
+		First: "regtest",
+		Second: []sop.Handle{h},
+	}); err != nil {
+		t.Error(err.Error())
+	}
+
+	r.close()
+}
+
+func TestRegistryMapRecyAddRemoveAdd(t *testing.T) {
+	r := newRegistryMap(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false),
+	redis.NewClient(), false)
+
+	h := sop.NewHandle(uuid)
+
+	if err := r.add(ctx, sop.Tuple[string, []sop.Handle]{
+		First: "regtest",
+		Second: []sop.Handle{h},
+	}); err != nil {
+		t.Error(err.Error())
+	}
+
+	if err := r.remove(ctx, sop.Tuple[string, []sop.UUID]{
+		First: "regtest",
+		Second: []sop.UUID{uuid},
+	}); err != nil {
+		t.Error(err.Error())
+	}
+
+	if err := r.add(ctx, sop.Tuple[string, []sop.Handle]{
+		First: "regtest",
+		Second: []sop.Handle{h},
+	}); err != nil {
+		t.Error(err.Error())
+	}
+
+	r.close()
+}
+

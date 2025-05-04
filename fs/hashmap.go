@@ -179,21 +179,21 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 				return result, err
 			} else if lid == id {
 				// Found the handle block, read, deserialize, lock if for writing and return it.
-				if !forWriting {
-					if err := m.Unmarshal(hbuf, &h); err != nil {
-						return result, err
-					}
-					result.handle = h
+				if err := m.Unmarshal(hbuf, &h); err != nil {
 					return result, err
 				}
+				result.handle = h
 				result.offset = blockOffset + handleInBlockOffset
+				result.dio = dio
+				if !forWriting {
+					return result, nil
+				}
 				if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
 					if ok {
 						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
 					}
 					return result, err
 				}
-				result.dio = dio
 				return result, hm.lockFoundFileRegion(ctx, &result)
 			}
 		}
@@ -228,21 +228,21 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 					return result, err
 				} else if lid == id {
 					// Found the handle block, read, deserialize, lock if for writing and return it.
-					if !forWriting {
-						if err := m.Unmarshal(hbuf, &h); err != nil {
-							return result, err
-						}
-						result.handle = h
+					if err := m.Unmarshal(hbuf, &h); err != nil {
 						return result, err
 					}
+					result.handle = h
 					result.offset = blockOffset + handleInBlockOffset
+					result.dio = dio
+					if !forWriting {
+						return result, err
+					}
 					if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
 						if ok {
 							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
 						}
 						return result, err
 					}
-					result.dio = dio
 					return result, hm.lockFoundFileRegion(ctx, &result)
 				}
 			}
