@@ -106,7 +106,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 			}
 			if !fileExists || fs < hm.getSegmentFileSize() {
 				if !forWriting {
-					return result, fmt.Errorf("can't read a registry file(%s) that is missing", fn)
+					return result, fmt.Errorf("registry record with id '%v' not found in file '%s'", id, filename)
 				}
 				frd, err := hm.setupNewFile(ctx, forWriting, fn, id, dio)
 				if dio.file != nil {
