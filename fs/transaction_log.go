@@ -10,23 +10,22 @@ import (
 const (
 	// DateHourLayout format mask string.
 	DateHourLayout = "2006-01-02T15"
-
 )
 
 // Now lambda to allow unit test to inject replayable time.Now.
 var Now = time.Now
 
 type transactionLog struct {
-	hourLockKey *sop.LockKey
-	cache       sop.Cache
+	hourLockKey  *sop.LockKey
+	cache        sop.Cache
 	logDirectory string
 }
 
 // NewTransactionLog instantiates a new TransactionLog instance.
 func NewTransactionLog(cache sop.Cache, logDirectory string) sop.TransactionLog {
 	return &transactionLog{
-		cache:       cache,
-		hourLockKey: cache.CreateLockKeys("HBP")[0],
+		cache:        cache,
+		hourLockKey:  cache.CreateLockKeys("HBP")[0],
 		logDirectory: logDirectory,
 	}
 }
@@ -106,9 +105,6 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 	var tid sop.UUID
 	var r []sop.KeyValuePair[int, []byte]
 
-
-
-
 	// hrid := gocql.UUIDFromTime(t)
 
 	// selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
@@ -128,11 +124,6 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 	// }
 
 	// r, err := tl.getLogsDetails(ctx, tid)
-
-
-
-
-
 
 	return sop.UUID(tid), r, err
 }
@@ -161,7 +152,7 @@ func (tl *transactionLog) getOne(ctx context.Context) (string, sop.UUID, error) 
 
 func (tl *transactionLog) getLogsDetails(ctx context.Context, tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
 
-	r := make([]sop.KeyValuePair[int, []byte], 0, )
+	r := make([]sop.KeyValuePair[int, []byte], 0)
 
 	// selectStatement := fmt.Sprintf("SELECT c_f, c_f_p FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
 	// qry := connection.Session.Query(selectStatement, tid).WithContext(ctx).Consistency(transactionLoggingConsistency)

@@ -109,7 +109,7 @@ type TransactionLog interface {
 	// Or nils if there is no more needing cleanup for this date hour.
 	GetLogsDetails(ctx context.Context, hour string) (UUID, []KeyValuePair[int, []byte], error)
 
-	// Implement to generate a new UUID. Cassandra transaction logging uses gocql.UUIDFromTime, SOP in file system 
+	// Implement to generate a new UUID. Cassandra transaction logging uses gocql.UUIDFromTime, SOP in file system
 	// should just use the general sop.NewUUID function which currently uses google's uuid package.
 	NewUUID() UUID
 }
