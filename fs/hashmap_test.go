@@ -18,8 +18,7 @@ const (
 // At 4, it should be able to fill 75%.
 
 func TestHashModDistribution(t *testing.T) {
-	hashTable1 := make([][handlesPerBlock * 3]sop.UUID, hashModValue)
-	//hashTable2 := make([][66]sop.UUID, hashModValue)
+	hashTable := make([][handlesPerBlock * 3]sop.UUID, hashModValue)
 	collisionCount := 0
 	fmt.Printf("Start %v", time.Now())
 	for i := 0; i < (hashModValue*handlesPerBlock*2)+2000000; i++ {
@@ -37,67 +36,39 @@ func TestHashModDistribution(t *testing.T) {
 		}
 
 		bucket := high % hashModValue
-		bucketOffset := low % uint64(len(hashTable1[0]))
+		bucketOffset := low % uint64(len(hashTable[0]))
 
-		if hashTable1[bucket][bucketOffset] != sop.NilUUID {
+		if hashTable[bucket][bucketOffset] != sop.NilUUID {
 			foundASlot := false
-			for ii := 0; ii < len(hashTable1[0]); ii++ {
-				if hashTable1[bucket][ii] == sop.NilUUID {
-					hashTable1[bucket][ii] = id
+			for ii := 0; ii < len(hashTable[0]); ii++ {
+				if hashTable[bucket][ii] == sop.NilUUID {
+					hashTable[bucket][ii] = id
 					foundASlot = true
 					break
 				}
 			}
 			if !foundASlot {
-				// if hashTable2[bucket][bucketOffset] != sop.NilUUID {
-				// 	for ii := 0; ii < 66; ii++ {
-				// 		if hashTable2[bucket][ii] == sop.NilUUID {
-				// 			hashTable2[bucket][ii] = id
-				// 			foundASlot = true
-				// 			break
-				// 		}
-				// 	}
-				// } else {
-				// 	hashTable2[bucket][bucketOffset] = id
-				// 	continue
-				// }
-				if !foundASlot {
-					collisionCount++
-					// fmt.Printf("collision count: %d, current: %v, new: %v, Bucket: %d, Offset: %d\n",
-					// 	collisionCount, hashTable1[bucket][bucketOffset], id, bucket, bucketOffset)
-				}
+				collisionCount++
 			}
 			continue
 		}
-		hashTable1[bucket][bucketOffset] = id
+		hashTable[bucket][bucketOffset] = id
 	}
 
 	notUsedSlot := 0
 	notFoundCount := 0
 
-	for i := 0; i < len(hashTable1); i++ {
-		for ii := 0; ii < len(hashTable1[0]); ii++ {
-			if hashTable1[i][ii] == sop.NilUUID {
+	for i := 0; i < len(hashTable); i++ {
+		for ii := 0; ii < len(hashTable[0]); ii++ {
+			if hashTable[i][ii] == sop.NilUUID {
 				notUsedSlot++
 				continue
 			}
-			if !findItem(hashTable1, hashTable1[i][ii]) {
+			if !findItem(hashTable, hashTable[i][ii]) {
 				notFoundCount++
-				// fmt.Printf("item with UUID: %v not found\n", hashTable1[i][ii])
 			}
 		}
 	}
-	// for i := 0; i < len(hashTable2); i++ {
-	// 	for ii := 0; ii < 66; ii++ {
-	// 		if hashTable2[i][ii] == sop.NilUUID {
-	// 			notUsedSlot++
-	// 			continue
-	// 		}
-	// 		if !findItem(hashTable2, hashTable2[i][ii]) {
-	// 			notFoundCount++
-	// 		}
-	// 	}
-	// }
 	fmt.Printf("not found count: %v, collision count: %v, not used slot: %v\n", notFoundCount, collisionCount, notUsedSlot)
 	fmt.Printf("End %v", time.Now())
 }

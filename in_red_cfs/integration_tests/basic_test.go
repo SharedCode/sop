@@ -217,6 +217,53 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	}
 }
 
+func Test_RegistryZeroDurationCache(t *testing.T) {
+	trans, err := in_red_cfs.NewTransactionExt(MyToFilePath, sop.ForWriting, -1, false)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	trans.Begin()
+	so := sop.StoreCacheConfig{}
+	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "regnotcached",
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+		BlobStoreBaseFolderPath:  dataPath,
+		CacheConfig:              &so,
+	}, trans, nil)
+	if err != nil {
+		t.Error(err)
+		trans.Rollback(ctx)
+		return
+	}
+	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
+		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		trans.Rollback(ctx)
+		return
+	}
+
+	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		trans.Rollback(ctx)
+		return
+	}
+	if k := b3.GetCurrentKey(); k != 1 {
+		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
+		trans.Rollback(ctx)
+		return
+	}
+	if v, err := b3.GetCurrentValue(ctx); v != "hello world" || err != nil {
+		t.Errorf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
+		trans.Rollback(ctx)
+		return
+	}
+	t.Logf("Successfully added & found item with key 1.")
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+}
+
 func Test_StoreCaching(t *testing.T) {
 	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {

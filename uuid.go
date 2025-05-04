@@ -10,6 +10,12 @@ import (
 // UUID type.
 type UUID uuid.UUID
 
+// Parse a string into a UUID.
+func ParseUUID(id string) (UUID, error) {
+	u, err := uuid.Parse(id)
+	return UUID(u), err
+}
+
 // NewUUID returns a new UUID. Will retry after sleep of 1 milli if an error occurs.
 // Guaranteed no panic by sleeping/retry, and only does after exhausting 10 attempts.
 func NewUUID() UUID {

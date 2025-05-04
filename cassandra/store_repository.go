@@ -146,10 +146,9 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 				qry.Consistency(connection.Config.ConsistencyBook.StoreUpdate)
 			}
 			if err := qry.Exec(); err != nil {
-				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed, details: %v", si.Name, err))
+				log.Error(fmt.Sprintf("StoreRepository Update Undo store %s failed, details: %v", si.Name, err))
 				continue
 			}
-			// Tolerate redis error since we've successfully updated the master table.
 			if err := sr.cache.SetStruct(ctx, si.Name, &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("StoreRepository Update Undo (redis setstruct) store %s failed, details: %v", si.Name, err))
 			}
@@ -166,8 +165,6 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			undo(i, beforeUpdateStores)
 			return err
 		}
-		beforeUpdateStores = append(beforeUpdateStores, sis...)
-
 		si := sis[0]
 		// Merge or apply the "count delta".
 		stores[i].Count = si.Count + stores[i].CountDelta
@@ -183,11 +180,14 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			undo(i, beforeUpdateStores)
 			return err
 		}
+
+		beforeUpdateStores = append(beforeUpdateStores, sis...)
 		// Tolerate redis error since we've successfully updated the master table.
 		if err := sr.cache.SetStruct(ctx, stores[i].Name, &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
-			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) failed, details: %v", err))
+			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) store %s failed, details: %v", stores[i].Name, err))
 		}
 	}
+
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"syscall"
 	"time"
@@ -44,6 +45,15 @@ func (dio *directIO) open(filename string, flag int, permission os.FileMode) err
 func (dio *directIO) fileExists(filePath string) bool {
 	_, err := os.Stat(filePath)
 	return !os.IsNotExist(err)
+}
+
+func (dio *directIO) getFileSize(filePath string) (int64, error) {
+	s, err := os.Stat(filePath)
+	return s.Size(), err
+}
+
+func (dio *directIO) isEOF(err error) bool {
+	return io.EOF == err
 }
 
 // Create a buffer that is aligned to the file sector size, usable as buffer for reading file data, directly.
@@ -133,7 +143,7 @@ func (dio *directIO) isRegionLocked(ctx context.Context, readWrite bool, offset 
 	return flock.Type != syscall.F_UNLCK, nil
 }
 
-func (dio *directIO) unlockFileRegion(ctx context.Context, offset int64, length int64) error {
+func (dio *directIO) unlockFileRegion(offset int64, length int64) error {
 	if dio.file == nil {
 		return fmt.Errorf("can't unlock file region, there is no opened file")
 	}
@@ -155,5 +165,6 @@ func (dio *directIO) close() error {
 
 	err := dio.file.Close()
 	dio.file = nil
+	dio.filename = ""
 	return err
 }

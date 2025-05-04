@@ -44,7 +44,7 @@ func (r registryOnDisk) Close() error {
 func (r registryOnDisk) Add(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
-			if err := r.hashmap.set(ctx, false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+			if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 				return err
 			}
 			// Tolerate Redis cache failure.

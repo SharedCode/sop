@@ -106,6 +106,16 @@ func (h *Handle) ClearInactiveID() {
 	h.WorkInProgressTimestamp = 0
 }
 
+// Return if this Handle is empty, i.e. - all fields nil.
+func (x *Handle) IsEmpty() bool {
+	return x.LogicalID == NilUUID &&
+		!x.IsDeleted &&
+		x.PhysicalIDA == NilUUID &&
+		x.PhysicalIDB == NilUUID &&
+		x.Version == 0 &&
+		x.WorkInProgressTimestamp == 0
+}
+
 // Checks if this Handle instance has the same attributes' values as another Handle, except version #.
 func (x *Handle) IsEqual(y *Handle) bool {
 	return x.LogicalID == y.LogicalID &&

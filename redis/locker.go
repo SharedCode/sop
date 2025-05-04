@@ -79,6 +79,9 @@ func (c client) IsLocked(ctx context.Context, lockKeys ...*sop.LockKey) error {
 
 // Returns true if lockKeyNames are all locked.
 func (c client) IsLockedByOthers(ctx context.Context, lockKeyNames ...string) (bool, error) {
+	if len(lockKeyNames) == 0 {
+		return false, nil
+	}
 	for _, lkn := range lockKeyNames {
 		_, err := c.Get(ctx, lkn)
 		if err != nil {

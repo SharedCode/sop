@@ -181,11 +181,9 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			}
 
 			if err := storeWriter.write(fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
-				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed write, details: %v", si.Name, err))
+				log.Error(fmt.Sprintf("StoreRepository Update Undo store %s failed write, details: %v", si.Name, err))
 				continue
 			}
-
-			// Tolerate redis error since we've successfully updated the master table.
 			if err := sr.cache.SetStruct(ctx, si.Name, &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("StoreRepository Update Undo (redis setstruct) store %s failed, details: %v", si.Name, err))
 			}
@@ -202,14 +200,13 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			undo(i, beforeUpdateStores)
 			return err
 		}
-		beforeUpdateStores = append(beforeUpdateStores, sis...)
 
 		si := sis[0]
 		// Merge or apply the "count delta".
 		stores[i].Count = si.Count + stores[i].CountDelta
 
 		// Persist store info into a JSON text file.
-		ba, err := encoding.Marshal(si)
+		ba, err := encoding.Marshal(stores[i])
 		if err != nil {
 			// Undo changes.
 			undo(i, beforeUpdateStores)
@@ -221,18 +218,16 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			undo(i, beforeUpdateStores)
 			return err
 		}
+
+		beforeUpdateStores = append(beforeUpdateStores, sis...)
+		if err := sr.cache.SetStruct(ctx, stores[i].Name, &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
+			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) store %s failed, details: %v", stores[i].Name, err))
+		}
 	}
 
 	// Replicate the files if configured to.
 	if err := storeWriter.replicate(); err != nil {
 		return err
-	}
-
-	// Cache each of the stores.
-	for _, store := range stores {
-		if err := sr.cache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
-			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) failed, details: %v", err))
-		}
 	}
 
 	return nil
