@@ -235,7 +235,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 					result.offset = blockOffset + handleInBlockOffset
 					result.dio = dio
 					if !forWriting {
-						return result, err
+						return result, nil
 					}
 					if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
 						if ok {

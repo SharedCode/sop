@@ -33,7 +33,7 @@ func NewTwoPhaseCommitTransaction(storesBaseFolder string, mode sop.TransactionM
 	if err != nil {
 		return nil, err
 	}
-	tl := fs.NewTransactionLog(cache, replicationTracker.GetActiveBaseFolder())
+	tl := fs.NewTransactionLog(cache, replicationTracker)
 	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, fs.NewBlobStore(nil), sr, fs.NewRegistry(mode == sop.ForWriting, registryHashModValue, replicationTracker, cache, useCacheForFileRegionLocks), cache, tl)
 }
 
@@ -74,7 +74,7 @@ func NewTwoPhaseCommitTransactionWithReplication(storesBaseFolders []string, mod
 		return nil, err
 	}
 
-	tl := fs.NewTransactionLog(cache, replicationTracker.GetActiveBaseFolder())
+	tl := fs.NewTransactionLog(cache, replicationTracker)
 
 	return common.NewTwoPhaseCommitTransaction(mode, maxTime, true, bs, sr, fs.NewRegistry(mode == sop.ForWriting, registryHashModValue, replicationTracker, cache, useCacheForFileRegionLocks), cache, tl)
 }

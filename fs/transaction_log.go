@@ -12,21 +12,18 @@ const (
 	DateHourLayout = "2006-01-02T15"
 )
 
-// Now lambda to allow unit test to inject replayable time.Now.
-var Now = time.Now
-
 type transactionLog struct {
-	hourLockKey  *sop.LockKey
-	cache        sop.Cache
-	logDirectory string
+	hourLockKey        *sop.LockKey
+	cache              sop.Cache
+	replicationTracker *replicationTracker
 }
 
 // NewTransactionLog instantiates a new TransactionLog instance.
-func NewTransactionLog(cache sop.Cache, logDirectory string) sop.TransactionLog {
+func NewTransactionLog(cache sop.Cache, rt *replicationTracker) sop.TransactionLog {
 	return &transactionLog{
-		cache:        cache,
-		hourLockKey:  cache.CreateLockKeys("HBP")[0],
-		logDirectory: logDirectory,
+		cache:              cache,
+		hourLockKey:        cache.CreateLockKeys("HBP")[0],
+		replicationTracker: rt,
 	}
 }
 
@@ -46,6 +43,7 @@ func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 	return nil
 }
 
+// NewUUID generates a new sop UUID, currently a pass-through to google's uuid package.
 func (tl *transactionLog) NewUUID() sop.UUID {
 	return sop.NewUUID()
 }
@@ -94,7 +92,7 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 	}
 
 	// Put a max time of three hours for a given cleanup processor.
-	mh, _ := time.Parse(DateHourLayout, Now().Format(DateHourLayout))
+	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 	if mh.Sub(t).Hours() > 4 {
 		// Unlock the hour to allow open opportunity to claim the next cleanup processing.
 		// Capping to 4th hour(Redis cache is set to 7hrs) maintains only one cleaner process at a time.
@@ -129,7 +127,7 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 }
 
 func (tl *transactionLog) getOne(ctx context.Context) (string, sop.UUID, error) {
-	mh, _ := time.Parse(DateHourLayout, Now().Format(DateHourLayout))
+	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 
 	// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
 	// gap ensures no issue due to overlapping.
