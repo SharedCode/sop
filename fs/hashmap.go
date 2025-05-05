@@ -41,7 +41,7 @@ const (
 	handlesPerBlock = 66
 	// Keep the attempt to lock file region short since if it is locked, we want to fail right away & cause transaction rollback.
 	lockFileRegionAttemptTimeout = time.Duration(2 * time.Second)
-	preallocateFileLockKey        = "infs_reg"
+	preallocateFileLockKey       = "infs_reg"
 	// Growing the file needs more time to complete.
 	lockPreallocateFileTimeout = time.Duration(25 * time.Minute)
 	lockFileRegionKeyPrefix    = "infs"
@@ -93,7 +93,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 			return result, fmt.Errorf("reached the maximum numer of segment files (1000), can't create another one")
 		}
 
-		segmentFilename := fmt.Sprintf("%s-%d.reg",filename, i)
+		segmentFilename := fmt.Sprintf("%s-%d.reg", filename, i)
 		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename))
 		if f, ok := hm.fileHandles[segmentFilename]; ok {
 			dio = f
@@ -106,7 +106,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 			}
 			if !fileExists || fs < hm.getSegmentFileSize() {
 				if !forWriting {
-					return result, fmt.Errorf("can't read a registry file(%s) that is missing", fn)
+					return result, fmt.Errorf("unable to find the item with id '%v'", id)
 				}
 				frd, err := hm.setupNewFile(ctx, forWriting, fn, id, dio)
 				if dio.file != nil {
@@ -235,7 +235,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 					result.offset = blockOffset + handleInBlockOffset
 					result.dio = dio
 					if !forWriting {
-						return result, err
+						return result, nil
 					}
 					if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
 						if ok {
@@ -252,6 +252,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 	}
 }
 
+// Fetch the Handle record with a given UUID (LogicalID) from a given file, without locking the file region it resides in.
 func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([]sop.Handle, error) {
 	completedItems := make([]sop.Handle, 0, len(ids))
 	for _, id := range ids {

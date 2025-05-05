@@ -47,6 +47,40 @@ func NewTransactionLog() sop.TransactionLog {
 	}
 }
 
+// Add blob(s) to the Blob store.
+func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+	if connection == nil {
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+	}
+
+	insertStatement := fmt.Sprintf("INSERT INTO %s.t_log (id, c_f, c_f_p) VALUES(?,?,?);", connection.Config.Keyspace)
+	qry := connection.Session.Query(insertStatement, gocql.UUID(tid), commitFunction, payload).WithContext(ctx).Consistency(transactionLoggingConsistency)
+	if err := qry.Exec(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Remove will delete transaction log(t_log) records given a transaction ID(tid).
+func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
+	if connection == nil {
+		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+	}
+
+	deleteStatement := fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
+	qry := connection.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(transactionLoggingConsistency)
+	if err := qry.Exec(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Generates a new UUID based on time, pass-through to gocql.UUID function.
+func (tl *transactionLog) NewUUID() sop.UUID {
+	return sop.UUID(gocql.UUIDFromTime(Now().UTC()))
+}
+
 // GetOne fetches an expired Transaction ID(TID), the hour it was created in and transaction logs for this TID.
 func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
 	duration := time.Duration(7 * time.Hour)
@@ -171,33 +205,4 @@ func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([
 		return r, err
 	}
 	return r, nil
-}
-
-// Add blob(s) to the Blob store.
-func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
-	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
-	}
-
-	insertStatement := fmt.Sprintf("INSERT INTO %s.t_log (id, c_f, c_f_p) VALUES(?,?,?);", connection.Config.Keyspace)
-	qry := connection.Session.Query(insertStatement, gocql.UUID(tid), commitFunction, payload).WithContext(ctx).Consistency(transactionLoggingConsistency)
-	if err := qry.Exec(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// Remove will delete transaction log(t_log) records given a transaction ID(tid).
-func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
-	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
-	}
-
-	deleteStatement := fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
-	qry := connection.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(transactionLoggingConsistency)
-	if err := qry.Exec(); err != nil {
-		return err
-	}
-
-	return nil
 }

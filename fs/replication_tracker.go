@@ -31,7 +31,7 @@ func (r *replicationTracker) failover() {
 	r.isFirstFolderActive = !r.isFirstFolderActive
 }
 
-func (r *replicationTracker) getActiveBaseFolder() string {
+func (r *replicationTracker) GetActiveBaseFolder() string {
 	if r.isFirstFolderActive {
 		return r.storesBaseFolders[0]
 	}
@@ -39,7 +39,7 @@ func (r *replicationTracker) getActiveBaseFolder() string {
 }
 
 func (r *replicationTracker) formatActiveFolderFilename(filename string) string {
-	bf := r.getActiveBaseFolder()
+	bf := r.GetActiveBaseFolder()
 
 	if strings.HasSuffix(bf, string(os.PathSeparator)) {
 		return fmt.Sprintf("%s%s", bf, filename)

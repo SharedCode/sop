@@ -176,7 +176,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 			// Persist store info into a JSON text file.
 			ba, err := encoding.Marshal(si)
 			if err != nil {
-				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed Marshal, details: %v", si.Name, err))
+				log.Error(fmt.Sprintf("StoreRepository Update Undo store %s failed Marshal, details: %v", si.Name, err))
 				continue
 			}
 
