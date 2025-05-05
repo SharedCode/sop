@@ -1,7 +1,13 @@
 package fs
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/SharedCode/sop"
@@ -10,12 +16,23 @@ import (
 const (
 	// DateHourLayout format mask string.
 	DateHourLayout = "2006-01-02T15"
+	logFileSuffix  = ".log"
 )
 
 type transactionLog struct {
 	hourLockKey        *sop.LockKey
 	cache              sop.Cache
 	replicationTracker *replicationTracker
+	tid                sop.UUID
+	filename           string
+	file               *os.File
+	encoder            *json.Encoder
+	writer             *bufio.Writer
+}
+
+type logEntry struct {
+	CommitFunction int    `json:"CommitFunction"`
+	Payload        []byte `json:"Payload"`
 }
 
 // NewTransactionLog instantiates a new TransactionLog instance.
@@ -29,18 +46,39 @@ func NewTransactionLog(cache sop.Cache, rt *replicationTracker) sop.TransactionL
 
 // Add transaction log w/ payload blob to the transaction log file.
 func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
-
-	// TODO: add an entry (using json?) to transaction log file (named after tid).
+	if tl.file == nil {
+		tl.tid = tid
+		tl.filename = tl.format(tid)
+		f, err := os.Create(tl.filename)
+		if err != nil {
+			return err
+		}
+		tl.file = f
+		tl.writer = bufio.NewWriter(f)
+		tl.encoder = json.NewEncoder(tl.writer)
+	}
+	// Append the log entry.
+	if err := tl.encoder.Encode(logEntry{
+		CommitFunction: commitFunction,
+		Payload:        payload,
+	}); err != nil {
+		tl.writer.Flush()
+		tl.file.Close()
+		tl.file = nil
+		return err
+	}
+	tl.writer.Flush()
 
 	return nil
 }
 
 // Remove will delete transaction log(t_log) records given a transaction ID(tid).
 func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
-
-	// TODO: delete the transaction log file (named after tid).
-
-	return nil
+	if tl.tid == tid && tl.file != nil {
+		tl.file.Close()
+		tl.file = nil
+	}
+	return os.Remove(tl.format(tid))
 }
 
 // NewUUID generates a new sop UUID, currently a pass-through to google's uuid package.
@@ -56,7 +94,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		return sop.NilUUID, "", nil, nil
 	}
 
-	hour, tid, err := tl.getOne(ctx)
+	hour, tid, err := tl.getOne()
 	if err != nil {
 		tl.cache.Unlock(ctx, tl.hourLockKey)
 		return sop.NilUUID, hour, nil, err
@@ -67,12 +105,12 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		return sop.NilUUID, "", nil, nil
 	}
 
-	r, err := tl.getLogsDetails(ctx, tid)
+	r, err := tl.getLogsDetails(tid)
 	if err != nil {
 		tl.cache.Unlock(ctx, tl.hourLockKey)
 		return sop.NilUUID, "", nil, err
 	}
-	// Check one more time to remove race condition issue.
+	// Check one more time to remove potential (.1%) race condition issue.
 	if err := tl.cache.IsLocked(ctx, tl.hourLockKey); err != nil {
 		tl.cache.Unlock(ctx, tl.hourLockKey)
 		// Just return nils as we can't attain a lock.
@@ -101,72 +139,122 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 	}
 
 	var tid sop.UUID
-	var r []sop.KeyValuePair[int, []byte]
 
-	// hrid := gocql.UUIDFromTime(t)
+	files, err := getFilesSortedByModifiedTime(tl.replicationTracker.GetActiveBaseFolder())
+	if err != nil {
+		return sop.NilUUID, nil, err
+	}
 
-	// selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
-	// qry := connection.Session.Query(selectStatement, hrid).WithContext(ctx).Consistency(transactionLoggingConsistency)
+	for i := len(files) - 1; i >= 0; i-- {
+		// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
+		// gap ensures no issue due to overlapping.
+		if mh.Sub(files[i].ModTime).Minutes() >= 70 {
+			filename := files[i].Name()
+			id, err := sop.ParseUUID(filename[0 : len(filename)-len(logFileSuffix)])
+			if err != nil {
+				continue
+			}
+			tid = id
+			break
+		} else {
+			break
+		}
+	}
 
-	// iter := qry.Iter()
-	// for iter.Scan(&tid) {
-	// }
-	// if err := iter.Close(); err != nil {
-	// 	return sop.NilUUID, nil, err
-	// }
+	if tid.IsNil() {
+		// Unlock the hour.
+		tl.cache.Unlock(ctx, tl.hourLockKey)
+		return sop.NilUUID, nil, nil
+	}
+	r, err := tl.getLogsDetails(tid)
 
-	// if IsNil(tid) {
-	// 	// Unlock the hour.
-	// 	tl.cache.Unlock(ctx, tl.hourLockKey)
-	// 	return sop.NilUUID, nil, nil
-	// }
-
-	// r, err := tl.getLogsDetails(ctx, tid)
-
-	return sop.UUID(tid), r, err
+	return tid, r, err
 }
 
-func (tl *transactionLog) getOne(ctx context.Context) (string, sop.UUID, error) {
+func (tl *transactionLog) getOne() (string, sop.UUID, error) {
+
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
+	files, err := getFilesSortedByModifiedTime(tl.replicationTracker.GetActiveBaseFolder())
+	if err != nil {
+		return "", sop.NilUUID, err
+	}
 
-	// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
-	// gap ensures no issue due to overlapping.
-	cappedHour := mh.Add(-time.Duration(70 * time.Minute))
-	var tid sop.UUID
-	//cappedHourTID := gocql.UUIDFromTime(cappedHour)
+	for i := len(files) - 1; i >= 0; i-- {
+		// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
+		// gap ensures no issue due to overlapping.
+		if mh.Sub(files[i].ModTime).Minutes() >= 70 {
+			filename := files[i].Name()
+			tid, err := sop.ParseUUID(filename[0 : len(filename)-len(logFileSuffix)])
+			if err != nil {
+				continue
+			}
+			return files[i].ModTime.Format(DateHourLayout), tid, nil
+		} else {
+			break
+		}
+	}
 
-	// selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
-	// qry := connection.Session.Query(selectStatement, cappedHourTID).WithContext(ctx).Consistency(transactionLoggingConsistency)
-
-	// iter := qry.Iter()
-	// var tid gocql.UUID
-	// for iter.Scan(&tid) {
-	// }
-	// if err := iter.Close(); err != nil {
-	// 	return "", NilUUID, err
-	// }
-	return cappedHour.Format(DateHourLayout), tid, nil
+	return "", sop.NilUUID, nil
 }
 
-func (tl *transactionLog) getLogsDetails(ctx context.Context, tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
+func (tl *transactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
 
-	r := make([]sop.KeyValuePair[int, []byte], 0)
+	filename := tl.format(tid)
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	var r []sop.KeyValuePair[int, []byte]
+	if err := json.Unmarshal(data, &r); err != nil {
+		return nil, err
+	}
 
-	// selectStatement := fmt.Sprintf("SELECT c_f, c_f_p FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
-	// qry := connection.Session.Query(selectStatement, tid).WithContext(ctx).Consistency(transactionLoggingConsistency)
-
-	// iter := qry.Iter()
-	// r := make([]sop.KeyValuePair[int, []byte], 0, iter.NumRows())
-	// var c_f int
-	// var c_f_p []byte
-	// for iter.Scan(&c_f, &c_f_p) {
-	// 	r = append(r, sop.KeyValuePair[int, []byte]{
-	// 		Key:   c_f,
-	// 		Value: c_f_p,
-	// 	})
-	// }
-	// if err := iter.Close(); err != nil {
-	// 	return r, err
-	// }
 	return r, nil
+}
+
+func (tl *transactionLog) format(tid sop.UUID) string {
+	return tl.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s%s", tid.String(), logFileSuffix))
+}
+
+// Directory files' reader.
+
+// FileInfoWithModTime struct to hold FileInfo and modified time for sorting
+type FileInfoWithModTime struct {
+	os.DirEntry
+	ModTime time.Time
+}
+
+// ByModTime implements sort.Interface for []FileInfoWithModTime based on ModTime
+type ByModTime []FileInfoWithModTime
+
+func (fis ByModTime) Len() int {
+	return len(fis)
+}
+
+func (fis ByModTime) Swap(i, j int) {
+	fis[i], fis[j] = fis[j], fis[i]
+}
+
+func (fis ByModTime) Less(i, j int) bool {
+	return fis[i].ModTime.After(fis[j].ModTime)
+}
+
+// Reads a directory then returns the filenames sorted in descending order as driven by the files' modified time.
+func getFilesSortedByModifiedTime(directoryPath string) ([]FileInfoWithModTime, error) {
+	files, err := os.ReadDir(directoryPath)
+	if err != nil {
+		return nil, fmt.Errorf("Error reading directory:", err)
+	}
+
+	fileInfoWithTimes := make([]FileInfoWithModTime, 0, len(files))
+	for _, file := range files {
+		inf, _ := file.Info()
+		if strings.HasSuffix(file.Name(), ".log") {
+			fileInfoWithTimes = append(fileInfoWithTimes, FileInfoWithModTime{file, inf.ModTime()})
+		}
+	}
+
+	sort.Sort(ByModTime(fileInfoWithTimes))
+
+	return fileInfoWithTimes, nil
 }
