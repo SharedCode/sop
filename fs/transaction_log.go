@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	log "log/slog"
 	"os"
 	"sort"
 	"strings"
@@ -30,10 +31,7 @@ type transactionLog struct {
 	writer             *bufio.Writer
 }
 
-type logEntry struct {
-	CommitFunction int    `json:"CommitFunction"`
-	Payload        []byte `json:"Payload"`
-}
+var ageLimit float64 = 70
 
 // NewTransactionLog instantiates a new TransactionLog instance.
 func NewTransactionLog(cache sop.Cache, rt *replicationTracker) sop.TransactionLog {
@@ -58,9 +56,9 @@ func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction 
 		tl.encoder = json.NewEncoder(tl.writer)
 	}
 	// Append the log entry.
-	if err := tl.encoder.Encode(logEntry{
-		CommitFunction: commitFunction,
-		Payload:        payload,
+	if err := tl.encoder.Encode(sop.KeyValuePair[int, []byte]{
+		Key:   commitFunction,
+		Value: payload,
 	}); err != nil {
 		tl.writer.Flush()
 		tl.file.Close()
@@ -139,26 +137,9 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 	}
 
 	var tid sop.UUID
-
-	files, err := getFilesSortedByModifiedTime(tl.replicationTracker.GetActiveBaseFolder())
+	_, tid, err = tl.getOne()
 	if err != nil {
-		return sop.NilUUID, nil, err
-	}
-
-	for i := len(files) - 1; i >= 0; i-- {
-		// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
-		// gap ensures no issue due to overlapping.
-		if mh.Sub(files[i].ModTime).Minutes() >= 70 {
-			filename := files[i].Name()
-			id, err := sop.ParseUUID(filename[0 : len(filename)-len(logFileSuffix)])
-			if err != nil {
-				continue
-			}
-			tid = id
-			break
-		} else {
-			break
-		}
+		return tid, nil, err
 	}
 
 	if tid.IsNil() {
@@ -174,6 +155,8 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 func (tl *transactionLog) getOne() (string, sop.UUID, error) {
 
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
+	cappedHour := mh.Add(-time.Duration(time.Duration(ageLimit) * time.Minute))
+
 	files, err := getFilesSortedByModifiedTime(tl.replicationTracker.GetActiveBaseFolder())
 	if err != nil {
 		return "", sop.NilUUID, err
@@ -182,13 +165,15 @@ func (tl *transactionLog) getOne() (string, sop.UUID, error) {
 	for i := len(files) - 1; i >= 0; i-- {
 		// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
 		// gap ensures no issue due to overlapping.
-		if mh.Sub(files[i].ModTime).Minutes() >= 70 {
+		fts := files[i].ModTime.Format(DateHourLayout)
+		ft, _ := time.Parse(DateHourLayout, fts)
+		if cappedHour.Compare(ft) >= 0 {
 			filename := files[i].Name()
 			tid, err := sop.ParseUUID(filename[0 : len(filename)-len(logFileSuffix)])
 			if err != nil {
 				continue
 			}
-			return files[i].ModTime.Format(DateHourLayout), tid, nil
+			return fts, tid, nil
 		} else {
 			break
 		}
@@ -200,13 +185,30 @@ func (tl *transactionLog) getOne() (string, sop.UUID, error) {
 func (tl *transactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
 
 	filename := tl.format(tid)
-	data, err := os.ReadFile(filename)
+	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	var r []sop.KeyValuePair[int, []byte]
-	if err := json.Unmarshal(data, &r); err != nil {
-		return nil, err
+
+	defer file.Close()
+
+	r := make([]sop.KeyValuePair[int, []byte], 0)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		var data sop.KeyValuePair[int, []byte]
+
+		err := json.Unmarshal([]byte(line), &data)
+		if err != nil {
+			log.Error(fmt.Sprintf("error unmarshaling JSON: %v", err))
+			continue // Skip to the next line if there's an error
+		}
+		r = append(r, data)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return r, fmt.Errorf("error reading file: %v", err)
 	}
 
 	return r, nil
@@ -243,7 +245,7 @@ func (fis ByModTime) Less(i, j int) bool {
 func getFilesSortedByModifiedTime(directoryPath string) ([]FileInfoWithModTime, error) {
 	files, err := os.ReadDir(directoryPath)
 	if err != nil {
-		return nil, fmt.Errorf("Error reading directory:", err)
+		return nil, fmt.Errorf("error reading directory: %v", err)
 	}
 
 	fileInfoWithTimes := make([]FileInfoWithModTime, 0, len(files))
