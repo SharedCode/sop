@@ -8,7 +8,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/fs"
-	"github.com/SharedCode/sop/in_red_cfs"
+	"github.com/SharedCode/sop/in_red_fs"
 )
 
 func initErasureCoding() {
@@ -31,12 +31,13 @@ func initErasureCoding() {
 }
 
 func Test_Basic_EC(t *testing.T) {
-	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForWriting, -1, false, nil)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
+	trans, err := in_red_fs.NewTransactionWithReplication(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtreeWithEC[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstoreec",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
@@ -71,12 +72,13 @@ func Test_Basic_EC(t *testing.T) {
 }
 
 func Test_Basic_EC_Get(t *testing.T) {
-	trans, err := in_red_cfs.NewTransactionWithEC(sop.ForReading, -1, false, nil)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
+	trans, err := in_red_fs.NewTransactionWithReplication(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtreeWithEC[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstoreec",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,

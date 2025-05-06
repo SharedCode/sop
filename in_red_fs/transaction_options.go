@@ -1,6 +1,7 @@
 package in_red_fs
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/SharedCode/sop"
@@ -43,4 +44,57 @@ type TransationOptionsWithReplication struct {
 	UseCacheForFileRegionLocks bool
 	// Erasure Config contains config data useful for Erasure Coding based file IO (& replication).
 	ErasureConfig map[string]fs.ErasureCodingConfig
+}
+
+// Create a new TransactionOptions using defaults for cache related.
+func NewTransactionOptions(storeFolder string, mode sop.TransactionMode, maxTime time.Duration,
+	registryHashMod fs.HashModValueType) (TransationOptions, error) {
+
+	if storeFolder == "" {
+		return TransationOptions{}, fmt.Errorf("storeFolder can't be empty")
+	}
+
+	return TransationOptions{
+		StoresBaseFolder:     storeFolder,
+		Mode:                 mode,
+		MaxTime:              maxTime,
+		RegistryHashModValue: registryHashMod,
+	}, nil
+}
+
+// Create a new TransactionOptionsWithReplication using defaults for cache related.
+func NewTransactionOptionsWithReplication(storeFolders []string, mode sop.TransactionMode, maxTime time.Duration,
+	registryHashMod fs.HashModValueType,
+	erasureConfig map[string]fs.ErasureCodingConfig) (TransationOptionsWithReplication, error) {
+	if erasureConfig == nil {
+		erasureConfig = fs.GetGlobalErasureConfig()
+	}
+	if storeFolders == nil && len(erasureConfig) > 1 {
+		storeFolders = make([]string, 0, 2)
+		defaultEntry := erasureConfig[""]
+		if len(defaultEntry.BaseFolderPathsAcrossDrives) >= 2 {
+			storeFolders[0] = defaultEntry.BaseFolderPathsAcrossDrives[0]
+			storeFolders[1] = defaultEntry.BaseFolderPathsAcrossDrives[1]
+		} else {
+			for _, v := range erasureConfig {
+				if len(v.BaseFolderPathsAcrossDrives) >= 2 {
+					storeFolders[0] = v.BaseFolderPathsAcrossDrives[0]
+					storeFolders[1] = v.BaseFolderPathsAcrossDrives[1]
+					break
+				}
+			}
+		}
+	}
+
+	if len(storeFolders) == 0 {
+		return TransationOptionsWithReplication{}, fmt.Errorf("storeFolders is nil & can't get extracted from erasureConfig")
+	}
+
+	return TransationOptionsWithReplication{
+		StoresBaseFolders:    storeFolders,
+		Mode:                 mode,
+		MaxTime:              maxTime,
+		RegistryHashModValue: registryHashMod,
+		ErasureConfig:        erasureConfig,
+	}, nil
 }

@@ -9,17 +9,10 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
-	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/fs"
-	"github.com/SharedCode/sop/in_red_cfs"
+	"github.com/SharedCode/sop/in_red_fs"
 	"github.com/SharedCode/sop/redis"
 )
-
-// Cassandra config.
-var cassConfig = cas.Config{
-	ClusterHosts: []string{"localhost:9042"},
-	Keyspace:     "btree",
-}
 
 // Redis config.
 var redisConfig = redis.Options{
@@ -37,7 +30,7 @@ func init() {
 	}))
 	log.SetDefault(l) // configures log package to print with LevelInfo
 
-	in_red_cfs.Initialize(cassConfig, redisConfig)
+	in_red_fs.Initialize(redisConfig)
 
 	// Initialize Erasure Coding (EC) for the EC tests.
 	initErasureCoding()
@@ -46,7 +39,8 @@ func init() {
 var ctx = context.Background()
 
 func Test_GetStoreList(t *testing.T) {
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -57,13 +51,14 @@ func Test_GetStoreList(t *testing.T) {
 
 // Create an empty store on 1st run, add one item(max) on succeeding runs.
 func Test_CreateEmptyStore(t *testing.T) {
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
 
-	b3, err := in_red_cfs.OpenBtree[int, string](ctx, "emptyStore", trans, nil)
+	b3, err := in_red_fs.OpenBtree[int, string](ctx, "emptyStore", trans, nil)
 	if err == nil {
 		if b3.Count() == 0 {
 			if ok, err := b3.Add(ctx, 123, "foobar"); !ok || err != nil {
@@ -74,15 +69,14 @@ func Test_CreateEmptyStore(t *testing.T) {
 		trans.Commit(ctx)
 		return
 	}
-	trans, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	trans, _ = in_red_fs.NewTransaction(to)
 	trans.Begin()
 
-	b3, err = in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err = in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "emptyStore",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans, nil)
 	if err != nil {
 		t.Error(err)
@@ -95,17 +89,17 @@ func Test_CreateEmptyStore(t *testing.T) {
 }
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstore2",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans, nil)
 	if err != nil {
 		t.Error(err)
@@ -115,7 +109,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		t.Logf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
-	if _, err := in_red_cfs.OpenBtree[int, string](ctx, "barStore22", trans, nil); err == nil {
+	if _, err := in_red_fs.OpenBtree[int, string](ctx, "barStore22", trans, nil); err == nil {
 		t.Logf("OpenBtree('barStore', trans) failed, got nil want error.")
 	}
 }
@@ -125,17 +119,17 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans, err := in_red_cfs.NewTransaction(sop.ForReading, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstore1",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans, nil)
 
 	defer trans.Rollback(ctx)
@@ -160,30 +154,20 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 	}
 }
 
-// My File path formatter, given a base path & a GUID.
-// basePath parameter contains the blob store BlobStore Base FolderPath + the blob store (file) name.
-// id parameter is the GUID of the blob to be written to the disk.
-func MyToFilePath(basePath string, id sop.UUID) string {
-	if len(basePath) > 0 && basePath[len(basePath)-1] == os.PathSeparator {
-		return fmt.Sprintf("%s%s", basePath, fs.Apply4LevelHierarchy(id))
-	}
-	return fmt.Sprintf("%s%c%s", basePath, os.PathSeparator, fs.Apply4LevelHierarchy(id))
-}
-
 func Test_TransactionStory_SingleBTree(t *testing.T) {
 
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	// Demo NewTransactionExt specifying custom "to file path" lambda function.
-	trans, err := in_red_cfs.NewTransactionExt(MyToFilePath, sop.ForWriting, -1, false)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstore1",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans, nil)
 	if err != nil {
 		t.Error(err)
@@ -218,18 +202,18 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 }
 
 func Test_RegistryZeroDurationCache(t *testing.T) {
-	trans, err := in_red_cfs.NewTransactionExt(MyToFilePath, sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
 	so := sop.StoreCacheConfig{}
-	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "regnotcached",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              &so,
 	}, trans, nil)
 	if err != nil {
@@ -265,16 +249,16 @@ func Test_RegistryZeroDurationCache(t *testing.T) {
 }
 
 func Test_StoreCaching(t *testing.T) {
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecaching",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
-		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(30*time.Minute), false),
 	}, trans, nil)
 	if err != nil {
@@ -306,16 +290,16 @@ func Test_StoreCaching(t *testing.T) {
 }
 
 func Test_StoreCachingTTL(t *testing.T) {
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecachingttl",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
-		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(30*time.Minute), true),
 	}, trans, nil)
 	if err != nil {
