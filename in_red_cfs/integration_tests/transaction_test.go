@@ -209,7 +209,8 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	t1.Begin()
 	so := sop.NewStoreCacheConfig(time.Duration(5*time.Minute), false)
-	// so.NodeCacheDuration = 0
+	// NodeCacheDuration of -1 means don't cache node.
+	so.NodeCacheDuration = -1
 	so.RegistryCacheDuration = time.Duration(10 * time.Minute)
 	b3, _ := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
