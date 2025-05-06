@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/in_red_cfs"
@@ -207,6 +208,9 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 
 	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
 	t1.Begin()
+	so := sop.NewStoreCacheConfig(time.Duration(5*time.Minute), false)
+	// so.NodeCacheDuration = 0
+	so.RegistryCacheDuration = time.Duration(10 * time.Minute)
 	b3, _ := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
 		SlotLength:               nodeSlotLength,
@@ -215,6 +219,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 		LeafLoadBalancing:        false,
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
+		CacheConfig:              so,
 	}, t1, Compare)
 
 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue

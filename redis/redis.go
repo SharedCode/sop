@@ -47,6 +47,10 @@ func (c client) Set(ctx context.Context, key string, value string, expiration ti
 	if expiration < 0 {
 		expiration = connection.Options.GetDefaultDuration()
 	}
+	// Don't cache if zero expiration.
+	if expiration == 0 {
+		return nil
+	}
 	return connection.Client.Set(ctx, key, value, expiration).Err()
 }
 
@@ -79,6 +83,10 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 	// SET object
 	if expiration < 0 {
 		expiration = connection.Options.GetDefaultDuration()
+	}
+	// Don't cache if zero expiration.
+	if expiration == 0 {
+		return nil
 	}
 	return connection.Client.Set(ctx, key, ba, expiration).Err()
 }

@@ -357,6 +357,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tupl
 	for i := range nodes {
 		handles[i].RegistryTable = nodes[i].First.RegistryTable
 		handles[i].IDs = make([]sop.Handle, len(nodes[i].Second))
+		handles[i].CacheDuration = nodes[i].First.CacheConfig.RegistryCacheDuration
 		blobs[i].BlobTable = nodes[i].First.BlobTable
 		blobs[i].Blobs = make([]sop.KeyValuePair[sop.UUID, []byte], len(handles[i].IDs))
 		for ii := range nodes[i].Second {

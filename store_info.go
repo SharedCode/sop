@@ -59,12 +59,9 @@ func (scc *StoreCacheConfig) enforceMinimumRule() {
 	if scc.NodeCacheDuration == 0 && scc.IsNodeCacheTTL {
 		scc.IsNodeCacheTTL = false
 	}
-	if scc.NodeCacheDuration == 0 {
-		scc.NodeCacheDuration = time.Duration(2 * time.Minute)
-	}
-
+	// scc.NodeCacheDuration can be 0, meaning no caching.
 	if scc.RegistryCacheDuration > 0 && scc.RegistryCacheDuration < minCacheDuration {
-		scc.RegistryCacheDuration = defaultCacheDuration
+		scc.RegistryCacheDuration = time.Duration(10 * time.Minute)
 	}
 	if scc.RegistryCacheDuration == 0 && scc.IsRegistryCacheTTL {
 		scc.IsRegistryCacheTTL = false
@@ -77,7 +74,7 @@ func (scc *StoreCacheConfig) enforceMinimumRule() {
 	}
 
 	if scc.StoreInfoCacheDuration > 0 && scc.StoreInfoCacheDuration < minCacheDuration {
-		scc.StoreInfoCacheDuration = defaultCacheDuration
+		scc.StoreInfoCacheDuration = minCacheDuration
 	}
 	if scc.StoreInfoCacheDuration == 0 && scc.IsStoreInfoCacheTTL {
 		scc.IsStoreInfoCacheTTL = false
@@ -86,9 +83,7 @@ func (scc *StoreCacheConfig) enforceMinimumRule() {
 		scc.StoreInfoCacheDuration = minCacheDuration
 	}
 
-	if scc.ValueDataCacheDuration > 0 && scc.ValueDataCacheDuration < minCacheDuration {
-		scc.ValueDataCacheDuration = defaultCacheDuration
-	}
+	// Value Data can be set to minimum.
 	if scc.ValueDataCacheDuration == 0 && scc.IsValueDataCacheTTL {
 		scc.IsValueDataCacheTTL = false
 	}
