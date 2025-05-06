@@ -28,7 +28,7 @@ func TestTransactionLogAdd(t *testing.T) {
 
 func TestTransactionLogGetOne(t *testing.T) {
 	tl := NewTransactionLog(redis.NewClient(), NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false))
-	ageLimit = 0
+	// ageLimit = 0
 	uid, hour, tlogdata, err := tl.GetOne(ctx)
 	if uid.IsNil() {
 		return
@@ -87,7 +87,7 @@ func TestTransactionLogAdd2(t *testing.T) {
 
 func TestTransactionLogGetOne2(t *testing.T) {
 	tl := NewTransactionLog(redis.NewClient(), NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false))
-	//ageLimit = 0
+	// ageLimit = 0
 	uid, _, tlogdata, err := tl.GetOne(ctx)
 	if uid.IsNil() {
 		return

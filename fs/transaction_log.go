@@ -25,7 +25,6 @@ type transactionLog struct {
 	cache              sop.Cache
 	replicationTracker *replicationTracker
 	tid                sop.UUID
-	filename           string
 	file               *os.File
 	encoder            *json.Encoder
 	writer             *bufio.Writer
@@ -46,8 +45,8 @@ func NewTransactionLog(cache sop.Cache, rt *replicationTracker) sop.TransactionL
 func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
 	if tl.file == nil {
 		tl.tid = tid
-		tl.filename = tl.format(tid)
-		f, err := os.Create(tl.filename)
+		filename := tl.format(tid)
+		f, err := os.Create(filename)
 		if err != nil {
 			return err
 		}
