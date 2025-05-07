@@ -271,6 +271,7 @@ func Test_VolumeDeletes(t *testing.T) {
 	end := 100000
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	//to.UseCacheForFileRegionLocks = true
 	t1, _ := in_red_fs.NewTransaction(to)
 	t1.Begin()
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{

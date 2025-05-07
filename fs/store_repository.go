@@ -36,6 +36,10 @@ func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cac
 	if rt.replicate && len(rt.storesBaseFolders) != 2 {
 		return nil, fmt.Errorf("'storesBaseFolders' needs to be exactly two elements if 'replicate' parameter is true")
 	}
+	if manageStore == nil {
+		fio := NewDefaultFileIO(DefaultToFilePath)
+		manageStore = NewManageStoreFolder(fio)
+	}
 	return &StoreRepository{
 		cache:              cache,
 		manageStore:        manageStore,

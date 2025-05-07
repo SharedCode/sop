@@ -65,20 +65,12 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 			}
 			// Update the Handles read w/ the items' values.
 			for i := 0; i < len(frds); i++ {
-
-				// Check if there is no record in the target file region that will be updated.
-				if frds[i].handle.IsEmpty() {
-					// Fail if there is no record on target.
-					lockedItems = append(lockedItems, frds...)
-					unlockItemFileRegions(lockedItems...)
-					return fmt.Errorf("registryMap.set failed, an item at offset=%v was found empty", frds[i].offset)
-				}
 				// Check if the record in the target file region is different.
-				if frds[i].handle.LogicalID != item.Second[i].LogicalID {
+				if !frds[i].handle.IsEmpty() && frds[i].handle.LogicalID != item.Second[i].LogicalID {
 					// Fail if the record on target is different.
 					lockedItems = append(lockedItems, frds...)
 					unlockItemFileRegions(lockedItems...)
-					return fmt.Errorf("registryMap.set failed, an item(target lid=%v) at offset=%v is different (source lid=%v)",
+					return fmt.Errorf("registryMap.set allOrNothing failed, an item(target lid=%v) at offset=%v is different (source lid=%v)",
 						frds[i].handle.LogicalID, frds[i].offset, item.Second[i].LogicalID)
 				}
 
@@ -99,13 +91,8 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 			if err != nil {
 				return err
 			}
-			// Fail if there is no record on target.
-			if frd[0].handle.IsEmpty() {
-				rm.hashmap.unlockFileRegion(ctx, frd...)
-				return fmt.Errorf("registryMap.set failed, an item at offset=%v was found empty", frd[0].offset)
-			}
 			// Check if the record in the target file region is different.
-			if frd[0].handle.LogicalID != h.LogicalID {
+			if !frd[0].handle.IsEmpty() && frd[0].handle.LogicalID != h.LogicalID {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return fmt.Errorf("registryMap.set failed, an item(target lid=%v) at offset=%v is different (source lid=%v)",
 					frd[0].handle.LogicalID, frd[0].offset, h.LogicalID)

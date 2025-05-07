@@ -51,8 +51,8 @@ const (
 )
 
 const (
-	// 500, should generate 2MB file segment. Formula: 500 X 4096 = 2MB
-	MinimumModValue = 500
+	// 250, should generate 1MB file segment. Formula: 250 X 4096 = 1MB
+	MinimumModValue = 250
 	// 750k, should generate 3GB file segment.  Formula: 750k X 4096 = 3GB
 	MaximumModValue = 750000
 )
@@ -251,6 +251,10 @@ func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([
 	completedItems := make([]sop.Handle, 0, len(ids))
 	for _, id := range ids {
 		frd, err := hm.findAndLock(ctx, false, filename, id)
+		if frd.handle.IsEmpty() {
+			fmt.Println("empty slot")
+			continue
+		}
 		if err != nil {
 			if strings.Contains(err.Error(), idNotFoundErr) {
 				continue

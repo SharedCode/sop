@@ -9,6 +9,7 @@ import (
 	"github.com/SharedCode/sop/common"
 	"github.com/SharedCode/sop/fs"
 	"github.com/SharedCode/sop/redis"
+	sd "github.com/SharedCode/sop/streaming_data"
 )
 
 // Removes B-Tree with a given name from the backend storage. This involves dropping tables
@@ -48,4 +49,51 @@ func NewBtreeWithReplication[TK btree.Comparable, TV any](ctx context.Context, s
 	si.DisableRegistryStoreFormatting = true
 	si.DisableBlobStoreFormatting = true
 	return common.NewBtree[TK, TV](ctx, si, t, comparer)
+}
+
+
+// Streaming Data Store related.
+
+// NewStreamingDataStore is synonymous to NewStreamingDataStore but is geared for storing blobs in blob table in Cassandra.
+func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+	return NewStreamingDataStoreExt[TK](ctx, name, trans, "", comparer)
+}
+
+// NewStreamingDataStoreExt instantiates a new Data Store for use in "streaming data".
+// That is, the "value" is saved in separate segment(partition in Cassandra) &
+// actively persisted to the backend, e.g. - call to Add method will save right away
+// to the separate segment and on commit, it will be a quick action as data is already saved to the data segments.
+//
+// This behaviour makes this store ideal for data management of huge blobs, like movies or huge data graphs.
+// Supports parameter for blobStoreBaseFolderPath which is useful in File System based blob storage.
+func NewStreamingDataStoreExt[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+	btree, err := NewBtree[sd.StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, blobStoreBaseFolderPath), trans, comparer)
+	if err != nil {
+		return nil, err
+	}
+	return &sd.StreamingDataStore[TK]{
+		Btree: btree,
+	}, nil
+}
+
+// Synonymous to NewStreamingDataStore but expects StoreOptions parameter.
+func NewStreamingDataStoreOptions[TK btree.Comparable](ctx context.Context, options sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+	btree, err := NewBtree[sd.StreamingDataKey[TK], []byte](ctx, options, trans, comparer)
+	if err != nil {
+		return nil, err
+	}
+	return &sd.StreamingDataStore[TK]{
+		Btree: btree,
+	}, nil
+}
+
+// OpenStreamingDataStore opens an existing data store for use in "streaming data".
+func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+	btree, err := OpenBtree[sd.StreamingDataKey[TK], []byte](ctx, name, trans, comparer)
+	if err != nil {
+		return nil, err
+	}
+	return &sd.StreamingDataStore[TK]{
+		Btree: btree,
+	}, nil
 }
