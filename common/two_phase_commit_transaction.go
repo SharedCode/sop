@@ -76,6 +76,14 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 	}, nil
 }
 
+// Close will do cleanup.
+func (t *Transaction) Close() {
+	// Do registry cleanup, e.g. - close all opened files.
+	if closeable, ok := t.registry.(io.Closer); ok {
+		closeable.Close()
+	}
+}
+
 func (t *Transaction) Begin() error {
 	if t.HasBegun() {
 		return fmt.Errorf("transaction is ongoing, 'can't begin again")
@@ -156,13 +164,6 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	}
 	t.phaseDone = 2
 
-	// Do registry cleanup, e.g. - close all opened files.
-	defer func() {
-		if closeable, ok := t.registry.(io.Closer); ok {
-			closeable.Close()
-		}
-	}()
-
 	if t.mode != sop.ForWriting {
 		return nil
 	}
@@ -213,15 +214,7 @@ func (t *Transaction) Rollback(ctx context.Context) error {
 	// Reset transaction status and mark done to end it without persisting any change.
 	t.phaseDone = 2
 	if err := t.rollback(ctx, true); err != nil {
-		// Do registry cleanup, e.g. - close all opened files.
-		if closeable, ok := t.registry.(io.Closer); ok {
-			closeable.Close()
-		}
 		return fmt.Errorf("rollback failed, details: %v", err)
-	}
-	// Do registry cleanup, e.g. - close all opened files.
-	if closeable, ok := t.registry.(io.Closer); ok {
-		closeable.Close()
 	}
 	return nil
 }

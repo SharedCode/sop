@@ -41,7 +41,7 @@ const (
 	fullPermission  = 0644
 	handlesPerBlock = 66
 	// Keep the attempt to lock file region short since if it is locked, we want to fail right away & cause transaction rollback.
-	lockFileRegionAttemptTimeout = time.Duration(2 * time.Second)
+	lockFileRegionAttemptTimeout = time.Duration(4 * time.Second)
 	preallocateFileLockKey       = "infs_reg"
 	// Growing the file needs more time to complete.
 	lockPreallocateFileTimeout = time.Duration(25 * time.Minute)
@@ -251,15 +251,14 @@ func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([
 	completedItems := make([]sop.Handle, 0, len(ids))
 	for _, id := range ids {
 		frd, err := hm.findAndLock(ctx, false, filename, id)
-		if frd.handle.IsEmpty() {
-			fmt.Println("empty slot")
-			continue
-		}
 		if err != nil {
 			if strings.Contains(err.Error(), idNotFoundErr) {
 				continue
 			}
 			return nil, err
+		}
+		if frd.handle.IsEmpty() {
+			continue
 		}
 		completedItems = append(completedItems, frd.handle)
 	}

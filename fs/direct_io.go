@@ -80,17 +80,13 @@ func (dio *directIO) readAt(block []byte, offset int64) (int, error) {
 	return dio.file.ReadAt(block, offset)
 }
 
-func (dio *directIO) lockFileRegion(ctx context.Context, readWrite bool, offset int64, length int64, timeout time.Duration) error {
+func (dio *directIO) lockFileRegion(ctx context.Context, offset int64, length int64, timeout time.Duration) error {
 	if dio.file == nil {
 		return fmt.Errorf("can't lock file region, there is no opened file")
 	}
 
-	var t int16 = syscall.F_WRLCK
-	if !readWrite {
-		t = syscall.F_RDLCK
-	}
 	flock := syscall.Flock_t{
-		Type:  t,
+		Type:  syscall.F_WRLCK,
 		Start: offset,
 		Len:   length,
 		Pid:   int32(syscall.Getpid()),
@@ -104,9 +100,11 @@ func (dio *directIO) lockFileRegion(ctx context.Context, readWrite bool, offset 
 	defer cancel()
 
 	done := make(chan error, 1)
+
 	go func() {
 		err := syscall.FcntlFlock(dio.file.Fd(), syscall.F_SETLKW, &flock)
 		done <- err
+		close(done)
 	}()
 
 	select {
@@ -159,6 +157,7 @@ func (dio *directIO) unlockFileRegion(offset int64, length int64) error {
 }
 
 func (dio *directIO) close() error {
+
 	if dio.file == nil {
 		return nil
 	}

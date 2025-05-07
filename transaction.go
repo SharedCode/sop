@@ -60,6 +60,9 @@ type TwoPhaseCommitTransaction interface {
 
 	// Returns all Btree stores available in the backend.
 	GetStores(ctx context.Context) ([]string, error)
+
+	// Implement close to handle resource cleanup, if there is a need.
+	Close()
 }
 
 // Enduser facing Transaction (wrapper) implementation.
@@ -107,6 +110,10 @@ func (t *singlePhaseTransaction) Begin() error {
 // this will return the sop phase 1 commit error or
 // your other transactions phase 1 commits' last error.
 func (t *singlePhaseTransaction) Commit(ctx context.Context) error {
+
+	// Ensure resources are cleaned up or released.
+	defer t.sopPhaseCommitTransaction.Close()
+
 	// Phase 1 commit.
 	if err := t.sopPhaseCommitTransaction.Phase1Commit(ctx); err != nil {
 		t.Rollback(ctx)

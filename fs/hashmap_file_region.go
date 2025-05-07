@@ -18,7 +18,7 @@ func (hm *hashmap) lockFoundFileRegion(ctx context.Context, fileRegionDetails ..
 			}
 			continue
 		}
-		if err := frd.dio.lockFileRegion(ctx, true, frd.offset, sop.HandleSizeInBytes, lockFileRegionAttemptTimeout); err != nil {
+		if err := frd.dio.lockFileRegion(ctx, frd.offset, sop.HandleSizeInBytes, lockFileRegionAttemptTimeout); err != nil {
 			return err
 		}
 	}
