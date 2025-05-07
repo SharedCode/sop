@@ -26,9 +26,9 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	sds, _ = OpenBtree[string, string](ctx, "xyz", trans, nil)
 	sds.Add(ctx, "fooVideo2", "video content")
 
-	tidLogs := trans.GetPhasedTransaction().(*transaction).
+	tidLogs := trans.GetPhasedTransaction().(*Transaction).
 		logger.logger.(*mocks.MockTransactionLog).GetTIDLogs(
-		trans.GetPhasedTransaction().(*transaction).logger.transactionID)
+		trans.GetPhasedTransaction().(*Transaction).logger.transactionID)
 
 	if tidLogs == nil {
 		t.Error("failed pre Rollback, got nil, want valid logs")
@@ -36,9 +36,9 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 
 	trans.Rollback(ctx)
 
-	gotTidLogs := trans.GetPhasedTransaction().(*transaction).
+	gotTidLogs := trans.GetPhasedTransaction().(*Transaction).
 		logger.logger.(*mocks.MockTransactionLog).GetTIDLogs(
-		trans.GetPhasedTransaction().(*transaction).logger.transactionID)
+		trans.GetPhasedTransaction().(*Transaction).logger.transactionID)
 
 	if gotTidLogs != nil {
 		t.Errorf("failed Rollback, got %v, want nil", gotTidLogs)
@@ -71,7 +71,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	b3.Update(ctx, pk, p)
 
 	pt := trans.GetPhasedTransaction()
-	twoPhaseTrans := pt.(*transaction)
+	twoPhaseTrans := pt.(*Transaction)
 
 	// GetOne should not get anything as uncommitted transaction is still ongoing or not expired.
 	tid, _, _, _ := twoPhaseTrans.logger.logger.GetOne(ctx)

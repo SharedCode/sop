@@ -37,7 +37,7 @@ func Test_Basic_EC(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstoreec",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
@@ -78,7 +78,7 @@ func Test_Basic_EC_Get(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
-	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstoreec",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,

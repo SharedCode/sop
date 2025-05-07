@@ -8,14 +8,14 @@ type fileIO struct {
 	filenames          []string
 	manageStore        sop.ManageStore
 	replicationTracker *replicationTracker
-	fio FileIO
+	fio                FileIO
 }
 
 func newFileIOWithReplication(replicationTracker *replicationTracker, manageStore sop.ManageStore) *fileIO {
 	return &fileIO{
 		manageStore:        manageStore,
 		replicationTracker: replicationTracker,
-		fio: NewDefaultFileIO(nil),
+		fio:                NewDefaultFileIO(nil),
 	}
 }
 

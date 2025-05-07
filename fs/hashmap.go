@@ -17,7 +17,7 @@ import (
 */
 
 type hashmap struct {
-	hashModValue       HashModValueType
+	hashModValue       int
 	replicationTracker *replicationTracker
 	readWrite          bool
 	// File handles of all known (traversed & opened) data segment file of the hash map.
@@ -47,26 +47,18 @@ const (
 	lockPreallocateFileTimeout = time.Duration(25 * time.Minute)
 	lockFileRegionKeyPrefix    = "infs"
 	lockFileRegionDuration     = time.Duration(15 * time.Minute)
-	idNotFoundErr = "unable to find the item with id"
+	idNotFoundErr              = "unable to find the item with id"
 )
 
-type HashModValueType int
-
 const (
-	MinimumModValue     = 25000  // 25k, should generate 100MB file segment
-	XXSuperTinyModValue = 50000  // 50k, should generate 200MB file segment
-	XSuperTinyModValue  = 75000  // 75k, should generate 300MB file segment
-	SuperTinyModValue   = 100000 // 100k, should generate 400MB file segment
-	TinyModValue        = 125000 // 125k, should generate 500MB file segment
-	SmallModValue       = 200000 // 200k, should generate 800MB file segment
-	MediumModValue      = 250000 // 250k, should generate 1GB file segment
-	LargeModValue       = 350000 // 350k, should generate 1.4GB file segment
-	XLargeModValue      = 500000 // 500k, 2GB file segment
-	XXLModValue         = 750000 // 750k, 3GB file segment
+	// 500, should generate 2MB file segment. Formula: 500 X 4096 = 2MB
+	MinimumModValue = 500
+	// 750k, should generate 3GB file segment.  Formula: 750k X 4096 = 3GB
+	MaximumModValue = 750000
 )
 
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
-func newHashmap(readWrite bool, hashModValue HashModValueType, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *hashmap {
+func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *hashmap {
 	return &hashmap{
 		hashModValue:               hashModValue,
 		replicationTracker:         replicationTracker,

@@ -35,7 +35,7 @@ func newMockTwoPhaseCommitTransaction(t *testing.T, mode sop.TransactionMode, ma
 		m := 15
 		maxTime = time.Duration(m * int(time.Minute))
 	}
-	return &transaction{
+	return &Transaction{
 		mode:            mode,
 		maxTime:         maxTime,
 		storeRepository: mockStoreRepository,

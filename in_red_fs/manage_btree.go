@@ -15,9 +15,9 @@ import (
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
 // Use with care and only when you are sure to delete the tables.
-func RemoveBtree(ctx context.Context, storeFolder, name string) error {
+func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) error {
 	cache := redis.NewClient()
-	replicationTracker := fs.NewReplicationTracker([]string{storeFolder}, false)
+	replicationTracker := fs.NewReplicationTracker([]string{storesBaseFolder}, false)
 	storeRepository, err := fs.NewStoreRepository(replicationTracker, nil, cache)
 	if err != nil {
 		return err
@@ -35,7 +35,17 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
-	si.DisableBlobStoreFormatting = true
 	si.DisableRegistryStoreFormatting = true
+	trans, _ := t.GetPhasedTransaction().(*common.Transaction)
+	sr := trans.GetStoreRepository().(*fs.StoreRepository)
+	si.BlobStoreBaseFolderPath = sr.GetStoresBaseFolder()
+	return common.NewBtree[TK, TV](ctx, si, t, comparer)
+}
+
+// NewBtreeWithReplication is geared for enforcing the Blobs base folder path to generate good folder path that works 
+// with Erasure Coding I/O, a part of SOP's replication feature (for blobs replication).
+func NewBtreeWithReplication[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	si.DisableRegistryStoreFormatting = true
+	si.DisableBlobStoreFormatting = true
 	return common.NewBtree[TK, TV](ctx, si, t, comparer)
 }

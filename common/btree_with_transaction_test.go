@@ -18,7 +18,7 @@ func Test_TransactionInducedErrorOnNew(t *testing.T) {
 	}
 	t2.Begin()
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	// Simulate having an existing fooStore store in the backend.
 	trans.storeRepository.Add(ctx, *sop.NewStoreInfo("fooStore", 5, false, false, true, ""))
@@ -55,7 +55,7 @@ func Test_TransactionWithInducedErrorOnAdd(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -71,7 +71,7 @@ func Test_TransactionWithInducedErrorOnAddIfNotExist(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -87,7 +87,7 @@ func Test_TransactionWithInducedErrorOnUpdate(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -103,7 +103,7 @@ func Test_TransactionWithInducedErrorOnUpdateCurrentItem(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -119,7 +119,7 @@ func Test_TransactionWithInducedErrorOnRemove(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -135,7 +135,7 @@ func Test_TransactionWithInducedErrorOnRemoveCurrentItem(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -151,7 +151,7 @@ func Test_TransactionWithInducedErrorOnFindOne(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -167,7 +167,7 @@ func Test_TransactionWithInducedErrorOnFindOneWithID(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -183,7 +183,7 @@ func Test_TransactionWithInducedErrorOnGetCurrentValue(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -199,7 +199,7 @@ func Test_TransactionWithInducedErrorOnGetCurrentItem(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -215,7 +215,7 @@ func Test_TransactionWithInducedErrorOnFirst(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -231,7 +231,7 @@ func Test_TransactionWithInducedErrorOnLast(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -247,7 +247,7 @@ func Test_TransactionWithInducedErrorOnNext(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -263,7 +263,7 @@ func Test_TransactionWithInducedErrorOnPrevious(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
@@ -279,7 +279,7 @@ func Test_TransactionWithInducedErrorOnUpsert(t *testing.T) {
 	t2.Begin()
 
 	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*transaction)
+	trans := t3.(*Transaction)
 
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)

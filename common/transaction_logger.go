@@ -75,7 +75,7 @@ var hourBeingProcessed string
 // Consume all Transaction IDs(TIDs) and clean their obsolete, leftover resources that fall within a given hour.
 // Using a package level variable(hourBeingProcessed) to keep the "hour" being worked on and the processor function below
 // to consume all TIDs of the hour before issuing another GetOne call to fetch the next hour.
-func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *transaction) error {
+func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *Transaction) error {
 	var tid sop.UUID
 	var hr string
 	var committedFunctionLogs []sop.KeyValuePair[int, []byte]
