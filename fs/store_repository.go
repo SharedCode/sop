@@ -239,6 +239,11 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 
 func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
 	fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
+
+	// Just return nil to denote no store yet on store folder.
+	if !fio.exists(storeListFilename) {
+		return nil, nil
+	}
 	ba, err := fio.read(storeListFilename)
 	if err != nil {
 		return nil, err
@@ -276,7 +281,12 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 	sio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
 	for _, s := range storesNotInCache {
 
-		ba, err := sio.read(fmt.Sprintf("%c%s%c%s", os.PathSeparator, s, os.PathSeparator, storeInfoFilename))
+		fn := fmt.Sprintf("%s%c%s", s, os.PathSeparator, storeInfoFilename)
+		if !sio.exists(fn) {
+			continue
+		}
+
+		ba, err := sio.read(fn)
 		if err != nil {
 			return nil, err
 		}

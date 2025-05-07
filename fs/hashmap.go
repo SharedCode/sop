@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/SharedCode/sop"
@@ -46,6 +47,7 @@ const (
 	lockPreallocateFileTimeout = time.Duration(25 * time.Minute)
 	lockFileRegionKeyPrefix    = "infs"
 	lockFileRegionDuration     = time.Duration(15 * time.Minute)
+	idNotFoundErr = "unable to find the item with id"
 )
 
 type HashModValueType int
@@ -106,7 +108,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 			}
 			if !fileExists || fs < hm.getSegmentFileSize() {
 				if !forWriting {
-					return result, fmt.Errorf("unable to find the item with id '%v'", id)
+					return result, fmt.Errorf("%s '%v'", idNotFoundErr, id)
 				}
 				frd, err := hm.setupNewFile(ctx, forWriting, fn, id, dio)
 				if dio.file != nil {
@@ -258,6 +260,9 @@ func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([
 	for _, id := range ids {
 		frd, err := hm.findAndLock(ctx, false, filename, id)
 		if err != nil {
+			if strings.Contains(err.Error(), idNotFoundErr) {
+				continue
+			}
 			return nil, err
 		}
 		completedItems = append(completedItems, frd.handle)

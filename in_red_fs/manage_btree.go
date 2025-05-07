@@ -6,16 +6,22 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	cas "github.com/SharedCode/sop/cassandra"
 	"github.com/SharedCode/sop/common"
+	"github.com/SharedCode/sop/fs"
+	"github.com/SharedCode/sop/redis"
 )
 
 // Removes B-Tree with a given name from the backend storage. This involves dropping tables
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
 // Use with care and only when you are sure to delete the tables.
-func RemoveBtree(ctx context.Context, name string) error {
-	storeRepository := cas.NewStoreRepository(nil)
+func RemoveBtree(ctx context.Context, storeFolder, name string) error {
+	cache := redis.NewClient()
+	replicationTracker := fs.NewReplicationTracker([]string{storeFolder}, false)
+	storeRepository, err := fs.NewStoreRepository(replicationTracker, nil, cache)
+	if err != nil {
+		return err
+	}
 	return storeRepository.Remove(ctx, name)
 }
 
@@ -29,5 +35,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
 func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	si.DisableBlobStoreFormatting = true
+	si.DisableRegistryStoreFormatting = true
 	return common.NewBtree[TK, TV](ctx, si, t, comparer)
 }

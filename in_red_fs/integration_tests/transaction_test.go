@@ -432,23 +432,3 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 		t.Errorf("No error expected, got %v", err)
 	}
 }
-
-func Test_IllegalBtreeStoreName(t *testing.T) {
-	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
-	t1.Begin()
-
-	if _, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "2phase",
-		SlotLength:               8,
-		IsUnique:                 false,
-		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        true,
-		Description:              "",
-	}, t1, nil); err == nil {
-		t.Error("NewBtree('2phase') failed, got nil, want err.")
-	}
-	if t1.HasBegun() {
-		t.Error("Transaction is not rolledback.")
-	}
-}

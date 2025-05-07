@@ -60,10 +60,16 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 		return nil, err
 	}
 	ns := sop.NewStoreInfoExt(si.Name, si.SlotLength, si.IsUnique, si.IsValueDataInNodeSegment, si.IsValueDataActivelyPersisted, si.IsValueDataGloballyCached, si.LeafLoadBalancing, si.Description, si.BlobStoreBaseFolderPath, si.CacheConfig)
+
 	// Allow caller to use the same name for blob store and the store name.
 	if si.DisableBlobStoreFormatting {
 		ns.BlobTable = ns.Name
 	}
+	// Allow caller to use the same name for registry store and the store name.
+	if si.DisableRegistryStoreFormatting {
+		ns.RegistryTable = ns.Name
+	}
+
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeID.IsNil() {

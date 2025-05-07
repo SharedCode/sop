@@ -38,6 +38,8 @@ type StoreOptions struct {
 	// Set to true to allow use of the store name as the blob store name. Useful for integrating with systems like AWS S3 where
 	// strict bucket naming convention is applied.
 	DisableBlobStoreFormatting bool
+	// Set to true to allow use of the store name as the registry store name.
+	DisableRegistryStoreFormatting bool
 	// Redis cache specification for this store's objects(registry, nodes, item value part).
 	// Defaults to the global specification and can be overriden for each store.
 	CacheConfig *StoreCacheConfig
