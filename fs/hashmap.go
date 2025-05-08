@@ -44,9 +44,9 @@ const (
 	lockFileRegionAttemptTimeout = time.Duration(4 * time.Second)
 	preallocateFileLockKey       = "infs_reg"
 	// Growing the file needs more time to complete.
-	lockPreallocateFileTimeout = time.Duration(25 * time.Minute)
+	lockPreallocateFileTimeout = time.Duration(20 * time.Minute)
 	lockFileRegionKeyPrefix    = "infs"
-	lockFileRegionDuration     = time.Duration(15 * time.Minute)
+	lockFileRegionDuration     = time.Duration(5 * time.Minute)
 	idNotFoundErr              = "unable to find the item with id"
 )
 
@@ -65,7 +65,10 @@ func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicatio
 		readWrite:                  readWrite,
 		fileHandles:                make(map[string]*directIO, 5),
 		cache:                      cache,
-		useCacheForFileRegionLocks: useCacheForFileRegionLocks,
+
+		// Support cache(e.g. - Redis) based file region locks so it can work across different OS like Windows, OSX & Linux.
+		// But yeah, 'will crowd the cache, use with care. :)
+		useCacheForFileRegionLocks: true,	//useCacheForFileRegionLocks,
 	}
 }
 
@@ -326,7 +329,7 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 	}
 
 	lk := hm.cache.CreateLockKeys(preallocateFileLockKey)
-	if err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk...); err != nil {
+	if ok, err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk...); !ok || err != nil {
 		return result, err
 	}
 

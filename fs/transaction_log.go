@@ -87,7 +87,7 @@ func (tl *transactionLog) NewUUID() sop.UUID {
 func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
 	duration := time.Duration(7 * time.Hour)
 
-	if err := tl.cache.Lock(ctx, duration, tl.hourLockKey); err != nil {
+	if ok, err := tl.cache.Lock(ctx, duration, tl.hourLockKey); !ok || err != nil {
 		return sop.NilUUID, "", nil, nil
 	}
 
@@ -108,7 +108,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		return sop.NilUUID, "", nil, err
 	}
 	// Check one more time to remove potential (.1%) race condition issue.
-	if err := tl.cache.IsLocked(ctx, tl.hourLockKey); err != nil {
+	if ok, err := tl.cache.IsLocked(ctx, tl.hourLockKey); !ok || err != nil {
 		tl.cache.Unlock(ctx, tl.hourLockKey)
 		// Just return nils as we can't attain a lock.
 		return sop.NilUUID, "", nil, nil

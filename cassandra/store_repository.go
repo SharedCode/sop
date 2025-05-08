@@ -113,7 +113,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	// Lock all keys.
 	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
 		// 15 minutes to lock, merge/update details then unlock.
-		if err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); err != nil {
+		if ok, err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); !ok || err != nil {
 			log.Warn(err.Error() + ", will retry")
 			return retry.RetryableError(err)
 		}

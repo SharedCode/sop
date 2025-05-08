@@ -56,7 +56,7 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	// 1. Lock Store List.
 	lk := sr.cache.CreateLockKeys(lockStoreListKey)
 	defer sr.cache.Unlock(ctx, lk...)
-	if err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); err != nil {
+	if ok, err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); !ok || err != nil {
 		return err
 	}
 
@@ -148,7 +148,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	// Lock all keys.
 	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
 		// 15 minutes to lock, merge/update details then unlock.
-		if err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); err != nil {
+		if ok, err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); !ok || err != nil {
 			log.Warn(err.Error() + ", will retry")
 			return retry.RetryableError(err)
 		}
@@ -316,7 +316,7 @@ func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) error {
 	lk := sr.cache.CreateLockKeys(lockStoreListKey)
 	defer sr.cache.Unlock(ctx, lk...)
-	if err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); err != nil {
+	if ok, err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); !ok || err != nil {
 		return err
 	}
 

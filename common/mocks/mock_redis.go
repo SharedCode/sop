@@ -85,12 +85,12 @@ func (m *mockRedis) CreateLockKeys(keys ...string) []*sop.LockKey {
 	return nil
 }
 
-func (m *mockRedis) Lock(ctx context.Context, duration time.Duration, lockKeys ...*sop.LockKey) error {
-	return nil
+func (m *mockRedis) Lock(ctx context.Context, duration time.Duration, lockKeys ...*sop.LockKey) (bool, error) {
+	return false, nil
 }
 
-func (m *mockRedis) IsLocked(ctx context.Context, lockKeys ...*sop.LockKey) error {
-	return nil
+func (m *mockRedis) IsLocked(ctx context.Context, lockKeys ...*sop.LockKey) (bool, error) {
+	return false, nil
 }
 
 func (m *mockRedis) IsLockedByOthers(ctx context.Context, lockKeys ...string) (bool, error) {

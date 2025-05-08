@@ -88,7 +88,7 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 				lk := r.cache.CreateLockKeys(h.LogicalID.String())
 				handleKeys = append(handleKeys, lk[0])
 
-				if err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); err != nil {
+				if ok, err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
 					// Unlock the object Keys before return.
 					r.cache.Unlock(ctx, handleKeys...)
 					return err
@@ -102,7 +102,7 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 		}
 
 		// Check the locks to cater for potential race condition.
-		if err := r.cache.IsLocked(ctx, handleKeys...); err != nil {
+		if ok, err := r.cache.IsLocked(ctx, handleKeys...); !ok || err != nil {
 			// Unlock the object Keys before return.
 			r.cache.Unlock(ctx, handleKeys...)
 			return err

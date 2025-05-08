@@ -34,7 +34,7 @@ func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.
 			}
 
 			frd[0].handle = h
-			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
+			if err := rm.hashmap.updateFileRegion(frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return err
 			}
@@ -78,7 +78,7 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 			}
 			lockedItems = append(lockedItems, frds...)
 		}
-		if err := rm.hashmap.updateFileRegion(ctx, lockedItems...); err != nil {
+		if err := rm.hashmap.updateFileRegion(lockedItems...); err != nil {
 			unlockItemFileRegions(lockedItems...)
 			return err
 		}
@@ -99,7 +99,7 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 			}
 
 			frd[0].handle = h
-			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
+			if err := rm.hashmap.updateFileRegion(frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return err
 			}
@@ -150,7 +150,7 @@ func (rm registryMap) remove(ctx context.Context, keys ...sop.Tuple[string, []so
 					frd[0].handle.LogicalID, frd[0].offset, id)
 			}
 
-			if err := rm.hashmap.markDeleteFileRegion(ctx, frd...); err != nil {
+			if err := rm.hashmap.markDeleteFileRegion(frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return err
 			}

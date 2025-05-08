@@ -101,7 +101,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 }
 
 func Test_ByteArrayValue(t *testing.T) {
-	in_red_fs.RemoveBtree(ctx, dataPath, "baStore")
+	//in_red_fs.RemoveBtree(ctx, dataPath, "baStore")
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
