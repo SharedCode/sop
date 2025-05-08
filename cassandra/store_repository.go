@@ -114,6 +114,9 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
 		// 15 minutes to lock, merge/update details then unlock.
 		if ok, err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); !ok || err != nil {
+			if err == nil {
+				err = fmt.Errorf("lock call detected conflict")
+			}
 			log.Warn(err.Error() + ", will retry")
 			return retry.RetryableError(err)
 		}

@@ -42,15 +42,16 @@ func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys ...*s
 			if readItem2, err := c.Get(ctx, lk.Key); err != nil {
 				return false, err
 			} else if readItem2 != lk.LockID.String() {
-				return false, nil 	//fmt.Errorf("lock(key: %v) call detected conflict", lk.Key)
+				// Item found in Redis, lock attempt failed.
+				return false, nil
 			}
 			// We got the item locked, ensure we can unlock it.
 			lk.IsLockOwner = true
 			continue
 		}
-		// Item found in Redis.
+		// Item found in Redis, lock attempt failed.
 		if readItem != lk.LockID.String() {
-			return false, nil  	//fmt.Errorf("lock(key: %v) call detected conflict", lk.Key)
+			return false, nil
 		}
 	}
 	// Successfully locked.
@@ -64,13 +65,14 @@ func (c client) IsLocked(ctx context.Context, lockKeys ...*sop.LockKey) (bool, e
 		if err != nil {
 			if c.KeyNotFound(err) {
 				// Not found means Is locked = false.
-				return false, nil   //fmt.Errorf("IsLocked(key: %v) not found", lk.Key)
+				return false, nil
 			}
 			return false, err
 		}
 		// Item found in Redis has different value, means key is locked by a different kind of function.
 		if readItem != lk.LockID.String() {
-			return false, nil   // fmt.Errorf("IsLocked(key: %v) locked by another", lk.Key)
+			// Not found means Is locked = false.
+			return false, nil
 		}
 	}
 	// Is locked = true.

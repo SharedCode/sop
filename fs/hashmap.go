@@ -330,6 +330,9 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 
 	lk := hm.cache.CreateLockKeys(preallocateFileLockKey)
 	if ok, err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk...); !ok || err != nil {
+		if err == nil {
+			err = fmt.Errorf("can't acquire a lock to preallocate file %s", filename)
+		}
 		return result, err
 	}
 

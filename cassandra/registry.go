@@ -99,6 +99,9 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				if ok, err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
 					// Unlock the object Keys before return.
 					v.cache.Unlock(ctx, handleKeys...)
+					if err == nil {
+						err = fmt.Errorf("lock(key: %v) call detected conflict", lk[0].Key)
+					}
 					return err
 				}
 			}
@@ -124,6 +127,9 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 			// Unlock the object Keys before return.
 			v.cache.Unlock(ctx, handleKeys...)
 			// Failed locking the batch.
+			if err == nil {
+				err = fmt.Errorf("IsLocked(key) not found")
+			}
 			return err
 		}
 

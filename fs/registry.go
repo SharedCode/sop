@@ -89,6 +89,9 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 				handleKeys = append(handleKeys, lk[0])
 
 				if ok, err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
+					if err == nil {
+						err = fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key)
+					}
 					// Unlock the object Keys before return.
 					r.cache.Unlock(ctx, handleKeys...)
 					return err

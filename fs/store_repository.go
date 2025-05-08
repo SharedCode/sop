@@ -57,6 +57,9 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	lk := sr.cache.CreateLockKeys(lockStoreListKey)
 	defer sr.cache.Unlock(ctx, lk...)
 	if ok, err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); !ok || err != nil {
+		if err == nil {
+			err = fmt.Errorf("lock failed, key %s already locked by another", lockStoreListKey)
+		}
 		return err
 	}
 
@@ -149,6 +152,9 @@ func (sr *StoreRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
 		// 15 minutes to lock, merge/update details then unlock.
 		if ok, err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); !ok || err != nil {
+			if err == nil {
+				err = fmt.Errorf("lock failed, key(s) already locked by another")
+			}
 			log.Warn(err.Error() + ", will retry")
 			return retry.RetryableError(err)
 		}
@@ -317,6 +323,9 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 	lk := sr.cache.CreateLockKeys(lockStoreListKey)
 	defer sr.cache.Unlock(ctx, lk...)
 	if ok, err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); !ok || err != nil {
+		if err == nil {
+			err = fmt.Errorf("lock failed, key %s already locked by another", lockStoreListKey)
+		}
 		return err
 	}
 
