@@ -43,6 +43,11 @@ func (fio *fileIO) createStore(folderName string) error {
 	return fio.fio.MkdirAll(filename, permission)
 }
 
+func (fio *fileIO) removeStore(folderName string) error {
+	filename := fio.replicationTracker.formatActiveFolderFilename(folderName)
+	return fio.fio.RemoveAll(filename)
+}
+
 func (fio *fileIO) replicate() error {
 
 	// TODO: Replicate to replicate path/filenames.

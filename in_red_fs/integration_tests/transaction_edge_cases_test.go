@@ -425,7 +425,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 }
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
-	//in_red_fs.RemoveBtree(ctx, dataPath, "twophase3")
+	in_red_fs.RemoveBtree(ctx, dataPath, "twophase3")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := in_red_fs.NewTransaction(to)
@@ -513,7 +513,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 - A commit with full conflict: retry success
 */
 func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
-	//in_red_fs.RemoveBtree(ctx, dataPath, "tablex")
+	in_red_fs.RemoveBtree(ctx, dataPath, "tablex")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := in_red_fs.NewTransaction(to)
@@ -539,7 +539,9 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 		b3.Add(ctx2, 50, "I am the value with 5000 key.")
 		b3.Add(ctx2, 51, "I am the value with 5001 key.")
 		b3.Add(ctx2, 52, "I am also a value with 5000 key.")
-		return t1.Commit(ctx2)
+		err := t1.Commit(ctx2)
+		log.Error(err.Error())
+		return err
 	}
 
 	f2 := func() error {
@@ -549,7 +551,9 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 		b32.Add(ctx2, 550, "I am the value with 5000 key.")
 		b32.Add(ctx2, 551, "I am the value with 5001 key.")
 		b32.Add(ctx2, 552, "I am the value with 5001 key.")
-		return t2.Commit(ctx2)
+		err := t2.Commit(ctx2)
+		log.Error(err.Error())
+		return err
 	}
 
 	f3 := func() error {
@@ -558,7 +562,9 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 		b32, _ := in_red_fs.OpenBtree[int, string](ctx2, "tablex", t3, nil)
 		b32.Add(ctx2, 550, "random foo.")
 		b32.Add(ctx2, 551, "bar hello.")
-		return t3.Commit(ctx2)
+		err := t3.Commit(ctx2)
+		log.Error(err.Error())
+		return err
 	}
 
 	eg.Go(f1)
@@ -599,7 +605,7 @@ One or both of these two should fail:
 - A commit with full conflict.
 */
 func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
-	//in_red_fs.RemoveBtree(ctx, dataPath, "tablex2")
+	in_red_fs.RemoveBtree(ctx, dataPath, "tablex2")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := in_red_fs.NewTransaction(to)
@@ -684,7 +690,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 - A commit with full conflict on update: rollback
 */
 func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
-	//in_red_fs.RemoveBtree(ctx, dataPath, "tabley")
+	in_red_fs.RemoveBtree(ctx, dataPath, "tabley")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := in_red_fs.NewTransaction(to)

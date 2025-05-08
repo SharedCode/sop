@@ -65,7 +65,7 @@ var defaultCacheConfig StoreCacheConfig = StoreCacheConfig{
 	StoreInfoCacheDuration: time.Duration(10 * time.Minute),
 	RegistryCacheDuration:  time.Duration(15 * time.Minute),
 	ValueDataCacheDuration: time.Duration(10 * time.Minute),
-	// Nodes are bigger data, thus, we want them minimally cached. You can set to 0 if needed.
+	// Nodes are bigger data, thus, we want them minimally cached. You can set to -1 (not cached) if needed.
 	NodeCacheDuration: time.Duration(5 * time.Minute),
 }
 

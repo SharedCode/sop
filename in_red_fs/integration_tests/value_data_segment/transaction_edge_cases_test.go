@@ -376,7 +376,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 }
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
-	//in_red_fs.RemoveBtree(ctx, dataPath, "twophase2")
+	in_red_fs.RemoveBtree(ctx, dataPath, "twophase2")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := in_red_fs.NewTransaction(to)

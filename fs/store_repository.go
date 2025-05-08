@@ -340,6 +340,7 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 	}
 
 	// Remove store(s) that exists.
+	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
 	for _, storeName := range storeNames {
 		if _, ok := storesLookup[storeName]; !ok {
 			log.Warn(fmt.Sprintf("can't remove store %s, there is no item with such name", storeName))
@@ -351,7 +352,7 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 			log.Warn(fmt.Sprintf("StoreRepository Remove (redis Delete) failed, details: %v", err))
 		}
 		// Delete store folder (contains blobs, store config & registry data files).
-		if err := sr.manageStore.RemoveStore(ctx, storeName); err != nil {
+		if err := storeWriter.removeStore(storeName); err != nil {
 			return err
 		}
 
@@ -359,7 +360,6 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 	}
 
 	// Update Store list file of removed entries.
-	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
 	storeList := make([]string, len(storesLookup))
 	i := 0
 	for k := range storesLookup {

@@ -9,6 +9,11 @@ import (
 	"github.com/SharedCode/sop/encoding"
 )
 
+/*
+	When writing, lock the sector, read it, update the target Handle record's byte range in it, write entire sector then unlock the sector.
+	- Use Redis to support multi-OS & use syscall as an option.
+*/
+
 func (hm *hashmap) lockFoundFileRegion(ctx context.Context, fileRegionDetails ...*fileRegionDetails) error {
 	for _, frd := range fileRegionDetails {
 		if hm.useCacheForFileRegionLocks {
@@ -16,9 +21,10 @@ func (hm *hashmap) lockFoundFileRegion(ctx context.Context, fileRegionDetails ..
 			if ok, err := hm.cache.Lock(ctx, lockFileRegionDuration, frd.lockKey); ok {
 				continue
 			} else if err == nil {
-				return &sop.UpdateAllOrNothingError{
-					Err: fmt.Errorf("can't lock file (%s) region offset %v, already locked", frd.dio.filename, frd.offset),
-				}
+				return fmt.Errorf("can't lock file (%s) region offset %v, already locked", frd.dio.filename, frd.offset)
+				// return &sop.UpdateAllOrNothingError{
+				// 	Err: fmt.Errorf("can't lock file (%s) region offset %v, already locked", frd.dio.filename, frd.offset),
+				// }
 			} else {
 				return err
 			}
@@ -54,10 +60,14 @@ func (hm *hashmap) isRegionLocked(ctx context.Context, dio *directIO, offset int
 }
 
 func (hm *hashmap) updateFileRegion(fileRegionDetails ...fileRegionDetails) error {
+	dio := newDirectIO()
+	ba := dio.createAlignedBlock()
 	m := encoding.NewHandleMarshaler()
 	for _, frd := range fileRegionDetails {
-		ba, _ := m.Marshal(frd.handle)
-		if n, err := frd.dio.writeAt(ba, frd.offset); n != len(ba) || err != nil {
+		ba2, _ := m.Marshal(frd.handle)
+		copy(ba, ba2)
+		buffer := ba[0:sop.HandleSizeInBytes]
+		if n, err := frd.dio.writeAt(buffer, frd.offset); n != len(buffer) || err != nil {
 			if err != nil {
 				return err
 			}

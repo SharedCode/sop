@@ -59,7 +59,11 @@ func (scc *StoreCacheConfig) enforceMinimumRule() {
 	if scc.NodeCacheDuration == 0 && scc.IsNodeCacheTTL {
 		scc.IsNodeCacheTTL = false
 	}
-	// scc.NodeCacheDuration can be -1, meaning no caching.
+	// scc.NodeCacheDuration defaults to -1, meaning no caching.
+	if scc.NodeCacheDuration == 0 {
+		scc.NodeCacheDuration = -1
+	}
+
 	if scc.RegistryCacheDuration > 0 && scc.RegistryCacheDuration < minCacheDuration {
 		scc.RegistryCacheDuration = time.Duration(10 * time.Minute)
 	}
