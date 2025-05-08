@@ -60,7 +60,7 @@ func (nr *nodeRepositoryTyped[TK, TV]) Remove(nodeID sop.UUID) {
 // but which, manages b-tree nodes in transaction cache, Redis and in Cassandra + S3,
 // or File System, for debugging &/or "poor man's" setup(no AWS required!).
 type nodeRepository struct {
-	transaction *transaction
+	transaction *Transaction
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
 	nodeLocalCache map[sop.UUID]cacheNode
 	storeInfo      *sop.StoreInfo
@@ -69,7 +69,7 @@ type nodeRepository struct {
 }
 
 // NewNodeRepository instantiates a NodeRepository.
-func newNodeRepository[TK btree.Comparable, TV any](t *transaction, storeInfo *sop.StoreInfo) *nodeRepositoryTyped[TK, TV] {
+func newNodeRepository[TK btree.Comparable, TV any](t *Transaction, storeInfo *sop.StoreInfo) *nodeRepositoryTyped[TK, TV] {
 	nr := &nodeRepository{
 		transaction:    t,
 		nodeLocalCache: make(map[sop.UUID]cacheNode),

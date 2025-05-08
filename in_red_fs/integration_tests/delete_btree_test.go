@@ -3,7 +3,7 @@ package integration_tests
 import (
 	"testing"
 
-	"github.com/SharedCode/sop/in_red_cfs"
+	"github.com/SharedCode/sop/in_red_fs"
 )
 
 // Add Test_ prefix if you want to run this test.
@@ -20,7 +20,7 @@ func DeleteBTree(t *testing.T) {
 	}
 
 	for _, tn := range tableList {
-		if err := in_red_cfs.RemoveBtree(ctx, tn); err != nil {
+		if err := in_red_fs.RemoveBtree(ctx, dataPath, tn); err != nil {
 			t.Error(err)
 		}
 	}

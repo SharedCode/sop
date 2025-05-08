@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/SharedCode/sop"
@@ -16,7 +17,7 @@ import (
 */
 
 type hashmap struct {
-	hashModValue       HashModValueType
+	hashModValue       int
 	replicationTracker *replicationTracker
 	readWrite          bool
 	// File handles of all known (traversed & opened) data segment file of the hash map.
@@ -40,38 +41,34 @@ const (
 	fullPermission  = 0644
 	handlesPerBlock = 66
 	// Keep the attempt to lock file region short since if it is locked, we want to fail right away & cause transaction rollback.
-	lockFileRegionAttemptTimeout = time.Duration(2 * time.Second)
+	lockFileRegionAttemptTimeout = time.Duration(4 * time.Second)
 	preallocateFileLockKey       = "infs_reg"
 	// Growing the file needs more time to complete.
-	lockPreallocateFileTimeout = time.Duration(25 * time.Minute)
+	lockPreallocateFileTimeout = time.Duration(20 * time.Minute)
 	lockFileRegionKeyPrefix    = "infs"
-	lockFileRegionDuration     = time.Duration(15 * time.Minute)
+	lockFileRegionDuration     = time.Duration(5 * time.Minute)
+	idNotFoundErr              = "unable to find the item with id"
 )
 
-type HashModValueType int
-
 const (
-	MinimumModValue     = 25000  // 25k, should generate 100MB file segment
-	XXSuperTinyModValue = 50000  // 50k, should generate 200MB file segment
-	XSuperTinyModValue  = 75000  // 75k, should generate 300MB file segment
-	SuperTinyModValue   = 100000 // 100k, should generate 400MB file segment
-	TinyModValue        = 125000 // 125k, should generate 500MB file segment
-	SmallModValue       = 200000 // 200k, should generate 800MB file segment
-	MediumModValue      = 250000 // 250k, should generate 1GB file segment
-	LargeModValue       = 350000 // 350k, should generate 1.4GB file segment
-	XLargeModValue      = 500000 // 500k, 2GB file segment
-	XXLModValue         = 750000 // 750k, 3GB file segment
+	// 250, should generate 1MB file segment. Formula: 250 X 4096 = 1MB
+	MinimumModValue = 250
+	// 750k, should generate 3GB file segment.  Formula: 750k X 4096 = 3GB
+	MaximumModValue = 750000
 )
 
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
-func newHashmap(readWrite bool, hashModValue HashModValueType, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *hashmap {
+func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *hashmap {
 	return &hashmap{
 		hashModValue:               hashModValue,
 		replicationTracker:         replicationTracker,
 		readWrite:                  readWrite,
 		fileHandles:                make(map[string]*directIO, 5),
 		cache:                      cache,
-		useCacheForFileRegionLocks: useCacheForFileRegionLocks,
+
+		// Support cache(e.g. - Redis) based file region locks so it can work across different OS like Windows, OSX & Linux.
+		// But yeah, 'will crowd the cache, use with care. :)
+		useCacheForFileRegionLocks: true,	//useCacheForFileRegionLocks,
 	}
 }
 
@@ -106,7 +103,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 			}
 			if !fileExists || fs < hm.getSegmentFileSize() {
 				if !forWriting {
-					return result, fmt.Errorf("unable to find the item with id '%v'", id)
+					return result, fmt.Errorf("%s '%v'", idNotFoundErr, id)
 				}
 				frd, err := hm.setupNewFile(ctx, forWriting, fn, id, dio)
 				if dio.file != nil {
@@ -258,7 +255,13 @@ func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([
 	for _, id := range ids {
 		frd, err := hm.findAndLock(ctx, false, filename, id)
 		if err != nil {
+			if strings.Contains(err.Error(), idNotFoundErr) {
+				continue
+			}
 			return nil, err
+		}
+		if frd.handle.IsEmpty() {
+			continue
 		}
 		completedItems = append(completedItems, frd.handle)
 	}
@@ -326,7 +329,10 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 	}
 
 	lk := hm.cache.CreateLockKeys(preallocateFileLockKey)
-	if err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk...); err != nil {
+	if ok, err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk...); !ok || err != nil {
+		if err == nil {
+			err = fmt.Errorf("can't acquire a lock to preallocate file %s", filename)
+		}
 		return result, err
 	}
 

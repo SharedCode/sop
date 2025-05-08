@@ -30,7 +30,7 @@ type btreeBackend struct {
 	getObsoleteTrackedItemsValues    func() *sop.BlobsPayload[sop.UUID]
 }
 
-type transaction struct {
+type Transaction struct {
 	// B-Tree instances, & their backend bits, managed within the transaction session.
 	btreesBackend []btreeBackend
 	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
@@ -64,7 +64,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 	if maxTime > time.Duration(1*time.Hour) {
 		maxTime = time.Duration(1 * time.Hour)
 	}
-	return &transaction{
+	return &Transaction{
 		mode:            mode,
 		maxTime:         maxTime,
 		storeRepository: storeRepository,
@@ -76,7 +76,15 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 	}, nil
 }
 
-func (t *transaction) Begin() error {
+// Close will do cleanup.
+func (t *Transaction) Close() {
+	// Do registry cleanup, e.g. - close all opened files.
+	if closeable, ok := t.registry.(io.Closer); ok {
+		closeable.Close()
+	}
+}
+
+func (t *Transaction) Begin() error {
 	if t.HasBegun() {
 		return fmt.Errorf("transaction is ongoing, 'can't begin again")
 	}
@@ -90,7 +98,7 @@ func (t *transaction) Begin() error {
 var lastOnIdleRunTime int64
 var locker = sync.Mutex{}
 
-func (t *transaction) onIdle(ctx context.Context) {
+func (t *Transaction) onIdle(ctx context.Context) {
 	// Required to have a backend btree to do cleanup.
 	if len(t.btreesBackend) == 0 {
 		return
@@ -116,7 +124,7 @@ func (t *transaction) onIdle(ctx context.Context) {
 		}
 	}
 }
-func (t *transaction) Phase1Commit(ctx context.Context) error {
+func (t *Transaction) Phase1Commit(ctx context.Context) error {
 	// Service the cleanup of left hanging transactions.
 	t.onIdle(ctx)
 
@@ -144,7 +152,7 @@ func (t *transaction) Phase1Commit(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) Phase2Commit(ctx context.Context) error {
+func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	if !t.HasBegun() {
 		return fmt.Errorf("no transaction to commit, call Begin to start a transaction")
 	}
@@ -155,13 +163,6 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 2
-
-	// Do registry cleanup, e.g. - close all opened files.
-	defer func() {
-		if closeable, ok := t.registry.(io.Closer); ok {
-			closeable.Close()
-		}
-	}()
 
 	if t.mode != sop.ForWriting {
 		return nil
@@ -203,7 +204,7 @@ func (t *transaction) Phase2Commit(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) Rollback(ctx context.Context) error {
+func (t *Transaction) Rollback(ctx context.Context) error {
 	if t.phaseDone == 2 {
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
@@ -213,34 +214,32 @@ func (t *transaction) Rollback(ctx context.Context) error {
 	// Reset transaction status and mark done to end it without persisting any change.
 	t.phaseDone = 2
 	if err := t.rollback(ctx, true); err != nil {
-		// Do registry cleanup, e.g. - close all opened files.
-		if closeable, ok := t.registry.(io.Closer); ok {
-			closeable.Close()
-		}
 		return fmt.Errorf("rollback failed, details: %v", err)
-	}
-	// Do registry cleanup, e.g. - close all opened files.
-	if closeable, ok := t.registry.(io.Closer); ok {
-		closeable.Close()
 	}
 	return nil
 }
 
 // Returns the transaction's mode.
-func (t *transaction) GetMode() sop.TransactionMode {
+func (t *Transaction) GetMode() sop.TransactionMode {
 	return t.mode
 }
 
 // Transaction has begun if it is has begun & not yet committed/rolled back.
-func (t *transaction) HasBegun() bool {
+func (t *Transaction) HasBegun() bool {
 	return t.phaseDone >= 0 && t.phaseDone < 2
 }
 
-func (t *transaction) GetStores(ctx context.Context) ([]string, error) {
+func (t *Transaction) GetStores(ctx context.Context) ([]string, error) {
 	return t.storeRepository.GetAll(ctx)
 }
 
-func (t *transaction) timedOut(ctx context.Context, startTime time.Time) error {
+
+// Returns this transaction's StoreRepository.
+func (t *Transaction) GetStoreRepository() sop.StoreRepository {
+	return t.storeRepository
+}
+
+func (t *Transaction) timedOut(ctx context.Context, startTime time.Time) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -269,7 +268,7 @@ func sleep(ctx context.Context, sleepTime time.Duration) {
 }
 
 // phase1Commit does the phase 1 commit steps.
-func (t *transaction) phase1Commit(ctx context.Context) error {
+func (t *Transaction) phase1Commit(ctx context.Context) error {
 	if !t.hasTrackedItems() {
 		return nil
 	}
@@ -433,7 +432,7 @@ func (t *transaction) phase1Commit(ctx context.Context) error {
 }
 
 // phase2Commit finalizes the commit process and does cleanup afterwards.
-func (t *transaction) phase2Commit(ctx context.Context) error {
+func (t *Transaction) phase2Commit(ctx context.Context) error {
 
 	f := t.getToBeObsoleteEntries()
 	s := t.getObsoleteTrackedItemsValues()
@@ -466,7 +465,7 @@ func (t *transaction) phase2Commit(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) cleanup(ctx context.Context) error {
+func (t *Transaction) cleanup(ctx context.Context) error {
 	// Cleanup resources not needed anymore.
 	if err := t.logger.log(ctx, deleteObsoleteEntries, nil); err != nil {
 		return err
@@ -484,7 +483,7 @@ func (t *transaction) cleanup(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]] {
+func (t *Transaction) getToBeObsoleteEntries() sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]] {
 	// Cleanup resources not needed anymore.
 	unusedNodeIDs := make([]sop.BlobsPayload[sop.UUID], 0, len(t.updatedNodeHandles)+len(t.removedNodeHandles))
 	for i := range t.updatedNodeHandles {
@@ -522,7 +521,7 @@ func (t *transaction) getToBeObsoleteEntries() sop.Tuple[[]sop.RegistryPayload[s
 	}
 }
 
-func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues bool) error {
+func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues bool) error {
 	var lastErr error
 
 	// Rollback pre commit logged items.
@@ -599,7 +598,7 @@ func (t *transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	return lastErr
 }
 
-func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
+func (t *Transaction) commitTrackedItemsValues(ctx context.Context) error {
 	for i := range t.btreesBackend {
 		if err := t.btreesBackend[i].commitTrackedItemsValues(ctx); err != nil {
 			return err
@@ -607,7 +606,7 @@ func (t *transaction) commitTrackedItemsValues(ctx context.Context) error {
 	}
 	return nil
 }
-func (t *transaction) getForRollbackTrackedItemsValues() []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]] {
+func (t *Transaction) getForRollbackTrackedItemsValues() []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]] {
 	r := make([]sop.Tuple[bool, sop.BlobsPayload[sop.UUID]], 0, 5)
 	for i := range t.btreesBackend {
 		itemsForDelete := t.btreesBackend[i].getForRollbackTrackedItemsValues()
@@ -620,7 +619,7 @@ func (t *transaction) getForRollbackTrackedItemsValues() []sop.Tuple[bool, sop.B
 	}
 	return r
 }
-func (t *transaction) getObsoleteTrackedItemsValues() []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]] {
+func (t *Transaction) getObsoleteTrackedItemsValues() []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]] {
 	r := make([]sop.Tuple[bool, sop.BlobsPayload[sop.UUID]], 0, 5)
 	for i := range t.btreesBackend {
 		itemsForDelete := t.btreesBackend[i].getObsoleteTrackedItemsValues()
@@ -634,7 +633,7 @@ func (t *transaction) getObsoleteTrackedItemsValues() []sop.Tuple[bool, sop.Blob
 	return r
 }
 
-func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDelete []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]) error {
+func (t *Transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDelete []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]) error {
 	var lastErr error
 	for i := range itemsForDelete {
 		// First field of the Tuple specifies whether we need to delete from Redis cache the blob IDs specified in Second.
@@ -653,7 +652,7 @@ func (t *transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDele
 }
 
 // Checks if fetched items are intact.
-func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
+func (t *Transaction) commitForReaderTransaction(ctx context.Context) error {
 	if t.mode == sop.ForWriting {
 		return nil
 	}
@@ -685,7 +684,7 @@ func (t *transaction) commitForReaderTransaction(ctx context.Context) error {
 }
 
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.
-func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
+func (t *Transaction) refetchAndMergeModifications(ctx context.Context) error {
 	log.Debug("same node(s) are being modified elsewhere, 'will refetch and re-merge changes in...")
 	for i := range t.btreesBackend {
 		if err := t.btreesBackend[i].refetchAndMerge(ctx); err != nil {
@@ -697,7 +696,7 @@ func (t *transaction) refetchAndMergeModifications(ctx context.Context) error {
 
 // classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes.
-func (t *transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []interface{}],
+func (t *Transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []interface{}],
 	[]sop.Tuple[*sop.StoreInfo, []interface{}],
 	[]sop.Tuple[*sop.StoreInfo, []interface{}],
 	[]sop.Tuple[*sop.StoreInfo, []interface{}],
@@ -757,7 +756,7 @@ func (t *transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []int
 	return storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes
 }
 
-func (t *transaction) commitStores(ctx context.Context) error {
+func (t *Transaction) commitStores(ctx context.Context) error {
 	stores := make([]sop.StoreInfo, len(t.btreesBackend))
 	for i := range t.btreesBackend {
 		store := t.btreesBackend[i].getStoreInfo()
@@ -769,7 +768,7 @@ func (t *transaction) commitStores(ctx context.Context) error {
 	}
 	return t.storeRepository.Update(ctx, stores...)
 }
-func (t *transaction) getRollbackStoresInfo() []sop.StoreInfo {
+func (t *Transaction) getRollbackStoresInfo() []sop.StoreInfo {
 	stores := make([]sop.StoreInfo, len(t.btreesBackend))
 	for i := range t.btreesBackend {
 		store := t.btreesBackend[i].getStoreInfo()
@@ -781,7 +780,7 @@ func (t *transaction) getRollbackStoresInfo() []sop.StoreInfo {
 	return stores
 }
 
-func (t *transaction) hasTrackedItems() bool {
+func (t *Transaction) hasTrackedItems() bool {
 	for _, s := range t.btreesBackend {
 		if s.hasTrackedItems() {
 			return true
@@ -791,7 +790,7 @@ func (t *transaction) hasTrackedItems() bool {
 }
 
 // Check Tracked items for conflict, this pass is to remove any race condition.
-func (t *transaction) checkTrackedItems(ctx context.Context) error {
+func (t *Transaction) checkTrackedItems(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
 		if err := s.checkTrackedItems(ctx); err != nil {
 			return err
@@ -800,7 +799,7 @@ func (t *transaction) checkTrackedItems(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) lockTrackedItems(ctx context.Context) error {
+func (t *Transaction) lockTrackedItems(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
 		if err := s.lockTrackedItems(ctx, t.maxTime); err != nil {
 			return err
@@ -809,7 +808,7 @@ func (t *transaction) lockTrackedItems(ctx context.Context) error {
 	return nil
 }
 
-func (t *transaction) unlockTrackedItems(ctx context.Context) error {
+func (t *Transaction) unlockTrackedItems(ctx context.Context) error {
 	var lastErr error
 	for _, s := range t.btreesBackend {
 		if err := s.unlockTrackedItems(ctx); err != nil {
@@ -820,7 +819,7 @@ func (t *transaction) unlockTrackedItems(ctx context.Context) error {
 }
 
 // Delete the registry entries and unused node blobs.
-func (t *transaction) deleteObsoleteEntries(ctx context.Context,
+func (t *Transaction) deleteObsoleteEntries(ctx context.Context,
 	deletedRegistryIDs []sop.RegistryPayload[sop.UUID], unusedNodeIDs []sop.BlobsPayload[sop.UUID]) error {
 	var lastErr error
 	if len(unusedNodeIDs) > 0 {

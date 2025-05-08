@@ -461,7 +461,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Preserve the good, nicely populated repositories.
-	t2 := trans.GetPhasedTransaction().(*transaction)
+	t2 := trans.GetPhasedTransaction().(*Transaction)
 
 	goodStoreRepository := t2.storeRepository
 	goodRegistry := t2.registry
@@ -469,7 +469,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	goodBlobStore := t2.blobStore
 
 	trans, _ = newMockTransaction(t, sop.ForWriting, -1)
-	t2 = trans.GetPhasedTransaction().(*transaction)
+	t2 = trans.GetPhasedTransaction().(*Transaction)
 
 	// Restore the populated repos.
 	t2.storeRepository = goodStoreRepository
@@ -498,7 +498,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	goodBlobStore = t2.blobStore
 
 	trans, _ = newMockTransaction(t, sop.ForReading, -1)
-	t2 = trans.GetPhasedTransaction().(*transaction)
+	t2 = trans.GetPhasedTransaction().(*Transaction)
 	t2.storeRepository = goodStoreRepository
 	t2.registry = goodRegistry
 	t2.cache = goodRedisCache

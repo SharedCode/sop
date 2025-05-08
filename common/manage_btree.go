@@ -20,7 +20,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 	}
 
 	var t2 interface{} = t.GetPhasedTransaction()
-	trans := t2.(*transaction)
+	trans := t2.(*Transaction)
 	stores, err := trans.storeRepository.Get(ctx, name)
 	if len(stores) == 0 || stores[0].IsEmpty() || err != nil {
 		if err == nil {
@@ -46,7 +46,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 	}
 
 	var t2 any = t.GetPhasedTransaction()
-	trans := t2.(*transaction)
+	trans := t2.(*Transaction)
 
 	var stores []sop.StoreInfo
 	var err error
@@ -60,10 +60,16 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 		return nil, err
 	}
 	ns := sop.NewStoreInfoExt(si.Name, si.SlotLength, si.IsUnique, si.IsValueDataInNodeSegment, si.IsValueDataActivelyPersisted, si.IsValueDataGloballyCached, si.LeafLoadBalancing, si.Description, si.BlobStoreBaseFolderPath, si.CacheConfig)
+
 	// Allow caller to use the same name for blob store and the store name.
 	if si.DisableBlobStoreFormatting {
 		ns.BlobTable = ns.Name
 	}
+	// Allow caller to use the same name for registry store and the store name.
+	if si.DisableRegistryStoreFormatting {
+		ns.RegistryTable = ns.Name
+	}
+
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeID.IsNil() {
@@ -89,7 +95,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 	return newBtree[TK, TV](ctx, ns, trans, comparer)
 }
 
-func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *sop.StoreInfo, trans *transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *sop.StoreInfo, trans *Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	si := StoreInterface[TK, TV]{}
 
 	// Assign the item action tracker frontend and backend bits.

@@ -28,7 +28,7 @@ const (
 )
 
 // NewRegistry manages the Handle in memory for mocking.
-func NewRegistry(readWrite bool, hashModValue HashModValueType, rt *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) Registry {
+func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) Registry {
 	return &registryOnDisk{
 		hashmap:            newRegistryMap(readWrite, hashModValue, rt, cache, useCacheForFileRegionLocks),
 		replicationTracker: rt,
@@ -88,7 +88,10 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 				lk := r.cache.CreateLockKeys(h.LogicalID.String())
 				handleKeys = append(handleKeys, lk[0])
 
-				if err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); err != nil {
+				if ok, err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
+					if err == nil {
+						err = fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key)
+					}
 					// Unlock the object Keys before return.
 					r.cache.Unlock(ctx, handleKeys...)
 					return err
@@ -102,7 +105,7 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 		}
 
 		// Check the locks to cater for potential race condition.
-		if err := r.cache.IsLocked(ctx, handleKeys...); err != nil {
+		if ok, err := r.cache.IsLocked(ctx, handleKeys...); !ok || err != nil {
 			// Unlock the object Keys before return.
 			r.cache.Unlock(ctx, handleKeys...)
 			return err

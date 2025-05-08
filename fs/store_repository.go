@@ -14,8 +14,8 @@ import (
 	"github.com/SharedCode/sop/in_memory"
 )
 
-// storeRepository is a File System based implementation of store repository.
-type storeRepository struct {
+// StoreRepository is a File System based implementation of store repository.
+type StoreRepository struct {
 	cache              sop.Cache
 	fileIO             FileIO
 	manageStore        sop.ManageStore
@@ -36,7 +36,11 @@ func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cac
 	if rt.replicate && len(rt.storesBaseFolders) != 2 {
 		return nil, fmt.Errorf("'storesBaseFolders' needs to be exactly two elements if 'replicate' parameter is true")
 	}
-	return &storeRepository{
+	if manageStore == nil {
+		fio := NewDefaultFileIO(DefaultToFilePath)
+		manageStore = NewManageStoreFolder(fio)
+	}
+	return &StoreRepository{
 		cache:              cache,
 		manageStore:        manageStore,
 		fileIO:             NewDefaultFileIO(DefaultToFilePath),
@@ -48,11 +52,14 @@ func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cac
 // each store is allocated a sub-folder where store info file is persisted.
 //
 // Store list is not cached since adding/removing store(s) are rare events.
-func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
+func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
 	// 1. Lock Store List.
 	lk := sr.cache.CreateLockKeys(lockStoreListKey)
 	defer sr.cache.Unlock(ctx, lk...)
-	if err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); err != nil {
+	if ok, err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); !ok || err != nil {
+		if err == nil {
+			err = fmt.Errorf("lock failed, key %s already locked by another", lockStoreListKey)
+		}
 		return err
 	}
 
@@ -117,7 +124,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	// 8. Unlock Store List. The defer statement will unlock store list.
 }
 
-func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) error {
+func (sr *StoreRepository) Update(ctx context.Context, stores ...sop.StoreInfo) error {
 	// Sort the stores info so we can commit them in same sort order across transactions,
 	// thus, reduced chance of deadlock.
 	b3 := in_memory.NewBtree[string, sop.StoreInfo](true)
@@ -144,7 +151,10 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	// Lock all keys.
 	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
 		// 15 minutes to lock, merge/update details then unlock.
-		if err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); err != nil {
+		if ok, err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); !ok || err != nil {
+			if err == nil {
+				err = fmt.Errorf("lock failed, key(s) already locked by another")
+			}
 			log.Warn(err.Error() + ", will retry")
 			return retry.RetryableError(err)
 		}
@@ -233,12 +243,17 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	return nil
 }
 
-func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
+func (sr *StoreRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
 	return sr.GetWithTTL(ctx, false, 0, names...)
 }
 
-func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
+func (sr *StoreRepository) GetAll(ctx context.Context) ([]string, error) {
 	fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
+
+	// Just return nil to denote no store yet on store folder.
+	if !fio.exists(storeListFilename) {
+		return nil, nil
+	}
 	ba, err := fio.read(storeListFilename)
 	if err != nil {
 		return nil, err
@@ -249,7 +264,7 @@ func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
 	return storeList, err
 }
 
-func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
+func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
 	stores := make([]sop.StoreInfo, 0, len(names))
 	storesNotInCache := make([]string, 0)
 	for i := range names {
@@ -276,7 +291,12 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 	sio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
 	for _, s := range storesNotInCache {
 
-		ba, err := sio.read(fmt.Sprintf("%c%s%c%s", os.PathSeparator, s, os.PathSeparator, storeInfoFilename))
+		fn := fmt.Sprintf("%s%c%s", s, os.PathSeparator, storeInfoFilename)
+		if !sio.exists(fn) {
+			continue
+		}
+
+		ba, err := sio.read(fn)
 		if err != nil {
 			return nil, err
 		}
@@ -299,10 +319,13 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 // Remove is destructive and shold only be done in an exclusive (admin only) operation.
 // Any deleted tables can't be rolled back. This is equivalent to DDL SQL script, which we
 // don't do part of a transaction.
-func (sr *storeRepository) Remove(ctx context.Context, storeNames ...string) error {
+func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) error {
 	lk := sr.cache.CreateLockKeys(lockStoreListKey)
 	defer sr.cache.Unlock(ctx, lk...)
-	if err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); err != nil {
+	if ok, err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); !ok || err != nil {
+		if err == nil {
+			err = fmt.Errorf("lock failed, key %s already locked by another", lockStoreListKey)
+		}
 		return err
 	}
 
@@ -352,4 +375,9 @@ func (sr *storeRepository) Remove(ctx context.Context, storeNames ...string) err
 	}
 
 	return nil
+}
+
+// Returns the stores' base folder path.
+func (sr *StoreRepository) GetStoresBaseFolder() string {
+	return sr.replicationTracker.GetActiveBaseFolder()
 }

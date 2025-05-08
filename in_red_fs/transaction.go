@@ -27,8 +27,10 @@ func NewTwoPhaseCommitTransaction(to TransationOptions) (sop.TwoPhaseCommitTrans
 	if to.Cache == nil {
 		to.Cache = redis.NewClient()
 	}
+	fio := fs.NewDefaultFileIO(fs.DefaultToFilePath)
 	replicationTracker := fs.NewReplicationTracker([]string{to.StoresBaseFolder}, false)
-	sr, err := fs.NewStoreRepository(replicationTracker, nil, to.Cache)
+	mbsf := fs.NewManageStoreFolder(fio)
+	sr, err := fs.NewStoreRepository(replicationTracker, mbsf, to.Cache)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +38,7 @@ func NewTwoPhaseCommitTransaction(to TransationOptions) (sop.TwoPhaseCommitTrans
 	return common.NewTwoPhaseCommitTransaction(to.Mode, to.MaxTime, true,
 		fs.NewBlobStore(nil), sr, fs.NewRegistry(to.Mode == sop.ForWriting,
 			to.RegistryHashModValue, replicationTracker, to.Cache, to.UseCacheForFileRegionLocks), to.Cache, tl)
-}
+} 
 
 // Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
 func NewTransactionWithReplication(towr TransationOptionsWithReplication) (sop.Transaction, error) {

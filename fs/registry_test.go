@@ -18,7 +18,7 @@ func init() {
 }
 
 var uuid, _ = sop.ParseUUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
-var hashMod HashModValueType = MinimumModValue
+var hashMod = MinimumModValue
 
 func TestRegistryAddThenRead(t *testing.T) {
 	r := NewRegistry(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false), redis.NewClient(), false)

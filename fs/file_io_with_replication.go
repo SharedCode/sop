@@ -8,32 +8,39 @@ type fileIO struct {
 	filenames          []string
 	manageStore        sop.ManageStore
 	replicationTracker *replicationTracker
+	fio                FileIO
 }
 
 func newFileIOWithReplication(replicationTracker *replicationTracker, manageStore sop.ManageStore) *fileIO {
 	return &fileIO{
 		manageStore:        manageStore,
 		replicationTracker: replicationTracker,
+		fio:                NewDefaultFileIO(nil),
 	}
 }
 
+// TODO: Do we want to simplify these File IOs? New findings show we need just to write to the target
+// replication paths during successful commit's cleanup, before the transaction logs are destroyed.
+
+func (fio *fileIO) exists(targetFilename string) bool {
+	filename := fio.replicationTracker.formatActiveFolderFilename(targetFilename)
+	return fio.fio.Exists(filename)
+}
+
 func (fio *fileIO) write(targetFilename string, contents []byte) error {
-	f := NewDefaultFileIO(nil)
 	filename := fio.replicationTracker.formatActiveFolderFilename(targetFilename)
 	fio.filenames = append(fio.filenames, targetFilename)
-	return f.WriteFile(filename, contents, permission)
+	return fio.fio.WriteFile(filename, contents, permission)
 }
 
 func (fio *fileIO) read(sourceFilename string) ([]byte, error) {
-	f := NewDefaultFileIO(nil)
 	filename := fio.replicationTracker.formatActiveFolderFilename(sourceFilename)
-	return f.ReadFile(filename)
+	return fio.fio.ReadFile(filename)
 }
 
 func (fio *fileIO) createStore(folderName string) error {
-	f := NewDefaultFileIO(nil)
 	filename := fio.replicationTracker.formatActiveFolderFilename(folderName)
-	return f.MkdirAll(filename, permission)
+	return fio.fio.MkdirAll(filename, permission)
 }
 
 func (fio *fileIO) replicate() error {

@@ -96,9 +96,12 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				lk := v.cache.CreateLockKeys(h.LogicalID.String())
 				handleKeys = append(handleKeys, lk[0])
 
-				if err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); err != nil {
+				if ok, err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
 					// Unlock the object Keys before return.
 					v.cache.Unlock(ctx, handleKeys...)
+					if err == nil {
+						err = fmt.Errorf("lock(key: %v) call detected conflict", lk[0].Key)
+					}
 					return err
 				}
 			}
@@ -120,10 +123,13 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 			}
 		}
 
-		if err := v.cache.IsLocked(ctx, handleKeys...); err != nil {
+		if ok, err := v.cache.IsLocked(ctx, handleKeys...); !ok || err != nil {
 			// Unlock the object Keys before return.
 			v.cache.Unlock(ctx, handleKeys...)
 			// Failed locking the batch.
+			if err == nil {
+				err = fmt.Errorf("IsLocked(key) not found")
+			}
 			return err
 		}
 

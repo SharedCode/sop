@@ -11,7 +11,7 @@ type registryMap struct {
 	hashmap *hashmap
 }
 
-func newRegistryMap(readWrite bool, hashModValue HashModValueType, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *registryMap {
+func newRegistryMap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *registryMap {
 	return &registryMap{
 		hashmap: newHashmap(readWrite, hashModValue, replicationTracker, cache, useCacheForFileRegionLocks),
 	}
@@ -34,7 +34,7 @@ func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.
 			}
 
 			frd[0].handle = h
-			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
+			if err := rm.hashmap.updateFileRegion(frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return err
 			}
@@ -65,20 +65,12 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 			}
 			// Update the Handles read w/ the items' values.
 			for i := 0; i < len(frds); i++ {
-
-				// Check if there is no record in the target file region that will be updated.
-				if frds[i].handle.IsEmpty() {
-					// Fail if there is no record on target.
-					lockedItems = append(lockedItems, frds...)
-					unlockItemFileRegions(lockedItems...)
-					return fmt.Errorf("registryMap.set failed, an item at offset=%v was found empty", frds[i].offset)
-				}
 				// Check if the record in the target file region is different.
-				if frds[i].handle.LogicalID != item.Second[i].LogicalID {
+				if !frds[i].handle.IsEmpty() && frds[i].handle.LogicalID != item.Second[i].LogicalID {
 					// Fail if the record on target is different.
 					lockedItems = append(lockedItems, frds...)
 					unlockItemFileRegions(lockedItems...)
-					return fmt.Errorf("registryMap.set failed, an item(target lid=%v) at offset=%v is different (source lid=%v)",
+					return fmt.Errorf("registryMap.set allOrNothing failed, an item(target lid=%v) at offset=%v is different (source lid=%v)",
 						frds[i].handle.LogicalID, frds[i].offset, item.Second[i].LogicalID)
 				}
 
@@ -86,7 +78,7 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 			}
 			lockedItems = append(lockedItems, frds...)
 		}
-		if err := rm.hashmap.updateFileRegion(ctx, lockedItems...); err != nil {
+		if err := rm.hashmap.updateFileRegion(lockedItems...); err != nil {
 			unlockItemFileRegions(lockedItems...)
 			return err
 		}
@@ -99,20 +91,15 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 			if err != nil {
 				return err
 			}
-			// Fail if there is no record on target.
-			if frd[0].handle.IsEmpty() {
-				rm.hashmap.unlockFileRegion(ctx, frd...)
-				return fmt.Errorf("registryMap.set failed, an item at offset=%v was found empty", frd[0].offset)
-			}
 			// Check if the record in the target file region is different.
-			if frd[0].handle.LogicalID != h.LogicalID {
+			if !frd[0].handle.IsEmpty() && frd[0].handle.LogicalID != h.LogicalID {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return fmt.Errorf("registryMap.set failed, an item(target lid=%v) at offset=%v is different (source lid=%v)",
 					frd[0].handle.LogicalID, frd[0].offset, h.LogicalID)
 			}
 
 			frd[0].handle = h
-			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
+			if err := rm.hashmap.updateFileRegion(frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return err
 			}
@@ -163,7 +150,7 @@ func (rm registryMap) remove(ctx context.Context, keys ...sop.Tuple[string, []so
 					frd[0].handle.LogicalID, frd[0].offset, id)
 			}
 
-			if err := rm.hashmap.markDeleteFileRegion(ctx, frd...); err != nil {
+			if err := rm.hashmap.markDeleteFileRegion(frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return err
 			}

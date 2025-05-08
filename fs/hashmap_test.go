@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	hashModValue = SmallModValue
+	hashModValue = MinimumModValue
 )
 
 // This hashing algorithm tend to be denser as more data segment file is used. At two, it can fill around 66% avg.

@@ -80,7 +80,7 @@ func Test_TLog_FailOnFinalizeCommit(t *testing.T) {
 	b3.Update(ctx, pk, p)
 
 	pt := trans.GetPhasedTransaction()
-	twoPhaseTrans := pt.(*transaction)
+	twoPhaseTrans := pt.(*Transaction)
 
 	twoPhaseTrans.phase1Commit(ctx)
 

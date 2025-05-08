@@ -13,12 +13,17 @@ func (hm *hashmap) lockFoundFileRegion(ctx context.Context, fileRegionDetails ..
 	for _, frd := range fileRegionDetails {
 		if hm.useCacheForFileRegionLocks {
 			frd.lockKey = hm.cache.CreateLockKeys(hm.formatLockKey(frd.dio.filename, frd.offset))[0]
-			if err := hm.cache.Lock(ctx, lockFileRegionDuration, frd.lockKey); err != nil {
+			if ok, err := hm.cache.Lock(ctx, lockFileRegionDuration, frd.lockKey); ok {
+				continue
+			} else if err == nil {
+				return &sop.UpdateAllOrNothingError{
+					Err: fmt.Errorf("can't lock file (%s) region offset %v, already locked", frd.dio.filename, frd.offset),
+				}
+			} else {
 				return err
 			}
-			continue
 		}
-		if err := frd.dio.lockFileRegion(ctx, true, frd.offset, sop.HandleSizeInBytes, lockFileRegionAttemptTimeout); err != nil {
+		if err := frd.dio.lockFileRegion(ctx, frd.offset, sop.HandleSizeInBytes, lockFileRegionAttemptTimeout); err != nil {
 			return err
 		}
 	}
@@ -43,13 +48,12 @@ func (hm *hashmap) unlockFileRegion(ctx context.Context, fileRegionDetails ...fi
 
 func (hm *hashmap) isRegionLocked(ctx context.Context, dio *directIO, offset int64) (bool, error) {
 	if hm.useCacheForFileRegionLocks {
-		lkn := hm.formatLockKey(dio.filename, offset)
-		return hm.cache.IsLockedByOthers(ctx, lkn)
+		return hm.cache.IsLockedByOthers(ctx, hm.formatLockKey(dio.filename, offset))
 	}
 	return dio.isRegionLocked(ctx, true, offset, sop.HandleSizeInBytes)
 }
 
-func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
+func (hm *hashmap) updateFileRegion(fileRegionDetails ...fileRegionDetails) error {
 	m := encoding.NewHandleMarshaler()
 	for _, frd := range fileRegionDetails {
 		ba, _ := m.Marshal(frd.handle)
@@ -63,7 +67,7 @@ func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails ...fi
 	return nil
 }
 
-func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
+func (hm *hashmap) markDeleteFileRegion(fileRegionDetails ...fileRegionDetails) error {
 	// Study whether we want to zero out only the "Logical ID" part. For now, zero out entire Handle block
 	// which could aid in cleaner deleted blocks(as marked w/ all zeroes). Negligible difference in IO.
 	ba := bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)
