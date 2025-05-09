@@ -623,6 +623,8 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	t1.Commit(ctx)
 
 	eg, ctx2 := errgroup.WithContext(ctx)
+	eg3, ctx3 := errgroup.WithContext(ctx)
+	eg4, ctx4 := errgroup.WithContext(ctx)
 
 	f1 := func() error {
 		t1, _ := in_red_fs.NewTransaction(to)
@@ -631,35 +633,54 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 		b3.Add(ctx2, 50, "I am the value with 5000 key.")
 		b3.Add(ctx2, 51, "I am the value with 5001 key.")
 		b3.Add(ctx2, 52, "I am also a value with 5000 key.")
-		return t1.Commit(ctx2)
+		err := t1.Commit(ctx2)
+		if err != nil {
+			log.Error(fmt.Sprintf("f1 commit failed, details: %v", err))
+		}
+		return err
 	}
 
 	f2 := func() error {
 		t2, _ := in_red_fs.NewTransaction(to)
 		t2.Begin()
-		b32, _ := in_red_fs.OpenBtree[int, string](ctx2, "tablex2", t2, nil)
-		b32.Add(ctx2, 550, "I am the value with 5000 key.")
-		b32.Add(ctx2, 551, "I am the value with 5001 key.")
-		b32.Add(ctx2, 552, "I am the value with 5001 key.")
-		return t2.Commit(ctx2)
+		b32, _ := in_red_fs.OpenBtree[int, string](ctx3, "tablex2", t2, nil)
+		b32.Add(ctx3, 550, "I am the value with 5000 key.")
+		b32.Add(ctx3, 551, "I am the value with 5001 key.")
+		b32.Add(ctx3, 552, "I am the value with 5001 key.")
+		err := t2.Commit(ctx3)
+		if err != nil {
+			log.Error(fmt.Sprintf("f2 commit failed, details: %v", err))
+		}
+		return err
 	}
 
 	f3 := func() error {
 		t3, _ := in_red_fs.NewTransaction(to)
 		t3.Begin()
-		b32, _ := in_red_fs.OpenBtree[int, string](ctx2, "tablex2", t3, nil)
-		b32.Add(ctx2, 550, "random foo.")
-		b32.Add(ctx2, 551, "bar hello.")
-		return t3.Commit(ctx2)
+		b32, _ := in_red_fs.OpenBtree[int, string](ctx4, "tablex2", t3, nil)
+		b32.Add(ctx4, 550, "random foo.")
+		b32.Add(ctx4, 551, "bar hello.")
+		err := t3.Commit(ctx4)
+		if err != nil {
+			log.Error(fmt.Sprintf("f3 commit failed, details: %v", err))
+		}
+		return err
 	}
 
 	eg.Go(f1)
-	eg.Go(f2)
-	eg.Go(f3)
+	eg3.Go(f2)
+	eg4.Go(f3)
 
-	if err := eg.Wait(); err == nil {
-		t.Error("Failed, got no error, want an error")
-		return
+	var err error
+	var err3 error
+	var err4 error
+
+	err = eg.Wait()
+	err3 = eg3.Wait()
+	err4 = eg4.Wait()
+
+	if err == nil && err3 == nil && err4 == nil {
+		t.Error("failed, got no error on err, err3 & err4, want an error")
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)

@@ -87,6 +87,7 @@ func (dio *directIO) lockFileRegion(ctx context.Context, offset int64, length in
 
 	flock := syscall.Flock_t{
 		Type:  syscall.F_WRLCK,
+		Whence: 0,	// SEEK_SET
 		Start: offset,
 		Len:   length,
 		Pid:   int32(syscall.Getpid()),
@@ -150,6 +151,7 @@ func (dio *directIO) unlockFileRegion(offset int64, length int64) error {
 		Type:  syscall.F_UNLCK, // Unlock
 		Start: offset,
 		Len:   length,
+		Whence: 0,	// SEEK_SET
 		Pid:   int32(syscall.Getpid()),
 	}
 

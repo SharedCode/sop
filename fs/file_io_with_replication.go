@@ -5,7 +5,6 @@ import (
 )
 
 type fileIO struct {
-	filenames          []string
 	manageStore        sop.ManageStore
 	replicationTracker *replicationTracker
 	fio                FileIO
@@ -29,7 +28,6 @@ func (fio *fileIO) exists(targetFilename string) bool {
 
 func (fio *fileIO) write(targetFilename string, contents []byte) error {
 	filename := fio.replicationTracker.formatActiveFolderFilename(targetFilename)
-	fio.filenames = append(fio.filenames, targetFilename)
 	return fio.fio.WriteFile(filename, contents, permission)
 }
 

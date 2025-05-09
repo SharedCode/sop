@@ -31,10 +31,14 @@ type hashmap struct {
 // value (unmarshalled to a Handle) read from the file.
 type fileRegionDetails struct {
 	dio    *directIO
-	offset int64
+	blockOffset int64
+	handleInBlockOffset int64
 	handle sop.Handle
 	// If the region had been locked, lockKey should contain the lock details useful for unlocking it.
 	lockKey *sop.LockKey
+}
+func (fr *fileRegionDetails) getOffset() int64 {
+	return fr.blockOffset + fr.handleInBlockOffset
 }
 
 const (
@@ -52,6 +56,11 @@ const (
 
 const (
 	// 250, should generate 1MB file segment. Formula: 250 X 4096 = 1MB
+	// Given a 50 slot size per node, should be able to manage 825,000 B-Tree items (key/value pairs).
+	//
+	// Formula: 250 * 66 * 50 = 825,000
+	// Or if you use 100 slot size per node, 'will give you 1,650,000 items, or assuming you have about 65%
+	// b-tree utilization, 1,072,500 usable space.
 	MinimumModValue = 250
 	// 750k, should generate 3GB file segment.  Formula: 750k X 4096 = 3GB
 	MaximumModValue = 750000
@@ -133,10 +142,11 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 		if err != nil {
 			if dio.isEOF(err) {
 				if forWriting {
-					result.offset = blockOffset + handleInBlockOffset
-					if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+					result.blockOffset = blockOffset
+					result.handleInBlockOffset = handleInBlockOffset
+					if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
 						if ok {
-							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
 						}
 						return result, err
 					}
@@ -161,10 +171,11 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 		hbuf := ba[handleInBlockOffset : handleInBlockOffset+sop.HandleSizeInBytes]
 		if isZeroData(hbuf) {
 			if forWriting {
-				result.offset = blockOffset + handleInBlockOffset
-				if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+				result.blockOffset = blockOffset
+				result.blockOffset = handleInBlockOffset
+				if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
 					if ok {
-						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
 					}
 					return result, err
 				}
@@ -180,14 +191,15 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 					return result, err
 				}
 				result.handle = h
-				result.offset = blockOffset + handleInBlockOffset
+				result.blockOffset = blockOffset
+				result.handleInBlockOffset = handleInBlockOffset
 				result.dio = dio
 				if !forWriting {
 					return result, nil
 				}
-				if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+				if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
 					if ok {
-						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
 					}
 					return result, err
 				}
@@ -198,6 +210,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 		// Falling through here means the ideal block is not it.
 		var bao int64
 		result.dio = dio
+		result.blockOffset = blockOffset
 		for i := 0; i < handlesPerBlock; i++ {
 
 			// handleInBlockOffset had already been processed above and it's not it, skip it.
@@ -206,14 +219,13 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 			}
 
 			hbuf := ba[bao : bao+sop.HandleSizeInBytes]
-			result.offset = blockOffset + int64(bao)
+			result.handleInBlockOffset = int64(bao)
 
 			if isZeroData(hbuf) {
 				if forWriting {
-					result.offset = blockOffset + handleInBlockOffset
-					if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+					if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
 						if ok {
-							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
 						}
 						return result, err
 					}
@@ -229,14 +241,13 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 						return result, err
 					}
 					result.handle = h
-					result.offset = blockOffset + handleInBlockOffset
 					result.dio = dio
 					if !forWriting {
 						return result, nil
 					}
-					if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+					if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
 						if ok {
-							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
 						}
 						return result, err
 					}
@@ -352,10 +363,11 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 
 	// New file, 'prepare to let caller write the new handle to this block's first slot.
 	blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
-	result.offset = blockOffset + handleInBlockOffset
-	if ok, err := hm.isRegionLocked(ctx, dio, result.offset); ok || err != nil {
+	result.blockOffset = blockOffset
+	result.handleInBlockOffset = handleInBlockOffset
+	if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
 		if ok {
-			err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.offset)
+			err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
 		}
 		return result, err
 	}

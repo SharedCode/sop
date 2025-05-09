@@ -90,7 +90,9 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 
 				if ok, err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
 					if err == nil {
-						err = fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key)
+						err = &sop.UpdateAllOrNothingError{
+							Err: fmt.Errorf("lock allOrNothing failed, key %v is already locked by another", lk[0].Key),
+						}
 					}
 					// Unlock the object Keys before return.
 					r.cache.Unlock(ctx, handleKeys...)
@@ -125,7 +127,22 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
 				// Update registry record.
+				lk := r.cache.CreateLockKeys(h.LogicalID.String())
+				if ok, err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
+					if err == nil {
+						err = &sop.UpdateAllOrNothingError{
+							Err: fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key),
+						}
+					}
+					return err
+				}
 				if err := r.hashmap.set(ctx, false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+					// Unlock the object Keys before return.
+					r.cache.Unlock(ctx, lk[0])
+					return err
+				}
+				// Unlock the object Keys before return.
+				if err := r.cache.Unlock(ctx, lk[0]); err != nil {
 					return err
 				}
 			}

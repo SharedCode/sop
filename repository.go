@@ -17,7 +17,7 @@ type RegistryPayload[T Handle | UUID] struct {
 	// true will use Redis' sliding time, a.k.a. TTL support.
 	IsCacheTTL bool
 
-	// IDs is an array containing the Virtual IDs details to be stored or to be fetched.
+	// IDs is an array containing the Virtual IDs details to be managed (CRUD).
 	IDs []T
 }
 
