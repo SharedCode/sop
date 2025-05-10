@@ -3,6 +3,9 @@ package in_red_fs
 
 import (
 	"context"
+	"fmt"
+	log "log/slog"
+	"os"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
@@ -15,10 +18,13 @@ import (
 // Removes B-Tree with a given name from the backend storage. This involves dropping tables
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
-// Use with care and only when you are sure to delete the tables. This also flushes or
-// clear the backend cache (Redis) storage of all items stored. Thus, you will lose all those
-// cached items and SOP has to refetch them from underlying files.
+// Use with care and only when you are sure to delete the tables. This does not flush the cache,
+// you will have to call cache.Clear to do that, WHEN safe.
+//
+// This API & cache.Clear are both destructive, please use with care.
 func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) error {
+	log.Warn(fmt.Sprintf("Btree %s%c%s is about to be deleted", storesBaseFolder, os.PathSeparator, name))
+
 	cache := redis.NewClient()
 	replicationTracker := fs.NewReplicationTracker([]string{storesBaseFolder}, false)
 	storeRepository, err := fs.NewStoreRepository(replicationTracker, nil, cache)
@@ -26,11 +32,7 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 		return err
 	}
 
-	err = storeRepository.Remove(ctx, name)
-	if err == nil {
-		cache.Clear(ctx)
-	}
-	return err
+	return storeRepository.Remove(ctx, name)
 }
 
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
