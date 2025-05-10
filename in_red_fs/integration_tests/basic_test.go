@@ -33,6 +33,11 @@ func init() {
 
 	// Initialize Erasure Coding (EC) for the EC tests.
 	initErasureCoding()
+
+	cache := redis.NewClient()
+	if err := cache.Clear(ctx); err != nil {
+		log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
+	}
 }
 
 var ctx = context.Background()
