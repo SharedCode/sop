@@ -19,7 +19,6 @@ var redisConfig = redis.Options{
 	Address:                  "localhost:6379",
 	Password:                 "", // no password set
 	DB:                       0,  // use default DB
-	DefaultDurationInSeconds: 24 * 60 * 60,
 }
 
 const dataPath string = "/Users/grecinto/sop_data"

@@ -68,7 +68,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
-		t.Fail()
+		t.FailNow()
 	}
 	if ok, err := b3.Add(ctx, pk, p); !ok || err != nil {
 		t.Errorf("Add('joe') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
@@ -111,7 +111,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	b3, err := in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
-		t.Fail()
+		t.FailNow()
 	}
 	if ok, err := b3.Add(ctx, pk, p); !ok || err != nil {
 		t.Errorf("b3.Add('tracy') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
@@ -121,7 +121,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	b32, err := in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, trans2, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
-		t.Fail()
+		t.FailNow()
 	}
 	if ok, err := b32.Add(ctx, pk, p); !ok || err != nil {
 		t.Errorf("b32.Add('tracy') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
@@ -154,7 +154,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
-		t.Fail()
+		t.FailNow()
 	}
 
 	const start = 1
@@ -169,7 +169,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}
 	if err := trans.Commit(ctx); err != nil {
 		t.Errorf(err.Error())
-		t.Fail()
+		t.FailNow()
 		return
 	}
 
@@ -177,20 +177,20 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	trans, err = in_red_fs.NewTransaction(to2)
 	if err != nil {
 		t.Errorf(err.Error())
-		t.Fail()
+		t.FailNow()
 		return
 	}
 
 	if err := trans.Begin(); err != nil {
 		t.Errorf(err.Error())
-		t.Fail()
+		t.FailNow()
 		return
 	}
 
 	b3, err = in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
-		t.Fail()
+		t.FailNow()
 	}
 	for i := start; i < end; i++ {
 		pk, _ := newPerson(fmt.Sprintf("tracy%d", i), "swift", "female", "email", "phone")
@@ -230,7 +230,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 		if i%batchSize == 0 {
 			if err := t1.Commit(ctx); err != nil {
 				t.Error(err)
-				t.Fail()
+				t.FailNow()
 			}
 			t1, _ = in_red_fs.NewTransaction(to)
 			t1.Begin()
@@ -246,17 +246,17 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 		pk, _ := newPerson("jack", lname, "male", "email very very long long long", "phone123")
 		if found, err := b3.FindOne(ctx, pk, false); !found || err != nil {
 			t.Error(err)
-			t.Fail()
+			t.FailNow()
 		}
 		ci, _ := b3.GetCurrentItem(ctx)
 		if ci.Value.Phone != "phone123" || ci.Key.Lastname != lname {
 			t.Error(fmt.Errorf("Did not find the correct person with phone123 & lname %s", lname))
-			t.Fail()
+			t.FailNow()
 		}
 		if i%batchSize == 0 {
 			if err := t1.Commit(ctx); err != nil {
 				t.Error(err)
-				t.Fail()
+				t.FailNow()
 			}
 			t1, _ = in_red_fs.NewTransaction(to2)
 			t1.Begin()
@@ -295,7 +295,7 @@ func Test_VolumeDeletes(t *testing.T) {
 		if i%batchSize == 0 {
 			if err := t1.Commit(ctx); err != nil {
 				t.Error(err)
-				t.Fail()
+				t.FailNow()
 			}
 			t1, _ = in_red_fs.NewTransaction(to)
 			t1.Begin()
@@ -337,19 +337,19 @@ func Test_MixedOperations(t *testing.T) {
 			ok, err := b3.FindOne(ctx, pk2, false)
 			if err != nil {
 				t.Log(err)
-				t.Fail()
+				t.FailNow()
 			}
 			item, _ := b3.GetCurrentItem(ctx)
 			if !ok || item.Key.Firstname != pk2.Firstname || item.Key.Lastname != pk2.Lastname {
 				t.Logf("Failed to find %v, found %v instead.", pk2, item.Key)
-				t.Fail()
+				t.FailNow()
 			}
 		}
 
 		if i%batchSize == 0 {
 			if err := t1.Commit(ctx); err != nil {
 				t.Error(err)
-				t.Fail()
+				t.FailNow()
 			}
 			t1, _ = in_red_fs.NewTransaction(to)
 			t1.Begin()
@@ -366,26 +366,26 @@ func Test_MixedOperations(t *testing.T) {
 		case 0:
 			if ok, _ := b3.FindOne(ctx, pk, false); !ok || b3.GetCurrentKey().Lastname != pk.Lastname {
 				t.Errorf("FindOne failed, got = %v, want = %v.", b3.GetCurrentKey(), pk)
-				t.Fail()
+				t.FailNow()
 			}
 		// Delete on 1.
 		case 1:
 			if ok, _ := b3.Remove(ctx, pk); !ok {
 				t.Errorf("Remove %v failed.", pk)
-				t.Fail()
+				t.FailNow()
 			}
 		// Update on 2.
 		case 2:
 			if ok, _ := b3.Update(ctx, pk, p); !ok {
 				t.Errorf("Update %v failed.", pk)
-				t.Fail()
+				t.FailNow()
 			}
 		}
 
 		if i%batchSize == 0 {
 			if err := t1.Commit(ctx); err != nil {
 				t.Error(err)
-				t.Fail()
+				t.FailNow()
 			}
 			t1, _ = in_red_fs.NewTransaction(to)
 			t1.Begin()

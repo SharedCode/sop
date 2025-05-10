@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	log "log/slog"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -142,6 +141,42 @@ func (t *Transaction) Phase1Commit(ctx context.Context) error {
 		return t.commitForReaderTransaction(ctx)
 	}
 	if err := t.phase1Commit(ctx); err != nil {
+		if _, ok := err.(*sop.UpdateAllOrNothingError); ok {
+			log.Debug(fmt.Sprintf("update all or nothing err, will retry, details: %v", err))
+			startTime := sop.Now()
+			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
+			// until it succeeds or timeout.
+			for {
+				if err := t.timedOut(ctx, startTime); err != nil {
+					log.Debug(fmt.Sprintf("phase1Commit loop: %v", err))
+					break
+				}
+				if rerr := t.rollback(ctx, false); rerr != nil {
+					return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
+				}
+
+				if err != nil {
+					log.Warn(err.Error() + ", will retry")
+				} else {
+					log.Info("inside phase1Commit allOrNothing for-loop retry")
+				}
+
+				sop.RandomSleep(ctx)
+
+				if err = t.refetchAndMergeModifications(ctx); err != nil {
+					log.Debug("phase1Commit.refetchAndMergeModifications err: %v", err)
+					return err
+				}
+				if err = t.phase1Commit(ctx); err != nil {
+					if _, ok := err.(*sop.UpdateAllOrNothingError); !ok {
+						break
+					}
+				} else {
+					log.Debug("after allOrNothing phase1Commit call")
+					return nil
+				}
+			}
+		}
 		t.phaseDone = 2
 		if rerr := t.rollback(ctx, true); rerr != nil {
 			return fmt.Errorf("phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
@@ -169,6 +204,7 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	}
 	if err := t.phase2Commit(ctx); err != nil {
 		if _, ok := err.(*sop.UpdateAllOrNothingError); ok {
+			log.Debug("update all or nothing err, will retry, details: %v", err)
 			startTime := sop.Now()
 			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
 			// until it succeeds or timeout.
@@ -179,15 +215,22 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 				if rerr := t.rollback(ctx, false); rerr != nil {
 					return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 				}
-				log.Warn(err.Error() + ", will retry")
 
-				randomSleep(ctx)
+				if err != nil {
+					log.Warn(err.Error() + ", will retry")
+				} else {
+					log.Info("inside phase2Commit allOrNothing for-loop retry")
+				}
+
+				sop.RandomSleep(ctx)
 
 				if err = t.refetchAndMergeModifications(ctx); err != nil {
 					return err
 				}
 				if err = t.phase1Commit(ctx); err != nil {
-					break
+					if _, ok := err.(*sop.UpdateAllOrNothingError); !ok {
+						break
+					}
 				}
 				if err = t.phase2Commit(ctx); err == nil {
 					return nil
@@ -240,31 +283,7 @@ func (t *Transaction) GetStoreRepository() sop.StoreRepository {
 }
 
 func (t *Transaction) timedOut(ctx context.Context, startTime time.Time) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	if sop.Now().Sub(startTime).Minutes() > float64(t.maxTime) {
-		return fmt.Errorf("transaction timed out(maxTime=%v)", t.maxTime)
-	}
-	return nil
-}
-
-// Sleep in random milli-seconds to allow different conflicting (Node modifying) transactions
-// to retry on different times, thus, increasing chance to succeed one after the other.
-func randomSleep(ctx context.Context) {
-	sleepTime := rand.Intn(5) * 20
-	log.Debug(fmt.Sprintf("sleep for %d millis", sleepTime))
-	sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
-}
-
-// sleep with context.
-func sleep(ctx context.Context, sleepTime time.Duration) {
-	if sleepTime <= 0 {
-		return
-	}
-	sleep, cancel := context.WithTimeout(ctx, sleepTime)
-	defer cancel()
-	<-sleep.Done()
+	return sop.TimedOut(ctx, "transaction", startTime, t.maxTime)
 }
 
 // phase1Commit does the phase 1 commit steps.
@@ -368,7 +387,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 			}
 
 			log.Debug("commit failed, refetch, remerge & another commit try will occur after randomSleep")
-			randomSleep(ctx)
+			sop.RandomSleep(ctx)
 
 			if err = t.refetchAndMergeModifications(ctx); err != nil {
 				return err
@@ -675,7 +694,7 @@ func (t *Transaction) commitForReaderTransaction(ctx context.Context) error {
 			return nil
 		}
 
-		randomSleep(ctx)
+		sop.RandomSleep(ctx)
 		// Recreate the fetches on latest committed nodes & check if fetched Items are unchanged.
 		if err := t.refetchAndMergeModifications(ctx); err != nil {
 			return err

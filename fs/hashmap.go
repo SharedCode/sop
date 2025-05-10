@@ -172,7 +172,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 		if isZeroData(hbuf) {
 			if forWriting {
 				result.blockOffset = blockOffset
-				result.blockOffset = handleInBlockOffset
+				result.handleInBlockOffset = handleInBlockOffset
 				if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
 					if ok {
 						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())

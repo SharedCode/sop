@@ -68,7 +68,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	err1 := t1.Commit(ctx)
 	err2 := t2.Commit(ctx)
 	if err1 != nil {
-		t.Error("Commit #1, got = fail, want = success.")
+		t.Errorf("Commit #1, got = fail, want = success, details: %v", err1)
 	}
 	if err2 == nil {
 		t.Error("Commit #2, got = succeess, want = fail.")
@@ -530,7 +530,9 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	b3.Add(ctx, 1, "I am the value with 500 key.")
 	t1.Commit(ctx)
 
-	eg, ctx2 := errgroup.WithContext(ctx)
+	eg2, ctx2 := errgroup.WithContext(ctx)
+	eg3, ctx3 := errgroup.WithContext(ctx)
+	eg4, ctx4 := errgroup.WithContext(ctx)
 
 	f1 := func() error {
 		t1, _ := in_red_fs.NewTransaction(to)
@@ -540,39 +542,56 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 		b3.Add(ctx2, 51, "I am the value with 5001 key.")
 		b3.Add(ctx2, 52, "I am also a value with 5000 key.")
 		err := t1.Commit(ctx2)
-		log.Error(err.Error())
+		if err != nil {
+			log.Error(fmt.Sprintf("f1 commit err: %v", err))
+		}
 		return err
 	}
 
 	f2 := func() error {
 		t2, _ := in_red_fs.NewTransaction(to)
 		t2.Begin()
-		b32, _ := in_red_fs.OpenBtree[int, string](ctx2, "tablex", t2, nil)
-		b32.Add(ctx2, 550, "I am the value with 5000 key.")
-		b32.Add(ctx2, 551, "I am the value with 5001 key.")
-		b32.Add(ctx2, 552, "I am the value with 5001 key.")
-		err := t2.Commit(ctx2)
-		log.Error(err.Error())
+		b32, _ := in_red_fs.OpenBtree[int, string](ctx3, "tablex", t2, nil)
+		b32.Add(ctx3, 550, "I am the value with 5000 key.")
+		b32.Add(ctx3, 551, "I am the value with 5001 key.")
+		b32.Add(ctx3, 552, "I am the value with 5001 key.")
+		err := t2.Commit(ctx3)
+		if err != nil {
+			log.Error(fmt.Sprintf("f2 commit err: %v", err))
+		}
 		return err
 	}
 
 	f3 := func() error {
 		t3, _ := in_red_fs.NewTransaction(to)
 		t3.Begin()
-		b32, _ := in_red_fs.OpenBtree[int, string](ctx2, "tablex", t3, nil)
-		b32.Add(ctx2, 550, "random foo.")
-		b32.Add(ctx2, 551, "bar hello.")
-		err := t3.Commit(ctx2)
-		log.Error(err.Error())
+		b32, _ := in_red_fs.OpenBtree[int, string](ctx4, "tablex", t3, nil)
+		b32.Add(ctx4, 550, "random foo.")
+		b32.Add(ctx4, 551, "bar hello.")
+		err := t3.Commit(ctx4)
+		if err != nil {
+			log.Error(fmt.Sprintf("f3 commit err: %v", err))
+		}
 		return err
 	}
 
-	eg.Go(f1)
-	eg.Go(f2)
-	eg.Go(f3)
+	eg2.Go(f1)
+	eg3.Go(f2)
+	eg4.Go(f3)
 
-	if err := eg.Wait(); err != nil {
-		log.Warn(fmt.Sprintf("error on commit, but should not fail the test, details: %v", err))
+	failCount := 0
+	if err := eg2.Wait(); err != nil {
+		failCount++
+	}
+	if err := eg3.Wait(); err != nil {
+		failCount++
+	}
+	if err := eg4.Wait(); err != nil {
+		failCount++
+	}
+
+	if failCount > 1 {
+		t.Errorf("at least 2 commits should succeed, got %d failed", failCount)
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
@@ -591,9 +610,9 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 		i++
 	}
 	if i < 5 {
-		t.Errorf("Failed, traversing/counting all records, got %d, want 5.", i)
+		t.Errorf("Failed, traversing/counting all records, got %d, want at least 5.", i)
 	}
-	if b3.Count() != 9 {
+	if i != int(b3.Count()) {
 		t.Errorf("Failed, traversing/counting all records, got %d, but Count() returned %d.", i, b3.Count())
 	}
 }
@@ -733,6 +752,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 
 	eg, ctx2 := errgroup.WithContext(ctx)
 	eg2, ctx3 := errgroup.WithContext(ctx)
+	eg3, ctx4 := errgroup.WithContext(ctx)
 
 	f1 := func() error {
 		t1, _ := in_red_fs.NewTransaction(to)
@@ -757,23 +777,31 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	f3 := func() error {
 		t3, _ := in_red_fs.NewTransaction(to)
 		t3.Begin()
-		b32, _ := in_red_fs.OpenBtree[int, string](ctx2, "tabley", t3, nil)
-		b32.Update(ctx2, 550, "random foo.")
-		b32.Update(ctx2, 551, "bar hello.")
-		return t3.Commit(ctx2)
+		b32, _ := in_red_fs.OpenBtree[int, string](ctx4, "tabley", t3, nil)
+		b32.Update(ctx4, 550, "random foo.")
+		b32.Update(ctx4, 551, "bar hello.")
+		return t3.Commit(ctx4)
 	}
 
 	eg2.Go(f1)
 	eg.Go(f2)
-	eg.Go(f3)
+	eg3.Go(f3)
 
-	if err := eg.Wait(); err == nil {
-		t.Error("Failed, got no error, want an error")
-		return
-	}
 	if err := eg2.Wait(); err != nil {
 		t.Error(err)
 		return
+	}
+	err := eg.Wait()
+	err3 := eg3.Wait()
+
+	if err == nil && err3 == nil {
+		t.Error("err or err3 should have errored but both did not")		
+	}
+	if err != nil {
+		log.Error(err.Error())
+	}
+	if err3 != nil {
+		log.Error(err3.Error())
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
