@@ -202,4 +202,7 @@ type Cache interface {
 	IsLockedByOthers(ctx context.Context, lockKeyNames ...string) (bool, error)
 	// Unlock a given set of keys.
 	Unlock(ctx context.Context, lockKeys ...*LockKey) error
+
+	// Clear out the backend Cache database of all items.
+	Clear(ctx context.Context) error
 }

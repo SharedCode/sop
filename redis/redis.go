@@ -39,6 +39,11 @@ func (c client) Ping(ctx context.Context) error {
 	return nil
 }
 
+// Clear the cache. Be cautions calling this method as it will clear the Redis cache.
+func (c client) Clear(ctx context.Context) error {
+	return connection.Client.FlushDB(ctx).Err()
+}
+
 // Set executes the redis Set command
 func (c client) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	if connection == nil {
