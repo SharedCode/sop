@@ -140,7 +140,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 
 	trans.Begin()
@@ -182,7 +182,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}
 
 	if err := trans.Begin(); err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 		t.Fail()
 		return
 	}
