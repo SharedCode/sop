@@ -16,6 +16,9 @@ import (
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
 // Use with care and only when you are sure to delete the tables.
+// Also, this does NOT clear out the (Redis) cache, so, you may generate an issue. This is only meant
+// to be used on special DB administration case, not to be used part of your application.
+// Make sure to delete all entries in (Redis) cache if ever you delete a SOP table using this function.
 func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) error {
 	cache := redis.NewClient()
 	replicationTracker := fs.NewReplicationTracker([]string{storesBaseFolder}, false)

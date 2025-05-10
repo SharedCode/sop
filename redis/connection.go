@@ -4,8 +4,6 @@ import (
 	"crypto/tls"
 	"sync"
 
-	"time"
-
 	"github.com/redis/go-redis/v9"
 )
 
@@ -17,15 +15,8 @@ type Options struct {
 	Password string
 	// DB to connect to.
 	DB int
-	// DefaultDurationInSeconds specifies the default caching time to use if not specified on call.
-	DefaultDurationInSeconds int
 	// TLS config.
 	TLSConfig *tls.Config
-}
-
-// Returns the default duration.
-func (opt *Options) GetDefaultDuration() time.Duration {
-	return time.Duration(opt.DefaultDurationInSeconds) * time.Second
 }
 
 // Connection contains Redis client connection object and the Options used to connect.
@@ -37,10 +28,9 @@ type Connection struct {
 // DefaultOptions.
 func DefaultOptions() Options {
 	return Options{
-		Address:                  "localhost:6379",
-		Password:                 "", // no password set
-		DB:                       0,  // use default DB
-		DefaultDurationInSeconds: int(30 * time.Minute),
+		Address:  "localhost:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
 	}
 }
 

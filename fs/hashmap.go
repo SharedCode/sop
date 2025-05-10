@@ -34,8 +34,6 @@ type fileRegionDetails struct {
 	blockOffset         int64
 	handleInBlockOffset int64
 	handle              sop.Handle
-	// If the region had been locked, lockKey should contain the lock details useful for unlocking it.
-	lockKey *sop.LockKey
 }
 
 func (fr *fileRegionDetails) getOffset() int64 {
@@ -76,8 +74,8 @@ func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicatio
 		fileHandles:        make(map[string]*directIO, 5),
 		cache:              cache,
 
-		// Support cache(e.g. - Redis) based file region locks so it can work across different OS like Windows, OSX & Linux.
-		// But yeah, 'will crowd the cache, use with care. :)
+		// Support cache(e.g. - Redis) based file region locks so it can work across different OS like Windows, OSX & Linux, etc...
+		// All supported by the Golang compiler. :)
 		useCacheForFileRegionLocks: true, //useCacheForFileRegionLocks,
 	}
 }
