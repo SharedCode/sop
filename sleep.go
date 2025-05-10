@@ -26,7 +26,7 @@ func RandomSleepWithUnit(ctx context.Context, unit time.Duration) {
 	if sleepTime == 0 {
 		sleepTime = 1
 	}
-	st := sleepTime*unit
+	st := sleepTime * unit
 	log.Debug(fmt.Sprintf("sleep for %d * %d unit", sleepTime, unit))
 	Sleep(ctx, st)
 }
