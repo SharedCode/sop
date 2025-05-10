@@ -8,6 +8,8 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/fs"
 	"github.com/SharedCode/sop/in_red_fs"
+	"github.com/SharedCode/sop/fs"
+	"github.com/SharedCode/sop/in_red_fs"
 )
 
 func MultipleExpiredTransCleanup(t *testing.T) {
@@ -19,8 +21,11 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, _ := in_red_fs.NewTransaction(to)
 	trans.Begin()
 
+	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "ztab1",
 		SlotLength:               8,
@@ -42,8 +47,10 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_fs.NewTransaction(to)
+	trans, _ = in_red_fs.NewTransaction(to)
 	trans.Begin()
 
+	b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	pk, p := newPerson("joe", "krueger77", "male", "email", "phone")
 	b3.Add(ctx, pk, p)
@@ -55,8 +62,10 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_fs.NewTransaction(to)
+	trans, _ = in_red_fs.NewTransaction(to)
 	trans.Begin()
 
+	b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	pk, p = newPerson("joe", "krueger47", "male", "email2", "phone")
 	b3.Update(ctx, pk, p)
@@ -66,6 +75,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now()
 	sop.Now = func() time.Time { return yesterday }
 
+	trans, _ = in_red_fs.NewTransaction(to)
 	trans, _ = in_red_fs.NewTransaction(to)
 
 	// Cleanup should be launched from this call.
@@ -79,7 +89,10 @@ func Cleanup(t *testing.T) {
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to2)
+	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+	trans, _ := in_red_fs.NewTransaction(to2)
 	trans.Begin()
+	_, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	_, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	trans.Commit(ctx)
 
@@ -87,7 +100,9 @@ func Cleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 
 	trans, _ = in_red_fs.NewTransaction(to2)
+	trans, _ = in_red_fs.NewTransaction(to2)
 	trans.Begin()
+	_, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	_, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	trans.Commit(ctx)
 }

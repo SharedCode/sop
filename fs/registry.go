@@ -29,6 +29,7 @@ const (
 
 // NewRegistry manages the Handle in memory for mocking.
 func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) Registry {
+func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) Registry {
 	return &registryOnDisk{
 		hashmap:            newRegistryMap(readWrite, hashModValue, rt, cache, useCacheForFileRegionLocks),
 		replicationTracker: rt,
@@ -107,6 +108,7 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 		}
 
 		// Check the locks to cater for potential race condition.
+		if ok, err := r.cache.IsLocked(ctx, handleKeys...); !ok || err != nil {
 		if ok, err := r.cache.IsLocked(ctx, handleKeys...); !ok || err != nil {
 			// Unlock the object Keys before return.
 			r.cache.Unlock(ctx, handleKeys...)

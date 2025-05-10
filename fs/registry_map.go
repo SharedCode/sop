@@ -12,6 +12,7 @@ type registryMap struct {
 }
 
 func newRegistryMap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *registryMap {
+func newRegistryMap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *registryMap {
 	return &registryMap{
 		hashmap: newHashmap(readWrite, hashModValue, replicationTracker, cache, useCacheForFileRegionLocks),
 	}
@@ -34,7 +35,7 @@ func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.
 			}
 
 			frd[0].handle = h
-			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
+			if err := rm.hashmap.updateFileRegion(frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return err
 			}
@@ -67,6 +68,7 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 			for i := 0; i < len(frds); i++ {
 				// Check if the record in the target file region is different.
 				if !frds[i].handle.IsEmpty() && frds[i].handle.LogicalID != item.Second[i].LogicalID {
+				if !frds[i].handle.IsEmpty() && frds[i].handle.LogicalID != item.Second[i].LogicalID {
 					// Fail if the record on target is different.
 					lockedItems = append(lockedItems, frds...)
 					unlockItemFileRegions(lockedItems...)
@@ -78,7 +80,7 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 			}
 			lockedItems = append(lockedItems, frds...)
 		}
-		if err := rm.hashmap.updateFileRegion(ctx, lockedItems...); err != nil {
+		if err := rm.hashmap.updateFileRegion(lockedItems...); err != nil {
 			unlockItemFileRegions(lockedItems...)
 			return err
 		}
@@ -93,13 +95,14 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 			}
 			// Check if the record in the target file region is different.
 			if !frd[0].handle.IsEmpty() && frd[0].handle.LogicalID != h.LogicalID {
+			if !frd[0].handle.IsEmpty() && frd[0].handle.LogicalID != h.LogicalID {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return fmt.Errorf("registryMap.set failed, an item(target lid=%v) at offset=%v is different (source lid=%v)",
 					frd[0].handle.LogicalID, frd[0].getOffset(), h.LogicalID)
 			}
 
 			frd[0].handle = h
-			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
+			if err := rm.hashmap.updateFileRegion(frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return err
 			}
@@ -150,7 +153,7 @@ func (rm registryMap) remove(ctx context.Context, keys ...sop.Tuple[string, []so
 					frd[0].handle.LogicalID, frd[0].getOffset(), id)
 			}
 
-			if err := rm.hashmap.markDeleteFileRegion(ctx, frd...); err != nil {
+			if err := rm.hashmap.markDeleteFileRegion(frd...); err != nil {
 				rm.hashmap.unlockFileRegion(ctx, frd...)
 				return err
 			}

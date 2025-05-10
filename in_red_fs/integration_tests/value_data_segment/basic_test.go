@@ -8,6 +8,8 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/fs"
 	"github.com/SharedCode/sop/in_red_fs"
+	"github.com/SharedCode/sop/fs"
+	"github.com/SharedCode/sop/in_red_fs"
 	"github.com/SharedCode/sop/redis"
 )
 
@@ -15,9 +17,13 @@ var redisConfig = redis.Options{
 	Address:  "localhost:6379",
 	Password: "", // no password set
 	DB:       0,  // use default DB
+	Address:  "localhost:6379",
+	Password: "", // no password set
+	DB:       0,  // use default DB
 }
 
 func init() {
+	in_red_fs.Initialize(redisConfig)
 	in_red_fs.Initialize(redisConfig)
 }
 
@@ -28,10 +34,13 @@ const dataPath string = "/Users/grecinto/sop_data"
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore1",
 		SlotLength:               8,
@@ -49,6 +58,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 		return
 	}
 	if _, err := in_red_fs.OpenBtree[int, string](ctx, "fooStore22", trans, nil); err == nil {
+	if _, err := in_red_fs.OpenBtree[int, string](ctx, "fooStore22", trans, nil); err == nil {
 		t.Logf("OpenBtree('fooStore', trans) failed, got nil want error.")
 	}
 }
@@ -60,10 +70,13 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 4. Commit Transaction
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore2",
 		SlotLength:               8,
@@ -113,6 +126,11 @@ func Test_ByteArrayValue(t *testing.T) {
 		SlotLength:        8,
 		LeafLoadBalancing: true,
 		Description:       "",
+	b3, err := in_red_fs.NewBtree[int, []byte](ctx, sop.StoreOptions{
+		Name:              "baStore",
+		SlotLength:        8,
+		LeafLoadBalancing: true,
+		Description:       "",
 	}, trans, nil)
 	if err != nil {
 		t.Error(err)
@@ -146,10 +164,17 @@ func Test_ByteArrayValue(t *testing.T) {
 func Test_ByteArrayValueGet(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.NoCheck, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.NoCheck, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 	trans.Begin()
+	b3, err := in_red_fs.NewBtree[int, []byte](ctx, sop.StoreOptions{
+		Name:              "baStore",
+		SlotLength:        8,
+		LeafLoadBalancing: true,
+		Description:       "",
 	b3, err := in_red_fs.NewBtree[int, []byte](ctx, sop.StoreOptions{
 		Name:              "baStore",
 		SlotLength:        8,

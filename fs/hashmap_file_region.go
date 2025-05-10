@@ -49,6 +49,7 @@ func (hm *hashmap) unlockFileRegion(ctx context.Context, fileRegionDetails ...fi
 func (hm *hashmap) isRegionLocked(ctx context.Context, dio *directIO, offset int64) (bool, error) {
 	if hm.useCacheForFileRegionLocks {
 		return hm.cache.IsLockedByOthers(ctx, hm.formatLockKey(dio.filename, offset))
+		return hm.cache.IsLockedByOthers(ctx, hm.formatLockKey(dio.filename, offset))
 	}
 	return dio.isRegionLocked(ctx, true, offset, sop.HandleSizeInBytes)
 }
