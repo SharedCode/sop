@@ -75,7 +75,7 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 						}
 					} else {
 						err = &sop.UpdateAllOrNothingError{
-							Err: fmt.Errorf("Registry Update failed, err getting handle %s data from cache", h.LogicalID.String()),
+							Err: fmt.Errorf("Registry Update failed, err getting handle %s data from cache, details: %v", h.LogicalID.String(), err),
 						}
 					}
 					// Unlock the object Keys before return.
