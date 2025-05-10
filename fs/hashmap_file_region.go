@@ -15,14 +15,6 @@ func (hm *hashmap) lockFoundFileRegion(ctx context.Context, fileRegionDetails ..
 	for _, frd := range fileRegionDetails {
 		if hm.useCacheForFileRegionLocks {
 			return nil
-			// frd.lockKey = hm.cache.CreateLockKeys(hm.formatLockKey(frd.dio.filename, frd.getOffset()))[0]
-			// if ok, err := hm.cache.Lock(ctx, lockFileRegionDuration, frd.lockKey); ok {
-			// 	continue
-			// } else if err == nil {
-			// 	return fmt.Errorf("can't lock file (%s) region offset %v, already locked", frd.dio.filename, frd.getOffset())
-			// } else {
-			// 	return err
-			// }
 		}
 		if err := frd.dio.lockFileRegion(ctx, frd.getOffset(), sop.HandleSizeInBytes, lockFileRegionAttemptTimeout); err != nil {
 			return err
@@ -37,12 +29,6 @@ func (hm *hashmap) unlockFileRegion(ctx context.Context, fileRegionDetails ...fi
 		return nil
 	}
 	for _, frd := range fileRegionDetails {
-		// if hm.useCacheForFileRegionLocks {
-		// 	if err := hm.cache.Unlock(ctx, frd.lockKey); err != nil {
-		// 		return err
-		// 	}
-		// 	continue
-		// }
 		if err := frd.dio.unlockFileRegion(frd.getOffset(), sop.HandleSizeInBytes); err != nil {
 			return err
 		}
@@ -53,7 +39,6 @@ func (hm *hashmap) unlockFileRegion(ctx context.Context, fileRegionDetails ...fi
 func (hm *hashmap) isRegionLocked(ctx context.Context, dio *directIO, offset int64) (bool, error) {
 	if hm.useCacheForFileRegionLocks {
 		return false, nil
-		// return hm.cache.IsLockedByOthers(ctx, hm.formatLockKey(dio.filename, offset))
 	}
 	return dio.isRegionLocked(ctx, true, offset, sop.HandleSizeInBytes)
 }

@@ -637,7 +637,6 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 		IsUnique:                 true,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		Description:              "",
 	}, t1, nil)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 1, "I am the value with 500 key.")
@@ -654,11 +653,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 		b3.Add(ctx2, 50, "I am the value with 5000 key.")
 		b3.Add(ctx2, 51, "I am the value with 5001 key.")
 		b3.Add(ctx2, 52, "I am also a value with 5000 key.")
-		err := t1.Commit(ctx2)
-		if err != nil {
-			log.Error(fmt.Sprintf("f1 commit failed, details: %v", err))
-		}
-		return err
+		return t1.Commit(ctx2)
 	}
 
 	f2 := func() error {
@@ -668,11 +663,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 		b32.Add(ctx3, 550, "I am the value with 5000 key.")
 		b32.Add(ctx3, 551, "I am the value with 5001 key.")
 		b32.Add(ctx3, 552, "I am the value with 5001 key.")
-		err := t2.Commit(ctx3)
-		if err != nil {
-			log.Error(fmt.Sprintf("f2 commit failed, details: %v", err))
-		}
-		return err
+		return t2.Commit(ctx3)
 	}
 
 	f3 := func() error {
@@ -681,11 +672,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 		b32, _ := in_red_fs.OpenBtree[int, string](ctx4, "tablex2", t3, nil)
 		b32.Add(ctx4, 550, "random foo.")
 		b32.Add(ctx4, 551, "bar hello.")
-		err := t3.Commit(ctx4)
-		if err != nil {
-			log.Error(fmt.Sprintf("f3 commit failed, details: %v", err))
-		}
-		return err
+		return t3.Commit(ctx4)
 	}
 
 	eg.Go(f1)
