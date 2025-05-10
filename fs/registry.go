@@ -108,6 +108,11 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 
 		// Check the locks to cater for potential race condition.
 		if ok, err := r.cache.IsLocked(ctx, handleKeys...); !ok || err != nil {
+			if err == nil {
+				err = &sop.UpdateAllOrNothingError{
+					Err: fmt.Errorf("isLocked allOrNothing failed, key(s) locked by another"),
+				}
+			}
 			// Unlock the object Keys before return.
 			r.cache.Unlock(ctx, handleKeys...)
 			return err
