@@ -69,9 +69,13 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 			for _, h := range sh.IDs {
 				var h2 sop.Handle
 				if err := r.cache.GetStruct(ctx, h.LogicalID.String(), &h2); err != nil {
-					if !r.cache.KeyNotFound(err) {
+					if r.cache.KeyNotFound(err) {
 						err = &sop.UpdateAllOrNothingError{
 							Err: fmt.Errorf("Registry Update failed, handle %s not in cache", h.LogicalID.String()),
+						}
+					} else {
+						err = &sop.UpdateAllOrNothingError{
+							Err: fmt.Errorf("Registry Update failed, err getting handle %s data from cache", h.LogicalID.String()),
 						}
 					}
 					// Unlock the object Keys before return.
