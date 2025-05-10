@@ -49,9 +49,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
 		t1, _ = in_red_fs.NewTransaction(to)
-		t1, _ = in_red_fs.NewTransaction(to)
 		t1.Begin()
-		b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "persondb77", t1, Compare)
 		b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "persondb77", t1, Compare)
 	}
 
@@ -678,14 +676,14 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 			if !ok {
 				err = fmt.Errorf("expected error")
 			}
-			t2.Rollback(ctx)
+			t2.Rollback(ctx3)
 			return err
 		}
 		if ok, err := b32.Add(ctx3, 551, "I am the value with 5001 key."); !ok || err != nil {
 			if !ok {
 				err = fmt.Errorf("expected error")
 			}
-			t2.Rollback(ctx)
+			t2.Rollback(ctx3)
 			return err
 		}
 		b32.Add(ctx3, 552, "I am the value with 5001 key.")
@@ -700,33 +698,37 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 			if !ok {
 				err = fmt.Errorf("expected error")
 			}
-			t3.Rollback(ctx)
+			t3.Rollback(ctx4)
 			return err
 		}
 		if ok, err := b32.Add(ctx4, 551, "bar hello."); !ok || err != nil {
 			if !ok {
 				err = fmt.Errorf("expected error")
 			}
-			t3.Rollback(ctx)
+			t3.Rollback(ctx4)
 			return err
 		}
 		return t3.Commit(ctx4)
 	}
 
 	eg.Go(f1)
+	if err := eg.Wait(); err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
 	eg3.Go(f2)
 	eg4.Go(f3)
 
-	var err error
 	var err3 error
 	var err4 error
 
-	err = eg.Wait()
 	err3 = eg3.Wait()
 	err4 = eg4.Wait()
 
-	if err == nil && err3 == nil && err4 == nil {
-		t.Error("failed, got no error on err, err3 & err4, want an error")
+	if err3 == nil && err4 == nil {
+		t.Error("failed, got no error on err3 & err4, want an error")
+		t.FailNow()
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
