@@ -81,7 +81,6 @@ func (dio *directIO) readAt(block []byte, offset int64) (int, error) {
 }
 
 func (dio *directIO) lockFileRegion(ctx context.Context, offset int64, length int64, timeout time.Duration) error {
-func (dio *directIO) lockFileRegion(ctx context.Context, offset int64, length int64, timeout time.Duration) error {
 	if dio.file == nil {
 		return fmt.Errorf("can't lock file region, there is no opened file")
 	}

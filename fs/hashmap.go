@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"strings"
 	"time"
 
 	"github.com/SharedCode/sop"
@@ -18,7 +17,6 @@ import (
 */
 
 type hashmap struct {
-	hashModValue       int
 	hashModValue       int
 	replicationTracker *replicationTracker
 	readWrite          bool
@@ -48,14 +46,10 @@ const (
 	handlesPerBlock = 66
 	// Keep the attempt to lock file region short since if it is locked, we want to fail right away & cause transaction rollback.
 	lockFileRegionAttemptTimeout = time.Duration(4 * time.Second)
-	lockFileRegionAttemptTimeout = time.Duration(4 * time.Second)
 	preallocateFileLockKey       = "infs_reg"
 	// Growing the file needs more time to complete.
 	lockPreallocateFileTimeout = time.Duration(20 * time.Minute)
-	lockPreallocateFileTimeout = time.Duration(20 * time.Minute)
 	lockFileRegionKeyPrefix    = "infs"
-	lockFileRegionDuration     = time.Duration(5 * time.Minute)
-	idNotFoundErr              = "unable to find the item with id"
 	lockFileRegionDuration     = time.Duration(5 * time.Minute)
 	idNotFoundErr              = "unable to find the item with id"
 )
@@ -74,17 +68,12 @@ const (
 
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
 func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *hashmap {
-func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *hashmap {
 	return &hashmap{
 		hashModValue:               hashModValue,
 		replicationTracker:         replicationTracker,
 		readWrite:                  readWrite,
 		fileHandles:                make(map[string]*directIO, 5),
 		cache:                      cache,
-
-		// Support cache(e.g. - Redis) based file region locks so it can work across different OS like Windows, OSX & Linux.
-		// But yeah, 'will crowd the cache, use with care. :)
-		useCacheForFileRegionLocks: true,	//useCacheForFileRegionLocks,
 
 		// Support cache(e.g. - Redis) based file region locks so it can work across different OS like Windows, OSX & Linux.
 		// But yeah, 'will crowd the cache, use with care. :)
@@ -123,7 +112,6 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 			}
 			if !fileExists || fs < hm.getSegmentFileSize() {
 				if !forWriting {
-					return result, fmt.Errorf("%s '%v'", idNotFoundErr, id)
 					return result, fmt.Errorf("%s '%v'", idNotFoundErr, id)
 				}
 				frd, err := hm.setupNewFile(ctx, forWriting, fn, id, dio)
@@ -362,10 +350,6 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 		if err == nil {
 			err = fmt.Errorf("can't acquire a lock to preallocate file %s", filename)
 		}
-	if ok, err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk...); !ok || err != nil {
-		if err == nil {
-			err = fmt.Errorf("can't acquire a lock to preallocate file %s", filename)
-		}
 		return result, err
 	}
 
@@ -400,6 +384,10 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 	return result, nil
 }
 
+func (hm *hashmap) getSegmentFileSize() int64 {
+	return int64(hm.hashModValue) * blockSize
+}
+
 func isZeroData(data []byte) bool {
 	for _, b := range data {
 		if b != 0 {
@@ -407,8 +395,4 @@ func isZeroData(data []byte) bool {
 		}
 	}
 	return true
-}
-
-func (hm *hashmap) getSegmentFileSize() int64 {
-	return int64(hm.hashModValue) * blockSize
 }
