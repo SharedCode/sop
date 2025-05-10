@@ -44,9 +44,6 @@ func (c client) Set(ctx context.Context, key string, value string, expiration ti
 	if connection == nil {
 		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
-	if expiration < 0 {
-		expiration = connection.Options.GetDefaultDuration()
-	}
 	// No caching if expiration < 0.
 	if expiration < 0 {
 		return nil
@@ -75,14 +72,16 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 	if connection == nil {
 		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
+
+	// No caching if expiration < 0.
+	if expiration < 0 {
+		return nil
+	}
+
 	// serialize User object to JSON
 	ba, err := encoding.BlobMarshaler.Marshal(value)
 	if err != nil {
 		return err
-	}
-	// No caching if expiration < 0.
-	if expiration < 0 {
-		return nil
 	}
 	return connection.Client.Set(ctx, key, ba, expiration).Err()
 }

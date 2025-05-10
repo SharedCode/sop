@@ -23,10 +23,9 @@ var cassConfig = cas.Config{
 
 // Redis config.
 var redisConfig = redis.Options{
-	Address:                  "localhost:6379",
-	Password:                 "", // no password set
-	DB:                       0,  // use default DB
-	DefaultDurationInSeconds: 24 * 60 * 60,
+	Address:  "localhost:6379",
+	Password: "", // no password set
+	DB:       0,  // use default DB
 }
 
 const dataPath string = "/Users/grecinto/sop_data"

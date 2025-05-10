@@ -9,10 +9,9 @@ import (
 
 func init() {
 	var redisConfig = redis.Options{
-		Address:                  "localhost:6379",
-		Password:                 "", // no password set
-		DB:                       0,  // use default DB
-		DefaultDurationInSeconds: 60 * 60,
+		Address:  "localhost:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
 	}
 	redis.OpenConnection(redisConfig)
 }

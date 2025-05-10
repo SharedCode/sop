@@ -17,10 +17,9 @@ var cassConfig = cas.Config{
 	Consistency:  gocql.Quorum,
 }
 var redisConfig = redis.Options{
-	Address:                  "172.17.0.1:6379",
-	Password:                 "", // no password set
-	DB:                       0,  // use default DB
-	DefaultDurationInSeconds: 24 * 60 * 60,
+	Address:  "172.17.0.1:6379",
+	Password: "", // no password set
+	DB:       0,  // use default DB
 }
 
 func main() {

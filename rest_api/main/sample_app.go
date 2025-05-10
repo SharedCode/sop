@@ -30,10 +30,9 @@ var cassConfig = cas.Config{
 
 // Regis Config, please update with your Redis cluster config.
 var redisConfig = redis.Options{
-	Address:                  "localhost:6379",
-	Password:                 "", // no password set
-	DB:                       0,  // use default DB
-	DefaultDurationInSeconds: 24 * 60 * 60,
+	Address:  "localhost:6379",
+	Password: "", // no password set
+	DB:       0,  // use default DB
 }
 
 var ctx = context.TODO()
