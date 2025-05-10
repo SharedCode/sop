@@ -2,6 +2,7 @@ package integration_tests
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"testing"
 
@@ -49,6 +50,7 @@ const tableName1 = "person2db"
 const tableName2 = "twophase22"
 
 func Test_SimpleAddPerson(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
@@ -96,6 +98,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 }
 
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
@@ -137,6 +140,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 }
 
 func Test_AddAndSearchManyPersons(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
@@ -205,6 +209,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 
 // This test took about 3 minutes from empty to finish in my laptop.
 func Test_VolumeAddThenSearch(t *testing.T) {
+	ctx := context.Background()
 	start := 9001
 	end := 100000
 
@@ -267,6 +272,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 
 // Add prefix Test_ if wanting to run this test.
 func Test_VolumeDeletes(t *testing.T) {
+	ctx := context.Background()
 	start := 9001
 	end := 100000
 
@@ -307,6 +313,7 @@ func Test_VolumeDeletes(t *testing.T) {
 // Mixed CRUD operations.
 // Add prefix Test_ if wanting to run this test.
 func Test_MixedOperations(t *testing.T) {
+	ctx := context.Background()
 	start := 9000
 	end := 14000
 
@@ -395,6 +402,7 @@ func Test_MixedOperations(t *testing.T) {
 }
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := in_red_fs.NewTransaction(to)
 	t1.Begin()

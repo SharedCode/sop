@@ -1,6 +1,7 @@
 package integration_tests
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 )
 
 func MultipleExpiredTransCleanup(t *testing.T) {
+	ctx := context.Background()
 	in_red_fs.RemoveBtree(ctx, dataPath, "ztab1")
 
 	// Seed with good records.
@@ -73,6 +75,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 }
 
 func Cleanup(t *testing.T) {
+	ctx := context.Background()
 	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
 	sop.Now = func() time.Time { return yesterday }
 

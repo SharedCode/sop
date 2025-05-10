@@ -75,7 +75,7 @@ func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicatio
 		cache:              cache,
 
 		// Support cache(e.g. - Redis) based file region locks so it can work across different OS like Windows, OSX & Linux, etc...
-		// All supported by the Golang compiler. :)
+		// All that are supported by the Golang compiler can work in the SOP enterprise cluster. :)
 		useCacheForFileRegionLocks: true, //useCacheForFileRegionLocks,
 	}
 }

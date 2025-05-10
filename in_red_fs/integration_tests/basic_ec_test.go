@@ -2,6 +2,7 @@ package integration_tests
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -31,6 +32,7 @@ func initErasureCoding() {
 }
 
 func Test_Basic_EC(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
 	trans, err := in_red_fs.NewTransactionWithReplication(to)
 	if err != nil {
@@ -72,6 +74,7 @@ func Test_Basic_EC(t *testing.T) {
 }
 
 func Test_Basic_EC_Get(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
 	trans, err := in_red_fs.NewTransactionWithReplication(to)
 	if err != nil {
