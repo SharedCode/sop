@@ -97,11 +97,13 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				handleKeys = append(handleKeys, lk[0])
 
 				if ok, err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
+					if err == nil {
+						err = &sop.UpdateAllOrNothingError{
+							Err: fmt.Errorf("lock allOrNothing failed, key %v is already locked by another", lk[0].Key),
+						}
+					}
 					// Unlock the object Keys before return.
 					v.cache.Unlock(ctx, handleKeys...)
-					if err == nil {
-						err = fmt.Errorf("lock(key: %v) call detected conflict", lk[0].Key)
-					}
 					return err
 				}
 			}
@@ -148,6 +150,16 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				connection.Config.Keyspace, sh.RegistryTable)
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
+				// Update registry record.
+				lk := v.cache.CreateLockKeys(h.LogicalID.String())
+				if ok, err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
+					if err == nil {
+						err = &sop.UpdateAllOrNothingError{
+							Err: fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key),
+						}
+					}
+					return err
+				}
 
 				qry := connection.Session.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
 					h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalID)).WithContext(ctx)
@@ -157,6 +169,13 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 
 				// Update registry record.
 				if err := qry.Exec(); err != nil {
+					// Unlock the object Keys before return.
+					v.cache.Unlock(ctx, lk[0])
+					return err
+				}
+
+				// Unlock the object Keys.
+				if err := v.cache.Unlock(ctx, lk[0]); err != nil {
 					return err
 				}
 			}
