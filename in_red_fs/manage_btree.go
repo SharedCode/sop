@@ -15,10 +15,9 @@ import (
 // Removes B-Tree with a given name from the backend storage. This involves dropping tables
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
-// Use with care and only when you are sure to delete the tables.
-// Also, this does NOT clear out the (Redis) cache, so, you may generate an issue. This is only meant
-// to be used on special DB administration case, not to be used part of your application.
-// Make sure to delete all entries in (Redis) cache if ever you delete a SOP table using this function.
+// Use with care and only when you are sure to delete the tables. This also flushes or
+// clear the backend cache (Redis) storage of all items stored. Thus, you will lose all those
+// cached items and SOP has to refetch them from underlying files.
 func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) error {
 	cache := redis.NewClient()
 	replicationTracker := fs.NewReplicationTracker([]string{storesBaseFolder}, false)
@@ -26,7 +25,12 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 	if err != nil {
 		return err
 	}
-	return storeRepository.Remove(ctx, name)
+
+	err = storeRepository.Remove(ctx, name)
+	if err == nil {
+		cache.Clear(ctx)
+	}
+	return err
 }
 
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.

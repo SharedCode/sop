@@ -100,3 +100,8 @@ func (m *mockRedis) IsLockedByOthers(ctx context.Context, lockKeys ...string) (b
 func (m *mockRedis) Unlock(ctx context.Context, lockKeys ...*sop.LockKey) error {
 	return nil
 }
+
+func (m *mockRedis) Clear(ctx context.Context) error {
+	m.lookup = make(map[string][]byte)
+	return nil
+}
