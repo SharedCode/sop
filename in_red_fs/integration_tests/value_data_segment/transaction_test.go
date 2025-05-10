@@ -103,7 +103,6 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	
 
 	trans.Begin()
 	trans2.Begin()
@@ -213,8 +212,8 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	t1, _ := in_red_fs.NewTransaction(to)
 	t1.Begin()
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
-		SlotLength:               nodeSlotLength,
+		Name:       "persondb",
+		SlotLength: nodeSlotLength,
 	}, t1, Compare)
 
 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
@@ -270,8 +269,8 @@ func VolumeDeletes(t *testing.T) {
 	t1, _ := in_red_fs.NewTransaction(to)
 	t1.Begin()
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
-		SlotLength:               nodeSlotLength,
+		Name:       "persondb",
+		SlotLength: nodeSlotLength,
 	}, t1, Compare)
 
 	// Populating 90,000 items took about few minutes, did not use Kafka based delete service.
@@ -391,9 +390,9 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	t1.Begin()
 
 	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "twophase",
-		SlotLength:               8,
-		LeafLoadBalancing:        true,
+		Name:              "twophase",
+		SlotLength:        8,
+		LeafLoadBalancing: true,
 	}, t1, nil)
 	originalCount := b3.Count()
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
@@ -429,8 +428,8 @@ func Test_StrangeBtreeStoreName(t *testing.T) {
 	t1.Begin()
 
 	if _, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "2phase",
-		SlotLength:               8,
+		Name:       "2phase",
+		SlotLength: 8,
 	}, t1, nil); err != nil {
 		t.Error("NewBtree('2phase') failed, got err, want nil.")
 	}

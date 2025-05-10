@@ -141,7 +141,7 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 					r.cache.Unlock(ctx, lk[0])
 					return err
 				}
-				// Unlock the object Keys before return.
+				// Unlock the object Keys.
 				if err := r.cache.Unlock(ctx, lk[0]); err != nil {
 					return err
 				}
