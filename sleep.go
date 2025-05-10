@@ -20,15 +20,21 @@ func TimedOut(ctx context.Context, name string, startTime time.Time, maxTime tim
 	return nil
 }
 
+// Random sleep also but you can specify a value of sleep unit amount.
+func RandomSleepWithUnit(ctx context.Context, unit time.Duration) {
+	sleepTime := time.Duration(rand.Intn(5))
+	if sleepTime == 0 {
+		sleepTime = 1
+	}
+	st := sleepTime*unit
+	log.Debug(fmt.Sprintf("sleep for %d * %d unit", sleepTime, unit))
+	Sleep(ctx, st)
+}
+
 // Sleep in random milli-seconds to allow different conflicting (Node modifying) transactions
 // to retry on different times, thus, increasing chance to succeed one after the other.
 func RandomSleep(ctx context.Context) {
-	sleepTime := rand.Intn(5) * 20
-	if sleepTime == 0 {
-		sleepTime = 2
-	}
-	log.Debug(fmt.Sprintf("sleep for %d millis", sleepTime))
-	Sleep(ctx, time.Duration(sleepTime)*time.Millisecond)
+	RandomSleepWithUnit(ctx, 20*time.Millisecond)
 }
 
 // sleep with context.

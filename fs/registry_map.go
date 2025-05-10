@@ -64,7 +64,7 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 				return err
 			}
 			// Update the Handles read w/ the items' values.
-			for i := 0; i < len(frds); i++ {
+			for i := range frds {
 				// Check if the record in the target file region is different.
 				if !frds[i].handle.IsEmpty() && frds[i].handle.LogicalID != item.Second[i].LogicalID {
 					// Fail if the record on target is different.

@@ -1,6 +1,7 @@
 package integration_tests
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"testing"
@@ -12,6 +13,7 @@ import (
 )
 
 func Test_StreamingDataStoreInvalidCases(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to)
 	trans.Begin()
@@ -30,6 +32,7 @@ func Test_StreamingDataStoreInvalidCases(t *testing.T) {
 }
 
 func Test_StreamingDataStoreBasicUse(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to)
 	trans.Begin()
@@ -74,6 +77,7 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 }
 
 func Test_StreamingDataStoreMultipleItems(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to)
 	trans.Begin()
@@ -123,6 +127,7 @@ func Test_StreamingDataStoreMultipleItems(t *testing.T) {
 }
 
 func Test_StreamingDataStoreDeleteAnItem(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to)
 	trans.Begin()
@@ -175,6 +180,7 @@ func Test_StreamingDataStoreDeleteAnItem(t *testing.T) {
 }
 
 func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
+	ctx := context.Background()
 	// Upload the video.
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to)
@@ -234,6 +240,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 }
 
 func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
+	ctx := context.Background()
 	// Upload the video.
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to)
@@ -259,6 +266,7 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 }
 
 func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
+	ctx := context.Background()
 	// Upload the video.
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to)
@@ -285,6 +293,7 @@ func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 }
 
 func Test_StreamingDataStoreUpdate(t *testing.T) {
+	ctx := context.Background()
 	// Upload the video.
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to)
@@ -309,6 +318,7 @@ func Test_StreamingDataStoreUpdate(t *testing.T) {
 }
 
 func Test_StreamingDataStoreDelete(t *testing.T) {
+	ctx := context.Background()
 	// Upload the video.
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to)

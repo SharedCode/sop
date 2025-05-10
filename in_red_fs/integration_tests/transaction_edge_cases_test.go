@@ -1,6 +1,7 @@
 package integration_tests
 
 import (
+	"context"
 	"fmt"
 	log "log/slog"
 	"testing"
@@ -18,6 +19,7 @@ import (
 // Transaction rolls back, new completes fine.
 // Reader transaction succeeds.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := in_red_fs.NewTransaction(to)
 	t2, _ := in_red_fs.NewTransaction(to)
@@ -107,6 +109,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 // Two transactions updating different items with no collision but items'
 // keys are sequential/contiguous between the two.
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := in_red_fs.NewTransaction(to)
 	t2, _ := in_red_fs.NewTransaction(to)
@@ -178,6 +181,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 
 // Reader transaction fails commit when an item read was modified by another transaction in-flight.
 func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := in_red_fs.NewTransaction(to)
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
@@ -251,6 +255,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 // Node merging and row(or item) level conflict detection.
 // Case: Reader transaction succeeds commit, while another item in same Node got updated by another transaction.
 func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := in_red_fs.NewTransaction(to)
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
@@ -325,6 +330,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 
 // One transaction updates a colliding item in 1st and a 2nd trans.
 func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
+	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := in_red_fs.NewTransaction(to)
 	t2, _ := in_red_fs.NewTransaction(to)
@@ -427,6 +433,8 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 }
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
+	// Needs a new context so our runs don't affect one another.
+	ctx := context.Background()
 	in_red_fs.RemoveBtree(ctx, dataPath, "twophase3")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
@@ -445,6 +453,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	t1.Commit(ctx)
 
 	eg, ctx2 := errgroup.WithContext(ctx)
+	eg2, ctx3 := errgroup.WithContext(ctx)
 
 	f1 := func() error {
 		t1, _ := in_red_fs.NewTransaction(to)
@@ -466,7 +475,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	f2 := func() error {
 		t2, _ := in_red_fs.NewTransaction(to)
 		t2.Begin()
-		b32, _ := in_red_fs.NewBtree[int, string](ctx2, sop.StoreOptions{
+		b32, _ := in_red_fs.NewBtree[int, string](ctx3, sop.StoreOptions{
 			Name:                     "twophase3",
 			SlotLength:               8,
 			IsUnique:                 false,
@@ -474,17 +483,20 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 			LeafLoadBalancing:        true,
 			Description:              "",
 		}, t2, nil)
-		b32.Add(ctx2, 5500, "I am the value with 5000 key.")
-		b32.Add(ctx2, 5501, "I am the value with 5001 key.")
-		b32.Add(ctx2, 5502, "I am also a value with 5000 key.")
-		return t2.Commit(ctx2)
+		b32.Add(ctx3, 5500, "I am the value with 5000 key.")
+		b32.Add(ctx3, 5501, "I am the value with 5001 key.")
+		b32.Add(ctx3, 5502, "I am also a value with 5000 key.")
+		return t2.Commit(ctx3)
 	}
 
 	eg.Go(f1)
-	eg.Go(f2)
+	eg2.Go(f2)
 
-	if err := eg.Wait(); err != nil {
-		t.Error(err)
+	err := eg.Wait()
+	err2 := eg2.Wait()
+	if err != nil || err2 != nil {
+		t.Error("expected no error")
+		t.FailNow()
 		return
 	}
 
@@ -515,6 +527,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 - A commit with full conflict: retry success
 */
 func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
+	ctx := context.Background()
 	in_red_fs.RemoveBtree(ctx, dataPath, "tablex")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
@@ -626,6 +639,7 @@ One or both of these two should fail:
 - A commit with full conflict.
 */
 func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
+	ctx := context.Background()
 	in_red_fs.RemoveBtree(ctx, dataPath, "tablex2")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
@@ -660,8 +674,20 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 		t2, _ := in_red_fs.NewTransaction(to)
 		t2.Begin()
 		b32, _ := in_red_fs.OpenBtree[int, string](ctx3, "tablex2", t2, nil)
-		b32.Add(ctx3, 550, "I am the value with 5000 key.")
-		b32.Add(ctx3, 551, "I am the value with 5001 key.")
+		if ok, err := b32.Add(ctx3, 550, "I am the value with 5000 key."); !ok || err != nil {
+			if !ok {
+				err = fmt.Errorf("expected error")
+			}
+			t2.Rollback(ctx)
+			return err
+		}
+		if ok, err := b32.Add(ctx3, 551, "I am the value with 5001 key."); !ok || err != nil {
+			if !ok {
+				err = fmt.Errorf("expected error")
+			}
+			t2.Rollback(ctx)
+			return err
+		}
 		b32.Add(ctx3, 552, "I am the value with 5001 key.")
 		return t2.Commit(ctx3)
 	}
@@ -670,8 +696,20 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 		t3, _ := in_red_fs.NewTransaction(to)
 		t3.Begin()
 		b32, _ := in_red_fs.OpenBtree[int, string](ctx4, "tablex2", t3, nil)
-		b32.Add(ctx4, 550, "random foo.")
-		b32.Add(ctx4, 551, "bar hello.")
+		if ok, err := b32.Add(ctx4, 550, "random foo."); !ok || err != nil {
+			if !ok {
+				err = fmt.Errorf("expected error")
+			}
+			t3.Rollback(ctx)
+			return err
+		}
+		if ok, err := b32.Add(ctx4, 551, "bar hello."); !ok || err != nil {
+			if !ok {
+				err = fmt.Errorf("expected error")
+			}
+			t3.Rollback(ctx)
+			return err
+		}
 		return t3.Commit(ctx4)
 	}
 
@@ -719,6 +757,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 - A commit with full conflict on update: rollback
 */
 func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
+	ctx := context.Background()
 	in_red_fs.RemoveBtree(ctx, dataPath, "tabley")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
