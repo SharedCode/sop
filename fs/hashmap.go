@@ -123,7 +123,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 				return frd, err
 			} else {
 				flag := os.O_RDWR
-				if !forWriting {
+				if !hm.readWrite {
 					flag = os.O_RDONLY
 				}
 				if err := dio.open(fn, flag, fullPermission); err != nil {

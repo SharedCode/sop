@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_cfs"
+	"github.com/SharedCode/sop/fs"
+	"github.com/SharedCode/sop/in_red_fs"
 )
 
 type PersonKey struct {
@@ -45,22 +46,22 @@ const nodeSlotLength = 500
 const batchSize = 200
 
 func Test_SimpleAddPerson(t *testing.T) {
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
-	b3, err := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -92,18 +93,23 @@ func Test_SimpleAddPerson(t *testing.T) {
 }
 
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 
-	trans2, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	trans2, err := in_red_fs.NewTransaction(to)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	
 
 	trans.Begin()
 	trans2.Begin()
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
-	b3, err := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
+	b3, err := in_red_fs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -113,7 +119,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		return
 	}
 
-	b32, err := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans2, Compare)
+	b32, err := in_red_fs.OpenBtree[PersonKey, Person](ctx, "persondb", trans2, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -132,20 +138,20 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 }
 
 func Test_AddAndSearchManyPersons(t *testing.T) {
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
 	trans.Begin()
-	b3, err := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -163,14 +169,15 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		}
 	}
 	if err := trans.Commit(ctx); err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 		t.Fail()
 		return
 	}
 
-	trans, err = in_red_cfs.NewTransaction(sop.ForReading, -1, false)
+	tor, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+	trans, err = in_red_fs.NewTransaction(tor)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 		t.Fail()
 		return
 	}
@@ -181,7 +188,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	b3, err = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
+	b3, err = in_red_fs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -202,16 +209,12 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	t1, _ := in_red_fs.NewTransaction(to)
 	t1.Begin()
-	b3, _ := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
-		IsValueDataInNodeSegment: false,
-		LeafLoadBalancing:        false,
-		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t1, Compare)
 
 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
@@ -226,9 +229,9 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+			t1, _ = in_red_fs.NewTransaction(to)
 			t1.Begin()
-			b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
+			b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
 
@@ -250,9 +253,10 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, false)
+			tor, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+			t1, _ = in_red_fs.NewTransaction(tor)
 			t1.Begin()
-			b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
+			b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
 }
@@ -262,16 +266,12 @@ func VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	t1, _ := in_red_fs.NewTransaction(to)
 	t1.Begin()
-	b3, _ := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
-		IsValueDataInNodeSegment: false,
-		LeafLoadBalancing:        false,
-		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t1, Compare)
 
 	// Populating 90,000 items took about few minutes, did not use Kafka based delete service.
@@ -288,9 +288,9 @@ func VolumeDeletes(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+			t1, _ = in_red_fs.NewTransaction(to)
 			t1.Begin()
-			b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
+			b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
 }
@@ -301,16 +301,16 @@ func MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
 
-	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	t1, _ := in_red_fs.NewTransaction(to)
 	t1.Begin()
-	b3, _ := in_red_cfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        false,
 		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t1, Compare)
 
 	lastNamePrefix := "zoltan"
@@ -342,9 +342,9 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+			t1, _ = in_red_fs.NewTransaction(to)
 			t1.Begin()
-			b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
+			b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
 
@@ -378,25 +378,22 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+			t1, _ = in_red_fs.NewTransaction(to)
 			t1.Begin()
-			b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
+			b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
 }
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
-	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	t1, _ := in_red_fs.NewTransaction(to)
 	t1.Begin()
 
-	b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase",
 		SlotLength:               8,
-		IsUnique:                 false,
-		IsValueDataInNodeSegment: false,
 		LeafLoadBalancing:        true,
-		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
 	}, t1, nil)
 	originalCount := b3.Count()
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
@@ -411,10 +408,10 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	if err := twoPhase.Phase1Commit(ctx); err == nil {
 		twoPhase.Rollback(ctx)
 
-		t1, _ = in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+		t1, _ = in_red_fs.NewTransaction(to)
 		t1.Begin()
 
-		b3, _ = in_red_cfs.OpenBtree[int, string](ctx, "twophase", t1, nil)
+		b3, _ = in_red_fs.OpenBtree[int, string](ctx, "twophase", t1, nil)
 		if b3.Count() != originalCount {
 			t.Errorf("Rollback Count() failed, got %v, want %v", b3.Count(), originalCount)
 		}
@@ -423,22 +420,18 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	}
 }
 
-func Test_IllegalBtreeStoreName(t *testing.T) {
-	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, false)
+func Test_StrangeBtreeStoreName(t *testing.T) {
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+
+	in_red_fs.RemoveBtree(ctx, dataPath, "2phase")
+
+	t1, _ := in_red_fs.NewTransaction(to)
 	t1.Begin()
 
-	if _, err := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	if _, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "2phase",
 		SlotLength:               8,
-		IsUnique:                 false,
-		IsValueDataInNodeSegment: false,
-		LeafLoadBalancing:        true,
-		Description:              "",
-		BlobStoreBaseFolderPath:  dataPath,
-	}, t1, nil); err == nil {
-		t.Error("NewBtree('2phase') failed, got nil, want err.")
-	}
-	if t1.HasBegun() {
-		t.Error("Transaction is not rolledback.")
+	}, t1, nil); err != nil {
+		t.Error("NewBtree('2phase') failed, got err, want nil.")
 	}
 }

@@ -76,11 +76,12 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 }
 
 // Close will do cleanup.
-func (t *Transaction) Close() {
+func (t *Transaction) Close() error {
 	// Do registry cleanup, e.g. - close all opened files.
 	if closeable, ok := t.registry.(io.Closer); ok {
-		closeable.Close()
+		return closeable.Close()
 	}
+	return nil
 }
 
 func (t *Transaction) Begin() error {
@@ -201,6 +202,7 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	t.phaseDone = 2
 
 	if t.mode != sop.ForWriting {
+		t.Close()
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
@@ -234,6 +236,8 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 					}
 				}
 				if err = t.phase2Commit(ctx); err == nil {
+					// Ensure resources are cleaned up or released.
+					t.Close()
 					return nil
 				} else if _, ok := err.(*sop.UpdateAllOrNothingError); !ok {
 					break
@@ -245,6 +249,8 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 		}
 		return fmt.Errorf("phase 2 commit failed, details: %v", err)
 	}
+	// Ensure resources are cleaned up or released.
+	t.Close()
 	return nil
 }
 
@@ -258,8 +264,10 @@ func (t *Transaction) Rollback(ctx context.Context) error {
 	// Reset transaction status and mark done to end it without persisting any change.
 	t.phaseDone = 2
 	if err := t.rollback(ctx, true); err != nil {
+		t.Close()
 		return fmt.Errorf("rollback failed, details: %v", err)
 	}
+	t.Close()
 	return nil
 }
 
