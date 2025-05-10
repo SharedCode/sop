@@ -1,10 +1,10 @@
 package sop
 
-import(
+import (
 	"context"
 	"fmt"
-	"math/rand"
 	log "log/slog"
+	"math/rand"
 	"time"
 )
 
@@ -13,7 +13,7 @@ func TimedOut(ctx context.Context, name string, startTime time.Time, maxTime tim
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	diff :=  Now().Sub(startTime)
+	diff := Now().Sub(startTime)
 	if diff > maxTime {
 		return fmt.Errorf("%s timed out(maxTime=%v)", name, maxTime)
 	}

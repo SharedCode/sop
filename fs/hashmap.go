@@ -30,13 +30,14 @@ type hashmap struct {
 // details about discovered (file &) location, i.e. - file offset, of a given UUID & its current record's
 // value (unmarshalled to a Handle) read from the file.
 type fileRegionDetails struct {
-	dio    *directIO
-	blockOffset int64
+	dio                 *directIO
+	blockOffset         int64
 	handleInBlockOffset int64
-	handle sop.Handle
+	handle              sop.Handle
 	// If the region had been locked, lockKey should contain the lock details useful for unlocking it.
 	lockKey *sop.LockKey
 }
+
 func (fr *fileRegionDetails) getOffset() int64 {
 	return fr.blockOffset + fr.handleInBlockOffset
 }
@@ -69,15 +70,15 @@ const (
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
 func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *hashmap {
 	return &hashmap{
-		hashModValue:               hashModValue,
-		replicationTracker:         replicationTracker,
-		readWrite:                  readWrite,
-		fileHandles:                make(map[string]*directIO, 5),
-		cache:                      cache,
+		hashModValue:       hashModValue,
+		replicationTracker: replicationTracker,
+		readWrite:          readWrite,
+		fileHandles:        make(map[string]*directIO, 5),
+		cache:              cache,
 
 		// Support cache(e.g. - Redis) based file region locks so it can work across different OS like Windows, OSX & Linux.
 		// But yeah, 'will crowd the cache, use with care. :)
-		useCacheForFileRegionLocks: true,	//useCacheForFileRegionLocks,
+		useCacheForFileRegionLocks: true, //useCacheForFileRegionLocks,
 	}
 }
 

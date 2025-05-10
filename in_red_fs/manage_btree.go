@@ -43,14 +43,13 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 	return common.NewBtree[TK, TV](ctx, si, t, comparer)
 }
 
-// NewBtreeWithReplication is geared for enforcing the Blobs base folder path to generate good folder path that works 
+// NewBtreeWithReplication is geared for enforcing the Blobs base folder path to generate good folder path that works
 // with Erasure Coding I/O, a part of SOP's replication feature (for blobs replication).
 func NewBtreeWithReplication[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	si.DisableRegistryStoreFormatting = true
 	si.DisableBlobStoreFormatting = true
 	return common.NewBtree[TK, TV](ctx, si, t, comparer)
 }
-
 
 // Streaming Data Store related.
 

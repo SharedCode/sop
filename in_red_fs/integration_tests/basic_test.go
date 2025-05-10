@@ -16,9 +16,9 @@ import (
 
 // Redis config.
 var redisConfig = redis.Options{
-	Address:                  "localhost:6379",
-	Password:                 "", // no password set
-	DB:                       0,  // use default DB
+	Address:  "localhost:6379",
+	Password: "", // no password set
+	DB:       0,  // use default DB
 }
 
 const dataPath string = "/Users/grecinto/sop_data"

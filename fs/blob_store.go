@@ -11,7 +11,6 @@ import (
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
 type blobStore struct {
 	fileIO FileIO
-	
 }
 
 // Directory/File permission.

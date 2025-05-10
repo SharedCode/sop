@@ -277,7 +277,6 @@ func (t *Transaction) GetStores(ctx context.Context) ([]string, error) {
 	return t.storeRepository.GetAll(ctx)
 }
 
-
 // Returns this transaction's StoreRepository.
 func (t *Transaction) GetStoreRepository() sop.StoreRepository {
 	return t.storeRepository

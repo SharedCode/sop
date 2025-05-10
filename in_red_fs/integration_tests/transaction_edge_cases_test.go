@@ -797,7 +797,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	err3 := eg3.Wait()
 
 	if err == nil && err3 == nil {
-		t.Error("err or err3 should have errored but both did not")		
+		t.Error("err or err3 should have errored but both did not")
 	}
 	if err != nil {
 		log.Error(err.Error())

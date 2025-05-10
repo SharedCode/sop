@@ -86,11 +86,11 @@ func (dio *directIO) lockFileRegion(ctx context.Context, offset int64, length in
 	}
 
 	flock := syscall.Flock_t{
-		Type:  syscall.F_WRLCK,
-		Whence: 0,	// SEEK_SET
-		Start: offset,
-		Len:   length,
-		Pid:   int32(syscall.Getpid()),
+		Type:   syscall.F_WRLCK,
+		Whence: 0, // SEEK_SET
+		Start:  offset,
+		Len:    length,
+		Pid:    int32(syscall.Getpid()),
 	}
 
 	if timeout <= 0 {
@@ -101,7 +101,6 @@ func (dio *directIO) lockFileRegion(ctx context.Context, offset int64, length in
 	defer cancel()
 
 	done := make(chan error, 1)
-
 
 	go func() {
 		err := syscall.FcntlFlock(dio.file.Fd(), syscall.F_SETLKW, &flock)
@@ -150,18 +149,17 @@ func (dio *directIO) unlockFileRegion(offset int64, length int64) error {
 	}
 
 	flock := syscall.Flock_t{
-		Type:  syscall.F_UNLCK, // Unlock
-		Start: offset,
-		Len:   length,
-		Whence: 0,	// SEEK_SET
-		Pid:   int32(syscall.Getpid()),
+		Type:   syscall.F_UNLCK, // Unlock
+		Start:  offset,
+		Len:    length,
+		Whence: 0, // SEEK_SET
+		Pid:    int32(syscall.Getpid()),
 	}
 
 	return syscall.FcntlFlock(dio.file.Fd(), syscall.F_SETLK, &flock)
 }
 
 func (dio *directIO) close() error {
-
 
 	if dio.file == nil {
 		return nil
