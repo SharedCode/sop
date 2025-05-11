@@ -166,7 +166,7 @@ func (t *Transaction) Phase1Commit(ctx context.Context) error {
 				sop.RandomSleep(ctx)
 
 				if err = t.refetchAndMergeModifications(ctx); err != nil {
-					log.Debug("phase1Commit.refetchAndMergeModifications err: %v", err)
+					log.Debug(fmt.Sprintf("phase1Commit.refetchAndMergeModifications err: %v", err))
 					return err
 				}
 				if err = t.phase1Commit(ctx); err != nil {
@@ -207,7 +207,7 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	}
 	if err := t.phase2Commit(ctx); err != nil {
 		if _, ok := err.(*sop.UpdateAllOrNothingError); ok {
-			log.Debug("update all or nothing err, will retry, details: %v", err)
+			log.Debug(fmt.Sprintf("update all or nothing err, will retry, details: %v", err))
 			startTime := sop.Now()
 			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
 			// until it succeeds or timeout.

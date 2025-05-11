@@ -134,6 +134,17 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 			// Failed update all, thus, return err to cause rollback.
 			return err
 		}
+
+		// Update redis cache.
+		for _, sh := range storesHandles {
+			for _, h := range sh.IDs {
+				// Tolerate Redis cache failure.
+				if err := r.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+					log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
+				}
+			}
+		}
+
 		// Unlock the object Keys before return.
 		r.cache.Unlock(ctx, handleKeys...)
 	} else {
@@ -155,20 +166,14 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 					r.cache.Unlock(ctx, lk[0])
 					return err
 				}
+				// Tolerate Redis cache failure.
+				if err := r.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+					log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
+				}
 				// Unlock the object Keys.
 				if err := r.cache.Unlock(ctx, lk[0]); err != nil {
 					return err
 				}
-			}
-		}
-	}
-
-	// Update redis cache.
-	for _, sh := range storesHandles {
-		for _, h := range sh.IDs {
-			// Tolerate Redis cache failure.
-			if err := r.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
-				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
 			}
 		}
 	}
