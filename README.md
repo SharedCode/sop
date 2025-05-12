@@ -15,6 +15,10 @@ SOP in File System: https://www.linkedin.com/pulse/scaleable-object-persistences
 
 Hash Map on Disk: https://www.linkedin.com/posts/coolguru_hash-map-on-a-file-can-offer-up-to-13-activity-7313645523024891905-8yem?utm_source=share&utm_medium=member_desktop&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
 
+Master less cluster wide distributed locking (RSRR algorithm) :https://www.linkedin.com/posts/coolguru_new-master-less-cluster-wide-resource-locking-activity-7322020975674302465-lUjl?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
+
+RSRR as compared to DynamoDB's distributed locking: https://www.linkedin.com/posts/coolguru_i-just-found-out-thanks-to-my-eldest-that-activity-7325255314474250241-f07g?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
+
 # Software Based Efficient Replication
 Quick update, SOP now sports very efficient software based replication via Reed Solomon algorithm erasure coding. SOP's Registry data already had replication via Cassandra & now, the data blobs stored in File System (see sop/in_red_cfs) are safe having very efficient software based modern replication.
 The feature is complete, it has auto-repair of detected missing or bitrot shards, if the RepairCorruptedShards flag (passed in the sop/in_red_cfs/NewTransactionWithEC erasure config) is turned on.
