@@ -157,7 +157,7 @@ func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, 
 		b3.StoreInfo.RootNodeID = storeInfo[0].RootNodeID
 
 		for uuid, ci := range b3ModifiedItems {
-			log.Debug("inside refetchAndMergeClosure")
+			log.Debug(fmt.Sprintf("inside refetchAndMergeClosure, tid: %v", si.backendNodeRepository.transaction.GetID()))
 			if ci.Action == addAction {
 				if !b3.StoreInfo.IsValueDataInNodeSegment {
 					if ok, err := b3.AddItem(ctx, ci.item); !ok || err != nil {

@@ -67,36 +67,10 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 
 		for _, sh := range storesHandles {
 			for _, h := range sh.IDs {
-				var h2 sop.Handle
-				if err := r.cache.GetStruct(ctx, h.LogicalID.String(), &h2); err != nil {
-					if r.cache.KeyNotFound(err) {
-						err = &sop.UpdateAllOrNothingError{
-							Err: fmt.Errorf("Registry Update failed, handle %s not in cache", h.LogicalID.String()),
-						}
-					} else {
-						err = &sop.UpdateAllOrNothingError{
-							Err: fmt.Errorf("Registry Update failed, err getting handle %s data from cache, details: %v", h.LogicalID.String(), err),
-						}
-					}
-					// Unlock the object Keys before return.
-					r.cache.Unlock(ctx, handleKeys...)
-					return err
-				}
-				newVersion := h.Version
-				// Version ID is incremental, 'thus we can compare with -1 the previous.
-				newVersion--
-				if newVersion != h2.Version || !h.IsEqual(&h2) {
-					// Unlock the object Keys before return.
-					r.cache.Unlock(ctx, handleKeys...)
-					return &sop.UpdateAllOrNothingError{
-						Err: fmt.Errorf("Registry Update failed, handle logical ID(%v) version conflict detected", h.LogicalID.String()),
-					}
-				}
+				// 1. lock the handle to check version of.
 				// Attempt to lock in Redis the registry object, if we can't attain a lock, it means there is another transaction elsewhere
 				// that already attained a lock, thus, we can cause rollback of this transaction due to conflict).
 				lk := r.cache.CreateLockKeys(h.LogicalID.String())
-				handleKeys = append(handleKeys, lk[0])
-
 				if ok, err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
 					if err == nil {
 						err = &sop.UpdateAllOrNothingError{
@@ -104,6 +78,13 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 						}
 					}
 					// Unlock the object Keys before return.
+					r.cache.Unlock(ctx, handleKeys...)
+					return err
+				}
+				handleKeys = append(handleKeys, lk[0])
+
+				// 2. Check the Handle if it got changed.
+				if _, err := r.isIntact(ctx, h); err != nil {
 					r.cache.Unlock(ctx, handleKeys...)
 					return err
 				}
@@ -174,6 +155,25 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 				if err := r.cache.Unlock(ctx, lk[0]); err != nil {
 					return err
 				}
+			}
+		}
+	}
+	return nil
+}
+
+func (r registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
+	if len(storesHandles) == 0 {
+		return nil
+	}
+	for _, sh := range storesHandles {
+		// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
+		for _, h := range sh.IDs {
+			if err := r.hashmap.set(ctx, false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+				return err
+			}
+			// Tolerate Redis cache failure.
+			if err := r.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
 			}
 		}
 	}
@@ -253,4 +253,27 @@ func (r registryOnDisk) Remove(ctx context.Context, storesLids ...sop.RegistryPa
 		deleteFromCache(storeLids)
 	}
 	return nil
+}
+
+func (r registryOnDisk) isIntact(ctx context.Context, h sop.Handle) (bool, error) {
+	var h2 sop.Handle
+	if err := r.cache.GetStruct(ctx, h.LogicalID.String(), &h2); err != nil {
+		if r.cache.KeyNotFound(err) {
+			err = &sop.UpdateAllOrNothingError{
+				Err: fmt.Errorf("Registry Update failed, handle %s not in cache", h.LogicalID.String()),
+			}
+		} else {
+			err = &sop.UpdateAllOrNothingError{
+				Err: fmt.Errorf("Registry Update failed, err getting handle %s data from cache, details: %v", h.LogicalID.String(), err),
+			}
+		}
+		return false, err
+	}
+	newVersion := h.Version
+	// Version ID is incremental, 'thus we can compare with -1 the previous.
+	newVersion--
+	if newVersion != h2.Version || !h.IsEqual(&h2) {
+		return false, fmt.Errorf("Registry Update failed, handle w/ logical ID(%v) version conflict detected", h.LogicalID.String())
+	}
+	return true, nil
 }

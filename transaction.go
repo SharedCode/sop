@@ -44,6 +44,9 @@ type Transaction interface {
 
 	// Call Close to allow cleanup/freeing of resources, if there are.
 	Close() error
+
+	// Implement to return the transaction ID.
+	GetID() UUID
 }
 
 // TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.
@@ -66,6 +69,9 @@ type TwoPhaseCommitTransaction interface {
 
 	// Implement close to handle resource cleanup, if there is a need.
 	Close() error
+
+	// Implement to return the transaction ID.
+	GetID() UUID
 }
 
 // Enduser facing Transaction (wrapper) implementation.
@@ -182,4 +188,8 @@ func (t *singlePhaseTransaction) AddPhasedTransaction(otherTransaction ...TwoPha
 
 func (t *singlePhaseTransaction) GetStores(ctx context.Context) ([]string, error) {
 	return t.sopPhaseCommitTransaction.GetStores(ctx)
+}
+
+func (t *singlePhaseTransaction) GetID() UUID {
+	return t.sopPhaseCommitTransaction.GetID()
 }

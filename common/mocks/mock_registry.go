@@ -37,6 +37,10 @@ func (v *Mock_vid_registry) Update(ctx context.Context, allOrNothing bool, store
 	}
 	return nil
 }
+func (v *Mock_vid_registry) UpdateNoLocks(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
+	return nil
+}
+
 func (v *Mock_vid_registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	var storesHandles []sop.RegistryPayload[sop.Handle]
 	for _, storeLids := range storesLids {

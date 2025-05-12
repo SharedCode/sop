@@ -11,6 +11,7 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/fs"
 	"github.com/SharedCode/sop/in_red_fs"
+	"github.com/SharedCode/sop/redis"
 )
 
 // Covers all of these cases:
@@ -525,109 +526,125 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 - A commit with full conflict: retry success
 */
 func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
-	ctx := context.Background()
-	in_red_fs.RemoveBtree(ctx, dataPath, "tablex")
-
-	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
-	t1.Begin()
-	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "tablex",
-		SlotLength:               8,
-		IsUnique:                 false,
-		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        true,
-		Description:              "",
-	}, t1, nil)
-	// Add a single item so we persist "root node".
-	b3.Add(ctx, 1, "I am the value with 500 key.")
-	t1.Commit(ctx)
-
-	eg2, ctx2 := errgroup.WithContext(ctx)
-	eg3, ctx3 := errgroup.WithContext(ctx)
-	eg4, ctx4 := errgroup.WithContext(ctx)
-
-	f1 := func() error {
+	// for {
+		ctx := context.Background()
+		in_red_fs.RemoveBtree(ctx, dataPath, "tablex")
+		cache := redis.NewClient()
+		cache.Clear(ctx)
+	
+		to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 		t1, _ := in_red_fs.NewTransaction(to)
 		t1.Begin()
-		b3, _ := in_red_fs.OpenBtree[int, string](ctx2, "tablex", t1, nil)
-		b3.Add(ctx2, 50, "I am the value with 5000 key.")
-		b3.Add(ctx2, 51, "I am the value with 5001 key.")
-		b3.Add(ctx2, 52, "I am also a value with 5000 key.")
-		err := t1.Commit(ctx2)
-		if err != nil {
-			log.Error(fmt.Sprintf("f1 commit err: %v", err))
+		b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
+			Name:                     "tablex",
+			SlotLength:               8,
+			IsUnique:                 false,
+			IsValueDataInNodeSegment: true,
+			LeafLoadBalancing:        true,
+			Description:              "",
+		}, t1, nil)
+		// Add a single item so we persist "root node".
+		b3.Add(ctx, 1, "I am the value with 500 key.")
+		t1.Commit(ctx)
+	
+		eg2, ctx2 := errgroup.WithContext(ctx)
+		eg3, ctx3 := errgroup.WithContext(ctx)
+		eg4, ctx4 := errgroup.WithContext(ctx)
+	
+		f1 := func() error {
+			t1, _ := in_red_fs.NewTransaction(to)
+			t1.Begin()
+			b3, _ := in_red_fs.OpenBtree[int, string](ctx2, "tablex", t1, nil)
+			b3.Add(ctx2, 50, "I am the value with 5000 key.")
+			b3.Add(ctx2, 51, "I am the value with 5001 key.")
+			b3.Add(ctx2, 52, "I am also a value with 5000 key.")
+			log.Debug(fmt.Sprintf("********** before f1 commit, tid: %v", t1.GetID()))
+			err := t1.Commit(ctx2)
+			log.Debug("********** after f1 commit")
+			if err != nil {
+				log.Error(fmt.Sprintf("f1 commit err: %v", err))
+			}
+			return err
 		}
-		return err
-	}
-
-	f2 := func() error {
-		t2, _ := in_red_fs.NewTransaction(to)
-		t2.Begin()
-		b32, _ := in_red_fs.OpenBtree[int, string](ctx3, "tablex", t2, nil)
-		b32.Add(ctx3, 550, "I am the value with 5000 key.")
-		b32.Add(ctx3, 551, "I am the value with 5001 key.")
-		b32.Add(ctx3, 552, "I am the value with 5001 key.")
-		err := t2.Commit(ctx3)
-		if err != nil {
-			log.Error(fmt.Sprintf("f2 commit err: %v", err))
+	
+		f2 := func() error {
+			t2, _ := in_red_fs.NewTransaction(to)
+			t2.Begin()
+			b32, _ := in_red_fs.OpenBtree[int, string](ctx3, "tablex", t2, nil)
+			b32.Add(ctx3, 550, "I am the value with 5000 key.")
+			b32.Add(ctx3, 551, "I am the value with 5001 key.")
+			b32.Add(ctx3, 552, "I am the value with 5001 key.")
+			log.Debug(fmt.Sprintf("********** before f2 commit, tid: %v", t2.GetID()))
+			err := t2.Commit(ctx3)
+			log.Debug("********** after f2 commit")
+			if err != nil {
+				log.Error(fmt.Sprintf("f2 commit err: %v", err))
+			}
+			return err
 		}
-		return err
-	}
-
-	f3 := func() error {
-		t3, _ := in_red_fs.NewTransaction(to)
-		t3.Begin()
-		b32, _ := in_red_fs.OpenBtree[int, string](ctx4, "tablex", t3, nil)
-		b32.Add(ctx4, 550, "random foo.")
-		b32.Add(ctx4, 551, "bar hello.")
-		err := t3.Commit(ctx4)
-		if err != nil {
-			log.Error(fmt.Sprintf("f3 commit err: %v", err))
+	
+		f3 := func() error {
+			t3, _ := in_red_fs.NewTransaction(to)
+			t3.Begin()
+			b32, _ := in_red_fs.OpenBtree[int, string](ctx4, "tablex", t3, nil)
+			b32.Add(ctx4, 550, "random foo.")
+			b32.Add(ctx4, 551, "bar hello.")
+			log.Debug(fmt.Sprintf("********** before f3 commit, tid: %v", t3.GetID()))
+			err := t3.Commit(ctx4)
+			log.Debug("********* after f3 commit")
+			if err != nil {
+				log.Error(fmt.Sprintf("f3 commit err: %v", err))
+			}
+			return err
 		}
-		return err
-	}
-
-	eg2.Go(f1)
-	eg3.Go(f2)
-	eg4.Go(f3)
-
-	failCount := 0
-	if err := eg2.Wait(); err != nil {
-		failCount++
-	}
-	if err := eg3.Wait(); err != nil {
-		failCount++
-	}
-	if err := eg4.Wait(); err != nil {
-		failCount++
-	}
-
-	if failCount > 1 {
-		t.Errorf("at least 2 commits should succeed, got %d failed", failCount)
-	}
-
-	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	t1, _ = in_red_fs.NewTransaction(to2)
-	t1.Begin()
-
-	b3, _ = in_red_fs.OpenBtree[int, string](ctx, "tablex", t1, nil)
-	b3.First(ctx)
-	i := 1
-	for {
-		if ok, err := b3.Next(ctx); err != nil {
-			t.Error(err)
-		} else if !ok {
-			break
+	
+		eg2.Go(f1)
+		eg3.Go(f2)
+		eg4.Go(f3)
+	
+		failCount := 0
+		if err := eg2.Wait(); err != nil {
+			failCount++
 		}
-		i++
-	}
-	if i < 5 {
-		t.Errorf("Failed, traversing/counting all records, got %d, want at least 5.", i)
-	}
-	if i != int(b3.Count()) {
-		t.Errorf("Failed, traversing/counting all records, got %d, but Count() returned %d.", i, b3.Count())
-	}
+		if err := eg3.Wait(); err != nil {
+			failCount++
+		}
+		if err := eg4.Wait(); err != nil {
+			failCount++
+		}
+	
+		if failCount > 0 {
+			t.Errorf("commit should all succeed, failed: %d", failCount)
+			// break
+		}
+	
+		to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+		t1, _ = in_red_fs.NewTransaction(to2)
+		t1.Begin()
+	
+		b3, _ = in_red_fs.OpenBtree[int, string](ctx, "tablex", t1, nil)
+		b3.First(ctx)
+		i := 1
+		for {
+			if ok, err := b3.Next(ctx); err != nil {
+				t.Error(err)
+			} else if !ok {
+				break
+			}
+			i++
+		}
+		if i < 5 {
+			t.Errorf("Failed, traversing/counting all records, got %d, want at least 5.", i)
+			// break
+		}
+		if i != int(b3.Count()) {
+			t.Errorf("Failed, traversing/counting all records, got %d, but Count() returned %d.", i, b3.Count())
+			// break
+		}
+		log.Info("loop end, PASSED")
+		log.Info("")
+		log.Info("")
+	// }
 }
 
 /*
@@ -839,7 +856,6 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	t1, _ = in_red_fs.NewTransaction(to2)
 	t1.Begin()
 
-	b3, _ = in_red_fs.OpenBtree[int, string](ctx, "tabley", t1, nil)
 	b3, _ = in_red_fs.OpenBtree[int, string](ctx, "tabley", t1, nil)
 	b3.First(ctx)
 	i := 1

@@ -44,6 +44,7 @@ type Registry interface {
 	// wanting to do an all or nothing update for the entire batch of handles.
 	// False is recommended if such consistency is not significant.
 	Update(ctx context.Context, allOrNothing bool, handles ...RegistryPayload[Handle]) error
+	UpdateNoLocks(ctx context.Context, storesHandles ...RegistryPayload[Handle]) error
 	// Remove will delete handles(given their IDs) from registry table(s).
 	Remove(context.Context, ...RegistryPayload[UUID]) error
 }

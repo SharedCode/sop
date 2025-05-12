@@ -289,7 +289,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 	}
 	log.Debug("outside commitUpdatedNodes forloop trying to AllocateID")
 
-	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
+	if err := nr.transaction.registry.UpdateNoLocks(ctx, handles...); err != nil {
 		log.Debug(fmt.Sprintf("failed registry.Update, details: %v", err))
 		return false, nil, err
 	}
@@ -335,7 +335,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Tu
 		}
 	}
 	// Persist the handles changes.
-	if err := nr.transaction.registry.Update(ctx, false, handles...); err != nil {
+	if err := nr.transaction.registry.UpdateNoLocks(ctx, handles...); err != nil {
 		return false, nil, err
 	}
 	return true, handles, nil
@@ -634,6 +634,16 @@ func convertToRegistryRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interfa
 		}
 	}
 	return vids
+}
+
+func extractUUIDs(nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) []sop.UUID {
+	uuids := make([]sop.UUID, 0, len(nodes))
+	for i := range nodes {
+		for ii := range nodes[i].Second {
+			uuids = append(uuids, nodes[i].Second[ii].(btree.MetaDataType).GetID())
+		}
+	}
+	return uuids
 }
 
 func (nr *nodeRepository) formatKey(k string) string {
