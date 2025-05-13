@@ -119,11 +119,13 @@ func (t *Transaction) Phase1Commit(ctx context.Context) error {
 	if t.mode == sop.ForReading {
 		return t.commitForReaderTransaction(ctx)
 	}
-	if err := t.phase1Commit(ctx); err != nil {
+	if err := t.phase1Commit(ctx); err != nil {		
 		t.phaseDone = 2
 		if rerr := t.rollback(ctx, true); rerr != nil {
+			t.unlockNodesKeys(ctx)
 			return fmt.Errorf("phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
+		t.unlockNodesKeys(ctx)
 		return fmt.Errorf("phase 1 commit failed, details: %v", err)
 	}
 	log.Debug("after phase1Commit call")
@@ -149,8 +151,10 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	}
 	if err := t.phase2Commit(ctx); err != nil {
 		if rerr := t.rollback(ctx, true); rerr != nil {
+			t.unlockNodesKeys(ctx)
 			return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
+		t.unlockNodesKeys(ctx)
 		return fmt.Errorf("phase 2 commit failed, details: %v", err)
 	}
 	return nil
@@ -237,7 +241,6 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 
 		var err error
 		if err = t.timedOut(ctx, startTime); err != nil {
-			t.unlockNodesKeys(ctx)
 			return err
 		}
 
@@ -261,17 +264,14 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 			log.Debug(fmt.Sprintf("before refetchAndMergeModifications, tid: %v", t.GetID()))
 			if err := t.refetchAndMergeModifications(ctx); err != nil {
 				log.Error(fmt.Sprintf("after refetchAndMergeModifications, tid: %v, error: %v", t.GetID(), err))
-				t.unlockNodesKeys(ctx)
 				return err
 			}
 
 			if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
-				t.unlockNodesKeys(ctx)
 				return err
 			}
 			if err = t.lockTrackedItems(ctx); err != nil {
 				log.Error(fmt.Sprintf("failed to lock tracked items, details: %v", err))
-				t.unlockNodesKeys(ctx)
 				return err
 			}
 
@@ -283,11 +283,9 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		//* End: Try to lock all updated & removed nodes before moving forward.
 
 		if err := t.logger.log(ctx, commitTrackedItemsValues, toByteArray(t.getForRollbackTrackedItemsValues())); err != nil {
-			t.unlockNodesKeys(ctx)
 			return err
 		}
 		if err := t.commitTrackedItemsValues(ctx); err != nil {
-			t.unlockNodesKeys(ctx)
 			return err
 		}
 
@@ -305,33 +303,27 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		if err := t.logger.log(ctx, commitNewRootNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
 			First: vids, Second: bibs,
 		})); err != nil {
-			t.unlockNodesKeys(ctx)
 			return err
 		}
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
-			t.unlockNodesKeys(ctx)
 			return err
 		}
 
 		if successful {
 			// Check for conflict on fetched items.
 			if err := t.logger.log(ctx, areFetchedItemsIntact, nil); err != nil {
-				t.unlockNodesKeys(ctx)
 				return err
 			}
 			if successful, err = t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
-				t.unlockNodesKeys(ctx)
 				return err
 			}
 		}
 		if successful {
 			// Commit updated nodes.
 			if err := t.logger.log(ctx, commitUpdatedNodes, toByteArray(convertToRegistryRequestPayload(updatedNodes))); err != nil {
-				t.unlockNodesKeys(ctx)
 				return err
 			}
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
-				t.unlockNodesKeys(ctx)
 				return err
 			}
 		}
@@ -339,18 +331,15 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		if successful {
 			// Commit removed nodes.
 			if err := t.logger.log(ctx, commitRemovedNodes, toByteArray(convertToRegistryRequestPayload(removedNodes))); err != nil {
-				t.unlockNodesKeys(ctx)
 				return err
 			}
 			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
-				t.unlockNodesKeys(ctx)
 				return err
 			}
 		}
 		if !successful {
 			// Rollback partial changes.
 			if rerr := t.rollback(ctx, false); rerr != nil {
-				t.unlockNodesKeys(ctx)
 				return fmt.Errorf("phase 1 commit failed, then rollback errored with: %v", rerr)
 			}
 
@@ -368,47 +357,39 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		First:  convertToRegistryRequestPayload(addedNodes),
 		Second: convertToBlobRequestPayload(addedNodes),
 	})); err != nil {
-		t.unlockNodesKeys(ctx)
 		return err
 	}
 	if err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
-		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// Commit stores update(CountDelta apply).
 	if err := t.logger.log(ctx, commitStoreInfo, toByteArray(t.getRollbackStoresInfo())); err != nil {
-		t.unlockNodesKeys(ctx)
 		return err
 	}
 	if err := t.commitStores(ctx); err != nil {
-		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// Mark that store info commit succeeded, so it can get rolled back if rollback occurs.
 	if err := t.logger.log(ctx, beforeFinalize, nil); err != nil {
-		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes, in phase2Commit.
 	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(updatedNodesHandles)
 	if err != nil {
-		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// Prepare to update upsert time of removed nodes to signal that they are finalized, in phase2Commit.
 	rh, err := t.btreesBackend[0].nodeRepository.touchNodes(removedNodesHandles)
 	if err != nil {
-		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// In case race condition exists, we remove it here by checking our tracked items' lock integrity.
 	if err := t.checkTrackedItems(ctx); err != nil {
-		t.unlockNodesKeys(ctx)
 		return err
 	}
 
@@ -434,13 +415,11 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 	}
 	// Log the "finalizeCommit" step & parameters, useful for rollback.
 	if err := t.logger.log(ctx, finalizeCommit, toByteArray(pl)); err != nil {
-		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
 	if err := t.registry.UpdateNoLocks(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
-		t.unlockNodesKeys(ctx)
 		return err
 	}
 
