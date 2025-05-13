@@ -36,12 +36,12 @@ func init() {
 	// Initialize Erasure Coding (EC) for the EC tests.
 	initErasureCoding()
 
-	// cache := redis.NewClient()
-	// log.Info("about to issue cache.Clear")
-	// ctx := context.Background()
-	// if err := cache.Clear(ctx); err != nil {
-	// 	log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
-	// }
+	cache := redis.NewClient()
+	log.Info("about to issue cache.Clear")
+	ctx := context.Background()
+	if err := cache.Clear(ctx); err != nil {
+		log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
+	}
 
 	testDefaultCacheConfig = sop.GetDefaulCacheConfig()
 	// Node Cache Duration for these tests is 5 minutes.
