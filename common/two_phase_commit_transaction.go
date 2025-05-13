@@ -10,6 +10,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/in_memory"
 )
 
 type btreeBackend struct {
@@ -141,8 +142,9 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	}
 	t.phaseDone = 2
 
+	// Ensure resources are cleaned up or released.
+	defer t.Close()
 	if t.mode != sop.ForWriting {
-		t.Close()
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
@@ -151,8 +153,6 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 		}
 		return fmt.Errorf("phase 2 commit failed, details: %v", err)
 	}
-	// Ensure resources are cleaned up or released.
-	t.Close()
 	return nil
 }
 
@@ -243,13 +243,16 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 
 		//* Start: Try to lock all updated & removed nodes before moving forward.
 		if ok, _ := t.cache.Lock(ctx, t.maxTime, t.nodesKeys...); !ok {
+			log.Debug(fmt.Sprintf("cache.Lock can't lock all nodesKeys, tid: %v", t.GetID()))
+			// Unlock in case there are those that got locked.
+			t.cache.Unlock(ctx, t.nodesKeys...)
 			sop.RandomSleep(ctx)
 			needsRefetchAndMerge = true
 			continue
 		}
 
 		if ok, err := t.cache.IsLocked(ctx, t.nodesKeys...); !ok || err != nil {
-			//log.Warn(fmt.Sprintf("isLocked returned not locked, retry lock, tid: %v", t.GetID()))
+			log.Debug(fmt.Sprintf("cache.IsLocked didn't confirm nodesKeys are locked, tid: %v", t.GetID()))
 			sop.RandomSleep(ctx)
 			continue
 		}
@@ -258,15 +261,26 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 			log.Debug(fmt.Sprintf("before refetchAndMergeModifications, tid: %v", t.GetID()))
 			if err := t.refetchAndMergeModifications(ctx); err != nil {
 				log.Error(fmt.Sprintf("after refetchAndMergeModifications, tid: %v, error: %v", t.GetID(), err))
+				t.unlockNodesKeys(ctx)
 				return err
 			}
+
+			if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
+				t.unlockNodesKeys(ctx)
+				return err
+			}
+			if err = t.lockTrackedItems(ctx); err != nil {
+				log.Error(fmt.Sprintf("failed to lock tracked items, details: %v", err))				
+				t.unlockNodesKeys(ctx)
+				return err
+			}
+
 			updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
 			t.mergeNodesKeys(ctx, updatedNodes, removedNodes)
 			needsRefetchAndMerge = false
 			continue
 		}
 		//* End: Try to lock all updated & removed nodes before moving forward.
-		log.Debug(fmt.Sprintf("phase 1 commit heartbeat, tid: %v", t.GetID()))
 
 		if err := t.logger.log(ctx, commitTrackedItemsValues, toByteArray(t.getForRollbackTrackedItemsValues())); err != nil {
 			t.unlockNodesKeys(ctx)
@@ -334,9 +348,9 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 			}
 		}
 		if !successful {
-			t.cache.Unlock(ctx, t.nodesKeys...)
 			// Rollback partial changes.
 			if rerr := t.rollback(ctx, false); rerr != nil {
+				t.unlockNodesKeys(ctx)
 				return fmt.Errorf("phase 1 commit failed, then rollback errored with: %v", rerr)
 			}
 
@@ -344,14 +358,6 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 
 			needsRefetchAndMerge = true
 			sop.RandomSleep(ctx)
-
-			if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
-				return err
-			}
-			if err = t.lockTrackedItems(ctx); err != nil {
-				log.Error(fmt.Sprintf("failed to lock tracked items, details: %v", err))				
-				return err
-			}			
 		}
 	}
 
@@ -552,13 +558,13 @@ func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	}
 	if t.logger.committedState > commitRemovedNodes {
 		vids := convertToRegistryRequestPayload(removedNodes)
-		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, vids); err != nil {
+		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, true, vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitUpdatedNodes {
 		vids := convertToRegistryRequestPayload(updatedNodes)
-		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, vids); err != nil {
+		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, true, vids); err != nil {
 			lastErr = err
 		}
 	}
@@ -655,7 +661,7 @@ func (t *Transaction) commitForReaderTransaction(ctx context.Context) error {
 	// For a reader transaction, conflict check is enough.
 	startTime := sop.Now()
 	for {
-		log.Debug("inside reader trans phase 2 commit")
+		log.Debug(fmt.Sprintf("inside reader trans phase 2 commit, tid: %v", t.GetID()))
 
 		if err := t.timedOut(ctx, startTime); err != nil {
 			return err
@@ -665,10 +671,14 @@ func (t *Transaction) commitForReaderTransaction(ctx context.Context) error {
 		if ok, err := t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
 			return err
 		} else if ok {
+			log.Debug(fmt.Sprintf("reader trans phase 2 commit succeeded, tid: %v", t.GetID()))
 			return nil
 		}
 
 		sop.RandomSleep(ctx)
+
+		log.Debug(fmt.Sprintf("reader trans phase 2 commit before 'refetchAndMergeModifications', tid: %v", t.GetID()))
+
 		// Recreate the fetches on latest committed nodes & check if fetched Items are unchanged.
 		if err := t.refetchAndMergeModifications(ctx); err != nil {
 			return err
@@ -847,43 +857,68 @@ func (t *Transaction) timedOut(ctx context.Context, startTime time.Time) error {
 }
 
 func (t *Transaction) unlockNodesKeys(ctx context.Context) error {
-	defer func() {
-		t.nodesKeys = nil
-	}()
-	return t.cache.Unlock(ctx, t.nodesKeys...)
+	if t.nodesKeys == nil {
+		return nil
+	}
+	err := t.cache.Unlock(ctx, t.nodesKeys...)
+	t.nodesKeys = nil
+	return err
 }
 
 func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tuple[*sop.StoreInfo, []any], removedNodes []sop.Tuple[*sop.StoreInfo, []any]) {
-	// Create lock keys so we can lock updated & removed handles then unlock them later when locks no longer needed.	
-	lids := extractUUIDs(updatedNodes)
-	uks := t.cache.CreateLockKeys(toString(lids)...)
-	rids := extractUUIDs(removedNodes)
-	rks := t.cache.CreateLockKeys(toString(rids)...)
-
-	log.Debug(fmt.Sprintf("mergeNodesKeys: updated lids: %v, removed lids: %v", lids, rids))
-
-	keys := make([]*sop.LockKey, 0, len(uks) + len(rks))
-	keys = append(keys, uks...)
-	keys = append(keys, rks...)
-
-	if t.nodesKeys == nil {
-		t.nodesKeys = keys
+	// Create lock keys so we can lock updated & removed handles then unlock them later when locks no longer needed.
+	// Keys are sorted by UUID as high, low int64 bit pair so we can order the cache lock call in a uniform manner and thus, reduce risk of dead lock.
+	if len(updatedNodes) == 0 && len(removedNodes) == 0 {
+		for _, nk := range t.nodesKeys {
+				// Release the held lock for a node key that we no longer care about.
+				t.cache.Unlock(ctx, nk)
+		}
+		t.nodesKeys = nil
 		return
 	}
-	// Merge the incoming keys w/ existing locked keys.
-	lookup := make(map[string]*sop.LockKey, len(keys))
-	for _,v := range t.nodesKeys {
-		lookup[v.Key] = v
+
+	lids := extractUUIDs(updatedNodes)
+	rids := extractUUIDs(removedNodes)
+	log.Debug(fmt.Sprintf("mergeNodesKeys: updated lids: %v, removed lids: %v", lids, rids))
+
+	lookupByUUID := in_memory.NewBtree[sop.UUID, *sop.LockKey](true)
+	for _,id := range lids {
+		lookupByUUID.Add(id, t.cache.CreateLockKeys(id.String())[0])
 	}
-	for i := range keys {
-		if v, ok := lookup[keys[i].Key]; ok {
-			keys[i] = v
-			continue
-		} else {
-			// Unlock the lockKey because it is not part of the new set, unrelated to our new Handle set.
-			t.cache.Unlock(ctx, v)
+	for _,id := range rids {
+		lookupByUUID.Add(id, t.cache.CreateLockKeys(id.String())[0])
+	}
+
+	lookupByKeyName := make(map[string]sop.UUID, lookupByUUID.Count())
+	lookupByUUID.First()
+	for {
+		v := lookupByUUID.GetCurrentValue()
+		lookupByKeyName[v.Key] = lookupByUUID.GetCurrentKey()
+		if !lookupByUUID.Next() {
+			break
 		}
 	}
+
+	for _, nk := range t.nodesKeys {
+		if v, ok := lookupByKeyName[nk.Key]; ok {
+			lookupByUUID.Update(v, nk)
+			continue
+		} else {
+			// Release the held lock for a node key that we no longer care about.
+			t.cache.Unlock(ctx, nk)
+		}
+	}
+
+	// Map into an array of LockKeys sorted by UUID high, low int64 bit values.
+	lookupByUUID.First()
+	keys := make([]*sop.LockKey, 0, lookupByUUID.Count())
+	for {
+		keys = append(keys, lookupByUUID.GetCurrentValue())
+		if !lookupByUUID.Next() {
+			break
+		}
+	}
+
 	t.nodesKeys = keys
 }
 
@@ -915,12 +950,4 @@ func (t *Transaction) onIdle(ctx context.Context) {
 			t.logger.processExpiredTransactionLogs(ctx, t)
 		}
 	}
-}
-
-func toString(uuids []sop.UUID) []string {
-	r := make([]string, len(uuids))
-	for i, uuid := range uuids {
-		r[i] = uuid.String()
-	}
-	return r
 }

@@ -23,6 +23,8 @@ var redisConfig = redis.Options{
 
 const dataPath string = "/Users/grecinto/sop_data"
 
+var testDefaultCacheConfig sop.StoreCacheConfig
+
 func init() {
 	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
 		Level: log.LevelInfo,
@@ -40,6 +42,11 @@ func init() {
 	if err := cache.Clear(ctx); err != nil {
 		log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
 	}
+
+	testDefaultCacheConfig = sop.GetDefaulCacheConfig()
+	// Node Cache Duration for these tests is 5 minutes.
+	testDefaultCacheConfig.NodeCacheDuration = time.Duration(5*time.Minute)
+	sop.SetDefaultCacheConfig(testDefaultCacheConfig)
 }
 
 func Test_GetStoreList(t *testing.T) {

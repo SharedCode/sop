@@ -2,6 +2,8 @@ package btree
 
 import (
 	"cmp"
+
+	"github.com/SharedCode/sop"
 )
 
 // Comparer interface specifies the Compare function.
@@ -80,6 +82,10 @@ func Compare[T Comparable](x, y T) int {
 		x1, _ := anyX.(string)
 		y1, _ := anyY.(string)
 		return cmp.Compare(x1, y1)
+	case sop.UUID:
+		x1, _ := anyX.(sop.UUID)
+		y1, _ := anyY.(sop.UUID)
+		return x1.Compare(y1)
 	default:
 		if anyX == nil && anyY == nil {
 			return 0

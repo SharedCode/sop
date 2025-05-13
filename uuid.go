@@ -46,3 +46,39 @@ func (id UUID) IsNil() bool {
 func (id UUID) String() string {
 	return uuid.UUID(id).String()
 }
+
+// Split a UUID into its high & low unsigned int64 bit parts.
+func (id UUID) Split() (uint64, uint64) {
+	// Split UUID into high & low int64 parts.
+	bytes := id[:]
+
+	var high uint64
+	for i := 0; i < 8; i++ {
+		high = high<<8 | uint64(bytes[i])
+	}
+
+	var low uint64
+	for i := 8; i < 16; i++ {
+		low = low<<8 | uint64(bytes[i])
+	}
+	return high, low
+}
+
+// Compare two UUIDs. If x < y, return -1, if x > y, 1, otherwise 0.
+func (x UUID) Compare(y UUID) int {
+	xHigh, xLow := x.Split()
+	yHigh, yLow := y.Split()
+	if xHigh < yHigh {
+		return -1
+	}
+	if yHigh < xHigh {
+		return 1
+	}
+	if xLow < yLow {
+		return -1
+	}
+	if yLow < xLow {
+		return 1
+	}
+	return 0
+}

@@ -486,7 +486,7 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData i
 }
 
 // rollback updated Nodes.
-func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, vids []sop.RegistryPayload[sop.UUID]) error {
+func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, fromActiveTransaction bool, vids []sop.RegistryPayload[sop.UUID]) error {
 	if len(vids) == 0 {
 		return nil
 	}
@@ -514,9 +514,16 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, vids []sop.R
 		log.Error(lastErr.Error())
 	}
 	// Undo changes in virtual ID registry.
-	if err = nr.transaction.registry.Update(ctx, false, handles...); err != nil {
-		lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
-		log.Error(lastErr.Error())
+	if fromActiveTransaction {
+		if err = nr.transaction.registry.UpdateNoLocks(ctx, handles...); err != nil {
+			lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
+			log.Error(lastErr.Error())
+		}	
+	} else {
+		if err = nr.transaction.registry.Update(ctx, false, handles...); err != nil {
+			lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
+			log.Error(lastErr.Error())
+		}
 	}
 	// Undo changes in redis.
 	for i := range blobsIDs {
@@ -533,7 +540,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, vids []sop.R
 	return lastErr
 }
 
-func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, vids []sop.RegistryPayload[sop.UUID]) error {
+func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, fromActiveTransaction bool, vids []sop.RegistryPayload[sop.UUID]) error {
 	if len(vids) == 0 {
 		return nil
 	}
@@ -560,10 +567,18 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, vids []sop.R
 	}
 
 	// Persist the handles changes.
-	if err := nr.transaction.registry.Update(ctx, false, handlesForRollback...); err != nil {
-		err = fmt.Errorf("unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
-		log.Error(err.Error())
-		return err
+	if fromActiveTransaction {
+		if err := nr.transaction.registry.UpdateNoLocks(ctx, handlesForRollback...); err != nil {
+			err = fmt.Errorf("unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
+			log.Error(err.Error())
+			return err
+		}
+	} else {
+		if err := nr.transaction.registry.Update(ctx, false, handlesForRollback...); err != nil {
+			err = fmt.Errorf("unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
+			log.Error(err.Error())
+			return err
+		}
 	}
 	return nil
 }

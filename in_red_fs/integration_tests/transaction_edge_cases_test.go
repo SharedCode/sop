@@ -788,7 +788,6 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		Description:              "",
 	}, t1, nil)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 1, "I am the value with 500 key.")

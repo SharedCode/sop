@@ -11,10 +11,6 @@ import (
 // Lock a set of keys.
 func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys ...*sop.LockKey) (bool, error) {
 	for _, lk := range lockKeys {
-		// If a key is "locked" then don't do anything.
-		if lk.IsLockOwner {
-			continue
-		}
 		readItem, err := c.Get(ctx, lk.Key)
 		if err != nil {
 			if !c.KeyNotFound(err) {
