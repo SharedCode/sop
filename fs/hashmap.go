@@ -318,22 +318,9 @@ func (hm *hashmap) close() error {
 }
 
 func (hm *hashmap) getBlockOffsetAndHandleInBlockOffset(id sop.UUID) (int64, int64) {
-	// Split UUID into high & low int64 parts.
-	bytes := id[:]
-
-	var high uint64
-	for i := 0; i < 8; i++ {
-		high = high<<8 | uint64(bytes[i])
-	}
-
-	var low uint64
-	for i := 8; i < 16; i++ {
-		low = low<<8 | uint64(bytes[i])
-	}
-
+	high, low := id.Split()
 	blockOffset := high % uint64(hm.hashModValue)
 	offsetInBlock := low % uint64(handlesPerBlock)
-
 	return int64(blockOffset * blockSize), int64(offsetInBlock * sop.HandleSizeInBytes)
 }
 

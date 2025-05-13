@@ -164,7 +164,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 		if committedFunctionLogs[i].Key == commitRemovedNodes {
 			if lastCommittedFunctionLog > commitRemovedNodes && committedFunctionLogs[i].Value != nil {
 				vids := toStruct[[]sop.RegistryPayload[sop.UUID]](committedFunctionLogs[i].Value)
-				if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, vids); err != nil {
+				if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, false, vids); err != nil {
 					lastErr = err
 				}
 			}
@@ -173,7 +173,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 		if committedFunctionLogs[i].Key == commitUpdatedNodes {
 			if lastCommittedFunctionLog > commitUpdatedNodes && committedFunctionLogs[i].Value != nil {
 				vids := toStruct[[]sop.RegistryPayload[sop.UUID]](committedFunctionLogs[i].Value)
-				if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, vids); err != nil {
+				if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, false, vids); err != nil {
 					lastErr = err
 				}
 			}

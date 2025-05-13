@@ -151,6 +151,17 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 			// Failed update all, thus, return err to cause rollback.
 			return err
 		}
+
+		// Update redis cache.
+		for _, sh := range storesHandles {
+			for _, h := range sh.IDs {
+				// Tolerate Redis cache failure.
+				if err := v.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+					log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
+				}
+			}
+		}
+
 		// Unlock the object Keys before return.
 		v.cache.Unlock(ctx, handleKeys...)
 	} else {
@@ -183,6 +194,11 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 					return err
 				}
 
+				// Tolerate Redis cache failure.
+				if err := v.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+					log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
+				}
+
 				// Unlock the object Keys.
 				if err := v.cache.Unlock(ctx, lk[0]); err != nil {
 					return err
@@ -191,9 +207,26 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		}
 	}
 
-	// Update redis cache.
+	return nil
+}
+
+func (v *registry) UpdateNoLocks(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
+		updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
+			connection.Config.Keyspace, sh.RegistryTable)
+		// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 		for _, h := range sh.IDs {
+			qry := connection.Session.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
+				h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalID)).WithContext(ctx)
+			if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
+				qry.Consistency(connection.Config.ConsistencyBook.RegistryUpdate)
+			}
+
+			// Update registry record.
+			if err := qry.Exec(); err != nil {
+				return err
+			}
+
 			// Tolerate Redis cache failure.
 			if err := v.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
@@ -202,6 +235,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 	}
 	return nil
 }
+
 
 func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if connection == nil {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/in_memory"
 )
 
 type btreeBackend struct {
@@ -44,9 +45,14 @@ type Transaction struct {
 	phaseDone int
 	maxTime   time.Duration
 	logger    *transactionLog
+
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles []sop.RegistryPayload[sop.Handle]
 	removedNodeHandles []sop.RegistryPayload[sop.Handle]
+
+	// Used for transaction level locking.
+	nodesKeys   []*sop.LockKey
+	id sop.UUID
 }
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
@@ -72,16 +78,8 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 		blobStore:       blobStore,
 		logger:          newTransactionLogger(transactionLog, logging),
 		phaseDone:       -1,
+		id: sop.NewUUID(),
 	}, nil
-}
-
-// Close will do cleanup.
-func (t *Transaction) Close() error {
-	// Do registry cleanup, e.g. - close all opened files.
-	if closeable, ok := t.registry.(io.Closer); ok {
-		return closeable.Close()
-	}
-	return nil
 }
 
 func (t *Transaction) Begin() error {
@@ -95,34 +93,13 @@ func (t *Transaction) Begin() error {
 	return nil
 }
 
-var lastOnIdleRunTime int64
-var locker = sync.Mutex{}
-
-func (t *Transaction) onIdle(ctx context.Context) {
-	// Required to have a backend btree to do cleanup.
-	if len(t.btreesBackend) == 0 {
-		return
+// Close will do cleanup.
+func (t *Transaction) Close() error {
+	// Do registry cleanup, e.g. - close all opened files.
+	if closeable, ok := t.registry.(io.Closer); ok {
+		return closeable.Close()
 	}
-	// If it is known that there is nothing to clean up then do 4hr interval polling,
-	// otherwise do shorter interval of 5 minutes, to allow faster cleanup.
-	// Having "abandoned" commit is a very rare occurrence.
-	interval := 4 * 60
-	if hourBeingProcessed != "" {
-		interval = 5
-	}
-	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
-	if lastOnIdleRunTime < nextRunTime {
-		runTime := false
-		locker.Lock()
-		if lastOnIdleRunTime < nextRunTime {
-			lastOnIdleRunTime = sop.Now().UnixMilli()
-			runTime = true
-		}
-		locker.Unlock()
-		if runTime {
-			t.logger.processExpiredTransactionLogs(ctx, t)
-		}
-	}
+	return nil
 }
 
 func (t *Transaction) Phase1Commit(ctx context.Context) error {
@@ -143,42 +120,6 @@ func (t *Transaction) Phase1Commit(ctx context.Context) error {
 		return t.commitForReaderTransaction(ctx)
 	}
 	if err := t.phase1Commit(ctx); err != nil {
-		if _, ok := err.(*sop.UpdateAllOrNothingError); ok {
-			log.Debug(fmt.Sprintf("update all or nothing err, will retry, details: %v", err))
-			startTime := sop.Now()
-			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
-			// until it succeeds or timeout.
-			for {
-				if err := t.timedOut(ctx, startTime); err != nil {
-					log.Debug(fmt.Sprintf("phase1Commit loop: %v", err))
-					break
-				}
-				if rerr := t.rollback(ctx, false); rerr != nil {
-					return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
-				}
-
-				if err != nil {
-					log.Warn(err.Error() + ", will retry")
-				} else {
-					log.Info("inside phase1Commit allOrNothing for-loop retry")
-				}
-
-				sop.RandomSleep(ctx)
-
-				if err = t.refetchAndMergeModifications(ctx); err != nil {
-					log.Debug("phase1Commit.refetchAndMergeModifications err: %v", err)
-					return err
-				}
-				if err = t.phase1Commit(ctx); err != nil {
-					if _, ok := err.(*sop.UpdateAllOrNothingError); !ok {
-						break
-					}
-				} else {
-					log.Debug("after allOrNothing phase1Commit call")
-					return nil
-				}
-			}
-		}
 		t.phaseDone = 2
 		if rerr := t.rollback(ctx, true); rerr != nil {
 			return fmt.Errorf("phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
@@ -201,56 +142,17 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	}
 	t.phaseDone = 2
 
+	// Ensure resources are cleaned up or released.
+	defer t.Close()
 	if t.mode != sop.ForWriting {
-		t.Close()
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
-		if _, ok := err.(*sop.UpdateAllOrNothingError); ok {
-			log.Debug("update all or nothing err, will retry, details: %v", err)
-			startTime := sop.Now()
-			// Retry if "update all or nothing" failed due to conflict. Retry will refetch & merge changes in
-			// until it succeeds or timeout.
-			for {
-				if err := t.timedOut(ctx, startTime); err != nil {
-					break
-				}
-				if rerr := t.rollback(ctx, false); rerr != nil {
-					return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
-				}
-
-				if err != nil {
-					log.Warn(err.Error() + ", will retry")
-				} else {
-					log.Info("inside phase2Commit allOrNothing for-loop retry")
-				}
-
-				sop.RandomSleep(ctx)
-
-				if err = t.refetchAndMergeModifications(ctx); err != nil {
-					return err
-				}
-				if err = t.phase1Commit(ctx); err != nil {
-					if _, ok := err.(*sop.UpdateAllOrNothingError); !ok {
-						break
-					}
-				}
-				if err = t.phase2Commit(ctx); err == nil {
-					// Ensure resources are cleaned up or released.
-					t.Close()
-					return nil
-				} else if _, ok := err.(*sop.UpdateAllOrNothingError); !ok {
-					break
-				}
-			}
-		}
 		if rerr := t.rollback(ctx, true); rerr != nil {
 			return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
 		return fmt.Errorf("phase 2 commit failed, details: %v", err)
 	}
-	// Ensure resources are cleaned up or released.
-	t.Close()
 	return nil
 }
 
@@ -290,8 +192,8 @@ func (t *Transaction) GetStoreRepository() sop.StoreRepository {
 	return t.storeRepository
 }
 
-func (t *Transaction) timedOut(ctx context.Context, startTime time.Time) error {
-	return sop.TimedOut(ctx, "transaction", startTime, t.maxTime)
+func (t *Transaction) GetID() sop.UUID {
+	return t.id
 }
 
 // phase1Commit does the phase 1 commit steps.
@@ -318,21 +220,74 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
 	var updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]
 
+	// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
+	// has to do merging & conflict resolution. Add is simple upsert.
+	updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
+
+	// Extract lock keys from updated & removed nodes.
+	t.mergeNodesKeys(ctx, updatedNodes, removedNodes)
+
 	startTime := sop.Now()
 	successful := false
+	needsRefetchAndMerge := false
+
 	for !successful {
 
-		log.Debug("inside phase1Commit forloop")
+		log.Debug(fmt.Sprintf("inside phase1Commit forloop, tid: %v", t.GetID()))
 
 		var err error
 		if err = t.timedOut(ctx, startTime); err != nil {
+			t.unlockNodesKeys(ctx)
 			return err
 		}
 
+		//* Start: Try to lock all updated & removed nodes before moving forward.
+		if ok, _ := t.cache.Lock(ctx, t.maxTime, t.nodesKeys...); !ok {
+			log.Debug(fmt.Sprintf("cache.Lock can't lock all nodesKeys, tid: %v", t.GetID()))
+			// Unlock in case there are those that got locked.
+			t.cache.Unlock(ctx, t.nodesKeys...)
+			sop.RandomSleep(ctx)
+			needsRefetchAndMerge = true
+			continue
+		}
+
+		if ok, err := t.cache.IsLocked(ctx, t.nodesKeys...); !ok || err != nil {
+			log.Debug(fmt.Sprintf("cache.IsLocked didn't confirm nodesKeys are locked, tid: %v", t.GetID()))
+			sop.RandomSleep(ctx)
+			continue
+		}
+
+		if needsRefetchAndMerge {
+			log.Debug(fmt.Sprintf("before refetchAndMergeModifications, tid: %v", t.GetID()))
+			if err := t.refetchAndMergeModifications(ctx); err != nil {
+				log.Error(fmt.Sprintf("after refetchAndMergeModifications, tid: %v, error: %v", t.GetID(), err))
+				t.unlockNodesKeys(ctx)
+				return err
+			}
+
+			if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
+				t.unlockNodesKeys(ctx)
+				return err
+			}
+			if err = t.lockTrackedItems(ctx); err != nil {
+				log.Error(fmt.Sprintf("failed to lock tracked items, details: %v", err))				
+				t.unlockNodesKeys(ctx)
+				return err
+			}
+
+			updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
+			t.mergeNodesKeys(ctx, updatedNodes, removedNodes)
+			needsRefetchAndMerge = false
+			continue
+		}
+		//* End: Try to lock all updated & removed nodes before moving forward.
+
 		if err := t.logger.log(ctx, commitTrackedItemsValues, toByteArray(t.getForRollbackTrackedItemsValues())); err != nil {
+			t.unlockNodesKeys(ctx)
 			return err
 		}
 		if err := t.commitTrackedItemsValues(ctx); err != nil {
+			t.unlockNodesKeys(ctx)
 			return err
 		}
 
@@ -344,37 +299,39 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 
 		successful = true
 
-		// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
-		// has to do merging & conflict resolution. Add is simple upsert.
-		updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
-
 		// Commit new root nodes.
 		bibs := convertToBlobRequestPayload(rootNodes)
 		vids := convertToRegistryRequestPayload(rootNodes)
 		if err := t.logger.log(ctx, commitNewRootNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
 			First: vids, Second: bibs,
 		})); err != nil {
+			t.unlockNodesKeys(ctx)
 			return err
 		}
 		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
+			t.unlockNodesKeys(ctx)
 			return err
 		}
 
 		if successful {
 			// Check for conflict on fetched items.
 			if err := t.logger.log(ctx, areFetchedItemsIntact, nil); err != nil {
+				t.unlockNodesKeys(ctx)
 				return err
 			}
 			if successful, err = t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
+				t.unlockNodesKeys(ctx)
 				return err
 			}
 		}
 		if successful {
 			// Commit updated nodes.
 			if err := t.logger.log(ctx, commitUpdatedNodes, toByteArray(convertToRegistryRequestPayload(updatedNodes))); err != nil {
+				t.unlockNodesKeys(ctx)
 				return err
 			}
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
+				t.unlockNodesKeys(ctx)
 				return err
 			}
 		}
@@ -382,75 +339,80 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		if successful {
 			// Commit removed nodes.
 			if err := t.logger.log(ctx, commitRemovedNodes, toByteArray(convertToRegistryRequestPayload(removedNodes))); err != nil {
+				t.unlockNodesKeys(ctx)
 				return err
 			}
 			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
+				t.unlockNodesKeys(ctx)
 				return err
 			}
 		}
 		if !successful {
 			// Rollback partial changes.
 			if rerr := t.rollback(ctx, false); rerr != nil {
+				t.unlockNodesKeys(ctx)
 				return fmt.Errorf("phase 1 commit failed, then rollback errored with: %v", rerr)
 			}
 
 			log.Debug("commit failed, refetch, remerge & another commit try will occur after randomSleep")
-			sop.RandomSleep(ctx)
 
-			if err = t.refetchAndMergeModifications(ctx); err != nil {
-				return err
-			}
-			if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
-				return err
-			}
-			if err = t.lockTrackedItems(ctx); err != nil {
-				return err
-			}
+			needsRefetchAndMerge = true
+			sop.RandomSleep(ctx)
 		}
 	}
+
+	log.Debug(fmt.Sprintf("phase 1 commit loop done, tid: %v", t.GetID()))
 
 	// Commit added nodes.
 	if err := t.logger.log(ctx, commitAddedNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
 		First:  convertToRegistryRequestPayload(addedNodes),
 		Second: convertToBlobRequestPayload(addedNodes),
 	})); err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
 	if err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// Commit stores update(CountDelta apply).
 	if err := t.logger.log(ctx, commitStoreInfo, toByteArray(t.getRollbackStoresInfo())); err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
 	if err := t.commitStores(ctx); err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// Mark that store info commit succeeded, so it can get rolled back if rollback occurs.
 	if err := t.logger.log(ctx, beforeFinalize, nil); err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes, in phase2Commit.
 	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(updatedNodesHandles)
 	if err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// Prepare to update upsert time of removed nodes to signal that they are finalized, in phase2Commit.
 	rh, err := t.btreesBackend[0].nodeRepository.touchNodes(removedNodesHandles)
 	if err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// In case race condition exists, we remove it here by checking our tracked items' lock integrity.
 	if err := t.checkTrackedItems(ctx); err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
 
-	log.Debug("phase 1 commit ends")
+	log.Debug(fmt.Sprintf("phase 1 commit ends, tid: %v", t.GetID()))
 	// Populate the phase 2 commit required objects.
 	t.updatedNodeHandles = uh
 	t.removedNodeHandles = rh
@@ -472,13 +434,18 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 	}
 	// Log the "finalizeCommit" step & parameters, useful for rollback.
 	if err := t.logger.log(ctx, finalizeCommit, toByteArray(pl)); err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
-	if err := t.registry.Update(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
+	if err := t.registry.UpdateNoLocks(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
+
+	// Let other transactions get a lock on these updated & removed nodes' keys we've locked.
+	t.unlockNodesKeys(ctx)
 
 	// Unlock the items in Redis since technically "commit" is done.
 	if err := t.unlockTrackedItems(ctx); err != nil {
@@ -489,6 +456,9 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 
 	// Cleanup transaction logs & obsolete entries.
 	t.cleanup(ctx)
+
+	log.Debug(fmt.Sprintf("phase 2 commit ends, tid: %v", t.GetID()))
+
 	return nil
 }
 
@@ -588,13 +558,13 @@ func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	}
 	if t.logger.committedState > commitRemovedNodes {
 		vids := convertToRegistryRequestPayload(removedNodes)
-		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, vids); err != nil {
+		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, true, vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitUpdatedNodes {
 		vids := convertToRegistryRequestPayload(updatedNodes)
-		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, vids); err != nil {
+		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, true, vids); err != nil {
 			lastErr = err
 		}
 	}
@@ -691,7 +661,7 @@ func (t *Transaction) commitForReaderTransaction(ctx context.Context) error {
 	// For a reader transaction, conflict check is enough.
 	startTime := sop.Now()
 	for {
-		log.Debug("inside reader trans phase 2 commit")
+		log.Debug(fmt.Sprintf("inside reader trans phase 2 commit, tid: %v", t.GetID()))
 
 		if err := t.timedOut(ctx, startTime); err != nil {
 			return err
@@ -701,10 +671,14 @@ func (t *Transaction) commitForReaderTransaction(ctx context.Context) error {
 		if ok, err := t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
 			return err
 		} else if ok {
+			log.Debug(fmt.Sprintf("reader trans phase 2 commit succeeded, tid: %v", t.GetID()))
 			return nil
 		}
 
 		sop.RandomSleep(ctx)
+
+		log.Debug(fmt.Sprintf("reader trans phase 2 commit before 'refetchAndMergeModifications', tid: %v", t.GetID()))
+
 		// Recreate the fetches on latest committed nodes & check if fetched Items are unchanged.
 		if err := t.refetchAndMergeModifications(ctx); err != nil {
 			return err
@@ -876,4 +850,104 @@ func (t *Transaction) deleteObsoleteEntries(ctx context.Context,
 		lastErr = err
 	}
 	return lastErr
+}
+
+func (t *Transaction) timedOut(ctx context.Context, startTime time.Time) error {
+	return sop.TimedOut(ctx, "transaction", startTime, t.maxTime)
+}
+
+func (t *Transaction) unlockNodesKeys(ctx context.Context) error {
+	if t.nodesKeys == nil {
+		return nil
+	}
+	err := t.cache.Unlock(ctx, t.nodesKeys...)
+	t.nodesKeys = nil
+	return err
+}
+
+func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tuple[*sop.StoreInfo, []any], removedNodes []sop.Tuple[*sop.StoreInfo, []any]) {
+	// Create lock keys so we can lock updated & removed handles then unlock them later when locks no longer needed.
+	// Keys are sorted by UUID as high, low int64 bit pair so we can order the cache lock call in a uniform manner and thus, reduce risk of dead lock.
+	if len(updatedNodes) == 0 && len(removedNodes) == 0 {
+		for _, nk := range t.nodesKeys {
+				// Release the held lock for a node key that we no longer care about.
+				t.cache.Unlock(ctx, nk)
+		}
+		t.nodesKeys = nil
+		return
+	}
+
+	lids := extractUUIDs(updatedNodes)
+	rids := extractUUIDs(removedNodes)
+	log.Debug(fmt.Sprintf("mergeNodesKeys: updated lids: %v, removed lids: %v", lids, rids))
+
+	lookupByUUID := in_memory.NewBtree[sop.UUID, *sop.LockKey](true)
+	for _,id := range lids {
+		lookupByUUID.Add(id, t.cache.CreateLockKeys(id.String())[0])
+	}
+	for _,id := range rids {
+		lookupByUUID.Add(id, t.cache.CreateLockKeys(id.String())[0])
+	}
+
+	lookupByKeyName := make(map[string]sop.UUID, lookupByUUID.Count())
+	lookupByUUID.First()
+	for {
+		v := lookupByUUID.GetCurrentValue()
+		lookupByKeyName[v.Key] = lookupByUUID.GetCurrentKey()
+		if !lookupByUUID.Next() {
+			break
+		}
+	}
+
+	for _, nk := range t.nodesKeys {
+		if v, ok := lookupByKeyName[nk.Key]; ok {
+			lookupByUUID.Update(v, nk)
+			continue
+		} else {
+			// Release the held lock for a node key that we no longer care about.
+			t.cache.Unlock(ctx, nk)
+		}
+	}
+
+	// Map into an array of LockKeys sorted by UUID high, low int64 bit values.
+	lookupByUUID.First()
+	keys := make([]*sop.LockKey, 0, lookupByUUID.Count())
+	for {
+		keys = append(keys, lookupByUUID.GetCurrentValue())
+		if !lookupByUUID.Next() {
+			break
+		}
+	}
+
+	t.nodesKeys = keys
+}
+
+var lastOnIdleRunTime int64
+var locker = sync.Mutex{}
+
+func (t *Transaction) onIdle(ctx context.Context) {
+	// Required to have a backend btree to do cleanup.
+	if len(t.btreesBackend) == 0 {
+		return
+	}
+	// If it is known that there is nothing to clean up then do 4hr interval polling,
+	// otherwise do shorter interval of 5 minutes, to allow faster cleanup.
+	// Having "abandoned" commit is a very rare occurrence.
+	interval := 4 * 60
+	if hourBeingProcessed != "" {
+		interval = 5
+	}
+	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
+	if lastOnIdleRunTime < nextRunTime {
+		runTime := false
+		locker.Lock()
+		if lastOnIdleRunTime < nextRunTime {
+			lastOnIdleRunTime = sop.Now().UnixMilli()
+			runTime = true
+		}
+		locker.Unlock()
+		if runTime {
+			t.logger.processExpiredTransactionLogs(ctx, t)
+		}
+	}
 }
