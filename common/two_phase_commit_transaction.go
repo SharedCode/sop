@@ -51,8 +51,8 @@ type Transaction struct {
 	removedNodeHandles []sop.RegistryPayload[sop.Handle]
 
 	// Used for transaction level locking.
-	nodesKeys   []*sop.LockKey
-	id sop.UUID
+	nodesKeys []*sop.LockKey
+	id        sop.UUID
 }
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
@@ -78,7 +78,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 		blobStore:       blobStore,
 		logger:          newTransactionLogger(transactionLog, logging),
 		phaseDone:       -1,
-		id: sop.NewUUID(),
+		id:              sop.NewUUID(),
 	}, nil
 }
 
@@ -270,7 +270,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 				return err
 			}
 			if err = t.lockTrackedItems(ctx); err != nil {
-				log.Error(fmt.Sprintf("failed to lock tracked items, details: %v", err))				
+				log.Error(fmt.Sprintf("failed to lock tracked items, details: %v", err))
 				t.unlockNodesKeys(ctx)
 				return err
 			}
@@ -870,8 +870,8 @@ func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tup
 	// Keys are sorted by UUID as high, low int64 bit pair so we can order the cache lock call in a uniform manner and thus, reduce risk of dead lock.
 	if len(updatedNodes) == 0 && len(removedNodes) == 0 {
 		for _, nk := range t.nodesKeys {
-				// Release the held lock for a node key that we no longer care about.
-				t.cache.Unlock(ctx, nk)
+			// Release the held lock for a node key that we no longer care about.
+			t.cache.Unlock(ctx, nk)
 		}
 		t.nodesKeys = nil
 		return
@@ -882,10 +882,10 @@ func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tup
 	log.Debug(fmt.Sprintf("mergeNodesKeys: updated lids: %v, removed lids: %v", lids, rids))
 
 	lookupByUUID := in_memory.NewBtree[sop.UUID, *sop.LockKey](true)
-	for _,id := range lids {
+	for _, id := range lids {
 		lookupByUUID.Add(id, t.cache.CreateLockKeys(id.String())[0])
 	}
-	for _,id := range rids {
+	for _, id := range rids {
 		lookupByUUID.Add(id, t.cache.CreateLockKeys(id.String())[0])
 	}
 

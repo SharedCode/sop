@@ -45,7 +45,7 @@ func init() {
 
 	testDefaultCacheConfig = sop.GetDefaulCacheConfig()
 	// Node Cache Duration for these tests is 5 minutes.
-	testDefaultCacheConfig.NodeCacheDuration = time.Duration(5*time.Minute)
+	testDefaultCacheConfig.NodeCacheDuration = time.Duration(5 * time.Minute)
 	sop.SetDefaultCacheConfig(testDefaultCacheConfig)
 }
 
