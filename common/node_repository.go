@@ -518,7 +518,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, fromActiveTr
 		if err = nr.transaction.registry.UpdateNoLocks(ctx, handles...); err != nil {
 			lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
 			log.Error(lastErr.Error())
-		}	
+		}
 	} else {
 		if err = nr.transaction.registry.Update(ctx, false, handles...); err != nil {
 			lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)

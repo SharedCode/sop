@@ -236,7 +236,6 @@ func (v *registry) UpdateNoLocks(ctx context.Context, storesHandles ...sop.Regis
 	return nil
 }
 
-
 func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if connection == nil {
 		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
