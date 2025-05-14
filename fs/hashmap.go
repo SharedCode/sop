@@ -42,8 +42,6 @@ func (fr *fileRegionDetails) getOffset() int64 {
 const (
 	fullPermission  = 0644
 	handlesPerBlock = 66
-	// Keep the attempt to lock file region short since if it is locked, we want to fail right away & cause transaction rollback.
-	lockFileRegionAttemptTimeout = time.Duration(4 * time.Second)
 	preallocateFileLockKey       = "infs_reg"
 	// Growing the file needs more time to complete.
 	lockPreallocateFileTimeout = time.Duration(20 * time.Minute)

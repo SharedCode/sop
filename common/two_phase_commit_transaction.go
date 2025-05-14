@@ -259,7 +259,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		if needsRefetchAndMerge {
 			log.Debug(fmt.Sprintf("before refetchAndMergeModifications, tid: %v", t.GetID()))
 			if err := t.refetchAndMergeModifications(ctx); err != nil {
-				log.Error(fmt.Sprintf("after refetchAndMergeModifications, tid: %v, error: %v", t.GetID(), err))
+				log.Info(fmt.Sprintf("after refetchAndMergeModifications, tid: %v, error: %v", t.GetID(), err))
 				return err
 			}
 
@@ -267,7 +267,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 				return err
 			}
 			if err = t.lockTrackedItems(ctx); err != nil {
-				log.Error(fmt.Sprintf("failed to lock tracked items, details: %v", err))
+				log.Info(fmt.Sprintf("failed to lock tracked items, details: %v", err))
 				return err
 			}
 
