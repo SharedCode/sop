@@ -11,9 +11,9 @@ type registryMap struct {
 	hashmap *hashmap
 }
 
-func newRegistryMap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *registryMap {
+func newRegistryMap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache) *registryMap {
 	return &registryMap{
-		hashmap: newHashmap(readWrite, hashModValue, replicationTracker, cache, useCacheForFileRegionLocks),
+		hashmap: newHashmap(readWrite, hashModValue, replicationTracker, cache, true),
 	}
 }
 

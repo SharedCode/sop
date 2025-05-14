@@ -37,7 +37,7 @@ func NewTwoPhaseCommitTransaction(to TransationOptions) (sop.TwoPhaseCommitTrans
 	tl := fs.NewTransactionLog(to.Cache, replicationTracker)
 	return common.NewTwoPhaseCommitTransaction(to.Mode, to.MaxTime, true,
 		fs.NewBlobStore(nil), sr, fs.NewRegistry(to.Mode == sop.ForWriting,
-			to.RegistryHashModValue, replicationTracker, to.Cache, to.UseCacheForFileRegionLocks), to.Cache, tl)
+			to.RegistryHashModValue, replicationTracker, to.Cache), to.Cache, tl)
 }
 
 // Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
@@ -80,5 +80,5 @@ func NewTwoPhaseCommitTransactionWithReplication(towr TransationOptionsWithRepli
 	tl := fs.NewTransactionLog(towr.Cache, replicationTracker)
 
 	return common.NewTwoPhaseCommitTransaction(towr.Mode, towr.MaxTime, true, bs, sr,
-		fs.NewRegistry(towr.Mode == sop.ForWriting, towr.RegistryHashModValue, replicationTracker, towr.Cache, towr.UseCacheForFileRegionLocks), towr.Cache, tl)
+		fs.NewRegistry(towr.Mode == sop.ForWriting, towr.RegistryHashModValue, replicationTracker, towr.Cache), towr.Cache, tl)
 }

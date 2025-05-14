@@ -119,13 +119,11 @@ func (t *Transaction) Phase1Commit(ctx context.Context) error {
 	if t.mode == sop.ForReading {
 		return t.commitForReaderTransaction(ctx)
 	}
-	if err := t.phase1Commit(ctx); err != nil {		
+	if err := t.phase1Commit(ctx); err != nil {
 		t.phaseDone = 2
 		if rerr := t.rollback(ctx, true); rerr != nil {
-			t.unlockNodesKeys(ctx)
 			return fmt.Errorf("phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
-		t.unlockNodesKeys(ctx)
 		return fmt.Errorf("phase 1 commit failed, details: %v", err)
 	}
 	log.Debug("after phase1Commit call")
@@ -151,10 +149,8 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	}
 	if err := t.phase2Commit(ctx); err != nil {
 		if rerr := t.rollback(ctx, true); rerr != nil {
-			t.unlockNodesKeys(ctx)
 			return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
-		t.unlockNodesKeys(ctx)
 		return fmt.Errorf("phase 2 commit failed, details: %v", err)
 	}
 	return nil
@@ -415,11 +411,13 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 	}
 	// Log the "finalizeCommit" step & parameters, useful for rollback.
 	if err := t.logger.log(ctx, finalizeCommit, toByteArray(pl)); err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
 
 	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
 	if err := t.registry.UpdateNoLocks(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
+		t.unlockNodesKeys(ctx)
 		return err
 	}
 
@@ -547,6 +545,8 @@ func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 			lastErr = err
 		}
 	}
+	// Safe to release the nodes keys' locks so other(s) waiting can get served.
+	t.unlockNodesKeys(ctx)
 	if t.logger.committedState > commitNewRootNodes {
 		bibs := convertToBlobRequestPayload(rootNodes)
 		vids := convertToRegistryRequestPayload(rootNodes)
