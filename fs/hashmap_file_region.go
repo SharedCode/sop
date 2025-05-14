@@ -11,38 +11,6 @@ import (
 	"github.com/SharedCode/sop/encoding"
 )
 
-func (hm *hashmap) lockFoundFileRegion(ctx context.Context, fileRegionDetails ...*fileRegionDetails) error {
-	for _, frd := range fileRegionDetails {
-		if hm.useCacheForFileRegionLocks {
-			return nil
-		}
-		if err := frd.dio.lockFileRegion(ctx, frd.getOffset(), sop.HandleSizeInBytes, lockFileRegionAttemptTimeout); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Unlock file region(s).
-func (hm *hashmap) unlockFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
-	if hm.useCacheForFileRegionLocks {
-		return nil
-	}
-	for _, frd := range fileRegionDetails {
-		if err := frd.dio.unlockFileRegion(frd.getOffset(), sop.HandleSizeInBytes); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (hm *hashmap) isRegionLocked(ctx context.Context, dio *directIO, offset int64) (bool, error) {
-	if hm.useCacheForFileRegionLocks {
-		return false, nil
-	}
-	return dio.isRegionLocked(ctx, true, offset, sop.HandleSizeInBytes)
-}
-
 func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
 	dio := newDirectIO()
 	ba := dio.createAlignedBlock()
@@ -121,21 +89,12 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 }
 
 func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *directIO, offset int64) (bool, *sop.LockKey, error) {
-	if hm.useCacheForFileRegionLocks {
-		lk := hm.cache.CreateLockKeys(hm.formatLockKey(dio.filename, offset))[0]
-		ok, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
-		return ok, lk, err
-	}
-	if err := dio.lockFileRegion(ctx, offset, int64(blockSize), lockFileRegionDuration); err != nil {
-		return false, nil, err
-	}
-	return true, nil, nil
+	lk := hm.cache.CreateLockKeys(hm.formatLockKey(dio.filename, offset))[0]
+	ok, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
+	return ok, lk, err
 }
 func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, dio *directIO, offset int64, lk *sop.LockKey) error {
-	if hm.useCacheForFileRegionLocks {
-		return hm.cache.Unlock(ctx, lk)
-	}
-	return dio.unlockFileRegion(offset, int64(blockSize))
+	return hm.cache.Unlock(ctx, lk)
 }
 
 func (hm *hashmap) formatLockKey(filename string, offset int64) string {
