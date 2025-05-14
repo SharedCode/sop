@@ -251,15 +251,15 @@ func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([
 // Find the file region(s) that a set of UUIDs correlate to and return these region(s)' offsett/Handle if in case
 // useful to the caller.
 func (hm *hashmap) findFileRegion(ctx context.Context, filename string, ids ...sop.UUID) ([]fileRegionDetails, error) {
-	completedItems := make([]fileRegionDetails, 0, len(ids))
+	foundItems := make([]fileRegionDetails, 0, len(ids))
 	for _, id := range ids {
 		frd, err := hm.findOneFileRegion(ctx, true, filename, id)
 		if err != nil {
 			return nil, err
 		}
-		completedItems = append(completedItems, frd)
+		foundItems = append(foundItems, frd)
 	}
-	return completedItems, nil
+	return foundItems, nil
 }
 
 // Close all files opened by this hashmap on disk.
