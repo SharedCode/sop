@@ -21,9 +21,6 @@ type TransationOptions struct {
 	RegistryHashModValue int
 	// Cache interface, will default to Redis if not specified.
 	Cache sop.Cache
-	// true will tell registry's hashmap to use Redis for file region locking, otherwise
-	// it will use the syscall API for lock managements on file.
-	UseCacheForFileRegionLocks bool
 }
 
 type TransationOptionsWithReplication struct {
@@ -39,9 +36,6 @@ type TransationOptionsWithReplication struct {
 	RegistryHashModValue int
 	// Cache interface, will default to Redis if not specified.
 	Cache sop.Cache
-	// true will tell registry's hashmap to use Redis for file region locking, otherwise
-	// it will use the syscall API for lock managements on file.
-	UseCacheForFileRegionLocks bool
 	// Erasure Config contains config data useful for Erasure Coding based file IO (& replication).
 	ErasureConfig map[string]fs.ErasureCodingConfig
 }

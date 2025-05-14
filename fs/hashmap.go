@@ -21,9 +21,8 @@ type hashmap struct {
 	replicationTracker *replicationTracker
 	readWrite          bool
 	// File handles of all known (traversed & opened) data segment file of the hash map.
-	fileHandles                map[string]*directIO
-	cache                      sop.Cache
-	useCacheForFileRegionLocks bool
+	fileHandles map[string]*directIO
+	cache       sop.Cache
 }
 
 // File reqion details is a response struct of 'findAndLock' function. It puts together
@@ -73,19 +72,17 @@ func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicatio
 		readWrite:          readWrite,
 		fileHandles:        make(map[string]*directIO, 5),
 		cache:              cache,
-
-		// Support cache(e.g. - Redis) based file region locks so it can work across different OS like Windows, OSX & Linux, etc...
-		// All that are supported by the Golang compiler can work in the SOP enterprise cluster. :)
-		useCacheForFileRegionLocks: true, //useCacheForFileRegionLocks,
 	}
 }
 
-// Iterate through the entire set of hashmap (bucket) files, from 1 to the last bucket file.
+// Iterate through the entire set of hashmap (bucket) files, from 1 to the last bucket file to findOneFileRegion the file region
+// containing the item (handle record) with 'id' (if for read), or a place for it (if for write).
+//
 // Each bucket file is allocated about 250,000 "sector blocks"(configurable) and in total, contains ~16,650,000
 // addressable virtual IDs (handles). Typically, there should be only one bucket file as this file
 // with the default numbers shown, can be used to hold 825 million items of the B-Tree, given a
 // slot length of 500.
-func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename string, id sop.UUID) (fileRegionDetails, error) {
+func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filename string, id sop.UUID) (fileRegionDetails, error) {
 	var dio *directIO
 	var result fileRegionDetails
 
@@ -143,14 +140,8 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 				if forWriting {
 					result.blockOffset = blockOffset
 					result.handleInBlockOffset = handleInBlockOffset
-					if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
-						if ok {
-							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
-						}
-						return result, err
-					}
 					result.dio = dio
-					return result, hm.lockFoundFileRegion(ctx, &result)
+					return result, nil
 				}
 				// If for read, check the next file or break the loop if this is the last file segment.
 				continue
@@ -172,14 +163,8 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 			if forWriting {
 				result.blockOffset = blockOffset
 				result.handleInBlockOffset = handleInBlockOffset
-				if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
-					if ok {
-						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
-					}
-					return result, err
-				}
 				result.dio = dio
-				return result, hm.lockFoundFileRegion(ctx, &result)
+				return result, nil
 			}
 		} else {
 			if lid, err := m.UnmarshalLogicalID(hbuf); err != nil {
@@ -196,13 +181,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 				if !forWriting {
 					return result, nil
 				}
-				if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
-					if ok {
-						err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
-					}
-					return result, err
-				}
-				return result, hm.lockFoundFileRegion(ctx, &result)
+				return result, nil
 			}
 		}
 
@@ -222,14 +201,8 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 
 			if isZeroData(hbuf) {
 				if forWriting {
-					if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
-						if ok {
-							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
-						}
-						return result, err
-					}
 					result.dio = dio
-					return result, hm.lockFoundFileRegion(ctx, &result)
+					return result, nil
 				}
 			} else {
 				if lid, err := m.UnmarshalLogicalID(hbuf); err != nil {
@@ -241,16 +214,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 					}
 					result.handle = h
 					result.dio = dio
-					if !forWriting {
-						return result, nil
-					}
-					if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
-						if ok {
-							err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
-						}
-						return result, err
-					}
-					return result, hm.lockFoundFileRegion(ctx, &result)
+					return result, nil
 				}
 			}
 
@@ -263,7 +227,7 @@ func (hm *hashmap) findAndLock(ctx context.Context, forWriting bool, filename st
 func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([]sop.Handle, error) {
 	completedItems := make([]sop.Handle, 0, len(ids))
 	for _, id := range ids {
-		frd, err := hm.findAndLock(ctx, false, filename, id)
+		frd, err := hm.findOneFileRegion(ctx, false, filename, id)
 		if err != nil {
 			if strings.Contains(err.Error(), idNotFoundErr) {
 				continue
@@ -284,24 +248,18 @@ func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([
 	return completedItems, nil
 }
 
-// Lock file region(s) that a set of UUIDs correlate to and return these region(s)' offsett/Handle if in case
+// Find the file region(s) that a set of UUIDs correlate to and return these region(s)' offsett/Handle if in case
 // useful to the caller.
-func (hm *hashmap) findAndLockFileRegion(ctx context.Context, filename string, ids ...sop.UUID) ([]fileRegionDetails, error) {
-	undo := func(items []fileRegionDetails) {
-		for _, item := range items {
-			hm.unlockFileRegion(ctx, item)
-		}
-	}
-	completedItems := make([]fileRegionDetails, 0, len(ids))
+func (hm *hashmap) findFileRegion(ctx context.Context, filename string, ids ...sop.UUID) ([]fileRegionDetails, error) {
+	foundItems := make([]fileRegionDetails, 0, len(ids))
 	for _, id := range ids {
-		frd, err := hm.findAndLock(ctx, true, filename, id)
+		frd, err := hm.findOneFileRegion(ctx, true, filename, id)
 		if err != nil {
-			undo(completedItems)
 			return nil, err
 		}
-		completedItems = append(completedItems, frd)
+		foundItems = append(foundItems, frd)
 	}
-	return completedItems, nil
+	return foundItems, nil
 }
 
 // Close all files opened by this hashmap on disk.
@@ -357,16 +315,7 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 	blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
 	result.blockOffset = blockOffset
 	result.handleInBlockOffset = handleInBlockOffset
-	if ok, err := hm.isRegionLocked(ctx, dio, result.getOffset()); ok || err != nil {
-		if ok {
-			err = fmt.Errorf("can't lock (forWriting=%v) file region w/ offset %v as it is locked", forWriting, result.getOffset())
-		}
-		return result, err
-	}
 	result.dio = dio
-	if err := hm.lockFoundFileRegion(ctx, &result); err != nil {
-		return result, err
-	}
 	return result, nil
 }
 
