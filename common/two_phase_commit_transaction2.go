@@ -108,13 +108,13 @@ func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	}
 	if t.logger.committedState > commitRemovedNodes {
 		vids := convertToRegistryRequestPayload(removedNodes)
-		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, true, vids); err != nil {
+		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, t.areNodesKeysLocked(), vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitUpdatedNodes {
 		vids := convertToRegistryRequestPayload(updatedNodes)
-		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, true, vids); err != nil {
+		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, t.areNodesKeysLocked(), vids); err != nil {
 			lastErr = err
 		}
 	}
@@ -415,6 +415,10 @@ func (t *Transaction) unlockNodesKeys(ctx context.Context) error {
 	err := t.cache.Unlock(ctx, t.nodesKeys...)
 	t.nodesKeys = nil
 	return err
+}
+
+func (t *Transaction) areNodesKeysLocked() bool {
+	return t.nodesKeys != nil
 }
 
 func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tuple[*sop.StoreInfo, []any], removedNodes []sop.Tuple[*sop.StoreInfo, []any]) {
