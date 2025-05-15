@@ -82,10 +82,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	b3, _ = in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t1, Compare)
 	var person Person
 	b3.FindOne(ctx, pk2, false)
@@ -119,10 +116,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
@@ -142,20 +136,14 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		b3, _ = in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
-			IsUnique:                 false,
 			IsValueDataInNodeSegment: true,
-			LeafLoadBalancing:        false,
-			Description:              "",
 		}, t1, Compare)
 	}
 
 	b32, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t2, Compare)
 
 	// edit both "pirellis" in both btrees, one each.
@@ -192,10 +180,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
@@ -215,20 +200,14 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		b3, _ = in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
-			IsUnique:                 false,
 			IsValueDataInNodeSegment: true,
-			LeafLoadBalancing:        false,
-			Description:              "",
 		}, t1, Compare)
 	}
 
 	b32, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t2, Compare)
 
 	// Read both records.
@@ -266,10 +245,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
@@ -291,20 +267,14 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		b3, _ = in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
-			IsUnique:                 false,
 			IsValueDataInNodeSegment: true,
-			LeafLoadBalancing:        false,
-			Description:              "",
 		}, t1, Compare)
 	}
 
 	b32, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t2, Compare)
 
 	// Read both records.
@@ -340,10 +310,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
@@ -369,20 +336,14 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		b3, _ = in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
-			IsUnique:                 false,
 			IsValueDataInNodeSegment: true,
-			LeafLoadBalancing:        false,
-			Description:              "",
 		}, t1, Compare)
 	}
 
 	b32, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t2, Compare)
 
 	b3.FindOne(ctx, pk, false)
@@ -442,10 +403,8 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase3",
 		SlotLength:               8,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		Description:              "",
 	}, t1, nil)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 500, "I am the value with 500 key.")
@@ -460,10 +419,8 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 		b3, _ := in_red_fs.NewBtree[int, string](ctx2, sop.StoreOptions{
 			Name:                     "twophase3",
 			SlotLength:               8,
-			IsUnique:                 false,
 			IsValueDataInNodeSegment: true,
 			LeafLoadBalancing:        true,
-			Description:              "",
 		}, t1, nil)
 		b3.Add(ctx2, 5000, "I am the value with 5000 key.")
 		b3.Add(ctx2, 5001, "I am the value with 5001 key.")
@@ -477,10 +434,8 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 		b32, _ := in_red_fs.NewBtree[int, string](ctx3, sop.StoreOptions{
 			Name:                     "twophase3",
 			SlotLength:               8,
-			IsUnique:                 false,
 			IsValueDataInNodeSegment: true,
 			LeafLoadBalancing:        true,
-			Description:              "",
 		}, t2, nil)
 		b32.Add(ctx3, 5500, "I am the value with 5000 key.")
 		b32.Add(ctx3, 5501, "I am the value with 5001 key.")
@@ -538,10 +493,8 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "tablex",
 		SlotLength:               8,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		Description:              "",
 	}, t1, nil)
 	// Add a single item so we persist "root node".
 	b3.Add(ctx, 1, "I am the value with 500 key.")
@@ -559,12 +512,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 		b3.Add(ctx2, 51, "I am the value with 5001 key.")
 		b3.Add(ctx2, 52, "I am also a value with 5000 key.")
 		log.Debug(fmt.Sprintf("********** before f1 commit, tid: %v", t1.GetID()))
-		err := t1.Commit(ctx2)
-		log.Debug("********** after f1 commit")
-		if err != nil {
-			log.Error(fmt.Sprintf("f1 commit err: %v", err))
-		}
-		return err
+		return t1.Commit(ctx2)
 	}
 
 	f2 := func() error {
@@ -575,12 +523,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 		b32.Add(ctx3, 551, "I am the value with 5001 key.")
 		b32.Add(ctx3, 552, "I am the value with 5001 key.")
 		log.Debug(fmt.Sprintf("********** before f2 commit, tid: %v", t2.GetID()))
-		err := t2.Commit(ctx3)
-		log.Debug("********** after f2 commit")
-		if err != nil {
-			log.Error(fmt.Sprintf("f2 commit err: %v", err))
-		}
-		return err
+		return t2.Commit(ctx3)
 	}
 
 	f3 := func() error {
@@ -590,12 +533,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 		b32.Add(ctx4, 550, "random foo.")
 		b32.Add(ctx4, 551, "bar hello.")
 		log.Debug(fmt.Sprintf("********** before f3 commit, tid: %v", t3.GetID()))
-		err := t3.Commit(ctx4)
-		log.Debug("********* after f3 commit")
-		if err != nil {
-			log.Error(fmt.Sprintf("f3 commit err: %v", err))
-		}
-		return err
+		return t3.Commit(ctx4)
 	}
 
 	eg2.Go(f1)
@@ -615,7 +553,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 
 	if failCount > 0 {
 		t.Errorf("commit should all succeed, failed: %d", failCount)
-		// break
+		t.FailNow()
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
@@ -628,6 +566,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	for {
 		if ok, err := b3.Next(ctx); err != nil {
 			t.Error(err)
+			t.FailNow()
 		} else if !ok {
 			break
 		}
@@ -785,7 +724,6 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "tabley",
 		SlotLength:               8,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
 	}, t1, nil)
@@ -835,6 +773,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 
 	if err := eg2.Wait(); err != nil {
 		t.Error(err)
+		t.FailNow()
 		return
 	}
 	err := eg.Wait()
@@ -842,12 +781,13 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 
 	if err == nil && err3 == nil {
 		t.Error("err or err3 should have errored but both did not")
+		t.FailNow()
 	}
 	if err != nil {
-		log.Error(err.Error())
+		log.Info(err.Error())
 	}
 	if err3 != nil {
-		log.Error(err3.Error())
+		log.Info(err3.Error())
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)

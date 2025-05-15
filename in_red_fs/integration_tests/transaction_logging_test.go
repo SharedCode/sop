@@ -26,10 +26,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "ztab1",
 		SlotLength:               8,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, trans, Compare)
 
 	for i := 0; i < 50; i++ {

@@ -23,7 +23,7 @@ import (
 //
 // This API & cache.Clear are both destructive, please use with care.
 func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) error {
-	log.Warn(fmt.Sprintf("Btree %s%c%s is about to be deleted", storesBaseFolder, os.PathSeparator, name))
+	log.Info(fmt.Sprintf("Btree %s%c%s is about to be deleted", storesBaseFolder, os.PathSeparator, name))
 
 	cache := redis.NewClient()
 	replicationTracker := fs.NewReplicationTracker([]string{storesBaseFolder}, false)
