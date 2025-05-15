@@ -11,6 +11,11 @@ import (
 	"github.com/SharedCode/sop/encoding"
 )
 
+const(
+	lockSectorRetryMax = 7
+	lockSectorRetryTimeoutInSecs = 5
+)
+
 func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
 	dio := newDirectIO()
 	ba := dio.createAlignedBlock()
@@ -49,16 +54,21 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 	for {
 		ok, lk, err = hm.lockFileBlockRegion(ctx, dio, blockOffset)
 		if ok {
-			break
+			// Double check to ensure we have no race condition and 100% acquired a lock on the sector.
+			if ok, err := hm.cache.IsLocked(ctx, lk); ok {
+				break
+			} else if err != nil {
+				return err
+			}
 		}
 		if err != nil {
 			return err
 		}
-		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, time.Duration(2*time.Second)); err != nil {
+		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
 			log.Debug(fmt.Sprintf("updateFileBlockRegion retry loop: %v", err))
 			return err
 		}
-		if ctr >= 5 {
+		if ctr >= lockSectorRetryMax {
 			return fmt.Errorf("can't lock file '%s' region at block offset %v, it's locked by another", dio.filename, blockOffset)
 		}
 		sop.RandomSleep(ctx)
