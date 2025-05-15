@@ -313,16 +313,11 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		}
 		if successful {
 			// Commit updated nodes.
-			vids := convertToRegistryRequestPayload(updatedNodes)
-			handles, err := t.registry.Get(ctx, vids...)
-			if err != nil {
+			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
 				return err
 			}
-			// Log the inactive Blobs' IDs so we can just easily remove them when cleaning up "dead" transaction logs.
-			if err := t.logger.log(ctx, commitUpdatedNodes, toByteArray(extractInactiveBlobsIDs(handles))); err != nil {
-				return err
-			}
-			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes, handles); err != nil {
+			// Log the inactive Blobs' IDs of newly written so we can just easily remove them when cleaning up "dead" transaction logs.
+			if err := t.logger.log(ctx, commitUpdatedNodes, toByteArray(extractInactiveBlobsIDs(updatedNodesHandles))); err != nil {
 				return err
 			}
 		}

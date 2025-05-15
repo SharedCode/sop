@@ -11,8 +11,8 @@ import (
 	"github.com/SharedCode/sop/encoding"
 )
 
-const(
-	lockSectorRetryMax = 7
+const (
+	lockSectorRetryMax           = 7
 	lockSectorRetryTimeoutInSecs = 5
 )
 

@@ -40,9 +40,9 @@ func (fr *fileRegionDetails) getOffset() int64 {
 }
 
 const (
-	fullPermission  = 0644
-	handlesPerBlock = 66
-	preallocateFileLockKey       = "infs_reg"
+	fullPermission         = 0644
+	handlesPerBlock        = 66
+	preallocateFileLockKey = "infs_reg"
 	// Growing the file needs more time to complete.
 	lockPreallocateFileTimeout = time.Duration(20 * time.Minute)
 	lockFileRegionKeyPrefix    = "infs"
