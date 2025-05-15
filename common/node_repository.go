@@ -240,17 +240,16 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tu
 }
 
 // Save to blob store, save node ID to the alternate(inactive) physical ID(see virtual ID).
-func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}],
-	handles []sop.RegistryPayload[sop.Handle]) (bool, []sop.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
 	}
 	// 1st pass, update the virtual ID registry ensuring the set of nodes are only being modified by us.
-	//vids := convertToRegistryRequestPayload(nodes)
-	//handles, err := nr.transaction.registry.Get(ctx, vids...)
-	// if err != nil {
-	// 	return false, nil, err
-	// }
+	vids := convertToRegistryRequestPayload(nodes)
+	handles, err := nr.transaction.registry.Get(ctx, vids...)
+	if err != nil {
+		return false, nil, err
+	}
 
 	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]], len(nodes))
 	for i := range handles {
@@ -653,10 +652,13 @@ func extractInactiveBlobsIDs(nodesHandles []sop.RegistryPayload[sop.Handle]) []s
 	for i := range nodesHandles {
 		bibs[i] = sop.BlobsPayload[sop.UUID]{
 			BlobTable: nodesHandles[i].BlobTable,
-			Blobs:     make([]sop.UUID, len(nodesHandles[i].IDs)),
+			Blobs:     make([]sop.UUID, 0, len(nodesHandles[i].IDs)),
 		}
 		for ii := range nodesHandles[i].IDs {
-			bibs[i].Blobs[ii] = nodesHandles[i].IDs[ii].GetInActiveID()
+			if nodesHandles[i].IDs[ii].GetInActiveID().IsNil() {
+				continue
+			}
+			bibs[i].Blobs = append(bibs[i].Blobs, nodesHandles[i].IDs[ii].GetInActiveID())
 		}
 	}
 	return bibs

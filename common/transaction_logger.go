@@ -171,7 +171,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 			continue
 		}
 		if committedFunctionLogs[i].Key == commitUpdatedNodes {
-			if lastCommittedFunctionLog > commitUpdatedNodes && committedFunctionLogs[i].Value != nil {
+			if lastCommittedFunctionLog >= commitUpdatedNodes && committedFunctionLogs[i].Value != nil {
 				blobsIDs := toStruct[[]sop.BlobsPayload[sop.UUID]](committedFunctionLogs[i].Value)
 				// In Updated Nodes, removal of left hanging temp Nodes is the task. No need to do anything else as the main data flow,
 				// transaction is able to clean up the Handle and kick out the unfinalized InactiveID that refers to the temp Node.
