@@ -63,10 +63,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -151,10 +148,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -219,10 +213,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t1, Compare)
 
 	// Populating 90,000 items took about few minutes. Not bad considering I did not use Kafka queue
@@ -283,10 +274,7 @@ func Test_VolumeDeletes(t *testing.T) {
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t1, Compare)
 
 	// Populating 90,000 items took about few minutes, did not use Kafka based delete service.
@@ -323,10 +311,7 @@ func Test_MixedOperations(t *testing.T) {
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t1, Compare)
 
 	lastNamePrefix := "zoltan"
@@ -410,10 +395,8 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     tableName2,
 		SlotLength:               8,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-		Description:              "",
 	}, t1, nil)
 	originalCount := b3.Count()
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
