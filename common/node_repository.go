@@ -487,7 +487,7 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData i
 }
 
 // rollback updated Nodes.
-func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, fromActiveTransaction bool, vids []sop.RegistryPayload[sop.UUID]) error {
+func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodesAreLocked bool, vids []sop.RegistryPayload[sop.UUID]) error {
 	if len(vids) == 0 {
 		return nil
 	}
@@ -515,7 +515,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, fromActiveTr
 		log.Error(lastErr.Error())
 	}
 	// Undo changes in virtual ID registry.
-	if fromActiveTransaction {
+	if nodesAreLocked {
 		if err = nr.transaction.registry.UpdateNoLocks(ctx, handles...); err != nil {
 			lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
 			log.Error(lastErr.Error())
@@ -567,7 +567,7 @@ func (nr *nodeRepository) removeNodes(ctx context.Context, blobsIDs []sop.BlobsP
 	return lastErr
 }
 
-func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, fromActiveTransaction bool, vids []sop.RegistryPayload[sop.UUID]) error {
+func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodesAreLocked bool, vids []sop.RegistryPayload[sop.UUID]) error {
 	if len(vids) == 0 {
 		return nil
 	}
@@ -594,7 +594,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, fromActiveTr
 	}
 
 	// Persist the handles changes.
-	if fromActiveTransaction {
+	if nodesAreLocked {
 		if err := nr.transaction.registry.UpdateNoLocks(ctx, handlesForRollback...); err != nil {
 			err = fmt.Errorf("unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
 			log.Error(err.Error())
