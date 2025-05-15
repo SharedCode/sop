@@ -240,16 +240,18 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tu
 }
 
 // Save to blob store, save node ID to the alternate(inactive) physical ID(see virtual ID).
-func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}],
+	handles []sop.RegistryPayload[sop.Handle]) (bool, []sop.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
 	}
 	// 1st pass, update the virtual ID registry ensuring the set of nodes are only being modified by us.
-	vids := convertToRegistryRequestPayload(nodes)
-	handles, err := nr.transaction.registry.Get(ctx, vids...)
-	if err != nil {
-		return false, nil, err
-	}
+	//vids := convertToRegistryRequestPayload(nodes)
+	//handles, err := nr.transaction.registry.Get(ctx, vids...)
+	// if err != nil {
+	// 	return false, nil, err
+	// }
+
 	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]], len(nodes))
 	for i := range handles {
 		blobs[i].BlobTable = nodes[i].First.BlobTable
@@ -540,6 +542,32 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, fromActiveTr
 	return lastErr
 }
 
+// Delete a list of Nodes from the Blob store & from cache. Used in "dead" (not in-flight) incomplete transactions data cleanup.
+func (nr *nodeRepository) removeNodes(ctx context.Context, blobsIDs []sop.BlobsPayload[sop.UUID]) error {
+	if len(blobsIDs) == 0 {
+		return nil
+	}
+	var lastErr error
+	// Undo the nodes blobs to blob store.
+	if err := nr.transaction.blobStore.Remove(ctx, blobsIDs...); err != nil {
+		lastErr = fmt.Errorf("unable to undo updated nodes, %v, error: %v", blobsIDs, err)
+		log.Error(lastErr.Error())
+	}
+	// Undo changes in redis.
+	for i := range blobsIDs {
+		for ii := range blobsIDs[i].Blobs {
+			if err := nr.transaction.cache.Delete(ctx, nr.formatKey(blobsIDs[i].Blobs[ii].String())); err != nil && !nr.cache.KeyNotFound(err) {
+				err = fmt.Errorf("unable to undo updated nodes in redis, error: %v", err)
+				if lastErr == nil {
+					lastErr = err
+				}
+				log.Warn(err.Error())
+			}
+		}
+	}
+	return lastErr
+}
+
 func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, fromActiveTransaction bool, vids []sop.RegistryPayload[sop.UUID]) error {
 	if len(vids) == 0 {
 		return nil
@@ -618,6 +646,20 @@ func (nr *nodeRepository) touchNodes(handles []sop.RegistryPayload[sop.Handle]) 
 	}
 	// All or nothing batch update.
 	return handles, nil
+}
+
+func extractInactiveBlobsIDs(nodesHandles []sop.RegistryPayload[sop.Handle]) []sop.BlobsPayload[sop.UUID] {
+	bibs := make([]sop.BlobsPayload[sop.UUID], len(nodesHandles))
+	for i := range nodesHandles {
+		bibs[i] = sop.BlobsPayload[sop.UUID]{
+			BlobTable: nodesHandles[i].BlobTable,
+			Blobs:     make([]sop.UUID, len(nodesHandles[i].IDs)),
+		}
+		for ii := range nodesHandles[i].IDs {
+			bibs[i].Blobs[ii] = nodesHandles[i].IDs[ii].GetInActiveID()
+		}
+	}
+	return bibs
 }
 
 func convertToBlobRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) []sop.BlobsPayload[sop.UUID] {

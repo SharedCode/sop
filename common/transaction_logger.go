@@ -172,8 +172,10 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 		}
 		if committedFunctionLogs[i].Key == commitUpdatedNodes {
 			if lastCommittedFunctionLog > commitUpdatedNodes && committedFunctionLogs[i].Value != nil {
-				vids := toStruct[[]sop.RegistryPayload[sop.UUID]](committedFunctionLogs[i].Value)
-				if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, false, vids); err != nil {
+				blobsIDs := toStruct[[]sop.BlobsPayload[sop.UUID]](committedFunctionLogs[i].Value)
+				// In Updated Nodes, removal of left hanging temp Nodes is the task. No need to do anything else as the main data flow,
+				// transaction is able to clean up the Handle and kick out the unfinalized InactiveID that refers to the temp Node.
+				if err := t.btreesBackend[0].nodeRepository.removeNodes(ctx, blobsIDs); err != nil {
 					lastErr = err
 				}
 			}
