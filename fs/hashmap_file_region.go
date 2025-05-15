@@ -53,16 +53,18 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 	ctr := 0
 	for {
 		ok, lk, err = hm.lockFileBlockRegion(ctx, dio, blockOffset)
+		if err != nil {
+			return err
+		}
 		if ok {
 			// Double check to ensure we have no race condition and 100% acquired a lock on the sector.
 			if ok, err := hm.cache.IsLocked(ctx, lk); ok {
 				break
 			} else if err != nil {
+				// Unlock the sector just in case it can "get through", before return.
+				hm.unlockFileBlockRegion(ctx, dio, blockOffset, lk)
 				return err
 			}
-		}
-		if err != nil {
-			return err
 		}
 		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
 			log.Debug(fmt.Sprintf("updateFileBlockRegion retry loop: %v", err))
