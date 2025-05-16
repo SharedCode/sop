@@ -2,6 +2,7 @@ package sop
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -208,4 +209,11 @@ type Cache interface {
 
 	// Clear out the backend Cache database of all items.
 	Clear(ctx context.Context) error
+}
+
+// Closeable Cache is a cache that which, you can explicitly call its "Close" method
+// after you are done with it.
+type CloseableCache interface {
+	Cache
+	io.Closer
 }
