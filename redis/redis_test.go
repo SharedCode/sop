@@ -42,7 +42,7 @@ func TestBasicUse(t *testing.T) {
 	}
 	fmt.Println(user)
 
-	err = c.Delete(ctx, "fooBar")
+	err = c.Delete(ctx, []string{"fooBar"})
 
 	if err != nil {
 		t.Errorf(err.Error())

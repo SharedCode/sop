@@ -36,7 +36,7 @@ var ageLimit float64 = 70
 func NewTransactionLog(cache sop.Cache, rt *replicationTracker) sop.TransactionLog {
 	return &transactionLog{
 		cache:              cache,
-		hourLockKey:        cache.CreateLockKeys("HBP")[0],
+		hourLockKey:        cache.CreateLockKeys([]string{"HBP"})[0],
 		replicationTracker: rt,
 	}
 }
@@ -87,29 +87,30 @@ func (tl *transactionLog) NewUUID() sop.UUID {
 func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
 	duration := time.Duration(7 * time.Hour)
 
-	if ok, err := tl.cache.Lock(ctx, duration, tl.hourLockKey); !ok || err != nil {
+	hlk := []*sop.LockKey{tl.hourLockKey}
+	if ok, err := tl.cache.Lock(ctx, duration, hlk); !ok || err != nil {
 		return sop.NilUUID, "", nil, nil
 	}
 
 	hour, tid, err := tl.getOne()
 	if err != nil {
-		tl.cache.Unlock(ctx, tl.hourLockKey)
+		tl.cache.Unlock(ctx, hlk)
 		return sop.NilUUID, hour, nil, err
 	}
 	if tid.IsNil() {
 		// Unlock the hour.
-		tl.cache.Unlock(ctx, tl.hourLockKey)
+		tl.cache.Unlock(ctx, hlk)
 		return sop.NilUUID, "", nil, nil
 	}
 
 	r, err := tl.getLogsDetails(tid)
 	if err != nil {
-		tl.cache.Unlock(ctx, tl.hourLockKey)
+		tl.cache.Unlock(ctx, hlk)
 		return sop.NilUUID, "", nil, err
 	}
 	// Check one more time to remove potential (.1%) race condition issue.
-	if ok, err := tl.cache.IsLocked(ctx, tl.hourLockKey); !ok || err != nil {
-		tl.cache.Unlock(ctx, tl.hourLockKey)
+	if ok, err := tl.cache.IsLocked(ctx, hlk); !ok || err != nil {
+		tl.cache.Unlock(ctx, hlk)
 		// Just return nils as we can't attain a lock.
 		return sop.NilUUID, "", nil, nil
 	}
@@ -131,7 +132,7 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 	if mh.Sub(t).Hours() > 4 {
 		// Unlock the hour to allow open opportunity to claim the next cleanup processing.
 		// Capping to 4th hour(Redis cache is set to 7hrs) maintains only one cleaner process at a time.
-		tl.cache.Unlock(ctx, tl.hourLockKey)
+		tl.cache.Unlock(ctx, []*sop.LockKey{tl.hourLockKey})
 		return sop.NilUUID, nil, nil
 	}
 
@@ -143,7 +144,7 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 
 	if tid.IsNil() {
 		// Unlock the hour.
-		tl.cache.Unlock(ctx, tl.hourLockKey)
+		tl.cache.Unlock(ctx, []*sop.LockKey{tl.hourLockKey})
 		return sop.NilUUID, nil, nil
 	}
 	r, err := tl.getLogsDetails(tid)

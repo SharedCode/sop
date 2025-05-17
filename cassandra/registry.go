@@ -28,7 +28,7 @@ func NewRegistry() sop.Registry {
 	}
 }
 
-func (v *registry) Add(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
+func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -57,7 +57,7 @@ func (v *registry) Add(ctx context.Context, storesHandles ...sop.RegistryPayload
 }
 
 // Update does an all or nothing update of the batch of handles, mapping them to respective registry table(s).
-func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
+func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -87,7 +87,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 						}
 					}
 					// Unlock the object Keys before return.
-					v.cache.Unlock(ctx, handleKeys...)
+					v.cache.Unlock(ctx, handleKeys)
 					return err
 				}
 				newVersion := h.Version
@@ -95,24 +95,24 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				newVersion--
 				if newVersion != h2.Version || !h.IsEqual(&h2) {
 					// Unlock the object Keys before return.
-					v.cache.Unlock(ctx, handleKeys...)
+					v.cache.Unlock(ctx, handleKeys)
 					return &sop.UpdateAllOrNothingError{
 						Err: fmt.Errorf("Registry Update failed, handle logical ID(%v) version conflict detected", h.LogicalID.String()),
 					}
 				}
 				// Attempt to lock in Redis the registry object, if we can't attain a lock, it means there is another transaction elsewhere
 				// that already attained a lock, thus, we can cause rollback of this transaction due to conflict).
-				lk := v.cache.CreateLockKeys(h.LogicalID.String())
+				lk := v.cache.CreateLockKeys([]string{h.LogicalID.String()})
 				handleKeys = append(handleKeys, lk[0])
 
-				if ok, err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
+				if ok, err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
 					if err == nil {
 						err = &sop.UpdateAllOrNothingError{
 							Err: fmt.Errorf("lock allOrNothing failed, key %v is already locked by another", lk[0].Key),
 						}
 					}
 					// Unlock the object Keys before return.
-					v.cache.Unlock(ctx, handleKeys...)
+					v.cache.Unlock(ctx, handleKeys)
 					return err
 				}
 			}
@@ -134,9 +134,9 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 			}
 		}
 
-		if ok, err := v.cache.IsLocked(ctx, handleKeys...); !ok || err != nil {
+		if ok, err := v.cache.IsLocked(ctx, handleKeys); !ok || err != nil {
 			// Unlock the object Keys before return.
-			v.cache.Unlock(ctx, handleKeys...)
+			v.cache.Unlock(ctx, handleKeys)
 			// Failed locking the batch.
 			if err == nil {
 				err = fmt.Errorf("IsLocked(key) not found")
@@ -147,7 +147,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		// Execute the batch query, all or nothing.
 		if err := connection.Session.ExecuteBatch(batch); err != nil {
 			// Unlock the object Keys before return.
-			v.cache.Unlock(ctx, handleKeys...)
+			v.cache.Unlock(ctx, handleKeys)
 			// Failed update all, thus, return err to cause rollback.
 			return err
 		}
@@ -163,7 +163,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 		}
 
 		// Unlock the object Keys before return.
-		v.cache.Unlock(ctx, handleKeys...)
+		v.cache.Unlock(ctx, handleKeys)
 	} else {
 		for _, sh := range storesHandles {
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
@@ -171,8 +171,8 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
 				// Update registry record.
-				lk := v.cache.CreateLockKeys(h.LogicalID.String())
-				if ok, err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
+				lk := v.cache.CreateLockKeys([]string{h.LogicalID.String()})
+				if ok, err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
 					if err == nil {
 						err = &sop.UpdateAllOrNothingError{
 							Err: fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key),
@@ -190,7 +190,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				// Update registry record.
 				if err := qry.Exec(); err != nil {
 					// Unlock the object Keys before return.
-					v.cache.Unlock(ctx, lk[0])
+					v.cache.Unlock(ctx, lk)
 					return err
 				}
 
@@ -200,7 +200,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 				}
 
 				// Unlock the object Keys.
-				if err := v.cache.Unlock(ctx, lk[0]); err != nil {
+				if err := v.cache.Unlock(ctx, lk); err != nil {
 					return err
 				}
 			}
@@ -210,7 +210,7 @@ func (v *registry) Update(ctx context.Context, allOrNothing bool, storesHandles 
 	return nil
 }
 
-func (v *registry) UpdateNoLocks(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
+func (v *registry) UpdateNoLocks(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
 			connection.Config.Keyspace, sh.RegistryTable)
@@ -236,7 +236,7 @@ func (v *registry) UpdateNoLocks(ctx context.Context, storesHandles ...sop.Regis
 	return nil
 }
 
-func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
+func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if connection == nil {
 		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -311,7 +311,7 @@ func (v *registry) Get(ctx context.Context, storesLids ...sop.RegistryPayload[so
 	return storesHandles, nil
 }
 
-func (v *registry) Remove(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) error {
+func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -329,7 +329,7 @@ func (v *registry) Remove(ctx context.Context, storesLids ...sop.RegistryPayload
 		// Flush out the failing records from cache.
 		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
 			for _, id := range storeLids.IDs {
-				if err := v.cache.Delete(ctx, id.String()); err != nil && !v.cache.KeyNotFound(err) {
+				if err := v.cache.Delete(ctx, []string{id.String()}); err != nil && !v.cache.KeyNotFound(err) {
 					log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
 				}
 			}
@@ -348,3 +348,6 @@ func (v *registry) Remove(ctx context.Context, storesLids ...sop.RegistryPayload
 	}
 	return nil
 }
+
+// Cassandra already provides replication for the registry tables, no need to do anything here.
+func (v *registry) Replicate(ctx context.Context, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles []sop.RegistryPayload[sop.Handle]) {}

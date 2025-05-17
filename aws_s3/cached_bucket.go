@@ -69,17 +69,17 @@ func NewCachedBucketExt(s3Client *s3.Client, refreshInterval time.Duration, cach
 // Fetch entry(ies) with given name(s).
 // Fetch term is used here because this CRUD interface is NOT part of the B-Tree system, thus, the context is
 // to "fetch" from the remote data storage sub-system like AWS S3.
-func (b *cachedBucket) Fetch(ctx context.Context, bucketName string, names ...string) sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
-	return b.fetch(ctx, bucketName, false, names...)
+func (b *cachedBucket) Fetch(ctx context.Context, bucketName string, names []string) sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
+	return b.fetch(ctx, bucketName, false, names)
 }
 
 // Fetch a large entry with the given name.
 func (b *cachedBucket) FetchLargeObject(ctx context.Context, bucketName string, name string) ([]byte, error) {
-	r := b.fetch(ctx, bucketName, true, name)
+	r := b.fetch(ctx, bucketName, true, []string{name})
 	return r.Details[0].Payload.Value, r.Error
 }
 
-func (b *cachedBucket) fetch(ctx context.Context, bucketName string, isLargeObjects bool, names ...string) sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
+func (b *cachedBucket) fetch(ctx context.Context, bucketName string, isLargeObjects bool, names []string) sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
 	r := make([]sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, []byte]], len(names))
 	now := Now()
 	var lastError error
@@ -93,7 +93,7 @@ func (b *cachedBucket) fetch(ctx context.Context, bucketName string, isLargeObje
 				if !b.cache.KeyNotFound(err) {
 					// Tolerate Redis cache failure.
 					k := b.formatKey(bucketName, names[i])
-					if err := b.cache.Delete(ctx, k); err != nil {
+					if err := b.cache.Delete(ctx, []string{k}); err != nil {
 						log.Warn(fmt.Sprintf("redis delete for key %s failed, details: %v", k, err))
 					}
 				}
@@ -149,7 +149,7 @@ func (b *cachedBucket) fetch(ctx context.Context, bucketName string, isLargeObje
 		r[i] = res.Details[0]
 		if r[i].Error != nil {
 			k := b.formatKey(bucketName, names[i])
-			if err := b.cache.Delete(ctx, k); err != nil {
+			if err := b.cache.Delete(ctx, []string{k}); err != nil {
 				log.Warn(fmt.Sprintf("redis setstruct for key %s failed, details: %v", k, err))
 			}
 			lastError = r[i].Error
@@ -170,7 +170,7 @@ func (b *cachedBucket) fetchAndCache(ctx context.Context, bucketName string, nam
 	// Refetch, recache if not large and package for return.
 	var res sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, *S3Object]]
 	if !isLargeObject {
-		r := b.bucketStore.Fetch(ctx, bucketName, name)
+		r := b.bucketStore.Fetch(ctx, bucketName, []string{name})
 		res = r.Details[0]
 	} else {
 		r, err := b.bucketStore.FetchLargeObject(ctx, bucketName, name)
@@ -218,17 +218,17 @@ func (b *cachedBucket) fetchAndCache(ctx context.Context, bucketName string, nam
 	}
 }
 
-func (b *cachedBucket) Add(ctx context.Context, bucketName string, entries ...sop.KeyValuePair[string, []byte]) sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
+func (b *cachedBucket) Add(ctx context.Context, bucketName string, entries []sop.KeyValuePair[string, []byte]) sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
 	r := make([]sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, []byte]], len(entries))
 	var lastError error
 	now := Now()
 	for i := range entries {
-		res := b.bucketStore.Add(ctx, bucketName, sop.KeyValuePair[string, *S3Object]{
+		res := b.bucketStore.Add(ctx, bucketName, []sop.KeyValuePair[string, *S3Object]{sop.KeyValuePair[string, *S3Object]{
 			Key: entries[i].Key,
 			Value: &S3Object{
 				Data: entries[i].Value,
 			},
-		})
+		}})
 		r[i].Error = res.Details[0].Error
 		r[i].Payload = sop.KeyValuePair[string, []byte]{
 			Key: res.Details[0].Payload.Key,
@@ -262,22 +262,22 @@ func (b *cachedBucket) Add(ctx context.Context, bucketName string, entries ...so
 	}
 }
 
-func (b *cachedBucket) Update(ctx context.Context, bucketName string, entries ...sop.KeyValuePair[string, []byte]) sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
-	return b.Add(ctx, bucketName, entries...)
+func (b *cachedBucket) Update(ctx context.Context, bucketName string, entries []sop.KeyValuePair[string, []byte]) sop.KeyValueStoreResponse[sop.KeyValuePair[string, []byte]] {
+	return b.Add(ctx, bucketName, entries)
 }
 
-func (b *cachedBucket) Remove(ctx context.Context, bucketName string, names ...string) sop.KeyValueStoreResponse[string] {
+func (b *cachedBucket) Remove(ctx context.Context, bucketName string, names []string) sop.KeyValueStoreResponse[string] {
 	keys := make([]string, len(names))
 	for i, name := range names {
 		keys[i] = b.formatKey(bucketName, name)
 	}
 	// Remove from cache.
-	err := b.cache.Delete(ctx, keys...)
+	err := b.cache.Delete(ctx, keys)
 	if err != nil {
 		log.Warn(fmt.Sprintf("redis deletes for bucket %s failed, details: %v", bucketName, err))
 	}
 	// Remove from AWS S3 bucket.
-	return b.bucketStore.Remove(ctx, bucketName, names...)
+	return b.bucketStore.Remove(ctx, bucketName, names)
 }
 
 func (b *cachedBucket) formatKey(bucketName string, key string) string {

@@ -24,19 +24,21 @@ func TestRegistryAddThenRead(t *testing.T) {
 
 	h := sop.NewHandle(uuid)
 
-	if err := r.Add(ctx, sop.RegistryPayload[sop.Handle]{
+	if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{
+		sop.RegistryPayload[sop.Handle]{
 		RegistryTable: "regtest",
 		BlobTable:     "regtest",
 		IDs:           []sop.Handle{h},
-	}); err != nil {
+	}}); err != nil {
 		t.Error(err.Error())
 	}
 
-	if h2, err := r.Get(ctx, sop.RegistryPayload[sop.UUID]{
+	if h2, err := r.Get(ctx, []sop.RegistryPayload[sop.UUID]{
+		sop.RegistryPayload[sop.UUID]{
 		RegistryTable: "regtest",
 		BlobTable:     "regtest",
 		IDs:           []sop.UUID{h.LogicalID},
-	}); err != nil {
+	}}); err != nil {
 		t.Error(err.Error())
 	} else {
 		if h2[0].IDs[0].LogicalID != h.LogicalID {

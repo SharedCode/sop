@@ -82,7 +82,7 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 }
 
 // Update enforces so only the Store's Count & timestamp can get updated.
-func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) error {
+func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -106,14 +106,14 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	}
 
 	// Create lock IDs that we can use to logically lock and prevent other updates.
-	lockKeys := sr.cache.CreateLockKeys(keys...)
+	lockKeys := sr.cache.CreateLockKeys(keys)
 
 	b := retry.NewFibonacci(1 * time.Second)
 
 	// Lock all keys.
 	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
 		// 15 minutes to lock, merge/update details then unlock.
-		if ok, err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); !ok || err != nil {
+		if ok, err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys); !ok || err != nil {
 			if err == nil {
 				err = fmt.Errorf("lock call detected conflict")
 			}
@@ -124,7 +124,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	}); err != nil {
 		log.Warn(err.Error() + ", gave up")
 		// Unlock keys since we failed locking all of them.
-		sr.cache.Unlock(ctx, lockKeys...)
+		sr.cache.Unlock(ctx, lockKeys)
 		return err
 	}
 
@@ -160,7 +160,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 
 	beforeUpdateStores := make([]sop.StoreInfo, 0, len(stores))
 	// Unlock all keys before going out of scope.
-	defer sr.cache.Unlock(ctx, lockKeys...)
+	defer sr.cache.Unlock(ctx, lockKeys)
 
 	for i := range stores {
 		sis, err := sr.GetWithTTL(ctx, stores[i].CacheConfig.IsStoreInfoCacheTTL, stores[i].CacheConfig.StoreInfoCacheDuration, stores[i].Name)
@@ -310,11 +310,9 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	}
 
 	// Delete the store records in Redis.
-	for i := range names {
-		// Tolerate Redis cache failure.
-		if err := sr.cache.Delete(ctx, names[i]); err != nil && !sr.cache.KeyNotFound(err) {
-			log.Warn(fmt.Sprintf("StoreRepository Remove (redis Delete) failed, details: %v", err))
-		}
+	// Tolerate Redis cache failure.
+	if err := sr.cache.Delete(ctx, names); err != nil && !sr.cache.KeyNotFound(err) {
+		log.Warn(fmt.Sprintf("StoreRepository Remove (redis Delete) failed, details: %v", err))
 	}
 
 	for i, n := range names {
@@ -364,3 +362,6 @@ func (sr *storeRepository) RemoveStore(ctx context.Context, blobStoreName string
 	}
 	return nil
 }
+
+// Cassandra StoreRepository table already benefits from Cassandra replication feature, do nothing here.
+func (sr *storeRepository) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) {}

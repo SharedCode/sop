@@ -33,21 +33,22 @@ func (b *blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.
 		}
 		return s3o.Data, nil
 	}
-	s3o := b.BucketAsStore.Fetch(ctx, blobFilePath, blobID.String())
+	s3o := b.BucketAsStore.Fetch(ctx, blobFilePath, []string{blobID.String()})
 	if s3o.Error != nil {
 		return nil, s3o.Error
 	}
 	return s3o.Details[0].Payload.Value.Data, nil
 }
 
-func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+func (b *blobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
 			ba := blob.Value
-			res := b.BucketAsStore.Add(ctx, storeBlobs.BlobTable, sop.KeyValuePair[string, *aws_s3.S3Object]{
+			res := b.BucketAsStore.Add(ctx, storeBlobs.BlobTable, []sop.KeyValuePair[string, *aws_s3.S3Object]{
+				sop.KeyValuePair[string, *aws_s3.S3Object]{
 				Key:   blob.Key.String(),
 				Value: &aws_s3.S3Object{Data: ba},
-			})
+			}})
 			if res.Error != nil {
 				return res.Error
 			}
@@ -56,17 +57,17 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop
 	return nil
 }
 
-func (b *blobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
-	return b.Add(ctx, storesblobs...)
+func (b *blobStore) Update(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+	return b.Add(ctx, storesblobs)
 }
 
-func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
+func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	for _, storeBlobIDs := range storesBlobsIDs {
 		s3okeys := make([]string, len(storeBlobIDs.Blobs))
 		for i, blobID := range storeBlobIDs.Blobs {
 			s3okeys[i] = blobID.String()
 		}
-		res := b.BucketAsStore.Remove(ctx, storeBlobIDs.BlobTable, s3okeys...)
+		res := b.BucketAsStore.Remove(ctx, storeBlobIDs.BlobTable, s3okeys)
 		if res.Error != nil {
 			return res.Error
 		}

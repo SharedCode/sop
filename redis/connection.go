@@ -54,6 +54,27 @@ func OpenConnection(options Options) (*Connection, error) {
 		return connection, nil
 	}
 
+	connection = openConnection(options)
+	return connection, nil
+}
+
+// Close the singleton connection if open.
+func CloseConnection() error {
+	if connection == nil {
+		return nil
+	}
+	mux.Lock()
+	defer mux.Unlock()
+	if connection == nil {
+		return nil
+	}
+	err := closeConnection(connection)
+	connection = nil
+	return err
+}
+
+// Creates a singleton connection and returns it for every call.
+func openConnection(options Options) *Connection {
 	client := redis.NewClient(&redis.Options{
 		TLSConfig: options.TLSConfig,
 		Addr:      options.Address,
@@ -64,19 +85,15 @@ func OpenConnection(options Options) (*Connection, error) {
 		Client:  client,
 		Options: options,
 	}
-	connection = &c
-	return connection, nil
+	return &c
 }
 
 // Close the singleton connection if open.
-func CloseConnection() {
-	if connection != nil {
-		mux.Lock()
-		defer mux.Unlock()
-		if connection == nil {
-			return
-		}
-		connection.Client.Close()
-		connection = nil
+func closeConnection(c *Connection) error {
+	if c == nil || c.Client == nil {
+		return nil
 	}
+	err := c.Client.Close()
+	c.Client = nil
+	return err
 }

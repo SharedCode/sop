@@ -59,7 +59,7 @@ func (m *mockRedis) GetStruct(ctx context.Context, key string, target interface{
 func (m *mockRedis) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) error {
 	return m.GetStruct(ctx, key, target)
 }
-func (m *mockRedis) Delete(ctx context.Context, keys ...string) error {
+func (m *mockRedis) Delete(ctx context.Context, keys []string) error {
 	var lastErr error
 	for _, k := range keys {
 		if _, ok := m.lookup[k]; !ok {
@@ -81,23 +81,23 @@ func (m *mockRedis) KeyNotFound(err error) bool {
 	return false
 }
 
-func (m *mockRedis) CreateLockKeys(keys ...string) []*sop.LockKey {
+func (m *mockRedis) CreateLockKeys(keys []string) []*sop.LockKey {
 	return nil
 }
 
-func (m *mockRedis) Lock(ctx context.Context, duration time.Duration, lockKeys ...*sop.LockKey) (bool, error) {
+func (m *mockRedis) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
 	return false, nil
 }
 
-func (m *mockRedis) IsLocked(ctx context.Context, lockKeys ...*sop.LockKey) (bool, error) {
+func (m *mockRedis) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	return false, nil
 }
 
-func (m *mockRedis) IsLockedByOthers(ctx context.Context, lockKeys ...string) (bool, error) {
+func (m *mockRedis) IsLockedByOthers(ctx context.Context, lockKeys []string) (bool, error) {
 	return false, nil
 }
 
-func (m *mockRedis) Unlock(ctx context.Context, lockKeys ...*sop.LockKey) error {
+func (m *mockRedis) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return nil
 }
 

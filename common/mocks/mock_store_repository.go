@@ -27,7 +27,7 @@ func (sr *mockStoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo)
 	return nil
 }
 
-func (sr *mockStoreRepository) Update(ctx context.Context, stores ...sop.StoreInfo) error {
+func (sr *mockStoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) error {
 	for _, store := range stores {
 		cs := sr.lookup[store.Name]
 		// Merge or apply the "count delta".
@@ -65,3 +65,6 @@ func (sr *mockStoreRepository) Remove(ctx context.Context, names ...string) erro
 	}
 	return nil
 }
+
+// Mocks do not replicate.
+func (sr *mockStoreRepository) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) {}

@@ -36,7 +36,7 @@ func (b blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.U
 	return ba, nil
 }
 
-func (b blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+func (b blobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
 			ba := blob.Value
@@ -55,11 +55,11 @@ func (b blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.
 	return nil
 }
 
-func (b blobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
-	return b.Add(ctx, storesblobs...)
+func (b blobStore) Update(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+	return b.Add(ctx, storesblobs)
 }
 
-func (b blobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
+func (b blobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	for _, storeBlobIDs := range storesBlobsIDs {
 		for _, blobID := range storeBlobIDs.Blobs {
 			fp := b.fileIO.ToFilePath(storeBlobIDs.BlobTable, blobID)

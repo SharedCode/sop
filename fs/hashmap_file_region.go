@@ -58,7 +58,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 		}
 		if ok {
 			// Double check to ensure we have no race condition and 100% acquired a lock on the sector.
-			if ok, err := hm.cache.IsLocked(ctx, lk); ok {
+			if ok, err := hm.cache.IsLocked(ctx, []*sop.LockKey{lk}); ok {
 				break
 			} else if err != nil {
 				// Unlock the sector just in case it can "get through", before return.
@@ -101,12 +101,12 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 }
 
 func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *directIO, offset int64) (bool, *sop.LockKey, error) {
-	lk := hm.cache.CreateLockKeys(hm.formatLockKey(dio.filename, offset))[0]
+	lk := hm.cache.CreateLockKeys([]string{hm.formatLockKey(dio.filename, offset)})
 	ok, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
-	return ok, lk, err
+	return ok, lk[0], err
 }
 func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, dio *directIO, offset int64, lk *sop.LockKey) error {
-	return hm.cache.Unlock(ctx, lk)
+	return hm.cache.Unlock(ctx, []*sop.LockKey{lk})
 }
 
 func (hm *hashmap) formatLockKey(filename string, offset int64) string {

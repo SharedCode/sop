@@ -2,7 +2,9 @@ package sop
 
 import (
 	"context"
+	"io"
 	"time"
+
 )
 
 // Manage or fetch Virtual ID request/response payload.
@@ -36,19 +38,24 @@ func (r *UpdateAllOrNothingError) Error() string {
 // All methods are taking in a set of items.
 type Registry interface {
 	// Get will fetch handles(given their IDs) from registry table(s).
-	Get(context.Context, ...RegistryPayload[UUID]) ([]RegistryPayload[Handle], error)
+	Get(context.Context, []RegistryPayload[UUID]) ([]RegistryPayload[Handle], error)
 	// Add will insert handles to registry table(s).
-	Add(context.Context, ...RegistryPayload[Handle]) error
+	Add(context.Context, []RegistryPayload[Handle]) error
 	// Update will update handles potentially spanning across registry table(s).
 	// Set allOrNothing to true if Update operation is crucial for data consistency and
 	// wanting to do an all or nothing update for the entire batch of handles.
 	// False is recommended if such consistency is not significant.
-	Update(ctx context.Context, allOrNothing bool, handles ...RegistryPayload[Handle]) error
+	Update(ctx context.Context, allOrNothing bool, handles []RegistryPayload[Handle]) error
 	// Update for use in an active transaction where the registry handles for update were
 	// all pre-locked (& post call unlocked) by the transaction manager.
-	UpdateNoLocks(ctx context.Context, storesHandles ...RegistryPayload[Handle]) error
+	UpdateNoLocks(ctx context.Context, storesHandles []RegistryPayload[Handle]) error
 	// Remove will delete handles(given their IDs) from registry table(s).
-	Remove(context.Context, ...RegistryPayload[UUID]) error
+	Remove(context.Context, []RegistryPayload[UUID]) error
+
+	// Implement to write to do the replication of data to passive target paths.
+	// This will be invoked after the transaction got committed to allow the registry to
+	// copy the files or portion of the files that were updated during the transaction.
+	Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle])
 }
 
 // ManageStore specifies the methods used to manage the Store(s) container.
@@ -67,11 +74,11 @@ type BlobStore interface {
 	// Get or fetch a blob given an ID.
 	GetOne(ctx context.Context, blobTable string, blobID UUID) ([]byte, error)
 	// Add blobs to store.
-	Add(ctx context.Context, blobs ...BlobsPayload[KeyValuePair[UUID, []byte]]) error
+	Add(ctx context.Context, blobs []BlobsPayload[KeyValuePair[UUID, []byte]]) error
 	// Update blobs in store.
-	Update(ctx context.Context, blobs ...BlobsPayload[KeyValuePair[UUID, []byte]]) error
+	Update(ctx context.Context, blobs []BlobsPayload[KeyValuePair[UUID, []byte]]) error
 	// Remove blobs in store with given IDs.
-	Remove(ctx context.Context, blobsIDs ...BlobsPayload[UUID]) error
+	Remove(ctx context.Context, blobsIDs []BlobsPayload[UUID]) error
 }
 
 // Manage or fetch node blobs request/response payload.
@@ -127,11 +134,16 @@ type StoreRepository interface {
 	GetAll(context.Context) ([]string, error)
 	// Add store info & create related tables like for registry & for node blob.
 	Add(context.Context, ...StoreInfo) error
-	// Update store info. Update should also merge the Count of items between the incoming store info
-	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
-	Update(context.Context, ...StoreInfo) error
 	// Remove store info with name & drop related tables like for registry & for node blob.
 	Remove(context.Context, ...string) error
+
+	// Update store info. Update should also merge the Count of items between the incoming store info
+	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
+	Update(context.Context, []StoreInfo) error
+	// Implement to write to do the replication of data to passive target paths.
+	// This will be invoked after the transaction got committed to allow the registry to
+	// copy the files or portion of the files that were updated during the transaction.
+	Replicate(context.Context, []StoreInfo)
 }
 
 // KeyValue Store Item Action Response has the payload and the error, if in case an error occurred while doing CRUD operation.
@@ -154,15 +166,15 @@ type KeyValueStore[TK any, TV any] interface {
 	// Fetch entry(ies) with given key(s).
 	// Fetch term is used here because this CRUD interface is NOT part of the B-Tree system, thus, the context is
 	// to "fetch" from the remote data storage sub-system like AWS S3.
-	Fetch(context.Context, string, ...TK) KeyValueStoreResponse[KeyValuePair[TK, TV]]
+	Fetch(context.Context, string, []TK) KeyValueStoreResponse[KeyValuePair[TK, TV]]
 	// Fetch a large entry with the given key.
 	FetchLargeObject(context.Context, string, TK) (TV, error)
 	// Add entry(ies) to the store.
-	Add(context.Context, string, ...KeyValuePair[TK, TV]) KeyValueStoreResponse[KeyValuePair[TK, TV]]
+	Add(context.Context, string, []KeyValuePair[TK, TV]) KeyValueStoreResponse[KeyValuePair[TK, TV]]
 	// Update entry(ies) of the store.
-	Update(context.Context, string, ...KeyValuePair[TK, TV]) KeyValueStoreResponse[KeyValuePair[TK, TV]]
+	Update(context.Context, string, []KeyValuePair[TK, TV]) KeyValueStoreResponse[KeyValuePair[TK, TV]]
 	// Remove entry(ies) from the store given their names.
-	Remove(context.Context, string, ...TK) KeyValueStoreResponse[TK]
+	Remove(context.Context, string, []TK) KeyValueStoreResponse[TK]
 }
 
 // LockKey contain fields to allow locking and unlocking of a set of cache (e.g. - redis) keys.
@@ -186,7 +198,7 @@ type Cache interface {
 	// GetStruct fetches a given object given a key in a TTL manner, that is, sliding time.
 	GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) error
 	// Delete removes the object given a key.
-	Delete(ctx context.Context, keys ...string) error
+	Delete(ctx context.Context, keys []string) error
 	// Ping is a utility function to check if connection is good.
 	Ping(ctx context.Context) error
 
@@ -195,17 +207,24 @@ type Cache interface {
 	// Formats a given string as a lock key.
 	FormatLockKey(k string) string
 	// Create lock keys.
-	CreateLockKeys(keys ...string) []*LockKey
+	CreateLockKeys(keys []string) []*LockKey
 	// Lock a set of keys.
-	Lock(ctx context.Context, duration time.Duration, lockKeys ...*LockKey) (bool, error)
+	Lock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
 	// Returns whether a set of keys are all locked.
-	IsLocked(ctx context.Context, lockKeys ...*LockKey) (bool, error)
+	IsLocked(ctx context.Context, lockKeys []*LockKey) (bool, error)
 	// Returns true if a set of keys are all locked, most likely by other processes.
 	// Use-case is for checking if a certain set of keys are locked by other processes.
-	IsLockedByOthers(ctx context.Context, lockKeyNames ...string) (bool, error)
+	IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error)
 	// Unlock a given set of keys.
-	Unlock(ctx context.Context, lockKeys ...*LockKey) error
+	Unlock(ctx context.Context, lockKeys []*LockKey) error
 
 	// Clear out the backend Cache database of all items.
 	Clear(ctx context.Context) error
+}
+
+// Closeable Cache is a cache that which, you can explicitly call its "Close" method
+// after you are done with it.
+type CloseableCache interface {
+	Cache
+	io.Closer
 }
