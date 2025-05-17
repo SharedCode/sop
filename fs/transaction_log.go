@@ -157,7 +157,7 @@ func (tl *transactionLog) getOne() (string, sop.UUID, error) {
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 	cappedHour := mh.Add(-time.Duration(time.Duration(ageLimit) * time.Minute))
 
-	files, err := getFilesSortedByModifiedTime(tl.replicationTracker.GetActiveBaseFolder())
+	files, err := getFilesSortedByModifiedTime(tl.replicationTracker.getActiveBaseFolder())
 	if err != nil {
 		return "", sop.NilUUID, err
 	}

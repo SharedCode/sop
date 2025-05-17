@@ -31,15 +31,31 @@ func (r *replicationTracker) failover() {
 	r.isFirstFolderActive = !r.isFirstFolderActive
 }
 
-func (r *replicationTracker) GetActiveBaseFolder() string {
+func (r *replicationTracker) getActiveBaseFolder() string {
 	if r.isFirstFolderActive {
 		return r.storesBaseFolders[0]
 	}
 	return r.storesBaseFolders[1]
 }
+func (r *replicationTracker) getPassiveBaseFolder() string {
+	if r.isFirstFolderActive {
+		return r.storesBaseFolders[1]
+	}
+	return r.storesBaseFolders[0]
+}
 
 func (r *replicationTracker) formatActiveFolderFilename(filename string) string {
-	bf := r.GetActiveBaseFolder()
+	bf := r.getActiveBaseFolder()
+
+	if strings.HasSuffix(bf, string(os.PathSeparator)) {
+		return fmt.Sprintf("%s%s", bf, filename)
+	} else {
+		return fmt.Sprintf("%s%c%s", bf, os.PathSeparator, filename)
+	}
+}
+
+func (r *replicationTracker) formatPassiveFolderFilename(filename string) string {
+	bf := r.getPassiveBaseFolder()
 
 	if strings.HasSuffix(bf, string(os.PathSeparator)) {
 		return fmt.Sprintf("%s%s", bf, filename)

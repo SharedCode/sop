@@ -139,7 +139,7 @@ type StoreRepository interface {
 
 	// Update store info. Update should also merge the Count of items between the incoming store info
 	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
-	Update(context.Context, []StoreInfo) error
+	Update(context.Context, []StoreInfo) ([]StoreInfo, error)
 	// Implement to write to do the replication of data to passive target paths.
 	// This will be invoked after the transaction got committed to allow the registry to
 	// copy the files or portion of the files that were updated during the transaction.

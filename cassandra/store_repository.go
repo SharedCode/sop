@@ -82,9 +82,9 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 }
 
 // Update enforces so only the Store's Count & timestamp can get updated.
-func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) error {
+func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) ([]sop.StoreInfo, error) {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
 	// Sort the stores info so we can commit them in same sort order across transactions,
@@ -125,7 +125,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) e
 		log.Warn(err.Error() + ", gave up")
 		// Unlock keys since we failed locking all of them.
 		sr.cache.Unlock(ctx, lockKeys)
-		return err
+		return nil, err
 	}
 
 	updateStatement := fmt.Sprintf("UPDATE %s.store SET count = ?, ts = ? WHERE name = ?;", connection.Config.Keyspace)
@@ -166,7 +166,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) e
 		sis, err := sr.GetWithTTL(ctx, stores[i].CacheConfig.IsStoreInfoCacheTTL, stores[i].CacheConfig.StoreInfoCacheDuration, stores[i].Name)
 		if len(sis) == 0 {
 			undo(i, beforeUpdateStores)
-			return err
+			return nil, err
 		}
 		si := sis[0]
 		// Merge or apply the "count delta".
@@ -181,7 +181,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) e
 		if err := qry.Exec(); err != nil {
 			// Undo changes.
 			undo(i, beforeUpdateStores)
-			return err
+			return nil, err
 		}
 
 		beforeUpdateStores = append(beforeUpdateStores, sis...)
@@ -191,7 +191,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) e
 		}
 	}
 
-	return nil
+	return stores, nil
 }
 
 func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {

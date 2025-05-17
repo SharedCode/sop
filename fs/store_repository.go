@@ -124,7 +124,7 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	// 8. Unlock Store List. The defer statement will unlock store list.
 }
 
-func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) error {
+func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) ([]sop.StoreInfo, error) {
 	// Sort the stores info so we can commit them in same sort order across transactions,
 	// thus, reduced chance of deadlock.
 	b3 := in_memory.NewBtree[string, sop.StoreInfo](true)
@@ -163,7 +163,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) e
 		log.Warn(err.Error() + ", gave up")
 		// Unlock keys since we failed locking all of them.
 		sr.cache.Unlock(ctx, lockKeys)
-		return err
+		return nil, err
 	}
 
 	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
@@ -208,7 +208,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) e
 		sis, err := sr.GetWithTTL(ctx, stores[i].CacheConfig.IsStoreInfoCacheTTL, stores[i].CacheConfig.StoreInfoCacheDuration, stores[i].Name)
 		if len(sis) == 0 {
 			undo(i, beforeUpdateStores)
-			return err
+			return nil, err
 		}
 
 		si := sis[0]
@@ -220,13 +220,13 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) e
 		if err != nil {
 			// Undo changes.
 			undo(i, beforeUpdateStores)
-			return err
+			return nil, err
 		}
 
 		if err := storeWriter.write(fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
 			// Undo changes.
 			undo(i, beforeUpdateStores)
-			return err
+			return nil, err
 		}
 
 		beforeUpdateStores = append(beforeUpdateStores, sis...)
@@ -235,12 +235,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) e
 		}
 	}
 
-	// Replicate the files if configured to.
-	if err := storeWriter.replicate(); err != nil {
-		return err
-	}
-
-	return nil
+	return stores, nil
 }
 
 func (sr *StoreRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
@@ -367,6 +362,7 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 		i++
 	}
 	ba, _ := encoding.Marshal(storeList)
+
 	storeWriter.write(storeListFilename, ba)
 
 	// Replicate the files if configured to.
@@ -377,14 +373,31 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 	return nil
 }
 
-// Implement to write to do the replication of data to passive target paths.
-// This will be invoked after the transaction got committed to allow the registry to
-// copy the files or portion of the files that were updated with during the transaction session.
-func (sr *StoreRepository) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) {
-	// TODO:
+// Replicate the updates on stores to the passive target paths.
+func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo) {
+	if !sr.replicationTracker.replicate {
+		return
+	}
+	for i := range stores {
+		// Persist store info into a JSON text file.
+		ba, err := encoding.Marshal(stores[i])
+		if err != nil {
+			// For now, 'just log if store marshal fails, it is not supposed to happen.
+			log.Error(fmt.Sprintf("storeRepository.Replicate failed, error Marshal of store '%s', details: %v", stores[i].Name, err))
+			return
+		}
+		// When store is being written and it failed, we need to handle whether to turn off writing to the replication's passive destination
+		// because if will break synchronization from here on out, thus, better to just log then turn off replication altogether, until cleared
+		// to resume.
+		filename := sr.replicationTracker.formatPassiveFolderFilename(fmt.Sprintf("%c%s%c%s", os.PathSeparator, stores[i].Name, os.PathSeparator, storeInfoFilename))
+		if err := sr.fileIO.WriteFile(filename, ba, permission); err != nil {
+			log.Error(fmt.Sprintf("storeRepository.Replicate failed, error writing store '%s' (passive), details: %v", filename, err))
+			return
+		}
+	}
 }
 
 // Returns the stores' base folder path.
 func (sr *StoreRepository) GetStoresBaseFolder() string {
-	return sr.replicationTracker.GetActiveBaseFolder()
+	return sr.replicationTracker.getActiveBaseFolder()
 }

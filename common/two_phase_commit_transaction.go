@@ -28,6 +28,7 @@ type btreeBackend struct {
 }
 
 type Transaction struct {
+	id        sop.UUID
 	// B-Tree instances, & their backend bits, managed within the transaction session.
 	btreesBackend []btreeBackend
 	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
@@ -46,13 +47,14 @@ type Transaction struct {
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles []sop.RegistryPayload[sop.Handle]
 	removedNodeHandles []sop.RegistryPayload[sop.Handle]
+
 	// Phase 1 commit generated objects required for "replication" in phase 2 commit.
 	addedNodeHandles []sop.RegistryPayload[sop.Handle]
 	newRootNodeHandles []sop.RegistryPayload[sop.Handle]
+	updatedStoresInfo []sop.StoreInfo
 
 	// Used for transaction level locking.
 	nodesKeys []*sop.LockKey
-	id        sop.UUID
 }
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
@@ -366,7 +368,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 	if err := t.logger.log(ctx, commitStoreInfo, toByteArray(t.getRollbackStoresInfo())); err != nil {
 		return err
 	}
-	if err := t.commitStores(ctx); err != nil {
+	if t.updatedStoresInfo, err = t.commitStores(ctx); err != nil {
 		return err
 	}
 
@@ -426,7 +428,7 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 
 	// Replicate to passive target paths.	
 	t.registry.Replicate(ctx, t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles)
-	t.storeRepository.Replicate(ctx, t.getCommitStoresInfo())
+	t.storeRepository.Replicate(ctx, t.updatedStoresInfo)
 
 	// Let other transactions get a lock on these updated & removed nodes' keys we've locked.
 	t.unlockNodesKeys(ctx)
