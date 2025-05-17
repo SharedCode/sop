@@ -16,7 +16,7 @@ const (
 	lockSectorRetryTimeoutInSecs = 5
 )
 
-func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
+func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails []fileRegionDetails) error {
 	dio := newDirectIO()
 	ba := dio.createAlignedBlock()
 	m := encoding.NewHandleMarshaler()
@@ -29,7 +29,7 @@ func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails ...fi
 	return nil
 }
 
-func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails ...fileRegionDetails) error {
+func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails []fileRegionDetails) error {
 	dio := newDirectIO()
 	ba := dio.createAlignedBlock()
 	// Study whether we want to zero out only the "Logical ID" part. For now, zero out entire Handle block

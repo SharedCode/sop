@@ -26,8 +26,8 @@ func (v *Mock_vid_registry) Add(ctx context.Context, storesHandles []sop.Registr
 	return nil
 }
 
-func (v *Mock_vid_registry) Update(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
-	if v.InducedErrorOnUpdateAllOrNothing && allOrNothing {
+func (v *Mock_vid_registry) Update(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+	if v.InducedErrorOnUpdateAllOrNothing {
 		return fmt.Errorf("induced error on Update w/ allOrNothing true")
 	}
 	for _, storeHandles := range storesHandles {

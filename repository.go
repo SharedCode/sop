@@ -23,15 +23,6 @@ type RegistryPayload[T Handle | UUID] struct {
 	IDs []T
 }
 
-// UpdateAllOrNothingError is a special error type that will allow caller to handle it differently than normal errors.
-type UpdateAllOrNothingError struct {
-	Err error
-}
-
-func (r *UpdateAllOrNothingError) Error() string {
-	return r.Err.Error()
-}
-
 // Virtual ID registry is essential in our support for all or nothing (sub)feature,
 // which is essential for fault tolerance.
 //
@@ -41,11 +32,9 @@ type Registry interface {
 	Get(context.Context, []RegistryPayload[UUID]) ([]RegistryPayload[Handle], error)
 	// Add will insert handles to registry table(s).
 	Add(context.Context, []RegistryPayload[Handle]) error
-	// Update will update handles potentially spanning across registry table(s).
-	// Set allOrNothing to true if Update operation is crucial for data consistency and
-	// wanting to do an all or nothing update for the entire batch of handles.
-	// False is recommended if such consistency is not significant.
-	Update(ctx context.Context, allOrNothing bool, handles []RegistryPayload[Handle]) error
+	// Update will update handles potentially spanning across registry table(s). Will issue a cache lock call
+	// for each handle to be updated.
+	Update(ctx context.Context, handles []RegistryPayload[Handle]) error
 	// Update for use in an active transaction where the registry handles for update were
 	// all pre-locked (& post call unlocked) by the transaction manager.
 	UpdateNoLocks(ctx context.Context, storesHandles []RegistryPayload[Handle]) error
@@ -87,15 +76,6 @@ type BlobsPayload[T UUID | KeyValuePair[UUID, []byte]] struct {
 	BlobTable string
 	// Blobs contains the blobs IDs and blobs data for upsert to the store or the blobs IDs to be removed.
 	Blobs []T
-}
-
-// Returns the total number of UUIDs given a set of blobs (ID) payload.
-func GetBlobPayloadCount[T UUID](payloads []BlobsPayload[T]) int {
-	total := 0
-	for _, p := range payloads {
-		total = total + len(p.Blobs)
-	}
-	return total
 }
 
 // Transaction Log specifies the API(methods) needed to implement logging for the transaction.

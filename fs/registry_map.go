@@ -13,16 +13,17 @@ type registryMap struct {
 
 func newRegistryMap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache) *registryMap {
 	return &registryMap{
-		hashmap: newHashmap(readWrite, hashModValue, replicationTracker, cache, true),
+		hashmap: newHashmap(readWrite, hashModValue, replicationTracker, cache),
 	}
 }
+
 
 // Add a given set of Handle(s) record(s) on file(s) where they are supposed to get stored in.
 func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.Handle]) error {
 	// Individually write to the file area occupied by the handle so we don't create "lock pressure".
 	for _, item := range items {
 		for _, h := range item.Second {
-			frd, err := rm.hashmap.findFileRegion(ctx, item.First, h.LogicalID)
+			frd, err := rm.hashmap.findFileRegion(ctx, item.First, []sop.UUID{h.LogicalID})
 			if err != nil {
 				return err
 			}
@@ -33,7 +34,7 @@ func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.
 			}
 
 			frd[0].handle = h
-			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
+			if err := rm.hashmap.updateFileRegion(ctx, frd); err != nil {
 				return err
 			}
 		}
@@ -42,50 +43,26 @@ func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.
 }
 
 // Update a given set of Handle(s) record(s) on file(s) where they are stored in.
-func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.Tuple[string, []sop.Handle]) error {
-	if allOrNothing {
-		lockedItems := make([]fileRegionDetails, 0, len(items))
-		for _, item := range items {
-			frds, err := rm.hashmap.findFileRegion(ctx, item.First, getIDs(item.Second...)...)
-			if err != nil {
-				return err
-			}
-			// Update the Handles read w/ the items' values.
-			for i := range frds {
-				// Check if the record in the target file region is different.
-				if !frds[i].handle.IsEmpty() && frds[i].handle.LogicalID != item.Second[i].LogicalID {
-					// Fail if the record on target is different.
-					lockedItems = append(lockedItems, frds...)
-					return fmt.Errorf("registryMap.set allOrNothing failed, an item(target lid=%v) at offset=%v is different (source lid=%v)",
-						frds[i].handle.LogicalID, frds[i].getOffset(), item.Second[i].LogicalID)
-				}
-
-				frds[i].handle = item.Second[i]
-			}
-			lockedItems = append(lockedItems, frds...)
-		}
-		if err := rm.hashmap.updateFileRegion(ctx, lockedItems...); err != nil {
+func (rm registryMap) set(ctx context.Context, items ...sop.Tuple[string, []sop.Handle]) error {
+	for _, item := range items {
+		frds, err := rm.hashmap.findFileRegion(ctx, item.First, getIDs(item.Second))
+		if err != nil {
 			return err
 		}
-		return nil
-	}
-	// Individually manage/update the file area occupied by the handle so we don't create "lock pressure".
-	for _, item := range items {
-		for _, h := range item.Second {
-			frd, err := rm.hashmap.findFileRegion(ctx, item.First, h.LogicalID)
-			if err != nil {
-				return err
-			}
+		// Update the Handles read w/ the items' values.
+		for i := range frds {
 			// Check if the record in the target file region is different.
-			if !frd[0].handle.IsEmpty() && frd[0].handle.LogicalID != h.LogicalID {
+			if !frds[i].handle.IsEmpty() && frds[i].handle.LogicalID != item.Second[i].LogicalID {
+				// Fail if the record on target is different.
 				return fmt.Errorf("registryMap.set failed, an item(target lid=%v) at offset=%v is different (source lid=%v)",
-					frd[0].handle.LogicalID, frd[0].getOffset(), h.LogicalID)
+					frds[i].handle.LogicalID, frds[i].getOffset(), item.Second[i].LogicalID)
 			}
-
-			frd[0].handle = h
-			if err := rm.hashmap.updateFileRegion(ctx, frd...); err != nil {
-				return err
-			}
+			// Update the handle with incoming.
+			frds[i].handle = item.Second[i]
+		}
+		// Do actual file region update.
+		if err := rm.hashmap.updateFileRegion(ctx, frds); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -95,7 +72,7 @@ func (rm registryMap) set(ctx context.Context, allOrNothing bool, items ...sop.T
 func (rm registryMap) get(ctx context.Context, keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[string, []sop.Handle], error) {
 	result := make([]sop.Tuple[string, []sop.Handle], 0, len(keys))
 	for _, k := range keys {
-		handles, err := rm.hashmap.get(ctx, k.First, k.Second...)
+		handles, err := rm.hashmap.get(ctx, k.First, k.Second)
 		if err != nil {
 			return nil, fmt.Errorf("registryMap.get failed, details: %v", err)
 		}
@@ -111,26 +88,27 @@ func (rm registryMap) get(ctx context.Context, keys ...sop.Tuple[string, []sop.U
 func (rm registryMap) remove(ctx context.Context, keys ...sop.Tuple[string, []sop.UUID]) error {
 	// Individually delete the file area occupied by the handle so we don't create "lock pressure".
 	for _, key := range keys {
-		for _, id := range key.Second {
-			frd, err := rm.hashmap.findFileRegion(ctx, key.First, id)
-			if err != nil {
-				return err
-			}
+
+		frds, err := rm.hashmap.findFileRegion(ctx, key.First, key.Second)
+		if err != nil {
+			return err
+		}
+		for i := range frds {
 			// If read handle is empty, it means the item is already marked deleted in disk.
-			if frd[0].handle.IsEmpty() {
+			if frds[i].handle.IsEmpty() {
 				// Fail if there is no record on target, can't delete a missing item.
-				return fmt.Errorf("registryMap.remove failed, an item at offset=%v was not found, can't delete a missing item", frd[0].getOffset())
+				return fmt.Errorf("registryMap.remove failed, an item at offset=%v was not found, can't delete a missing item", frds[i].getOffset())
 			}
 			// Check if the record in the target file region is different.
-			if frd[0].handle.LogicalID != id {
+			if frds[i].handle.LogicalID != key.Second[i] {
 				// Fail if the found record on target is different.
 				return fmt.Errorf("registryMap.remove failed, an item(target lid=%v) at offset=%v is different (source lid=%v)",
-					frd[0].handle.LogicalID, frd[0].getOffset(), id)
+					frds[i].handle.LogicalID, frds[i].getOffset(), key.Second[i])
 			}
+		}
 
-			if err := rm.hashmap.markDeleteFileRegion(ctx, frd...); err != nil {
-				return err
-			}
+		if err := rm.hashmap.markDeleteFileRegion(ctx, frds); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -141,7 +119,7 @@ func (rm registryMap) close() error {
 	return rm.hashmap.close()
 }
 
-func getIDs(items ...sop.Handle) []sop.UUID {
+func getIDs(items []sop.Handle) []sop.UUID {
 	IDs := make([]sop.UUID, len(items))
 	for i := range items {
 		IDs[i] = items[i].LogicalID

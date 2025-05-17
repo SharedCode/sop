@@ -385,7 +385,7 @@ func (t *Transaction) deleteObsoleteEntries(ctx context.Context,
 	var lastErr error
 	if len(unusedNodeIDs) > 0 {
 		// Delete from Redis & BlobStore the unused/inactive nodes.
-		deletedKeys := make([]string, sop.GetBlobPayloadCount(unusedNodeIDs))
+		deletedKeys := make([]string, getBlobPayloadCount(unusedNodeIDs))
 		ik := 0
 		for i := range unusedNodeIDs {
 			for ii := range unusedNodeIDs[i].Blobs {
@@ -509,4 +509,13 @@ func (t *Transaction) onIdle(ctx context.Context) {
 			t.logger.processExpiredTransactionLogs(ctx, t)
 		}
 	}
+}
+
+// Returns the total number of UUIDs given a set of blobs (ID) payload.
+func getBlobPayloadCount[T sop.UUID](payloads []sop.BlobsPayload[T]) int {
+	total := 0
+	for _, p := range payloads {
+		total = total + len(p.Blobs)
+	}
+	return total
 }
