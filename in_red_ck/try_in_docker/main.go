@@ -40,10 +40,11 @@ func main() {
 	}
 
 	registry := cas.NewRegistry()
-	if err := registry.Add(ctx, sop.RegistryPayload[sop.Handle]{
+	if err := registry.Add(ctx, []sop.RegistryPayload[sop.Handle]{
+		sop.RegistryPayload[sop.Handle]{
 		RegistryTable: storeInfo.RegistryTable,
 		IDs:           []sop.Handle{sop.NewHandle(sop.NewUUID())},
-	}); err != nil {
+	}}); err != nil {
 		writeAndExit("Cassandra registry Add failed, err: %v.", err)
 	}
 

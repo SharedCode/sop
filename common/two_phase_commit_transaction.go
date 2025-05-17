@@ -46,6 +46,9 @@ type Transaction struct {
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles []sop.RegistryPayload[sop.Handle]
 	removedNodeHandles []sop.RegistryPayload[sop.Handle]
+	// Phase 1 commit generated objects required for "replication" in phase 2 commit.
+	addedNodeHandles []sop.RegistryPayload[sop.Handle]
+	newRootNodeHandles []sop.RegistryPayload[sop.Handle]
 
 	// Used for transaction level locking.
 	nodesKeys []*sop.LockKey
@@ -238,16 +241,16 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		}
 
 		//* Start: Try to lock all updated & removed nodes before moving forward.
-		if ok, _ := t.cache.Lock(ctx, t.maxTime, t.nodesKeys...); !ok {
+		if ok, _ := t.cache.Lock(ctx, t.maxTime, t.nodesKeys); !ok {
 			log.Debug(fmt.Sprintf("cache.Lock can't lock all nodesKeys, tid: %v", t.GetID()))
 			// Unlock in case there are those that got locked.
-			t.cache.Unlock(ctx, t.nodesKeys...)
+			t.cache.Unlock(ctx, t.nodesKeys)
 			sop.RandomSleep(ctx)
 			needsRefetchAndMerge = true
 			continue
 		}
 
-		if ok, err := t.cache.IsLocked(ctx, t.nodesKeys...); !ok || err != nil {
+		if ok, err := t.cache.IsLocked(ctx, t.nodesKeys); !ok || err != nil {
 			log.Debug(fmt.Sprintf("cache.IsLocked didn't confirm nodesKeys are locked, tid: %v", t.GetID()))
 			sop.RandomSleep(ctx)
 			continue
@@ -293,12 +296,13 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		// Commit new root nodes.
 		bibs := convertToBlobRequestPayload(rootNodes)
 		vids := convertToRegistryRequestPayload(rootNodes)
+		//t.newRootNodeHandles = con
 		if err := t.logger.log(ctx, commitNewRootNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
 			First: vids, Second: bibs,
 		})); err != nil {
 			return err
 		}
-		if successful, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
+		if successful, t.newRootNodeHandles, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
 			return err
 		}
 
@@ -353,7 +357,8 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 	})); err != nil {
 		return err
 	}
-	if err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
+	var err error
+	if t.addedNodeHandles, err = t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
 		return err
 	}
 
@@ -414,12 +419,14 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 	}
 
 	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
-	if err := t.registry.UpdateNoLocks(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)...); err != nil {
+	if err := t.registry.UpdateNoLocks(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)); err != nil {
 		t.unlockNodesKeys(ctx)
 		return err
 	}
 
-	// TODO: Write to replicate to passive target paths.
+	// Replicate to passive target paths.	
+	t.registry.Replicate(ctx, t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles)
+	t.storeRepository.Replicate(ctx, t.getCommitStoresInfo())
 
 	// Let other transactions get a lock on these updated & removed nodes' keys we've locked.
 	t.unlockNodesKeys(ctx)

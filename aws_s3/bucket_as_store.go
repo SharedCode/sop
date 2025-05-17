@@ -56,7 +56,7 @@ func (b *S3Bucket) FetchLargeObject(ctx context.Context, bucketName string, name
 }
 
 // Fetch bucket entry with a given name.
-func (b *S3Bucket) Fetch(ctx context.Context, bucketName string, names ...string) sop.KeyValueStoreResponse[sop.KeyValuePair[string, *S3Object]] {
+func (b *S3Bucket) Fetch(ctx context.Context, bucketName string, names []string) sop.KeyValueStoreResponse[sop.KeyValuePair[string, *S3Object]] {
 	r := make([]sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, *S3Object]], len(names))
 	var lastError error
 	for i, name := range names {
@@ -108,7 +108,7 @@ func (b *S3Bucket) Fetch(ctx context.Context, bucketName string, names ...string
 	}
 }
 
-func (b *S3Bucket) Add(ctx context.Context, bucketName string, entries ...sop.KeyValuePair[string, *S3Object]) sop.KeyValueStoreResponse[sop.KeyValuePair[string, *S3Object]] {
+func (b *S3Bucket) Add(ctx context.Context, bucketName string, entries []sop.KeyValuePair[string, *S3Object]) sop.KeyValueStoreResponse[sop.KeyValuePair[string, *S3Object]] {
 	r := make([]sop.KeyValueStoreItemActionResponse[sop.KeyValuePair[string, *S3Object]], len(entries))
 	var lastError error
 	for i, entry := range entries {
@@ -168,11 +168,11 @@ func (b *S3Bucket) Add(ctx context.Context, bucketName string, entries ...sop.Ke
 	}
 }
 
-func (b *S3Bucket) Update(ctx context.Context, bucketName string, entries ...sop.KeyValuePair[string, *S3Object]) sop.KeyValueStoreResponse[sop.KeyValuePair[string, *S3Object]] {
-	return b.Add(ctx, bucketName, entries...)
+func (b *S3Bucket) Update(ctx context.Context, bucketName string, entries []sop.KeyValuePair[string, *S3Object]) sop.KeyValueStoreResponse[sop.KeyValuePair[string, *S3Object]] {
+	return b.Add(ctx, bucketName, entries)
 }
 
-func (b *S3Bucket) Remove(ctx context.Context, bucketName string, names ...string) sop.KeyValueStoreResponse[string] {
+func (b *S3Bucket) Remove(ctx context.Context, bucketName string, names []string) sop.KeyValueStoreResponse[string] {
 	if len(names) == 0 {
 		return sop.KeyValueStoreResponse[string]{}
 	}

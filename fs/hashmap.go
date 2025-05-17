@@ -287,8 +287,8 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 		flag = os.O_RDONLY
 	}
 
-	lk := hm.cache.CreateLockKeys(preallocateFileLockKey)
-	if ok, err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk...); !ok || err != nil {
+	lk := hm.cache.CreateLockKeys([]string{preallocateFileLockKey})
+	if ok, err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk); !ok || err != nil {
 		if err == nil {
 			err = fmt.Errorf("can't acquire a lock to preallocate file %s", filename)
 		}
@@ -296,7 +296,7 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 	}
 
 	if err := dio.open(filename, flag, fullPermission); err != nil {
-		hm.cache.Unlock(ctx, lk...)
+		hm.cache.Unlock(ctx, lk)
 		return result, err
 	}
 
@@ -304,10 +304,10 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 	// Pre-allocate entire segment if new file. Should we Redis lock to allow only one process to win Truncate?
 	// NFS should be able to allow one and others to fail, error out.
 	if err := dio.file.Truncate(hm.getSegmentFileSize()); err != nil {
-		hm.cache.Unlock(ctx, lk...)
+		hm.cache.Unlock(ctx, lk)
 		return result, err
 	}
-	hm.cache.Unlock(ctx, lk...)
+	hm.cache.Unlock(ctx, lk)
 
 	// New file, 'prepare to let caller write the new handle to this block's first slot.
 	blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)

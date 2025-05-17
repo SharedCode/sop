@@ -161,7 +161,7 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 			if err := t.tlogger.log(ctx, addActivelyPersistedItem, extractRequestPayloadIDs(&itemsForAdd)); err != nil {
 				return err
 			}
-			if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
+			if err := t.blobStore.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{itemsForAdd}); err != nil {
 				return err
 			}
 			if t.storeInfo.IsValueDataGloballyCached {
@@ -196,7 +196,7 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 				if err := t.tlogger.log(ctx, updateActivelyPersistedItem, extractRequestPayloadIDs(&itemsForAdd)); err != nil {
 					return err
 				}
-				if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
+				if err := t.blobStore.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{itemsForAdd}); err != nil {
 					return err
 				}
 				if t.storeInfo.IsValueDataGloballyCached {
@@ -355,7 +355,7 @@ func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context) error {
 		if !cachedItem.isLockOwner {
 			continue
 		}
-		if err := t.cache.Delete(ctx, t.cache.FormatLockKey(uuid.String())); err != nil {
+		if err := t.cache.Delete(ctx, []string{t.cache.FormatLockKey(uuid.String())}); err != nil {
 			lastErr = err
 		}
 	}

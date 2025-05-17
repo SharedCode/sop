@@ -9,7 +9,7 @@ import (
 )
 
 // Lock a set of keys.
-func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys ...*sop.LockKey) (bool, error) {
+func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
 	for _, lk := range lockKeys {
 		readItem, err := c.Get(ctx, lk.Key)
 		if err != nil {
@@ -44,7 +44,7 @@ func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys ...*s
 }
 
 // Returns true if lockKeys have claimed lock equivalent.
-func (c client) IsLocked(ctx context.Context, lockKeys ...*sop.LockKey) (bool, error) {
+func (c client) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	r := true
 	var lastErr error
 	for _, lk := range lockKeys {
@@ -70,7 +70,7 @@ func (c client) IsLocked(ctx context.Context, lockKeys ...*sop.LockKey) (bool, e
 }
 
 // Returns true if lockKeyNames are all locked.
-func (c client) IsLockedByOthers(ctx context.Context, lockKeyNames ...string) (bool, error) {
+func (c client) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	if len(lockKeyNames) == 0 {
 		return false, nil
 	}
@@ -88,14 +88,14 @@ func (c client) IsLockedByOthers(ctx context.Context, lockKeyNames ...string) (b
 }
 
 // Unlock a set of keys.
-func (c client) Unlock(ctx context.Context, lockKeys ...*sop.LockKey) error {
+func (c client) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	var lastErr error
 	for _, lk := range lockKeys {
 		if !lk.IsLockOwner {
 			continue
 		}
 		// Delete lock key if we own it.
-		if err := c.Delete(ctx, lk.Key); err != nil {
+		if err := c.Delete(ctx, []string{lk.Key}); err != nil {
 			// Ignore if key not in cache, not an issue.
 			if c.KeyNotFound(err) {
 				continue
@@ -107,7 +107,7 @@ func (c client) Unlock(ctx context.Context, lockKeys ...*sop.LockKey) error {
 }
 
 // Create a set of lock keys.
-func (c client) CreateLockKeys(keys ...string) []*sop.LockKey {
+func (c client) CreateLockKeys(keys []string) []*sop.LockKey {
 	lockKeys := make([]*sop.LockKey, len(keys))
 	for i := range keys {
 		lockKeys[i] = &sop.LockKey{

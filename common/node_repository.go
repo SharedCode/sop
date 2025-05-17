@@ -104,12 +104,12 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 		}
 		return v.node, nil
 	}
-	h, err := nr.transaction.registry.Get(ctx, sop.RegistryPayload[sop.UUID]{
+	h, err := nr.transaction.registry.Get(ctx, []sop.RegistryPayload[sop.UUID]{sop.RegistryPayload[sop.UUID]{
 		RegistryTable: nr.storeInfo.RegistryTable,
 		CacheDuration: nr.storeInfo.CacheConfig.RegistryCacheDuration,
 		IsCacheTTL:    nr.storeInfo.CacheConfig.IsRegistryCacheTTL,
 		IDs:           []sop.UUID{logicalID},
-	})
+	}})
 	if err != nil {
 		return nil, err
 	}
@@ -190,14 +190,14 @@ func (nr *nodeRepository) remove(nodeID sop.UUID) {
 	// Code should not reach this point, as B-tree will not issue a remove if node is not cached locally.
 }
 
-func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, error) {
+func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
-		return true, nil
+		return true, nil, nil
 	}
 	vids := convertToRegistryRequestPayload(nodes)
-	handles, err := nr.transaction.registry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]], len(nodes))
 	for i := range handles {
@@ -209,34 +209,34 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tu
 		for ii := range handles[i].IDs {
 			// Check if a non-empty root node was found, fail to cause "re-sync & merge".
 			if !handles[i].IDs[ii].LogicalID.IsNil() {
-				return false, nil
+				return false, nil, nil
 			}
 			handles[i].IDs[ii] = sop.NewHandle(vids[i].IDs[ii])
 			blobs[i].Blobs[ii].Key = handles[i].IDs[ii].GetActiveID()
 			ba, err := encoding.BlobMarshaler.Marshal(nodes[i].Second[ii])
 			if err != nil {
-				return false, err
+				return false, nil, err
 			}
 			blobs[i].Blobs[ii].Value = ba
 		}
 	}
 	// Persist the nodes blobs to blob store and redis cache.
-	if err := nr.transaction.blobStore.Add(ctx, blobs...); err != nil {
-		return false, err
+	if err := nr.transaction.blobStore.Add(ctx, blobs); err != nil {
+		return false, nil, err
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Second {
 			if err := nr.transaction.cache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetActiveID().String()),
 				nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
-				return false, err
+				return false, nil, err
 			}
 		}
 	}
 	// Add virtual IDs to registry.
-	if err := nr.transaction.registry.Add(ctx, handles...); err != nil {
-		return false, err
+	if err := nr.transaction.registry.Add(ctx, handles); err != nil {
+		return false, nil, err
 	}
-	return true, nil
+	return true, handles, nil
 }
 
 // Save to blob store, save node ID to the alternate(inactive) physical ID(see virtual ID).
@@ -246,7 +246,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 	}
 	// 1st pass, update the virtual ID registry ensuring the set of nodes are only being modified by us.
 	vids := convertToRegistryRequestPayload(nodes)
-	handles, err := nr.transaction.registry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids)
 	if err != nil {
 		return false, nil, err
 	}
@@ -290,13 +290,13 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 	}
 	log.Debug("outside commitUpdatedNodes forloop trying to AllocateID")
 
-	if err := nr.transaction.registry.UpdateNoLocks(ctx, handles...); err != nil {
+	if err := nr.transaction.registry.UpdateNoLocks(ctx, handles); err != nil {
 		log.Debug(fmt.Sprintf("failed registry.Update, details: %v", err))
 		return false, nil, err
 	}
 
 	// 2nd pass, persist the nodes blobs to blob store and redis cache.
-	if err := nr.transaction.blobStore.Add(ctx, blobs...); err != nil {
+	if err := nr.transaction.blobStore.Add(ctx, blobs); err != nil {
 		log.Debug(fmt.Sprintf("failed blobStore.Add, details: %v", err))
 		return false, nil, err
 	}
@@ -318,7 +318,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Tu
 		return true, nil, nil
 	}
 	vids := convertToRegistryRequestPayload(nodes)
-	handles, err := nr.transaction.registry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids)
 	if err != nil {
 		return false, nil, err
 	}
@@ -336,13 +336,13 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Tu
 		}
 	}
 	// Persist the handles changes.
-	if err := nr.transaction.registry.UpdateNoLocks(ctx, handles...); err != nil {
+	if err := nr.transaction.registry.UpdateNoLocks(ctx, handles); err != nil {
 		return false, nil, err
 	}
 	return true, handles, nil
 }
 
-func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) error {
+func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) ([]sop.RegistryPayload[sop.Handle], error) {
 	/* UUID to Virtual ID story:
 	   - (on commit) New(added) nodes will have their IDs converted to virtual ID with empty
 	     phys IDs(or same ID with active & virtual ID).
@@ -351,7 +351,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tupl
 	   - On finalization of commit, inactive will be switched to active (node) IDs.
 	*/
 	if len(nodes) == 0 {
-		return nil
+		return nil, nil
 	}
 	handles := make([]sop.RegistryPayload[sop.Handle], len(nodes))
 	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]], len(nodes))
@@ -370,25 +370,25 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tupl
 			blobs[i].Blobs[ii].Key = metaData.GetID()
 			ba, err := encoding.BlobMarshaler.Marshal(nodes[i].Second[ii])
 			if err != nil {
-				return err
+				return nil, err
 			}
 			blobs[i].Blobs[ii].Value = ba
 			handles[i].IDs[ii] = h
 			// Add node to Redis cache.
 			if err := nr.transaction.cache.SetStruct(ctx, nr.formatKey(metaData.GetID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
 	// Register virtual IDs(a.k.a. handles).
-	if err := nr.transaction.registry.Add(ctx, handles...); err != nil {
-		return err
+	if err := nr.transaction.registry.Add(ctx, handles); err != nil {
+		return nil, err
 	}
 	// Add nodes to blob store.
-	if err := nr.transaction.blobStore.Add(ctx, blobs...); err != nil {
-		return err
+	if err := nr.transaction.blobStore.Add(ctx, blobs); err != nil {
+		return nil, err
 	}
-	return nil
+	return handles, nil
 }
 
 func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, error) {
@@ -397,7 +397,7 @@ func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop
 	}
 	// Check if the Items read for each fetchedNode are intact.
 	vids := convertToRegistryRequestPayload(nodes)
-	handles, err := nr.transaction.registry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids)
 	if err != nil {
 		return false, err
 	}
@@ -427,13 +427,13 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData
 
 	var lastErr error
 	// Undo on blob store & redis.
-	if err := nr.transaction.blobStore.Remove(ctx, bibs...); err != nil {
+	if err := nr.transaction.blobStore.Remove(ctx, bibs); err != nil {
 		lastErr = fmt.Errorf("unable to undo new root nodes, %v, error: %v", bibs, err)
 		log.Error(lastErr.Error())
 	}
 	for i := range vids {
 		for ii := range vids[i].IDs {
-			if err := nr.transaction.cache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].String())); err != nil && !nr.cache.KeyNotFound(err) {
+			if err := nr.transaction.cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil && !nr.cache.KeyNotFound(err) {
 				err = fmt.Errorf("unable to undo new root nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -444,7 +444,7 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData
 	}
 	// If we're able to commit roots in registry then they are "ours", we need to unregister.
 	if nr.transaction.logger.committedState > commitNewRootNodes {
-		if err := nr.transaction.registry.Remove(ctx, vids...); err != nil {
+		if err := nr.transaction.registry.Remove(ctx, vids); err != nil {
 			lastErr = fmt.Errorf("unable to undo new root nodes registration, %v, error: %v", vids, err)
 			log.Error(lastErr.Error())
 		}
@@ -462,19 +462,19 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData i
 		return nil
 	}
 	var lastErr error
-	if err := nr.transaction.blobStore.Remove(ctx, bibs...); err != nil {
+	if err := nr.transaction.blobStore.Remove(ctx, bibs); err != nil {
 		lastErr = fmt.Errorf("unable to undo added nodes, %v, error: %v", bibs, err)
 		log.Error(lastErr.Error())
 	}
 	// Unregister nodes IDs.
-	if err := nr.transaction.registry.Remove(ctx, vids...); err != nil {
+	if err := nr.transaction.registry.Remove(ctx, vids); err != nil {
 		lastErr = fmt.Errorf("unable to undo added nodes registration, %v, error: %v", vids, err)
 		log.Error(lastErr.Error())
 	}
 	// Remove nodes from Redis cache.
 	for i := range vids {
 		for ii := range vids[i].IDs {
-			if err := nr.transaction.cache.Delete(ctx, nr.formatKey(vids[i].IDs[ii].String())); err != nil && !nr.cache.KeyNotFound(err) {
+			if err := nr.transaction.cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil && !nr.cache.KeyNotFound(err) {
 				err = fmt.Errorf("unable to undo added nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -491,7 +491,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodesAreLock
 	if len(vids) == 0 {
 		return nil
 	}
-	handles, err := nr.transaction.registry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids)
 	if err != nil {
 		return err
 	}
@@ -510,18 +510,18 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodesAreLock
 	}
 	var lastErr error
 	// Undo the nodes blobs to blob store.
-	if err = nr.transaction.blobStore.Remove(ctx, blobsIDs...); err != nil {
+	if err = nr.transaction.blobStore.Remove(ctx, blobsIDs); err != nil {
 		lastErr = fmt.Errorf("unable to undo updated nodes, %v, error: %v", blobsIDs, err)
 		log.Error(lastErr.Error())
 	}
 	// Undo changes in virtual ID registry.
 	if nodesAreLocked {
-		if err = nr.transaction.registry.UpdateNoLocks(ctx, handles...); err != nil {
+		if err = nr.transaction.registry.UpdateNoLocks(ctx, handles); err != nil {
 			lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
 			log.Error(lastErr.Error())
 		}
 	} else {
-		if err = nr.transaction.registry.Update(ctx, false, handles...); err != nil {
+		if err = nr.transaction.registry.Update(ctx, false, handles); err != nil {
 			lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
 			log.Error(lastErr.Error())
 		}
@@ -529,7 +529,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodesAreLock
 	// Undo changes in redis.
 	for i := range blobsIDs {
 		for ii := range blobsIDs[i].Blobs {
-			if err = nr.transaction.cache.Delete(ctx, nr.formatKey(blobsIDs[i].Blobs[ii].String())); err != nil && !nr.cache.KeyNotFound(err) {
+			if err = nr.transaction.cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil && !nr.cache.KeyNotFound(err) {
 				err = fmt.Errorf("unable to undo updated nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -548,14 +548,14 @@ func (nr *nodeRepository) removeNodes(ctx context.Context, blobsIDs []sop.BlobsP
 	}
 	var lastErr error
 	// Undo the nodes blobs to blob store.
-	if err := nr.transaction.blobStore.Remove(ctx, blobsIDs...); err != nil {
+	if err := nr.transaction.blobStore.Remove(ctx, blobsIDs); err != nil {
 		lastErr = fmt.Errorf("unable to undo updated nodes, %v, error: %v", blobsIDs, err)
 		log.Error(lastErr.Error())
 	}
 	// Undo changes in redis.
 	for i := range blobsIDs {
 		for ii := range blobsIDs[i].Blobs {
-			if err := nr.transaction.cache.Delete(ctx, nr.formatKey(blobsIDs[i].Blobs[ii].String())); err != nil && !nr.cache.KeyNotFound(err) {
+			if err := nr.transaction.cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil && !nr.cache.KeyNotFound(err) {
 				err = fmt.Errorf("unable to undo updated nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -571,7 +571,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodesAreLock
 	if len(vids) == 0 {
 		return nil
 	}
-	handles, err := nr.transaction.registry.Get(ctx, vids...)
+	handles, err := nr.transaction.registry.Get(ctx, vids)
 	if err != nil {
 		err = fmt.Errorf("unable to fetch removed nodes from registry, %v, error: %v", vids, err)
 		log.Error(err.Error())
@@ -595,13 +595,13 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodesAreLock
 
 	// Persist the handles changes.
 	if nodesAreLocked {
-		if err := nr.transaction.registry.UpdateNoLocks(ctx, handlesForRollback...); err != nil {
+		if err := nr.transaction.registry.UpdateNoLocks(ctx, handlesForRollback); err != nil {
 			err = fmt.Errorf("unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
 			log.Error(err.Error())
 			return err
 		}
 	} else {
-		if err := nr.transaction.registry.Update(ctx, false, handlesForRollback...); err != nil {
+		if err := nr.transaction.registry.Update(ctx, false, handlesForRollback); err != nil {
 			err = fmt.Errorf("unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
 			log.Error(err.Error())
 			return err

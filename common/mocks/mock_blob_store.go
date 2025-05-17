@@ -24,7 +24,7 @@ func (b *mockBlobStore) GetOne(ctx context.Context, blobName string, blobID sop.
 	return nil, nil
 }
 
-func (b *mockBlobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+func (b *mockBlobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
 			ba := blob.Value
@@ -34,7 +34,7 @@ func (b *mockBlobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload
 	return nil
 }
 
-func (b *mockBlobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+func (b *mockBlobStore) Update(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
 			ba := blob.Value
@@ -44,7 +44,7 @@ func (b *mockBlobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayl
 	return nil
 }
 
-func (b *mockBlobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
+func (b *mockBlobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	for _, storeBlobIDs := range storesBlobsIDs {
 		for _, blobID := range storeBlobIDs.Blobs {
 			delete(b.lookup, blobID)

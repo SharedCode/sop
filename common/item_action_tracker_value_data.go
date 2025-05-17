@@ -29,7 +29,7 @@ func (t *itemActionTracker[TK, TV]) commitTrackedItemsValues(ctx context.Context
 		}
 	}
 	if len(itemsForAdd.Blobs) > 0 {
-		if err := t.blobStore.Add(ctx, itemsForAdd); err != nil {
+		if err := t.blobStore.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{itemsForAdd}); err != nil {
 			return err
 		}
 	}

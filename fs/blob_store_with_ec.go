@@ -180,11 +180,11 @@ func (b *blobStoreWithEC) getBaseFolderPathsAndErasureConfig(blobTable string) (
 	return baseFolderPathsAcrossDrives, erasure
 }
 
-func (b *blobStoreWithEC) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
-	return b.Add(ctx, storesblobs...)
+func (b *blobStoreWithEC) Update(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+	return b.Add(ctx, storesblobs)
 }
 
-func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)
 
@@ -242,7 +242,7 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs ...sop.BlobsPaylo
 	return tr.Wait()
 }
 
-func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
+func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)
 

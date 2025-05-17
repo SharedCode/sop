@@ -70,7 +70,7 @@ func (mb *manageBucket) removeContents(ctx context.Context, bucketName string) e
 			batch[i] = *contents[i].Key
 		}
 		// Delete the batch.
-		if res := bs.Remove(ctx, bucketName, batch...); res.Error != nil {
+		if res := bs.Remove(ctx, bucketName, batch); res.Error != nil {
 			return res.Error
 		}
 	}

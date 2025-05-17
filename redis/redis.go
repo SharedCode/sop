@@ -151,7 +151,7 @@ func (c client) GetStructEx(ctx context.Context, key string, target interface{},
 }
 
 // Delete executes the redis Del command
-func (c client) Delete(ctx context.Context, keys ...string) error {
+func (c client) Delete(ctx context.Context, keys []string) error {
 	if c.conn == nil {
 		return fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}

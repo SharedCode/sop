@@ -54,9 +54,9 @@ func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cac
 // Store list is not cached since adding/removing store(s) are rare events.
 func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
 	// 1. Lock Store List.
-	lk := sr.cache.CreateLockKeys(lockStoreListKey)
-	defer sr.cache.Unlock(ctx, lk...)
-	if ok, err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); !ok || err != nil {
+	lk := sr.cache.CreateLockKeys([]string{lockStoreListKey})
+	defer sr.cache.Unlock(ctx, lk)
+	if ok, err := sr.cache.Lock(ctx, lockStoreListDuration, lk); !ok || err != nil {
 		if err == nil {
 			err = fmt.Errorf("lock failed, key %s already locked by another", lockStoreListKey)
 		}
@@ -124,7 +124,7 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	// 8. Unlock Store List. The defer statement will unlock store list.
 }
 
-func (sr *StoreRepository) Update(ctx context.Context, stores ...sop.StoreInfo) error {
+func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) error {
 	// Sort the stores info so we can commit them in same sort order across transactions,
 	// thus, reduced chance of deadlock.
 	b3 := in_memory.NewBtree[string, sop.StoreInfo](true)
@@ -144,14 +144,14 @@ func (sr *StoreRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	}
 
 	// Create lock IDs that we can use to logically lock and prevent other updates.
-	lockKeys := sr.cache.CreateLockKeys(keys...)
+	lockKeys := sr.cache.CreateLockKeys(keys)
 
 	b := retry.NewFibonacci(1 * time.Second)
 
 	// Lock all keys.
 	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
 		// 15 minutes to lock, merge/update details then unlock.
-		if ok, err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys...); !ok || err != nil {
+		if ok, err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys); !ok || err != nil {
 			if err == nil {
 				err = fmt.Errorf("lock failed, key(s) already locked by another")
 			}
@@ -162,7 +162,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 	}); err != nil {
 		log.Warn(err.Error() + ", gave up")
 		// Unlock keys since we failed locking all of them.
-		sr.cache.Unlock(ctx, lockKeys...)
+		sr.cache.Unlock(ctx, lockKeys)
 		return err
 	}
 
@@ -202,7 +202,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores ...sop.StoreInfo) 
 
 	beforeUpdateStores := make([]sop.StoreInfo, 0, len(stores))
 	// Unlock all keys before going out of scope.
-	defer sr.cache.Unlock(ctx, lockKeys...)
+	defer sr.cache.Unlock(ctx, lockKeys)
 
 	for i := range stores {
 		sis, err := sr.GetWithTTL(ctx, stores[i].CacheConfig.IsStoreInfoCacheTTL, stores[i].CacheConfig.StoreInfoCacheDuration, stores[i].Name)
@@ -320,9 +320,9 @@ func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 // Any deleted tables can't be rolled back. This is equivalent to DDL SQL script, which we
 // don't do part of a transaction.
 func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) error {
-	lk := sr.cache.CreateLockKeys(lockStoreListKey)
-	defer sr.cache.Unlock(ctx, lk...)
-	if ok, err := sr.cache.Lock(ctx, lockStoreListDuration, lk...); !ok || err != nil {
+	lk := sr.cache.CreateLockKeys([]string{lockStoreListKey})
+	defer sr.cache.Unlock(ctx, lk)
+	if ok, err := sr.cache.Lock(ctx, lockStoreListDuration, lk); !ok || err != nil {
 		if err == nil {
 			err = fmt.Errorf("lock failed, key %s already locked by another", lockStoreListKey)
 		}
@@ -348,7 +348,7 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 		}
 
 		// Tolerate Redis cache failure.
-		if err := sr.cache.Delete(ctx, storeName); err != nil && !sr.cache.KeyNotFound(err) {
+		if err := sr.cache.Delete(ctx, []string{storeName}); err != nil && !sr.cache.KeyNotFound(err) {
 			log.Warn(fmt.Sprintf("StoreRepository Remove (redis Delete) failed, details: %v", err))
 		}
 		// Delete store folder (contains blobs, store config & registry data files).
@@ -375,6 +375,13 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 	}
 
 	return nil
+}
+
+// Implement to write to do the replication of data to passive target paths.
+// This will be invoked after the transaction got committed to allow the registry to
+// copy the files or portion of the files that were updated with during the transaction session.
+func (sr *StoreRepository) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) {
+	// TODO:
 }
 
 // Returns the stores' base folder path.

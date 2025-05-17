@@ -41,7 +41,7 @@ func (r registryOnDisk) Close() error {
 	return r.hashmap.close()
 }
 
-func (r registryOnDisk) Add(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
+func (r registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		for _, h := range sh.IDs {
 			if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
@@ -56,7 +56,7 @@ func (r registryOnDisk) Add(ctx context.Context, storesHandles ...sop.RegistryPa
 	return nil
 }
 
-func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
+func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if len(storesHandles) == 0 {
 		return nil
 	}
@@ -70,22 +70,22 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 				// 1. lock the handle to check version of.
 				// Attempt to lock in Redis the registry object, if we can't attain a lock, it means there is another transaction elsewhere
 				// that already attained a lock, thus, we can cause rollback of this transaction due to conflict).
-				lk := r.cache.CreateLockKeys(h.LogicalID.String())
-				if ok, err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
+				lk := r.cache.CreateLockKeys([]string{h.LogicalID.String()})
+				if ok, err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
 					if err == nil {
 						err = &sop.UpdateAllOrNothingError{
 							Err: fmt.Errorf("lock allOrNothing failed, key %v is already locked by another", lk[0].Key),
 						}
 					}
 					// Unlock the object Keys before return.
-					r.cache.Unlock(ctx, handleKeys...)
+					r.cache.Unlock(ctx, handleKeys)
 					return err
 				}
 				handleKeys = append(handleKeys, lk[0])
 
 				// 2. Check the Handle if it got changed.
 				if _, err := r.isIntact(ctx, h); err != nil {
-					r.cache.Unlock(ctx, handleKeys...)
+					r.cache.Unlock(ctx, handleKeys)
 					return err
 				}
 			}
@@ -97,21 +97,21 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 		}
 
 		// Check the locks to cater for potential race condition.
-		if ok, err := r.cache.IsLocked(ctx, handleKeys...); !ok || err != nil {
+		if ok, err := r.cache.IsLocked(ctx, handleKeys); !ok || err != nil {
 			if err == nil {
 				err = &sop.UpdateAllOrNothingError{
 					Err: fmt.Errorf("isLocked allOrNothing failed, key(s) locked by another"),
 				}
 			}
 			// Unlock the object Keys before return.
-			r.cache.Unlock(ctx, handleKeys...)
+			r.cache.Unlock(ctx, handleKeys)
 			return err
 		}
 
 		// Execute the batch set, all or nothing.
 		if err := r.hashmap.set(ctx, true, batch...); err != nil {
 			// Unlock the object Keys before return.
-			r.cache.Unlock(ctx, handleKeys...)
+			r.cache.Unlock(ctx, handleKeys)
 			// Failed update all, thus, return err to cause rollback.
 			return err
 		}
@@ -127,14 +127,14 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 		}
 
 		// Unlock the object Keys before return.
-		r.cache.Unlock(ctx, handleKeys...)
+		r.cache.Unlock(ctx, handleKeys)
 	} else {
 		for _, sh := range storesHandles {
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
 				// Update registry record.
-				lk := r.cache.CreateLockKeys(h.LogicalID.String())
-				if ok, err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk[0]); !ok || err != nil {
+				lk := r.cache.CreateLockKeys([]string{h.LogicalID.String()})
+				if ok, err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
 					if err == nil {
 						err = &sop.UpdateAllOrNothingError{
 							Err: fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key),
@@ -144,7 +144,7 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 				}
 				if err := r.hashmap.set(ctx, false, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
 					// Unlock the object Keys before return.
-					r.cache.Unlock(ctx, lk[0])
+					r.cache.Unlock(ctx, lk)
 					return err
 				}
 				// Tolerate Redis cache failure.
@@ -152,7 +152,7 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 					log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
 				}
 				// Unlock the object Keys.
-				if err := r.cache.Unlock(ctx, lk[0]); err != nil {
+				if err := r.cache.Unlock(ctx, lk); err != nil {
 					return err
 				}
 			}
@@ -161,7 +161,7 @@ func (r registryOnDisk) Update(ctx context.Context, allOrNothing bool, storesHan
 	return nil
 }
 
-func (r registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles ...sop.RegistryPayload[sop.Handle]) error {
+func (r registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if len(storesHandles) == 0 {
 		return nil
 	}
@@ -180,7 +180,7 @@ func (r registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles ...sop.
 	return nil
 }
 
-func (r registryOnDisk) Get(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
+func (r registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	storesHandles := make([]sop.RegistryPayload[sop.Handle], 0, len(storesLids))
 	for _, storeLids := range storesLids {
 		handles := make([]sop.Handle, 0, len(storeLids.IDs))
@@ -236,12 +236,12 @@ func (r registryOnDisk) Get(ctx context.Context, storesLids ...sop.RegistryPaylo
 	}
 	return storesHandles, nil
 }
-func (r registryOnDisk) Remove(ctx context.Context, storesLids ...sop.RegistryPayload[sop.UUID]) error {
+func (r registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
 	for _, storeLids := range storesLids {
 		// Flush out the failing records from cache.
 		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
 			for _, id := range storeLids.IDs {
-				if err := r.cache.Delete(ctx, id.String()); err != nil && !r.cache.KeyNotFound(err) {
+				if err := r.cache.Delete(ctx, []string{id.String()}); err != nil && !r.cache.KeyNotFound(err) {
 					log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
 				}
 			}
@@ -253,6 +253,10 @@ func (r registryOnDisk) Remove(ctx context.Context, storesLids ...sop.RegistryPa
 		deleteFromCache(storeLids)
 	}
 	return nil
+}
+
+func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
+	// TODO:
 }
 
 func (r registryOnDisk) isIntact(ctx context.Context, h sop.Handle) (bool, error) {

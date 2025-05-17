@@ -38,7 +38,7 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobID sop.UUI
 }
 
 // Add blob(s) to the Blob store.
-func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+func (b *blobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -60,7 +60,7 @@ func (b *blobStore) Add(ctx context.Context, storesblobs ...sop.BlobsPayload[sop
 }
 
 // Update blob(s) in the Blob store.
-func (b *blobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+func (b *blobStore) Update(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
@@ -81,7 +81,7 @@ func (b *blobStore) Update(ctx context.Context, storesblobs ...sop.BlobsPayload[
 }
 
 // Remove will delete(non-logged) node records from different Blob stores(node tables).
-func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs ...sop.BlobsPayload[sop.UUID]) error {
+func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
