@@ -200,22 +200,36 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 	// Force tracker to treat passive as active folder so replication can write to the passive destinations.
 	r.replicationTracker.isFirstFolderActive = !af
 	rm := newRegistryMap(true, r.hashmap.hashmap.hashModValue, r.replicationTracker, r.cache)
-	r.replicate(ctx, rm, newRootNodesHandles)
-	r.replicate(ctx, rm, addedNodesHandles)
-	r.replicate(ctx, rm, updatedNodesHandles)
-	r.replicateRemove(ctx, rm, removedNodesHandles)
+
+	for i := range newRootNodesHandles {
+		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: newRootNodesHandles[i].RegistryTable, 
+			Second:  newRootNodesHandles[i].IDs}); err != nil {
+			log.Error(fmt.Sprintf("error replicating new root nodes, details: %v", err))
+		}
+	}
+	for i := range addedNodesHandles {
+		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: addedNodesHandles[i].RegistryTable, 
+			Second: addedNodesHandles[i].IDs}); err != nil {
+			log.Error(fmt.Sprintf("error replicating new nodes, details: %v", err))
+		}
+	}
+	for i := range updatedNodesHandles {
+		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: updatedNodesHandles[i].RegistryTable, 
+			Second: updatedNodesHandles[i].IDs}); err != nil {
+			log.Error(fmt.Sprintf("error replicating updated nodes, details: %v", err))
+		}
+	}
+
+	for i := range removedNodesHandles {
+		
+		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: removedNodesHandles[i].RegistryTable, 
+			Second: getIDs(removedNodesHandles[i].IDs)}); err != nil {
+			log.Error(fmt.Sprintf("error replicating removed nodes, details: %v", err))
+		}
+	}
+
 	rm.close()
 
 	// Restore to the proper active destination(s).
 	r.replicationTracker.isFirstFolderActive = af
-}
-
-func (r *registryOnDisk) replicate(ctx context.Context, rm *registryMap, nodesHandles []sop.RegistryPayload[sop.Handle]) {
-	// for i := range nodesHandles {
-	// 	rm.add()
-	// 	rm.set(ctx, )
-	// }
-}
-func (r *registryOnDisk) replicateRemove(ctx context.Context, rm *registryMap, nodesHandles []sop.RegistryPayload[sop.Handle]) {
-
 }
