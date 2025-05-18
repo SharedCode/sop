@@ -188,6 +188,10 @@ func (r registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPay
 func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles,
 	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
 
+	if !r.replicationTracker.replicate {
+		return
+	}
+
 	// Open the hashmaps on the passive destination(s).
 	// Write the nodes' handle(s) on each.
 	// Close the hashmaps files.
