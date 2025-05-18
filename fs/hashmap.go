@@ -48,9 +48,7 @@ const (
 	lockFileRegionKeyPrefix    = "infs"
 	lockFileRegionDuration     = time.Duration(5 * time.Minute)
 	idNotFoundErr              = "unable to find the item with id"
-)
 
-const (
 	// 250, should generate 1MB file segment. Formula: 250 X 4096 = 1MB
 	// Given a 50 slot size per node, should be able to manage 825,000 B-Tree items (key/value pairs).
 	//
@@ -63,7 +61,7 @@ const (
 )
 
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
-func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache, useCacheForFileRegionLocks bool) *hashmap {
+func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache) *hashmap {
 	return &hashmap{
 		hashModValue:       hashModValue,
 		replicationTracker: replicationTracker,
@@ -94,7 +92,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 		}
 
 		segmentFilename := fmt.Sprintf("%s-%d.reg", filename, i)
-		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename))
+		fn := hm.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename))
 		if f, ok := hm.fileHandles[segmentFilename]; ok {
 			dio = f
 		} else {
@@ -222,7 +220,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 }
 
 // Fetch the Handle record with a given UUID (LogicalID) from a given file, without locking the file region it resides in.
-func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([]sop.Handle, error) {
+func (hm *hashmap) get(ctx context.Context, filename string, ids []sop.UUID) ([]sop.Handle, error) {
 	completedItems := make([]sop.Handle, 0, len(ids))
 	for _, id := range ids {
 		frd, err := hm.findOneFileRegion(ctx, false, filename, id)
@@ -248,7 +246,7 @@ func (hm *hashmap) get(ctx context.Context, filename string, ids ...sop.UUID) ([
 
 // Find the file region(s) that a set of UUIDs correlate to and return these region(s)' offsett/Handle if in case
 // useful to the caller.
-func (hm *hashmap) findFileRegion(ctx context.Context, filename string, ids ...sop.UUID) ([]fileRegionDetails, error) {
+func (hm *hashmap) findFileRegion(ctx context.Context, filename string, ids []sop.UUID) ([]fileRegionDetails, error) {
 	foundItems := make([]fileRegionDetails, 0, len(ids))
 	for _, id := range ids {
 		frd, err := hm.findOneFileRegion(ctx, true, filename, id)

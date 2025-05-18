@@ -23,15 +23,6 @@ type RegistryPayload[T Handle | UUID] struct {
 	IDs []T
 }
 
-// UpdateAllOrNothingError is a special error type that will allow caller to handle it differently than normal errors.
-type UpdateAllOrNothingError struct {
-	Err error
-}
-
-func (r *UpdateAllOrNothingError) Error() string {
-	return r.Err.Error()
-}
-
 // Virtual ID registry is essential in our support for all or nothing (sub)feature,
 // which is essential for fault tolerance.
 //
@@ -41,11 +32,9 @@ type Registry interface {
 	Get(context.Context, []RegistryPayload[UUID]) ([]RegistryPayload[Handle], error)
 	// Add will insert handles to registry table(s).
 	Add(context.Context, []RegistryPayload[Handle]) error
-	// Update will update handles potentially spanning across registry table(s).
-	// Set allOrNothing to true if Update operation is crucial for data consistency and
-	// wanting to do an all or nothing update for the entire batch of handles.
-	// False is recommended if such consistency is not significant.
-	Update(ctx context.Context, allOrNothing bool, handles []RegistryPayload[Handle]) error
+	// Update will update handles potentially spanning across registry table(s). Will issue a cache lock call
+	// for each handle to be updated.
+	Update(ctx context.Context, handles []RegistryPayload[Handle]) error
 	// Update for use in an active transaction where the registry handles for update were
 	// all pre-locked (& post call unlocked) by the transaction manager.
 	UpdateNoLocks(ctx context.Context, storesHandles []RegistryPayload[Handle]) error
@@ -89,15 +78,6 @@ type BlobsPayload[T UUID | KeyValuePair[UUID, []byte]] struct {
 	Blobs []T
 }
 
-// Returns the total number of UUIDs given a set of blobs (ID) payload.
-func GetBlobPayloadCount[T UUID](payloads []BlobsPayload[T]) int {
-	total := 0
-	for _, p := range payloads {
-		total = total + len(p.Blobs)
-	}
-	return total
-}
-
 // Transaction Log specifies the API(methods) needed to implement logging for the transaction.
 type TransactionLog interface {
 	// Add a transaction log.
@@ -139,7 +119,7 @@ type StoreRepository interface {
 
 	// Update store info. Update should also merge the Count of items between the incoming store info
 	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
-	Update(context.Context, []StoreInfo) error
+	Update(context.Context, []StoreInfo) ([]StoreInfo, error)
 	// Implement to write to do the replication of data to passive target paths.
 	// This will be invoked after the transaction got committed to allow the registry to
 	// copy the files or portion of the files that were updated during the transaction.

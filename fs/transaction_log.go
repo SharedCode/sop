@@ -157,7 +157,7 @@ func (tl *transactionLog) getOne() (string, sop.UUID, error) {
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 	cappedHour := mh.Add(-time.Duration(time.Duration(ageLimit) * time.Minute))
 
-	files, err := getFilesSortedByModifiedTime(tl.replicationTracker.GetActiveBaseFolder())
+	files, err := getFilesSortedByModifiedTime(tl.replicationTracker.getActiveBaseFolder())
 	if err != nil {
 		return "", sop.NilUUID, err
 	}
@@ -215,7 +215,7 @@ func (tl *transactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, 
 }
 
 func (tl *transactionLog) format(tid sop.UUID) string {
-	return tl.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s.%s", tid.String(), logFileSuffix))
+	return tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s.%s", tid.String(), logFileSuffix))
 }
 
 // Directory files' reader.

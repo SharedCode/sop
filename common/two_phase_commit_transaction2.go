@@ -94,7 +94,7 @@ func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 
 	if t.logger.committedState > commitStoreInfo {
 		rollbackStoresInfo := t.getRollbackStoresInfo()
-		if err := t.storeRepository.Update(ctx, rollbackStoresInfo); err != nil {
+		if _, err := t.storeRepository.Update(ctx, rollbackStoresInfo); err != nil {
 			lastErr = err
 		}
 	}
@@ -311,7 +311,7 @@ func (t *Transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []int
 	return storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes
 }
 
-func (t *Transaction) commitStores(ctx context.Context) error {
+func (t *Transaction) commitStores(ctx context.Context) ([]sop.StoreInfo, error) {
 	stores := t.getCommitStoresInfo()
 	return t.storeRepository.Update(ctx, stores)
 }
@@ -385,7 +385,7 @@ func (t *Transaction) deleteObsoleteEntries(ctx context.Context,
 	var lastErr error
 	if len(unusedNodeIDs) > 0 {
 		// Delete from Redis & BlobStore the unused/inactive nodes.
-		deletedKeys := make([]string, sop.GetBlobPayloadCount(unusedNodeIDs))
+		deletedKeys := make([]string, getBlobPayloadCount(unusedNodeIDs))
 		ik := 0
 		for i := range unusedNodeIDs {
 			for ii := range unusedNodeIDs[i].Blobs {
@@ -509,4 +509,13 @@ func (t *Transaction) onIdle(ctx context.Context) {
 			t.logger.processExpiredTransactionLogs(ctx, t)
 		}
 	}
+}
+
+// Returns the total number of UUIDs given a set of blobs (ID) payload.
+func getBlobPayloadCount[T sop.UUID](payloads []sop.BlobsPayload[T]) int {
+	total := 0
+	for _, p := range payloads {
+		total = total + len(p.Blobs)
+	}
+	return total
 }

@@ -27,7 +27,7 @@ func (sr *mockStoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo)
 	return nil
 }
 
-func (sr *mockStoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) error {
+func (sr *mockStoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) ([]sop.StoreInfo, error) {
 	for _, store := range stores {
 		cs := sr.lookup[store.Name]
 		// Merge or apply the "count delta".
@@ -35,7 +35,7 @@ func (sr *mockStoreRepository) Update(ctx context.Context, stores []sop.StoreInf
 		store.CountDelta = 0
 		sr.lookup[store.Name] = store
 	}
-	return nil
+	return nil, nil
 }
 func (sr *mockStoreRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
 	return sr.GetWithTTL(ctx, false, 0, names...)

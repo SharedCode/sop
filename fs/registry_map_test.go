@@ -27,7 +27,7 @@ func TestRegistryMapSet(t *testing.T) {
 
 	h := sop.NewHandle(uuid)
 
-	if err := r.set(ctx, true, sop.Tuple[string, []sop.Handle]{
+	if err := r.set(ctx, sop.Tuple[string, []sop.Handle]{
 		First:  "regtest",
 		Second: []sop.Handle{h},
 	}); err != nil {
@@ -86,7 +86,7 @@ func TestRegistryMapFailedSet(t *testing.T) {
 		t.Error(err.Error())
 	}
 
-	if err := r.set(ctx, false, sop.Tuple[string, []sop.Handle]{
+	if err := r.set(ctx, sop.Tuple[string, []sop.Handle]{
 		First:  "regtest",
 		Second: []sop.Handle{h},
 	}); err == nil {

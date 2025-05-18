@@ -521,7 +521,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodesAreLock
 			log.Error(lastErr.Error())
 		}
 	} else {
-		if err = nr.transaction.registry.Update(ctx, false, handles); err != nil {
+		if err = nr.transaction.registry.Update(ctx, handles); err != nil {
 			lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
 			log.Error(lastErr.Error())
 		}
@@ -601,7 +601,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodesAreLock
 			return err
 		}
 	} else {
-		if err := nr.transaction.registry.Update(ctx, false, handlesForRollback); err != nil {
+		if err := nr.transaction.registry.Update(ctx, handlesForRollback); err != nil {
 			err = fmt.Errorf("unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
 			log.Error(err.Error())
 			return err
