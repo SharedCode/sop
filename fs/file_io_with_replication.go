@@ -1,8 +1,9 @@
 package fs
 
 import (
-	"github.com/SharedCode/sop"
 	log "log/slog"
+
+	"github.com/SharedCode/sop"
 )
 
 type fileIO struct {
@@ -22,42 +23,42 @@ func newFileIOWithReplication(replicationTracker *replicationTracker, manageStor
 }
 
 func (fio *fileIO) exists(targetFilename string) bool {
-	filename := fio.replicationTracker.formatActiveFolderFilename(targetFilename)
+	filename := fio.replicationTracker.formatActiveFolderEntity(targetFilename)
 	return fio.fio.Exists(filename)
 }
 
 func (fio *fileIO) write(targetFilename string, contents []byte) error {
-	filename := fio.replicationTracker.formatActiveFolderFilename(targetFilename)	
+	filename := fio.replicationTracker.formatActiveFolderEntity(targetFilename)
 	err := fio.fio.WriteFile(filename, contents, permission)
 	fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
 		First: 1,
 		Second: sop.Tuple[string, []byte]{
-			First: targetFilename,
+			First:  targetFilename,
 			Second: contents,
-	}})
+		}})
 	return err
 }
 
 func (fio *fileIO) read(sourceFilename string) ([]byte, error) {
-	filename := fio.replicationTracker.formatActiveFolderFilename(sourceFilename)
+	filename := fio.replicationTracker.formatActiveFolderEntity(sourceFilename)
 	return fio.fio.ReadFile(filename)
 }
 
 func (fio *fileIO) createStore(folderName string) error {
-	filename := fio.replicationTracker.formatActiveFolderFilename(folderName)
-	err := fio.fio.MkdirAll(filename, permission)
+	folderPath := fio.replicationTracker.formatActiveFolderEntity(folderName)
+	err := fio.fio.MkdirAll(folderPath, permission)
 	fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
-		First: 2,
+		First:  2,
 		Second: folderName,
 	})
 	return err
 }
 
 func (fio *fileIO) removeStore(folderName string) error {
-	filename := fio.replicationTracker.formatActiveFolderFilename(folderName)
+	filename := fio.replicationTracker.formatActiveFolderEntity(folderName)
 	err := fio.fio.RemoveAll(filename)
 	fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
-		First: 3,
+		First:  3,
 		Second: folderName,
 	})
 	return err
@@ -72,21 +73,25 @@ func (fio *fileIO) replicate() error {
 		switch fio.actionsDone[i].First {
 		case 1:
 			// write file.
-			payload := fio.actionsDone[i].Second.(sop.Tuple[string,[]byte])
-			targetFilename := fio.replicationTracker.formatPassiveFolderFilename(payload.First)
-			return fio.fio.WriteFile(targetFilename, payload.Second, permission)
-
+			payload := fio.actionsDone[i].Second.(sop.Tuple[string, []byte])
+			targetFilename := fio.replicationTracker.formatPassiveFolderEntity(payload.First)
+			if err := fio.fio.WriteFile(targetFilename, payload.Second, permission); err != nil {
+				return err
+			}
 		case 2:
 			// create store
 			payload := fio.actionsDone[i].Second.(string)
-			targetFolder := fio.replicationTracker.formatPassiveFolderFilename(payload)
-			return fio.fio.MkdirAll(targetFolder, permission)
-
+			targetFolder := fio.replicationTracker.formatPassiveFolderEntity(payload)
+			if err := fio.fio.MkdirAll(targetFolder, permission); err != nil {
+				return err
+			}
 		case 3:
 			// remove store
 			payload := fio.actionsDone[i].Second.(string)
-			targetFolder := fio.replicationTracker.formatPassiveFolderFilename(payload)
-			return fio.fio.RemoveAll(targetFolder)
+			targetFolder := fio.replicationTracker.formatPassiveFolderEntity(payload)
+			if err := fio.fio.RemoveAll(targetFolder); err != nil {
+				return err
+			}
 
 		default:
 			log.Error("unsupported action type 3")

@@ -44,17 +44,17 @@ func (r *replicationTracker) getPassiveBaseFolder() string {
 	return r.storesBaseFolders[0]
 }
 
-func (r *replicationTracker) formatActiveFolderFilename(filename string) string {
+func (r *replicationTracker) formatActiveFolderEntity(entityName string) string {
 	bf := r.getActiveBaseFolder()
 
 	if strings.HasSuffix(bf, string(os.PathSeparator)) {
-		return fmt.Sprintf("%s%s", bf, filename)
+		return fmt.Sprintf("%s%s", bf, entityName)
 	} else {
-		return fmt.Sprintf("%s%c%s", bf, os.PathSeparator, filename)
+		return fmt.Sprintf("%s%c%s", bf, os.PathSeparator, entityName)
 	}
 }
 
-func (r *replicationTracker) formatPassiveFolderFilename(filename string) string {
+func (r *replicationTracker) formatPassiveFolderEntity(filename string) string {
 	bf := r.getPassiveBaseFolder()
 
 	if strings.HasSuffix(bf, string(os.PathSeparator)) {

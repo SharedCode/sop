@@ -34,6 +34,7 @@ type fileRegionDetails struct {
 	handleInBlockOffset int64
 	handle              sop.Handle
 }
+
 func (fr *fileRegionDetails) getOffset() int64 {
 	return fr.blockOffset + fr.handleInBlockOffset
 }
@@ -91,7 +92,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 		}
 
 		segmentFilename := fmt.Sprintf("%s-%d.reg", filename, i)
-		fn := hm.replicationTracker.formatActiveFolderFilename(fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename))
+		fn := hm.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename))
 		if f, ok := hm.fileHandles[segmentFilename]; ok {
 			dio = f
 		} else {

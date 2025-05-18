@@ -90,7 +90,15 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 		i++
 	}
 	ba, _ := encoding.Marshal(storeList)
-	storeWriter.write(storeListFilename, ba)
+	if sl == nil {
+		// Ensure the stores base folder is created.
+		if err := storeWriter.createStore(""); err != nil {
+			return err
+		}
+	}
+	if err := storeWriter.write(storeListFilename, ba); err != nil {
+		return err
+	}
 
 	// 5-6. Create folders and write store info to its tmp file, for each added item.
 	for _, store := range stores {
@@ -389,7 +397,7 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 		// When store is being written and it failed, we need to handle whether to turn off writing to the replication's passive destination
 		// because if will break synchronization from here on out, thus, better to just log then turn off replication altogether, until cleared
 		// to resume.
-		filename := sr.replicationTracker.formatPassiveFolderFilename(fmt.Sprintf("%c%s%c%s", os.PathSeparator, stores[i].Name, os.PathSeparator, storeInfoFilename))
+		filename := sr.replicationTracker.formatPassiveFolderEntity(fmt.Sprintf("%c%s%c%s", os.PathSeparator, stores[i].Name, os.PathSeparator, storeInfoFilename))
 		if err := sr.fileIO.WriteFile(filename, ba, permission); err != nil {
 			log.Error(fmt.Sprintf("storeRepository.Replicate failed, error writing store '%s' (passive), details: %v", filename, err))
 			return
