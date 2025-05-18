@@ -10,15 +10,17 @@ type fileIO struct {
 	manageStore        sop.ManageStore
 	replicationTracker *replicationTracker
 	fio                FileIO
+	trackActions bool
 	// 1 = write, 2 = createStore, 3 = removeStore
 	actionsDone []sop.Tuple[int, any]
 }
 
-func newFileIOWithReplication(replicationTracker *replicationTracker, manageStore sop.ManageStore) *fileIO {
+func newFileIOWithReplication(replicationTracker *replicationTracker, manageStore sop.ManageStore, trackActions bool) *fileIO {
 	return &fileIO{
 		manageStore:        manageStore,
 		replicationTracker: replicationTracker,
 		fio:                NewDefaultFileIO(nil),
+		trackActions: trackActions,
 	}
 }
 
@@ -30,6 +32,9 @@ func (fio *fileIO) exists(targetFilename string) bool {
 func (fio *fileIO) write(targetFilename string, contents []byte) error {
 	filename := fio.replicationTracker.formatActiveFolderEntity(targetFilename)
 	err := fio.fio.WriteFile(filename, contents, permission)
+	if !fio.trackActions {
+		return err
+	}
 	fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
 		First: 1,
 		Second: sop.Tuple[string, []byte]{
@@ -47,6 +52,9 @@ func (fio *fileIO) read(sourceFilename string) ([]byte, error) {
 func (fio *fileIO) createStore(folderName string) error {
 	folderPath := fio.replicationTracker.formatActiveFolderEntity(folderName)
 	err := fio.fio.MkdirAll(folderPath, permission)
+	if !fio.trackActions {
+		return err
+	}
 	fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
 		First:  2,
 		Second: folderName,
@@ -57,6 +65,9 @@ func (fio *fileIO) createStore(folderName string) error {
 func (fio *fileIO) removeStore(folderName string) error {
 	filename := fio.replicationTracker.formatActiveFolderEntity(folderName)
 	err := fio.fio.RemoveAll(filename)
+	if !fio.trackActions {
+		return err
+	}
 	fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
 		First:  3,
 		Second: folderName,
@@ -98,5 +109,6 @@ func (fio *fileIO) replicate() error {
 		}
 	}
 
+	fio.actionsDone = nil
 	return nil
 }

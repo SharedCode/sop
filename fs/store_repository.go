@@ -82,7 +82,7 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	}
 
 	// 4. Write Store List to tmp file.
-	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
+	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, true)
 	storeList := make([]string, len(storesLookup))
 	i := 0
 	for k := range storesLookup {
@@ -174,7 +174,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 		return nil, err
 	}
 
-	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
+	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
 
 	undo := func(endIndex int, original []sop.StoreInfo) {
 		// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
@@ -251,7 +251,7 @@ func (sr *StoreRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 }
 
 func (sr *StoreRepository) GetAll(ctx context.Context) ([]string, error) {
-	fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
+	fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
 
 	// Just return nil to denote no store yet on store folder.
 	if !fio.exists(storeListFilename) {
@@ -291,7 +291,7 @@ func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 		return stores, nil
 	}
 
-	sio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
+	sio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
 	for _, s := range storesNotInCache {
 
 		fn := fmt.Sprintf("%s%c%s", s, os.PathSeparator, storeInfoFilename)
@@ -343,7 +343,7 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 	}
 
 	// Remove store(s) that exists.
-	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore)
+	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, true)
 	for _, storeName := range storeNames {
 		if _, ok := storesLookup[storeName]; !ok {
 			log.Warn(fmt.Sprintf("can't remove store %s, there is no item with such name", storeName))
@@ -397,7 +397,7 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 		// When store is being written and it failed, we need to handle whether to turn off writing to the replication's passive destination
 		// because if will break synchronization from here on out, thus, better to just log then turn off replication altogether, until cleared
 		// to resume.
-		filename := sr.replicationTracker.formatPassiveFolderEntity(fmt.Sprintf("%c%s%c%s", os.PathSeparator, stores[i].Name, os.PathSeparator, storeInfoFilename))
+		filename := sr.replicationTracker.formatPassiveFolderEntity(fmt.Sprintf("%s%c%s", stores[i].Name, os.PathSeparator, storeInfoFilename))
 		if err := sr.fileIO.WriteFile(filename, ba, permission); err != nil {
 			log.Error(fmt.Sprintf("storeRepository.Replicate failed, error writing store '%s' (passive), details: %v", filename, err))
 			return
