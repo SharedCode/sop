@@ -3,6 +3,8 @@ Scaleable Objects Persistence (SOP) Framework - Golang V2
 Code Coverage: https://app.codecov.io/github/SharedCode/sop
 
 ### High level feature usability articles about SOP:
+SOP's Swarm Computing Proposition: https://www.linkedin.com/pulse/geminis-analysis-sops-swarm-computing-gerardo-recinto-cqzqc
+
 Google Slides Presentation: https://docs.google.com/presentation/d/17BWiLXcz1fPGVtCkAwvE9wR0cDq_dJPjxKgzMcWKkp4/edit#slide=id.p
 
 SOP as AI database: https://www.linkedin.com/pulse/sop-ai-database-engine-gerardo-recinto-tzlbc/?trackingId=yRXnbOEGSvS2knwVOAyxCA%3D%3D
