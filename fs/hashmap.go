@@ -93,7 +93,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 
 		segmentFilename := fmt.Sprintf("%s-%d.reg", filename, i)
 		fn := hm.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename))
-		if f, ok := hm.fileHandles[segmentFilename]; ok {
+		if f, ok := hm.fileHandles[fn]; ok {
 			dio = f
 		} else {
 			dio = newDirectIO()
@@ -109,7 +109,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				frd, err := hm.setupNewFile(ctx, forWriting, fn, id, dio)
 				if dio.file != nil {
 					dio.filename = segmentFilename
-					hm.fileHandles[segmentFilename] = dio
+					hm.fileHandles[fn] = dio
 				}
 				return frd, err
 			} else {
@@ -122,7 +122,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				}
 				dio.filename = segmentFilename
 			}
-			hm.fileHandles[segmentFilename] = dio
+			hm.fileHandles[fn] = dio
 		}
 
 		// Read entire block for the ID hash mod, deserialize each Handle and check if anyone matches the one we are trying to find.
@@ -174,9 +174,6 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				result.blockOffset = blockOffset
 				result.handleInBlockOffset = handleInBlockOffset
 				result.dio = dio
-				if !forWriting {
-					return result, nil
-				}
 				return result, nil
 			}
 		}

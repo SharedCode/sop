@@ -54,7 +54,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatalf("%s", err.Error())
 	}
 	trans.Begin()
 
@@ -99,7 +99,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatalf("%s", err.Error())
 	}
 
 	trans2, _ := in_red_fs.NewTransaction(to)
@@ -141,7 +141,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatalf("%s", err.Error())
 	}
 
 	trans.Begin()
@@ -166,7 +166,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		}
 	}
 	if err := trans.Commit(ctx); err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 		t.FailNow()
 		return
 	}
@@ -174,13 +174,13 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
 	trans, err = in_red_fs.NewTransaction(to2)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 		t.FailNow()
 		return
 	}
 
 	if err := trans.Begin(); err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 		t.FailNow()
 		return
 	}

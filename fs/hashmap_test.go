@@ -18,10 +18,10 @@ const (
 // At 4, it should be able to fill 75%.
 
 func TestHashModDistribution(t *testing.T) {
-	hashTable := make([][handlesPerBlock * 3]sop.UUID, hashModValue)
+	hashTable := make([][handlesPerBlock]sop.UUID, hashModValue)
 	collisionCount := 0
 	fmt.Printf("Start %v", time.Now())
-	for i := 0; i < (hashModValue*handlesPerBlock*2)+2000000; i++ {
+	for i := 0; i < 12000; i++ {
 		// Split UUID into high & low int64 parts.
 		id := sop.NewUUID()
 		bytes := id[:]
@@ -73,7 +73,7 @@ func TestHashModDistribution(t *testing.T) {
 	fmt.Printf("End %v", time.Now())
 }
 
-func findItem(ht [][handlesPerBlock * 3]sop.UUID, id sop.UUID) bool {
+func findItem(ht [][handlesPerBlock]sop.UUID, id sop.UUID) bool {
 	bytes := id[:]
 	var high uint64
 	for i := 0; i < 8; i++ {

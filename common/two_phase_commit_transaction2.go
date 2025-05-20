@@ -249,8 +249,8 @@ func (t *Transaction) refetchAndMergeModifications(ctx context.Context) error {
 	return nil
 }
 
-// classifyModifiedNodes will classify modified Nodes into 3 tables & return them:
-// a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes.
+// classifyModifiedNodes will classify modified Nodes into 5 kinds & return them:
+// a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes, e. root Nodes.
 func (t *Transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []interface{}],
 	[]sop.Tuple[*sop.StoreInfo, []interface{}],
 	[]sop.Tuple[*sop.StoreInfo, []interface{}],

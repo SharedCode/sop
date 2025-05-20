@@ -2,6 +2,7 @@ package btree
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/SharedCode/sop"
@@ -12,7 +13,7 @@ type btreeWithTransaction[TK Comparable, TV any] struct {
 	btree       BtreeInterface[TK, TV]
 }
 
-const transHasNotBegunErrorMsg = "can't do operation on b-tree if transaction has not begun"
+var errTransHasNotBegunMsg = errors.New("can't do operation on b-tree if transaction has not begun")
 
 // Instantiate a B-Tree wrapper that enforces transaction session on each method(a.k.a. operation).
 func NewBtreeWithTransaction[TK Comparable, TV any](t sop.TwoPhaseCommitTransaction, btree BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
@@ -35,7 +36,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Count() int64 {
 // Add adds an item to the b-tree and does not check for duplicates.
 func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
@@ -53,7 +54,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value T
 // This is useful for cases one wants to add an item without creating a duplicate entry.
 func (b3 *btreeWithTransaction[TK, TV]) AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
@@ -69,7 +70,7 @@ func (b3 *btreeWithTransaction[TK, TV]) AddIfNotExist(ctx context.Context, key T
 // Upsert will add item if it does not exist or update it if it does.
 func (b3 *btreeWithTransaction[TK, TV]) Upsert(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
@@ -85,7 +86,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Upsert(ctx context.Context, key TK, valu
 // Update finds the item with key and update its value to the value argument.
 func (b3 *btreeWithTransaction[TK, TV]) Update(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
@@ -102,7 +103,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Update(ctx context.Context, key TK, valu
 // Key is read-only, thus, no argument for the key.
 func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
@@ -118,7 +119,7 @@ func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, v
 // Remove will find the item with a given key then remove that item.
 func (b3 *btreeWithTransaction[TK, TV]) Remove(ctx context.Context, key TK) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
@@ -134,7 +135,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Remove(ctx context.Context, key TK) (boo
 // RemoveCurrentItem will remove the current key/value pair from the store.
 func (b3 *btreeWithTransaction[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
 		b3.transaction.Rollback(ctx)
@@ -155,7 +156,7 @@ func (b3 *btreeWithTransaction[TK, TV]) RemoveCurrentItem(ctx context.Context) (
 func (b3 *btreeWithTransaction[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.btree.FindOne(ctx, key, firstItemWithKey)
 	if err != nil {
@@ -166,7 +167,7 @@ func (b3 *btreeWithTransaction[TK, TV]) FindOne(ctx context.Context, key TK, fir
 func (b3 *btreeWithTransaction[TK, TV]) FindOneWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.btree.FindOneWithID(ctx, key, id)
 	if err != nil {
@@ -189,7 +190,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValue(ctx context.Context) (TV
 	var zero TV
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx)
-		return zero, fmt.Errorf(transHasNotBegunErrorMsg)
+		return zero, errTransHasNotBegunMsg
 	}
 	v, err := b3.btree.GetCurrentValue(ctx)
 	if err != nil {
@@ -203,7 +204,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (Ite
 	var zero Item[TK, TV]
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx)
-		return zero, fmt.Errorf(transHasNotBegunErrorMsg)
+		return zero, errTransHasNotBegunMsg
 	}
 	r, err := b3.btree.GetCurrentItem(ctx)
 	if err != nil {
@@ -217,7 +218,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (Ite
 func (b3 *btreeWithTransaction[TK, TV]) First(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.btree.First(ctx)
 	if err != nil {
@@ -231,7 +232,7 @@ func (b3 *btreeWithTransaction[TK, TV]) First(ctx context.Context) (bool, error)
 func (b3 *btreeWithTransaction[TK, TV]) Last(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.btree.Last(ctx)
 	if err != nil {
@@ -245,7 +246,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Last(ctx context.Context) (bool, error) 
 func (b3 *btreeWithTransaction[TK, TV]) Next(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.btree.Next(ctx)
 	if err != nil {
@@ -259,7 +260,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Next(ctx context.Context) (bool, error) 
 func (b3 *btreeWithTransaction[TK, TV]) Previous(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx)
-		return false, fmt.Errorf(transHasNotBegunErrorMsg)
+		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.btree.Previous(ctx)
 	if err != nil {
