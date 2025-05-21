@@ -3,6 +3,7 @@ package fs
 import (
 	"context"
 	"fmt"
+	log "log/slog"
 
 	"github.com/SharedCode/sop"
 )
@@ -16,7 +17,6 @@ func newRegistryMap(readWrite bool, hashModValue int, replicationTracker *replic
 		hashmap: newHashmap(readWrite, hashModValue, replicationTracker, cache),
 	}
 }
-
 
 // Add a given set of Handle(s) record(s) on file(s) where they are supposed to get stored in.
 func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.Handle]) error {
@@ -34,6 +34,9 @@ func (rm registryMap) add(ctx context.Context, items ...sop.Tuple[string, []sop.
 			}
 
 			frd[0].handle = h
+
+			log.Debug(fmt.Sprintf("adding to file %s, sector offset %v, offset in block %v", frd[0].dio.filename, frd[0].blockOffset, frd[0].handleInBlockOffset))
+
 			if err := rm.hashmap.updateFileRegion(ctx, frd); err != nil {
 				return err
 			}
@@ -60,7 +63,10 @@ func (rm registryMap) set(ctx context.Context, items ...sop.Tuple[string, []sop.
 			// Update the handle with incoming.
 			frds[i].handle = item.Second[i]
 		}
+
 		// Do actual file region update.
+		log.Debug(fmt.Sprintf("updating file %s, sector offset %v, offset in block %v", frds[0].dio.filename, frds[0].blockOffset, frds[0].handleInBlockOffset))
+
 		if err := rm.hashmap.updateFileRegion(ctx, frds); err != nil {
 			return err
 		}

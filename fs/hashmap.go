@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	log "log/slog"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
@@ -86,12 +87,18 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 	for {
 		// Not found or there is no space left in the block, try (or create if writing) other file segments.
 		i++
+
 		// Stop the loop of we've just created a new file segment or reaching ridiculous file check.
 		if i > 1000 {
 			return result, fmt.Errorf("reached the maximum numer of segment files (1000), can't create another one")
 		}
 
 		segmentFilename := fmt.Sprintf("%s-%d.reg", filename, i)
+
+		if i > 1 {
+			log.Debug(fmt.Sprintf("checking segment file %s", segmentFilename))
+		}
+
 		fn := hm.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename))
 		if f, ok := hm.fileHandles[fn]; ok {
 			dio = f
@@ -182,7 +189,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 		var bao int64
 		result.dio = dio
 		result.blockOffset = blockOffset
-		for i := 0; i < handlesPerBlock; i++ {
+		for range handlesPerBlock {
 
 			// handleInBlockOffset had already been processed above and it's not it, skip it.
 			if bao == handleInBlockOffset {

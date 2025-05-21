@@ -57,7 +57,7 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(ctx context.Context, btre
 					node.ChildrenIDs = nil
 				}
 			}
-			btree.removeNode(node)
+			btree.removeNode(nc)
 			btree.saveNode(node)
 			return true, nil
 		}
