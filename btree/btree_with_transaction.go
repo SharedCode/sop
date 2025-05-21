@@ -8,7 +8,7 @@ import (
 	"github.com/SharedCode/sop"
 )
 
-type btreeWithTransaction[TK Comparable, TV any] struct {
+type btreeWithTransaction[TK Ordered, TV any] struct {
 	transaction sop.TwoPhaseCommitTransaction
 	btree       BtreeInterface[TK, TV]
 }
@@ -16,7 +16,7 @@ type btreeWithTransaction[TK Comparable, TV any] struct {
 var errTransHasNotBegunMsg = errors.New("can't do operation on b-tree if transaction has not begun")
 
 // Instantiate a B-Tree wrapper that enforces transaction session on each method(a.k.a. operation).
-func NewBtreeWithTransaction[TK Comparable, TV any](t sop.TwoPhaseCommitTransaction, btree BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
+func NewBtreeWithTransaction[TK Ordered, TV any](t sop.TwoPhaseCommitTransaction, btree BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
 	return &btreeWithTransaction[TK, TV]{
 		transaction: t,
 		btree:       btree,

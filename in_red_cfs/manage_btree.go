@@ -18,7 +18,7 @@ import (
 // If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
-func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if si.BlobStoreBaseFolderPath == "" {
 		return nil, fmt.Errorf("si.BlobStoreBaseFolderPath(\"\") needs to be a valid folder path")
 	}
@@ -26,14 +26,14 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 }
 
 // NewBtreeWithEC is geared for enforcing the Blobs base folder path to generate good folder path that works with Erasure Coding I/O.
-func NewBtreeWithEC[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func NewBtreeWithEC[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	// Force blob base folder path to be the name of the store so we generate good folder path.
 	si.BlobStoreBaseFolderPath = si.Name
 	return in_red_ck.NewBtree[TK, TV](ctx, si, t, comparer)
 }
 
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
-func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	return in_red_ck.OpenBtree[TK, TV](ctx, name, t, comparer)
 }
 
@@ -58,7 +58,7 @@ func NewStoreRepository() sop.StoreRepository {
 // blobs in File System.
 //
 // Specify your blobStoreBaseFolderPath to an appropriate folder path that will be the base folder of blob files.
-func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	if blobStoreBaseFolderPath == "" {
 		return nil, fmt.Errorf("blobStoreBaseFolderPath(\"\") needs to be a valid folder path")
 	}
@@ -66,6 +66,6 @@ func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string
 }
 
 // OpenStreamingDataStore is a convenience function to open an existing data store for use in "streaming data".
-func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+func OpenStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	return sd.OpenStreamingDataStore[TK](ctx, name, trans, comparer)
 }

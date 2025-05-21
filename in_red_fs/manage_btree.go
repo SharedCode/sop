@@ -36,7 +36,7 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 }
 
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
-func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	return common.OpenBtree[TK, TV](ctx, name, t, comparer)
 }
 
@@ -44,7 +44,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
-func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	si.DisableRegistryStoreFormatting = true
 	trans, _ := t.GetPhasedTransaction().(*common.Transaction)
 	sr := trans.GetStoreRepository().(*fs.StoreRepository)
@@ -54,7 +54,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 
 // NewBtreeWithReplication is geared for enforcing the Blobs base folder path to generate good folder path that works
 // with Erasure Coding I/O, a part of SOP's replication feature (for blobs replication).
-func NewBtreeWithReplication[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func NewBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	si.DisableRegistryStoreFormatting = true
 	si.DisableBlobStoreFormatting = true
 	return common.NewBtree[TK, TV](ctx, si, t, comparer)
@@ -63,7 +63,7 @@ func NewBtreeWithReplication[TK btree.Comparable, TV any](ctx context.Context, s
 // Streaming Data Store related.
 
 // NewStreamingDataStore is synonymous to NewStreamingDataStore but is geared for storing blobs in blob table in Cassandra.
-func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	return NewStreamingDataStoreExt[TK](ctx, name, trans, "", comparer)
 }
 
@@ -74,7 +74,7 @@ func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string
 //
 // This behaviour makes this store ideal for data management of huge blobs, like movies or huge data graphs.
 // Supports parameter for blobStoreBaseFolderPath which is useful in File System based blob storage.
-func NewStreamingDataStoreExt[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+func NewStreamingDataStoreExt[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	btree, err := NewBtree[sd.StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, blobStoreBaseFolderPath), trans, comparer)
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func NewStreamingDataStoreExt[TK btree.Comparable](ctx context.Context, name str
 }
 
 // Synonymous to NewStreamingDataStore but expects StoreOptions parameter.
-func NewStreamingDataStoreOptions[TK btree.Comparable](ctx context.Context, options sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+func NewStreamingDataStoreOptions[TK btree.Ordered](ctx context.Context, options sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	btree, err := NewBtree[sd.StreamingDataKey[TK], []byte](ctx, options, trans, comparer)
 	if err != nil {
 		return nil, err
@@ -96,7 +96,7 @@ func NewStreamingDataStoreOptions[TK btree.Comparable](ctx context.Context, opti
 }
 
 // OpenStreamingDataStore opens an existing data store for use in "streaming data".
-func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+func OpenStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	btree, err := OpenBtree[sd.StreamingDataKey[TK], []byte](ctx, name, trans, comparer)
 	if err != nil {
 		return nil, err

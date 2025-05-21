@@ -9,7 +9,7 @@ import (
 // NOTE: this is synonymous to the btree.BtreeInterface but with methods removed of error
 // in return. Because in-memory will not produce any error during access,
 // thus, it can be simplified so code will not need to bother with the 2nd (error) return.
-type BtreeInterface[TK btree.Comparable, TV any] struct {
+type BtreeInterface[TK btree.Ordered, TV any] struct {
 	btree *btree.Btree[TK, TV]
 }
 
@@ -18,7 +18,7 @@ const itemsPerNode = 8
 
 // NewBtree will create an in-memory B-Tree & its required data stores. You can use it to store
 // and access key/value pairs similar to a map but which, sorts items & allows "range queries".
-func NewBtree[TK btree.Comparable, TV any](isUnique bool) BtreeInterface[TK, TV] {
+func NewBtree[TK btree.Ordered, TV any](isUnique bool) BtreeInterface[TK, TV] {
 	s := sop.NewStoreInfo("", itemsPerNode, isUnique, true, true, "")
 	si := btree.StoreInterface[TK, TV]{
 		NodeRepository:    newNodeRepository[TK, TV](),

@@ -8,12 +8,12 @@ import (
 )
 
 // An Encoder writes JSON values to an output stream by delegating to JSON Encoder.
-type Encoder[TK btree.Comparable] struct {
+type Encoder[TK btree.Ordered] struct {
 	jsonEncoder *json.Encoder
 	w           *writer[TK]
 }
 
-func newEncoder[TK btree.Comparable](w *writer[TK]) *Encoder[TK] {
+func newEncoder[TK btree.Ordered](w *writer[TK]) *Encoder[TK] {
 	return &Encoder[TK]{
 		jsonEncoder: json.NewEncoder(w),
 		w:           w,

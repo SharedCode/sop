@@ -121,7 +121,7 @@ type StoreRepository interface {
 	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
 	Update(context.Context, []StoreInfo) ([]StoreInfo, error)
 	// Implement to write to do the replication of data to passive target paths.
-	// This will be invoked after the transaction got committed to allow the registry to
+	// This will be invoked after the transaction got committed to allow the StoreRepository to
 	// copy the files or portion of the files that were updated during the transaction.
 	Replicate(context.Context, []StoreInfo)
 }
@@ -155,13 +155,6 @@ type KeyValueStore[TK any, TV any] interface {
 	Update(context.Context, string, []KeyValuePair[TK, TV]) KeyValueStoreResponse[KeyValuePair[TK, TV]]
 	// Remove entry(ies) from the store given their names.
 	Remove(context.Context, string, []TK) KeyValueStoreResponse[TK]
-}
-
-// LockKey contain fields to allow locking and unlocking of a set of cache (e.g. - redis) keys.
-type LockKey struct {
-	Key         string
-	LockID      UUID
-	IsLockOwner bool
 }
 
 // Cache interface specifies the methods implemented for out of memory caching, e.g. - Redis based.
@@ -207,4 +200,11 @@ type Cache interface {
 type CloseableCache interface {
 	Cache
 	io.Closer
+}
+
+// LockKey contain fields to allow locking and unlocking of a set of cache keys.
+type LockKey struct {
+	Key         string
+	LockID      UUID
+	IsLockOwner bool
 }

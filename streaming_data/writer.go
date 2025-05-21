@@ -7,7 +7,7 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
-type writer[TK btree.Comparable] struct {
+type writer[TK btree.Ordered] struct {
 	btree       btree.BtreeInterface[StreamingDataKey[TK], []byte]
 	ctx         context.Context
 	key         TK
@@ -15,7 +15,7 @@ type writer[TK btree.Comparable] struct {
 	addOrUpdate bool
 }
 
-func newWriter[TK btree.Comparable](ctx context.Context, addOrUpdate bool, key TK, btree btree.BtreeInterface[StreamingDataKey[TK], []byte]) *writer[TK] {
+func newWriter[TK btree.Ordered](ctx context.Context, addOrUpdate bool, key TK, btree btree.BtreeInterface[StreamingDataKey[TK], []byte]) *writer[TK] {
 	return &writer[TK]{
 		btree:       btree,
 		ctx:         ctx,

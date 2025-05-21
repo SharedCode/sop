@@ -11,7 +11,7 @@ import (
 )
 
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
-func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("transaction 't' parameter can't be nil")
 	}
@@ -37,7 +37,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
-func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("transaction 't' parameter can't be nil")
 	}
@@ -95,7 +95,7 @@ func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOpti
 	return newBtree[TK, TV](ctx, ns, trans, comparer)
 }
 
-func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *sop.StoreInfo, trans *Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, trans *Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	si := StoreInterface[TK, TV]{}
 
 	// Assign the item action tracker frontend and backend bits.
@@ -139,7 +139,7 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *sop.StoreInfo
 }
 
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.
-func refetchAndMergeClosure[TK btree.Comparable, TV any](si *StoreInterface[TK, TV], b3 *btree.Btree[TK, TV], sr sop.StoreRepository) func(ctx context.Context) error {
+func refetchAndMergeClosure[TK btree.Ordered, TV any](si *StoreInterface[TK, TV], b3 *btree.Btree[TK, TV], sr sop.StoreRepository) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		b3ModifiedItems := si.ItemActionTracker.(*itemActionTracker[TK, TV]).items
 		// Clear the backend "cache" so we can force B-Tree to re-fetch from Redis(or BlobStore).

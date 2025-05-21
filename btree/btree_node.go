@@ -19,7 +19,7 @@ type MetaDataType interface {
 }
 
 // Item contains key & value pair, plus the version number.
-type Item[TK Comparable, TV any] struct {
+type Item[TK Ordered, TV any] struct {
 	// (Internal) ID is the Item's sop.UUID. ID is needed for two reasons:
 	// 1. so B-Tree can identify or differentiate item(s) with duplicated Key.
 	// 2. used as the Value "data" ID if item's value data is persisted in another
@@ -39,7 +39,7 @@ type Item[TK Comparable, TV any] struct {
 	valueWasFetched bool
 }
 
-func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
+func newItem[TK Ordered, TV any](key TK, value TV) *Item[TK, TV] {
 	return &Item[TK, TV]{
 		Key:   key,
 		Value: &value,
@@ -48,7 +48,7 @@ func newItem[TK Comparable, TV any](key TK, value TV) *Item[TK, TV] {
 }
 
 // Node contains a B-Tree node's data.
-type Node[TK Comparable, TV any] struct {
+type Node[TK Ordered, TV any] struct {
 	ID       sop.UUID
 	ParentID sop.UUID
 	// Slots is an array where the Items get stored in.
@@ -73,7 +73,7 @@ func (n *Node[TK, TV]) SetVersion(v int32) {
 }
 
 // newNode creates a new node.
-func newNode[TK Comparable, TV any](slotCount int) *Node[TK, TV] {
+func newNode[TK Ordered, TV any](slotCount int) *Node[TK, TV] {
 	return &Node[TK, TV]{
 		Slots:       make([]*Item[TK, TV], slotCount),
 		indexOfNode: -1,
