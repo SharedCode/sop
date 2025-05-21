@@ -298,7 +298,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		// Commit new root nodes.
 		bibs := convertToBlobRequestPayload(rootNodes)
 		vids := convertToRegistryRequestPayload(rootNodes)
-		//t.newRootNodeHandles = con
+
 		if err := t.logger.log(ctx, commitNewRootNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
 			First: vids, Second: bibs,
 		})); err != nil {
@@ -420,7 +420,7 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 		return err
 	}
 
-	// The last step to consider a completed commit. It is the only "all or nothing" action in the commit.
+	// The last step to consider a completed commit.
 	if err := t.registry.UpdateNoLocks(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)); err != nil {
 		t.unlockNodesKeys(ctx)
 		return err

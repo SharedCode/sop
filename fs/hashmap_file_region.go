@@ -20,8 +20,9 @@ func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails []fil
 	dio := newDirectIO()
 	ba := dio.createAlignedBlock()
 	m := encoding.NewHandleMarshaler()
+	buffer :=  make([]byte, 0, sop.HandleSizeInBytes)
 	for _, frd := range fileRegionDetails {
-		ba2, _ := m.Marshal(frd.handle)
+		ba2, _ := m.Marshal(frd.handle, buffer)
 		if err := hm.updateFileBlockRegion(ctx, frd.dio, frd.blockOffset, int(frd.handleInBlockOffset), ba2, ba); err != nil {
 			return err
 		}
@@ -36,6 +37,9 @@ func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails [
 	// which could aid in cleaner deleted blocks(as marked w/ all zeroes). Negligible difference in IO.
 	ba2 := bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)
 	for _, frd := range fileRegionDetails {
+
+		log.Debug(fmt.Sprintf("marking deleted file %s, sector offset %v, offset in block %v", frd.dio.filename, frd.blockOffset, frd.handleInBlockOffset))
+
 		if err := hm.updateFileBlockRegion(ctx, frd.dio, frd.blockOffset, int(frd.handleInBlockOffset), ba2, ba); err != nil {
 			return err
 		}

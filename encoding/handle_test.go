@@ -25,7 +25,8 @@ func TestHandleMarshalling(t *testing.T) {
 	h.Version = 29
 	h.WorkInProgressTimestamp = sop.Now().Unix()
 	m := NewHandleMarshaler()
-	ba, err := m.Marshal(h)
+	buf :=  make([]byte, 0, sop.HandleSizeInBytes)
+	ba, err := m.Marshal(h, buf)
 	if err != nil {
 		t.Error(err)
 	}

@@ -108,7 +108,7 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *sop.StoreInfo
 	si.backendNodeRepository = nrw.realNodeRepository
 
 	// Wire up the B-tree & the backend bits required by the transaction.
-	b3, err := btree.New[TK, TV](s, &si.StoreInterface, comparer)
+	b3, err := btree.New(s, &si.StoreInterface, comparer)
 	if err != nil {
 		trans.Rollback(ctx)
 		return nil, err
@@ -119,7 +119,7 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *sop.StoreInfo
 		// Node blob repository.
 		nodeRepository: nrw.realNodeRepository,
 		// Needed for auto-merging of Node contents.
-		refetchAndMerge: refetchAndMergeClosure[TK, TV](&si, b3, trans.storeRepository),
+		refetchAndMerge: refetchAndMergeClosure(&si, b3, trans.storeRepository),
 		// Needed when applying the "delta" to the Store Count field.
 		getStoreInfo: func() *sop.StoreInfo { return b3.StoreInfo },
 
@@ -135,7 +135,7 @@ func newBtree[TK btree.Comparable, TV any](ctx context.Context, s *sop.StoreInfo
 	}
 	trans.btreesBackend = append(trans.btreesBackend, b3b)
 
-	return btree.NewBtreeWithTransaction[TK, TV](trans, b3), nil
+	return btree.NewBtreeWithTransaction(trans, b3), nil
 }
 
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.

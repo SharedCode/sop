@@ -54,7 +54,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatalf("%s", err.Error())
 	}
 	trans.Begin()
 
@@ -94,12 +94,156 @@ func Test_SimpleAddPerson(t *testing.T) {
 	}
 }
 
+func Test_AddToBreakNodeThenRemoveAllPerson(t *testing.T) {
+	ctx := context.Background()
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, _ := in_red_fs.NewTransaction(to)
+	trans.Begin()
+
+	pk, p := newPerson("foo", "bar", "male", "email", "phone")
+	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     "personfoo",
+		SlotLength:               2,
+		IsValueDataInNodeSegment: true,
+	}, trans, Compare)
+
+	b3.Add(ctx, pk, p)
+	pk2 := pk
+	pk2.Firstname = "hello"
+	b3.Add(ctx, pk2, p)
+	pk2.Firstname = "hello2"
+	b3.Add(ctx, pk2, p)
+
+	trans.Commit(ctx)
+	trans, _ = in_red_fs.NewTransaction(to)
+
+	trans.Begin()
+	b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "personfoo", trans, Compare)
+	b3.Remove(ctx, pk)
+	pk2.Firstname = "hello"
+	b3.Remove(ctx, pk2)
+	pk2.Firstname = "hello2"
+	b3.Remove(ctx, pk2)
+
+	trans.Commit(ctx)
+}
+
+func Test_AddThenTripleUpdatesPerson(t *testing.T) {
+	ctx := context.Background()
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(to)
+	if err != nil {
+		t.Fatalf("%s", err.Error())
+	}
+	trans.Begin()
+
+	pk, p := newPerson("foo", "bar", "male", "email", "phone")
+	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
+		Name:                     tableName1,
+		SlotLength:               nodeSlotLength,
+		IsValueDataInNodeSegment: true,
+	}, trans, Compare)
+	if err != nil {
+		t.Errorf("Error instantiating Btree, details: %v.", err)
+		t.FailNow()
+	}
+	if ok, err := b3.Add(ctx, pk, p); !ok || err != nil {
+		t.Errorf("Add('foo') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		return
+	}
+
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+
+	trans, err = in_red_fs.NewTransaction(to)
+	if err != nil {
+		t.Fatalf("%s", err.Error())
+	}
+
+	trans.Begin()
+	b3, err = in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, trans, Compare)
+	if err != nil {
+		t.Errorf("Error opening Btree, details: %v.", err)
+		t.FailNow()
+	}
+	if ok, err := b3.Update(ctx, pk, p); !ok || err != nil {
+		t.Errorf("Update('foo') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		t.FailNow()
+	}
+
+	if err = trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+
+	trans, err = in_red_fs.NewTransaction(to)
+	if err != nil {
+		t.Fatalf("%s", err.Error())
+	}
+
+	trans.Begin()
+	b3, err = in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, trans, Compare)
+	if err != nil {
+		t.Errorf("Error opening Btree, details: %v.", err)
+		t.FailNow()
+	}
+	if ok, err := b3.Update(ctx, pk, p); !ok || err != nil {
+		t.Errorf("Update('foo') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		t.FailNow()
+	}
+
+	if err = trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+
+	trans, err = in_red_fs.NewTransaction(to)
+	if err != nil {
+		t.Fatalf("%s", err.Error())
+	}
+
+	trans.Begin()
+	b3, err = in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, trans, Compare)
+	if err != nil {
+		t.Errorf("Error opening Btree, details: %v.", err)
+		t.FailNow()
+	}
+	if ok, err := b3.Update(ctx, pk, p); !ok || err != nil {
+		t.Errorf("Update('foo') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		t.FailNow()
+	}
+
+	if err = trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+
+	trans, err = in_red_fs.NewTransaction(to)
+	if err != nil {
+		t.Fatalf("%s", err.Error())
+	}
+
+	trans.Begin()
+	b3, err = in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, trans, Compare)
+	if err != nil {
+		t.Errorf("Error opening Btree, details: %v.", err)
+		t.FailNow()
+	}
+	if ok, err := b3.Remove(ctx, pk); !ok || err != nil {
+		t.Errorf("Remove('foo') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		t.FailNow()
+	}
+
+	if err = trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+
+}
+
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatalf("%s", err.Error())
 	}
 
 	trans2, _ := in_red_fs.NewTransaction(to)
@@ -141,7 +285,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatalf("%s", err.Error())
 	}
 
 	trans.Begin()
@@ -166,7 +310,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		}
 	}
 	if err := trans.Commit(ctx); err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 		t.FailNow()
 		return
 	}
@@ -174,13 +318,13 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
 	trans, err = in_red_fs.NewTransaction(to2)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 		t.FailNow()
 		return
 	}
 
 	if err := trans.Begin(); err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%s", err.Error())
 		t.FailNow()
 		return
 	}

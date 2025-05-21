@@ -17,19 +17,17 @@ func NewHandleMarshaler() *HandleEncoder {
 }
 
 // Encodes handler to byte array.
-func (he HandleEncoder) Marshal(v any) ([]byte, error) {
-	w := bytes.NewBuffer(make([]byte, 0, sop.HandleSizeInBytes))
-	pv := v.(sop.Handle)
+func (he HandleEncoder) Marshal(v sop.Handle, buffer []byte) ([]byte, error) {
+	w := bytes.NewBuffer(buffer)
+	pv := v
 	encode(w, &pv)
 	return w.Bytes(), nil
 }
 
 // Decodes byte array back to a handler type.
-func (he HandleEncoder) Unmarshal(data []byte, v any) error {
+func (he HandleEncoder) Unmarshal(data []byte, target *sop.Handle) error {
 	r := bytes.NewBuffer(data)
-	h, err := decode(r)
-	target := v.(*sop.Handle)
-	*target = *h
+	err := decode(r, target)
 	return err
 }
 
@@ -69,38 +67,37 @@ func encode(w *bytes.Buffer, h *sop.Handle) (int, error) {
 	return w.Len(), nil
 }
 
-func decode(r *bytes.Buffer) (*sop.Handle, error) {
-	var result sop.Handle
+func decode(r *bytes.Buffer, target *sop.Handle) error {
 	h, err := uuid.FromBytes(r.Next(16))
 	if err != nil {
-		return &result, err
+		return err
 	}
-	result.LogicalID = sop.UUID(h)
+	target.LogicalID = sop.UUID(h)
 
 	h, err = uuid.FromBytes(r.Next(16))
 	if err != nil {
-		return &result, err
+		return err
 	}
-	result.PhysicalIDA = sop.UUID(h)
+	target.PhysicalIDA = sop.UUID(h)
 
 	h, err = uuid.FromBytes(r.Next(16))
 	if err != nil {
-		return &result, err
+		return err
 	}
-	result.PhysicalIDB = sop.UUID(h)
+	target.PhysicalIDB = sop.UUID(h)
 
 	var b byte = r.Next(1)[0]
 	if b == 1 {
-		result.IsActiveIDB = true
+		target.IsActiveIDB = true
 	}
 
-	result.Version = int32(binary.LittleEndian.Uint32(r.Next(4)))
-	result.WorkInProgressTimestamp = int64(binary.LittleEndian.Uint64(r.Next(8)))
+	target.Version = int32(binary.LittleEndian.Uint32(r.Next(4)))
+	target.WorkInProgressTimestamp = int64(binary.LittleEndian.Uint64(r.Next(8)))
 
 	b = r.Next(1)[0]
 	if b == 1 {
-		result.IsDeleted = true
+		target.IsDeleted = true
 	}
 
-	return &result, nil
+	return nil
 }
