@@ -984,7 +984,7 @@ func (node *Node[TK, TV]) updateChildrenParent(ctx context.Context, btree *Btree
 		return err
 	}
 	// Make node parent of its children.
-	for index := 0; index < len(children); index++ {
+	for index := range children {
 		if children[index] != nil {
 			children[index].ParentID = node.ID
 			btree.saveNode(children[index])

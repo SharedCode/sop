@@ -193,6 +193,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 
 			// handleInBlockOffset had already been processed above and it's not it, skip it.
 			if bao == handleInBlockOffset {
+				bao += sop.HandleSizeInBytes
 				continue
 			}
 

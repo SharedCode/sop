@@ -107,23 +107,21 @@ func Test_AddToBreakNodeThenRemoveAllPerson(t *testing.T) {
 		IsValueDataInNodeSegment: true,
 	}, trans, Compare)
 
-	b3.Add(ctx, pk, p)
-	pk2 := pk
-	pk2.Firstname = "hello"
-	b3.Add(ctx, pk2, p)
-	pk2.Firstname = "hello2"
-	b3.Add(ctx, pk2, p)
+	for i := 0; i < 5000; i++ {
+		pk.Firstname = fmt.Sprintf("hello%d", i)
+		b3.Add(ctx, pk, p)
+	}
 
 	trans.Commit(ctx)
 	trans, _ = in_red_fs.NewTransaction(to)
 
 	trans.Begin()
 	b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "personfoo", trans, Compare)
-	b3.Remove(ctx, pk)
-	pk2.Firstname = "hello"
-	b3.Remove(ctx, pk2)
-	pk2.Firstname = "hello2"
-	b3.Remove(ctx, pk2)
+
+	for i := 0; i < 5000; i++ {
+		pk.Firstname = fmt.Sprintf("hello%d", i)
+		b3.Remove(ctx, pk)
+	}
 
 	trans.Commit(ctx)
 }
