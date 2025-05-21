@@ -2,12 +2,13 @@ package in_memory
 
 import (
 	"context"
+
 	"github.com/SharedCode/sop/btree"
 )
 
-type mt[TK btree.Comparable, TV any] struct{}
+type mt[TK btree.Ordered, TV any] struct{}
 
-func newDumbItemActionTracker[TK btree.Comparable, TV any]() btree.ItemActionTracker[TK, TV] {
+func newDumbItemActionTracker[TK btree.Ordered, TV any]() btree.ItemActionTracker[TK, TV] {
 	return &mt[TK, TV]{}
 }
 

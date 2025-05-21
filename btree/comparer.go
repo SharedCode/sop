@@ -14,15 +14,15 @@ type Comparer interface {
 }
 
 // ComparerFunc allows code to specify explicit comparer separate than the key object.
-type ComparerFunc[TK any] func(a TK, b TK) int
+type ComparerFunc[TK Ordered] func(a TK, b TK) int
 
-// Comparable interface is used as a B-Tree store (generics) constraint for Key types.
-type Comparable interface {
+// Ordered interface is used as a B-Tree store (generics) constraint for Key types.
+type Ordered interface {
 	cmp.Ordered | *Comparer | any
 }
 
-// Compare can Compare a Comparable type.
-func Compare[T Comparable](x, y T) int {
+// Compare can Compare an Ordered type.
+func Compare[T Ordered](x, y T) int {
 	anyX := any(x)
 	anyY := any(y)
 	switch any(x).(type) {

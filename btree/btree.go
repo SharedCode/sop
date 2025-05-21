@@ -24,7 +24,7 @@ import (
 )
 
 // Btree manages items using B-tree data structure and algorithm.
-type Btree[TK Comparable, TV any] struct {
+type Btree[TK Ordered, TV any] struct {
 	StoreInfo          *sop.StoreInfo
 	storeInterface     *StoreInterface[TK, TV]
 	tempSlots          []*Item[TK, TV]
@@ -57,7 +57,7 @@ func (c currentItemRef) getNodeID() sop.UUID {
 // "distribute" function will use these details in order to distribute an item of a node
 // to either the left side or right side nodes of the branch(relative to the sourceNode)
 // that is known to have a vacant slot.
-type distributeAction[TK Comparable, TV any] struct {
+type distributeAction[TK Ordered, TV any] struct {
 	sourceNode *Node[TK, TV]
 	item       *Item[TK, TV]
 	// distributeToLeft is true if item needs to be distributed to the left side,
@@ -68,13 +68,13 @@ type distributeAction[TK Comparable, TV any] struct {
 // promoteAction similar to distributeAction, contains details to allow controller in B-Tree
 // to drive calls for Node promotion to a higher level branch without using recursion.
 // Recursion can be more "taxing"(on edge case) as it accumulates items pushed to the stack.
-type promoteAction[TK Comparable, TV any] struct {
+type promoteAction[TK Ordered, TV any] struct {
 	targetNode *Node[TK, TV]
 	slotIndex  int
 }
 
 // New creates a new B-Tree instance with support for explicit comparer separate than the key object.
-func New[TK Comparable, TV any](storeInfo *sop.StoreInfo, si *StoreInterface[TK, TV], comparer ComparerFunc[TK]) (*Btree[TK, TV], error) {
+func New[TK Ordered, TV any](storeInfo *sop.StoreInfo, si *StoreInterface[TK, TV], comparer ComparerFunc[TK]) (*Btree[TK, TV], error) {
 	// Return nil B-Tree to signify failure if there is not enough info to create an instance.
 	if si == nil {
 		return nil, fmt.Errorf("can't create a b-tree with nil StoreInterface parameter")
@@ -111,7 +111,7 @@ func (btree *Btree[TK, TV]) Count() int64 {
 
 // Add a key/value pair item to the tree.
 func (btree *Btree[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {
-	var item = newItem[TK, TV](key, value)
+	var item = newItem(key, value)
 
 	node, err := btree.getRootNode(ctx)
 	if err != nil {
@@ -172,7 +172,7 @@ func (btree *Btree[TK, TV]) compare(a TK, b TK) int {
 	if btree.comparer != nil {
 		return btree.comparer(a, b)
 	}
-	return Compare[TK](a, b)
+	return Compare(a, b)
 }
 
 // FindOne will traverse the tree to find an item with such key.

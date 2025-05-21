@@ -25,7 +25,7 @@ type lockRecord struct {
 	LockID sop.UUID
 	Action actionType
 }
-type cacheItem[TK btree.Comparable, TV any] struct {
+type cacheItem[TK btree.Ordered, TV any] struct {
 	lockRecord
 	item *btree.Item[TK, TV]
 	// Version of the item as read from DB.
@@ -34,7 +34,7 @@ type cacheItem[TK btree.Comparable, TV any] struct {
 	persisted   bool
 }
 
-type itemActionTracker[TK btree.Comparable, TV any] struct {
+type itemActionTracker[TK btree.Ordered, TV any] struct {
 	storeInfo        *sop.StoreInfo
 	items            map[sop.UUID]cacheItem[TK, TV]
 	forDeletionItems []sop.UUID
@@ -44,7 +44,7 @@ type itemActionTracker[TK btree.Comparable, TV any] struct {
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
-func newItemActionTracker[TK btree.Comparable, TV any](storeInfo *sop.StoreInfo, redisCache sop.Cache, blobStore sop.BlobStore, tl *transactionLog) *itemActionTracker[TK, TV] {
+func newItemActionTracker[TK btree.Ordered, TV any](storeInfo *sop.StoreInfo, redisCache sop.Cache, blobStore sop.BlobStore, tl *transactionLog) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
 		storeInfo: storeInfo,
 		items:     make(map[sop.UUID]cacheItem[TK, TV], 10),

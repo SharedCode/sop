@@ -7,7 +7,7 @@ import (
 )
 
 // BtreeInterface defines publicly callable methods of Btree.
-type BtreeInterface[TK Comparable, TV any] interface {
+type BtreeInterface[TK Ordered, TV any] interface {
 	// Add adds an item to the b-tree and does not check for duplicates.
 	Add(ctx context.Context, key TK, value TV) (bool, error)
 	// AddIfNotExist adds an item if there is no item matching the key yet.
@@ -72,7 +72,7 @@ type BtreeInterface[TK Comparable, TV any] interface {
 }
 
 // NodeRepository interface specifies the node repository.
-type NodeRepository[TK Comparable, TV any] interface {
+type NodeRepository[TK Ordered, TV any] interface {
 	// Add will just cache the item, "add" action for submit on transaction commit as appropriate.
 	Add(node *Node[TK, TV])
 	// Get fetches from backend(or from cache if exists) & returns the Node with a given nodeID.
@@ -88,7 +88,7 @@ type NodeRepository[TK Comparable, TV any] interface {
 // ItemActionTracker specifies the CRUD action methods that can be done to manage Items.
 // These action methods can be implemented to allow the backend to resolve and submit
 // these changes to the backend storage during transaction commit.
-type ItemActionTracker[TK Comparable, TV any] interface {
+type ItemActionTracker[TK Ordered, TV any] interface {
 	// Add will just cache the item, "add" action for submit on transaction commit as appropriate.
 	Add(ctx context.Context, item *Item[TK, TV]) error
 	// Get will just cache the item, "get" action then resolve on transaction commit, compare version
@@ -102,7 +102,7 @@ type ItemActionTracker[TK Comparable, TV any] interface {
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its
 // data/objects from a backend.
-type StoreInterface[TK Comparable, TV any] struct {
+type StoreInterface[TK Ordered, TV any] struct {
 	// NodeRepository is used to manage/access B-Tree nodes.
 	NodeRepository NodeRepository[TK, TV]
 	// ItemActionTracker is used to track management actions to Items which

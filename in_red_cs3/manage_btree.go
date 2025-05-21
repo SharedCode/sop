@@ -20,14 +20,14 @@ import (
 // If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
-func NewBtree[TK btree.Comparable, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	// Use the Store name as the bucket name.
 	si.DisableBlobStoreFormatting = true
 	return in_red_ck.NewBtree[TK, TV](ctx, si, t, comparer)
 }
 
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
-func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	return in_red_ck.OpenBtree[TK, TV](ctx, name, t, comparer)
 }
 
@@ -35,7 +35,7 @@ func OpenBtree[TK btree.Comparable, TV any](ctx context.Context, name string, t 
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
 // Use with care and only when you are sure to delete the tables.
-func RemoveBtree[TK btree.Comparable, TV any](ctx context.Context, s3Client *s3.Client, region string, name string, comparer btree.ComparerFunc[TK]) error {
+func RemoveBtree[TK btree.Ordered, TV any](ctx context.Context, s3Client *s3.Client, region string, name string, comparer btree.ComparerFunc[TK]) error {
 	// Delete B-Tree contents.
 	if err := removeBtreeContents[TK, TV](ctx, s3Client, region, name, comparer); err != nil {
 		return err
@@ -60,18 +60,18 @@ func NewStoreRepository(s3Client *s3.Client, region string) (sop.StoreRepository
 
 // NewStreamingDataStore is a convenience function to easily instantiate a streaming data store that stores
 // blobs in AWS S3.
-func NewStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	si := sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, "")
 	si.DisableBlobStoreFormatting = true
 	return sd.NewStreamingDataStoreOptions[TK](ctx, si, trans, comparer)
 }
 
 // OpenStreamingDataStore is a convenience function to open an existing data store for use in "streaming data".
-func OpenStreamingDataStore[TK btree.Comparable](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+func OpenStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	return sd.OpenStreamingDataStore[TK](ctx, name, trans, comparer)
 }
 
-func removeBtreeContents[TK btree.Comparable, TV any](ctx context.Context, s3Client *s3.Client, region string, name string, comparer btree.ComparerFunc[TK]) error {
+func removeBtreeContents[TK btree.Ordered, TV any](ctx context.Context, s3Client *s3.Client, region string, name string, comparer btree.ComparerFunc[TK]) error {
 	const batchSize = 1000
 	for {
 		trans, err := NewTransaction(s3Client, sop.ForWriting, -1, true, region)

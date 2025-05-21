@@ -19,7 +19,7 @@ type cacheNode struct {
 	action actionType
 }
 
-type nodeRepositoryTyped[TK btree.Comparable, TV any] struct {
+type nodeRepositoryTyped[TK btree.Ordered, TV any] struct {
 	realNodeRepository *nodeRepository
 }
 
@@ -69,7 +69,7 @@ type nodeRepository struct {
 }
 
 // NewNodeRepository instantiates a NodeRepository.
-func newNodeRepository[TK btree.Comparable, TV any](t *Transaction, storeInfo *sop.StoreInfo) *nodeRepositoryTyped[TK, TV] {
+func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.StoreInfo) *nodeRepositoryTyped[TK, TV] {
 	nr := &nodeRepository{
 		transaction:    t,
 		nodeLocalCache: make(map[sop.UUID]cacheNode),
@@ -104,7 +104,7 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 		}
 		return v.node, nil
 	}
-	h, err := nr.transaction.registry.Get(ctx, []sop.RegistryPayload[sop.UUID]{sop.RegistryPayload[sop.UUID]{
+	h, err := nr.transaction.registry.Get(ctx, []sop.RegistryPayload[sop.UUID]{{
 		RegistryTable: nr.storeInfo.RegistryTable,
 		CacheDuration: nr.storeInfo.CacheConfig.RegistryCacheDuration,
 		IsCacheTTL:    nr.storeInfo.CacheConfig.IsRegistryCacheTTL,

@@ -7,7 +7,7 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
-type reader[TK btree.Comparable] struct {
+type reader[TK btree.Ordered] struct {
 	btree      btree.BtreeInterface[StreamingDataKey[TK], []byte]
 	ctx        context.Context
 	key        TK
@@ -16,7 +16,7 @@ type reader[TK btree.Comparable] struct {
 	readCount  int
 }
 
-func newReader[TK btree.Comparable](ctx context.Context, key TK, chunkIndex int, btree btree.BtreeInterface[StreamingDataKey[TK], []byte]) *reader[TK] {
+func newReader[TK btree.Ordered](ctx context.Context, key TK, chunkIndex int, btree btree.BtreeInterface[StreamingDataKey[TK], []byte]) *reader[TK] {
 	return &reader[TK]{
 		btree:      btree,
 		ctx:        ctx,

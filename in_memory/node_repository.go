@@ -8,12 +8,12 @@ import (
 )
 
 // in-memory implementation of NodeRepository. Uses a map to manage nodes in memory.
-type nodeRepository[TK btree.Comparable, TV any] struct {
+type nodeRepository[TK btree.Ordered, TV any] struct {
 	lookup map[sop.UUID]*btree.Node[TK, TV]
 }
 
 // NewNodeRepository instantiates a NodeRepository that uses a map to manage items.
-func newNodeRepository[TK btree.Comparable, TV any]() btree.NodeRepository[TK, TV] {
+func newNodeRepository[TK btree.Ordered, TV any]() btree.NodeRepository[TK, TV] {
 	return &nodeRepository[TK, TV]{
 		lookup: make(map[sop.UUID]*btree.Node[TK, TV]),
 	}

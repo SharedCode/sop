@@ -9,12 +9,12 @@ import (
 	"github.com/SharedCode/sop/btree"
 )
 
-type b3WithInducedErrors[TK btree.Comparable, TV any] struct {
+type b3WithInducedErrors[TK btree.Ordered, TV any] struct {
 	induceErrorOnMethod int
 	t                   *testing.T
 }
 
-func newBTreeWithInducedErrors[TK btree.Comparable, TV any](t *testing.T) *b3WithInducedErrors[TK, TV] {
+func newBTreeWithInducedErrors[TK btree.Ordered, TV any](t *testing.T) *b3WithInducedErrors[TK, TV] {
 	t.Helper()
 	return &b3WithInducedErrors[TK, TV]{t: t}
 }
