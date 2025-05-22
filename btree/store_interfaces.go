@@ -69,6 +69,10 @@ type BtreeInterface[TK Ordered, TV any] interface {
 
 	// Returns StoreInfo which contains the details about this B-Tree.
 	GetStoreInfo() sop.StoreInfo
+
+	// Lock the B-Tree for writing (if param is true) or for reading (if param is false).
+	// Upon transaction commit, lock on any B-Trees are automatically released, why there is no "Unlock" function.
+	Lock(ctx context.Context, forWriting bool) error
 }
 
 // NodeRepository interface specifies the node repository.

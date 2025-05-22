@@ -23,6 +23,17 @@ func NewBtreeWithTransaction[TK Ordered, TV any](t sop.TwoPhaseCommitTransaction
 	}
 }
 
+/*
+	- Implement Lock & unlock on commit.
+	- Implement Node early persist.
+	- Implement MRU caching.
+*/
+
+func (b3 *btreeWithTransaction[TK, TV]) Lock(ctx context.Context, forWriting bool) error {
+	// TODO
+	return nil
+}
+
 // Returns the store info of this B-Tree.
 func (b3 *btreeWithTransaction[TK, TV]) GetStoreInfo() sop.StoreInfo {
 	return b3.btree.GetStoreInfo()

@@ -8,5 +8,5 @@ import (
 type StoreInterface[TK btree.Ordered, TV any] struct {
 	btree.StoreInterface[TK, TV]
 	// Non-generics node repository, used in transaction commit to process modified Nodes.
-	backendNodeRepository *nodeRepository
+	backendNodeRepository *nodeRepositoryBackend
 }

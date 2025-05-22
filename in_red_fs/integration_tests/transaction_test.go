@@ -94,7 +94,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 	}
 }
 
-func AddToBreakNodeThenRemoveAllPerson(t *testing.T) {
+func AddToBreakNodeThenRemoveAll(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := in_red_fs.NewTransaction(to)
