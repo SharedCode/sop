@@ -19,6 +19,10 @@ func newBTreeWithInducedErrors[TK btree.Ordered, TV any](t *testing.T) *b3WithIn
 	return &b3WithInducedErrors[TK, TV]{t: t}
 }
 
+func (b3 b3WithInducedErrors[TK, TV]) Lock(ctx context.Context, forWriting bool) error {
+	return nil
+}
+
 func (b3 b3WithInducedErrors[TK, TV]) Count() int64 {
 	return 0
 }

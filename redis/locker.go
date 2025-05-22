@@ -8,6 +8,69 @@ import (
 	"github.com/SharedCode/sop"
 )
 
+// Lock a set of keys but with TTL attribute, i.e. - everytime IsLocked is invoked, it extends the lifetime
+// of the locked key(s). This is useful for long term held locks, e.g. - table level locks that can span
+// within entire life of the transaction, not just the commit part.
+func (c client) LockTTL(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
+	for _, lk := range lockKeys {
+		readItem, err := c.GetEx(ctx, lk.Key, duration)
+		if err != nil {
+			if !c.KeyNotFound(err) {
+				return false, err
+			}
+			// Item does not exist, upsert it.
+			if err := c.Set(ctx, lk.Key, lk.LockID.String(), duration); err != nil {
+				return false, err
+			}
+			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
+			if readItem2, err := c.GetEx(ctx, lk.Key, duration); err != nil {
+				if c.KeyNotFound(err) {
+					return false, nil
+				}
+				return false, err
+			} else if readItem2 != lk.LockID.String() {
+				// Item found in Redis, lock attempt failed.
+				return false, nil
+			}
+			// We got the item locked, ensure we can unlock it.
+			lk.IsLockOwner = true
+			continue
+		}
+		// Item found in Redis, lock attempt failed.
+		if readItem != lk.LockID.String() {
+			return false, nil
+		}
+	}
+	// Successfully locked.
+	return true, nil
+}
+
+// Returns true if lockKeys have claimed lock equivalent. And extends the lock by another 30 seconds for each call (TTL).
+func (c client) IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
+	r := true
+	var lastErr error
+	for _, lk := range lockKeys {
+		readItem, err := c.GetEx(ctx, lk.Key, duration)
+		if err != nil {
+			lk.IsLockOwner = false
+			r = false
+			if !c.KeyNotFound(err) {
+				lastErr = err
+			}
+			continue
+		}
+		// Item found in Redis has different value, means key is locked by a different kind of function.
+		if readItem != lk.LockID.String() {
+			lk.IsLockOwner = false
+			r = false
+			continue
+		}
+		lk.IsLockOwner = true
+	}
+	// Is locked = true.
+	return r, lastErr
+}
+
 // Lock a set of keys.
 func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
 	for _, lk := range lockKeys {

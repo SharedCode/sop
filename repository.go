@@ -181,6 +181,12 @@ type Cache interface {
 	FormatLockKey(k string) string
 	// Create lock keys.
 	CreateLockKeys(keys []string) []*LockKey
+
+	// Lock a set of keys & with TTL.
+	LockTTL(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
+	// Returns whether a set of keys are all locked & with TTL.
+	IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
+
 	// Lock a set of keys.
 	Lock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
 	// Returns whether a set of keys are all locked.

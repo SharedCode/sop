@@ -11,7 +11,7 @@ import (
 )
 
 type btreeBackend struct {
-	nodeRepository *nodeRepository
+	nodeRepository *nodeRepositoryBackend
 	// Following are function references because BTree is generic typed for Key & Value,
 	// and these functions being references allow the backend to deal without requiring knowing data types.
 	refetchAndMerge    func(ctx context.Context) error
@@ -28,7 +28,7 @@ type btreeBackend struct {
 }
 
 type Transaction struct {
-	id        sop.UUID
+	id sop.UUID
 	// B-Tree instances, & their backend bits, managed within the transaction session.
 	btreesBackend []btreeBackend
 	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
@@ -49,9 +49,9 @@ type Transaction struct {
 	removedNodeHandles []sop.RegistryPayload[sop.Handle]
 
 	// Phase 1 commit generated objects required for "replication" in phase 2 commit.
-	addedNodeHandles []sop.RegistryPayload[sop.Handle]
+	addedNodeHandles   []sop.RegistryPayload[sop.Handle]
 	newRootNodeHandles []sop.RegistryPayload[sop.Handle]
-	updatedStoresInfo []sop.StoreInfo
+	updatedStoresInfo  []sop.StoreInfo
 
 	// Used for transaction level locking.
 	nodesKeys []*sop.LockKey
@@ -426,7 +426,7 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 		return err
 	}
 
-	// Replicate to passive target paths.	
+	// Replicate to passive target paths.
 	t.registry.Replicate(ctx, t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles)
 	t.storeRepository.Replicate(ctx, t.updatedStoresInfo)
 

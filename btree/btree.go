@@ -99,6 +99,10 @@ func New[TK Ordered, TV any](storeInfo *sop.StoreInfo, si *StoreInterface[TK, TV
 	return &b3, nil
 }
 
+func (btree *Btree[TK, TV]) Lock(ctx context.Context, forWriting bool) error {
+	return nil
+}
+
 // Returns the details about this B-Tree.
 func (btree *Btree[TK, TV]) GetStoreInfo() sop.StoreInfo {
 	return *btree.StoreInfo

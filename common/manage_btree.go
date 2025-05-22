@@ -105,7 +105,7 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 	// Assign the node repository frontend and backend bits.
 	nrw := newNodeRepository[TK, TV](trans, s)
 	si.NodeRepository = nrw
-	si.backendNodeRepository = nrw.realNodeRepository
+	si.backendNodeRepository = nrw.backendNodeRepository
 
 	// Wire up the B-tree & the backend bits required by the transaction.
 	b3, err := btree.New(s, &si.StoreInterface, comparer)
@@ -117,7 +117,7 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 	// B-Tree backend processing(of commit & rollback) required objects.
 	b3b := btreeBackend{
 		// Node blob repository.
-		nodeRepository: nrw.realNodeRepository,
+		nodeRepository: nrw.backendNodeRepository,
 		// Needed for auto-merging of Node contents.
 		refetchAndMerge: refetchAndMergeClosure(&si, b3, trans.storeRepository),
 		// Needed when applying the "delta" to the Store Count field.
@@ -144,7 +144,7 @@ func refetchAndMergeClosure[TK btree.Ordered, TV any](si *StoreInterface[TK, TV]
 		b3ModifiedItems := si.ItemActionTracker.(*itemActionTracker[TK, TV]).items
 		// Clear the backend "cache" so we can force B-Tree to re-fetch from Redis(or BlobStore).
 		si.ItemActionTracker.(*itemActionTracker[TK, TV]).items = make(map[sop.UUID]cacheItem[TK, TV])
-		si.backendNodeRepository.nodeLocalCache = make(map[sop.UUID]cacheNode)
+		si.backendNodeRepository.localCache = make(map[sop.UUID]cacheNode)
 		// Reset StoreInfo of B-Tree in prep to replay the "actions".
 		storeInfo, err := sr.GetWithTTL(ctx, b3.StoreInfo.CacheConfig.IsStoreInfoCacheTTL, b3.StoreInfo.CacheConfig.StoreInfoCacheDuration, b3.StoreInfo.Name)
 		if err != nil {

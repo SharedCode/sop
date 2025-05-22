@@ -11,74 +11,36 @@ import (
 	"github.com/SharedCode/sop/redis"
 )
 
-// nodeRepository implements both frontend and backend facing methods of the NodeRepository.
-// Part of where the magic happens.
+// Backend facing Node Repository. Part of where the magic happens.
 
 type cacheNode struct {
 	node   interface{}
 	action actionType
 }
 
-type nodeRepositoryTyped[TK btree.Ordered, TV any] struct {
-	realNodeRepository *nodeRepository
-}
-
-// Add will upsert node to the map.
-func (nr *nodeRepositoryTyped[TK, TV]) Add(n *btree.Node[TK, TV]) {
-	nr.realNodeRepository.add(n.ID, n)
-}
-
-// Update will upsert node to the map.
-func (nr *nodeRepositoryTyped[TK, TV]) Update(n *btree.Node[TK, TV]) {
-	nr.realNodeRepository.update(n.ID, n)
-}
-
-// Get will retrieve a node with nodeID from the map.
-func (nr *nodeRepositoryTyped[TK, TV]) Get(ctx context.Context, nodeID sop.UUID) (*btree.Node[TK, TV], error) {
-	var target btree.Node[TK, TV]
-	n, err := nr.realNodeRepository.get(ctx, nodeID, &target)
-	if n == nil {
-		return nil, err
-	}
-	return n.(*btree.Node[TK, TV]), err
-}
-
-func (nr *nodeRepositoryTyped[TK, TV]) Fetched(nodeID sop.UUID) {
-	c := nr.realNodeRepository.nodeLocalCache[nodeID]
-	if c.action == defaultAction {
-		c.action = getAction
-		nr.realNodeRepository.nodeLocalCache[nodeID] = c
-	}
-}
-
-// Remove will remove a node with nodeID from the map.
-func (nr *nodeRepositoryTyped[TK, TV]) Remove(nodeID sop.UUID) {
-	nr.realNodeRepository.remove(nodeID)
-}
-
-// nodeRepository implementation for "cassandra-S3"(in_cas_s3) exposes a standard NodeRepository interface
+// nodeRepositoryBackend implementation for "cassandra-S3"(in_cas_s3) exposes a standard NodeRepository interface
 // but which, manages b-tree nodes in transaction cache, Redis and in Cassandra + S3,
 // or File System, for debugging &/or "poor man's" setup(no AWS required!).
-type nodeRepository struct {
+type nodeRepositoryBackend struct {
 	transaction *Transaction
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
-	nodeLocalCache map[sop.UUID]cacheNode
-	storeInfo      *sop.StoreInfo
-	cache          sop.Cache
-	count          int64
+	localCache map[sop.UUID]cacheNode
+	storeInfo  *sop.StoreInfo
+	cache      sop.Cache
+	count      int64
 }
 
 // NewNodeRepository instantiates a NodeRepository.
-func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.StoreInfo) *nodeRepositoryTyped[TK, TV] {
-	nr := &nodeRepository{
-		transaction:    t,
-		nodeLocalCache: make(map[sop.UUID]cacheNode),
-		storeInfo:      storeInfo,
-		cache:          redis.NewClient(),
-		count:          storeInfo.Count,
+func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.StoreInfo) *nodeRepositoryFrontEnd[TK, TV] {
+	nr := &nodeRepositoryBackend{
+		transaction: t,
+		localCache:  make(map[sop.UUID]cacheNode),
+		storeInfo:   storeInfo,
+		cache:       redis.NewClient(),
+		count:       storeInfo.Count,
 	}
-	return &nodeRepositoryTyped[TK, TV]{
-		realNodeRepository: nr,
+	return &nodeRepositoryFrontEnd[TK, TV]{
+		backendNodeRepository: nr,
 	}
 }
 
@@ -97,8 +59,8 @@ func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.
 // - Otherwise, mark data as removed, for actual remove from blobStore(& redis) on transaction commit.
 
 // Get will retrieve a node with nodeID from the map.
-func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target interface{}) (interface{}, error) {
-	if v, ok := nr.nodeLocalCache[logicalID]; ok {
+func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, target interface{}) (interface{}, error) {
+	if v, ok := nr.localCache[logicalID]; ok {
 		if v.action == removeAction {
 			return nil, nil
 		}
@@ -140,57 +102,57 @@ func (nr *nodeRepository) get(ctx context.Context, logicalID sop.UUID, target in
 		if err := nr.transaction.cache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID.String(), err))
 		}
-		nr.nodeLocalCache[logicalID] = cacheNode{
+		nr.localCache[logicalID] = cacheNode{
 			action: defaultAction,
 			node:   target,
 		}
 		return target, nil
 	}
 	target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
-	nr.nodeLocalCache[logicalID] = cacheNode{
+	nr.localCache[logicalID] = cacheNode{
 		action: defaultAction,
 		node:   target,
 	}
 	return target, nil
 }
 
-func (nr *nodeRepository) add(nodeID sop.UUID, node interface{}) {
-	nr.nodeLocalCache[nodeID] = cacheNode{
+func (nr *nodeRepositoryBackend) add(nodeID sop.UUID, node interface{}) {
+	nr.localCache[nodeID] = cacheNode{
 		action: addAction,
 		node:   node,
 	}
 }
 
-func (nr *nodeRepository) update(nodeID sop.UUID, node interface{}) {
-	if v, ok := nr.nodeLocalCache[nodeID]; ok {
+func (nr *nodeRepositoryBackend) update(nodeID sop.UUID, node interface{}) {
+	if v, ok := nr.localCache[nodeID]; ok {
 		// Update the node and keep the "action" marker if new, otherwise update to "update" action.
 		v.node = node
 		if v.action != addAction {
 			v.action = updateAction
 		}
-		nr.nodeLocalCache[nodeID] = v
+		nr.localCache[nodeID] = v
 		return
 	}
 	// Treat as add if not in local cache, because it should be there unless node is new.
-	nr.nodeLocalCache[nodeID] = cacheNode{
+	nr.localCache[nodeID] = cacheNode{
 		action: addAction,
 		node:   node,
 	}
 }
 
-func (nr *nodeRepository) remove(nodeID sop.UUID) {
-	if v, ok := nr.nodeLocalCache[nodeID]; ok {
+func (nr *nodeRepositoryBackend) remove(nodeID sop.UUID) {
+	if v, ok := nr.localCache[nodeID]; ok {
 		if v.action == addAction {
-			delete(nr.nodeLocalCache, nodeID)
+			delete(nr.localCache, nodeID)
 			return
 		}
 		v.action = removeAction
-		nr.nodeLocalCache[nodeID] = v
+		nr.localCache[nodeID] = v
 	}
 	// Code should not reach this point, as B-tree will not issue a remove if node is not cached locally.
 }
 
-func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepositoryBackend) commitNewRootNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
 	}
@@ -240,7 +202,7 @@ func (nr *nodeRepository) commitNewRootNodes(ctx context.Context, nodes []sop.Tu
 }
 
 // Save to blob store, save node ID to the alternate(inactive) physical ID(see virtual ID).
-func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepositoryBackend) commitUpdatedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
 	}
@@ -313,7 +275,7 @@ func (nr *nodeRepository) commitUpdatedNodes(ctx context.Context, nodes []sop.Tu
 
 // Add the removed Node(s) and their Item(s) Data(if not in node segment) to the recycler
 // so they can get serviced for physical delete on schedule in the future.
-func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepositoryBackend) commitRemovedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
 	}
@@ -342,7 +304,7 @@ func (nr *nodeRepository) commitRemovedNodes(ctx context.Context, nodes []sop.Tu
 	return true, handles, nil
 }
 
-func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) ([]sop.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepositoryBackend) commitAddedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) ([]sop.RegistryPayload[sop.Handle], error) {
 	/* UUID to Virtual ID story:
 	   - (on commit) New(added) nodes will have their IDs converted to virtual ID with empty
 	     phys IDs(or same ID with active & virtual ID).
@@ -391,7 +353,7 @@ func (nr *nodeRepository) commitAddedNodes(ctx context.Context, nodes []sop.Tupl
 	return handles, nil
 }
 
-func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, error) {
+func (nr *nodeRepositoryBackend) areFetchedItemsIntact(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, error) {
 	if len(nodes) == 0 {
 		return true, nil
 	}
@@ -412,7 +374,7 @@ func (nr *nodeRepository) areFetchedItemsIntact(ctx context.Context, nodes []sop
 	return true, nil
 }
 
-func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData interface{}) error {
+func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollbackData interface{}) error {
 	if rollbackData == nil {
 		return nil
 	}
@@ -452,7 +414,7 @@ func (nr *nodeRepository) rollbackNewRootNodes(ctx context.Context, rollbackData
 	return lastErr
 }
 
-func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData interface{}) error {
+func (nr *nodeRepositoryBackend) rollbackAddedNodes(ctx context.Context, rollbackData interface{}) error {
 	var bibs []sop.BlobsPayload[sop.UUID]
 	var vids []sop.RegistryPayload[sop.UUID]
 	tup := rollbackData.(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]])
@@ -487,7 +449,7 @@ func (nr *nodeRepository) rollbackAddedNodes(ctx context.Context, rollbackData i
 }
 
 // rollback updated Nodes.
-func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodesAreLocked bool, vids []sop.RegistryPayload[sop.UUID]) error {
+func (nr *nodeRepositoryBackend) rollbackUpdatedNodes(ctx context.Context, nodesAreLocked bool, vids []sop.RegistryPayload[sop.UUID]) error {
 	if len(vids) == 0 {
 		return nil
 	}
@@ -542,7 +504,7 @@ func (nr *nodeRepository) rollbackUpdatedNodes(ctx context.Context, nodesAreLock
 }
 
 // Delete a list of Nodes from the Blob store & from cache. Used in "dead" (not in-flight) incomplete transactions data cleanup.
-func (nr *nodeRepository) removeNodes(ctx context.Context, blobsIDs []sop.BlobsPayload[sop.UUID]) error {
+func (nr *nodeRepositoryBackend) removeNodes(ctx context.Context, blobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	if len(blobsIDs) == 0 {
 		return nil
 	}
@@ -567,7 +529,7 @@ func (nr *nodeRepository) removeNodes(ctx context.Context, blobsIDs []sop.BlobsP
 	return lastErr
 }
 
-func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodesAreLocked bool, vids []sop.RegistryPayload[sop.UUID]) error {
+func (nr *nodeRepositoryBackend) rollbackRemovedNodes(ctx context.Context, nodesAreLocked bool, vids []sop.RegistryPayload[sop.UUID]) error {
 	if len(vids) == 0 {
 		return nil
 	}
@@ -611,7 +573,7 @@ func (nr *nodeRepository) rollbackRemovedNodes(ctx context.Context, nodesAreLock
 }
 
 // Set to active the inactive nodes.
-func (nr *nodeRepository) activateInactiveNodes(handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepositoryBackend) activateInactiveNodes(handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if len(handles) == 0 {
 		return nil, nil
 	}
@@ -632,7 +594,7 @@ func (nr *nodeRepository) activateInactiveNodes(handles []sop.RegistryPayload[so
 }
 
 // Update upsert time of a given set of nodes.
-func (nr *nodeRepository) touchNodes(handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
+func (nr *nodeRepositoryBackend) touchNodes(handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if len(handles) == 0 {
 		return nil, nil
 	}
@@ -705,6 +667,6 @@ func extractUUIDs(nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) []sop.UUID {
 	return uuids
 }
 
-func (nr *nodeRepository) formatKey(k string) string {
+func (nr *nodeRepositoryBackend) formatKey(k string) string {
 	return fmt.Sprintf("N%s", k)
 }

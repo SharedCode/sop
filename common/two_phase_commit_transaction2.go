@@ -259,7 +259,7 @@ func (t *Transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []int
 	var storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
 	for i, s := range t.btreesBackend {
 		var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []interface{}
-		for _, cacheNode := range s.nodeRepository.nodeLocalCache {
+		for _, cacheNode := range s.nodeRepository.localCache {
 			// Allow newly created root nodes to get merged between transactions.
 			if s.nodeRepository.count == 0 &&
 				cacheNode.action == addAction && t.btreesBackend[i].getStoreInfo().RootNodeID == cacheNode.node.(btree.MetaDataType).GetID() {
