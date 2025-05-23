@@ -13,7 +13,7 @@ import (
 
 // Backend facing Node Repository. Part of where the magic happens.
 
-type cacheNode struct {
+type cachedNode struct {
 	node   interface{}
 	action actionType
 }
@@ -24,7 +24,7 @@ type cacheNode struct {
 type nodeRepositoryBackend struct {
 	transaction *Transaction
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
-	localCache map[sop.UUID]cacheNode
+	localCache map[sop.UUID]cachedNode
 	storeInfo  *sop.StoreInfo
 	l2Cache    sop.Cache
 	count      int64
@@ -34,7 +34,7 @@ type nodeRepositoryBackend struct {
 func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.StoreInfo) *nodeRepositoryFrontEnd[TK, TV] {
 	nr := &nodeRepositoryBackend{
 		transaction: t,
-		localCache:  make(map[sop.UUID]cacheNode),
+		localCache:  make(map[sop.UUID]cachedNode),
 		storeInfo:   storeInfo,
 		l2Cache:     redis.NewClient(),
 		count:       storeInfo.Count,
@@ -102,14 +102,14 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 		if err := nr.transaction.l2Cache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID.String(), err))
 		}
-		nr.localCache[logicalID] = cacheNode{
+		nr.localCache[logicalID] = cachedNode{
 			action: defaultAction,
 			node:   target,
 		}
 		return target, nil
 	}
 	target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
-	nr.localCache[logicalID] = cacheNode{
+	nr.localCache[logicalID] = cachedNode{
 		action: defaultAction,
 		node:   target,
 	}
@@ -117,7 +117,7 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 }
 
 func (nr *nodeRepositoryBackend) add(nodeID sop.UUID, node interface{}) {
-	nr.localCache[nodeID] = cacheNode{
+	nr.localCache[nodeID] = cachedNode{
 		action: addAction,
 		node:   node,
 	}
@@ -134,7 +134,7 @@ func (nr *nodeRepositoryBackend) update(nodeID sop.UUID, node interface{}) {
 		return
 	}
 	// Treat as add if not in local cache, because it should be there unless node is new.
-	nr.localCache[nodeID] = cacheNode{
+	nr.localCache[nodeID] = cachedNode{
 		action: addAction,
 		node:   node,
 	}

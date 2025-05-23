@@ -75,10 +75,10 @@ func (rm registryMap) set(ctx context.Context, items ...sop.Tuple[string, []sop.
 }
 
 // Fetch the Handle record(s) from a given set of file(s) & their UUID(s).
-func (rm registryMap) get(ctx context.Context, keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[string, []sop.Handle], error) {
+func (rm registryMap) fetch(ctx context.Context, keys ...sop.Tuple[string, []sop.UUID]) ([]sop.Tuple[string, []sop.Handle], error) {
 	result := make([]sop.Tuple[string, []sop.Handle], 0, len(keys))
 	for _, k := range keys {
-		handles, err := rm.hashmap.get(ctx, k.First, k.Second)
+		handles, err := rm.hashmap.fetch(ctx, k.First, k.Second)
 		if err != nil {
 			return nil, fmt.Errorf("registryMap.get failed, details: %v", err)
 		}

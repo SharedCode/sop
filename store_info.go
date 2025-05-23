@@ -7,6 +7,47 @@ import (
 	"time"
 )
 
+// StoreInfo contains a given (B-Tree) store details.
+type StoreInfo struct {
+	// Short name of this (B-Tree store).
+	Name string `json:"name" minLength:"1" maxLength:"20"`
+	// Count of items that can be stored on a given node.
+	SlotLength int `json:"slot_length" min:"2" max:"10000"`
+	// IsUnique tells whether key/value pair (items) of this tree should be unique on key.
+	IsUnique bool `json:"is_unique"`
+	// (optional) Description of the Store.
+	Description string `json:"description" maxLength:"250"`
+	// Virtual ID registry table name.
+	RegistryTable string `json:"registry_table" minLength:"1" maxLength:"20"`
+	// Blob table name if using a table or (base) file path if storing blobs in File System.
+	BlobTable string `json:"blob_table" minLength:"1" maxLength:"300"`
+	// RootNodeID is the root node's ID.
+	RootNodeID UUID `json:"root_node_id"`
+	// Total count of items stored.
+	Count int64 `json:"count"`
+	// Used internally by SOP. Should be ignored when persisted in the backend.
+	CountDelta int64 `json:"-"`
+	// Add or update timestamp in milliseconds.
+	Timestamp int64 `json:"timestamp"`
+	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's data segment.
+	// Otherwise is false.
+	IsValueDataInNodeSegment bool `json:"is_value_data_in_node_segment"`
+	// If true, each Btree Add(..) method call will persist the item value's data to another partition, then on commit,
+	// it will then be a very quick action as item(s) values' data were already saved on backend.
+	// This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
+	IsValueDataActivelyPersisted bool `json:"is_value_data_actively_persisted"`
+	// If true, the Value data will be cached in Redis, otherwise not. This is used when 'IsValueDataInNodeSegment'
+	// is set to false. Typically set to false if 'IsValueDataActivelyPersisted' is true, as value data is expected
+	// to be huge rendering caching it in Redis to affect Redis performance due to the drastic size of data per item.
+	IsValueDataGloballyCached bool `json:"is_value_data_globally_cached"`
+	// If true, node load will be balanced by pushing items to sibling nodes if there are vacant slots,
+	// otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
+	LeafLoadBalancing bool `json:"leaf_load_balancing"`
+	// Redis cache specification for this store's objects(registry, nodes, item value part).
+	// Defaults to the global specification and can be overriden for each store.
+	CacheConfig StoreCacheConfig `json:"cache_config"`
+}
+
 // Store Cache config specificaiton.
 type StoreCacheConfig struct {
 	// Specifies this store's Registry Objects' Redis cache duration.
@@ -29,7 +70,6 @@ type StoreCacheConfig struct {
 }
 
 const minCacheDuration = time.Duration(5 * time.Minute)
-const defaultCacheDuration = time.Duration(15 * time.Minute)
 
 // Create a new StoraceCacheConfig with common cache duration(& TTL setting) among its data parts.
 func NewStoreCacheConfig(cacheDuration time.Duration, isCacheTTL bool) *StoreCacheConfig {
@@ -94,47 +134,6 @@ func (scc *StoreCacheConfig) enforceMinimumRule() {
 	if scc.ValueDataCacheDuration == 0 {
 		scc.ValueDataCacheDuration = minCacheDuration
 	}
-}
-
-// StoreInfo contains a given (B-Tree) store details.
-type StoreInfo struct {
-	// Short name of this (B-Tree store).
-	Name string `json:"name" minLength:"1" maxLength:"20"`
-	// Count of items that can be stored on a given node.
-	SlotLength int `json:"slot_length" min:"2" max:"10000"`
-	// IsUnique tells whether key/value pair (items) of this tree should be unique on key.
-	IsUnique bool `json:"is_unique"`
-	// (optional) Description of the Store.
-	Description string `json:"description" maxLength:"250"`
-	// Virtual ID registry table name.
-	RegistryTable string `json:"registry_table" minLength:"1" maxLength:"20"`
-	// Blob table name if using a table or (base) file path if storing blobs in File System.
-	BlobTable string `json:"blob_table" minLength:"1" maxLength:"300"`
-	// RootNodeID is the root node's ID.
-	RootNodeID UUID `json:"root_node_id"`
-	// Total count of items stored.
-	Count int64 `json:"count"`
-	// Used internally by SOP. Should be ignored when persisted in the backend.
-	CountDelta int64 `json:"-"`
-	// Add or update timestamp in milliseconds.
-	Timestamp int64 `json:"timestamp"`
-	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's data segment.
-	// Otherwise is false.
-	IsValueDataInNodeSegment bool `json:"is_value_data_in_node_segment"`
-	// If true, each Btree Add(..) method call will persist the item value's data to another partition, then on commit,
-	// it will then be a very quick action as item(s) values' data were already saved on backend.
-	// This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
-	IsValueDataActivelyPersisted bool `json:"is_value_data_actively_persisted"`
-	// If true, the Value data will be cached in Redis, otherwise not. This is used when 'IsValueDataInNodeSegment'
-	// is set to false. Typically set to false if 'IsValueDataActivelyPersisted' is true, as value data is expected
-	// to be huge rendering caching it in Redis to affect Redis performance due to the drastic size of data per item.
-	IsValueDataGloballyCached bool `json:"is_value_data_globally_cached"`
-	// If true, node load will be balanced by pushing items to sibling nodes if there are vacant slots,
-	// otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
-	LeafLoadBalancing bool `json:"leaf_load_balancing"`
-	// Redis cache specification for this store's objects(registry, nodes, item value part).
-	// Defaults to the global specification and can be overriden for each store.
-	CacheConfig StoreCacheConfig `json:"cache_config"`
 }
 
 // NewStoreInfo instantiates a new Store, defaults extended parameters to typical use-case values. Please use NewStoreInfoExtended(..) function
@@ -209,11 +208,6 @@ func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNo
 	}
 }
 
-// Format a given name into a registry table name by adding suffix.
-func FormatRegistryTable(name string) string {
-	return fmt.Sprintf("%s_r", name)
-}
-
 // Returns true if this StoreInfo is empty, false otherwise.
 // Empty StoreInfo signifies B-Tree does not exist yet.
 func (s StoreInfo) IsEmpty() bool {
@@ -231,4 +225,9 @@ func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 		s.IsValueDataActivelyPersisted == b.IsValueDataActivelyPersisted &&
 		s.IsValueDataGloballyCached == b.IsValueDataGloballyCached &&
 		s.LeafLoadBalancing == b.LeafLoadBalancing
+}
+
+// Format a given name into a registry table name by adding suffix.
+func FormatRegistryTable(name string) string {
+	return fmt.Sprintf("%s_r", name)
 }

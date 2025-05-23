@@ -40,7 +40,7 @@ func TestRegistryMapSet(t *testing.T) {
 func TestRegistryMapGet(t *testing.T) {
 	r := newRegistryMap(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false), redis.NewClient())
 
-	if res, err := r.get(ctx, sop.Tuple[string, []sop.UUID]{
+	if res, err := r.fetch(ctx, sop.Tuple[string, []sop.UUID]{
 		First:  "regtest",
 		Second: []sop.UUID{uuid},
 	}); err != nil {

@@ -3,10 +3,10 @@ package fs
 import (
 	"context"
 	"fmt"
+	log "log/slog"
 	"os"
 	"strings"
 	"time"
-	log "log/slog"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
@@ -225,7 +225,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 }
 
 // Fetch the Handle record with a given UUID (LogicalID) from a given file, without locking the file region it resides in.
-func (hm *hashmap) get(ctx context.Context, filename string, ids []sop.UUID) ([]sop.Handle, error) {
+func (hm *hashmap) fetch(ctx context.Context, filename string, ids []sop.UUID) ([]sop.Handle, error) {
 	completedItems := make([]sop.Handle, 0, len(ids))
 	for _, id := range ids {
 		frd, err := hm.findOneFileRegion(ctx, false, filename, id)
