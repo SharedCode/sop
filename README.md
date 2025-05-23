@@ -26,7 +26,7 @@ RSRR as compared to DynamoDB's distributed locking: https://www.linkedin.com/pos
 # Documentation
 A lot has changed in SOP. "sop/in_red_fs" is shaping to be the primary and recommended package. It is a very lean package only needing Redis as dependency. There are still value in below discussions but be very careful, self discerning as they are getting obsolete by the day.
 
-SOP in Redis & File System (in_red_fs) will need a new, simple documentation. Bear with below for now. You can use the "in_red_fs/integration_tests" automated test code to guide you in API usage.
+SOP in Redis & File System (in_red_fs) will need a new, simple documentation. Bear with below for now. Please feel free to use the "in_red_fs/integration_tests" automated test code as examples, guide in SOP API usage.
 
 # Software Based Efficient Replication
 Quick update, SOP now sports very efficient software based replication via Reed Solomon algorithm erasure coding. SOP's Registry data already had replication via Cassandra & now, the data blobs stored in File System (see sop/in_red_cfs) are safe having very efficient software based modern replication.
