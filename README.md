@@ -23,6 +23,11 @@ Master less cluster wide distributed locking (RSRR algorithm) :https://www.linke
 
 RSRR as compared to DynamoDB's distributed locking: https://www.linkedin.com/posts/coolguru_i-just-found-out-thanks-to-my-eldest-that-activity-7325255314474250241-f07g?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
 
+# Documentation
+A lot has changed in SOP. "sop/in_red_fs" is shaping to be the primary and recommended package. It is a very lean package only needing Redis as dependency. There are still value in below discussions but be very careful, self discerning as they are getting obsolete by the day.
+
+SOP in Redis & File System (in_red_fs) will need a new, simple documentation. Bear with below for now. You can use the "in_red_fs/integration_tests" automated test code to guide you in API usage.
+
 # Software Based Efficient Replication
 Quick update, SOP now sports very efficient software based replication via Reed Solomon algorithm erasure coding. SOP's Registry data already had replication via Cassandra & now, the data blobs stored in File System (see sop/in_red_cfs) are safe having very efficient software based modern replication.
 The feature is complete, it has auto-repair of detected missing or bitrot shards, if the RepairCorruptedShards flag (passed in the sop/in_red_cfs/NewTransactionWithEC erasure config) is turned on.
@@ -151,26 +156,23 @@ You do need to set the StoreOption field **IsValueDataInNodeSegment** = false in
 
 Of course, you have to do fine tuning as there are tradeoffs :), determine what works best in your particular situation. As there are quite a few "knobs" you can tweak in SOP to achieve what you want. See below discussions for more details in this area.
 
-# In File System(FS), in AWS S3 or in Cassandra Blobs
-SOP supports storing the data blobs(containing both SOP metadata, specifically the B-Tree Nodes & application data) either in FS, AWS S3 or in Cassandra (via Cassandra's support for blobs storage). Choose whichever you want. However, my favorite is the FS, as it is very lean. However, there is huge potential to accelerate using AWS S3 if you have a huge, super S3 cluster(via AWS or on-prem).
+# In File System(FS) or in Cassandra Blobs
+SOP supports storing the data blobs(containing both SOP metadata, specifically the B-Tree Nodes & application data) either in FS or in Cassandra (via Cassandra's support for blobs storage). Choose whichever you want. However, my favorite is the FS, as it is very lean.
 
 Following are the package locations for the different flavors:
 * in File System w/ registry in Cassandra: 	sop/in_red_cfs
-* in AWS S3:					sop/in_red_cs3
-* in Cassandra:   				sop/in_red_ck
-* in File System (under construction!): 	sop/in_red_fs
+* in File System (early preview!): 		sop/in_red_fs
 NOTE: **in_red_fs** (under construction) will not require any external system as SOP replaces Cassandra based registry with a more optimal hash map on disk implementation. Redis for caching is still available.
 
 The API for each package to construct a new BTree, Open an existing one or Remove one are pretty much consistent across the three. Streaming Data Store API are also available across the three and consistent in shape too.
 
 # Data Partitioning
 * SOP in Cassandra stores a blob in its own dedicated partition, which is the optimal form.
-* SOP in AWS S3 uses UUID as the filename, which will fully take advantage of S3 bucket's recommended file naming convention for optimal I/O.
 * SOP in File System has the following to address data partitioning:
   - Vertical partitioning is built-in, you can take advantage of this by specifying different drive in the directory path field of StoreOptions argument of the BTree constructor function. E.g. - for store1, specify "c://sop_data" and on store2, specify "d://sop_data". This will allow SOP to store the blob files for each store on its own drive. Thus, combined with SOP's efficient I/O(i.e. - 4 level "tree like" directory structuring) achieves super efficient parallel I/O, per store.
   - Horizontal partitioning however, you need to do a little bit of customization, i.e. - specify a lambda expression that has the logic to carve into different drive(s) or storage path(s) per given blob file ID. You can pass in this function in the respective "in_red_xxx.NewTransactionExt(..)" function call and it will be utilized to drive where the file blob(s) will be stored. Sample functions that can allocate(or partition!) across different drives the file blobs are below.
     
-Here is the SOP's **DefaultToFilePath** function(in package sop/in_red_cfs/fs) that drives storage of file blobs across passed in **base directory path** argument of StoreOptions in NewBtree call:
+Here is the SOP's **DefaultToFilePath** function(in package sop/in_red_fs) that drives storage of file blobs across passed in **base directory path** argument of StoreOptions in NewBtree call:
 ```
 package fs
 
