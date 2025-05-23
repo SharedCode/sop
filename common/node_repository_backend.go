@@ -26,7 +26,7 @@ type nodeRepositoryBackend struct {
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
 	localCache map[sop.UUID]cacheNode
 	storeInfo  *sop.StoreInfo
-	cache      sop.Cache
+	l2Cache    sop.Cache
 	count      int64
 }
 
@@ -36,7 +36,7 @@ func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.
 		transaction: t,
 		localCache:  make(map[sop.UUID]cacheNode),
 		storeInfo:   storeInfo,
-		cache:       redis.NewClient(),
+		l2Cache:     redis.NewClient(),
 		count:       storeInfo.Count,
 	}
 	return &nodeRepositoryFrontEnd[TK, TV]{
@@ -84,12 +84,12 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 		nodeID = h[0].IDs[0].GetActiveID()
 	}
 	if nr.storeInfo.CacheConfig.IsNodeCacheTTL {
-		err = nr.transaction.cache.GetStructEx(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration)
+		err = nr.transaction.l2Cache.GetStructEx(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration)
 	} else {
-		err = nr.transaction.cache.GetStruct(ctx, nr.formatKey(nodeID.String()), target)
+		err = nr.transaction.l2Cache.GetStruct(ctx, nr.formatKey(nodeID.String()), target)
 	}
 	if err != nil {
-		if !nr.cache.KeyNotFound(err) {
+		if !nr.l2Cache.KeyNotFound(err) {
 			return nil, err
 		}
 		// Fetch from blobStore and cache to Redis/local.
@@ -99,7 +99,7 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 		}
 		encoding.BlobMarshaler.Unmarshal(ba, target)
 		target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
-		if err := nr.transaction.cache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
+		if err := nr.transaction.l2Cache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID.String(), err))
 		}
 		nr.localCache[logicalID] = cacheNode{
@@ -188,7 +188,7 @@ func (nr *nodeRepositoryBackend) commitNewRootNodes(ctx context.Context, nodes [
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Second {
-			if err := nr.transaction.cache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetActiveID().String()),
+			if err := nr.transaction.l2Cache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetActiveID().String()),
 				nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
 				return false, nil, err
 			}
@@ -264,7 +264,7 @@ func (nr *nodeRepositoryBackend) commitUpdatedNodes(ctx context.Context, nodes [
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Second {
-			if err := nr.transaction.cache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
+			if err := nr.transaction.l2Cache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
 				log.Debug(fmt.Sprintf("failed redisCache.SetStruct, details: %v", err))
 				return false, nil, err
 			}
@@ -337,7 +337,7 @@ func (nr *nodeRepositoryBackend) commitAddedNodes(ctx context.Context, nodes []s
 			blobs[i].Blobs[ii].Value = ba
 			handles[i].IDs[ii] = h
 			// Add node to Redis cache.
-			if err := nr.transaction.cache.SetStruct(ctx, nr.formatKey(metaData.GetID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
+			if err := nr.transaction.l2Cache.SetStruct(ctx, nr.formatKey(metaData.GetID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
 				return nil, err
 			}
 		}
@@ -395,7 +395,7 @@ func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollb
 	}
 	for i := range vids {
 		for ii := range vids[i].IDs {
-			if err := nr.transaction.cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil && !nr.cache.KeyNotFound(err) {
+			if err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil && !nr.l2Cache.KeyNotFound(err) {
 				err = fmt.Errorf("unable to undo new root nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -436,7 +436,7 @@ func (nr *nodeRepositoryBackend) rollbackAddedNodes(ctx context.Context, rollbac
 	// Remove nodes from Redis cache.
 	for i := range vids {
 		for ii := range vids[i].IDs {
-			if err := nr.transaction.cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil && !nr.cache.KeyNotFound(err) {
+			if err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil && !nr.l2Cache.KeyNotFound(err) {
 				err = fmt.Errorf("unable to undo added nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -491,7 +491,7 @@ func (nr *nodeRepositoryBackend) rollbackUpdatedNodes(ctx context.Context, nodes
 	// Undo changes in redis.
 	for i := range blobsIDs {
 		for ii := range blobsIDs[i].Blobs {
-			if err = nr.transaction.cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil && !nr.cache.KeyNotFound(err) {
+			if err = nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil && !nr.l2Cache.KeyNotFound(err) {
 				err = fmt.Errorf("unable to undo updated nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -517,7 +517,7 @@ func (nr *nodeRepositoryBackend) removeNodes(ctx context.Context, blobsIDs []sop
 	// Undo changes in redis.
 	for i := range blobsIDs {
 		for ii := range blobsIDs[i].Blobs {
-			if err := nr.transaction.cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil && !nr.cache.KeyNotFound(err) {
+			if err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil && !nr.l2Cache.KeyNotFound(err) {
 				err = fmt.Errorf("unable to undo updated nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
