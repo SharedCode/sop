@@ -190,7 +190,7 @@ func (t *Transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDele
 		// First field of the Tuple specifies whether we need to delete from Redis cache the blob IDs specified in Second.
 		if itemsForDelete[i].First {
 			for ii := range itemsForDelete[i].Second.Blobs {
-				if err := t.cache.Delete(ctx, []string{formatItemKey(itemsForDelete[i].Second.Blobs[ii].String())}); err != nil {
+				if err := t.l2Cache.Delete(ctx, []string{formatItemKey(itemsForDelete[i].Second.Blobs[ii].String())}); err != nil {
 					lastErr = err
 				}
 			}
@@ -393,7 +393,7 @@ func (t *Transaction) deleteObsoleteEntries(ctx context.Context,
 				ik++
 			}
 		}
-		if err := t.cache.Delete(ctx, deletedKeys); err != nil && !t.cache.KeyNotFound(err) {
+		if err := t.l2Cache.Delete(ctx, deletedKeys); err != nil && !t.l2Cache.KeyNotFound(err) {
 			lastErr = err
 			log.Warn(fmt.Sprintf("Redis delete failed, details: %v", err))
 		}
@@ -417,7 +417,7 @@ func (t *Transaction) unlockNodesKeys(ctx context.Context) error {
 	if t.nodesKeys == nil {
 		return nil
 	}
-	err := t.cache.Unlock(ctx, t.nodesKeys)
+	err := t.l2Cache.Unlock(ctx, t.nodesKeys)
 	t.nodesKeys = nil
 	return err
 }
@@ -431,7 +431,7 @@ func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tup
 	// Keys are sorted by UUID as high, low int64 bit pair so we can order the cache lock call in a uniform manner and thus, reduce risk of dead lock.
 	if len(updatedNodes) == 0 && len(removedNodes) == 0 {
 		// Release the held lock for a node key that we no longer care about.
-		t.cache.Unlock(ctx, t.nodesKeys)
+		t.l2Cache.Unlock(ctx, t.nodesKeys)
 		t.nodesKeys = nil
 		return
 	}
@@ -442,10 +442,10 @@ func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tup
 
 	lookupByUUID := in_memory.NewBtree[sop.UUID, *sop.LockKey](true)
 	for _, id := range lids {
-		lookupByUUID.Add(id, t.cache.CreateLockKeys([]string{id.String()})[0])
+		lookupByUUID.Add(id, t.l2Cache.CreateLockKeys([]string{id.String()})[0])
 	}
 	for _, id := range rids {
-		lookupByUUID.Add(id, t.cache.CreateLockKeys([]string{id.String()})[0])
+		lookupByUUID.Add(id, t.l2Cache.CreateLockKeys([]string{id.String()})[0])
 	}
 
 	lookupByKeyName := make(map[string]sop.UUID, lookupByUUID.Count())
@@ -464,7 +464,7 @@ func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tup
 			continue
 		} else {
 			// Release the held lock for a node key that we no longer care about.
-			t.cache.Unlock(ctx, []*sop.LockKey{nk})
+			t.l2Cache.Unlock(ctx, []*sop.LockKey{nk})
 		}
 	}
 

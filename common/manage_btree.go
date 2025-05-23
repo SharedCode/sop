@@ -99,7 +99,7 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 	si := StoreInterface[TK, TV]{}
 
 	// Assign the item action tracker frontend and backend bits.
-	iat := newItemActionTracker[TK, TV](s, trans.cache, trans.blobStore, trans.logger)
+	iat := newItemActionTracker[TK, TV](s, trans.l2Cache, trans.blobStore, trans.logger)
 	si.ItemActionTracker = iat
 
 	// Assign the node repository frontend and backend bits.

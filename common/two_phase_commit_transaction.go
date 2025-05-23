@@ -33,7 +33,7 @@ type Transaction struct {
 	btreesBackend []btreeBackend
 	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
 	blobStore       sop.BlobStore
-	cache           sop.Cache
+	l2Cache         sop.Cache
 	storeRepository sop.StoreRepository
 	// VirtualIDRegistry manages the virtual IDs, a.k.a. "handle".
 	registry sop.Registry
@@ -76,7 +76,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 		maxTime:         maxTime,
 		storeRepository: storeRepository,
 		registry:        registry,
-		cache:           cache,
+		l2Cache:         cache,
 		blobStore:       blobStore,
 		logger:          newTransactionLogger(transactionLog, logging),
 		phaseDone:       -1,
@@ -243,16 +243,16 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		}
 
 		//* Start: Try to lock all updated & removed nodes before moving forward.
-		if ok, _ := t.cache.Lock(ctx, t.maxTime, t.nodesKeys); !ok {
+		if ok, _ := t.l2Cache.Lock(ctx, t.maxTime, t.nodesKeys); !ok {
 			log.Debug(fmt.Sprintf("cache.Lock can't lock all nodesKeys, tid: %v", t.GetID()))
 			// Unlock in case there are those that got locked.
-			t.cache.Unlock(ctx, t.nodesKeys)
+			t.l2Cache.Unlock(ctx, t.nodesKeys)
 			sop.RandomSleep(ctx)
 			needsRefetchAndMerge = true
 			continue
 		}
 
-		if ok, err := t.cache.IsLocked(ctx, t.nodesKeys); !ok || err != nil {
+		if ok, err := t.l2Cache.IsLocked(ctx, t.nodesKeys); !ok || err != nil {
 			log.Debug(fmt.Sprintf("cache.IsLocked didn't confirm nodesKeys are locked, tid: %v", t.GetID()))
 			sop.RandomSleep(ctx)
 			continue
