@@ -1,3 +1,13 @@
+// Package contains the L1 (MRU) Cache implementtion. The cache management logic handles
+// both L1(local MRU) & L2(Redis) caches. It flows and fetches data between the two layers.
+// L1 limits the caching to MRU max capacity which defaults to 1,350.
+//
+// It is written to be thread safe so it can get used as a global cache that can provide data
+// to different transaction B-tree instances.
+//
+// You can instantiate the global cache using the "CreateGlobalCache" package function, or simply
+// call GetGlobalCache() to return a default global cache using DefaultMinCapacity, DefaultMaxCapacity
+// and Redis as L2 Cache, using the package "redis" global connection.
 package l1_cache
 
 import (
@@ -61,8 +71,8 @@ func NewL1Cache(l2c sop.Cache, minCapacity, maxCapacity int) *l1Cache {
 }
 
 func (c *l1Cache) SetHandles(ctx context.Context, handles []sop.RegistryPayload[sop.Handle]) error {
-	// Self pruning ?
 	if c.IsFull() {
+		// Self pruning if capacity is at full (max).
 		c.Prune()
 	}
 
