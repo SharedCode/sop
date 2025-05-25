@@ -14,6 +14,7 @@ import (
 // Backend facing Node Repository. Part of where the magic happens.
 
 type cachedNode struct {
+	// node is a pointer to btree.Node.
 	node   interface{}
 	action actionType
 }

@@ -1,4 +1,4 @@
-package l1_cache
+package cache
 
 // node represents a node in the doubly linked list
 type node[T any] struct {

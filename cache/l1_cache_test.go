@@ -1,4 +1,4 @@
-package l1_cache
+package cache
 
 import (
 	"context"
@@ -70,7 +70,7 @@ func TestBasicUse(t *testing.T) {
 
 	var targetNode btree.Node[int, string]
 	var n any
-	if n, err = cache.GetNode(ctx, sop.RegistryPayload[sop.UUID]{
+	if _, n, err = cache.GetNode(ctx, sop.RegistryPayload[sop.UUID]{
 		IDs: []sop.UUID{
 			uuid,
 		},
