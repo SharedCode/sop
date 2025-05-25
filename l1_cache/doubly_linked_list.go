@@ -42,37 +42,6 @@ func (dll *doublyLinkedList[T]) addToHead(data T) *node[T] {
 	return newNode
 }
 
-// AddToTail adds a new node with the given data to the tail of the list
-func (dll *doublyLinkedList[T]) addToTail(data T) *node[T] {
-	newNode := &node[T]{data: data, prev: dll.tail, next: nil}
-	if dll.tail != nil {
-		dll.tail.next = newNode
-	} else {
-		dll.head = newNode
-	}
-	dll.tail = newNode
-	dll.size++
-	return newNode
-}
-
-// DeleteFromHead removes the node from the head of the list
-func (dll *doublyLinkedList[T]) deleteFromHead() (T, bool) {
-	var d T
-	if dll.isEmpty() {
-		return d, false
-	}
-	data := dll.head.data
-	if dll.head == dll.tail {
-		dll.head = nil
-		dll.tail = nil
-	} else {
-		dll.head = dll.head.next
-		dll.head.prev = nil
-	}
-	dll.size--
-	return data, true
-}
-
 // DeleteFromTail removes the node from the tail of the list
 func (dll *doublyLinkedList[T]) deleteFromTail() (T, bool) {
 	var d T
@@ -109,22 +78,4 @@ func (dll *doublyLinkedList[T]) delete(n *node[T]) bool {
 
 	dll.size--
 	return true
-}
-
-// PeekHead returns the data of the head node without removing it
-func (dll *doublyLinkedList[T]) peekHead() (T, bool) {
-	var d T
-	if dll.isEmpty() {
-		return d, false
-	}
-	return dll.head.data, true
-}
-
-// PeekTail returns the data of the tail node without removing it
-func (dll *doublyLinkedList[T]) peekTail() (T, bool) {
-	var d T
-	if dll.isEmpty() {
-		return d, false
-	}
-	return dll.tail.data, true
 }

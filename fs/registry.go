@@ -168,15 +168,15 @@ func (r registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPayloa
 	return storesHandles, nil
 }
 func (r registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
-	for _, storeLids := range storesLids {
-		// Flush out the failing records from cache.
-		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
-			for _, id := range storeLids.IDs {
-				if err := r.l2Cache.Delete(ctx, []string{id.String()}); err != nil && !r.l2Cache.KeyNotFound(err) {
-					log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
-				}
+	// Flush out the failing records from cache.
+	deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
+		for _, id := range storeLids.IDs {
+			if err := r.l2Cache.Delete(ctx, []string{id.String()}); err != nil && !r.l2Cache.KeyNotFound(err) {
+				log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
 			}
 		}
+	}
+	for _, storeLids := range storesLids {
 		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: storeLids.IDs}); err != nil {
 			deleteFromCache(storeLids)
 			return err

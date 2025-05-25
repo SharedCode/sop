@@ -30,7 +30,11 @@ func (m *mru) prune() {
 			break
 		}
 		if id, ok := m.dll.deleteFromTail(); ok {
-			delete(m.lcCache.handles, id)
+			if v, found := m.lcCache.handles[id]; found {
+				v.node = sop.NilUUID
+				v.dllNode = nil
+				delete(m.lcCache.handles, id)
+			}
 		} else {
 			break
 		}
