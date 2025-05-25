@@ -13,7 +13,7 @@ import (
 type registryOnDisk struct {
 	hashmap            *registryMap
 	replicationTracker *replicationTracker
-	cache              sop.Cache
+	l2Cache            sop.Cache
 }
 
 // Registry interface needs to have close method so registry can get closed when not needed anymore, e.g. transaction is completed.
@@ -32,7 +32,7 @@ func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, cache
 	return &registryOnDisk{
 		hashmap:            newRegistryMap(readWrite, hashModValue, rt, cache),
 		replicationTracker: rt,
-		cache:              cache,
+		l2Cache:            cache,
 	}
 }
 
@@ -48,7 +48,7 @@ func (r registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPay
 		}
 		for _, h := range sh.IDs {
 			// Tolerate Redis cache failure.
-			if err := r.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+			if err := r.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis setstruct) failed, details: %v", err))
 			}
 		}
@@ -65,24 +65,25 @@ func (r registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registry
 		// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 		for _, h := range sh.IDs {
 			// Update registry record.
-			lk := r.cache.CreateLockKeys([]string{h.LogicalID.String()})
-			if ok, err := r.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
+			lk := r.l2Cache.CreateLockKeys([]string{h.LogicalID.String()})
+			if ok, err := r.l2Cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
 				if err == nil {
 					err = fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key)
 				}
 				return err
 			}
 			if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+				r.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				// Unlock the object Keys before return.
-				r.cache.Unlock(ctx, lk)
+				r.l2Cache.Unlock(ctx, lk)
 				return err
 			}
 			// Tolerate Redis cache failure.
-			if err := r.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+			if err := r.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
 			}
 			// Unlock the object Keys.
-			if err := r.cache.Unlock(ctx, lk); err != nil {
+			if err := r.l2Cache.Unlock(ctx, lk); err != nil {
 				return err
 			}
 		}
@@ -97,11 +98,12 @@ func (r registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles []sop.R
 
 	for _, sh := range storesHandles {
 		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs}); err != nil {
+			// TODO: remove from cache if errored.
 			return err
 		}
 		for _, h := range sh.IDs {
 			// Tolerate Redis cache failure.
-			if err := r.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+			if err := r.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis setstruct) failed, details: %v", err))
 			}
 		}
@@ -118,12 +120,12 @@ func (r registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPayloa
 			h := sop.Handle{}
 			var err error
 			if storeLids.IsCacheTTL {
-				err = r.cache.GetStructEx(ctx, storeLids.IDs[i].String(), &h, storeLids.CacheDuration)
+				err = r.l2Cache.GetStructEx(ctx, storeLids.IDs[i].String(), &h, storeLids.CacheDuration)
 			} else {
-				err = r.cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
+				err = r.l2Cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
 			}
 			if err != nil {
-				if !r.cache.KeyNotFound(err) {
+				if !r.l2Cache.KeyNotFound(err) {
 					log.Warn(fmt.Sprintf("Registry Get (redis getstruct) failed, details: %v", err))
 				}
 				lids = append(lids, storeLids.IDs[i])
@@ -143,7 +145,7 @@ func (r registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPayloa
 			continue
 		}
 
-		mh, err := r.hashmap.get(ctx, sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: lids})
+		mh, err := r.hashmap.fetch(ctx, sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: lids})
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +153,7 @@ func (r registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPayloa
 		// Add to the handles list the "missing from cache" handles read from registry file.
 		for _, handle := range mh[0].Second {
 			handles = append(handles, handle)
-			if err := r.cache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
+			if err := r.l2Cache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Set (redis setstruct) failed, details: %v", err))
 			}
 		}
@@ -166,15 +168,15 @@ func (r registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPayloa
 	return storesHandles, nil
 }
 func (r registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
-	for _, storeLids := range storesLids {
-		// Flush out the failing records from cache.
-		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
-			for _, id := range storeLids.IDs {
-				if err := r.cache.Delete(ctx, []string{id.String()}); err != nil && !r.cache.KeyNotFound(err) {
-					log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
-				}
+	// Flush out the failing records from cache.
+	deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
+		for _, id := range storeLids.IDs {
+			if err := r.l2Cache.Delete(ctx, []string{id.String()}); err != nil && !r.l2Cache.KeyNotFound(err) {
+				log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
 			}
 		}
+	}
+	for _, storeLids := range storesLids {
 		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: storeLids.IDs}); err != nil {
 			deleteFromCache(storeLids)
 			return err
@@ -199,30 +201,30 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 
 	// Force tracker to treat passive as active folder so replication can write to the passive destinations.
 	r.replicationTracker.isFirstFolderActive = !af
-	rm := newRegistryMap(true, r.hashmap.hashmap.hashModValue, r.replicationTracker, r.cache)
+	rm := newRegistryMap(true, r.hashmap.hashmap.hashModValue, r.replicationTracker, r.l2Cache)
 
 	for i := range newRootNodesHandles {
-		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: newRootNodesHandles[i].RegistryTable, 
-			Second:  newRootNodesHandles[i].IDs}); err != nil {
+		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: newRootNodesHandles[i].RegistryTable,
+			Second: newRootNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating new root nodes, details: %v", err))
 		}
 	}
 	for i := range addedNodesHandles {
-		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: addedNodesHandles[i].RegistryTable, 
+		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: addedNodesHandles[i].RegistryTable,
 			Second: addedNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating new nodes, details: %v", err))
 		}
 	}
 	for i := range updatedNodesHandles {
-		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: updatedNodesHandles[i].RegistryTable, 
+		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: updatedNodesHandles[i].RegistryTable,
 			Second: updatedNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating updated nodes, details: %v", err))
 		}
 	}
 
 	for i := range removedNodesHandles {
-		
-		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: removedNodesHandles[i].RegistryTable, 
+
+		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: removedNodesHandles[i].RegistryTable,
 			Second: getIDs(removedNodesHandles[i].IDs)}); err != nil {
 			log.Error(fmt.Sprintf("error replicating removed nodes, details: %v", err))
 		}
