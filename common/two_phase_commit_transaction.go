@@ -467,6 +467,29 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 }
 
 func (t *Transaction) populateMru(ctx context.Context) {
+
+	// populate MRU cache with nodes in "localCache" of each B-tree.
+	for _, s := range t.btreesBackend {
+		for k, cacheNode := range s.nodeRepository.localCache {
+
+			si := s.getStoreInfo()
+			h, err := t.registry.Get(ctx, []sop.RegistryPayload[sop.UUID]{{
+				RegistryTable: si.RegistryTable,
+				CacheDuration: si.CacheConfig.RegistryCacheDuration,
+				IsCacheTTL:    si.CacheConfig.IsRegistryCacheTTL,
+				IDs:           []sop.UUID{k},
+			}})
+			if err != nil {
+				continue
+			}
+			if len(h) == 0 || len(h[0].IDs) == 0 {
+				continue
+			}
+
+			t.l1Cache.SetNodeMRU(ctx, h[0].IDs[0].GetActiveID(), cacheNode.node, si.CacheConfig.NodeCacheDuration)
+		}
+	}
+
 	t.updateVersionThenPopulateMru(ctx, t.addedNodeHandles, t.addedNodes)
 	t.updateVersionThenPopulateMru(ctx, t.newRootNodeHandles, t.rootNodes)
 	t.updateVersionThenPopulateMru(ctx, t.updatedNodeHandles, t.updatedNodes)
@@ -478,7 +501,7 @@ func (t *Transaction) updateVersionThenPopulateMru(ctx context.Context, handles 
 		for ii := range nodes[i].Second {
 			target := nodes[i].Second[ii]
 			target.(btree.MetaDataType).SetVersion(handles[i].IDs[ii].Version)
-			t.l1Cache.SetNode(ctx, handles[i].IDs[ii].GetActiveID(), target, nodes[i].First.CacheConfig.NodeCacheDuration)
+			t.l1Cache.SetNodeMRU(ctx, handles[i].IDs[ii].GetActiveID(), target, nodes[i].First.CacheConfig.NodeCacheDuration)
 		}
 	}
 }

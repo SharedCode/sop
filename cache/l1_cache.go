@@ -66,6 +66,12 @@ func NewL1Cache(l2cn sop.Cache, minCapacity, maxCapacity int) *L1Cache {
 // and fetch it if there is.
 
 func (c *L1Cache) SetNode(ctx context.Context, nodeID sop.UUID, node any, nodeCacheDuration time.Duration) {
+	c.SetNodeMRU(ctx, nodeID, node, nodeCacheDuration)
+	if err := c.l2CacheNodes.SetStruct(ctx, FormatNodeKey(nodeID.String()), node, nodeCacheDuration); err != nil {
+		log.Warn(fmt.Sprintf("failed to cache in Redis node with ID: %v, details: %v", nodeID.String(), err))
+	}
+}
+func (c *L1Cache) SetNodeMRU(ctx context.Context, nodeID sop.UUID, node any, nodeCacheDuration time.Duration) {
 	// Update the lookup entry's node value w/ incoming.
 	ba, _ := encoding.BlobMarshaler.Marshal(node)
 	c.locker.Lock()
@@ -84,7 +90,7 @@ func (c *L1Cache) SetNode(ctx context.Context, nodeID sop.UUID, node any, nodeCa
 		}
 	}
 	c.locker.Unlock()
-
+	
 	// Evict LRU items if MRU is full.
 	c.Evict()
 }
@@ -128,7 +134,7 @@ func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any
 		}
 	}
 	// Found in L2, put in MRU.
-	c.SetNode(ctx, nodeID, nodeTarget, nodeCacheTTLDuration)
+	c.SetNodeMRU(ctx, nodeID, nodeTarget, nodeCacheTTLDuration)
 
 	return nodeTarget, nil
 }

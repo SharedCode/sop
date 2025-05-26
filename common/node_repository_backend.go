@@ -107,10 +107,7 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 	}
 	encoding.BlobMarshaler.Unmarshal(ba, target)
 	target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
-	//nr.l1Cache.SetNode(ctx, nodeID, target, nr.storeInfo.CacheConfig.NodeCacheDuration)
-	if err := nr.transaction.l2Cache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
-		log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID.String(), err))
-	}
+	nr.l1Cache.SetNode(ctx, nodeID, target, nr.storeInfo.CacheConfig.NodeCacheDuration)
 	nr.localCache[logicalID] = cachedNode{
 		action: defaultAction,
 		node:   target,
