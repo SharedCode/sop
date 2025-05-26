@@ -15,6 +15,7 @@ import (
 )
 
 type entry struct {
+	nodeVersion int32
 	nodeData []byte
 	dllNode  *node[sop.UUID]
 }
@@ -74,9 +75,11 @@ func (c *L1Cache) SetNode(ctx context.Context, nodeID sop.UUID, node any, nodeCa
 func (c *L1Cache) SetNodeMRU(ctx context.Context, nodeID sop.UUID, node any, nodeCacheDuration time.Duration) {
 	// Update the lookup entry's node value w/ incoming.
 	ba, _ := encoding.BlobMarshaler.Marshal(node)
+	nv := node.(btree.MetaDataType).GetVersion()
 	c.locker.Lock()
 	if v, ok := c.lookup[nodeID]; ok {
 		v.nodeData = ba
+		v.nodeVersion = nv
 		c.mru.remove(v.dllNode)
 		v.dllNode = c.mru.add(nodeID)
 		c.locker.Unlock()
@@ -86,6 +89,7 @@ func (c *L1Cache) SetNodeMRU(ctx context.Context, nodeID sop.UUID, node any, nod
 		n := c.mru.add(nodeID)
 		c.lookup[nodeID] = &entry{
 			nodeData: ba,
+			nodeVersion: nv,
 			dllNode:  n,
 		}
 	}
@@ -98,21 +102,14 @@ func (c *L1Cache) SetNodeMRU(ctx context.Context, nodeID sop.UUID, node any, nod
 func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any, isNodeCacheTTL bool, nodeCacheTTLDuration time.Duration) (any, error) {
 	nodeID := handle.GetActiveID()
 
-	fetchFromL2 := false
-
 	// Get node from MRU if same version as requested.
 	c.locker.Lock()
-	if v, ok := c.lookup[nodeID]; ok {
+	if v, ok := c.lookup[nodeID]; ok && v.nodeVersion == handle.Version{
 		c.mru.remove(v.dllNode)
 		v.dllNode = c.mru.add(nodeID)
-
 		encoding.BlobMarshaler.Unmarshal(v.nodeData, nodeTarget)
-		fetchFromL2 = nodeTarget.(btree.MetaDataType).GetVersion() != handle.Version
-
-		if !fetchFromL2 {
-			c.locker.Unlock()
-			return nodeTarget, nil
-		}
+		c.locker.Unlock()
+		return nodeTarget, nil
 	}
 	c.locker.Unlock()
 
