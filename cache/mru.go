@@ -31,7 +31,7 @@ func (m *mru) evict() {
 		}
 		if id, ok := m.dll.deleteFromTail(); ok {
 			if v, found := m.l1Cache.lookup[id]; found {
-				v.node = sop.NilUUID
+				v.nodeData = nil
 				v.dllNode = nil
 				delete(m.l1Cache.lookup, id)
 			}
