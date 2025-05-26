@@ -46,9 +46,9 @@ func (b *blobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.
 			ba := blob.Value
 			res := b.BucketAsStore.Add(ctx, storeBlobs.BlobTable, []sop.KeyValuePair[string, *aws_s3.S3Object]{
 				sop.KeyValuePair[string, *aws_s3.S3Object]{
-				Key:   blob.Key.String(),
-				Value: &aws_s3.S3Object{Data: ba},
-			}})
+					Key:   blob.Key.String(),
+					Value: &aws_s3.S3Object{Data: ba},
+				}})
 			if res.Error != nil {
 				return res.Error
 			}

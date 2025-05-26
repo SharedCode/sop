@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"time"
-
 )
 
 // Manage or fetch Virtual ID request/response payload.

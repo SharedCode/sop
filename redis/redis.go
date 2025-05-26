@@ -11,8 +11,8 @@ import (
 	"github.com/SharedCode/sop/encoding"
 )
 
-type client struct{
-	conn *Connection
+type client struct {
+	conn    *Connection
 	isOwner bool
 }
 
@@ -26,14 +26,14 @@ func NewClient() sop.Cache {
 
 // Opens a new Redis connection then returns a client wrapper for it.
 // Returned wrapper has "Close" method you can call when you don't need it anymore.
-// 
+//
 // This ctor was provided for the case of wanting to use another separate Redis cluster,
 // perhaps wanting to use another one dedicated for Blobs management. Watch out later
 // when this feature is supported & you can pass this (blobs) cache in the Transaction options.
 func NewConnectionClient(options Options) sop.CloseableCache {
 	c := openConnection(options)
 	return &client{
-		conn: c,
+		conn:    c,
 		isOwner: true,
 	}
 }

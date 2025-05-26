@@ -36,7 +36,7 @@ type Transaction struct {
 	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
 	blobStore       sop.BlobStore
 	l2Cache         sop.Cache
-	l1Cache 		*cache.L1Cache
+	l1Cache         *cache.L1Cache
 	storeRepository sop.StoreRepository
 	// VirtualIDRegistry manages the virtual IDs, a.k.a. "handle".
 	registry sop.Registry
@@ -58,9 +58,9 @@ type Transaction struct {
 
 	// Needed for Phase 2 commit for populating MRU cache.
 	updatedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
-	addedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
+	addedNodes   []sop.Tuple[*sop.StoreInfo, []interface{}]
 	fetchedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
-	rootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
+	rootNodes    []sop.Tuple[*sop.StoreInfo, []interface{}]
 
 	// Used for transaction level locking.
 	nodesKeys []*sop.LockKey
@@ -86,7 +86,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 		storeRepository: storeRepository,
 		registry:        registry,
 		l2Cache:         l2Cache,
-		l1Cache: cache.GetGlobalCache(),
+		l1Cache:         cache.GetGlobalCache(),
 		blobStore:       blobStore,
 		logger:          newTransactionLogger(transactionLog, logging),
 		phaseDone:       -1,

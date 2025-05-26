@@ -20,7 +20,7 @@ func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails []fil
 	dio := newDirectIO()
 	ba := dio.createAlignedBlock()
 	m := encoding.NewHandleMarshaler()
-	buffer :=  make([]byte, 0, sop.HandleSizeInBytes)
+	buffer := make([]byte, 0, sop.HandleSizeInBytes)
 	for _, frd := range fileRegionDetails {
 		ba2, _ := m.Marshal(frd.handle, buffer)
 		if err := hm.updateFileBlockRegion(ctx, frd.dio, frd.blockOffset, int(frd.handleInBlockOffset), ba2, ba); err != nil {

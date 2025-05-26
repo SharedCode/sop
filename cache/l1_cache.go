@@ -76,7 +76,7 @@ func (c *L1Cache) SetNodeMRU(ctx context.Context, nodeID sop.UUID, node any, nod
 	ba, _ := encoding.BlobMarshaler.Marshal(node)
 	c.locker.Lock()
 	if v, ok := c.lookup[nodeID]; ok {
-		v.node =  ba //node
+		v.node = ba //node
 		c.mru.remove(v.dllNode)
 		v.dllNode = c.mru.add(nodeID)
 		c.locker.Unlock()
@@ -85,12 +85,12 @@ func (c *L1Cache) SetNodeMRU(ctx context.Context, nodeID sop.UUID, node any, nod
 		// Add to MRU cache.
 		n := c.mru.add(nodeID)
 		c.lookup[nodeID] = &entry{
-			node: ba,	//node,
+			node:    ba, //node,
 			dllNode: n,
 		}
 	}
 	c.locker.Unlock()
-	
+
 	// Evict LRU items if MRU is full.
 	c.Evict()
 }
@@ -99,7 +99,7 @@ func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any
 	nodeID := handle.GetActiveID()
 
 	fetchFromL2 := false
-	
+
 	// Get node from MRU if same version as requested.
 	c.locker.Lock()
 	if v, ok := c.lookup[nodeID]; ok {

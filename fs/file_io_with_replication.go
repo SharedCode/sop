@@ -10,7 +10,7 @@ type fileIO struct {
 	manageStore        sop.ManageStore
 	replicationTracker *replicationTracker
 	fio                FileIO
-	trackActions bool
+	trackActions       bool
 	// 1 = write, 2 = createStore, 3 = removeStore
 	actionsDone []sop.Tuple[int, any]
 }
@@ -20,7 +20,7 @@ func newFileIOWithReplication(replicationTracker *replicationTracker, manageStor
 		manageStore:        manageStore,
 		replicationTracker: replicationTracker,
 		fio:                NewDefaultFileIO(nil),
-		trackActions: trackActions,
+		trackActions:       trackActions,
 	}
 }
 

@@ -28,7 +28,7 @@ type nodeRepositoryBackend struct {
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
 	localCache map[sop.UUID]cachedNode
 	l2Cache    sop.Cache
-	l1Cache *cache.L1Cache
+	l1Cache    *cache.L1Cache
 	storeInfo  *sop.StoreInfo
 	count      int64
 }
@@ -40,7 +40,7 @@ func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.
 		storeInfo:   storeInfo,
 		localCache:  make(map[sop.UUID]cachedNode),
 		l2Cache:     redis.NewClient(),
-		l1Cache: cache.GetGlobalCache(),
+		l1Cache:     cache.GetGlobalCache(),
 		count:       storeInfo.Count,
 	}
 	return &nodeRepositoryFrontEnd[TK, TV]{
