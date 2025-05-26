@@ -24,16 +24,16 @@ func (m *mru) add(id sop.UUID) *node[sop.UUID] {
 func (m *mru) remove(n *node[sop.UUID]) {
 	m.dll.delete(n)
 }
-func (m *mru) prune() {
+func (m *mru) evict() {
 	for {
 		if !m.isFull() {
 			break
 		}
 		if id, ok := m.dll.deleteFromTail(); ok {
-			if v, found := m.l1Cache.handles[id]; found {
+			if v, found := m.l1Cache.lookup[id]; found {
 				v.node = sop.NilUUID
 				v.dllNode = nil
-				delete(m.l1Cache.handles, id)
+				delete(m.l1Cache.lookup, id)
 			}
 		} else {
 			break

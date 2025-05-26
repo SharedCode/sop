@@ -65,6 +65,14 @@ func (dll *doublyLinkedList[T]) delete(n *node[T]) bool {
 	if n == nil {
 		return false
 	}
+
+	if n == dll.head {
+		dll.head = n.next
+	}
+	if n == dll.tail {
+		dll.tail = n.prev
+	}
+
 	p := n.prev
 	if p != nil {
 		p.next = n.next

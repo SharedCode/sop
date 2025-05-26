@@ -7,6 +7,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/cache"
 	"github.com/SharedCode/sop/encoding"
 	"github.com/SharedCode/sop/redis"
 )
@@ -26,8 +27,9 @@ type nodeRepositoryBackend struct {
 	transaction *Transaction
 	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
 	localCache map[sop.UUID]cachedNode
-	storeInfo  *sop.StoreInfo
 	l2Cache    sop.Cache
+	l1Cache *cache.L1Cache
+	storeInfo  *sop.StoreInfo
 	count      int64
 }
 
@@ -35,9 +37,10 @@ type nodeRepositoryBackend struct {
 func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.StoreInfo) *nodeRepositoryFrontEnd[TK, TV] {
 	nr := &nodeRepositoryBackend{
 		transaction: t,
-		localCache:  make(map[sop.UUID]cachedNode),
 		storeInfo:   storeInfo,
+		localCache:  make(map[sop.UUID]cachedNode),
 		l2Cache:     redis.NewClient(),
+		l1Cache: cache.GetGlobalCache(),
 		count:       storeInfo.Count,
 	}
 	return &nodeRepositoryFrontEnd[TK, TV]{
@@ -79,37 +82,35 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 	if len(h) == 0 || len(h[0].IDs) == 0 {
 		return nil, nil
 	}
-	nodeID := logicalID
-	if !h[0].IDs[0].LogicalID.IsNil() {
-		// Use active physical ID if in case different.
-		nodeID = h[0].IDs[0].GetActiveID()
-	}
-	if nr.storeInfo.CacheConfig.IsNodeCacheTTL {
-		err = nr.transaction.l2Cache.GetStructEx(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration)
-	} else {
-		err = nr.transaction.l2Cache.GetStruct(ctx, nr.formatKey(nodeID.String()), target)
-	}
+
+	// Fetch node from MRU if it is there.
+	var n any
+	n, err = nr.l1Cache.GetNode(ctx, h[0].IDs[0], target, nr.storeInfo.CacheConfig.IsNodeCacheTTL, nr.storeInfo.CacheConfig.NodeCacheDuration)
 	if err != nil {
-		if !nr.l2Cache.KeyNotFound(err) {
-			return nil, err
-		}
-		// Fetch from blobStore and cache to Redis/local.
-		var ba []byte
-		if ba, err = nr.transaction.blobStore.GetOne(ctx, nr.storeInfo.BlobTable, nodeID); err != nil {
-			return nil, err
-		}
-		encoding.BlobMarshaler.Unmarshal(ba, target)
+		return nil, err
+	}
+	if n != nil {
+		target = n
 		target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
-		if err := nr.transaction.l2Cache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
-			log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID.String(), err))
-		}
 		nr.localCache[logicalID] = cachedNode{
 			action: defaultAction,
 			node:   target,
 		}
 		return target, nil
 	}
+
+	// Fetch from blobStore and cache to Redis/local.
+	nodeID := h[0].IDs[0].GetActiveID()
+	var ba []byte
+	if ba, err = nr.transaction.blobStore.GetOne(ctx, nr.storeInfo.BlobTable, nodeID); err != nil {
+		return nil, err
+	}
+	encoding.BlobMarshaler.Unmarshal(ba, target)
 	target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
+	//nr.l1Cache.SetNode(ctx, nodeID, target, nr.storeInfo.CacheConfig.NodeCacheDuration)
+	if err := nr.transaction.l2Cache.SetStruct(ctx, nr.formatKey(nodeID.String()), target, nr.storeInfo.CacheConfig.NodeCacheDuration); err != nil {
+		log.Warn(fmt.Sprintf("failed to cache in Redis the newly fetched node with ID: %v, details: %v", nodeID.String(), err))
+	}
 	nr.localCache[logicalID] = cachedNode{
 		action: defaultAction,
 		node:   target,

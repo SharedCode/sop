@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/cache"
 )
 
 type btreeBackend struct {
@@ -34,6 +36,7 @@ type Transaction struct {
 	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
 	blobStore       sop.BlobStore
 	l2Cache         sop.Cache
+	l1Cache 		*cache.L1Cache
 	storeRepository sop.StoreRepository
 	// VirtualIDRegistry manages the virtual IDs, a.k.a. "handle".
 	registry sop.Registry
@@ -53,6 +56,13 @@ type Transaction struct {
 	newRootNodeHandles []sop.RegistryPayload[sop.Handle]
 	updatedStoresInfo  []sop.StoreInfo
 
+	// Needed for Phase 2 commit for populating MRU cache.
+	updatedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
+	removedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
+	addedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
+	fetchedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
+	rootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
+
 	// Used for transaction level locking.
 	nodesKeys []*sop.LockKey
 }
@@ -62,7 +72,7 @@ type Transaction struct {
 // If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
 // However, without logging, the transaction commit can execute faster because there is no data getting logged.
 func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool,
-	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, cache sop.Cache, transactionLog sop.TransactionLog) (sop.TwoPhaseCommitTransaction, error) {
+	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, l2Cache sop.Cache, transactionLog sop.TransactionLog) (sop.TwoPhaseCommitTransaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
 		maxTime = time.Duration(15 * time.Minute)
@@ -76,7 +86,8 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 		maxTime:         maxTime,
 		storeRepository: storeRepository,
 		registry:        registry,
-		l2Cache:         cache,
+		l2Cache:         l2Cache,
+		l1Cache: cache.GetGlobalCache(),
 		blobStore:       blobStore,
 		logger:          newTransactionLogger(transactionLog, logging),
 		phaseDone:       -1,
@@ -395,9 +406,15 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 	}
 
 	log.Debug(fmt.Sprintf("phase 1 commit ends, tid: %v", t.GetID()))
+
 	// Populate the phase 2 commit required objects.
 	t.updatedNodeHandles = uh
 	t.removedNodeHandles = rh
+
+	t.addedNodes = addedNodes
+	t.rootNodes = rootNodes
+	t.updatedNodes = updatedNodes
+	t.removedNodes = removedNodes
 
 	return nil
 }
@@ -429,6 +446,7 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 	// Replicate to passive target paths.
 	t.registry.Replicate(ctx, t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles)
 	t.storeRepository.Replicate(ctx, t.updatedStoresInfo)
+	t.populateMru(ctx)
 
 	// Let other transactions get a lock on these updated & removed nodes' keys we've locked.
 	t.unlockNodesKeys(ctx)
@@ -446,4 +464,21 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 	log.Debug(fmt.Sprintf("phase 2 commit ends, tid: %v", t.GetID()))
 
 	return nil
+}
+
+func (t *Transaction) populateMru(ctx context.Context) {
+	t.updateVersionThenPopulateMru(ctx, t.addedNodeHandles, t.addedNodes)
+	t.updateVersionThenPopulateMru(ctx, t.newRootNodeHandles, t.rootNodes)
+	t.updateVersionThenPopulateMru(ctx, t.updatedNodeHandles, t.updatedNodes)
+	t.updateVersionThenPopulateMru(ctx, t.removedNodeHandles, t.removedNodes)
+}
+
+func (t *Transaction) updateVersionThenPopulateMru(ctx context.Context, handles []sop.RegistryPayload[sop.Handle], nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) {
+	for i := range nodes {
+		for ii := range nodes[i].Second {
+			target := nodes[i].Second[ii]
+			target.(btree.MetaDataType).SetVersion(handles[i].IDs[ii].Version)
+			t.l1Cache.SetNode(ctx, handles[i].IDs[ii].GetActiveID(), target, nodes[i].First.CacheConfig.NodeCacheDuration)
+		}
+	}
 }
