@@ -1,4 +1,4 @@
-package l1_cache
+package cache
 
 import "github.com/SharedCode/sop"
 
@@ -6,12 +6,12 @@ type mru struct {
 	minCapacity int
 	maxCapacity int
 	dll         *doublyLinkedList[sop.UUID]
-	lcCache     *l1Cache
+	l1Cache     *L1Cache
 }
 
-func newMru(l1c *l1Cache, minCapacity, maxCapacity int) *mru {
+func newMru(l1c *L1Cache, minCapacity, maxCapacity int) *mru {
 	return &mru{
-		lcCache:     l1c,
+		l1Cache:     l1c,
 		minCapacity: minCapacity,
 		maxCapacity: maxCapacity,
 		dll:         newDoublyLinkedList[sop.UUID](),
@@ -24,16 +24,16 @@ func (m *mru) add(id sop.UUID) *node[sop.UUID] {
 func (m *mru) remove(n *node[sop.UUID]) {
 	m.dll.delete(n)
 }
-func (m *mru) prune() {
+func (m *mru) evict() {
 	for {
 		if !m.isFull() {
 			break
 		}
 		if id, ok := m.dll.deleteFromTail(); ok {
-			if v, found := m.lcCache.handles[id]; found {
+			if v, found := m.l1Cache.lookup[id]; found {
 				v.node = sop.NilUUID
 				v.dllNode = nil
-				delete(m.lcCache.handles, id)
+				delete(m.l1Cache.lookup, id)
 			}
 		} else {
 			break
