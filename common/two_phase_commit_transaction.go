@@ -58,7 +58,6 @@ type Transaction struct {
 
 	// Needed for Phase 2 commit for populating MRU cache.
 	updatedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
-	removedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
 	addedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
 	fetchedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
 	rootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
@@ -414,7 +413,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 	t.addedNodes = addedNodes
 	t.rootNodes = rootNodes
 	t.updatedNodes = updatedNodes
-	t.removedNodes = removedNodes
+	t.fetchedNodes = fetchedNodes
 
 	return nil
 }
@@ -470,30 +469,24 @@ func (t *Transaction) populateMru(ctx context.Context) {
 
 	// populate MRU cache with nodes in "localCache" of each B-tree.
 	for _, s := range t.btreesBackend {
-		for k, cacheNode := range s.nodeRepository.localCache {
-
+		for _, cacheNode := range s.nodeRepository.localCache {
 			si := s.getStoreInfo()
-			h, err := t.registry.Get(ctx, []sop.RegistryPayload[sop.UUID]{{
-				RegistryTable: si.RegistryTable,
-				CacheDuration: si.CacheConfig.RegistryCacheDuration,
-				IsCacheTTL:    si.CacheConfig.IsRegistryCacheTTL,
-				IDs:           []sop.UUID{k},
-			}})
-			if err != nil {
-				continue
-			}
-			if len(h) == 0 || len(h[0].IDs) == 0 {
-				continue
-			}
-
-			t.l1Cache.SetNodeMRU(ctx, h[0].IDs[0].GetActiveID(), cacheNode.node, si.CacheConfig.NodeCacheDuration)
+			id := cacheNode.node.(btree.MetaDataType).GetID()
+			t.l1Cache.SetNodeMRU(ctx, id, cacheNode.node, si.CacheConfig.NodeCacheDuration)
+		}
+	}
+	// Fetched Nodes are handled differently because they are not processed in the transaction and we don't have their "virtual IDs" (handles).
+	vids := convertToRegistryRequestPayload(t.fetchedNodes)
+	for i := range vids {
+		for ii := range vids[i].IDs {
+			target := t.fetchedNodes[i].Second[ii]
+			t.l1Cache.SetNodeMRU(ctx, vids[i].IDs[ii], target, t.fetchedNodes[i].First.CacheConfig.NodeCacheDuration)
 		}
 	}
 
 	t.updateVersionThenPopulateMru(ctx, t.addedNodeHandles, t.addedNodes)
-	t.updateVersionThenPopulateMru(ctx, t.newRootNodeHandles, t.rootNodes)
 	t.updateVersionThenPopulateMru(ctx, t.updatedNodeHandles, t.updatedNodes)
-	t.updateVersionThenPopulateMru(ctx, t.removedNodeHandles, t.removedNodes)
+	t.updateVersionThenPopulateMru(ctx, t.newRootNodeHandles, t.rootNodes)
 }
 
 func (t *Transaction) updateVersionThenPopulateMru(ctx context.Context, handles []sop.RegistryPayload[sop.Handle], nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) {

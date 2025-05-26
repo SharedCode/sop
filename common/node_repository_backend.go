@@ -573,9 +573,6 @@ func (nr *nodeRepositoryBackend) rollbackRemovedNodes(ctx context.Context, nodes
 
 // Set to active the inactive nodes.
 func (nr *nodeRepositoryBackend) activateInactiveNodes(handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
-	if len(handles) == 0 {
-		return nil, nil
-	}
 	for i := range handles {
 		for ii := range handles[i].IDs {
 			// Set the inactive as active ID.
