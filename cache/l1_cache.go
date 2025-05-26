@@ -15,8 +15,8 @@ import (
 )
 
 type entry struct {
-	node    any
-	dllNode *node[sop.UUID]
+	nodeData []byte
+	dllNode  *node[sop.UUID]
 }
 
 type L1Cache struct {
@@ -76,7 +76,7 @@ func (c *L1Cache) SetNodeMRU(ctx context.Context, nodeID sop.UUID, node any, nod
 	ba, _ := encoding.BlobMarshaler.Marshal(node)
 	c.locker.Lock()
 	if v, ok := c.lookup[nodeID]; ok {
-		v.node = ba //node
+		v.nodeData = ba
 		c.mru.remove(v.dllNode)
 		v.dllNode = c.mru.add(nodeID)
 		c.locker.Unlock()
@@ -85,8 +85,8 @@ func (c *L1Cache) SetNodeMRU(ctx context.Context, nodeID sop.UUID, node any, nod
 		// Add to MRU cache.
 		n := c.mru.add(nodeID)
 		c.lookup[nodeID] = &entry{
-			node:    ba, //node,
-			dllNode: n,
+			nodeData: ba,
+			dllNode:  n,
 		}
 	}
 	c.locker.Unlock()
@@ -106,9 +106,8 @@ func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any
 		c.mru.remove(v.dllNode)
 		v.dllNode = c.mru.add(nodeID)
 
-		encoding.BlobMarshaler.Unmarshal(v.node.([]byte), nodeTarget)
+		encoding.BlobMarshaler.Unmarshal(v.nodeData, nodeTarget)
 		fetchFromL2 = nodeTarget.(btree.MetaDataType).GetVersion() != handle.Version
-		//nodeTarget = v.node
 
 		if !fetchFromL2 {
 			c.locker.Unlock()
@@ -147,7 +146,7 @@ func (c *L1Cache) DeleteNode(ctx context.Context, nodeID sop.UUID) (bool, error)
 	c.locker.Lock()
 	if v, ok := c.lookup[nodeID]; ok {
 		c.mru.remove(v.dllNode)
-		v.node = nil
+		v.nodeData = nil
 		v.dllNode = nil
 		delete(c.lookup, nodeID)
 		result = true

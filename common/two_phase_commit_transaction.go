@@ -469,6 +469,7 @@ func (t *Transaction) populateMru(ctx context.Context) {
 
 	// populate MRU cache with nodes in "localCache" of each B-tree.
 	for _, s := range t.btreesBackend {
+		log.Debug(fmt.Sprintf("MRU seeding: local cache node count: %d", len(s.nodeRepository.localCache)))
 		for _, cacheNode := range s.nodeRepository.localCache {
 			si := s.getStoreInfo()
 			id := cacheNode.node.(btree.MetaDataType).GetID()
