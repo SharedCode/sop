@@ -401,7 +401,7 @@ func (node *Node[TK, TV]) moveToLast(ctx context.Context, btree *Btree[TK, TV]) 
 			break
 		}
 		n, err = btree.getNode(ctx, cid)
-		if err != nil {
+		if n == nil || err != nil {
 			return false, err
 		}
 	}
