@@ -15,7 +15,7 @@ import (
 )
 
 type registry struct {
-	cache sop.Cache
+	l2Cache sop.Cache
 }
 
 // Lock time out for the cache based conflict check routine in update (handles) function.
@@ -24,7 +24,7 @@ const updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 // NewRegistry manages the Handle in the store's Cassandra registry table.
 func NewRegistry() sop.Registry {
 	return &registry{
-		cache: redis.NewClient(),
+		l2Cache: redis.NewClient(),
 	}
 }
 
@@ -48,7 +48,7 @@ func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[
 				return err
 			}
 			// Tolerate Redis cache failure.
-			if err := v.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+			if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Add (redis setstruct) failed, details: %v", err))
 			}
 		}
@@ -71,8 +71,8 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 		// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 		for _, h := range sh.IDs {
 			// Update registry record.
-			lk := v.cache.CreateLockKeys([]string{h.LogicalID.String()})
-			if ok, err := v.cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
+			lk := v.l2Cache.CreateLockKeys([]string{h.LogicalID.String()})
+			if ok, err := v.l2Cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
 				if err == nil {
 					err = fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key)
 				}
@@ -87,18 +87,19 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 
 			// Update registry record.
 			if err := qry.Exec(); err != nil {
+				v.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				// Unlock the object Keys before return.
-				v.cache.Unlock(ctx, lk)
+				v.l2Cache.Unlock(ctx, lk)
 				return err
 			}
 
-			// Tolerate Redis cache failure.
-			if err := v.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+			// Update Redis to sync it since storage update succeeded.
+			if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
 			}
 
 			// Unlock the object Keys.
-			if err := v.cache.Unlock(ctx, lk); err != nil {
+			if err := v.l2Cache.Unlock(ctx, lk); err != nil {
 				return err
 			}
 		}
@@ -120,11 +121,12 @@ func (v *registry) UpdateNoLocks(ctx context.Context, storesHandles []sop.Regist
 
 			// Update registry record.
 			if err := qry.Exec(); err != nil {
+				v.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				return err
 			}
 
 			// Tolerate Redis cache failure.
-			if err := v.cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+			if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
 			}
 		}
@@ -146,12 +148,12 @@ func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop
 			h := sop.Handle{}
 			var err error
 			if storeLids.IsCacheTTL {
-				err = v.cache.GetStructEx(ctx, storeLids.IDs[i].String(), &h, storeLids.CacheDuration)
+				err = v.l2Cache.GetStructEx(ctx, storeLids.IDs[i].String(), &h, storeLids.CacheDuration)
 			} else {
-				err = v.cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
+				err = v.l2Cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
 			}
 			if err != nil {
-				if !v.cache.KeyNotFound(err) {
+				if !v.l2Cache.KeyNotFound(err) {
 					log.Warn(fmt.Sprintf("Registry Get (redis getstruct) failed, details: %v", err))
 				}
 				paramQ = append(paramQ, "?")
@@ -188,7 +190,7 @@ func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop
 			handle.PhysicalIDB = sop.UUID(idb)
 			handles = append(handles, handle)
 
-			if err := v.cache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
+			if err := v.l2Cache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Set (redis setstruct) failed, details: %v", err))
 			}
 			handle = sop.Handle{}
@@ -225,7 +227,7 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 		// Flush out the failing records from cache.
 		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
 			for _, id := range storeLids.IDs {
-				if err := v.cache.Delete(ctx, []string{id.String()}); err != nil && !v.cache.KeyNotFound(err) {
+				if err := v.l2Cache.Delete(ctx, []string{id.String()}); err != nil && !v.l2Cache.KeyNotFound(err) {
 					log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
 				}
 			}

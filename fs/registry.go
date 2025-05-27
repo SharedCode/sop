@@ -57,10 +57,6 @@ func (r registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPay
 }
 
 func (r registryOnDisk) Update(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
-	if len(storesHandles) == 0 {
-		return nil
-	}
-
 	for _, sh := range storesHandles {
 		// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 		for _, h := range sh.IDs {
@@ -98,7 +94,11 @@ func (r registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles []sop.R
 
 	for _, sh := range storesHandles {
 		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs}); err != nil {
-			// TODO: remove from cache if errored.
+			for _, h := range sh.IDs {
+				if err := r.l2Cache.Delete(ctx, []string{h.LogicalID.String()}); err != nil {
+					log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis delete) failed, details: %v", err))
+				}
+			}
 			return err
 		}
 		for _, h := range sh.IDs {
@@ -194,8 +194,7 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 		return
 	}
 
-	// Open the hashmaps on the passive destination(s).
-	// Write the nodes' handle(s) on each.
+	// Open the hashmaps on the passive destination(s). Write the nodes' handle(s) on each.
 	// Close the hashmaps files.
 	af := r.replicationTracker.isFirstFolderActive
 
