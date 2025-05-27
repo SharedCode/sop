@@ -26,16 +26,21 @@ type nodeRepositoryBackend struct {
 	transaction *Transaction
 	// MRU cache of read but not operated on nodes.
 	readNodesCache cache.Cache[sop.UUID, any]
+	// cache of all nodes that were operated on, i.e. - created, updated, explitly fetched, removed nodes (and/or its items).
 	localCache map[sop.UUID]cachedNode
+	// L2 Cache, e.g. - Redis. Used here primarily to allow nodes merging in L2. I.e. - capability to sense
+	// changes across different transactions on same or different machines and merge their changes in during transaction commits.
 	l2Cache    sop.Cache
+	// L1 Cache is a virtualized in-memory & L2. Used as a global MRU cache of all
+	// B-trees (across transactions) running in this host computer.
 	l1Cache    *cache.L1Cache
 	storeInfo  *sop.StoreInfo
 	count      int64
 }
 
 const(
-	readNodesMruMinCapacity = 20
-	readNodesMruMaxCapacity = 25
+	readNodesMruMinCapacity = 8
+	readNodesMruMaxCapacity = 12
 )
 
 // NewNodeRepository instantiates a NodeRepository.
@@ -43,13 +48,9 @@ func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.
 	nr := &nodeRepositoryBackend{
 		transaction: t,
 		storeInfo:   storeInfo,
-		// MRU cache of read but not operated on Nodes.
 		readNodesCache: cache.NewCache[sop.UUID, any](readNodesMruMinCapacity, readNodesMruMaxCapacity),
-		// cache of all nodes that were operated on, i.e. - created, updated, explitly fetched, removed nodes (and/or its items).
 		localCache:  make(map[sop.UUID]cachedNode),
-		// L2 Cache, e.g. - Redis.
 		l2Cache:     redis.NewClient(),
-		// L1 Cache is a virtualized in-memory & L2.
 		l1Cache:     cache.GetGlobalCache(),
 		count:       storeInfo.Count,
 	}
