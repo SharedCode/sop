@@ -20,9 +20,8 @@ type cachedNode struct {
 	action actionType
 }
 
-// nodeRepositoryBackend implementation for "cassandra-S3"(in_cas_s3) exposes a standard NodeRepository interface
-// but which, manages b-tree nodes in transaction cache, Redis and in Cassandra + S3,
-// or File System, for debugging &/or "poor man's" setup(no AWS required!).
+// nodeRepositoryBackend implementation exposes a standard NodeRepository interface
+// that manages b-tree nodes in transaction cache, Redis and File System.
 type nodeRepositoryBackend struct {
 	transaction *Transaction
 	// MRU cache of read but not operated on nodes.
@@ -44,9 +43,13 @@ func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.
 	nr := &nodeRepositoryBackend{
 		transaction: t,
 		storeInfo:   storeInfo,
+		// MRU cache of read but not operated on Nodes.
 		readNodesCache: cache.NewCache[sop.UUID, any](readNodesMruMinCapacity, readNodesMruMaxCapacity),
+		// cache of all nodes that were operated on, i.e. - created, updated, explitly fetched, removed nodes (and/or its items).
 		localCache:  make(map[sop.UUID]cachedNode),
+		// L2 Cache, e.g. - Redis.
 		l2Cache:     redis.NewClient(),
+		// L1 Cache is a virtualized in-memory & L2.
 		l1Cache:     cache.GetGlobalCache(),
 		count:       storeInfo.Count,
 	}
