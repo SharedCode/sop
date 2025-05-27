@@ -13,19 +13,19 @@ type Cache[TK any, TV any] interface {
 }
 
 type cacheEntry[TK, TV any] struct {
-	data TV
-	dllNode  *node[TK]
+	data    TV
+	dllNode *node[TK]
 }
 
 type cache[TK comparable, TV any] struct {
-	lookup       map[TK]*cacheEntry[TK, TV]
-	mru          *mru[TK, TV]
+	lookup map[TK]*cacheEntry[TK, TV]
+	mru    *mru[TK, TV]
 }
 
 // Instantiate a new instance of this Cache w/ MRU management logic.
 func NewCache[TK comparable, TV any](minCapacity, maxCapacity int) Cache[TK, TV] {
 	c := cache[TK, TV]{
-		lookup:       make(map[TK]*cacheEntry[TK, TV], maxCapacity),
+		lookup: make(map[TK]*cacheEntry[TK, TV], maxCapacity),
 	}
 	c.mru = newMru(&c, minCapacity, maxCapacity)
 	return &c
@@ -45,7 +45,7 @@ func (c *cache[TK, TV]) Set(key TK, value TV) {
 	}
 	n := c.mru.add(key)
 	c.lookup[key] = &cacheEntry[TK, TV]{
-		data: value,
+		data:    value,
 		dllNode: n,
 	}
 

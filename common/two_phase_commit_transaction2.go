@@ -506,12 +506,3 @@ func (t *Transaction) onIdle(ctx context.Context) {
 		}
 	}
 }
-
-// Returns the total number of UUIDs given a set of blobs (ID) payload.
-func getBlobPayloadCount[T sop.UUID](payloads []sop.BlobsPayload[T]) int {
-	total := 0
-	for _, p := range payloads {
-		total = total + len(p.Blobs)
-	}
-	return total
-}

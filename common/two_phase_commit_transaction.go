@@ -42,7 +42,7 @@ type Transaction struct {
 	registry sop.Registry
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
 	mode sop.TransactionMode
-	// -1 = intial state, 0 = began, 1 = phase 1 commit done, 2 = phase 2 commit or rollback done.
+	// -1 = intial state, 0 = began, 1 = phase 1 commit started, 2 = phase 2 commit or rollback done.
 	phaseDone int
 	maxTime   time.Duration
 	logger    *transactionLog
@@ -464,6 +464,7 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 }
 
 func (t *Transaction) populateMru(ctx context.Context) {
+	// Sync up the cache layers.
 	t.updateVersionThenPopulateMru(ctx, t.addedNodeHandles, t.addedNodes)
 	t.updateVersionThenPopulateMru(ctx, t.updatedNodeHandles, t.updatedNodes)
 	t.updateVersionThenPopulateMru(ctx, t.newRootNodeHandles, t.rootNodes)
