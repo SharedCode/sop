@@ -4,12 +4,12 @@ type mru[TK comparable, TV any] struct {
 	minCapacity int
 	maxCapacity int
 	dll         *doublyLinkedList[TK]
-	cache     *cache[TK, TV]
+	cache       *cache[TK, TV]
 }
 
 func newMru[TK comparable, TV any](c *cache[TK, TV], minCapacity, maxCapacity int) *mru[TK, TV] {
 	return &mru[TK, TV]{
-		cache:     c,
+		cache:       c,
 		minCapacity: minCapacity,
 		maxCapacity: maxCapacity,
 		dll:         newDoublyLinkedList[TK](),
