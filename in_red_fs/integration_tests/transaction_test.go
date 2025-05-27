@@ -379,6 +379,9 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	// Search them all. Searching 90,000 items just took few seconds in my laptop.
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
 
+	b3.Last(ctx)
+	b3.First(ctx)
+
 	for i := start; i <= end; i++ {
 		lname := fmt.Sprintf("reepper%d", i)
 		pk, _ := newPerson("jack", lname, "male", "email very very long long long", "phone123")

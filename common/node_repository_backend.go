@@ -25,7 +25,8 @@ type cachedNode struct {
 // or File System, for debugging &/or "poor man's" setup(no AWS required!).
 type nodeRepositoryBackend struct {
 	transaction *Transaction
-	// TODO: implement a MRU caching on node local cache so we only retain a handful in memory.
+	// MRU cache of read but not operated on nodes.
+	readNodesCache cache.Cache[sop.UUID, any]
 	localCache map[sop.UUID]cachedNode
 	l2Cache    sop.Cache
 	l1Cache    *cache.L1Cache
@@ -33,11 +34,17 @@ type nodeRepositoryBackend struct {
 	count      int64
 }
 
+const(
+	readNodesMruMinCapacity = 20
+	readNodesMruMaxCapacity = 25
+)
+
 // NewNodeRepository instantiates a NodeRepository.
 func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.StoreInfo) *nodeRepositoryFrontEnd[TK, TV] {
 	nr := &nodeRepositoryBackend{
 		transaction: t,
 		storeInfo:   storeInfo,
+		readNodesCache: cache.NewCache[sop.UUID, any](readNodesMruMinCapacity, readNodesMruMaxCapacity),
 		localCache:  make(map[sop.UUID]cachedNode),
 		l2Cache:     redis.NewClient(),
 		l1Cache:     cache.GetGlobalCache(),
@@ -70,6 +77,10 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 		}
 		return v.node, nil
 	}
+	if v := nr.readNodesCache.Get(logicalID); v != nil {
+		return v, nil
+	}
+
 	h, err := nr.transaction.registry.Get(ctx, []sop.RegistryPayload[sop.UUID]{{
 		RegistryTable: nr.storeInfo.RegistryTable,
 		CacheDuration: nr.storeInfo.CacheConfig.RegistryCacheDuration,
@@ -83,6 +94,7 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 		return nil, nil
 	}
 
+	nodeID := h[0].IDs[0].GetActiveID()
 	// Fetch node from MRU if it is there.
 	var n any
 	n, err = nr.l1Cache.GetNode(ctx, h[0].IDs[0], target, nr.storeInfo.CacheConfig.IsNodeCacheTTL, nr.storeInfo.CacheConfig.NodeCacheDuration)
@@ -92,26 +104,21 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 	if n != nil {
 		target = n
 		target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
-		nr.localCache[logicalID] = cachedNode{
-			action: defaultAction,
-			node:   target,
-		}
+		nr.readNodesCache.Set(logicalID, target)
 		return target, nil
 	}
 
 	// Fetch from blobStore and cache to Redis/local.
-	nodeID := h[0].IDs[0].GetActiveID()
 	var ba []byte
 	if ba, err = nr.transaction.blobStore.GetOne(ctx, nr.storeInfo.BlobTable, nodeID); err != nil {
 		return nil, err
 	}
 	encoding.BlobMarshaler.Unmarshal(ba, target)
 	target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
+
+	// Put to cache layer this node since it got fetched from blob store.
 	nr.l1Cache.SetNode(ctx, nodeID, target, nr.storeInfo.CacheConfig.NodeCacheDuration)
-	nr.localCache[logicalID] = cachedNode{
-		action: defaultAction,
-		node:   target,
-	}
+	nr.readNodesCache.Set(logicalID, target)
 	return target, nil
 }
 
@@ -123,6 +130,13 @@ func (nr *nodeRepositoryBackend) add(nodeID sop.UUID, node interface{}) {
 }
 
 func (nr *nodeRepositoryBackend) update(nodeID sop.UUID, node interface{}) {
+	if n := nr.readNodesCache.Get(nodeID); n != nil {
+		nr.localCache[nodeID] = cachedNode{
+			action: defaultAction,
+			node: n,
+		}
+		nr.readNodesCache.Delete(nodeID)
+	}
 	if v, ok := nr.localCache[nodeID]; ok {
 		// Update the node and keep the "action" marker if new, otherwise update to "update" action.
 		v.node = node
@@ -140,6 +154,13 @@ func (nr *nodeRepositoryBackend) update(nodeID sop.UUID, node interface{}) {
 }
 
 func (nr *nodeRepositoryBackend) remove(nodeID sop.UUID) {
+	if n := nr.readNodesCache.Get(nodeID); n != nil {
+		nr.localCache[nodeID] = cachedNode{
+			action: defaultAction,
+			node: n,
+		}
+		nr.readNodesCache.Delete(nodeID)
+	}
 	if v, ok := nr.localCache[nodeID]; ok {
 		if v.action == addAction {
 			delete(nr.localCache, nodeID)

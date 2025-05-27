@@ -145,6 +145,7 @@ func refetchAndMergeClosure[TK btree.Ordered, TV any](si *StoreInterface[TK, TV]
 		// Clear the backend "cache" so we can force B-Tree to re-fetch from Redis(or BlobStore).
 		si.ItemActionTracker.(*itemActionTracker[TK, TV]).items = make(map[sop.UUID]cacheItem[TK, TV])
 		si.backendNodeRepository.localCache = make(map[sop.UUID]cachedNode)
+		si.backendNodeRepository.readNodesCache.Clear()
 		// Reset StoreInfo of B-Tree in prep to replay the "actions".
 		storeInfo, err := sr.GetWithTTL(ctx, b3.StoreInfo.CacheConfig.IsStoreInfoCacheTTL, b3.StoreInfo.CacheConfig.StoreInfoCacheDuration, b3.StoreInfo.Name)
 		if err != nil {

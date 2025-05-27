@@ -1,45 +1,42 @@
 package cache
 
-import "github.com/SharedCode/sop"
-
-type mru struct {
+type mru[TK comparable, TV any] struct {
 	minCapacity int
 	maxCapacity int
-	dll         *doublyLinkedList[sop.UUID]
-	l1Cache     *L1Cache
+	dll         *doublyLinkedList[TK]
+	cache     *cache[TK, TV]
 }
 
-func newMru(l1c *L1Cache, minCapacity, maxCapacity int) *mru {
-	return &mru{
-		l1Cache:     l1c,
+func newMru[TK comparable, TV any](c *cache[TK, TV], minCapacity, maxCapacity int) *mru[TK, TV] {
+	return &mru[TK, TV]{
+		cache:     c,
 		minCapacity: minCapacity,
 		maxCapacity: maxCapacity,
-		dll:         newDoublyLinkedList[sop.UUID](),
+		dll:         newDoublyLinkedList[TK](),
 	}
 }
 
-func (m *mru) add(id sop.UUID) *node[sop.UUID] {
+func (m *mru[TK, TV]) add(id TK) *node[TK] {
 	return m.dll.addToHead(id)
 }
-func (m *mru) remove(n *node[sop.UUID]) {
+func (m *mru[TK, TV]) remove(n *node[TK]) {
 	m.dll.delete(n)
 }
-func (m *mru) evict() {
+func (m *mru[TK, TV]) evict() {
 	for {
 		if !m.isFull() {
 			break
 		}
 		if id, ok := m.dll.deleteFromTail(); ok {
-			if v, found := m.l1Cache.lookup[id]; found {
-				v.nodeData = nil
+			if v, found := m.cache.lookup[id]; found {
 				v.dllNode = nil
-				delete(m.l1Cache.lookup, id)
+				delete(m.cache.lookup, id)
 			}
 		} else {
 			break
 		}
 	}
 }
-func (m *mru) isFull() bool {
+func (m *mru[TK, TV]) isFull() bool {
 	return m.dll.count() >= m.maxCapacity
 }

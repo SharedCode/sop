@@ -385,17 +385,13 @@ func (t *Transaction) deleteObsoleteEntries(ctx context.Context,
 	var lastErr error
 	if len(unusedNodeIDs) > 0 {
 		// Delete from Redis & BlobStore the unused/inactive nodes.
-		deletedKeys := make([]string, getBlobPayloadCount(unusedNodeIDs))
-		ik := 0
 		for i := range unusedNodeIDs {
 			for ii := range unusedNodeIDs[i].Blobs {
-				deletedKeys[ik] = t.btreesBackend[0].nodeRepository.formatKey(unusedNodeIDs[i].Blobs[ii].String())
-				ik++
+				if _, err := t.l1Cache.DeleteNode(ctx, unusedNodeIDs[i].Blobs[ii]); err != nil {
+					lastErr = err
+					log.Warn(fmt.Sprintf("Redis delete failed, details: %v", err))
+				}
 			}
-		}
-		if err := t.l2Cache.Delete(ctx, deletedKeys); err != nil && !t.l2Cache.KeyNotFound(err) {
-			lastErr = err
-			log.Warn(fmt.Sprintf("Redis delete failed, details: %v", err))
 		}
 		if err := t.blobStore.Remove(ctx, unusedNodeIDs); err != nil {
 			lastErr = err

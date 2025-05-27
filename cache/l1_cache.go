@@ -14,15 +14,15 @@ import (
 	"github.com/SharedCode/sop/redis"
 )
 
-type entry struct {
+type l1CacheEntry struct {
 	nodeVersion int32
-	nodeData []byte
-	dllNode  *node[sop.UUID]
+	nodeData    []byte
+	dllNode     *node[sop.UUID]
 }
 
 type L1Cache struct {
-	lookup       map[sop.UUID]*entry
-	mru          *mru
+	lookup       map[sop.UUID]*l1CacheEntry
+	mru          *l1_mru
 	l2CacheNodes sop.Cache
 	locker       *sync.Mutex
 }
@@ -55,11 +55,11 @@ func GetGlobalCache() *L1Cache {
 // Instantiate a new instance of this L1 Cache management logic.
 func NewL1Cache(l2cn sop.Cache, minCapacity, maxCapacity int) *L1Cache {
 	l1c := &L1Cache{
-		lookup:       make(map[sop.UUID]*entry, maxCapacity),
+		lookup:       make(map[sop.UUID]*l1CacheEntry, maxCapacity),
 		l2CacheNodes: l2cn,
 		locker:       &sync.Mutex{},
 	}
-	l1c.mru = newMru(l1c, minCapacity, maxCapacity)
+	l1c.mru = newL1Mru(l1c, minCapacity, maxCapacity)
 	return l1c
 }
 
@@ -84,14 +84,13 @@ func (c *L1Cache) SetNodeMRU(ctx context.Context, nodeID sop.UUID, node any, nod
 		v.dllNode = c.mru.add(nodeID)
 		c.locker.Unlock()
 		return
-	} else {
-		// Add to MRU cache.
-		n := c.mru.add(nodeID)
-		c.lookup[nodeID] = &entry{
-			nodeData: ba,
-			nodeVersion: nv,
-			dllNode:  n,
-		}
+	}
+	// Add to MRU cache.
+	n := c.mru.add(nodeID)
+	c.lookup[nodeID] = &l1CacheEntry{
+		nodeData:    ba,
+		nodeVersion: nv,
+		dllNode:     n,
 	}
 	c.locker.Unlock()
 
@@ -104,7 +103,7 @@ func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any
 
 	// Get node from MRU if same version as requested.
 	c.locker.Lock()
-	if v, ok := c.lookup[nodeID]; ok && v.nodeVersion == handle.Version{
+	if v, ok := c.lookup[nodeID]; ok && v.nodeVersion == handle.Version {
 		c.mru.remove(v.dllNode)
 		v.dllNode = c.mru.add(nodeID)
 		encoding.BlobMarshaler.Unmarshal(v.nodeData, nodeTarget)
