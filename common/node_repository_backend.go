@@ -91,7 +91,6 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 		if h := nr.l1Cache.GetHandlesFromMRU([]sop.UUID{logicalID}); len(h) == 1 && !h[0].IsEmpty() {
 			if n := nr.l1Cache.GetNodeFromMRU(h[0], target); n != nil {
 				target = n
-				//target.(btree.MetaDataType).SetVersion(h[0].Version)
 				nr.readNodesCache.Set(logicalID, target)
 				return target, nil
 			}
