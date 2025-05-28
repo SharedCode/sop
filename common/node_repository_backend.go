@@ -85,6 +85,18 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 		return v, nil
 	}
 
+	// Try to fetch node from L1 cache Nodes MRU prior to "commit" time. On commit time (transaction.phaseDone > 0),
+	// we only fetch the Handle from L2 cache to get the "true" record.
+	if nr.transaction.phaseDone == 0 {
+		if h := nr.l1Cache.GetHandlesFromMRU([]sop.UUID{logicalID}); len(h) == 1 && !h[0].IsEmpty() {
+			if n := nr.l1Cache.GetNodeFromMRU(h[0], target); n != nil {
+				target = n
+				nr.readNodesCache.Set(logicalID, target)
+				return target, nil
+			}
+		}
+	}
+
 	h, err := nr.transaction.registry.Get(ctx, []sop.RegistryPayload[sop.UUID]{{
 		RegistryTable: nr.storeInfo.RegistryTable,
 		CacheDuration: nr.storeInfo.CacheConfig.RegistryCacheDuration,

@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/cache"
 )
 
 type registryOnDisk struct {
 	hashmap            *registryMap
 	replicationTracker *replicationTracker
 	l2Cache            sop.Cache
+	l1Cache            *cache.L1Cache
 }
 
 // Registry interface needs to have close method so registry can get closed when not needed anymore, e.g. transaction is completed.
@@ -28,11 +30,12 @@ const (
 )
 
 // NewRegistry manages the Handle in memory for mocking.
-func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, cache sop.Cache) Registry {
+func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, l2Cache sop.Cache) Registry {
 	return &registryOnDisk{
-		hashmap:            newRegistryMap(readWrite, hashModValue, rt, cache),
+		hashmap:            newRegistryMap(readWrite, hashModValue, rt, l2Cache),
 		replicationTracker: rt,
-		l2Cache:            cache,
+		l2Cache:            l2Cache,
+		l1Cache:            cache.GetGlobalCache(),
 	}
 }
 
@@ -41,13 +44,13 @@ func (r registryOnDisk) Close() error {
 	return r.hashmap.close()
 }
 
-func (r registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+func (r *registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs}); err != nil {
 			return err
 		}
+		r.l1Cache.SetHandlesToMRU(sh.IDs)
 		for _, h := range sh.IDs {
-			// Tolerate Redis cache failure.
 			if err := r.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis setstruct) failed, details: %v", err))
 			}
@@ -56,11 +59,7 @@ func (r registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPay
 	return nil
 }
 
-func (r registryOnDisk) Update(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
-	if len(storesHandles) == 0 {
-		return nil
-	}
-
+func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 		for _, h := range sh.IDs {
@@ -73,6 +72,7 @@ func (r registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registry
 				return err
 			}
 			if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+				r.l1Cache.DeleteHandlesInMRU([]sop.UUID{h.LogicalID})
 				r.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				// Unlock the object Keys before return.
 				r.l2Cache.Unlock(ctx, lk)
@@ -87,20 +87,23 @@ func (r registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registry
 				return err
 			}
 		}
+		r.l1Cache.SetHandlesToMRU(sh.IDs)
 	}
 	return nil
 }
 
-func (r registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
-	if len(storesHandles) == 0 {
-		return nil
-	}
-
+func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs}); err != nil {
-			// TODO: remove from cache if errored.
+			for _, h := range sh.IDs {
+				r.l1Cache.DeleteHandlesInMRU([]sop.UUID{h.LogicalID})
+				if err := r.l2Cache.Delete(ctx, []string{h.LogicalID.String()}); err != nil {
+					log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis delete) failed, details: %v", err))
+				}
+			}
 			return err
 		}
+		r.l1Cache.SetHandlesToMRU(sh.IDs)
 		for _, h := range sh.IDs {
 			// Tolerate Redis cache failure.
 			if err := r.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
@@ -111,7 +114,7 @@ func (r registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles []sop.R
 	return nil
 }
 
-func (r registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
+func (r *registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	storesHandles := make([]sop.RegistryPayload[sop.Handle], 0, len(storesLids))
 	for _, storeLids := range storesLids {
 		handles := make([]sop.Handle, 0, len(storeLids.IDs))
@@ -167,7 +170,7 @@ func (r registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPayloa
 	}
 	return storesHandles, nil
 }
-func (r registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
+func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
 	// Flush out the failing records from cache.
 	deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
 		for _, id := range storeLids.IDs {
@@ -177,6 +180,7 @@ func (r registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPay
 		}
 	}
 	for _, storeLids := range storesLids {
+		r.l1Cache.DeleteHandlesInMRU(storeLids.IDs)
 		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: storeLids.IDs}); err != nil {
 			deleteFromCache(storeLids)
 			return err
@@ -194,8 +198,7 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 		return
 	}
 
-	// Open the hashmaps on the passive destination(s).
-	// Write the nodes' handle(s) on each.
+	// Open the hashmaps on the passive destination(s). Write the nodes' handle(s) on each.
 	// Close the hashmaps files.
 	af := r.replicationTracker.isFirstFolderActive
 

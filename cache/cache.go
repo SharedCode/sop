@@ -1,4 +1,3 @@
-// Package contains the L1 (MRU) Cache implementtion.
 package cache
 
 // Generic Cache is useful for general MRU cache needs.
@@ -8,7 +7,9 @@ type Cache[TK any, TV any] interface {
 	Get(key TK) TV
 	Delete(key TK)
 	Count() int
+	// Returns yes if cache is at max capacity.
 	IsFull() bool
+	// Evict the Least Recently Used (LRU) items, if cache is at max capacity.
 	Evict()
 }
 
