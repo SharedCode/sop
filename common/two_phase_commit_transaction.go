@@ -448,7 +448,7 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 	// Let other transactions get a lock on these updated & removed nodes' keys we've locked.
 	t.unlockNodesKeys(ctx)
 
-	// Unlock the items in Redis since technically "commit" is done.
+	// Unlock the items in Redis since technically, "commit" is done.
 	if err := t.unlockTrackedItems(ctx); err != nil {
 		// Just log as warning any error as at this point, commit is already finalized.
 		// Any partial changes before failure in unlock tracked items will just expire in Redis.
@@ -475,7 +475,7 @@ func (t *Transaction) updateVersionThenPopulateMru(ctx context.Context, handles 
 		for ii := range nodes[i].Second {
 			target := nodes[i].Second[ii]
 			target.(btree.MetaDataType).SetVersion(handles[i].IDs[ii].Version)
-			t.l1Cache.SetNodeMRU(ctx, handles[i].IDs[ii].GetActiveID(), target, nodes[i].First.CacheConfig.NodeCacheDuration)
+			t.l1Cache.SetNodeToMRU(ctx, handles[i].IDs[ii].GetActiveID(), target, nodes[i].First.CacheConfig.NodeCacheDuration)
 		}
 	}
 }

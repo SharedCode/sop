@@ -21,10 +21,12 @@ type l1CacheEntry struct {
 }
 
 type L1Cache struct {
-	lookup       map[sop.UUID]*l1CacheEntry
-	mru          *l1_mru
-	l2CacheNodes sop.Cache
-	locker       *sync.Mutex
+	lookup             map[sop.UUID]*l1CacheEntry
+	mru                *l1_mru
+	l2CacheNodes       sop.Cache
+	locker             *sync.Mutex
+	handlesCache       Cache[sop.UUID, sop.Handle]
+	handlesCacheLocker *sync.Mutex
 }
 
 const (
@@ -55,9 +57,11 @@ func GetGlobalCache() *L1Cache {
 // Instantiate a new instance of this L1 Cache management logic.
 func NewL1Cache(l2cn sop.Cache, minCapacity, maxCapacity int) *L1Cache {
 	l1c := &L1Cache{
-		lookup:       make(map[sop.UUID]*l1CacheEntry, maxCapacity),
-		l2CacheNodes: l2cn,
-		locker:       &sync.Mutex{},
+		lookup:             make(map[sop.UUID]*l1CacheEntry, maxCapacity),
+		l2CacheNodes:       l2cn,
+		locker:             &sync.Mutex{},
+		handlesCache:       NewCache[sop.UUID, sop.Handle](minCapacity, maxCapacity),
+		handlesCacheLocker: &sync.Mutex{},
 	}
 	l1c.mru = newL1Mru(l1c, minCapacity, maxCapacity)
 	return l1c
@@ -66,13 +70,37 @@ func NewL1Cache(l2cn sop.Cache, minCapacity, maxCapacity int) *L1Cache {
 // The L1 Cache getters (get handles & get node) are able to check if there is newer version in L2 cache
 // and fetch it if there is.
 
+func (c *L1Cache) SetHandlesToMRU(handles []sop.Handle) {
+	c.handlesCacheLocker.Lock()
+	for i := range handles {
+		c.handlesCache.Set(handles[i].LogicalID, handles[i])
+	}
+	c.handlesCacheLocker.Unlock()
+}
+func (c *L1Cache) GetHandlesFromMRU(logicalIDs []sop.UUID) []sop.Handle {
+	r := make([]sop.Handle, len(logicalIDs))
+	c.handlesCacheLocker.Lock()
+	for i := range logicalIDs {
+		r[i] = c.handlesCache.Get(logicalIDs[i])
+	}
+	c.handlesCacheLocker.Unlock()
+	return r
+}
+func (c *L1Cache) DeleteHandlesInMRU(logicalIDs []sop.UUID) {
+	c.handlesCacheLocker.Lock()
+	for i := range logicalIDs {
+		c.handlesCache.Delete(logicalIDs[i])
+	}
+	c.handlesCacheLocker.Unlock()
+}
+
 func (c *L1Cache) SetNode(ctx context.Context, nodeID sop.UUID, node any, nodeCacheDuration time.Duration) {
-	c.SetNodeMRU(ctx, nodeID, node, nodeCacheDuration)
+	c.SetNodeToMRU(ctx, nodeID, node, nodeCacheDuration)
 	if err := c.l2CacheNodes.SetStruct(ctx, FormatNodeKey(nodeID.String()), node, nodeCacheDuration); err != nil {
 		log.Warn(fmt.Sprintf("failed to cache in Redis node with ID: %v, details: %v", nodeID.String(), err))
 	}
 }
-func (c *L1Cache) SetNodeMRU(ctx context.Context, nodeID sop.UUID, node any, nodeCacheDuration time.Duration) {
+func (c *L1Cache) SetNodeToMRU(ctx context.Context, nodeID sop.UUID, node any, nodeCacheDuration time.Duration) {
 	// Update the lookup entry's node value w/ incoming.
 	ba, _ := encoding.BlobMarshaler.Marshal(node)
 	nv := node.(btree.MetaDataType).GetVersion()
@@ -96,6 +124,21 @@ func (c *L1Cache) SetNodeMRU(ctx context.Context, nodeID sop.UUID, node any, nod
 
 	// Evict LRU items if MRU is full.
 	c.Evict()
+}
+
+func (c *L1Cache) GetNodeFromMRU(handle sop.Handle, nodeTarget any) any {
+	nodeID := handle.GetActiveID()
+	// Get node from MRU if same version as requested.
+	c.locker.Lock()
+	if v, ok := c.lookup[nodeID]; ok && v.nodeVersion == handle.Version {
+		c.mru.remove(v.dllNode)
+		v.dllNode = c.mru.add(nodeID)
+		encoding.BlobMarshaler.Unmarshal(v.nodeData, nodeTarget)
+		c.locker.Unlock()
+		return nodeTarget
+	}
+	c.locker.Unlock()
+	return nil
 }
 
 func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any, isNodeCacheTTL bool, nodeCacheTTLDuration time.Duration) (any, error) {
@@ -129,7 +172,7 @@ func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any
 		}
 	}
 	// Found in L2, put in MRU.
-	c.SetNodeMRU(ctx, nodeID, nodeTarget, nodeCacheTTLDuration)
+	c.SetNodeToMRU(ctx, nodeID, nodeTarget, nodeCacheTTLDuration)
 
 	return nodeTarget, nil
 }
