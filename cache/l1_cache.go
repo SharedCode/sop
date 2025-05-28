@@ -177,29 +177,33 @@ func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any
 	return nodeTarget, nil
 }
 
-func (c *L1Cache) DeleteNode(ctx context.Context, nodeID sop.UUID) (bool, error) {
+func (c *L1Cache) DeleteNodes(ctx context.Context, nodesIDs []sop.UUID) (bool, error) {
 	var result bool
 	var lastErr error
 
 	// Delete from MRU if it is there.
 	c.locker.Lock()
-	if v, ok := c.lookup[nodeID]; ok {
-		c.mru.remove(v.dllNode)
-		v.nodeData = nil
-		v.dllNode = nil
-		delete(c.lookup, nodeID)
-		result = true
+	for _, nodeID := range nodesIDs {
+		if v, ok := c.lookup[nodeID]; ok {
+			c.mru.remove(v.dllNode)
+			v.nodeData = nil
+			v.dllNode = nil
+			delete(c.lookup, nodeID)
+			result = true
+		}
 	}
 	c.locker.Unlock()
 
 	// Delete from L2 cache if it is there.
-	if err := c.l2CacheNodes.Delete(ctx, []string{FormatNodeKey(nodeID.String())}); err != nil {
-		if !c.l2CacheNodes.KeyNotFound(err) {
-			log.Debug(err.Error())
-			lastErr = err
+	for _, nodeID := range nodesIDs {
+		if err := c.l2CacheNodes.Delete(ctx, []string{FormatNodeKey(nodeID.String())}); err != nil {
+			if !c.l2CacheNodes.KeyNotFound(err) {
+				log.Debug(err.Error())
+				lastErr = err
+			}
+		} else {
+			result = true
 		}
-	} else {
-		result = true
 	}
 	return result, lastErr
 }

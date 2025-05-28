@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/cache"
 	"github.com/SharedCode/sop/redis"
 	"github.com/gocql/gocql"
 )
 
 type registry struct {
 	l2Cache sop.Cache
+	l1Cache *cache.L1Cache
 }
 
 // Lock time out for the cache based conflict check routine in update (handles) function.
@@ -25,6 +27,7 @@ const updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 func NewRegistry() sop.Registry {
 	return &registry{
 		l2Cache: redis.NewClient(),
+		l1Cache: cache.GetGlobalCache(),
 	}
 }
 
@@ -47,6 +50,7 @@ func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[
 			if err := qry.Exec(); err != nil {
 				return err
 			}
+			v.l1Cache.SetHandlesToMRU([]sop.Handle{h})
 			// Tolerate Redis cache failure.
 			if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Add (redis setstruct) failed, details: %v", err))
@@ -60,9 +64,6 @@ func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[
 func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
-	}
-	if len(storesHandles) == 0 {
-		return nil
 	}
 
 	for _, sh := range storesHandles {
@@ -87,6 +88,7 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 
 			// Update registry record.
 			if err := qry.Exec(); err != nil {
+				v.l1Cache.DeleteHandlesInMRU([]sop.UUID{h.LogicalID})
 				v.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				// Unlock the object Keys before return.
 				v.l2Cache.Unlock(ctx, lk)
@@ -103,6 +105,7 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 				return err
 			}
 		}
+		v.l1Cache.SetHandlesToMRU(sh.IDs)
 	}
 	return nil
 }
@@ -121,6 +124,7 @@ func (v *registry) UpdateNoLocks(ctx context.Context, storesHandles []sop.Regist
 
 			// Update registry record.
 			if err := qry.Exec(); err != nil {
+				v.l1Cache.DeleteHandlesInMRU([]sop.UUID{h.LogicalID})
 				v.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				return err
 			}
@@ -129,6 +133,7 @@ func (v *registry) UpdateNoLocks(ctx context.Context, storesHandles []sop.Regist
 			if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
 			}
+			v.l1Cache.SetHandlesToMRU([]sop.Handle{h})
 		}
 	}
 	return nil
@@ -238,6 +243,7 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 			qry.Consistency(connection.Config.ConsistencyBook.RegistryRemove)
 		}
 
+		v.l1Cache.DeleteHandlesInMRU(storeLids.IDs)
 		if err := qry.Exec(); err != nil {
 			deleteFromCache(storeLids)
 			return err

@@ -386,11 +386,9 @@ func (t *Transaction) deleteObsoleteEntries(ctx context.Context,
 	if len(unusedNodeIDs) > 0 {
 		// Delete from Redis & BlobStore the unused/inactive nodes.
 		for i := range unusedNodeIDs {
-			for ii := range unusedNodeIDs[i].Blobs {
-				if _, err := t.l1Cache.DeleteNode(ctx, unusedNodeIDs[i].Blobs[ii]); err != nil {
-					lastErr = err
-					log.Warn(fmt.Sprintf("Redis delete failed, details: %v", err))
-				}
+			if _, err := t.l1Cache.DeleteNodes(ctx, unusedNodeIDs[i].Blobs); err != nil {
+				lastErr = err
+				log.Warn(fmt.Sprintf("Redis delete failed, details: %v", err))
 			}
 		}
 		if err := t.blobStore.Remove(ctx, unusedNodeIDs); err != nil {
