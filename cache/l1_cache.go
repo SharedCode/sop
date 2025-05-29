@@ -157,17 +157,11 @@ func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any
 
 	// Get node from L2 cache.
 	if isNodeCacheTTL {
-		if err := c.l2CacheNodes.GetStructEx(ctx, FormatNodeKey(nodeID.String()), nodeTarget, nodeCacheTTLDuration); err != nil {
-			if c.l2CacheNodes.KeyNotFound(err) {
-				return nil, nil
-			}
+		if found, err := c.l2CacheNodes.GetStructEx(ctx, FormatNodeKey(nodeID.String()), nodeTarget, nodeCacheTTLDuration); !found || err != nil {
 			return nil, err
 		}
 	} else {
-		if err := c.l2CacheNodes.GetStruct(ctx, FormatNodeKey(nodeID.String()), nodeTarget); err != nil {
-			if c.l2CacheNodes.KeyNotFound(err) {
-				return nil, nil
-			}
+		if found, err := c.l2CacheNodes.GetStruct(ctx, FormatNodeKey(nodeID.String()), nodeTarget); !found || err != nil {
 			return nil, err
 		}
 	}
@@ -196,10 +190,11 @@ func (c *L1Cache) DeleteNodes(ctx context.Context, nodesIDs []sop.UUID) (bool, e
 
 	// Delete from L2 cache if it is there.
 	for _, nodeID := range nodesIDs {
-		if err := c.l2CacheNodes.Delete(ctx, []string{FormatNodeKey(nodeID.String())}); err != nil {
-			if !c.l2CacheNodes.KeyNotFound(err) {
+		if found, err := c.l2CacheNodes.Delete(ctx, []string{FormatNodeKey(nodeID.String())}); !found || err != nil {
+			if err != nil {
 				log.Debug(err.Error())
 				lastErr = err
+
 			}
 		} else {
 			result = true

@@ -234,15 +234,16 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 	for i := range names {
 		store := sop.StoreInfo{}
 		var err error
+		var found bool
 		if isCacheTTL {
-			err = sr.cache.GetStructEx(ctx, names[i], &store, cacheDuration)
+			found, err = sr.cache.GetStructEx(ctx, names[i], &store, cacheDuration)
 		} else {
-			err = sr.cache.GetStruct(ctx, names[i], &store)
+			found, err = sr.cache.GetStruct(ctx, names[i], &store)
 		}
 		if err != nil {
-			if !sr.cache.KeyNotFound(err) {
-				log.Warn(fmt.Sprintf("StoreRepository Get (redis getstruct) failed, details: %v", err))
-			}
+			log.Warn(fmt.Sprintf("StoreRepository Get (redis getstruct) failed, details: %v", err))
+		}
+		if !found || err != nil {
 			paramQ = append(paramQ, "?")
 			namesAsIntf = append(namesAsIntf, interface{}(names[i]))
 			continue
@@ -311,7 +312,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 
 	// Delete the store records in Redis.
 	// Tolerate Redis cache failure.
-	if err := sr.cache.Delete(ctx, names); err != nil && !sr.cache.KeyNotFound(err) {
+	if _, err := sr.cache.Delete(ctx, names); err != nil {
 		log.Warn(fmt.Sprintf("StoreRepository Remove (redis Delete) failed, details: %v", err))
 	}
 

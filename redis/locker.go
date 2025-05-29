@@ -13,9 +13,9 @@ import (
 // within entire life of the transaction, not just the commit part.
 func (c client) LockTTL(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
 	for _, lk := range lockKeys {
-		readItem, err := c.GetEx(ctx, lk.Key, duration)
-		if err != nil {
-			if !c.KeyNotFound(err) {
+		found, readItem, err := c.GetEx(ctx, lk.Key, duration)
+		if !found || err != nil {
+			if err != nil {
 				return false, err
 			}
 			// Item does not exist, upsert it.
@@ -23,10 +23,7 @@ func (c client) LockTTL(ctx context.Context, duration time.Duration, lockKeys []
 				return false, err
 			}
 			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-			if readItem2, err := c.GetEx(ctx, lk.Key, duration); err != nil {
-				if c.KeyNotFound(err) {
-					return false, nil
-				}
+			if found, readItem2, err := c.GetEx(ctx, lk.Key, duration); !found || err != nil {
 				return false, err
 			} else if readItem2 != lk.LockID.String() {
 				// Item found in Redis, lock attempt failed.
@@ -50,11 +47,11 @@ func (c client) IsLockedTTL(ctx context.Context, duration time.Duration, lockKey
 	r := true
 	var lastErr error
 	for _, lk := range lockKeys {
-		readItem, err := c.GetEx(ctx, lk.Key, duration)
-		if err != nil {
+		found, readItem, err := c.GetEx(ctx, lk.Key, duration)
+		if !found || err != nil {
 			lk.IsLockOwner = false
 			r = false
-			if !c.KeyNotFound(err) {
+			if err != nil {
 				lastErr = err
 			}
 			continue
@@ -74,9 +71,9 @@ func (c client) IsLockedTTL(ctx context.Context, duration time.Duration, lockKey
 // Lock a set of keys.
 func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
 	for _, lk := range lockKeys {
-		readItem, err := c.Get(ctx, lk.Key)
-		if err != nil {
-			if !c.KeyNotFound(err) {
+		found, readItem, err := c.Get(ctx, lk.Key)
+		if !found || err != nil {
+			if err != nil {
 				return false, err
 			}
 			// Item does not exist, upsert it.
@@ -84,10 +81,7 @@ func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*so
 				return false, err
 			}
 			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-			if readItem2, err := c.Get(ctx, lk.Key); err != nil {
-				if c.KeyNotFound(err) {
-					return false, nil
-				}
+			if found, readItem2, err := c.Get(ctx, lk.Key); !found || err != nil {
 				return false, err
 			} else if readItem2 != lk.LockID.String() {
 				// Item found in Redis, lock attempt failed.
@@ -111,11 +105,11 @@ func (c client) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, er
 	r := true
 	var lastErr error
 	for _, lk := range lockKeys {
-		readItem, err := c.Get(ctx, lk.Key)
-		if err != nil {
+		found, readItem, err := c.Get(ctx, lk.Key)
+		if !found || err != nil {
 			lk.IsLockOwner = false
 			r = false
-			if !c.KeyNotFound(err) {
+			if err != nil {
 				lastErr = err
 			}
 			continue
@@ -138,11 +132,8 @@ func (c client) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bo
 		return false, nil
 	}
 	for _, lkn := range lockKeyNames {
-		_, err := c.Get(ctx, lkn)
-		if err != nil {
-			if c.KeyNotFound(err) {
-				return false, nil
-			}
+		found, _, err := c.Get(ctx, lkn)
+		if !found || err != nil {
 			return false, err
 		}
 		// Item found in Redis means other process has a lock on it.
@@ -158,9 +149,9 @@ func (c client) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 			continue
 		}
 		// Delete lock key if we own it.
-		if err := c.Delete(ctx, []string{lk.Key}); err != nil {
+		if found, err := c.Delete(ctx, []string{lk.Key}); !found || err != nil {
 			// Ignore if key not in cache, not an issue.
-			if c.KeyNotFound(err) {
+			if err == nil {
 				continue
 			}
 			lastErr = err

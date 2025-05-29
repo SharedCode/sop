@@ -97,7 +97,7 @@ func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles []sop.
 		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs}); err != nil {
 			for _, h := range sh.IDs {
 				r.l1Cache.DeleteHandlesInMRU([]sop.UUID{h.LogicalID})
-				if err := r.l2Cache.Delete(ctx, []string{h.LogicalID.String()}); err != nil {
+				if _, err := r.l2Cache.Delete(ctx, []string{h.LogicalID.String()}); err != nil {
 					log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis delete) failed, details: %v", err))
 				}
 			}
@@ -122,13 +122,14 @@ func (r *registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPaylo
 		for i := range storeLids.IDs {
 			h := sop.Handle{}
 			var err error
+			var found bool
 			if storeLids.IsCacheTTL {
-				err = r.l2Cache.GetStructEx(ctx, storeLids.IDs[i].String(), &h, storeLids.CacheDuration)
+				found, err = r.l2Cache.GetStructEx(ctx, storeLids.IDs[i].String(), &h, storeLids.CacheDuration)
 			} else {
-				err = r.l2Cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
+				found, err = r.l2Cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
 			}
-			if err != nil {
-				if !r.l2Cache.KeyNotFound(err) {
+			if !found || err != nil {
+				if err != nil {
 					log.Warn(fmt.Sprintf("Registry Get (redis getstruct) failed, details: %v", err))
 				}
 				lids = append(lids, storeLids.IDs[i])
@@ -174,7 +175,7 @@ func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPa
 	// Flush out the failing records from cache.
 	deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
 		for _, id := range storeLids.IDs {
-			if err := r.l2Cache.Delete(ctx, []string{id.String()}); err != nil && !r.l2Cache.KeyNotFound(err) {
+			if _, err := r.l2Cache.Delete(ctx, []string{id.String()}); err != nil {
 				log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
 			}
 		}
@@ -189,6 +190,22 @@ func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPa
 	}
 	return nil
 }
+
+/*
+	Replication events:
+	- IO (reading or writing) to active drive generated an IO error. SOP should be able to detect that special error and decide to failover if warranted.
+		- perhaps the deciding factor is, if rollback to undo file changes fail as well then we can decide that the active drives are unworkable.
+		Then failover to passive, make that active, log the event as error/fatal & needing manual intervention on the previous active drive
+		that is now unusable. If rollback works then active drive is still intact.
+	- Writing to passive drive errored, log an error/fatal then stop writing to the passive targets. Until a manual reset of the flag is done.
+
+	Handling stories:
+	- on rollback error, do a failover to the passive drive.
+	If failed, then log FATAL and stop on succeeding runs.
+
+	Model this on a smaller setup. Perhaps create a simulator so we can synthesize failures, failover and cut out of failing passive IO.
+	We need to also detect manual intervention to cause "recover" (the opposite of failover).
+*/
 
 // Write the nodes handles to the target passive destinations.
 func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles,

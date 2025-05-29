@@ -25,11 +25,11 @@ func NewMockClient() sop.Cache {
 func (m mockRedis) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	return nil
 }
-func (m mockRedis) Get(ctx context.Context, key string) (string, error) {
-	return "", nil
+func (m mockRedis) Get(ctx context.Context, key string) (bool, string, error) {
+	return false, "", nil
 }
-func (m mockRedis) GetEx(ctx context.Context, key string, expiration time.Duration) (string, error) {
-	return "", nil
+func (m mockRedis) GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error) {
+	return false, "", nil
 }
 func (m mockRedis) Ping(ctx context.Context) error {
 	return nil
@@ -46,20 +46,20 @@ func (m *mockRedis) SetStruct(ctx context.Context, key string, value interface{}
 	return nil
 }
 
-func (m *mockRedis) GetStruct(ctx context.Context, key string, target interface{}) error {
+func (m *mockRedis) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	ba, ok := m.lookup[key]
 	if !ok {
-		return redis.Nil
+		return false, redis.Nil
 	}
 	encoding.BlobMarshaler.Unmarshal(ba, target)
-	return nil
+	return false, nil
 }
 
 // Mock only support GetStruct, GetStructEx just calls GetStruct ignoring expiration.
-func (m *mockRedis) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) error {
+func (m *mockRedis) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
 	return m.GetStruct(ctx, key, target)
 }
-func (m *mockRedis) Delete(ctx context.Context, keys []string) error {
+func (m *mockRedis) Delete(ctx context.Context, keys []string) (bool, error) {
 	var lastErr error
 	for _, k := range keys {
 		if _, ok := m.lookup[k]; !ok {
@@ -68,7 +68,11 @@ func (m *mockRedis) Delete(ctx context.Context, keys []string) error {
 		}
 		delete(m.lookup, k)
 	}
-	return lastErr
+	r := lastErr == nil
+	if m.KeyNotFound(lastErr) {
+		lastErr = nil
+	}
+	return r, lastErr
 }
 
 // Unimplemented and is not used in this mock.

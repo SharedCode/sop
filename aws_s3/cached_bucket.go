@@ -85,15 +85,14 @@ func (b *cachedBucket) fetch(ctx context.Context, bucketName string, isLargeObje
 	var lastError error
 	for i := range names {
 		var t cacheObject
-		err := b.cache.GetStruct(ctx, b.formatKey(bucketName, names[i]), &t)
-		if b.cache.KeyNotFound(err) || err != nil {
+		found, err := b.cache.GetStruct(ctx, b.formatKey(bucketName, names[i]), &t)
+		if !found || err != nil {
 			res := b.fetchAndCache(ctx, bucketName, names[i], now, false)
 			r[i] = res.Details[0]
 			if r[i].Error != nil {
-				if !b.cache.KeyNotFound(err) {
-					// Tolerate Redis cache failure.
+				if err != nil {
 					k := b.formatKey(bucketName, names[i])
-					if err := b.cache.Delete(ctx, []string{k}); err != nil {
+					if _, err := b.cache.Delete(ctx, []string{k}); err != nil {
 						log.Warn(fmt.Sprintf("redis delete for key %s failed, details: %v", k, err))
 					}
 				}
@@ -149,7 +148,7 @@ func (b *cachedBucket) fetch(ctx context.Context, bucketName string, isLargeObje
 		r[i] = res.Details[0]
 		if r[i].Error != nil {
 			k := b.formatKey(bucketName, names[i])
-			if err := b.cache.Delete(ctx, []string{k}); err != nil {
+			if _, err := b.cache.Delete(ctx, []string{k}); err != nil {
 				log.Warn(fmt.Sprintf("redis setstruct for key %s failed, details: %v", k, err))
 			}
 			lastError = r[i].Error
@@ -272,7 +271,7 @@ func (b *cachedBucket) Remove(ctx context.Context, bucketName string, names []st
 		keys[i] = b.formatKey(bucketName, name)
 	}
 	// Remove from cache.
-	err := b.cache.Delete(ctx, keys)
+	_, err := b.cache.Delete(ctx, keys)
 	if err != nil {
 		log.Warn(fmt.Sprintf("redis deletes for bucket %s failed, details: %v", bucketName, err))
 	}

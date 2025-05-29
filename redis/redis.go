@@ -86,19 +86,31 @@ func (c client) Set(ctx context.Context, key string, value string, expiration ti
 }
 
 // Get executes the redis Get command
-func (c client) Get(ctx context.Context, key string) (string, error) {
+func (c client) Get(ctx context.Context, key string) (bool, string, error) {
 	if c.conn == nil {
-		return "", fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return false, "", fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
-	return c.conn.Client.Get(ctx, key).Result()
+	s, err := c.conn.Client.Get(ctx, key).Result()
+	// Convert key not found into returning false and nil err.
+	r := err == nil
+	if c.KeyNotFound(err) {
+		err = nil
+	}
+	return r, s, err
 }
 
 // Get executes the redis GetEx command
-func (c client) GetEx(ctx context.Context, key string, expiration time.Duration) (string, error) {
+func (c client) GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error) {
 	if c.conn == nil {
-		return "", fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return false, "", fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
-	return c.conn.Client.GetEx(ctx, key, expiration).Result()
+	s, err := c.conn.Client.GetEx(ctx, key, expiration).Result()
+	// Convert key not found into returning false and nil err.
+	r := err == nil
+	if c.KeyNotFound(err) {
+		err = nil
+	}
+	return r, s, err
 }
 
 // SetStruct executes the redis Set command
@@ -121,40 +133,59 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 }
 
 // GetStruct executes the redis Get command
-func (c client) GetStruct(ctx context.Context, key string, target interface{}) error {
+func (c client) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	if c.conn == nil {
-		return fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return false, fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
 	if target == nil {
-		return fmt.Errorf("target can't be nil")
+		return false, fmt.Errorf("target can't be nil")
 	}
 	ba, err := c.conn.Client.Get(ctx, key).Bytes()
 	if err == nil {
 		err = encoding.BlobMarshaler.Unmarshal(ba, target)
 	}
-	return err
+
+	// Convert key not found into returning false and nil err.
+	r := err == nil
+	if c.KeyNotFound(err) {
+		err = nil
+	}
+	return r, err
 }
 
 // GetStructEx executes the redis GetEx command
-func (c client) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) error {
+func (c client) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
 	if c.conn == nil {
-		return fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return false, fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
 	if target == nil {
-		return fmt.Errorf("target can't be nil")
+		return false, fmt.Errorf("target can't be nil")
 	}
 	ba, err := c.conn.Client.GetEx(ctx, key, expiration).Bytes()
 	if err == nil {
 		err = encoding.BlobMarshaler.Unmarshal(ba, target)
 	}
-	return err
+
+	// Convert key not found into returning false and nil err.
+	r := err == nil
+	if c.KeyNotFound(err) {
+		err = nil
+	}
+	return r, err
 }
 
 // Delete executes the redis Del command
-func (c client) Delete(ctx context.Context, keys []string) error {
+func (c client) Delete(ctx context.Context, keys []string) (bool, error) {
 	if c.conn == nil {
-		return fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return false, fmt.Errorf("Redis connection is not open, 'can't create new client")
 	}
-	var r = c.conn.Client.Del(ctx, keys...)
-	return r.Err()
+	var rs = c.conn.Client.Del(ctx, keys...)
+
+	err := rs.Err()
+	// Convert key not found into returning false and nil err.
+	r := err == nil
+	if c.KeyNotFound(err) {
+		err = nil
+	}
+	return r, err
 }

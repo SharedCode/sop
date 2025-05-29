@@ -431,7 +431,7 @@ func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollb
 	}
 	for i := range vids {
 		for ii := range vids[i].IDs {
-			if err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil && !nr.l2Cache.KeyNotFound(err) {
+			if _, err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil {
 				err = fmt.Errorf("unable to undo new root nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -472,7 +472,7 @@ func (nr *nodeRepositoryBackend) rollbackAddedNodes(ctx context.Context, rollbac
 	// Remove nodes from Redis cache.
 	for i := range vids {
 		for ii := range vids[i].IDs {
-			if err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil && !nr.l2Cache.KeyNotFound(err) {
+			if _, err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil {
 				err = fmt.Errorf("unable to undo added nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -527,7 +527,7 @@ func (nr *nodeRepositoryBackend) rollbackUpdatedNodes(ctx context.Context, nodes
 	// Undo changes in redis.
 	for i := range blobsIDs {
 		for ii := range blobsIDs[i].Blobs {
-			if err = nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil && !nr.l2Cache.KeyNotFound(err) {
+			if _, err = nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil {
 				err = fmt.Errorf("unable to undo updated nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
@@ -553,7 +553,7 @@ func (nr *nodeRepositoryBackend) removeNodes(ctx context.Context, blobsIDs []sop
 	// Undo changes in redis.
 	for i := range blobsIDs {
 		for ii := range blobsIDs[i].Blobs {
-			if err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil && !nr.l2Cache.KeyNotFound(err) {
+			if _, err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil {
 				err = fmt.Errorf("unable to undo updated nodes in redis, error: %v", err)
 				if lastErr == nil {
 					lastErr = err
