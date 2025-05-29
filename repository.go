@@ -160,14 +160,18 @@ type KeyValueStore[TK any, TV any] interface {
 // String key and interface{} value are the supported types. Also specifies methods useful for locking.
 type Cache interface {
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
+	// First return bool var signifies success or false if either item was not found or an error occurred during Get.
 	Get(ctx context.Context, key string) (bool, string, error)
+	// First return bool var signifies success or false if either item was not found or an error occurred during Get.
 	GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error)
 
 	// SetStruct upserts a given object with a key to it.
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
-	// GetStruct fetches a given object given a key.
+	// GetStruct fetches a given object given a key. First return bool var signifies success or false if
+	// either item was not found or an error occurred during Get.
 	GetStruct(ctx context.Context, key string, target interface{}) (bool, error)
 	// GetStruct fetches a given object given a key in a TTL manner, that is, sliding time.
+	// First return bool var signifies success or false if either item was not found or an error occurred during Get.
 	GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error)
 	// Delete removes the object given a key.
 	Delete(ctx context.Context, keys []string) (bool, error)
