@@ -190,7 +190,7 @@ func (t *Transaction) deleteTrackedItemsValues(ctx context.Context, itemsForDele
 		// First field of the Tuple specifies whether we need to delete from Redis cache the blob IDs specified in Second.
 		if itemsForDelete[i].First {
 			for ii := range itemsForDelete[i].Second.Blobs {
-				if err := t.l2Cache.Delete(ctx, []string{formatItemKey(itemsForDelete[i].Second.Blobs[ii].String())}); err != nil {
+				if _, err := t.l2Cache.Delete(ctx, []string{formatItemKey(itemsForDelete[i].Second.Blobs[ii].String())}); err != nil {
 					lastErr = err
 				}
 			}

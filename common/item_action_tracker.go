@@ -76,15 +76,16 @@ func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK
 			var v TV
 			if t.storeInfo.IsValueDataGloballyCached {
 				var err error
+				var found bool
 				if t.storeInfo.CacheConfig.IsValueDataCacheTTL {
-					err = t.cache.GetStructEx(ctx, formatItemKey(item.ID.String()), &v, t.storeInfo.CacheConfig.ValueDataCacheDuration)
+					found, err = t.cache.GetStructEx(ctx, formatItemKey(item.ID.String()), &v, t.storeInfo.CacheConfig.ValueDataCacheDuration)
 				} else {
-					err = t.cache.GetStruct(ctx, formatItemKey(item.ID.String()), &v)
+					found, err = t.cache.GetStruct(ctx, formatItemKey(item.ID.String()), &v)
 				}
 				if err != nil {
-					if !t.cache.KeyNotFound(err) {
-						log.Warn(err.Error())
-					}
+					log.Warn(err.Error())
+				}
+				if !found || err != nil {
 					// If item not found in Redis or an error fetching it, fetch from Blob store.
 					var ba []byte
 					if ba, err = t.blobStore.GetOne(ctx, t.storeInfo.BlobTable, item.ID); err != nil {
@@ -279,7 +280,7 @@ func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context) error
 			continue
 		}
 		var readItem lockRecord
-		if err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); err != nil {
+		if found, err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); !found || err != nil {
 			cachedItem.isLockOwner = false
 			lastErr = err
 			continue
@@ -307,8 +308,8 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Dura
 			continue
 		}
 		var readItem lockRecord
-		if err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); err != nil {
-			if !t.cache.KeyNotFound(err) {
+		if found, err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); !found || err != nil {
+			if err != nil {
 				return err
 			}
 			// Item does not exist, upsert it.
@@ -316,8 +317,11 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Dura
 				return err
 			}
 			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-			if err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); err != nil {
-				return err
+			if found, err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); !found || err != nil {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("lock(item: %v) call can't attain a lock in Redis", uuid.String())
 			} else if readItem.LockID != cachedItem.LockID {
 				if readItem.Action == getAction && cachedItem.Action == getAction {
 					continue
@@ -355,8 +359,10 @@ func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context) error {
 		if !cachedItem.isLockOwner {
 			continue
 		}
-		if err := t.cache.Delete(ctx, []string{t.cache.FormatLockKey(uuid.String())}); err != nil {
-			lastErr = err
+		if found, err := t.cache.Delete(ctx, []string{t.cache.FormatLockKey(uuid.String())}); !found || err != nil {
+			if err != nil {
+				lastErr = err
+			}
 		}
 	}
 	return lastErr

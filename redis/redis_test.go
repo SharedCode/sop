@@ -22,7 +22,7 @@ func TestBasicUse(t *testing.T) {
 	c := NewClient()
 
 	ctx := context.Background()
-	item, _ := c.Get(ctx, "key")
+	_, item, _ := c.Get(ctx, "key")
 
 	fmt.Println(item)
 
@@ -36,19 +36,19 @@ func TestBasicUse(t *testing.T) {
 
 	c.SetStruct(ctx, "fooBar", &usr, 0)
 	user := user{}
-	err := c.GetStruct(ctx, "fooBar", &user)
+	_, err := c.GetStruct(ctx, "fooBar", &user)
 	if err != nil {
 		t.Error("Struct foo NOT exists.")
 	}
 	fmt.Println(user)
 
-	err = c.Delete(ctx, []string{"fooBar"})
+	_, err = c.Delete(ctx, []string{"fooBar"})
 
 	if err != nil {
 		t.Errorf(err.Error())
 	}
 
-	err = c.GetStruct(ctx, "fooBar", &user)
+	_, err = c.GetStruct(ctx, "fooBar", &user)
 	if err == nil {
 		t.Error("Struct foo still exists after delete.")
 	}

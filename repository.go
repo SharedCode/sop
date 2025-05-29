@@ -160,22 +160,24 @@ type KeyValueStore[TK any, TV any] interface {
 // String key and interface{} value are the supported types. Also specifies methods useful for locking.
 type Cache interface {
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
-	Get(ctx context.Context, key string) (string, error)
-	GetEx(ctx context.Context, key string, expiration time.Duration) (string, error)
+	// First return bool var signifies success or false if either item was not found or an error occurred during Get.
+	Get(ctx context.Context, key string) (bool, string, error)
+	// First return bool var signifies success or false if either item was not found or an error occurred during Get.
+	GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error)
 
 	// SetStruct upserts a given object with a key to it.
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
-	// GetStruct fetches a given object given a key.
-	GetStruct(ctx context.Context, key string, target interface{}) error
+	// GetStruct fetches a given object given a key. First return bool var signifies success or false if
+	// either item was not found or an error occurred during Get.
+	GetStruct(ctx context.Context, key string, target interface{}) (bool, error)
 	// GetStruct fetches a given object given a key in a TTL manner, that is, sliding time.
-	GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) error
+	// First return bool var signifies success or false if either item was not found or an error occurred during Get.
+	GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error)
 	// Delete removes the object given a key.
-	Delete(ctx context.Context, keys []string) error
+	Delete(ctx context.Context, keys []string) (bool, error)
 	// Ping is a utility function to check if connection is good.
 	Ping(ctx context.Context) error
 
-	// Returns true if error signifies "key not found", otherwise false.
-	KeyNotFound(err error) bool
 	// Formats a given string as a lock key.
 	FormatLockKey(k string) string
 	// Create lock keys.

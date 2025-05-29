@@ -152,15 +152,16 @@ func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop
 		for i := range storeLids.IDs {
 			h := sop.Handle{}
 			var err error
+			var found bool
 			if storeLids.IsCacheTTL {
-				err = v.l2Cache.GetStructEx(ctx, storeLids.IDs[i].String(), &h, storeLids.CacheDuration)
+				found, err = v.l2Cache.GetStructEx(ctx, storeLids.IDs[i].String(), &h, storeLids.CacheDuration)
 			} else {
-				err = v.l2Cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
+				found, err = v.l2Cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
 			}
 			if err != nil {
-				if !v.l2Cache.KeyNotFound(err) {
-					log.Warn(fmt.Sprintf("Registry Get (redis getstruct) failed, details: %v", err))
-				}
+				log.Warn(fmt.Sprintf("Registry Get (redis getstruct) failed, details: %v", err))
+			}
+			if !found || err != nil {
 				paramQ = append(paramQ, "?")
 				lidsAsIntfs = append(lidsAsIntfs, interface{}(gocql.UUID(storeLids.IDs[i])))
 				continue
@@ -232,7 +233,7 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 		// Flush out the failing records from cache.
 		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
 			for _, id := range storeLids.IDs {
-				if err := v.l2Cache.Delete(ctx, []string{id.String()}); err != nil && !v.l2Cache.KeyNotFound(err) {
+				if _, err := v.l2Cache.Delete(ctx, []string{id.String()}); err != nil {
 					log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
 				}
 			}
