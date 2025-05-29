@@ -48,8 +48,8 @@ func (c *client) Close() error {
 	return err
 }
 
-// KeyNotFound will detect whether error signifies key not found by Redis.
-func (c client) KeyNotFound(err error) bool {
+// keyNotFound will detect whether error signifies key not found by Redis.
+func (c client) keyNotFound(err error) bool {
 	return err == redis.Nil
 }
 
@@ -93,7 +93,7 @@ func (c client) Get(ctx context.Context, key string) (bool, string, error) {
 	s, err := c.conn.Client.Get(ctx, key).Result()
 	// Convert key not found into returning false and nil err.
 	r := err == nil
-	if c.KeyNotFound(err) {
+	if c.keyNotFound(err) {
 		err = nil
 	}
 	return r, s, err
@@ -107,7 +107,7 @@ func (c client) GetEx(ctx context.Context, key string, expiration time.Duration)
 	s, err := c.conn.Client.GetEx(ctx, key, expiration).Result()
 	// Convert key not found into returning false and nil err.
 	r := err == nil
-	if c.KeyNotFound(err) {
+	if c.keyNotFound(err) {
 		err = nil
 	}
 	return r, s, err
@@ -147,7 +147,7 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) (
 
 	// Convert key not found into returning false and nil err.
 	r := err == nil
-	if c.KeyNotFound(err) {
+	if c.keyNotFound(err) {
 		err = nil
 	}
 	return r, err
@@ -168,7 +168,7 @@ func (c client) GetStructEx(ctx context.Context, key string, target interface{},
 
 	// Convert key not found into returning false and nil err.
 	r := err == nil
-	if c.KeyNotFound(err) {
+	if c.keyNotFound(err) {
 		err = nil
 	}
 	return r, err
@@ -184,7 +184,7 @@ func (c client) Delete(ctx context.Context, keys []string) (bool, error) {
 	err := rs.Err()
 	// Convert key not found into returning false and nil err.
 	r := err == nil
-	if c.KeyNotFound(err) {
+	if c.keyNotFound(err) {
 		err = nil
 	}
 	return r, err
