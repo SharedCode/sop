@@ -183,8 +183,6 @@ type Cache interface {
 	// Create lock keys.
 	CreateLockKeys(keys []string) []*LockKey
 
-	// Lock a set of keys & with TTL.
-	LockTTL(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
 	// Returns whether a set of keys are all locked & with TTL.
 	IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
 
@@ -192,7 +190,7 @@ type Cache interface {
 	Lock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
 	// Returns whether a set of keys are all locked.
 	IsLocked(ctx context.Context, lockKeys []*LockKey) (bool, error)
-	// Returns true if a set of keys are all locked, most likely by other processes.
+	// Returns true if a set of keys are all locked, most likely by other processes (or threads).
 	// Use-case is for checking if a certain set of keys are locked by other processes.
 	IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error)
 	// Unlock a given set of keys.
