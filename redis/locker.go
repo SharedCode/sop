@@ -38,29 +38,30 @@ func (c client) IsLockedTTL(ctx context.Context, duration time.Duration, lockKey
 func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
 	for _, lk := range lockKeys {
 		found, readItem, err := c.Get(ctx, lk.Key)
-		if !found || err != nil {
-			if err != nil {
-				return false, err
-			}
-			// Item does not exist, upsert it.
-			if err := c.Set(ctx, lk.Key, lk.LockID.String(), duration); err != nil {
-				return false, err
-			}
-			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-			if found, readItem2, err := c.Get(ctx, lk.Key); !found || err != nil {
-				return false, err
-			} else if readItem2 != lk.LockID.String() {
-				// Item found in Redis, lock attempt failed.
+		if err != nil {
+			return false, err
+		}
+		if found {
+			// Item found in Redis, check if not ours. Most likely, but check anyway.
+			if readItem != lk.LockID.String() {
 				return false, nil
 			}
-			// We got the item locked, ensure we can unlock it.
-			lk.IsLockOwner = true
 			continue
 		}
-		// Item found in Redis, lock attempt failed.
-		if readItem != lk.LockID.String() {
+
+		// Item does not exist, upsert it.
+		if err := c.Set(ctx, lk.Key, lk.LockID.String(), duration); err != nil {
+			return false, err
+		}
+		// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
+		if found, readItem2, err := c.Get(ctx, lk.Key); !found || err != nil {
+			return false, err
+		} else if readItem2 != lk.LockID.String() {
+			// Item found in Redis, lock attempt failed.
 			return false, nil
 		}
+		// We got the item locked, ensure we can unlock it.
+		lk.IsLockOwner = true
 	}
 	// Successfully locked.
 	return true, nil
