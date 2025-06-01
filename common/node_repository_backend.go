@@ -55,7 +55,7 @@ func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.
 		count:          storeInfo.Count,
 	}
 	return &nodeRepositoryFrontEnd[TK, TV]{
-		backendNodeRepository: nr,
+		nodeRepositoryBackend: nr,
 	}
 }
 
