@@ -8,7 +8,8 @@ import (
 	"github.com/ncw/directio"
 )
 
-type directIOInterface interface {
+// For use in unit test only.
+type unitTestInjectableIO interface {
 	// Open the file with a given filename.
 	open(filename string, flag int, permission os.FileMode) error
 	writeAt(block []byte, offset int64) (int, error)
@@ -26,7 +27,7 @@ const (
 )
 
 // Allows unit test to inject a fake or a simulator.
-var directIOSim directIOInterface
+var directIOSim unitTestInjectableIO
 
 // Instantiate a direct File IO object.
 func newDirectIO() *directIO {
