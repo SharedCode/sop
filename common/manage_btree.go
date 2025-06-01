@@ -105,7 +105,7 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 	// Assign the node repository frontend and backend bits.
 	nrw := newNodeRepository[TK, TV](trans, s)
 	si.NodeRepository = nrw
-	si.backendNodeRepository = nrw.backendNodeRepository
+	si.backendNodeRepository = nrw.nodeRepositoryBackend
 
 	// Wire up the B-tree & the backend bits required by the transaction.
 	b3, err := btree.New(s, &si.StoreInterface, comparer)
@@ -117,7 +117,7 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 	// B-Tree backend processing(of commit & rollback) required objects.
 	b3b := btreeBackend{
 		// Node blob repository.
-		nodeRepository: nrw.backendNodeRepository,
+		nodeRepository: nrw.nodeRepositoryBackend,
 		// Needed for auto-merging of Node contents.
 		refetchAndMerge: refetchAndMergeClosure(&si, b3, trans.storeRepository),
 		// Needed when applying the "delta" to the Store Count field.
