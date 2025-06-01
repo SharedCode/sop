@@ -88,7 +88,7 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 	// Try to fetch node from L1 cache Nodes MRU prior to "commit" time. On commit time (transaction.phaseDone > 0),
 	// we only fetch the Handle from L2 cache to get the "true" record.
 	if nr.transaction.phaseDone == 0 {
-		if h := nr.l1Cache.HandlesCache.Get([]sop.UUID{logicalID}); len(h) == 1 && !h[0].IsEmpty() {
+		if h := nr.l1Cache.Handles.Get([]sop.UUID{logicalID}); len(h) == 1 && !h[0].IsEmpty() {
 			if n := nr.l1Cache.GetNodeFromMRU(h[0], target); n != nil {
 				target = n
 				nr.readNodesCache.Set([]sop.KeyValuePair[sop.UUID, any]{{
