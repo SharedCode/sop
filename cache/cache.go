@@ -1,11 +1,13 @@
 package cache
 
+import "github.com/SharedCode/sop"
+
 // Generic Cache is useful for general MRU cache needs.
-type Cache[TK any, TV any] interface {
+type Cache[TK comparable, TV any] interface {
 	Clear()
-	Set(key TK, value TV)
-	Get(key TK) TV
-	Delete(key TK)
+	Set(items []sop.KeyValuePair[TK, TV])
+	Get(keys []TK) []TV
+	Delete(keys []TK)
 	Count() int
 	// Returns yes if cache is at max capacity.
 	IsFull() bool
@@ -37,37 +39,42 @@ func (c *cache[TK, TV]) Clear() {
 	c.mru = newMru(c, c.mru.minCapacity, c.mru.maxCapacity)
 }
 
-func (c *cache[TK, TV]) Set(key TK, value TV) {
-	if v, ok := c.lookup[key]; ok {
-		v.data = value
-		c.mru.remove(v.dllNode)
-		v.dllNode = c.mru.add(key)
-		return
+func (c *cache[TK, TV]) Set(items []sop.KeyValuePair[TK, TV]) {
+	for i := range items {
+		if v, ok := c.lookup[items[i].Key]; ok {
+			v.data = items[i].Value
+			c.mru.remove(v.dllNode)
+			v.dllNode = c.mru.add(items[i].Key)
+			continue
+		}
+		n := c.mru.add(items[i].Key)
+		c.lookup[items[i].Key] = &cacheEntry[TK, TV]{
+			data:    items[i].Value,
+			dllNode: n,
+		}
 	}
-	n := c.mru.add(key)
-	c.lookup[key] = &cacheEntry[TK, TV]{
-		data:    value,
-		dllNode: n,
-	}
-
 	c.Evict()
 }
 
-func (c *cache[TK, TV]) Get(key TK) TV {
-	if v, ok := c.lookup[key]; ok {
-		c.mru.remove(v.dllNode)
-		v.dllNode = c.mru.add(key)
-		return v.data
+func (c *cache[TK, TV]) Get(keys []TK) []TV {
+	r := make([]TV, len(keys))
+	for i := range keys {
+		if v, ok := c.lookup[keys[i]]; ok {
+			c.mru.remove(v.dllNode)
+			v.dllNode = c.mru.add(keys[i])
+			r[i] = v.data
+		}
 	}
-	var d TV
-	return d
+	return r
 }
 
-func (c *cache[TK, TV]) Delete(key TK) {
-	if v, ok := c.lookup[key]; ok {
-		c.mru.remove(v.dllNode)
-		v.dllNode = nil
-		delete(c.lookup, key)
+func (c *cache[TK, TV]) Delete(keys []TK) {
+	for i := range keys {
+		if v, ok := c.lookup[keys[i]]; ok {
+			c.mru.remove(v.dllNode)
+			v.dllNode = nil
+			delete(c.lookup, keys[i])
+		}
 	}
 }
 

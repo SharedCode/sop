@@ -21,12 +21,11 @@ type l1CacheEntry struct {
 }
 
 type L1Cache struct {
-	lookup             map[sop.UUID]*l1CacheEntry
-	mru                *l1_mru
-	l2CacheNodes       sop.Cache
-	locker             *sync.Mutex
-	handlesCache       Cache[sop.UUID, sop.Handle]
-	handlesCacheLocker *sync.Mutex
+	lookup       map[sop.UUID]*l1CacheEntry
+	mru          *l1_mru
+	l2CacheNodes sop.Cache
+	locker       *sync.Mutex
+	HandlesCache Cache[sop.UUID, sop.Handle]
 }
 
 const (
@@ -57,11 +56,10 @@ func GetGlobalCache() *L1Cache {
 // Instantiate a new instance of this L1 Cache management logic.
 func NewL1Cache(l2cn sop.Cache, minCapacity, maxCapacity int) *L1Cache {
 	l1c := &L1Cache{
-		lookup:             make(map[sop.UUID]*l1CacheEntry, maxCapacity),
-		l2CacheNodes:       l2cn,
-		locker:             &sync.Mutex{},
-		handlesCache:       NewCache[sop.UUID, sop.Handle](minCapacity, maxCapacity),
-		handlesCacheLocker: &sync.Mutex{},
+		lookup:       make(map[sop.UUID]*l1CacheEntry, maxCapacity),
+		l2CacheNodes: l2cn,
+		locker:       &sync.Mutex{},
+		HandlesCache: NewSynchronizedCache[sop.UUID, sop.Handle](minCapacity, maxCapacity),
 	}
 	l1c.mru = newL1Mru(l1c, minCapacity, maxCapacity)
 	return l1c
@@ -69,30 +67,6 @@ func NewL1Cache(l2cn sop.Cache, minCapacity, maxCapacity int) *L1Cache {
 
 // The L1 Cache getters (get handles & get node) are able to check if there is newer version in L2 cache
 // and fetch it if there is.
-
-func (c *L1Cache) SetHandlesToMRU(handles []sop.Handle) {
-	c.handlesCacheLocker.Lock()
-	for i := range handles {
-		c.handlesCache.Set(handles[i].LogicalID, handles[i])
-	}
-	c.handlesCacheLocker.Unlock()
-}
-func (c *L1Cache) GetHandlesFromMRU(logicalIDs []sop.UUID) []sop.Handle {
-	r := make([]sop.Handle, len(logicalIDs))
-	c.handlesCacheLocker.Lock()
-	for i := range logicalIDs {
-		r[i] = c.handlesCache.Get(logicalIDs[i])
-	}
-	c.handlesCacheLocker.Unlock()
-	return r
-}
-func (c *L1Cache) DeleteHandlesInMRU(logicalIDs []sop.UUID) {
-	c.handlesCacheLocker.Lock()
-	for i := range logicalIDs {
-		c.handlesCache.Delete(logicalIDs[i])
-	}
-	c.handlesCacheLocker.Unlock()
-}
 
 func (c *L1Cache) SetNode(ctx context.Context, nodeID sop.UUID, node any, nodeCacheDuration time.Duration) {
 	c.SetNodeToMRU(ctx, nodeID, node, nodeCacheDuration)
