@@ -19,8 +19,8 @@ var errTransHasNotBegunMsg = errors.New("can't do operation on b-tree if transac
 // Instantiate a B-Tree wrapper that enforces transaction session on each method(a.k.a. operation).
 func NewBtreeWithTransaction[TK Ordered, TV any](t sop.TwoPhaseCommitTransaction, btree BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
 	return &btreeWithTransaction[TK, TV]{
-		transaction: t,
-		BtreeInterface:       btree,
+		transaction:    t,
+		BtreeInterface: btree,
 	}
 }
 

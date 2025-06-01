@@ -16,7 +16,7 @@ type sync_cache[TK comparable, TV any] struct {
 func NewSynchronizedCache[TK comparable, TV any](minCapacity, maxCapacity int) Cache[TK, TV] {
 	return &sync_cache[TK, TV]{
 		locker: &sync.Mutex{},
-		Cache: NewCache[TK, TV](minCapacity, maxCapacity),
+		Cache:  NewCache[TK, TV](minCapacity, maxCapacity),
 	}
 }
 
