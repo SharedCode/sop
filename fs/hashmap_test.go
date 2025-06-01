@@ -14,8 +14,8 @@ const (
 
 // This hashing algorithm tend to be denser as more data segment file is used. At two, it can fill around 66% avg.
 // At one segment file, it fills up around 55%. SOP b-tree (w/ load distribution)
-// can fill up around 55%-67%, so, this is at par. BUT better because each Handle is a very small sized data (record).
-// At 4, it should be able to fill 75%.
+// can fill up around 55%-75%, so, this is at par. BUT better for its use-case, i.e. each Handle is a very small sized data (record).
+// At 4, it should be able to fill ~75%.
 
 func TestHashModDistribution(t *testing.T) {
 	hashTable := make([][handlesPerBlock]sop.UUID, hashModValue)

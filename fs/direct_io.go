@@ -8,6 +8,14 @@ import (
 	"github.com/ncw/directio"
 )
 
+type directIOInterface interface {
+	// Open the file with a given filename.
+	open(filename string, flag int, permission os.FileMode) error
+	writeAt(block []byte, offset int64) (int, error)
+	readAt(block []byte, offset int64) (int, error)
+	close() error
+}
+
 type directIO struct {
 	file     *os.File
 	filename string
@@ -17,6 +25,9 @@ const (
 	blockSize = directio.BlockSize
 )
 
+// Allows unit test to inject a fake or a simulator.
+var directIOSim directIOInterface
+
 // Instantiate a direct File IO object.
 func newDirectIO() *directIO {
 	return &directIO{}
@@ -24,6 +35,9 @@ func newDirectIO() *directIO {
 
 // Open the file with a given filename.
 func (dio *directIO) open(filename string, flag int, permission os.FileMode) error {
+	if directIOSim != nil {
+		return directIOSim.open(filename, flag, permission)
+	}
 	if dio.file != nil {
 		return fmt.Errorf("there is an opened file for this directIO object, 'not allowed to open file again")
 	}
@@ -61,6 +75,9 @@ func (dio *directIO) createAlignedBlockOfSize(blockSize int) []byte {
 }
 
 func (dio *directIO) writeAt(block []byte, offset int64) (int, error) {
+	if directIOSim != nil {
+		return directIOSim.writeAt(block, offset)
+	}
 	if dio.file == nil {
 		return 0, fmt.Errorf("can't write, there is no opened file")
 	}
@@ -68,6 +85,9 @@ func (dio *directIO) writeAt(block []byte, offset int64) (int, error) {
 }
 
 func (dio *directIO) readAt(block []byte, offset int64) (int, error) {
+	if directIOSim != nil {
+		return directIOSim.readAt(block, offset)
+	}
 	if dio.file == nil {
 		return 0, fmt.Errorf("can't read, there is no opened file")
 	}
@@ -75,6 +95,9 @@ func (dio *directIO) readAt(block []byte, offset int64) (int, error) {
 }
 
 func (dio *directIO) close() error {
+	if directIOSim != nil {
+		return directIOSim.close()
+	}
 
 	if dio.file == nil {
 		return nil
