@@ -19,20 +19,20 @@ func NewSynchronizedCache[TK comparable, TV any](minCapacity, maxCapacity int) C
 	}
 }
 
-func (sc *sync_cache[TK, TV]) Set(items ...sop.KeyValuePair[TK, TV]) {
+func (sc *sync_cache[TK, TV]) Set(items []sop.KeyValuePair[TK, TV]) {
 	sc.locker.Lock()
-	sc.cache.Set(items...)
+	sc.cache.Set(items)
 	sc.locker.Unlock()
 }
-func (sc *sync_cache[TK, TV]) Get(keys ...TK) []TV {
+func (sc *sync_cache[TK, TV]) Get(keys []TK) []TV {
 	sc.locker.Lock()
 	defer sc.locker.Unlock()
-	return sc.cache.Get(keys...)
+	return sc.cache.Get(keys)
 }
 
-func (sc *sync_cache[TK, TV]) Delete(keys ...TK) {
+func (sc *sync_cache[TK, TV]) Delete(keys []TK) {
 	sc.locker.Lock()
-	sc.cache.Delete(keys...)
+	sc.cache.Delete(keys)
 	sc.locker.Unlock()
 }
 

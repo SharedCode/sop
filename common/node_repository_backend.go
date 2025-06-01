@@ -81,17 +81,19 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 		}
 		return v.node, nil
 	}
-	if v := nr.readNodesCache.Get(logicalID); v[0] != nil {
+	if v := nr.readNodesCache.Get([]sop.UUID{logicalID}); v[0] != nil {
 		return v[0], nil
 	}
 
 	// Try to fetch node from L1 cache Nodes MRU prior to "commit" time. On commit time (transaction.phaseDone > 0),
 	// we only fetch the Handle from L2 cache to get the "true" record.
 	if nr.transaction.phaseDone == 0 {
-		if h := nr.l1Cache.HandlesCache.Get(logicalID); len(h) == 1 && !h[0].IsEmpty() {
+		if h := nr.l1Cache.HandlesCache.Get([]sop.UUID{logicalID}); len(h) == 1 && !h[0].IsEmpty() {
 			if n := nr.l1Cache.GetNodeFromMRU(h[0], target); n != nil {
 				target = n
-				nr.readNodesCache.Set(sop.KeyValuePair[sop.UUID, any]{Key: logicalID, Value: target})
+				nr.readNodesCache.Set([]sop.KeyValuePair[sop.UUID, any]{{
+					Key: logicalID, Value: target,
+				}})
 				return target, nil
 			}
 		}
@@ -120,7 +122,9 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 	if n != nil {
 		target = n
 		target.(btree.MetaDataType).SetVersion(h[0].IDs[0].Version)
-		nr.readNodesCache.Set(sop.KeyValuePair[sop.UUID, any]{Key: logicalID, Value: target})
+		nr.readNodesCache.Set([]sop.KeyValuePair[sop.UUID, any]{{
+			Key: logicalID, Value: target,
+		}})
 		return target, nil
 	}
 
@@ -134,7 +138,9 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 
 	// Put to cache layer this node since it got fetched from blob store.
 	nr.l1Cache.SetNode(ctx, nodeID, target, nr.storeInfo.CacheConfig.NodeCacheDuration)
-	nr.readNodesCache.Set(sop.KeyValuePair[sop.UUID, any]{Key: logicalID, Value: target})
+	nr.readNodesCache.Set([]sop.KeyValuePair[sop.UUID, any]{{
+		Key: logicalID, Value: target,
+	}})
 	return target, nil
 }
 
@@ -146,12 +152,12 @@ func (nr *nodeRepositoryBackend) add(nodeID sop.UUID, node interface{}) {
 }
 
 func (nr *nodeRepositoryBackend) update(nodeID sop.UUID, node interface{}) {
-	if n := nr.readNodesCache.Get(nodeID); n[0] != nil {
+	if n := nr.readNodesCache.Get([]sop.UUID{nodeID}); n[0] != nil {
 		nr.localCache[nodeID] = cachedNode{
 			action: defaultAction,
 			node:   n[0],
 		}
-		nr.readNodesCache.Delete(nodeID)
+		nr.readNodesCache.Delete([]sop.UUID{nodeID})
 	}
 	if v, ok := nr.localCache[nodeID]; ok {
 		// Update the node and keep the "action" marker if new, otherwise update to "update" action.
@@ -170,12 +176,12 @@ func (nr *nodeRepositoryBackend) update(nodeID sop.UUID, node interface{}) {
 }
 
 func (nr *nodeRepositoryBackend) remove(nodeID sop.UUID) {
-	if n := nr.readNodesCache.Get(nodeID); n[0] != nil {
+	if n := nr.readNodesCache.Get([]sop.UUID{nodeID}); n[0] != nil {
 		nr.localCache[nodeID] = cachedNode{
 			action: defaultAction,
 			node:   n[0],
 		}
-		nr.readNodesCache.Delete(nodeID)
+		nr.readNodesCache.Delete([]sop.UUID{nodeID})
 	}
 	if v, ok := nr.localCache[nodeID]; ok {
 		if v.action == addAction {

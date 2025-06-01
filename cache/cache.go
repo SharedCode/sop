@@ -5,9 +5,9 @@ import "github.com/SharedCode/sop"
 // Generic Cache is useful for general MRU cache needs.
 type Cache[TK comparable, TV any] interface {
 	Clear()
-	Set(items ...sop.KeyValuePair[TK, TV])
-	Get(keys ...TK) []TV
-	Delete(keys ...TK)
+	Set(items []sop.KeyValuePair[TK, TV])
+	Get(keys []TK) []TV
+	Delete(keys []TK)
 	Count() int
 	// Returns yes if cache is at max capacity.
 	IsFull() bool
@@ -39,7 +39,7 @@ func (c *cache[TK, TV]) Clear() {
 	c.mru = newMru(c, c.mru.minCapacity, c.mru.maxCapacity)
 }
 
-func (c *cache[TK, TV]) Set(items ...sop.KeyValuePair[TK, TV]) {
+func (c *cache[TK, TV]) Set(items []sop.KeyValuePair[TK, TV]) {
 	for i := range items {
 		if v, ok := c.lookup[items[i].Key]; ok {
 			v.data = items[i].Value
@@ -56,7 +56,7 @@ func (c *cache[TK, TV]) Set(items ...sop.KeyValuePair[TK, TV]) {
 	c.Evict()
 }
 
-func (c *cache[TK, TV]) Get(keys ...TK) []TV {
+func (c *cache[TK, TV]) Get(keys []TK) []TV {
 	r := make([]TV, len(keys))
 	for i := range keys {
 		if v, ok := c.lookup[keys[i]]; ok {
@@ -68,7 +68,7 @@ func (c *cache[TK, TV]) Get(keys ...TK) []TV {
 	return r
 }
 
-func (c *cache[TK, TV]) Delete(keys ...TK) {
+func (c *cache[TK, TV]) Delete(keys []TK) {
 	for i := range keys {
 		if v, ok := c.lookup[keys[i]]; ok {
 			c.mru.remove(v.dllNode)

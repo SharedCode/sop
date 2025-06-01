@@ -34,14 +34,14 @@ func (nr *nodeRepositoryFrontEnd[TK, TV]) Get(ctx context.Context, nodeID sop.UU
 }
 
 func (nr *nodeRepositoryFrontEnd[TK, TV]) Fetched(nodeID sop.UUID) {
-	n := nr.backendNodeRepository.readNodesCache.Get(nodeID)
+	n := nr.backendNodeRepository.readNodesCache.Get([]sop.UUID{nodeID})
 	if n[0] != nil {
 		nr.backendNodeRepository.localCache[nodeID] = cachedNode{
 			action: getAction,
 			node:   n[0],
 		}
 		// Remove now from MRU since node got migrated to local cache and is now "tracked".
-		nr.backendNodeRepository.readNodesCache.Delete(nodeID)
+		nr.backendNodeRepository.readNodesCache.Delete([]sop.UUID{nodeID})
 	}
 }
 

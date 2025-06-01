@@ -49,7 +49,7 @@ func (r *registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPa
 		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs}); err != nil {
 			return err
 		}
-		r.l1Cache.HandlesCache.Set(convertToKvp(sh.IDs)...)
+		r.l1Cache.HandlesCache.Set(convertToKvp(sh.IDs))
 		for _, h := range sh.IDs {
 			if err := r.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis setstruct) failed, details: %v", err))
@@ -72,7 +72,7 @@ func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registr
 				return err
 			}
 			if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
-				r.l1Cache.HandlesCache.Delete(h.LogicalID)
+				r.l1Cache.HandlesCache.Delete([]sop.UUID{h.LogicalID})
 				r.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				// Unlock the object Keys before return.
 				r.l2Cache.Unlock(ctx, lk)
@@ -87,7 +87,7 @@ func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registr
 				return err
 			}
 		}
-		r.l1Cache.HandlesCache.Set(convertToKvp(sh.IDs)...)
+		r.l1Cache.HandlesCache.Set(convertToKvp(sh.IDs))
 	}
 	return nil
 }
@@ -96,14 +96,14 @@ func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles []sop.
 	for _, sh := range storesHandles {
 		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs}); err != nil {
 			for _, h := range sh.IDs {
-				r.l1Cache.HandlesCache.Delete(h.LogicalID)
+				r.l1Cache.HandlesCache.Delete([]sop.UUID{h.LogicalID})
 				if _, err := r.l2Cache.Delete(ctx, []string{h.LogicalID.String()}); err != nil {
 					log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis delete) failed, details: %v", err))
 				}
 			}
 			return err
 		}
-		r.l1Cache.HandlesCache.Set(convertToKvp(sh.IDs)...)
+		r.l1Cache.HandlesCache.Set(convertToKvp(sh.IDs))
 		for _, h := range sh.IDs {
 			// Tolerate Redis cache failure.
 			if err := r.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
@@ -181,7 +181,7 @@ func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPa
 		}
 	}
 	for _, storeLids := range storesLids {
-		r.l1Cache.HandlesCache.Delete(storeLids.IDs...)
+		r.l1Cache.HandlesCache.Delete(storeLids.IDs)
 		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: storeLids.IDs}); err != nil {
 			deleteFromCache(storeLids)
 			return err
