@@ -14,11 +14,10 @@ type sync_cache[TK comparable, TV any] struct {
 
 // NewSynchronizedCache returns a Cache instance that is thread safe.
 func NewSynchronizedCache[TK comparable, TV any](minCapacity, maxCapacity int) Cache[TK, TV] {
-	r := &sync_cache[TK, TV]{
+	return &sync_cache[TK, TV]{
 		locker: &sync.Mutex{},
+		Cache: NewCache[TK, TV](minCapacity, maxCapacity),
 	}
-	r.Cache = NewCache[TK, TV](minCapacity, maxCapacity)
-	return r
 }
 
 func (sc *sync_cache[TK, TV]) Set(items []sop.KeyValuePair[TK, TV]) {

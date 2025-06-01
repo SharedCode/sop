@@ -9,8 +9,9 @@ import (
 )
 
 type btreeWithTransaction[TK Ordered, TV any] struct {
+	// Inherit from B
+	BtreeInterface[TK, TV]
 	transaction sop.TwoPhaseCommitTransaction
-	btree       BtreeInterface[TK, TV]
 }
 
 var errTransHasNotBegunMsg = errors.New("can't do operation on b-tree if transaction has not begun")
@@ -19,7 +20,7 @@ var errTransHasNotBegunMsg = errors.New("can't do operation on b-tree if transac
 func NewBtreeWithTransaction[TK Ordered, TV any](t sop.TwoPhaseCommitTransaction, btree BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
 	return &btreeWithTransaction[TK, TV]{
 		transaction: t,
-		btree:       btree,
+		BtreeInterface:       btree,
 	}
 }
 
@@ -34,16 +35,6 @@ func (b3 *btreeWithTransaction[TK, TV]) Lock(ctx context.Context, forWriting boo
 	return nil
 }
 
-// Returns the store info of this B-Tree.
-func (b3 *btreeWithTransaction[TK, TV]) GetStoreInfo() sop.StoreInfo {
-	return b3.btree.GetStoreInfo()
-}
-
-// Returns the count of items in the
-func (b3 *btreeWithTransaction[TK, TV]) Count() int64 {
-	return b3.btree.Count()
-}
-
 // Add adds an item to the b-tree and does not check for duplicates.
 func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
@@ -53,7 +44,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value T
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't add item, transaction is not for writing")
 	}
-	r, err := b3.btree.Add(ctx, key, value)
+	r, err := b3.BtreeInterface.Add(ctx, key, value)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -71,7 +62,7 @@ func (b3 *btreeWithTransaction[TK, TV]) AddIfNotExist(ctx context.Context, key T
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't add item, transaction is not for writing")
 	}
-	r, err := b3.btree.AddIfNotExist(ctx, key, value)
+	r, err := b3.BtreeInterface.AddIfNotExist(ctx, key, value)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -87,7 +78,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Upsert(ctx context.Context, key TK, valu
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
-	r, err := b3.btree.Upsert(ctx, key, value)
+	r, err := b3.BtreeInterface.Upsert(ctx, key, value)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -103,7 +94,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Update(ctx context.Context, key TK, valu
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
-	r, err := b3.btree.Update(ctx, key, value)
+	r, err := b3.BtreeInterface.Update(ctx, key, value)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -120,7 +111,7 @@ func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, v
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
-	r, err := b3.btree.UpdateCurrentItem(ctx, value)
+	r, err := b3.BtreeInterface.UpdateCurrentItem(ctx, value)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -136,7 +127,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Remove(ctx context.Context, key TK) (boo
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
-	r, err := b3.btree.Remove(ctx, key)
+	r, err := b3.BtreeInterface.Remove(ctx, key)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -152,7 +143,7 @@ func (b3 *btreeWithTransaction[TK, TV]) RemoveCurrentItem(ctx context.Context) (
 		b3.transaction.Rollback(ctx)
 		return false, fmt.Errorf("can't remove item, transaction is not for writing")
 	}
-	r, err := b3.btree.RemoveCurrentItem(ctx)
+	r, err := b3.BtreeInterface.RemoveCurrentItem(ctx)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -169,7 +160,7 @@ func (b3 *btreeWithTransaction[TK, TV]) FindOne(ctx context.Context, key TK, fir
 		b3.transaction.Rollback(ctx)
 		return false, errTransHasNotBegunMsg
 	}
-	r, err := b3.btree.FindOne(ctx, key, firstItemWithKey)
+	r, err := b3.BtreeInterface.FindOne(ctx, key, firstItemWithKey)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -180,7 +171,7 @@ func (b3 *btreeWithTransaction[TK, TV]) FindOneWithID(ctx context.Context, key T
 		b3.transaction.Rollback(ctx)
 		return false, errTransHasNotBegunMsg
 	}
-	r, err := b3.btree.FindOneWithID(ctx, key, id)
+	r, err := b3.BtreeInterface.FindOneWithID(ctx, key, id)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -193,7 +184,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentKey() TK {
 	if !b3.transaction.HasBegun() {
 		return zero
 	}
-	return b3.btree.GetCurrentKey()
+	return b3.BtreeInterface.GetCurrentKey()
 }
 
 // GetCurrentValue returns the current item's value.
@@ -203,7 +194,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValue(ctx context.Context) (TV
 		b3.transaction.Rollback(ctx)
 		return zero, errTransHasNotBegunMsg
 	}
-	v, err := b3.btree.GetCurrentValue(ctx)
+	v, err := b3.BtreeInterface.GetCurrentValue(ctx)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -217,7 +208,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (Ite
 		b3.transaction.Rollback(ctx)
 		return zero, errTransHasNotBegunMsg
 	}
-	r, err := b3.btree.GetCurrentItem(ctx)
+	r, err := b3.BtreeInterface.GetCurrentItem(ctx)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -231,7 +222,7 @@ func (b3 *btreeWithTransaction[TK, TV]) First(ctx context.Context) (bool, error)
 		b3.transaction.Rollback(ctx)
 		return false, errTransHasNotBegunMsg
 	}
-	r, err := b3.btree.First(ctx)
+	r, err := b3.BtreeInterface.First(ctx)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -245,7 +236,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Last(ctx context.Context) (bool, error) 
 		b3.transaction.Rollback(ctx)
 		return false, errTransHasNotBegunMsg
 	}
-	r, err := b3.btree.Last(ctx)
+	r, err := b3.BtreeInterface.Last(ctx)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -259,7 +250,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Next(ctx context.Context) (bool, error) 
 		b3.transaction.Rollback(ctx)
 		return false, errTransHasNotBegunMsg
 	}
-	r, err := b3.btree.Next(ctx)
+	r, err := b3.BtreeInterface.Next(ctx)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
@@ -273,16 +264,9 @@ func (b3 *btreeWithTransaction[TK, TV]) Previous(ctx context.Context) (bool, err
 		b3.transaction.Rollback(ctx)
 		return false, errTransHasNotBegunMsg
 	}
-	r, err := b3.btree.Previous(ctx)
+	r, err := b3.BtreeInterface.Previous(ctx)
 	if err != nil {
 		b3.transaction.Rollback(ctx)
 	}
 	return r, err
-}
-
-// IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
-// Specifying uniqueness base on key makes the B-Tree permanently set. If you want just a temporary
-// unique check during Add of an item, then you can use AddIfNotExist method for that.
-func (b3 *btreeWithTransaction[TK, TV]) IsUnique() bool {
-	return b3.btree.IsUnique()
 }
