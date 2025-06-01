@@ -50,7 +50,7 @@ func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[
 			if err := qry.Exec(); err != nil {
 				return err
 			}
-			v.l1Cache.SetHandlesToMRU([]sop.Handle{h})
+			v.l1Cache.HandlesCache.Set(convertToKvp(h)...)
 			// Tolerate Redis cache failure.
 			if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Add (redis setstruct) failed, details: %v", err))
@@ -88,7 +88,7 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 
 			// Update registry record.
 			if err := qry.Exec(); err != nil {
-				v.l1Cache.DeleteHandlesInMRU([]sop.UUID{h.LogicalID})
+				v.l1Cache.HandlesCache.Delete(h.LogicalID)
 				v.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				// Unlock the object Keys before return.
 				v.l2Cache.Unlock(ctx, lk)
@@ -105,7 +105,7 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 				return err
 			}
 		}
-		v.l1Cache.SetHandlesToMRU(sh.IDs)
+		v.l1Cache.HandlesCache.Set(convertToKvp(sh.IDs...)...)
 	}
 	return nil
 }
@@ -124,7 +124,7 @@ func (v *registry) UpdateNoLocks(ctx context.Context, storesHandles []sop.Regist
 
 			// Update registry record.
 			if err := qry.Exec(); err != nil {
-				v.l1Cache.DeleteHandlesInMRU([]sop.UUID{h.LogicalID})
+				v.l1Cache.HandlesCache.Delete(h.LogicalID)
 				v.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				return err
 			}
@@ -133,7 +133,7 @@ func (v *registry) UpdateNoLocks(ctx context.Context, storesHandles []sop.Regist
 			if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
 			}
-			v.l1Cache.SetHandlesToMRU([]sop.Handle{h})
+			v.l1Cache.HandlesCache.Set(convertToKvp(h)...)
 		}
 	}
 	return nil
@@ -244,7 +244,7 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 			qry.Consistency(connection.Config.ConsistencyBook.RegistryRemove)
 		}
 
-		v.l1Cache.DeleteHandlesInMRU(storeLids.IDs)
+		v.l1Cache.HandlesCache.Delete(storeLids.IDs...)
 		if err := qry.Exec(); err != nil {
 			deleteFromCache(storeLids)
 			return err
@@ -256,4 +256,12 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 
 // Cassandra already provides replication for the registry tables, no need to do anything here.
 func (v *registry) Replicate(ctx context.Context, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles []sop.RegistryPayload[sop.Handle]) {
+}
+
+func convertToKvp(handles ...sop.Handle) []sop.KeyValuePair[sop.UUID, sop.Handle] {
+	items := make([]sop.KeyValuePair[sop.UUID, sop.Handle], len(handles))
+	for i := range handles {
+		items[i] = sop.KeyValuePair[sop.UUID, sop.Handle]{Key: handles[i].LogicalID, Value: handles[i]}
+	}
+	return items
 }
