@@ -3,8 +3,8 @@ package replication
 import (
 	"context"
 	"fmt"
-	"os"
 	log "log/slog"
+	"os"
 
 	"testing"
 
@@ -12,7 +12,6 @@ import (
 	"github.com/SharedCode/sop/fs"
 	"github.com/SharedCode/sop/in_red_fs"
 	"github.com/SharedCode/sop/redis"
-
 )
 
 const dataPath string = "/Users/grecinto/sop_data"

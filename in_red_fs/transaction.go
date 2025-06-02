@@ -100,7 +100,6 @@ func handleReplicationRelatedError(ioError error, rollbackSucceeded bool) bool {
 
 		// Cause a failover switch to passive destinations on succeeding transactions.
 
-
 	}
 	return true
 }

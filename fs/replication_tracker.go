@@ -13,7 +13,7 @@ type replicationTracker struct {
 	// otherwise the 2nd folder, as specified in storesBaseFolders[1].
 	isFirstFolderActive bool
 	replicate           bool
-	isInDeltaSync bool
+	isInDeltaSync       bool
 }
 
 // Instantiates a replication tracker.
@@ -71,7 +71,7 @@ func (r *replicationTracker) formatPassiveFolderEntity(entityName string) string
 	}
 }
 
-func (r *replicationTracker)readStatusFromHomeFolder(storesBaseFolders []string) {
+func (r *replicationTracker) readStatusFromHomeFolder(storesBaseFolders []string) {
 	// TODO: read the replication status from log file(s) in home folder.
 
 }
