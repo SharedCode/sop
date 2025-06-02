@@ -13,22 +13,29 @@ type replicationTracker struct {
 	// otherwise the 2nd folder, as specified in storesBaseFolders[1].
 	isFirstFolderActive bool
 	replicate           bool
+	isInDeltaSync       bool
 }
 
-func NewReplicationTracker(storesBaseFolders []string, replicate bool) *replicationTracker {
+// Instantiates a replication tracker.
+func NewReplicationTracker(storesBaseFolders []string, replicate bool) (*replicationTracker, error) {
 	isFirstFolderActive := true
-	if replicate {
-		isFirstFolderActive = detectIfFirstIsActiveFolder(storesBaseFolders)
-	}
-	return &replicationTracker{
+	rt := replicationTracker{
 		storesBaseFolders:   storesBaseFolders,
 		isFirstFolderActive: isFirstFolderActive,
 		replicate:           replicate,
 	}
+	if replicate {
+		rt.readStatusFromHomeFolder(storesBaseFolders)
+	}
+	if rt.isInDeltaSync {
+		return nil, fmt.Errorf("delta sync is happening, transaction should fail")
+	}
+	return &rt, nil
 }
 
 func (r *replicationTracker) failover() {
 	r.isFirstFolderActive = !r.isFirstFolderActive
+	// TODO: write to log file the new active folder flag.
 }
 
 func (r *replicationTracker) getActiveBaseFolder() string {
@@ -64,7 +71,7 @@ func (r *replicationTracker) formatPassiveFolderEntity(entityName string) string
 	}
 }
 
-func detectIfFirstIsActiveFolder(storesBaseFolders []string) bool {
-	// TODO
-	return true
+func (r *replicationTracker) readStatusFromHomeFolder(storesBaseFolders []string) {
+	// TODO: read the replication status from log file(s) in home folder.
+
 }

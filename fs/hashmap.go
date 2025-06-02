@@ -124,7 +124,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				if !hm.readWrite {
 					flag = os.O_RDONLY
 				}
-				if err := dio.open(fn, flag, fullPermission); err != nil {
+				if err := dio.Open(fn, flag, fullPermission); err != nil {
 					return result, err
 				}
 				dio.filename = segmentFilename
@@ -137,7 +137,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 		ba := dio.createAlignedBlock()
 		blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
 
-		n, err := dio.readAt(ba, blockOffset)
+		n, err := dio.ReadAt(ba, blockOffset)
 		if err != nil {
 			if dio.isEOF(err) {
 				if forWriting {
@@ -267,7 +267,7 @@ func (hm *hashmap) findFileRegion(ctx context.Context, filename string, ids []so
 func (hm *hashmap) close() error {
 	var lastError error
 	for _, f := range hm.fileHandles {
-		if err := f.close(); err != nil {
+		if err := f.Close(); err != nil {
 			lastError = err
 		}
 	}
@@ -298,7 +298,7 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 		return result, err
 	}
 
-	if err := dio.open(filename, flag, fullPermission); err != nil {
+	if err := dio.Open(filename, flag, fullPermission); err != nil {
 		hm.cache.Unlock(ctx, lk)
 		return result, err
 	}

@@ -31,7 +31,7 @@ func TestECAddThenRead(t *testing.T) {
 	bs, _ := NewBlobStoreWithEC(fileIO, nil)
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
-	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
@@ -55,7 +55,7 @@ func TestECAddRemoveRead(t *testing.T) {
 	bs, _ := NewBlobStoreWithEC(fileIO, nil)
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
-	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
@@ -65,7 +65,7 @@ func TestECAddRemoveRead(t *testing.T) {
 		},
 	}})
 
-	bs.Remove(ctx, []sop.BlobsPayload[sop.UUID]{sop.BlobsPayload[sop.UUID]{
+	bs.Remove(ctx, []sop.BlobsPayload[sop.UUID]{{
 		BlobTable: "b1",
 		Blobs:     []sop.UUID{id},
 	}})
@@ -81,7 +81,7 @@ func TestECerrorOnAdd(t *testing.T) {
 	bs, _ := NewBlobStoreWithEC(fileIO, nil)
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
-	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{
 		BlobTable: "b1",
 		Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 			{
@@ -95,7 +95,7 @@ func TestECerrorOnAdd(t *testing.T) {
 	eba2 := []byte{1, 2, 3}
 	fileIO.errorOnSuffixNumber = 1
 	err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
-		sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+		{
 			BlobTable: "b1",
 			Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 				{
@@ -115,7 +115,7 @@ func TestECerrorOnRemove(t *testing.T) {
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
 	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
-		sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+		{
 			BlobTable: "b1",
 			Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 				{
@@ -129,7 +129,7 @@ func TestECerrorOnRemove(t *testing.T) {
 	eba2 := []byte{1, 2, 3}
 	//fileIO.errorOnSuffixNumber = 1
 	err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
-		sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+		{
 			BlobTable: "b1",
 			Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 				{
@@ -144,7 +144,7 @@ func TestECerrorOnRemove(t *testing.T) {
 
 	fileIO.errorOnSuffixNumber = 1
 	err = bs.Remove(ctx, []sop.BlobsPayload[sop.UUID]{
-		sop.BlobsPayload[sop.UUID]{
+		{
 			BlobTable: "b1",
 			Blobs:     []sop.UUID{id},
 		}})
@@ -159,7 +159,7 @@ func TestECerrorOnReadButReconstructed(t *testing.T) {
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
 	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
-		sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+		{
 			BlobTable: "b1",
 			Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 				{
@@ -172,7 +172,7 @@ func TestECerrorOnReadButReconstructed(t *testing.T) {
 	id2 := sop.NewUUID()
 	eba2 := []byte{1, 2, 3}
 	err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
-		sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+		{
 			BlobTable: "b1",
 			Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 				{
@@ -198,7 +198,7 @@ func TestECerrorOnReadNotReconstructed(t *testing.T) {
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
 	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
-		sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+		{
 			BlobTable: "b1",
 			Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 				{
@@ -211,7 +211,7 @@ func TestECerrorOnReadNotReconstructed(t *testing.T) {
 	id2 := sop.NewUUID()
 	eba2 := []byte{1, 2, 3}
 	err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
-		sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+		{
 			BlobTable: "b1",
 			Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 				{
@@ -238,7 +238,7 @@ func TestECerrorOnRepair(t *testing.T) {
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
 	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
-		sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+		{
 			BlobTable: "b1",
 			Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 				{
@@ -251,7 +251,7 @@ func TestECerrorOnRepair(t *testing.T) {
 	id2 := sop.NewUUID()
 	eba2 := []byte{1, 2, 3}
 	err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
-		sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+		{
 			BlobTable: "b1",
 			Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 				{
@@ -289,7 +289,7 @@ func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
 		id := sop.NewUUID()
 		eba := []byte{1, 2, 3}
 		bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
-			sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+			{
 				BlobTable: "b1",
 				Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 					{
@@ -302,7 +302,7 @@ func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
 		id2 := sop.NewUUID()
 		eba2 := []byte{1, 2, 3}
 		bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
-			sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+			{
 				BlobTable: "b1",
 				Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
 					{

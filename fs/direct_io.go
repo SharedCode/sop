@@ -9,12 +9,12 @@ import (
 )
 
 // For use in unit test only.
-type unitTestInjectableIO interface {
+type UnitTestInjectableIO interface {
 	// Open the file with a given filename.
-	open(filename string, flag int, permission os.FileMode) error
-	writeAt(block []byte, offset int64) (int, error)
-	readAt(block []byte, offset int64) (int, error)
-	close() error
+	Open(filename string, flag int, permission os.FileMode) error
+	WriteAt(block []byte, offset int64) (int, error)
+	ReadAt(block []byte, offset int64) (int, error)
+	Close() error
 }
 
 type directIO struct {
@@ -27,7 +27,7 @@ const (
 )
 
 // Allows unit test to inject a fake or a simulator.
-var directIOSim unitTestInjectableIO
+var DirectIOSim UnitTestInjectableIO
 
 // Instantiate a direct File IO object.
 func newDirectIO() *directIO {
@@ -35,9 +35,9 @@ func newDirectIO() *directIO {
 }
 
 // Open the file with a given filename.
-func (dio *directIO) open(filename string, flag int, permission os.FileMode) error {
-	if directIOSim != nil {
-		return directIOSim.open(filename, flag, permission)
+func (dio *directIO) Open(filename string, flag int, permission os.FileMode) error {
+	if DirectIOSim != nil {
+		return DirectIOSim.Open(filename, flag, permission)
 	}
 	if dio.file != nil {
 		return fmt.Errorf("there is an opened file for this directIO object, 'not allowed to open file again")
@@ -49,6 +49,41 @@ func (dio *directIO) open(filename string, flag int, permission os.FileMode) err
 	dio.file = f
 	dio.filename = filename
 	return nil
+}
+
+func (dio *directIO) WriteAt(block []byte, offset int64) (int, error) {
+	if DirectIOSim != nil {
+		return DirectIOSim.WriteAt(block, offset)
+	}
+	if dio.file == nil {
+		return 0, fmt.Errorf("can't write, there is no opened file")
+	}
+	return dio.file.WriteAt(block, offset)
+}
+
+func (dio *directIO) ReadAt(block []byte, offset int64) (int, error) {
+	if DirectIOSim != nil {
+		return DirectIOSim.ReadAt(block, offset)
+	}
+	if dio.file == nil {
+		return 0, fmt.Errorf("can't read, there is no opened file")
+	}
+	return dio.file.ReadAt(block, offset)
+}
+
+func (dio *directIO) Close() error {
+	if DirectIOSim != nil {
+		return DirectIOSim.Close()
+	}
+
+	if dio.file == nil {
+		return nil
+	}
+
+	err := dio.file.Close()
+	dio.file = nil
+	dio.filename = ""
+	return err
 }
 
 func (dio *directIO) fileExists(filePath string) bool {

@@ -2,6 +2,7 @@ package in_red_fs
 
 import (
 	"fmt"
+	log "log/slog"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/common"
@@ -28,16 +29,21 @@ func NewTwoPhaseCommitTransaction(to TransationOptions) (sop.TwoPhaseCommitTrans
 		to.Cache = redis.NewClient()
 	}
 	fio := fs.NewDefaultFileIO(fs.DefaultToFilePath)
-	replicationTracker := fs.NewReplicationTracker([]string{to.StoresBaseFolder}, false)
+	replicationTracker, err := fs.NewReplicationTracker([]string{to.StoresBaseFolder}, false)
+	if err != nil {
+		return nil, err
+	}
 	mbsf := fs.NewManageStoreFolder(fio)
 	sr, err := fs.NewStoreRepository(replicationTracker, mbsf, to.Cache)
 	if err != nil {
 		return nil, err
 	}
 	tl := fs.NewTransactionLog(to.Cache, replicationTracker)
-	return common.NewTwoPhaseCommitTransaction(to.Mode, to.MaxTime, true,
+	t, err := common.NewTwoPhaseCommitTransaction(to.Mode, to.MaxTime, true,
 		fs.NewBlobStore(nil), sr, fs.NewRegistry(to.Mode == sop.ForWriting,
 			to.RegistryHashModValue, replicationTracker, to.Cache), to.Cache, tl)
+	t.HandleReplicationRelatedError = handleReplicationRelatedError
+	return t, err
 }
 
 // Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
@@ -59,7 +65,10 @@ func NewTwoPhaseCommitTransactionWithReplication(towr TransationOptionsWithRepli
 		}
 	}
 	fio := fs.NewDefaultFileIO(fs.DefaultToFilePath)
-	replicationTracker := fs.NewReplicationTracker(towr.StoresBaseFolders, true)
+	replicationTracker, err := fs.NewReplicationTracker(towr.StoresBaseFolders, true)
+	if err != nil {
+		return nil, err
+	}
 	bs, err := fs.NewBlobStoreWithEC(fio, towr.ErasureConfig)
 	if err != nil {
 		return nil, err
@@ -79,6 +88,18 @@ func NewTwoPhaseCommitTransactionWithReplication(towr TransationOptionsWithRepli
 
 	tl := fs.NewTransactionLog(towr.Cache, replicationTracker)
 
-	return common.NewTwoPhaseCommitTransaction(towr.Mode, towr.MaxTime, true, bs, sr,
+	t, err := common.NewTwoPhaseCommitTransaction(towr.Mode, towr.MaxTime, true, bs, sr,
 		fs.NewRegistry(towr.Mode == sop.ForWriting, towr.RegistryHashModValue, replicationTracker, towr.Cache), towr.Cache, tl)
+	t.HandleReplicationRelatedError = handleReplicationRelatedError
+	return t, err
+}
+
+func handleReplicationRelatedError(ioError error, rollbackSucceeded bool) bool {
+	if err, ok := ioError.(common.ReplicationRelatedError); ok {
+		log.Error(fmt.Sprintf("a replication related error detected (rollback succeeded: %v), details: %v", rollbackSucceeded, err.Error()))
+
+		// Cause a failover switch to passive destinations on succeeding transactions.
+
+	}
+	return true
 }

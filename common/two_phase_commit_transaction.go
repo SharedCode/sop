@@ -29,14 +29,15 @@ type btreeBackend struct {
 	getObsoleteTrackedItemsValues    func() *sop.BlobsPayload[sop.UUID]
 }
 
+// Transaction implements the sop's TwoPhaseTransaction interface.
 type Transaction struct {
 	id sop.UUID
 	// B-Tree instances, & their backend bits, managed within the transaction session.
 	btreesBackend []btreeBackend
 	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
 	blobStore       sop.BlobStore
-	l2Cache         sop.Cache
 	l1Cache         *cache.L1Cache
+	l2Cache         sop.Cache
 	storeRepository sop.StoreRepository
 	// VirtualIDRegistry manages the virtual IDs, a.k.a. "handle".
 	registry sop.Registry
@@ -46,6 +47,9 @@ type Transaction struct {
 	phaseDone int
 	maxTime   time.Duration
 	logger    *transactionLog
+
+	// Handle replication related error.
+	HandleReplicationRelatedError func(ioError error, rollbackSucceeded bool) bool
 
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles []sop.RegistryPayload[sop.Handle]
@@ -70,7 +74,7 @@ type Transaction struct {
 // If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
 // However, without logging, the transaction commit can execute faster because there is no data getting logged.
 func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool,
-	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, l2Cache sop.Cache, transactionLog sop.TransactionLog) (sop.TwoPhaseCommitTransaction, error) {
+	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, l2Cache sop.Cache, transactionLog sop.TransactionLog) (*Transaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if maxTime <= 0 {
 		maxTime = time.Duration(15 * time.Minute)
@@ -132,7 +136,14 @@ func (t *Transaction) Phase1Commit(ctx context.Context) error {
 	}
 	if err := t.phase1Commit(ctx); err != nil {
 		t.phaseDone = 2
-		if rerr := t.rollback(ctx, true); rerr != nil {
+		rerr := t.rollback(ctx, true)
+
+		// Allow replication handler to handle error related to replication, e.g. IO error.
+		if t.HandleReplicationRelatedError != nil {
+			t.HandleReplicationRelatedError(err, rerr == nil)
+		}
+
+		if rerr != nil {
 			return fmt.Errorf("phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
 		return fmt.Errorf("phase 1 commit failed, details: %v", err)
@@ -159,7 +170,14 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
-		if rerr := t.rollback(ctx, true); rerr != nil {
+		rerr := t.rollback(ctx, true)
+
+		// Allow replication handler to handle error related to replication, e.g. IO error.
+		if t.HandleReplicationRelatedError != nil {
+			t.HandleReplicationRelatedError(err, rerr == nil)
+		}
+
+		if rerr != nil {
 			return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
 		}
 		return fmt.Errorf("phase 2 commit failed, details: %v", err)
@@ -178,6 +196,12 @@ func (t *Transaction) Rollback(ctx context.Context) error {
 	t.phaseDone = 2
 	if err := t.rollback(ctx, true); err != nil {
 		t.Close()
+
+		// Allow replication handler to handle error related to replication, e.g. IO error.
+		if t.HandleReplicationRelatedError != nil {
+			t.HandleReplicationRelatedError(err, false)
+		}
+
 		return fmt.Errorf("rollback failed, details: %v", err)
 	}
 	t.Close()

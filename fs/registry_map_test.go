@@ -8,7 +8,8 @@ import (
 )
 
 func TestRegistryMapAdd(t *testing.T) {
-	r := newRegistryMap(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false), redis.NewClient())
+	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
+	r := newRegistryMap(true, hashMod, rt, redis.NewClient())
 
 	h := sop.NewHandle(uuid)
 
@@ -23,7 +24,8 @@ func TestRegistryMapAdd(t *testing.T) {
 }
 
 func TestRegistryMapSet(t *testing.T) {
-	r := newRegistryMap(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false), redis.NewClient())
+	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
+	r := newRegistryMap(true, hashMod, rt, redis.NewClient())
 
 	h := sop.NewHandle(uuid)
 
@@ -38,7 +40,8 @@ func TestRegistryMapSet(t *testing.T) {
 }
 
 func TestRegistryMapGet(t *testing.T) {
-	r := newRegistryMap(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false), redis.NewClient())
+	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
+	r := newRegistryMap(true, hashMod, rt, redis.NewClient())
 
 	if res, err := r.fetch(ctx, sop.Tuple[string, []sop.UUID]{
 		First:  "regtest",
@@ -55,7 +58,8 @@ func TestRegistryMapGet(t *testing.T) {
 }
 
 func TestRegistryMapRemove(t *testing.T) {
-	r := newRegistryMap(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false), redis.NewClient())
+	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
+	r := newRegistryMap(true, hashMod, rt, redis.NewClient())
 
 	if err := r.remove(ctx, sop.Tuple[string, []sop.UUID]{
 		First:  "regtest",
@@ -68,7 +72,8 @@ func TestRegistryMapRemove(t *testing.T) {
 }
 
 func TestRegistryMapFailedSet(t *testing.T) {
-	r := newRegistryMap(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false), redis.NewClient())
+	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
+	r := newRegistryMap(true, hashMod, rt, redis.NewClient())
 
 	h := sop.NewHandle(uuid)
 
@@ -97,7 +102,8 @@ func TestRegistryMapFailedSet(t *testing.T) {
 }
 
 func TestRegistryMapRecyAddRemoveAdd(t *testing.T) {
-	r := newRegistryMap(true, hashMod, NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false), redis.NewClient())
+	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
+	r := newRegistryMap(true, hashMod, rt, redis.NewClient())
 
 	h := sop.NewHandle(uuid)
 
