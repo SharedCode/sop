@@ -18,6 +18,9 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 	if !t.HasBegun() {
 		return nil, fmt.Errorf("transaction 't' parameter has not started")
 	}
+	if name == "" {
+		return nil, fmt.Errorf("B-tree name can't be empty string")
+	}
 
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*Transaction)
@@ -43,6 +46,9 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 	}
 	if !t.HasBegun() {
 		return nil, fmt.Errorf("transaction 't' parameter has not started")
+	}
+	if si.Name == "" {
+		return nil, fmt.Errorf("B-tree name can't be empty string")
 	}
 
 	var t2 any = t.GetPhasedTransaction()

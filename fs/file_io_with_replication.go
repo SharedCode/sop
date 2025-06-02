@@ -15,11 +15,21 @@ type fileIO struct {
 	actionsDone []sop.Tuple[int, any]
 }
 
+// Allows unit test to inject a simulated or fake FileIO for its test related peek/poke.
+var FileIOSim FileIO
+
 func newFileIOWithReplication(replicationTracker *replicationTracker, manageStore sop.ManageStore, trackActions bool) *fileIO {
+	fio := NewDefaultFileIO(nil)
+
+	// Allow unit test to inject unit test "fake" for File IO.
+	if FileIOSim != nil {
+		fio = FileIOSim
+	}
+
 	return &fileIO{
 		manageStore:        manageStore,
 		replicationTracker: replicationTracker,
-		fio:                NewDefaultFileIO(nil),
+		fio:                fio,
 		trackActions:       trackActions,
 	}
 }
@@ -35,12 +45,14 @@ func (fio *fileIO) write(targetFilename string, contents []byte) error {
 	if !fio.trackActions {
 		return err
 	}
-	fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
-		First: 1,
-		Second: sop.Tuple[string, []byte]{
-			First:  targetFilename,
-			Second: contents,
-		}})
+	if err == nil {
+		fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
+			First: 1,
+			Second: sop.Tuple[string, []byte]{
+				First:  targetFilename,
+				Second: contents,
+			}})
+	}
 	return err
 }
 
@@ -55,10 +67,12 @@ func (fio *fileIO) createStore(folderName string) error {
 	if !fio.trackActions {
 		return err
 	}
-	fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
-		First:  2,
-		Second: folderName,
-	})
+	if err == nil {
+		fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
+			First:  2,
+			Second: folderName,
+		})
+	}
 	return err
 }
 
@@ -68,10 +82,12 @@ func (fio *fileIO) removeStore(folderName string) error {
 	if !fio.trackActions {
 		return err
 	}
-	fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
-		First:  3,
-		Second: folderName,
-	})
+	if err == nil {
+		fio.actionsDone = append(fio.actionsDone, sop.Tuple[int, any]{
+			First:  3,
+			Second: folderName,
+		})
+	}
 	return err
 }
 

@@ -1,15 +1,16 @@
-package fs
+package replication
 
 import (
 	"os"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/fs"
 )
 
 type fileIOReplicationSimulator struct {
 }
 
-func newFileIOReplicationSim() *fileIOReplicationSimulator {
+func newFileIOReplicationSim() fs.FileIO {
 	return &fileIOReplicationSimulator{}
 }
 
