@@ -15,7 +15,9 @@ func newDirectIOReplicationSim() fs.UnitTestInjectableIO {
 }
 
 func (dio *dioReplicationSim) Open(filename string, flag int, permission os.FileMode) error {
-	return fmt.Errorf("simulated error on Open")
+	return fs.ReplicationRelatedError{
+		Err: fmt.Errorf("simulated error on Open"),
+	}
 }
 func (dio *dioReplicationSim) WriteAt(block []byte, offset int64) (int, error) {
 	return 0, nil
