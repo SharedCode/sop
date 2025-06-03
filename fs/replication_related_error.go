@@ -1,4 +1,4 @@
-package common
+package fs
 
 // Error related to replication. IO writers/readers can raise this kind of error and
 // Transaction manager will handle this kind of error to implement replication related events

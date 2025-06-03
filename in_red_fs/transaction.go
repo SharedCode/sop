@@ -95,7 +95,7 @@ func NewTwoPhaseCommitTransactionWithReplication(towr TransationOptionsWithRepli
 }
 
 func handleReplicationRelatedError(ioError error, rollbackSucceeded bool) bool {
-	if err, ok := ioError.(common.ReplicationRelatedError); ok {
+	if err, ok := ioError.(fs.ReplicationRelatedError); ok {
 		log.Error(fmt.Sprintf("a replication related error detected (rollback succeeded: %v), details: %v", rollbackSucceeded, err.Error()))
 
 		// Cause a failover switch to passive destinations on succeeding transactions.
