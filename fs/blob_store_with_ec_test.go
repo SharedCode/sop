@@ -28,7 +28,7 @@ func init() {
 
 func TestECAddThenRead(t *testing.T) {
 	fileIO := newFileIOSim()
-	bs, _ := NewBlobStoreWithEC(fileIO, nil)
+	bs, _ := NewBlobStoreWithEC(DefaultToFilePath, fileIO, nil)
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
 	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{
@@ -52,7 +52,7 @@ func TestECAddThenRead(t *testing.T) {
 
 func TestECAddRemoveRead(t *testing.T) {
 	fileIO := newFileIOSim()
-	bs, _ := NewBlobStoreWithEC(fileIO, nil)
+	bs, _ := NewBlobStoreWithEC(DefaultToFilePath, fileIO, nil)
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
 	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{
@@ -78,7 +78,7 @@ func TestECAddRemoveRead(t *testing.T) {
 
 func TestECerrorOnAdd(t *testing.T) {
 	fileIO := newFileIOSim()
-	bs, _ := NewBlobStoreWithEC(fileIO, nil)
+	bs, _ := NewBlobStoreWithEC(DefaultToFilePath, fileIO, nil)
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
 	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{
@@ -111,7 +111,7 @@ func TestECerrorOnAdd(t *testing.T) {
 
 func TestECerrorOnRemove(t *testing.T) {
 	fileIO := newFileIOSim()
-	bs, _ := NewBlobStoreWithEC(fileIO, nil)
+	bs, _ := NewBlobStoreWithEC(DefaultToFilePath, fileIO, nil)
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
 	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
@@ -155,7 +155,7 @@ func TestECerrorOnRemove(t *testing.T) {
 
 func TestECerrorOnReadButReconstructed(t *testing.T) {
 	fileIO := newFileIOSim()
-	bs, _ := NewBlobStoreWithEC(fileIO, nil)
+	bs, _ := NewBlobStoreWithEC(DefaultToFilePath, fileIO, nil)
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
 	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
@@ -194,7 +194,7 @@ func TestECerrorOnReadButReconstructed(t *testing.T) {
 
 func TestECerrorOnReadNotReconstructed(t *testing.T) {
 	fileIO := newFileIOSim()
-	bs, _ := NewBlobStoreWithEC(fileIO, nil)
+	bs, _ := NewBlobStoreWithEC(DefaultToFilePath, fileIO, nil)
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
 	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
@@ -234,7 +234,7 @@ func TestECerrorOnReadNotReconstructed(t *testing.T) {
 
 func TestECerrorOnRepair(t *testing.T) {
 	fileIO := newFileIOSim()
-	bs, _ := NewBlobStoreWithEC(fileIO, nil)
+	bs, _ := NewBlobStoreWithEC(DefaultToFilePath, fileIO, nil)
 	id := sop.NewUUID()
 	eba := []byte{1, 2, 3}
 	bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
@@ -277,7 +277,7 @@ func TestECerrorOnRepair(t *testing.T) {
 
 func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
 	fileIO := newFileIOSim()
-	bs, _ := NewBlobStoreWithEC(fileIO, nil)
+	bs, _ := NewBlobStoreWithEC(DefaultToFilePath, fileIO, nil)
 
 	tr := sop.NewTaskRunner(ctx, 5)
 

@@ -17,6 +17,7 @@ const (
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
 type blobStoreWithEC struct {
 	fileIO                      FileIO
+	toFilePath  ToFilePathFunc
 	erasure                     map[string]*erasure.Erasure
 	baseFolderPathsAcrossDrives map[string][]string
 	repairCorruptedShards       bool
@@ -37,9 +38,12 @@ func GetGlobalErasureConfig() map[string]ErasureCodingConfig {
 }
 
 // Instantiate a blob store with replication (via Erasure Coding (EC)) capabilities.
-func NewBlobStoreWithEC(fileIO FileIO, erasureConfig map[string]ErasureCodingConfig) (sop.BlobStore, error) {
+func NewBlobStoreWithEC(toFilePath ToFilePathFunc, fileIO FileIO, erasureConfig map[string]ErasureCodingConfig) (sop.BlobStore, error) {
 	if erasureConfig == nil {
 		erasureConfig = globalErasureConfig
+	}
+	if toFilePath == nil {
+		toFilePath = DefaultToFilePath
 	}
 
 	var e map[string]*erasure.Erasure
@@ -67,6 +71,7 @@ func NewBlobStoreWithEC(fileIO FileIO, erasureConfig map[string]ErasureCodingCon
 	}
 	return &blobStoreWithEC{
 		fileIO:                      fileIO,
+		toFilePath: toFilePath,
 		erasure:                     e,
 		baseFolderPathsAcrossDrives: baseFolderPathsAcrossDrives,
 		repairCorruptedShards:       repairCorruptedShards,
@@ -95,7 +100,7 @@ func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobI
 		blobKey := blobID
 
 		shardIndex := i
-		fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
+		fp := b.toFilePath(baseFolderPath, blobKey)
 		fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), shardIndex)
 
 		tr.Go(func() error {
@@ -134,7 +139,7 @@ func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobI
 			baseFolderPath := fmt.Sprintf("%s%c%s", baseFolderPathsAcrossDrives[i], os.PathSeparator, blobFilePath)
 			blobKey := blobID
 
-			fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
+			fp := b.toFilePath(baseFolderPath, blobKey)
 			fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), i)
 
 			log.Debug(fmt.Sprintf("repairing file %s", fn))
@@ -213,7 +218,7 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayloa
 
 				// Task WriteFile will add or replace existing file.
 				tr.Go(func() error {
-					fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
+					fp := b.toFilePath(baseFolderPath, blobKey)
 					if !b.fileIO.Exists(fp) {
 						if err := b.fileIO.MkdirAll(fp, permission); err != nil {
 							return err
@@ -262,7 +267,7 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.Blobs
 				baseFolderPath := fmt.Sprintf("%s%c%s", baseFolderPathsAcrossDrives[i], os.PathSeparator, storeBlobIDs.BlobTable)
 				blobKey := blobID
 
-				fp := b.fileIO.ToFilePath(baseFolderPath, blobKey)
+				fp := b.toFilePath(baseFolderPath, blobKey)
 				fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), i)
 
 				// Do nothing if file already not existent.

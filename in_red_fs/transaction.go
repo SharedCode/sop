@@ -2,7 +2,6 @@ package in_red_fs
 
 import (
 	"fmt"
-	log "log/slog"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/common"
@@ -40,9 +39,9 @@ func NewTwoPhaseCommitTransaction(to TransationOptions) (sop.TwoPhaseCommitTrans
 	}
 	tl := fs.NewTransactionLog(to.Cache, replicationTracker)
 	t, err := common.NewTwoPhaseCommitTransaction(to.Mode, to.MaxTime, true,
-		fs.NewBlobStore(nil), sr, fs.NewRegistry(to.Mode == sop.ForWriting,
+		fs.NewBlobStore(fs.DefaultToFilePath, nil), sr, fs.NewRegistry(to.Mode == sop.ForWriting,
 			to.RegistryHashModValue, replicationTracker, to.Cache), to.Cache, tl)
-	t.HandleReplicationRelatedError = handleReplicationRelatedError
+	t.HandleReplicationRelatedError = replicationTracker.HandleReplicationRelatedError
 	return t, err
 }
 
@@ -69,9 +68,9 @@ func NewTwoPhaseCommitTransactionWithReplication(towr TransationOptionsWithRepli
 	if err != nil {
 		return nil, err
 	}
-	bs, err := fs.NewBlobStoreWithEC(fio, towr.ErasureConfig)
+	bs, err := fs.NewBlobStoreWithEC(fs.DefaultToFilePath, fio, towr.ErasureConfig)
 	if err != nil {
-		return nil, err
+		return nil, err 
 	}
 	mbsf := fs.NewManageStoreFolder(fio)
 	if towr.Cache == nil {
@@ -90,16 +89,6 @@ func NewTwoPhaseCommitTransactionWithReplication(towr TransationOptionsWithRepli
 
 	t, err := common.NewTwoPhaseCommitTransaction(towr.Mode, towr.MaxTime, true, bs, sr,
 		fs.NewRegistry(towr.Mode == sop.ForWriting, towr.RegistryHashModValue, replicationTracker, towr.Cache), towr.Cache, tl)
-	t.HandleReplicationRelatedError = handleReplicationRelatedError
+	t.HandleReplicationRelatedError = replicationTracker.HandleReplicationRelatedError
 	return t, err
-}
-
-func handleReplicationRelatedError(ioError error, rollbackSucceeded bool) bool {
-	if err, ok := ioError.(fs.ReplicationRelatedError); ok {
-		log.Error(fmt.Sprintf("a replication related error detected (rollback succeeded: %v), details: %v", rollbackSucceeded, err.Error()))
-
-		// Cause a failover switch to passive destinations on succeeding transactions.
-
-	}
-	return true
 }
