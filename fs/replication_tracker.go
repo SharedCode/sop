@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	log "log/slog"
 )
 
 type replicationTracker struct {
@@ -16,6 +18,12 @@ type replicationTracker struct {
 	isInDeltaSync       bool
 }
 
+const(
+	replicationStatusFilename = "repl_status.txt"
+)
+
+var globalReplicationTracker *replicationTracker
+
 // Instantiates a replication tracker.
 func NewReplicationTracker(storesBaseFolders []string, replicate bool) (*replicationTracker, error) {
 	isFirstFolderActive := true
@@ -25,7 +33,20 @@ func NewReplicationTracker(storesBaseFolders []string, replicate bool) (*replica
 		replicate:           replicate,
 	}
 	if replicate {
-		rt.readStatusFromHomeFolder(storesBaseFolders)
+		// Minimize reading the replication "status" if we have read it and is tracking it globally.
+		if globalReplicationTracker != nil {
+			rt.isFirstFolderActive = globalReplicationTracker.isFirstFolderActive
+			rt.isInDeltaSync = globalReplicationTracker.isInDeltaSync
+		} else {
+			rt.readStatusFromHomeFolder(storesBaseFolders)
+			globalReplicationTracker = &replicationTracker{
+				storesBaseFolders:   storesBaseFolders,
+				isFirstFolderActive: isFirstFolderActive,
+				replicate:           replicate,
+			}
+			globalReplicationTracker.isFirstFolderActive = rt.isFirstFolderActive
+			globalReplicationTracker.isInDeltaSync = rt.isInDeltaSync
+		}
 	}
 	if rt.isInDeltaSync {
 		return nil, fmt.Errorf("delta sync is happening, transaction should fail")
@@ -33,9 +54,30 @@ func NewReplicationTracker(storesBaseFolders []string, replicate bool) (*replica
 	return &rt, nil
 }
 
+// Handle replication related error is invoked from a transaction when an IO error is encountered.
+// This function should handle the act of failing over to the passive destinations making them as active and the actives to be passives.
+func (r *replicationTracker)HandleReplicationRelatedError(ioError error, rollbackSucceeded bool) bool {
+	if err, ok := ioError.(ReplicationRelatedError); ok {
+		log.Error(fmt.Sprintf("a replication related error detected (rollback succeeded: %v), details: %v", rollbackSucceeded, err.Error()))
+		// Cause a failover switch to passive destinations on succeeding transactions.
+		//r.failover()
+	}
+	return true
+}
+
 func (r *replicationTracker) failover() {
+	if globalReplicationTracker.isFirstFolderActive == !r.isFirstFolderActive {
+		// Do nothing if global tracker already knows that a failover already occurred.
+		return
+	}
+
+	fio := NewDefaultFileIO(ToFilePath)
+	fio.WriteFile(r.formatPassiveFolderEntity(replicationStatusFilename), fmt.Appendf(nil, "isInDeltaSync:%v", r.isInDeltaSync), permission)
+
+	// Swtich the passive into active & vice versa.
 	r.isFirstFolderActive = !r.isFirstFolderActive
-	// TODO: write to log file the new active folder flag.
+	globalReplicationTracker.isFirstFolderActive = r.isFirstFolderActive
+	log.Info(fmt.Sprintf("failover event occurred, newly active folder is, %s", r.getActiveBaseFolder()))
 }
 
 func (r *replicationTracker) getActiveBaseFolder() string {
@@ -72,6 +114,8 @@ func (r *replicationTracker) formatPassiveFolderEntity(entityName string) string
 }
 
 func (r *replicationTracker) readStatusFromHomeFolder(storesBaseFolders []string) {
-	// TODO: read the replication status from log file(s) in home folder.
+
+	//fio := NewDefaultFileIO(ToFilePath)
+	//fio.ReadFile(r.formatPassiveFolderEntity(replicationStatusFilename), fmt.Appendf(nil, "isInDeltaSync:%v", r.isInDeltaSync), permission)
 
 }
