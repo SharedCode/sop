@@ -25,7 +25,7 @@ var redisConfig = redis.Options{
 
 func init() {
 	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
-		Level: log.LevelInfo,
+		Level: log.LevelDebug,
 	}))
 	log.SetDefault(l) // configures log package to print with LevelInfo
 

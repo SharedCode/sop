@@ -212,6 +212,9 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
 
 	if !r.replicationTracker.replicate || r.replicationTracker.replicationStatus.FailedToReplicate {
+		log.Debug(fmt.Sprintf("replicate %v, FailedToReplicate %v, current target %s",
+			r.replicationTracker.replicate, r.replicationTracker.replicationStatus.FailedToReplicate,
+			r.replicationTracker.getActiveBaseFolder()))
 		return
 	}
 

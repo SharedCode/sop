@@ -185,6 +185,8 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	return nil
 }
 
+// Rollback the transaction. err param allows code to flow the error that caused rollback.
+// An IO error as originally detected by this transaction can cause failover to the passive targets.
 func (t *Transaction) Rollback(ctx context.Context, err error) error {
 	if t.phaseDone == 2 {
 		return fmt.Errorf("transaction is done, 'create a new one")
@@ -208,7 +210,7 @@ func (t *Transaction) Rollback(ctx context.Context, err error) error {
 
 	// Allow replication handler to handle error related to replication, e.g. IO error.
 	if t.HandleReplicationRelatedError != nil {
-		t.HandleReplicationRelatedError(err, false)
+		t.HandleReplicationRelatedError(err, true)
 	}
 
 	return nil

@@ -58,7 +58,6 @@ func NewReplicationTracker(storesBaseFolders []string, replicate bool) (*replica
 			globalReplicationTrackerLocker.Lock()
 
 			globalReplicationTracker = &replicationTracker{
-				storesBaseFolders:   storesBaseFolders,
 				isFirstFolderActive: isFirstFolderActive,
 				replicate:           replicate,
 			}
@@ -75,7 +74,7 @@ func NewReplicationTracker(storesBaseFolders []string, replicate bool) (*replica
 }
 
 // Handle replication related error is invoked from a transaction when an IO error is encountered.
-// This function should handle the act of failing over to the passive destinations making them as active and the actives to be passives.
+// This function should handle the act of failing over to the passive destinations making them as active and the active to be passive.
 func (r *replicationTracker) HandleReplicationRelatedError(ioError error, rollbackSucceeded bool) {
 	if !r.replicate {
 		return
