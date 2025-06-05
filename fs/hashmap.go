@@ -41,7 +41,6 @@ func (fr *fileRegionDetails) getOffset() int64 {
 }
 
 const (
-	fullPermission         = 0644
 	handlesPerBlock        = 66
 	preallocateFileLockKey = "infs_reg"
 	// Growing the file needs more time to complete.
@@ -124,7 +123,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				if !hm.readWrite {
 					flag = os.O_RDONLY
 				}
-				if err := dio.Open(fn, flag, fullPermission); err != nil {
+				if err := dio.Open(fn, flag, permission); err != nil {
 					return result, err
 				}
 				dio.filename = segmentFilename
@@ -298,7 +297,7 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 		return result, err
 	}
 
-	if err := dio.Open(filename, flag, fullPermission); err != nil {
+	if err := dio.Open(filename, flag, permission); err != nil {
 		hm.cache.Unlock(ctx, lk)
 		return result, err
 	}

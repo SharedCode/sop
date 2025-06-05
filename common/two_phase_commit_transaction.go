@@ -49,7 +49,7 @@ type Transaction struct {
 	logger    *transactionLog
 
 	// Handle replication related error.
-	HandleReplicationRelatedError func(ioError error, rollbackSucceeded bool) bool
+	HandleReplicationRelatedError func(ioError error, rollbackSucceeded bool)
 
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles []sop.RegistryPayload[sop.Handle]

@@ -19,7 +19,7 @@ type fileIO struct {
 var FileIOSim FileIO
 
 func newFileIOWithReplication(replicationTracker *replicationTracker, manageStore sop.ManageStore, trackActions bool) *fileIO {
-	fio := NewDefaultFileIO(nil)
+	fio := NewDefaultFileIO()
 
 	// Allow unit test to inject unit test "fake" for File IO.
 	if FileIOSim != nil {

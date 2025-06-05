@@ -10,7 +10,7 @@ import (
 
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
 type blobStore struct {
-	fileIO FileIO
+	fileIO     FileIO
 	toFilePath ToFilePathFunc
 }
 
@@ -20,13 +20,13 @@ const permission os.FileMode = os.ModeSticky | os.ModePerm
 // NewBlobStore instantiates a new blobstore for File System storage.
 func NewBlobStore(toFilePath ToFilePathFunc, fileIO FileIO) sop.BlobStore {
 	if fileIO == nil {
-		fileIO = NewDefaultFileIO(DefaultToFilePath)
+		fileIO = NewDefaultFileIO()
 	}
 	if toFilePath == nil {
 		toFilePath = DefaultToFilePath
 	}
 	return &blobStore{
-		fileIO: fileIO,
+		fileIO:     fileIO,
 		toFilePath: toFilePath,
 	}
 }

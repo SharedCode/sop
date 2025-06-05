@@ -136,75 +136,71 @@ func (scc *StoreCacheConfig) enforceMinimumRule() {
 	}
 }
 
-// NewStoreInfo instantiates a new Store, defaults extended parameters to typical use-case values. Please use NewStoreInfoExtended(..) function
-// below for option to set including the extended parameters.
-func NewStoreInfo(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, leafLoadBalancing bool, desciption string) *StoreInfo {
-	isValueDataActivelyPersisted := false
-	isValueDataGloballyCached := false
-	if !isValueDataInNodeSegment {
-		isValueDataGloballyCached = true
-	}
-	return NewStoreInfoExt(name, slotLength, isUnique, isValueDataInNodeSegment, isValueDataActivelyPersisted, isValueDataGloballyCached, leafLoadBalancing, desciption, "", nil)
-}
-
 // NewStoreInfoExt instantiates a new Store and offers more parameters configurable to your desire.
 // blobStoreBasePath can be left blank("") and SOP will generate a name for it. This parameter is geared so one can specify
 // a base path folder for the blob store using the File System. If using Cassandra table, please specify blank("").
-func NewStoreInfoExt(name string, slotLength int, isUnique bool, isValueDataInNodeSegment bool, isValueDataActivelyPersisted bool, isValueDataGloballyCached bool, leafLoadBalancing bool, desciption string, blobStoreBasePath string, cacheConfig *StoreCacheConfig) *StoreInfo {
+func NewStoreInfo(si StoreOptions) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
-	if slotLength%2 != 0 {
-		slotLength--
+	if si.SlotLength%2 != 0 {
+		si.SlotLength--
 	}
 	// Minimum slot length is 2.
-	if slotLength < 2 {
-		slotLength = 2
+	if si.SlotLength < 2 {
+		si.SlotLength = 2
 	}
 
-	// auto generate table names based off of store name.
-	registryTableName := FormatRegistryTable(name)
-	blobTableName := fmt.Sprintf("%s_b", name)
-	if blobStoreBasePath != "" {
-		// Append the store name as suffix so blob folders will be separated from one another, if not yet.
-		if !strings.HasSuffix(blobStoreBasePath, name) {
-			blobStoreBasePath = fmt.Sprintf("%s%c%s", blobStoreBasePath, os.PathSeparator, name)
+	registryTableName := si.Name
+	blobTableName := si.Name
+
+	if !si.DisableRegistryStoreFormatting {
+		// auto generate table names based off of store name.
+		registryTableName = FormatRegistryTable(si.Name)
+	}
+	if !si.DisableBlobStoreFormatting {
+		blobTableName = fmt.Sprintf("%s_b", si.Name)
+		if si.BlobStoreBaseFolderPath != "" {
+			// Append the store name as suffix so blob folders will be separated from one another, if not yet.
+			if !strings.HasSuffix(si.BlobStoreBaseFolderPath, si.Name) {
+				si.BlobStoreBaseFolderPath = fmt.Sprintf("%s%c%s", si.BlobStoreBaseFolderPath, os.PathSeparator, si.Name)
+			}
+			blobTableName = si.BlobStoreBaseFolderPath
 		}
-		blobTableName = blobStoreBasePath
 	}
 
 	const maxSlotLength = 10000
 
 	// Maximum slot length is 10,000. It may be ridiculously huge blob if too big.
 	// Even 10,000 may be too much, depending on key & value data size you'll store.
-	if slotLength > maxSlotLength {
-		slotLength = maxSlotLength
+	if si.SlotLength > maxSlotLength {
+		si.SlotLength = maxSlotLength
 	}
 
 	// Enforce some basic rule not to create conflicting setup.
-	if isValueDataInNodeSegment {
-		isValueDataGloballyCached = false
-		isValueDataActivelyPersisted = false
+	if si.IsValueDataInNodeSegment {
+		si.IsValueDataGloballyCached = false
+		si.IsValueDataActivelyPersisted = false
 	}
 
 	// Use the SOP default cache config if the parameter received is not set.
-	if cacheConfig == nil {
+	if si.CacheConfig == nil {
 		cc := GetDefaulCacheConfig()
-		cacheConfig = &cc
+		si.CacheConfig = &cc
 	}
 	// Apply SOP minimum caching rule if needed.
-	cacheConfig.enforceMinimumRule()
+	si.CacheConfig.enforceMinimumRule()
 
 	return &StoreInfo{
-		Name:                         name,
-		SlotLength:                   slotLength,
-		IsUnique:                     isUnique,
-		Description:                  desciption,
+		Name:                         si.Name,
+		SlotLength:                   si.SlotLength,
+		IsUnique:                     si.IsUnique,
+		Description:                  si.Description,
 		RegistryTable:                registryTableName,
 		BlobTable:                    blobTableName,
-		IsValueDataInNodeSegment:     isValueDataInNodeSegment,
-		IsValueDataActivelyPersisted: isValueDataActivelyPersisted,
-		IsValueDataGloballyCached:    isValueDataGloballyCached,
-		LeafLoadBalancing:            leafLoadBalancing,
-		CacheConfig:                  *cacheConfig,
+		IsValueDataInNodeSegment:     si.IsValueDataInNodeSegment,
+		IsValueDataActivelyPersisted: si.IsValueDataActivelyPersisted,
+		IsValueDataGloballyCached:    si.IsValueDataGloballyCached,
+		LeafLoadBalancing:            si.LeafLoadBalancing,
+		CacheConfig:                  *si.CacheConfig,
 	}
 }
 

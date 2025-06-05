@@ -12,9 +12,12 @@ type Marshaler interface {
 	Unmarshal(data []byte, v any) error
 }
 
+// Global Default marshaller.
+var DefaultMarshaler = NewMarshaler()
+
 // Global BlobMarshaler takes care of packing and unpacking to/from blob object & byte array.
 // You can replace with your desired Marshaler implementation if needed. Defaults to use JSON Marshal.
-var BlobMarshaler = NewMarshaler()
+var BlobMarshaler = DefaultMarshaler
 
 type defaultMarshaler struct{}
 
