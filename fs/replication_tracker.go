@@ -12,8 +12,8 @@ import (
 )
 
 type replicationStatus struct {
-	IsInDeltaSync       bool
-	FailedToReplicate   bool
+	IsInDeltaSync     bool
+	FailedToReplicate bool
 }
 
 type replicationTracker struct {
@@ -26,12 +26,12 @@ type replicationTracker struct {
 	replicationStatus   replicationStatus
 }
 
-const(
+const (
 	replicationStatusFilename = "repl_stat.txt"
 )
 
 var globalReplicationTracker *replicationTracker
-var	globalReplicationTrackerLocker sync.Mutex = sync.Mutex{}
+var globalReplicationTrackerLocker sync.Mutex = sync.Mutex{}
 
 // Instantiates a replication tracker.
 func NewReplicationTracker(storesBaseFolders []string, replicate bool) (*replicationTracker, error) {
@@ -75,7 +75,7 @@ func NewReplicationTracker(storesBaseFolders []string, replicate bool) (*replica
 
 // Handle replication related error is invoked from a transaction when an IO error is encountered.
 // This function should handle the act of failing over to the passive destinations making them as active and the actives to be passives.
-func (r *replicationTracker)HandleReplicationRelatedError(ioError error, rollbackSucceeded bool) {
+func (r *replicationTracker) HandleReplicationRelatedError(ioError error, rollbackSucceeded bool) {
 	if !r.replicate {
 		return
 	}
@@ -201,7 +201,7 @@ func (r *replicationTracker) readStatusFromHomeFolder() error {
 	return r.readReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename))
 }
 
-func (r *replicationTracker)writeReplicationStatus(filename string) error {
+func (r *replicationTracker) writeReplicationStatus(filename string) error {
 	fio := NewDefaultFileIO()
 	ba, _ := encoding.DefaultMarshaler.Marshal(r.replicationStatus)
 	if err := fio.WriteFile(filename, ba, permission); err != nil {
@@ -211,7 +211,7 @@ func (r *replicationTracker)writeReplicationStatus(filename string) error {
 	return nil
 }
 
-func (r *replicationTracker)readReplicationStatus(filename string) error {
+func (r *replicationTracker) readReplicationStatus(filename string) error {
 	fio := NewDefaultFileIO()
 	// Read the delta sync status.
 	ba, err := fio.ReadFile(filename)

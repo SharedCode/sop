@@ -27,11 +27,11 @@ func main() {
 		writeAndExit(err.Error())
 	}
 	so := sop.StoreOptions{
-		Name: "foobar",
-		SlotLength: 4,
-		IsValueDataInNodeSegment: true,
+		Name:                         "foobar",
+		SlotLength:                   4,
+		IsValueDataInNodeSegment:     true,
 		IsValueDataActivelyPersisted: true,
-		IsValueDataGloballyCached: true,
+		IsValueDataGloballyCached:    true,
 	}
 	storeInfo := *sop.NewStoreInfo(so)
 	storeInfo.RootNodeID = sop.NewUUID()

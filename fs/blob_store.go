@@ -10,7 +10,7 @@ import (
 
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
 type blobStore struct {
-	fileIO FileIO
+	fileIO     FileIO
 	toFilePath ToFilePathFunc
 }
 
@@ -26,7 +26,7 @@ func NewBlobStore(toFilePath ToFilePathFunc, fileIO FileIO) sop.BlobStore {
 		toFilePath = DefaultToFilePath
 	}
 	return &blobStore{
-		fileIO: fileIO,
+		fileIO:     fileIO,
 		toFilePath: toFilePath,
 	}
 }

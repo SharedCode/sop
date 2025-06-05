@@ -70,7 +70,7 @@ func NewTwoPhaseCommitTransactionWithReplication(towr TransationOptionsWithRepli
 	}
 	bs, err := fs.NewBlobStoreWithEC(fs.DefaultToFilePath, fio, towr.ErasureConfig)
 	if err != nil {
-		return nil, err 
+		return nil, err
 	}
 	mbsf := fs.NewManageStoreFolder(fio)
 	if towr.Cache == nil {

@@ -17,7 +17,7 @@ const (
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
 type blobStoreWithEC struct {
 	fileIO                      FileIO
-	toFilePath  ToFilePathFunc
+	toFilePath                  ToFilePathFunc
 	erasure                     map[string]*erasure.Erasure
 	baseFolderPathsAcrossDrives map[string][]string
 	repairCorruptedShards       bool
@@ -71,7 +71,7 @@ func NewBlobStoreWithEC(toFilePath ToFilePathFunc, fileIO FileIO, erasureConfig 
 	}
 	return &blobStoreWithEC{
 		fileIO:                      fileIO,
-		toFilePath: toFilePath,
+		toFilePath:                  toFilePath,
 		erasure:                     e,
 		baseFolderPathsAcrossDrives: baseFolderPathsAcrossDrives,
 		repairCorruptedShards:       repairCorruptedShards,

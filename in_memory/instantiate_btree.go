@@ -21,10 +21,10 @@ const itemsPerNode = 8
 // and access key/value pairs similar to a map but which, sorts items & allows "range queries".
 func NewBtree[TK btree.Ordered, TV any](isUnique bool) BtreeInterface[TK, TV] {
 	so := sop.StoreOptions{
-		Name: "",
-		SlotLength: itemsPerNode,
-		IsUnique: isUnique,
-		IsValueDataInNodeSegment: true,
+		Name:                         "",
+		SlotLength:                   itemsPerNode,
+		IsUnique:                     isUnique,
+		IsValueDataInNodeSegment:     true,
 		IsValueDataActivelyPersisted: true,
 	}
 	s := sop.NewStoreInfo(so)
