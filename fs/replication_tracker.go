@@ -205,7 +205,6 @@ func (r *replicationTracker) writeReplicationStatus(filename string) error {
 	fio := NewDefaultFileIO()
 	ba, _ := encoding.DefaultMarshaler.Marshal(r.replicationStatus)
 	if err := fio.WriteFile(filename, ba, permission); err != nil {
-		globalReplicationTrackerLocker.Unlock()
 		return err
 	}
 	return nil
