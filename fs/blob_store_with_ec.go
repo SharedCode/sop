@@ -67,7 +67,7 @@ func NewBlobStoreWithEC(toFilePath ToFilePathFunc, fileIO FileIO, erasureConfig 
 		}
 	}
 	if fileIO == nil {
-		fileIO = NewDefaultFileIO(DefaultToFilePath)
+		fileIO = NewDefaultFileIO()
 	}
 	return &blobStoreWithEC{
 		fileIO:                      fileIO,

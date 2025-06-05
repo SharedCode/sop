@@ -37,14 +37,61 @@ func init() {
 	if err := cache.Clear(ctx); err != nil {
 		log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
 	}
+	initErasureCoding()
 }
 
-func TestDirectIOSetupNewFileFailure(t *testing.T) {
+func initErasureCoding() {
+	// Erasure Coding configuration lookup table (map).
+	ec := make(map[string]fs.ErasureCodingConfig)
+
+	// Erasure Coding config for "barstoreec" table uses three base folder paths that mimicks three disks.
+	// Two data shards and one parity shard.
+	ec["repltable"] = fs.ErasureCodingConfig{
+		DataShardsCount:   2,
+		ParityShardsCount: 1,
+		BaseFolderPathsAcrossDrives: []string{
+			fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk3", dataPath, os.PathSeparator),
+		},
+		RepairCorruptedShards: true,
+	}
+	fs.SetGlobalErasureConfig(ec)
+}
+
+func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 	fs.DirectIOSim = newDirectIOReplicationSim()
 
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := in_red_fs.NewTransaction(to)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	trans.Begin()
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "repltable",
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+	}, trans, nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	b3.Add(ctx, 1, "hello world")
+	if err := trans.Commit(ctx); err == nil {
+		t.Error("expected error but none was returned")
+		t.FailNow()
+	}
+}
+
+func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
+	fs.DirectIOSim = newDirectIOReplicationSim()
+
+	ctx := context.Background()
+	// Take from global EC config the data paths & EC config details.
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
+	trans, err := in_red_fs.NewTransactionWithReplication(to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}

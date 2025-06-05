@@ -125,7 +125,7 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 	}
 
 	// serialize User object to JSON
-	ba, err := encoding.BlobMarshaler.Marshal(value)
+	ba, err := encoding.DefaultMarshaler.Marshal(value)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) (
 	}
 	ba, err := c.conn.Client.Get(ctx, key).Bytes()
 	if err == nil {
-		err = encoding.BlobMarshaler.Unmarshal(ba, target)
+		err = encoding.DefaultMarshaler.Unmarshal(ba, target)
 	}
 
 	// Convert key not found into returning false and nil err.
@@ -163,7 +163,7 @@ func (c client) GetStructEx(ctx context.Context, key string, target interface{},
 	}
 	ba, err := c.conn.Client.GetEx(ctx, key, expiration).Bytes()
 	if err == nil {
-		err = encoding.BlobMarshaler.Unmarshal(ba, target)
+		err = encoding.DefaultMarshaler.Unmarshal(ba, target)
 	}
 
 	// Convert key not found into returning false and nil err.

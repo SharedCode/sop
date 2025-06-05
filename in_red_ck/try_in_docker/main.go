@@ -26,7 +26,14 @@ func main() {
 	if err := in_red_ck.Initialize(cassConfig, redisConfig); err != nil {
 		writeAndExit(err.Error())
 	}
-	storeInfo := *sop.NewStoreInfo("foobar", 4, true, true, true, "")
+	so := sop.StoreOptions{
+		Name: "foobar",
+		SlotLength: 4,
+		IsValueDataInNodeSegment: true,
+		IsValueDataActivelyPersisted: true,
+		IsValueDataGloballyCached: true,
+	}
+	storeInfo := *sop.NewStoreInfo(so)
 	storeInfo.RootNodeID = sop.NewUUID()
 	repo := cas.NewStoreRepository(nil)
 	sis, err := repo.Get(ctx, "foobar")

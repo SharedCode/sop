@@ -20,7 +20,14 @@ const itemsPerNode = 8
 // NewBtree will create an in-memory B-Tree & its required data stores. You can use it to store
 // and access key/value pairs similar to a map but which, sorts items & allows "range queries".
 func NewBtree[TK btree.Ordered, TV any](isUnique bool) BtreeInterface[TK, TV] {
-	s := sop.NewStoreInfo("", itemsPerNode, isUnique, true, true, "")
+	so := sop.StoreOptions{
+		Name: "",
+		SlotLength: itemsPerNode,
+		IsUnique: isUnique,
+		IsValueDataInNodeSegment: true,
+		IsValueDataActivelyPersisted: true,
+	}
+	s := sop.NewStoreInfo(so)
 	si := btree.StoreInterface[TK, TV]{
 		NodeRepository:    newNodeRepository[TK, TV](),
 		ItemActionTracker: newDumbItemActionTracker[TK, TV](),

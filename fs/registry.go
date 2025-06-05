@@ -211,7 +211,7 @@ func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPa
 func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles,
 	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
 
-	if !r.replicationTracker.replicate {
+	if !r.replicationTracker.replicate || r.replicationTracker.replicationStatus.FailedToReplicate {
 		return
 	}
 
@@ -227,18 +227,21 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: newRootNodesHandles[i].RegistryTable,
 			Second: newRootNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating new root nodes, details: %v", err))
+			r.replicationTracker.handleFailedToReplicate()
 		}
 	}
 	for i := range addedNodesHandles {
 		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: addedNodesHandles[i].RegistryTable,
 			Second: addedNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating new nodes, details: %v", err))
+			r.replicationTracker.handleFailedToReplicate()
 		}
 	}
 	for i := range updatedNodesHandles {
 		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: updatedNodesHandles[i].RegistryTable,
 			Second: updatedNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating updated nodes, details: %v", err))
+			r.replicationTracker.handleFailedToReplicate()
 		}
 	}
 
@@ -247,6 +250,7 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: removedNodesHandles[i].RegistryTable,
 			Second: getIDs(removedNodesHandles[i].IDs)}); err != nil {
 			log.Error(fmt.Sprintf("error replicating removed nodes, details: %v", err))
+			r.replicationTracker.handleFailedToReplicate()
 		}
 	}
 

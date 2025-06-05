@@ -4,9 +4,17 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	log "log/slog"
+
+	"github.com/SharedCode/sop/encoding"
 )
+
+type replicationStatus struct {
+	IsInDeltaSync       bool
+	FailedToReplicate   bool
+}
 
 type replicationTracker struct {
 	// Array so we can use in replication across two folders, if in replication mode.
@@ -15,14 +23,15 @@ type replicationTracker struct {
 	// otherwise the 2nd folder, as specified in storesBaseFolders[1].
 	isFirstFolderActive bool
 	replicate           bool
-	isInDeltaSync       bool
+	replicationStatus   replicationStatus
 }
 
 const(
-	replicationStatusFilename = "repl_status.txt"
+	replicationStatusFilename = "repl_stat.txt"
 )
 
 var globalReplicationTracker *replicationTracker
+var	globalReplicationTrackerLocker sync.Mutex = sync.Mutex{}
 
 // Instantiates a replication tracker.
 func NewReplicationTracker(storesBaseFolders []string, replicate bool) (*replicationTracker, error) {
@@ -35,20 +44,30 @@ func NewReplicationTracker(storesBaseFolders []string, replicate bool) (*replica
 	if replicate {
 		// Minimize reading the replication "status" if we have read it and is tracking it globally.
 		if globalReplicationTracker != nil {
+			globalReplicationTrackerLocker.Lock()
+
 			rt.isFirstFolderActive = globalReplicationTracker.isFirstFolderActive
-			rt.isInDeltaSync = globalReplicationTracker.isInDeltaSync
+			rt.replicationStatus = globalReplicationTracker.replicationStatus
+
+			globalReplicationTrackerLocker.Unlock()
 		} else {
-			rt.readStatusFromHomeFolder(storesBaseFolders)
+			if err := rt.readStatusFromHomeFolder(); err != nil {
+				return nil, fmt.Errorf("failed reading replication status (%sº file, details: %v", replicationStatusFilename, err)
+			}
+			globalReplicationTrackerLocker.Lock()
+
 			globalReplicationTracker = &replicationTracker{
 				storesBaseFolders:   storesBaseFolders,
 				isFirstFolderActive: isFirstFolderActive,
 				replicate:           replicate,
 			}
 			globalReplicationTracker.isFirstFolderActive = rt.isFirstFolderActive
-			globalReplicationTracker.isInDeltaSync = rt.isInDeltaSync
+			globalReplicationTracker.replicationStatus = rt.replicationStatus
+
+			globalReplicationTrackerLocker.Unlock()
 		}
 	}
-	if rt.isInDeltaSync {
+	if rt.replicationStatus.IsInDeltaSync {
 		return nil, fmt.Errorf("delta sync is happening, transaction should fail")
 	}
 	return &rt, nil
@@ -56,28 +75,65 @@ func NewReplicationTracker(storesBaseFolders []string, replicate bool) (*replica
 
 // Handle replication related error is invoked from a transaction when an IO error is encountered.
 // This function should handle the act of failing over to the passive destinations making them as active and the actives to be passives.
-func (r *replicationTracker)HandleReplicationRelatedError(ioError error, rollbackSucceeded bool) bool {
+func (r *replicationTracker)HandleReplicationRelatedError(ioError error, rollbackSucceeded bool) {
+	if !r.replicate {
+		return
+	}
 	if err, ok := ioError.(ReplicationRelatedError); ok {
 		log.Error(fmt.Sprintf("a replication related error detected (rollback succeeded: %v), details: %v", rollbackSucceeded, err.Error()))
 		// Cause a failover switch to passive destinations on succeeding transactions.
-		//r.failover()
+		if err := r.failover(); err != nil {
+			log.Error(fmt.Sprintf("failover to folder %s failed, details: %v", r.getPassiveBaseFolder(), err.Error()))
+		}
 	}
-	return true
 }
 
-func (r *replicationTracker) failover() {
-	if globalReplicationTracker.isFirstFolderActive == !r.isFirstFolderActive {
-		// Do nothing if global tracker already knows that a failover already occurred.
+func (r *replicationTracker) handleFailedToReplicate() {
+	if !r.replicate || r.replicationStatus.FailedToReplicate {
+		return
+	}
+	globalReplicationTrackerLocker.Lock()
+	if r.replicationStatus.FailedToReplicate {
+		globalReplicationTrackerLocker.Unlock()
 		return
 	}
 
-	fio := NewDefaultFileIO(ToFilePath)
-	fio.WriteFile(r.formatPassiveFolderEntity(replicationStatusFilename), fmt.Appendf(nil, "isInDeltaSync:%v", r.isInDeltaSync), permission)
+	r.replicationStatus.FailedToReplicate = true
+	globalReplicationTracker.replicationStatus.FailedToReplicate = true
+	r.writeReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename))
 
-	// Swtich the passive into active & vice versa.
+	globalReplicationTrackerLocker.Unlock()
+}
+
+func (r *replicationTracker) failover() error {
+	if globalReplicationTracker.isFirstFolderActive == !r.isFirstFolderActive ||
+		r.replicationStatus.FailedToReplicate {
+		// Do nothing if global tracker already knows that a failover already occurred.
+		return nil
+	}
+
+	globalReplicationTrackerLocker.Lock()
+	if globalReplicationTracker.isFirstFolderActive == !r.isFirstFolderActive {
+		globalReplicationTrackerLocker.Unlock()
+		// Do nothing if global tracker already knows that a failover already occurred.
+		return nil
+	}
+
+	// Set to failed to replicate because when we flip passive to active, then yes, we should not
+	// replicate on the previously active drive because it failed.
+	r.replicationStatus.FailedToReplicate = true
+
+	r.writeReplicationStatus(r.formatPassiveFolderEntity(replicationStatusFilename))
+
+	// Switch the passive into active & vice versa.
 	r.isFirstFolderActive = !r.isFirstFolderActive
 	globalReplicationTracker.isFirstFolderActive = r.isFirstFolderActive
+	globalReplicationTracker.replicationStatus = r.replicationStatus
+
+	globalReplicationTrackerLocker.Unlock()
+
 	log.Info(fmt.Sprintf("failover event occurred, newly active folder is, %s", r.getActiveBaseFolder()))
+	return nil
 }
 
 func (r *replicationTracker) getActiveBaseFolder() string {
@@ -113,9 +169,57 @@ func (r *replicationTracker) formatPassiveFolderEntity(entityName string) string
 	}
 }
 
-func (r *replicationTracker) readStatusFromHomeFolder(storesBaseFolders []string) {
+func (r *replicationTracker) readStatusFromHomeFolder() error {
+	fio := NewDefaultFileIO()
+	// Detect the active folder based on time stamp of the file.
+	if !fio.Exists(r.formatActiveFolderEntity(replicationStatusFilename)) {
+		if fio.Exists(r.formatPassiveFolderEntity(replicationStatusFilename)) {
+			if err := r.readReplicationStatus(r.formatPassiveFolderEntity(replicationStatusFilename)); err == nil {
+				// Switch passive to active if we are able to read the delta sync status file.
+				r.isFirstFolderActive = !r.isFirstFolderActive
+			}
+		}
+		// No Replication status file in both active & passive folders, we're good with default.
+		return nil
+	}
+	stat, err := os.Stat(r.formatActiveFolderEntity(replicationStatusFilename))
+	if err != nil {
+		_, err = os.Stat(r.formatPassiveFolderEntity(replicationStatusFilename))
+		if err != nil {
+			return err
+		}
+		r.isFirstFolderActive = !r.isFirstFolderActive
+	} else {
+		stat2, err := os.Stat(r.formatPassiveFolderEntity(replicationStatusFilename))
+		if err == nil {
+			if stat2.ModTime().After(stat.ModTime()) {
+				r.isFirstFolderActive = !r.isFirstFolderActive
+			}
+		}
+	}
 
-	//fio := NewDefaultFileIO(ToFilePath)
-	//fio.ReadFile(r.formatPassiveFolderEntity(replicationStatusFilename), fmt.Appendf(nil, "isInDeltaSync:%v", r.isInDeltaSync), permission)
+	return r.readReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename))
+}
 
+func (r *replicationTracker)writeReplicationStatus(filename string) error {
+	fio := NewDefaultFileIO()
+	ba, _ := encoding.DefaultMarshaler.Marshal(r.replicationStatus)
+	if err := fio.WriteFile(filename, ba, permission); err != nil {
+		globalReplicationTrackerLocker.Unlock()
+		return err
+	}
+	return nil
+}
+
+func (r *replicationTracker)readReplicationStatus(filename string) error {
+	fio := NewDefaultFileIO()
+	// Read the delta sync status.
+	ba, err := fio.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+	if err = encoding.DefaultMarshaler.Unmarshal(ba, &r.replicationStatus); err != nil {
+		return err
+	}
+	return nil
 }

@@ -20,7 +20,7 @@ const permission os.FileMode = os.ModeSticky | os.ModePerm
 // NewBlobStore instantiates a new blobstore for File System storage.
 func NewBlobStore(toFilePath ToFilePathFunc, fileIO FileIO) sop.BlobStore {
 	if fileIO == nil {
-		fileIO = NewDefaultFileIO(DefaultToFilePath)
+		fileIO = NewDefaultFileIO()
 	}
 	if toFilePath == nil {
 		toFilePath = DefaultToFilePath
