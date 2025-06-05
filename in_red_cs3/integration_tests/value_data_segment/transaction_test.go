@@ -438,7 +438,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	twoPhase := t1.GetPhasedTransaction()
 
 	if err := twoPhase.Phase1Commit(ctx); err == nil {
-		twoPhase.Rollback(ctx)
+		twoPhase.Rollback(ctx, nil)
 
 		t1, _ = in_red_cs3.NewTransaction(s3Client, sop.ForWriting, -1, false, region)
 		t1.Begin()

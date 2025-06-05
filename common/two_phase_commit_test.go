@@ -29,7 +29,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 
 	if err := twoPhase.Phase1Commit(ctx); err == nil {
 		if err2 := my3rdPartyDBlogic(true); err2 != nil {
-			twoPhase.Rollback(ctx)
+			twoPhase.Rollback(ctx, err2)
 			return
 		}
 		t.Error("Should not go here.")
@@ -111,7 +111,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 	if err := twoPhase.Phase1Commit(ctx); err == nil {
 		// Call 3rd party DB integration, failure.
 		if err2 := my3rdPartyDBlogic(true); err2 != nil {
-			twoPhase.Rollback(ctx)
+			twoPhase.Rollback(ctx, err2)
 
 			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
 			t1.Begin()

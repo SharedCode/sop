@@ -48,6 +48,11 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
 func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		if ct.HandleReplicationRelatedError != nil {
+			return nil, fmt.Errorf("failed in NewBtree as transaction has replication enabled, use NewBtreeWithReplication instead")
+		}
+	}
 	si.DisableRegistryStoreFormatting = true
 	trans, _ := t.GetPhasedTransaction().(*common.Transaction)
 	sr := trans.GetStoreRepository().(*fs.StoreRepository)

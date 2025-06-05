@@ -144,9 +144,9 @@ func (t *Transaction) Phase1Commit(ctx context.Context) error {
 		}
 
 		if rerr != nil {
-			return fmt.Errorf("phase 1 commit failed, details: %v, rollback error: %v", err, rerr)
+			return fmt.Errorf("phase 1 commit failed, details: %w, rollback error: %v", err, rerr)
 		}
-		return fmt.Errorf("phase 1 commit failed, details: %v", err)
+		return fmt.Errorf("phase 1 commit failed, details: %w", err)
 	}
 	log.Debug("after phase1Commit call")
 	return nil
@@ -178,14 +178,14 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 		}
 
 		if rerr != nil {
-			return fmt.Errorf("phase 2 commit failed, details: %v, rollback error: %v", err, rerr)
+			return fmt.Errorf("phase 2 commit failed, details: %w, rollback error: %v", err, rerr)
 		}
-		return fmt.Errorf("phase 2 commit failed, details: %v", err)
+		return fmt.Errorf("phase 2 commit failed, details: %w", err)
 	}
 	return nil
 }
 
-func (t *Transaction) Rollback(ctx context.Context) error {
+func (t *Transaction) Rollback(ctx context.Context, err error) error {
 	if t.phaseDone == 2 {
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
@@ -194,7 +194,7 @@ func (t *Transaction) Rollback(ctx context.Context) error {
 	}
 	// Reset transaction status and mark done to end it without persisting any change.
 	t.phaseDone = 2
-	if err := t.rollback(ctx, true); err != nil {
+	if rerr := t.rollback(ctx, true); rerr != nil {
 		t.Close()
 
 		// Allow replication handler to handle error related to replication, e.g. IO error.
@@ -202,9 +202,15 @@ func (t *Transaction) Rollback(ctx context.Context) error {
 			t.HandleReplicationRelatedError(err, false)
 		}
 
-		return fmt.Errorf("rollback failed, details: %v", err)
+		return fmt.Errorf("rollback failed, details: %w", rerr)
 	}
 	t.Close()
+
+	// Allow replication handler to handle error related to replication, e.g. IO error.
+	if t.HandleReplicationRelatedError != nil {
+		t.HandleReplicationRelatedError(err, false)
+	}
+
 	return nil
 }
 
@@ -373,7 +379,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		if !successful {
 			// Rollback partial changes.
 			if rerr := t.rollback(ctx, false); rerr != nil {
-				return fmt.Errorf("phase 1 commit failed, then rollback errored with: %v", rerr)
+				return fmt.Errorf("phase 1 commit failed, then rollback errored with: %w", rerr)
 			}
 
 			log.Debug("commit failed, refetch, remerge & another commit try will occur after randomSleep")
