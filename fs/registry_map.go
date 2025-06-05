@@ -80,7 +80,7 @@ func (rm registryMap) fetch(ctx context.Context, keys ...sop.Tuple[string, []sop
 	for _, k := range keys {
 		handles, err := rm.hashmap.fetch(ctx, k.First, k.Second)
 		if err != nil {
-			return nil, fmt.Errorf("registryMap.get failed, details: %v", err)
+			return nil,  fmt.Errorf("registryMap.fetch failed, details: %w", err)
 		}
 		result = append(result, sop.Tuple[string, []sop.Handle]{
 			First:  k.First,

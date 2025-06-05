@@ -174,7 +174,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 		return nil, err
 	}
 
-	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
+	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, true)
 
 	undo := func(endIndex int, original []sop.StoreInfo) {
 		// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.

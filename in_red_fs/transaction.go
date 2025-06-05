@@ -41,7 +41,6 @@ func NewTwoPhaseCommitTransaction(to TransationOptions) (sop.TwoPhaseCommitTrans
 	t, err := common.NewTwoPhaseCommitTransaction(to.Mode, to.MaxTime, true,
 		fs.NewBlobStore(fs.DefaultToFilePath, nil), sr, fs.NewRegistry(to.Mode == sop.ForWriting,
 			to.RegistryHashModValue, replicationTracker, to.Cache), to.Cache, tl)
-	t.HandleReplicationRelatedError = replicationTracker.HandleReplicationRelatedError
 	return t, err
 }
 

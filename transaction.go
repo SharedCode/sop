@@ -58,7 +58,8 @@ type TwoPhaseCommitTransaction interface {
 	// Phase2Commit of the transaction.
 	Phase2Commit(ctx context.Context) error
 	// Rollback the transaction.
-	Rollback(ctx context.Context) error
+	// Gives option to flow the error (if there is) that caused rollback to be invoked.
+	Rollback(ctx context.Context, err error) error
 	// Returns true if transaction has begun, false otherwise.
 	HasBegun() bool
 	// Returns the Transaction mode, it can be for reading or for writing.
@@ -154,10 +155,10 @@ func (t *singlePhaseTransaction) Commit(ctx context.Context) error {
 // Rollback the transaction. If multiple transaction rollbacks errored,
 // this will return the last error.
 func (t *singlePhaseTransaction) Rollback(ctx context.Context) error {
-	t.sopPhaseCommitTransaction.Rollback(ctx)
+	t.sopPhaseCommitTransaction.Rollback(ctx, nil)
 	var lastErr error
 	for _, ot := range t.otherTransactions {
-		if err := ot.Rollback(ctx); err != nil {
+		if err := ot.Rollback(ctx, nil); err != nil {
 			lastErr = err
 		}
 	}

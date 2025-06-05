@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -79,8 +80,14 @@ func (r *replicationTracker) HandleReplicationRelatedError(ioError error, rollba
 	if !r.replicate {
 		return
 	}
-	if err, ok := ioError.(ReplicationRelatedError); ok {
-		log.Error(fmt.Sprintf("a replication related error detected (rollback succeeded: %v), details: %v", rollbackSucceeded, err.Error()))
+	rootErr := errors.Unwrap(ioError)
+	err1, ok1 := rootErr.(ReplicationRelatedError)
+	err2, ok2 := ioError.(ReplicationRelatedError)
+	if ok2 {
+		err1 = err2
+	}
+	if ok1 || ok2 {
+		log.Error(fmt.Sprintf("a replication related error detected (rollback: %v), details: %v", rollbackSucceeded, err1.Error()))
 		// Cause a failover switch to passive destinations on succeeding transactions.
 		if err := r.failover(); err != nil {
 			log.Error(fmt.Sprintf("failover to folder %s failed, details: %v", r.getPassiveBaseFolder(), err.Error()))
@@ -100,7 +107,9 @@ func (r *replicationTracker) handleFailedToReplicate() {
 
 	r.replicationStatus.FailedToReplicate = true
 	globalReplicationTracker.replicationStatus.FailedToReplicate = true
-	r.writeReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename))
+	if err := r.writeReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
+		log.Warn(fmt.Sprintf("handleFailedToReplicate writeReplicationStatus failed, details: %v", err))
+	}
 
 	globalReplicationTrackerLocker.Unlock()
 }
@@ -123,7 +132,10 @@ func (r *replicationTracker) failover() error {
 	// replicate on the previously active drive because it failed.
 	r.replicationStatus.FailedToReplicate = true
 
-	r.writeReplicationStatus(r.formatPassiveFolderEntity(replicationStatusFilename))
+	if err := r.writeReplicationStatus(r.formatPassiveFolderEntity(replicationStatusFilename)); err != nil {
+		globalReplicationTrackerLocker.Unlock()
+		return err
+	}
 
 	// Switch the passive into active & vice versa.
 	r.isFirstFolderActive = !r.isFirstFolderActive

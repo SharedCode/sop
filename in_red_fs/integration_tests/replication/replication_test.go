@@ -91,25 +91,33 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
 	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
-	trans, err := in_red_fs.NewTransactionWithReplication(to)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
+
+	trans, _ := in_red_fs.NewTransactionWithReplication(to)
 	trans.Begin()
-	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
+	so := sop.StoreOptions{
 		Name:                     "repltable",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
-	}, trans, nil)
-	if err != nil {
-		t.Error(err)
-		return
 	}
+	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, so, trans, nil)
 	b3.Add(ctx, 1, "hello world")
 	if err := trans.Commit(ctx); err == nil {
 		t.Error("expected error but none was returned")
 		t.FailNow()
 	}
+
+	// Now, check whether transaction IO on new "active" target paths will be successful.
+	fs.DirectIOSim = nil
+
+	trans, _ = in_red_fs.NewTransactionWithReplication(to)
+	trans.Begin()
+	b3, _ = in_red_fs.NewBtreeWithReplication[int, string](ctx, so, trans, nil)
+	b3.Add(ctx, 1, "hello world")
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("expected no error but got: %v", err)
+		t.FailNow()
+	}
+
 }
 
 func TestDirectIOReadFromFileFailure(t *testing.T) {

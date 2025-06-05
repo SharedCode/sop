@@ -153,7 +153,7 @@ func Test_UniqueKeyBTreeOnMultipleCommits(t *testing.T) {
 func Test_StoreCachingMinRuleCheck(t *testing.T) {
 	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
@@ -184,7 +184,7 @@ func Test_StoreCachingMinRuleCheck(t *testing.T) {
 func Test_StoreCachingDefaultCacheApplied(t *testing.T) {
 	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
