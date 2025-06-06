@@ -20,8 +20,9 @@ var uuid, _ = sop.ParseUUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 var hashMod = MinimumModValue
 
 func TestRegistryAddThenRead(t *testing.T) {
-	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
-	r := NewRegistry(true, hashMod, rt, redis.NewClient())
+	l2cache := redis.NewClient()
+	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	r := NewRegistry(true, hashMod, rt, l2cache)
 
 	h := sop.NewHandle(uuid)
 

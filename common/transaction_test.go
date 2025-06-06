@@ -86,7 +86,7 @@ func Test_Rollback(t *testing.T) {
 func Test_SimpleAddPerson(t *testing.T) {
 	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 
@@ -133,7 +133,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 func Test_NoCheckCommitAddFail(t *testing.T) {
 	trans, err := newMockTransaction(t, sop.NoCheck, -1)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 
@@ -156,7 +156,7 @@ func Test_NoCheckCommitAddFail(t *testing.T) {
 func Test_NoCheckCommit(t *testing.T) {
 	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 
@@ -178,7 +178,7 @@ func Test_NoCheckCommit(t *testing.T) {
 
 	trans, err = newMockTransaction(t, sop.NoCheck, -1)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 
@@ -191,7 +191,7 @@ func Test_NoCheckCommit(t *testing.T) {
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 
 	trans2, _ := newMockTransaction(t, sop.ForWriting, -1)
@@ -247,7 +247,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 func Test_AddAndSearchManyPersons(t *testing.T) {
 	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 
 	trans.Begin()
@@ -276,20 +276,20 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		}
 	}
 	if err := trans.Commit(ctx); err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 		t.Fail()
 		return
 	}
 
 	trans, err = newMockTransaction(t, sop.ForReading, -1)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 		t.Fail()
 		return
 	}
 
 	if err := trans.Begin(); err != nil {
-		t.Errorf(err.Error())
+		t.Error(err.Error())
 		t.Fail()
 		return
 	}

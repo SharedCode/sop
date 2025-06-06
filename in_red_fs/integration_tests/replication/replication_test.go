@@ -64,7 +64,7 @@ func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -92,7 +92,11 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 	// Take from global EC config the data paths & EC config details.
 	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
 
-	trans, _ := in_red_fs.NewTransactionWithReplication(to)
+	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()		
+	}
 	trans.Begin()
 	so := sop.StoreOptions{
 		Name:                     "repltable",
@@ -109,10 +113,26 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 	// Now, check whether transaction IO on new "active" target paths will be successful.
 	fs.DirectIOSim = nil
 
-	trans, _ = in_red_fs.NewTransactionWithReplication(to)
-	trans.Begin()
-	b3, _ = in_red_fs.NewBtreeWithReplication[int, string](ctx, so, trans, nil)
-	b3.Add(ctx, 1, "hello world")
+	ctx = context.Background()
+	trans, err = in_red_fs.NewTransactionWithReplication(ctx, to)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()		
+	}
+	if err = trans.Begin(); err != nil {
+		t.Error(err)
+		t.FailNow()		
+	}
+	b3, err = in_red_fs.NewBtreeWithReplication[int, string](ctx, so, trans, nil)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()		
+	}
+	_, err = b3.Add(ctx, 1, "hello world")
+	if err != nil {
+		t.Error(err)
+		t.FailNow()		
+	}
 	if err := trans.Commit(ctx); err != nil {
 		t.Errorf("expected no error but got: %v", err)
 		t.FailNow()

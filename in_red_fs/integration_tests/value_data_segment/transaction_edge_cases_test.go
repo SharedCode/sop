@@ -17,8 +17,8 @@ import (
 // Reader transaction succeeds.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
-	t2, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
+	t2, _ := in_red_fs.NewTransaction(ctx, to)
 
 	t1.Begin()
 	t2.Begin()
@@ -44,7 +44,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = in_red_fs.NewTransaction(to)
+		t1, _ = in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ = in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "personvdb7",
@@ -87,7 +87,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	t1, _ = in_red_fs.NewTransaction(to2)
+	t1, _ = in_red_fs.NewTransaction(ctx, to2)
 	t1.Begin()
 	b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	var person Person
@@ -112,8 +112,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 // keys are sequential/contiguous between the two.
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
-	t2, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
+	t2, _ := in_red_fs.NewTransaction(ctx, to)
 
 	t1.Begin()
 	t2.Begin()
@@ -139,7 +139,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = in_red_fs.NewTransaction(to)
+		t1, _ = in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
@@ -169,10 +169,10 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 // Reader transaction fails commit when an item read was modified by another transaction in-flight.
 func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	t2, _ := in_red_fs.NewTransaction(to2)
+	t2, _ := in_red_fs.NewTransaction(ctx, to2)
 
 	t1.Begin()
 	t2.Begin()
@@ -198,7 +198,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = in_red_fs.NewTransaction(to)
+		t1, _ = in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
@@ -229,9 +229,9 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 // Case: Reader transaction succeeds commit, while another item in same Node got updated by another transaction.
 func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	t2, _ := in_red_fs.NewTransaction(to2)
+	t2, _ := in_red_fs.NewTransaction(ctx, to2)
 
 	t1.Begin()
 	t2.Begin()
@@ -259,7 +259,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		b3.Add(ctx, pk2, p2)
 		b3.Add(ctx, pk3, p3)
 		t1.Commit(ctx)
-		t1, _ = in_red_fs.NewTransaction(to)
+		t1, _ = in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
@@ -289,8 +289,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 // One transaction updates a colliding item in 1st and a 2nd trans.
 func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
-	t2, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
+	t2, _ := in_red_fs.NewTransaction(ctx, to)
 
 	t1.Begin()
 	t2.Begin()
@@ -322,7 +322,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		b3.Add(ctx, pk4, p4)
 		b3.Add(ctx, pk5, p5)
 		t1.Commit(ctx)
-		t1, _ = in_red_fs.NewTransaction(to)
+		t1, _ = in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
@@ -379,7 +379,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	in_red_fs.RemoveBtree(ctx, dataPath, "twophase2")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	t1.Begin()
 	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase2",
@@ -396,7 +396,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	eg, ctx2 := errgroup.WithContext(ctx)
 
 	f1 := func() error {
-		t1, _ := in_red_fs.NewTransaction(to)
+		t1, _ := in_red_fs.NewTransaction(ctx2, to)
 		t1.Begin()
 		b3, _ := in_red_fs.OpenBtree[int, string](ctx2, "twophase2", t1, nil)
 		b3.Add(ctx2, 5000, "I am the value with 5000 key.")
@@ -406,7 +406,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	}
 
 	f2 := func() error {
-		t2, _ := in_red_fs.NewTransaction(to)
+		t2, _ := in_red_fs.NewTransaction(ctx2, to)
 		t2.Begin()
 		b32, _ := in_red_fs.OpenBtree[int, string](ctx2, "twophase2", t2, nil)
 		b32.Add(ctx2, 5500, "I am the value with 5000 key.")
@@ -424,7 +424,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	t1, _ = in_red_fs.NewTransaction(to2)
+	t1, _ = in_red_fs.NewTransaction(ctx, to2)
 	t1.Begin()
 
 	b3, _ = in_red_fs.OpenBtree[int, string](ctx, "twophase2", t1, nil)

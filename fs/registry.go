@@ -29,7 +29,7 @@ const (
 	updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 )
 
-// NewRegistry manages the Handle in memory for mocking.
+// NewRegistry instantiates a new Registry that manages handle records in a file using hashmap on disk.
 func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, l2Cache sop.Cache) Registry {
 	return &registryOnDisk{
 		hashmap:            newRegistryMap(readWrite, hashModValue, rt, l2Cache),
@@ -220,31 +220,31 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 
 	// Open the hashmaps on the passive destination(s). Write the nodes' handle(s) on each.
 	// Close the hashmaps files.
-	af := r.replicationTracker.isFirstFolderActive
+	af := r.replicationTracker.IsFirstFolderActive
 
 	// Force tracker to treat passive as active folder so replication can write to the passive destinations.
-	r.replicationTracker.isFirstFolderActive = !af
+	r.replicationTracker.IsFirstFolderActive = !af
 	rm := newRegistryMap(true, r.hashmap.hashmap.hashModValue, r.replicationTracker, r.l2Cache)
 
 	for i := range newRootNodesHandles {
 		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: newRootNodesHandles[i].RegistryTable,
 			Second: newRootNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating new root nodes, details: %v", err))
-			r.replicationTracker.handleFailedToReplicate()
+			r.replicationTracker.handleFailedToReplicate(ctx)
 		}
 	}
 	for i := range addedNodesHandles {
 		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: addedNodesHandles[i].RegistryTable,
 			Second: addedNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating new nodes, details: %v", err))
-			r.replicationTracker.handleFailedToReplicate()
+			r.replicationTracker.handleFailedToReplicate(ctx)
 		}
 	}
 	for i := range updatedNodesHandles {
 		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: updatedNodesHandles[i].RegistryTable,
 			Second: updatedNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating updated nodes, details: %v", err))
-			r.replicationTracker.handleFailedToReplicate()
+			r.replicationTracker.handleFailedToReplicate(ctx)
 		}
 	}
 
@@ -253,14 +253,14 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: removedNodesHandles[i].RegistryTable,
 			Second: getIDs(removedNodesHandles[i].IDs)}); err != nil {
 			log.Error(fmt.Sprintf("error replicating removed nodes, details: %v", err))
-			r.replicationTracker.handleFailedToReplicate()
+			r.replicationTracker.handleFailedToReplicate(ctx)
 		}
 	}
 
 	rm.close()
 
 	// Restore to the proper active destination(s).
-	r.replicationTracker.isFirstFolderActive = af
+	r.replicationTracker.IsFirstFolderActive = af
 }
 
 func convertToKvp(handles []sop.Handle) []sop.KeyValuePair[sop.UUID, sop.Handle] {

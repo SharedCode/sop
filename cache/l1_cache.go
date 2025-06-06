@@ -37,7 +37,7 @@ const (
 var Global *L1Cache
 
 // Instantiate the global cache.
-func CreateGlobalCache(l2CacheNodes sop.Cache, minCapacity, maxCapacity int) *L1Cache {
+func NewGlobalCache(l2CacheNodes sop.Cache, minCapacity, maxCapacity int) *L1Cache {
 	if Global == nil || Global.mru.minCapacity != minCapacity || Global.mru.maxCapacity != maxCapacity {
 		Global = NewL1Cache(l2CacheNodes, minCapacity, maxCapacity)
 	}
@@ -48,7 +48,7 @@ func CreateGlobalCache(l2CacheNodes sop.Cache, minCapacity, maxCapacity int) *L1
 func GetGlobalCache() *L1Cache {
 	if Global == nil {
 		c := redis.NewClient()
-		CreateGlobalCache(c, DefaultMinCapacity, DefaultMaxCapacity)
+		NewGlobalCache(c, DefaultMinCapacity, DefaultMaxCapacity)
 	}
 	return Global
 }

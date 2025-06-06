@@ -49,7 +49,7 @@ type Transaction struct {
 	logger    *transactionLog
 
 	// Handle replication related error.
-	HandleReplicationRelatedError func(ioError error, rollbackSucceeded bool)
+	HandleReplicationRelatedError func(ctx context.Context, ioError error, rollbackSucceeded bool)
 
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles []sop.RegistryPayload[sop.Handle]
@@ -140,7 +140,7 @@ func (t *Transaction) Phase1Commit(ctx context.Context) error {
 
 		// Allow replication handler to handle error related to replication, e.g. IO error.
 		if t.HandleReplicationRelatedError != nil {
-			t.HandleReplicationRelatedError(err, rerr == nil)
+			t.HandleReplicationRelatedError(ctx, err, rerr == nil)
 		}
 
 		if rerr != nil {
@@ -174,7 +174,7 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 
 		// Allow replication handler to handle error related to replication, e.g. IO error.
 		if t.HandleReplicationRelatedError != nil {
-			t.HandleReplicationRelatedError(err, rerr == nil)
+			t.HandleReplicationRelatedError(ctx, err, rerr == nil)
 		}
 
 		if rerr != nil {
@@ -201,7 +201,7 @@ func (t *Transaction) Rollback(ctx context.Context, err error) error {
 
 		// Allow replication handler to handle error related to replication, e.g. IO error.
 		if t.HandleReplicationRelatedError != nil {
-			t.HandleReplicationRelatedError(err, false)
+			t.HandleReplicationRelatedError(ctx, err, false)
 		}
 
 		return fmt.Errorf("rollback failed, details: %w", rerr)
@@ -210,7 +210,7 @@ func (t *Transaction) Rollback(ctx context.Context, err error) error {
 
 	// Allow replication handler to handle error related to replication, e.g. IO error.
 	if t.HandleReplicationRelatedError != nil {
-		t.HandleReplicationRelatedError(err, true)
+		t.HandleReplicationRelatedError(ctx, err, true)
 	}
 
 	return nil

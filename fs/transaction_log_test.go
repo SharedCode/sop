@@ -16,8 +16,9 @@ type payload struct {
 var uuid2, _ = sop.ParseUUID("6ba7b810-9dad-11d1-80b4-00c04fd430c9")
 
 func TestTransactionLogAdd(t *testing.T) {
-	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
-	tl := NewTransactionLog(redis.NewClient(), rt)
+	l2cache := redis.NewClient()
+	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	tl := NewTransactionLog(l2cache, rt)
 	ba, _ := json.Marshal(payload{
 		Abc: "abc", Xyc: 123,
 	})
@@ -28,8 +29,9 @@ func TestTransactionLogAdd(t *testing.T) {
 }
 
 func TestTransactionLogGetOne(t *testing.T) {
-	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
-	tl := NewTransactionLog(redis.NewClient(), rt)
+	l2cache := redis.NewClient()
+	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	tl := NewTransactionLog(l2cache, rt)
 	// ageLimit = 0
 	uid, hour, tlogdata, err := tl.GetOne(ctx)
 	if uid.IsNil() {
@@ -70,8 +72,9 @@ func TestTransactionLogGetOne(t *testing.T) {
 }
 
 func TestTransactionLogAdd2(t *testing.T) {
-	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
-	tl := NewTransactionLog(redis.NewClient(), rt)
+	l2cache := redis.NewClient()
+	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	tl := NewTransactionLog(l2cache, rt)
 	ba, _ := json.Marshal(payload{
 		Abc: "abc", Xyc: 123,
 	})
@@ -89,8 +92,9 @@ func TestTransactionLogAdd2(t *testing.T) {
 }
 
 func TestTransactionLogGetOne2(t *testing.T) {
-	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
-	tl := NewTransactionLog(redis.NewClient(), rt)
+	l2cache := redis.NewClient()
+	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	tl := NewTransactionLog(l2cache, rt)
 	// ageLimit = 0
 	uid, _, tlogdata, err := tl.GetOne(ctx)
 	if uid.IsNil() {
@@ -124,8 +128,9 @@ func TestTransactionLogGetOne2(t *testing.T) {
 }
 
 func TestTransactionLogRemove2(t *testing.T) {
-	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
-	tl := NewTransactionLog(redis.NewClient(), rt)
+	l2cache := redis.NewClient()
+	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	tl := NewTransactionLog(l2cache, rt)
 	err := tl.Remove(ctx, uuid2)
 	if err != nil {
 		t.Errorf("Remove err: %v", err)
@@ -133,8 +138,9 @@ func TestTransactionLogRemove2(t *testing.T) {
 }
 
 func TestTransactionLogAddRemove(t *testing.T) {
-	rt, _ := NewReplicationTracker([]string{"/Users/grecinto/sop_data/"}, false)
-	tl := NewTransactionLog(redis.NewClient(), rt)
+	l2cache := redis.NewClient()
+	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	tl := NewTransactionLog(l2cache, rt)
 	ba, _ := json.Marshal(payload{
 		Abc: "abc", Xyc: 123,
 	})
