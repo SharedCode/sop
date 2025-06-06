@@ -192,23 +192,20 @@ func (b *blobStoreWithEC) Update(ctx context.Context, storesblobs []sop.BlobsPay
 }
 
 func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
-	// Spin up a job processor of shards count max threads.
-	var trBlobs *sop.TaskRunner
-	if len(storesblobs) > 1 {
-		trBlobs = sop.NewTaskRunner(ctx, len(storesblobs))
+	if len(storesblobs) == 0 {
+		return nil
 	}
+	if len(storesblobs) == 1 {
+		return b.writeBlob(ctx, storesblobs, 0)
+	}
+
+	// Sign up a job processor to parallelize blob writing.
+	trBlobs := sop.NewTaskRunner(ctx, len(storesblobs))
 	for i := range storesblobs {
 		index := i
-		f := func() error {
+		trBlobs.Go(func() error {
 			return b.writeBlob(ctx, storesblobs, index)
-		}
-		if trBlobs == nil {
-			return f()
-		}
-		trBlobs.Go(f)
-	}
-	if trBlobs == nil {
-		return nil
+		})
 	}
 	return trBlobs.Wait()
 }
