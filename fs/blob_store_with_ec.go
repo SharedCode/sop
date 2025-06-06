@@ -223,7 +223,8 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayloa
 					fp := b.toFilePath(baseFolderPath, blobKey)
 					if !b.fileIO.Exists(fp) {
 						if err := b.fileIO.MkdirAll(fp, permission); err != nil {
-							return err
+							ch <- err
+							return nil
 						}
 					}
 
