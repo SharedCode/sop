@@ -10,10 +10,15 @@ import (
 )
 
 type Erasure struct {
-	dataShardsCount   int
-	parityShardsCount int
+	DataShardsCount   int
+	ParityShardsCount int
 	encoder           reedsolomon.Encoder
 }
+
+const (
+	// MetaDataSize is 1 byte + checksum(16 bytes) = 17 bytes.
+	MetaDataSize = 17
+)
 
 // NewErasure instantiates an erasure encoder.
 func NewErasure(dataShards int, parityShards int) (*Erasure, error) {
@@ -25,8 +30,8 @@ func NewErasure(dataShards int, parityShards int) (*Erasure, error) {
 		return nil, err
 	}
 	return &Erasure{
-		dataShardsCount:   dataShards,
-		parityShardsCount: parityShards,
+		DataShardsCount:   dataShards,
+		ParityShardsCount: parityShards,
 		encoder:           enc,
 	}, nil
 }
@@ -59,23 +64,11 @@ func (e *Erasure) ComputeShardMetadata(dataSize int, shards [][]byte, shardIndex
 	checksum := md5.Sum(shards[shardIndex])
 	r := make([]byte, 1+len(checksum))
 	// Add the last shard stuffed zeroes count as 1st byte.
-	if dataSize%e.dataShardsCount != 0 {
-		r[0] = byte(e.dataShardsCount - dataSize%e.dataShardsCount)
+	if dataSize%e.DataShardsCount != 0 {
+		r[0] = byte(e.DataShardsCount - dataSize%e.DataShardsCount)
 	}
 	// Add the checksum bytes.
 	copy(r[1:], checksum[0:])
 
 	return r
-}
-
-// MetaDataSize is 1 byte + checksum(16 bytes) = 17 bytes.
-func (e *Erasure) MetaDataSize() int {
-	return 17
-}
-
-func (e *Erasure) DataShardsCount() int {
-	return e.dataShardsCount
-}
-func (e *Erasure) ParityShardsCount() int {
-	return e.parityShardsCount
 }

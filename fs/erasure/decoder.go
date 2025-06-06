@@ -52,7 +52,7 @@ func (e *Erasure) Decode(shards [][]byte, shardsMetaData [][]byte) *DecodeResult
 
 	var b bytes.Buffer
 	w := bufio.NewWriter(&b)
-	err := e.encoder.Join(w, shards, len(shards[0])*e.dataShardsCount)
+	err := e.encoder.Join(w, shards, len(shards[0])*e.DataShardsCount)
 	if err != nil {
 		return &DecodeResult{
 			Error: fmt.Errorf("encoder.Join failed, error: %v", err),

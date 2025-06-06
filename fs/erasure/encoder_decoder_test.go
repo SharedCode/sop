@@ -62,3 +62,33 @@ func Test_bitrot(t *testing.T) {
 		t.Errorf("DecodedData got %v, expected %v", dr.DecodedData, d)
 	}
 }
+
+func Test_FailedWriteOnOne(t *testing.T) {
+	e, _ := NewErasure(4, 2)
+	d := []byte{1, 2, 3, 4, 5}
+	shards, err := e.Encode(d)
+	if err != nil {
+		t.Error(err)
+	}
+	sm := make([][]byte, len(shards))
+	for i := range shards {
+		md := e.ComputeShardMetadata(len(d), shards, i)
+		sm[i] = md
+	}
+
+	// Change one byte to simulate bitrot on that location losing a byte.
+	shards[1][1] = 0
+
+	dr := e.Decode(shards, sm)
+	if dr.Error != nil {
+		t.Error(dr.Error)
+	}
+	if dr.ReconstructedShardsIndeces[0] != 1 {
+		t.Errorf("ReconstructedShardsIndeces got %v, expected 1", dr.ReconstructedShardsIndeces[0])
+	}
+
+	d = []byte{1, 2, 3, 4, 5}
+	if !bytes.Equal(dr.DecodedData, d) {
+		t.Errorf("DecodedData got %v, expected %v", dr.DecodedData, d)
+	}
+}
