@@ -207,6 +207,9 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayloa
 		}
 		trBlobs.Go(f)
 	}
+	if trBlobs == nil {
+		return nil
+	}
 	return trBlobs.Wait()
 }
 
