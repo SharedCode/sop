@@ -18,6 +18,7 @@ func init() {
 	ec["b1"] = ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
+		RepairCorruptedShards: true,
 		BaseFolderPathsAcrossDrives: []string{
 			"disk1",
 			"disk2",
