@@ -15,6 +15,10 @@ import (
 	sd "github.com/SharedCode/sop/streaming_data"
 )
 
+const(
+	minimumStreamingStoreSlotLength = 50
+)
+
 // Removes B-Tree with a given name from the backend storage. This involves dropping tables
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
@@ -40,6 +44,11 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
 func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		if ct.HandleReplicationRelatedError != nil {
+			return nil, fmt.Errorf("failed in OpenBtree as transaction has replication enabled, use OpenBtreeWithReplication instead")
+		}
+	}
 	return common.OpenBtree[TK, TV](ctx, name, t, comparer)
 }
 
@@ -60,9 +69,23 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 	return common.NewBtree[TK, TV](ctx, si, t, comparer)
 }
 
-// NewBtreeWithReplication is geared for enforcing the Blobs base folder path to generate good folder path that works
-// with Erasure Coding I/O, a part of SOP's replication feature (for blobs replication).
+// OpenBtreeWithReplication will (open &) instantiate a B-tree that has SOP's file system based replication feature.
+func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		if ct.HandleReplicationRelatedError == nil {
+			return nil, fmt.Errorf("failed in OpenBtreeWithReplication as transaction has no replication, use OpenBtree instead")
+		}
+	}
+	return common.OpenBtree[TK, TV](ctx, name, t, comparer)
+}
+
+// NewBtreeWithReplication will (create! &) instantiate a B-tree that has SOP's file system based replication feature.
 func NewBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		if ct.HandleReplicationRelatedError == nil {
+			return nil, fmt.Errorf("failed in NewBtreeWithReplication as transaction has no replication, use NewBtree instead")
+		}
+	}
 	si.DisableRegistryStoreFormatting = true
 	si.DisableBlobStoreFormatting = true
 	return common.NewBtree[TK, TV](ctx, si, t, comparer)
@@ -70,31 +93,22 @@ func NewBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, si s
 
 // Streaming Data Store related.
 
-// NewStreamingDataStore is synonymous to NewStreamingDataStore but is geared for storing blobs in blob table in Cassandra.
-func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
-	return NewStreamingDataStoreExt[TK](ctx, name, trans, "", comparer)
-}
-
-// NewStreamingDataStoreExt instantiates a new Data Store for use in "streaming data".
-// That is, the "value" is saved in separate segment(partition in Cassandra) &
-// actively persisted to the backend, e.g. - call to Add method will save right away
-// to the separate segment and on commit, it will be a quick action as data is already saved to the data segments.
-//
-// This behaviour makes this store ideal for data management of huge blobs, like movies or huge data graphs.
-// Supports parameter for blobStoreBaseFolderPath which is useful in File System based blob storage.
-func NewStreamingDataStoreExt[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
-	btree, err := NewBtree[sd.StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, blobStoreBaseFolderPath), trans, comparer)
-	if err != nil {
-		return nil, err
+// NewStreamingDataStore implements data chunking on top of a B-tree, thus, it can support very large data sets. limited by your hardware only.
+// It returns JSON constructs like "encoder" (for writing) & "decoder" (for reading) which is backed by the B-tree and thus, gives your code
+// the convenience to "chunkitize" a huge huge object (blob) and still, be able to easily stream it, without impacting the network, because
+// B-tree stores this object in chunks and even allows you to manage its part(s). As they are stored in a B-tree in chunks, thus, you can easily
+// replace or update any part of the huge huge object (blob).
+func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, so sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+	if so.SlotLength < minimumStreamingStoreSlotLength {
+		return nil, fmt.Errorf("streaming data store requires minimum of %d SlotLength", minimumStreamingStoreSlotLength)
 	}
-	return &sd.StreamingDataStore[TK]{
-		Btree: btree,
-	}, nil
-}
-
-// Synonymous to NewStreamingDataStore but expects StoreOptions parameter.
-func NewStreamingDataStoreOptions[TK btree.Ordered](ctx context.Context, options sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
-	btree, err := NewBtree[sd.StreamingDataKey[TK], []byte](ctx, options, trans, comparer)
+	if so.IsValueDataInNodeSegment {
+		return nil, fmt.Errorf("streaming data store requires value data to be set for save in separate segment(IsValueDataInNodeSegment = false)")
+	}
+	if !so.IsUnique {
+		return nil, fmt.Errorf("streaming data store requires unique key (IsUnique = true) to be set to true")
+	}
+	btree, err := NewBtree[sd.StreamingDataKey[TK], []byte](ctx, so, trans, comparer)
 	if err != nil {
 		return nil, err
 	}

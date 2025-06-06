@@ -123,6 +123,7 @@ func (r *replicationTracker) handleFailedToReplicate(ctx context.Context) {
 
 	// L2 cache "knows" of failure, just return.
 	if globalReplicationDetails.replicationStatus.FailedToReplicate {
+		r.replicationStatus.FailedToReplicate = true
 		return
 	}
 
@@ -158,8 +159,7 @@ func (r *replicationTracker) failover(ctx context.Context) error {
 		log.Warn(fmt.Sprintf("error while updating global replication status & L2 cache, details: %v", err))
 	}
 
-	if globalReplicationDetails.IsFirstFolderActive == !r.IsFirstFolderActive ||
-		r.replicationStatus.FailedToReplicate {
+	if globalReplicationDetails.IsFirstFolderActive == !r.IsFirstFolderActive {
 		// Do nothing if global tracker already knows that a failover already occurred.
 		return nil
 	}

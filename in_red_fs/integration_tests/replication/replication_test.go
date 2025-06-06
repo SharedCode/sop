@@ -140,6 +140,46 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 
 }
 
+func TestOpenBtree_TransWithRepl_failed(t *testing.T) {
+	fs.DirectIOSim = newDirectIOReplicationSim()
+
+	ctx := context.Background()
+	// Take from global EC config the data paths & EC config details.
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
+
+	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	trans.Begin()
+	_, err = in_red_fs.OpenBtree[int, string](ctx, "repltable", trans, nil)
+	if err == nil {
+		t.Error("expected to fail but succeeded")
+		t.FailNow()
+	}
+}
+
+func TestOpenBtreeWithRepl_succeeded(t *testing.T) {
+	fs.DirectIOSim = newDirectIOReplicationSim()
+
+	ctx := context.Background()
+	// Take from global EC config the data paths & EC config details.
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
+
+	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	trans.Begin()
+	_, err = in_red_fs.OpenBtreeWithReplication[int, string](ctx, "repltable", trans, nil)
+	if err != nil {
+		t.Errorf("expected to succeed but failed, details: %v", err)
+		t.FailNow()
+	}
+}
+
 func TestDirectIOReadFromFileFailure(t *testing.T) {
 }
 func TestDirectIOWriteToFileFailure(t *testing.T) {
