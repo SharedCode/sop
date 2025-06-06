@@ -166,7 +166,9 @@ func (t *itemActionTracker[TK, TV]) Add(ctx context.Context, item *btree.Item[TK
 				return err
 			}
 			if t.storeInfo.IsValueDataGloballyCached {
-				t.cache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), iv, t.storeInfo.CacheConfig.ValueDataCacheDuration)
+				if err := t.cache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), iv, t.storeInfo.CacheConfig.ValueDataCacheDuration); err != nil {
+					log.Warn(err.Error())
+				}
 			}
 		}
 	}
@@ -201,7 +203,9 @@ func (t *itemActionTracker[TK, TV]) Update(ctx context.Context, item *btree.Item
 					return err
 				}
 				if t.storeInfo.IsValueDataGloballyCached {
-					t.cache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), iv, t.storeInfo.CacheConfig.ValueDataCacheDuration)
+					if err := t.cache.SetStruct(ctx, formatItemKey(itemForAdd.Key.String()), iv, t.storeInfo.CacheConfig.ValueDataCacheDuration); err != nil {
+						log.Warn(err.Error())
+					}
 				}
 			}
 		}
