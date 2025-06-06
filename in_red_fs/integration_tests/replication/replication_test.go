@@ -31,12 +31,12 @@ func init() {
 
 	in_red_fs.Initialize(redisConfig)
 
-	cache := redis.NewClient()
-	log.Info("about to issue cache.Clear")
-	ctx := context.Background()
-	if err := cache.Clear(ctx); err != nil {
-		log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
-	}
+	// cache := redis.NewClient()
+	// log.Info("about to issue cache.Clear")
+	// ctx := context.Background()
+	// if err := cache.Clear(ctx); err != nil {
+	// 	log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
+	// }
 	initErasureCoding()
 }
 
