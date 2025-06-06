@@ -95,7 +95,7 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Error(err)
-		t.FailNow()		
+		t.FailNow()
 	}
 	trans.Begin()
 	so := sop.StoreOptions{
@@ -117,21 +117,21 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 	trans, err = in_red_fs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Error(err)
-		t.FailNow()		
+		t.FailNow()
 	}
 	if err = trans.Begin(); err != nil {
 		t.Error(err)
-		t.FailNow()		
+		t.FailNow()
 	}
 	b3, err = in_red_fs.NewBtreeWithReplication[int, string](ctx, so, trans, nil)
 	if err != nil {
 		t.Error(err)
-		t.FailNow()		
+		t.FailNow()
 	}
 	_, err = b3.Add(ctx, 1, "hello world")
 	if err != nil {
 		t.Error(err)
-		t.FailNow()		
+		t.FailNow()
 	}
 	if err := trans.Commit(ctx); err != nil {
 		t.Errorf("expected no error but got: %v", err)

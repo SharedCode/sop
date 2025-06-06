@@ -56,8 +56,8 @@ func Test_SimpleAddPerson(t *testing.T) {
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
 	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
-		SlotLength:               nodeSlotLength,
+		Name:       "persondb",
+		SlotLength: nodeSlotLength,
 	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
@@ -141,8 +141,8 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 
 	trans.Begin()
 	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
-		Name:                     "persondb",
-		SlotLength:               nodeSlotLength,
+		Name:       "persondb",
+		SlotLength: nodeSlotLength,
 	}, trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
