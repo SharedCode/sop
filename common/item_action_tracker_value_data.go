@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	log "log/slog"
+
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
 )
@@ -37,7 +39,9 @@ func (t *itemActionTracker[TK, TV]) commitTrackedItemsValues(ctx context.Context
 	// Add to cache since succeeded to add to the blob store.
 	if t.storeInfo.IsValueDataGloballyCached {
 		for i, kvp := range itemsForAdd.Blobs {
-			t.cache.SetStruct(ctx, formatItemKey(kvp.Key.String()), itemsForAddValues[i], t.storeInfo.CacheConfig.ValueDataCacheDuration)
+			if err := t.cache.SetStruct(ctx, formatItemKey(kvp.Key.String()), itemsForAddValues[i], t.storeInfo.CacheConfig.ValueDataCacheDuration); err != nil {
+				log.Warn(err.Error())
+			}
 		}
 	}
 	return nil

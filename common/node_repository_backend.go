@@ -232,7 +232,8 @@ func (nr *nodeRepositoryBackend) commitNewRootNodes(ctx context.Context, nodes [
 		for ii := range nodes[i].Second {
 			if err := nr.transaction.l2Cache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetActiveID().String()),
 				nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
-				return false, nil, err
+				// Tolerate Redis error, log as Warning.
+				log.Warn(fmt.Sprintf("commitNewRootNodes failed redisCache.SetStruct, details: %v", err))
 			}
 		}
 	}
@@ -295,20 +296,19 @@ func (nr *nodeRepositoryBackend) commitUpdatedNodes(ctx context.Context, nodes [
 	log.Debug("outside commitUpdatedNodes forloop trying to AllocateID")
 
 	if err := nr.transaction.registry.UpdateNoLocks(ctx, handles); err != nil {
-		log.Debug(fmt.Sprintf("failed registry.Update, details: %v", err))
+		log.Debug(fmt.Sprintf("commitUpdatedNodes failed registry.Update, details: %v", err))
 		return false, nil, err
 	}
 
 	// 2nd pass, persist the nodes blobs to blob store and redis cache.
 	if err := nr.transaction.blobStore.Add(ctx, blobs); err != nil {
-		log.Debug(fmt.Sprintf("failed blobStore.Add, details: %v", err))
+		log.Debug(fmt.Sprintf("commitUpdatedNodes failed blobStore.Add, details: %v", err))
 		return false, nil, err
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Second {
 			if err := nr.transaction.l2Cache.SetStruct(ctx, nr.formatKey(handles[i].IDs[ii].GetInActiveID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
-				log.Debug(fmt.Sprintf("failed redisCache.SetStruct, details: %v", err))
-				return false, nil, err
+				log.Warn(fmt.Sprintf("commitUpdatedNodes failed redisCache.SetStruct, details: %v", err))
 			}
 		}
 	}
@@ -380,7 +380,7 @@ func (nr *nodeRepositoryBackend) commitAddedNodes(ctx context.Context, nodes []s
 			handles[i].IDs[ii] = h
 			// Add node to Redis cache.
 			if err := nr.transaction.l2Cache.SetStruct(ctx, nr.formatKey(metaData.GetID().String()), nodes[i].Second[ii], nodes[i].First.CacheConfig.NodeCacheDuration); err != nil {
-				return nil, err
+				log.Warn(fmt.Sprintf("commitAddedNodes failed redisCache.SetStruct, details: %v", err))
 			}
 		}
 	}
