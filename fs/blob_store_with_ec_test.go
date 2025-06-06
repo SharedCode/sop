@@ -16,8 +16,8 @@ var ctx context.Context = context.Background()
 func init() {
 	ec := make(map[string]ErasureCodingConfig)
 	ec["b1"] = ErasureCodingConfig{
-		DataShardsCount:   2,
-		ParityShardsCount: 1,
+		DataShardsCount:       2,
+		ParityShardsCount:     1,
 		RepairCorruptedShards: true,
 		BaseFolderPathsAcrossDrives: []string{
 			"disk1",
