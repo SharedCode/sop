@@ -127,3 +127,5 @@ func OpenStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, 
 		Btree: btree,
 	}, nil
 }
+
+// TODO: add NewXx/OpenXx "with replication" for streaming data stores.
