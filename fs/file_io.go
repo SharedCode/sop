@@ -2,6 +2,7 @@ package fs
 
 import (
 	"os"
+	"path/filepath"
 )
 
 // Functions for File I/O defaults to "os" file I/O functions.
@@ -24,7 +25,14 @@ func NewDefaultFileIO() FileIO {
 }
 
 func (dio DefaultFileIO) WriteFile(name string, data []byte, perm os.FileMode) error {
-	return os.WriteFile(name, data, perm)
+	if err := os.WriteFile(name, data, perm); err != nil {
+		dirPath := filepath.Dir(name)
+		if derr := dio.MkdirAll(dirPath, permission); derr == nil {
+			return os.WriteFile(name, data, perm)
+		}
+		return err
+	}
+	return nil
 }
 func (dio DefaultFileIO) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(name)

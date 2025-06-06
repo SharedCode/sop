@@ -60,7 +60,14 @@ func (e *Erasure) Decode(shards [][]byte, shardsMetaData [][]byte) *DecodeResult
 	}
 	// Truncate trailing zeroes from decoded data, if there are and package for return.
 	w.Flush()
-	ba := make([]byte, len(b.Bytes())-int(shardsMetaData[0][0]))
+	mi2 := 0
+	for {
+		if shardsMetaData[mi2] != nil {
+			break
+		}
+		mi2++
+	}
+	ba := make([]byte, len(b.Bytes())-int(shardsMetaData[mi2][0]))
 	copy(ba, b.Bytes())
 	r.DecodedData = ba
 	return r
