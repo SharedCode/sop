@@ -15,7 +15,7 @@ import (
 	sd "github.com/SharedCode/sop/streaming_data"
 )
 
-const(
+const (
 	minimumStreamingStoreSlotLength = 50
 )
 
@@ -56,17 +56,17 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 // If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
 // and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
 // the OpenBtree function.
-func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func NewBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
 		if ct.HandleReplicationRelatedError != nil {
 			return nil, fmt.Errorf("failed in NewBtree as transaction has replication enabled, use NewBtreeWithReplication instead")
 		}
 	}
-	si.DisableRegistryStoreFormatting = true
+	so.DisableRegistryStoreFormatting = true
 	trans, _ := t.GetPhasedTransaction().(*common.Transaction)
 	sr := trans.GetStoreRepository().(*fs.StoreRepository)
-	si.BlobStoreBaseFolderPath = sr.GetStoresBaseFolder()
-	return common.NewBtree[TK, TV](ctx, si, t, comparer)
+	so.BlobStoreBaseFolderPath = sr.GetStoresBaseFolder()
+	return common.NewBtree[TK, TV](ctx, so, t, comparer)
 }
 
 // OpenBtreeWithReplication will (open &) instantiate a B-tree that has SOP's file system based replication feature.
@@ -80,15 +80,15 @@ func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, nam
 }
 
 // NewBtreeWithReplication will (create! &) instantiate a B-tree that has SOP's file system based replication feature.
-func NewBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func NewBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
 		if ct.HandleReplicationRelatedError == nil {
 			return nil, fmt.Errorf("failed in NewBtreeWithReplication as transaction has no replication, use NewBtree instead")
 		}
 	}
-	si.DisableRegistryStoreFormatting = true
-	si.DisableBlobStoreFormatting = true
-	return common.NewBtree[TK, TV](ctx, si, t, comparer)
+	so.DisableRegistryStoreFormatting = true
+	so.DisableBlobStoreFormatting = true
+	return common.NewBtree[TK, TV](ctx, so, t, comparer)
 }
 
 // Streaming Data Store related.
