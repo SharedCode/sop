@@ -52,7 +52,7 @@ func init() {
 func Test_GetStoreList(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -65,7 +65,7 @@ func Test_GetStoreList(t *testing.T) {
 func Test_CreateEmptyStore(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -82,7 +82,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 		trans.Commit(ctx)
 		return
 	}
-	trans, _ = in_red_fs.NewTransaction(to)
+	trans, _ = in_red_fs.NewTransaction(ctx, to)
 	trans.Begin()
 
 	b3, err = in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -104,7 +104,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -135,7 +135,7 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 	// 4. Commit Transaction
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -174,7 +174,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	// Demo NewTransactionExt specifying custom "to file path" lambda function.
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -220,7 +220,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 func Test_RegistryZeroDurationCache(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -268,7 +268,7 @@ func Test_RegistryZeroDurationCache(t *testing.T) {
 func Test_StoreCaching(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -310,7 +310,7 @@ func Test_StoreCaching(t *testing.T) {
 func Test_StoreCachingTTL(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}

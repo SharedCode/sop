@@ -14,7 +14,7 @@ var ctx = context.Background()
 func Test_TransactionInducedErrorOnNew(t *testing.T) {
 	t2, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	t2.Begin()
 	var t3 interface{} = t2.GetPhasedTransaction()
@@ -49,7 +49,7 @@ func Test_TransactionInducedErrorOnNew(t *testing.T) {
 func Test_TransactionInducedErrorOnOpen(t *testing.T) {
 	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	trans.Begin()
 	OpenBtree[int, string](ctx, "fooStore33", trans, cmp.Compare)

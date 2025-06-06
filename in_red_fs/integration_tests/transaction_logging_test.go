@@ -20,7 +20,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, _ := in_red_fs.NewTransaction(to)
+	trans, _ := in_red_fs.NewTransaction(ctx, to)
 	trans.Begin()
 
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -40,7 +40,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now().Add(time.Duration(-47 * time.Hour))
 	sop.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_fs.NewTransaction(to)
+	trans, _ = in_red_fs.NewTransaction(ctx, to)
 	trans.Begin()
 
 	b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
@@ -53,7 +53,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now().Add(time.Duration(-46 * time.Hour))
 	sop.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_fs.NewTransaction(to)
+	trans, _ = in_red_fs.NewTransaction(ctx, to)
 	trans.Begin()
 
 	b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
@@ -65,7 +65,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday = time.Now()
 	sop.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_fs.NewTransaction(to)
+	trans, _ = in_red_fs.NewTransaction(ctx, to)
 
 	// Cleanup should be launched from this call.
 	trans.Begin()
@@ -77,7 +77,7 @@ func Cleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	trans, _ := in_red_fs.NewTransaction(to2)
+	trans, _ := in_red_fs.NewTransaction(ctx, to2)
 	trans.Begin()
 	_, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	trans.Commit(ctx)
@@ -85,7 +85,7 @@ func Cleanup(t *testing.T) {
 	yesterday = time.Now().Add(-time.Duration(23*time.Hour + 54*time.Minute))
 	sop.Now = func() time.Time { return yesterday }
 
-	trans, _ = in_red_fs.NewTransaction(to2)
+	trans, _ = in_red_fs.NewTransaction(ctx, to2)
 	trans.Begin()
 	_, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	trans.Commit(ctx)

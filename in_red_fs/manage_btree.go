@@ -26,7 +26,7 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 	log.Info(fmt.Sprintf("Btree %s%c%s is about to be deleted", storesBaseFolder, os.PathSeparator, name))
 
 	cache := redis.NewClient()
-	replicationTracker, err := fs.NewReplicationTracker([]string{storesBaseFolder}, false)
+	replicationTracker, err := fs.NewReplicationTracker(ctx, []string{storesBaseFolder}, false, cache)
 	if err != nil {
 		return err
 	}

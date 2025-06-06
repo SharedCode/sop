@@ -27,7 +27,7 @@ const dataPath string = "/Users/grecinto/sop_data"
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -59,7 +59,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -103,7 +103,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 func Test_ByteArrayValue(t *testing.T) {
 	in_red_fs.RemoveBtree(ctx, dataPath, "baStore")
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -145,7 +145,7 @@ func Test_ByteArrayValue(t *testing.T) {
 
 func Test_ByteArrayValueGet(t *testing.T) {
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.NoCheck, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
 	}

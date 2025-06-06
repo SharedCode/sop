@@ -1,6 +1,7 @@
 package in_red_fs
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SharedCode/sop"
@@ -10,8 +11,8 @@ import (
 )
 
 // NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
-func NewTransaction(to TransationOptions) (sop.Transaction, error) {
-	twoPT, err := NewTwoPhaseCommitTransaction(to)
+func NewTransaction(ctx context.Context, to TransationOptions) (sop.Transaction, error) {
+	twoPT, err := NewTwoPhaseCommitTransaction(ctx, to)
 	if err != nil {
 		return nil, err
 	}
@@ -20,7 +21,7 @@ func NewTransaction(to TransationOptions) (sop.Transaction, error) {
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
-func NewTwoPhaseCommitTransaction(to TransationOptions) (sop.TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransaction(ctx context.Context, to TransationOptions) (sop.TwoPhaseCommitTransaction, error) {
 	if !IsInitialized() {
 		return nil, fmt.Errorf("Redis was not initialized")
 	}
@@ -28,7 +29,7 @@ func NewTwoPhaseCommitTransaction(to TransationOptions) (sop.TwoPhaseCommitTrans
 		to.Cache = redis.NewClient()
 	}
 	fio := fs.NewDefaultFileIO()
-	replicationTracker, err := fs.NewReplicationTracker([]string{to.StoresBaseFolder}, false)
+	replicationTracker, err := fs.NewReplicationTracker(ctx, []string{to.StoresBaseFolder}, false, to.Cache)
 	if err != nil {
 		return nil, err
 	}
@@ -45,8 +46,8 @@ func NewTwoPhaseCommitTransaction(to TransationOptions) (sop.TwoPhaseCommitTrans
 }
 
 // Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
-func NewTransactionWithReplication(towr TransationOptionsWithReplication) (sop.Transaction, error) {
-	twoPT, err := NewTwoPhaseCommitTransactionWithReplication(towr)
+func NewTransactionWithReplication(ctx context.Context, towr TransationOptionsWithReplication) (sop.Transaction, error) {
+	twoPT, err := NewTwoPhaseCommitTransactionWithReplication(ctx, towr)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +56,7 @@ func NewTransactionWithReplication(towr TransationOptionsWithReplication) (sop.T
 
 // Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
 // Returns sop.TwoPhaseCommitTransaction type useful for integration with your custom application transaction where code would like to get access to SOP's two phase commit transaction API.
-func NewTwoPhaseCommitTransactionWithReplication(towr TransationOptionsWithReplication) (sop.TwoPhaseCommitTransaction, error) {
+func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr TransationOptionsWithReplication) (sop.TwoPhaseCommitTransaction, error) {
 	if towr.ErasureConfig == nil {
 		towr.ErasureConfig = fs.GetGlobalErasureConfig()
 		if towr.ErasureConfig == nil {
@@ -63,7 +64,7 @@ func NewTwoPhaseCommitTransactionWithReplication(towr TransationOptionsWithRepli
 		}
 	}
 	fio := fs.NewDefaultFileIO()
-	replicationTracker, err := fs.NewReplicationTracker(towr.StoresBaseFolders, true)
+	replicationTracker, err := fs.NewReplicationTracker(ctx, towr.StoresBaseFolders, true, towr.Cache)
 	if err != nil {
 		return nil, err
 	}

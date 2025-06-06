@@ -2,11 +2,21 @@ package common
 
 import (
 	"cmp"
+	"os"
 	"testing"
 	"time"
 
+	log "log/slog"
+
 	"github.com/SharedCode/sop"
 )
+
+func init() {
+	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
+		Level: log.LevelDebug,
+	}))
+	log.SetDefault(l) // configures log package to print with LevelInfo
+}
 
 func Test_OpenVsNewBTree(t *testing.T) {
 	trans, _ := newMockTransaction(t, sop.ForWriting, -1)

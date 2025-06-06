@@ -22,8 +22,8 @@ import (
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
-	t2, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
+	t2, _ := in_red_fs.NewTransaction(ctx, to)
 
 	t1.Begin()
 	t2.Begin()
@@ -31,10 +31,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	b3, err := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
-		IsUnique:                 false,
 		IsValueDataInNodeSegment: true,
-		LeafLoadBalancing:        false,
-		Description:              "",
 	}, t1, Compare)
 	if err != nil {
 		t.Error(err.Error()) // most likely, the "persondb77" b-tree store has not been created yet.
@@ -49,7 +46,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = in_red_fs.NewTransaction(to)
+		t1, _ = in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "persondb77", t1, Compare)
 	}
@@ -77,7 +74,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		t.Error("Commit #2, got = succeess, want = fail.")
 	}
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	t1, _ = in_red_fs.NewTransaction(to2)
+	t1, _ = in_red_fs.NewTransaction(ctx, to2)
 	t1.Begin()
 	b3, _ = in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
@@ -107,8 +104,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
-	t2, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
+	t2, _ := in_red_fs.NewTransaction(ctx, to)
 
 	t1.Begin()
 	t2.Begin()
@@ -131,7 +128,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = in_red_fs.NewTransaction(to)
+		t1, _ = in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ = in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
@@ -170,9 +167,9 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	t2, _ := in_red_fs.NewTransaction(to2)
+	t2, _ := in_red_fs.NewTransaction(ctx, to2)
 
 	t1.Begin()
 	t2.Begin()
@@ -195,7 +192,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = in_red_fs.NewTransaction(to)
+		t1, _ = in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ = in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
@@ -235,9 +232,9 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	t2, _ := in_red_fs.NewTransaction(to2)
+	t2, _ := in_red_fs.NewTransaction(ctx, to2)
 
 	t1.Begin()
 	t2.Begin()
@@ -262,7 +259,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		b3.Add(ctx, pk2, p2)
 		b3.Add(ctx, pk3, p3)
 		t1.Commit(ctx)
-		t1, _ = in_red_fs.NewTransaction(to)
+		t1, _ = in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ = in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
@@ -301,8 +298,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
-	t2, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
+	t2, _ := in_red_fs.NewTransaction(ctx, to)
 
 	t1.Begin()
 	t2.Begin()
@@ -331,7 +328,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		b3.Add(ctx, pk4, p4)
 		b3.Add(ctx, pk5, p5)
 		t1.Commit(ctx)
-		t1, _ = in_red_fs.NewTransaction(to)
+		t1, _ = in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ = in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
@@ -398,7 +395,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	in_red_fs.RemoveBtree(ctx, dataPath, "twophase3")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	t1.Begin()
 	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase3",
@@ -414,7 +411,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	eg2, ctx3 := errgroup.WithContext(ctx)
 
 	f1 := func() error {
-		t1, _ := in_red_fs.NewTransaction(to)
+		t1, _ := in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ := in_red_fs.NewBtree[int, string](ctx2, sop.StoreOptions{
 			Name:                     "twophase3",
@@ -429,7 +426,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	}
 
 	f2 := func() error {
-		t2, _ := in_red_fs.NewTransaction(to)
+		t2, _ := in_red_fs.NewTransaction(ctx, to)
 		t2.Begin()
 		b32, _ := in_red_fs.NewBtree[int, string](ctx3, sop.StoreOptions{
 			Name:                     "twophase3",
@@ -455,7 +452,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	t1, _ = in_red_fs.NewTransaction(to2)
+	t1, _ = in_red_fs.NewTransaction(ctx, to2)
 	t1.Begin()
 
 	b3, _ = in_red_fs.OpenBtree[int, string](ctx, "twophase3", t1, nil)
@@ -488,7 +485,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	cache.Clear(ctx)
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	t1.Begin()
 	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "tablex",
@@ -505,7 +502,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	eg4, ctx4 := errgroup.WithContext(ctx)
 
 	f1 := func() error {
-		t1, _ := in_red_fs.NewTransaction(to)
+		t1, _ := in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 		b3, _ := in_red_fs.OpenBtree[int, string](ctx2, "tablex", t1, nil)
 		b3.Add(ctx2, 50, "I am the value with 5000 key.")
@@ -516,7 +513,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	}
 
 	f2 := func() error {
-		t2, _ := in_red_fs.NewTransaction(to)
+		t2, _ := in_red_fs.NewTransaction(ctx, to)
 		t2.Begin()
 		b32, _ := in_red_fs.OpenBtree[int, string](ctx3, "tablex", t2, nil)
 		b32.Add(ctx3, 550, "I am the value with 5000 key.")
@@ -527,7 +524,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	}
 
 	f3 := func() error {
-		t3, _ := in_red_fs.NewTransaction(to)
+		t3, _ := in_red_fs.NewTransaction(ctx, to)
 		t3.Begin()
 		b32, _ := in_red_fs.OpenBtree[int, string](ctx4, "tablex", t3, nil)
 		b32.Add(ctx4, 550, "random foo.")
@@ -557,7 +554,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	t1, _ = in_red_fs.NewTransaction(to2)
+	t1, _ = in_red_fs.NewTransaction(ctx, to2)
 	t1.Begin()
 
 	b3, _ = in_red_fs.OpenBtree[int, string](ctx, "tablex", t1, nil)
@@ -597,7 +594,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	in_red_fs.RemoveBtree(ctx, dataPath, "tablex2")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	t1.Begin()
 	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "tablex2",
@@ -615,7 +612,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	eg4, ctx4 := errgroup.WithContext(ctx)
 
 	f1 := func() error {
-		t1, _ := in_red_fs.NewTransaction(to)
+		t1, _ := in_red_fs.NewTransaction(ctx2, to)
 		t1.Begin()
 		b3, _ := in_red_fs.OpenBtree[int, string](ctx2, "tablex2", t1, nil)
 		b3.Add(ctx2, 50, "I am the value with 5000 key.")
@@ -625,7 +622,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	}
 
 	f2 := func() error {
-		t2, _ := in_red_fs.NewTransaction(to)
+		t2, _ := in_red_fs.NewTransaction(ctx3, to)
 		t2.Begin()
 		b32, _ := in_red_fs.OpenBtree[int, string](ctx3, "tablex2", t2, nil)
 		if ok, err := b32.Add(ctx3, 550, "I am the value with 5000 key."); !ok || err != nil {
@@ -647,7 +644,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	}
 
 	f3 := func() error {
-		t3, _ := in_red_fs.NewTransaction(to)
+		t3, _ := in_red_fs.NewTransaction(ctx4, to)
 		t3.Begin()
 		b32, _ := in_red_fs.OpenBtree[int, string](ctx4, "tablex2", t3, nil)
 		if ok, err := b32.Add(ctx4, 550, "random foo."); !ok || err != nil {
@@ -688,7 +685,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	t1, _ = in_red_fs.NewTransaction(to2)
+	t1, _ = in_red_fs.NewTransaction(ctx, to2)
 	t1.Begin()
 
 	b3, _ = in_red_fs.OpenBtree[int, string](ctx, "tablex2", t1, nil)
@@ -719,7 +716,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	in_red_fs.RemoveBtree(ctx, dataPath, "tabley")
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	t1.Begin()
 	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "tabley",
@@ -739,7 +736,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	eg3, ctx4 := errgroup.WithContext(ctx)
 
 	f1 := func() error {
-		t1, _ := in_red_fs.NewTransaction(to)
+		t1, _ := in_red_fs.NewTransaction(ctx3, to)
 		t1.Begin()
 		b3, _ := in_red_fs.OpenBtree[int, string](ctx3, "tabley", t1, nil)
 		b3.Add(ctx3, 50, "I am the value with 5000 key.")
@@ -749,7 +746,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	}
 
 	f2 := func() error {
-		t2, _ := in_red_fs.NewTransaction(to)
+		t2, _ := in_red_fs.NewTransaction(ctx2, to)
 		t2.Begin()
 		b32, _ := in_red_fs.OpenBtree[int, string](ctx2, "tabley", t2, nil)
 		b32.Update(ctx2, 550, "I am the value with 5000 key.")
@@ -759,7 +756,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	}
 
 	f3 := func() error {
-		t3, _ := in_red_fs.NewTransaction(to)
+		t3, _ := in_red_fs.NewTransaction(ctx4, to)
 		t3.Begin()
 		b32, _ := in_red_fs.OpenBtree[int, string](ctx4, "tabley", t3, nil)
 		b32.Update(ctx4, 550, "random foo.")
@@ -792,7 +789,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
 
-	t1, _ = in_red_fs.NewTransaction(to2)
+	t1, _ = in_red_fs.NewTransaction(ctx, to2)
 	t1.Begin()
 
 	b3, _ = in_red_fs.OpenBtree[int, string](ctx, "tabley", t1, nil)

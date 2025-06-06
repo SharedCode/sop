@@ -52,7 +52,7 @@ const tableName2 = "twophase22"
 func Test_SimpleAddPerson(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
 	}
@@ -97,7 +97,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 func AddToBreakNodeThenRemoveAll(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, _ := in_red_fs.NewTransaction(to)
+	trans, _ := in_red_fs.NewTransaction(ctx, to)
 	trans.Begin()
 
 	pk, p := newPerson("foo", "bar", "male", "email", "phone")
@@ -113,7 +113,7 @@ func AddToBreakNodeThenRemoveAll(t *testing.T) {
 	}
 
 	trans.Commit(ctx)
-	trans, _ = in_red_fs.NewTransaction(to)
+	trans, _ = in_red_fs.NewTransaction(ctx, to)
 
 	trans.Begin()
 	b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, "personfoo", trans, Compare)
@@ -129,7 +129,7 @@ func AddToBreakNodeThenRemoveAll(t *testing.T) {
 func Test_AddThenTripleUpdatesPerson(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
 	}
@@ -154,7 +154,7 @@ func Test_AddThenTripleUpdatesPerson(t *testing.T) {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}
 
-	trans, err = in_red_fs.NewTransaction(to)
+	trans, err = in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
 	}
@@ -174,7 +174,7 @@ func Test_AddThenTripleUpdatesPerson(t *testing.T) {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}
 
-	trans, err = in_red_fs.NewTransaction(to)
+	trans, err = in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
 	}
@@ -194,7 +194,7 @@ func Test_AddThenTripleUpdatesPerson(t *testing.T) {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}
 
-	trans, err = in_red_fs.NewTransaction(to)
+	trans, err = in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
 	}
@@ -214,7 +214,7 @@ func Test_AddThenTripleUpdatesPerson(t *testing.T) {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}
 
-	trans, err = in_red_fs.NewTransaction(to)
+	trans, err = in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
 	}
@@ -239,12 +239,12 @@ func Test_AddThenTripleUpdatesPerson(t *testing.T) {
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
 	}
 
-	trans2, _ := in_red_fs.NewTransaction(to)
+	trans2, _ := in_red_fs.NewTransaction(ctx, to)
 
 	trans.Begin()
 	trans2.Begin()
@@ -281,7 +281,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 func Test_AddAndSearchManyPersons(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(to)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
 	}
@@ -314,7 +314,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}
 
 	to2, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
-	trans, err = in_red_fs.NewTransaction(to2)
+	trans, err = in_red_fs.NewTransaction(ctx, to2)
 	if err != nil {
 		t.Errorf("%s", err.Error())
 		t.FailNow()
@@ -350,7 +350,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	end := 100000
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	t1.Begin()
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
@@ -370,7 +370,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.FailNow()
 			}
-			t1, _ = in_red_fs.NewTransaction(to)
+			t1, _ = in_red_fs.NewTransaction(ctx, to)
 			t1.Begin()
 			b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, t1, Compare)
 		}
@@ -399,7 +399,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.FailNow()
 			}
-			t1, _ = in_red_fs.NewTransaction(to2)
+			t1, _ = in_red_fs.NewTransaction(ctx, to2)
 			t1.Begin()
 			b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, t1, Compare)
 		}
@@ -414,7 +414,7 @@ func Test_VolumeDeletes(t *testing.T) {
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	//to.UseCacheForFileRegionLocks = true
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	t1.Begin()
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
@@ -436,7 +436,7 @@ func Test_VolumeDeletes(t *testing.T) {
 				t.Error(err)
 				t.FailNow()
 			}
-			t1, _ = in_red_fs.NewTransaction(to)
+			t1, _ = in_red_fs.NewTransaction(ctx, to)
 			t1.Begin()
 			b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, t1, Compare)
 		}
@@ -451,7 +451,7 @@ func Test_MixedOperations(t *testing.T) {
 	end := 14000
 
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	t1.Begin()
 	b3, _ := in_red_fs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
@@ -488,7 +488,7 @@ func Test_MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.FailNow()
 			}
-			t1, _ = in_red_fs.NewTransaction(to)
+			t1, _ = in_red_fs.NewTransaction(ctx, to)
 			t1.Begin()
 			b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, t1, Compare)
 		}
@@ -524,7 +524,7 @@ func Test_MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.FailNow()
 			}
-			t1, _ = in_red_fs.NewTransaction(to)
+			t1, _ = in_red_fs.NewTransaction(ctx, to)
 			t1.Begin()
 			b3, _ = in_red_fs.OpenBtree[PersonKey, Person](ctx, tableName1, t1, Compare)
 		}
@@ -534,7 +534,7 @@ func Test_MixedOperations(t *testing.T) {
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	ctx := context.Background()
 	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := in_red_fs.NewTransaction(to)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	t1.Begin()
 
 	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -558,7 +558,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 			t.Errorf("Rollback error: %v", err)
 		}
 
-		t1, _ = in_red_fs.NewTransaction(to)
+		t1, _ = in_red_fs.NewTransaction(ctx, to)
 		t1.Begin()
 
 		b3, _ = in_red_fs.OpenBtree[int, string](ctx, tableName2, t1, nil)
