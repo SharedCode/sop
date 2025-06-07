@@ -15,10 +15,6 @@ import (
 	sd "github.com/SharedCode/sop/streaming_data"
 )
 
-const (
-	minimumStreamingStoreSlotLength = 50
-)
-
 // Removes B-Tree with a given name from the backend storage. This involves dropping tables
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
@@ -99,8 +95,8 @@ func NewBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, so s
 // B-tree stores this object in chunks and even allows you to manage its part(s). As they are stored in a B-tree in chunks, thus, you can easily
 // replace or update any part of the huge huge object (blob).
 func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, so sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
-	if so.SlotLength < minimumStreamingStoreSlotLength {
-		return nil, fmt.Errorf("streaming data store requires minimum of %d SlotLength", minimumStreamingStoreSlotLength)
+	if so.SlotLength < sd.MinimumStreamingStoreSlotLength {
+		return nil, fmt.Errorf("streaming data store requires minimum of %d SlotLength", sd.MinimumStreamingStoreSlotLength)
 	}
 	if so.IsValueDataInNodeSegment {
 		return nil, fmt.Errorf("streaming data store requires value data to be set for save in separate segment(IsValueDataInNodeSegment = false)")
@@ -113,7 +109,7 @@ func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, so sop.StoreOp
 		return nil, err
 	}
 	return &sd.StreamingDataStore[TK]{
-		Btree: btree,
+		BtreeInterface: btree,
 	}, nil
 }
 
@@ -124,7 +120,7 @@ func OpenStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, 
 		return nil, err
 	}
 	return &sd.StreamingDataStore[TK]{
-		Btree: btree,
+		BtreeInterface: btree,
 	}, nil
 }
 

@@ -63,7 +63,7 @@ func NewStoreRepository(s3Client *s3.Client, region string) (sop.StoreRepository
 func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	si := sop.ConfigureStore(name, true, 500, "Streaming data", sop.BigData, "")
 	si.DisableBlobStoreFormatting = true
-	return sd.NewStreamingDataStoreOptions[TK](ctx, si, trans, comparer)
+	return sd.NewStreamingDataStore[TK](ctx, si, trans, comparer)
 }
 
 // OpenStreamingDataStore is a convenience function to open an existing data store for use in "streaming data".
