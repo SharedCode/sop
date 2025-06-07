@@ -56,13 +56,20 @@ func NewStoreRepository() sop.StoreRepository {
 
 // NewStreamingDataStore is a convenience function to easily instantiate a streaming data store that stores
 // blobs in File System.
-//
-// Specify your blobStoreBaseFolderPath to an appropriate folder path that will be the base folder of blob files.
-func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, blobStoreBaseFolderPath string, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
-	if blobStoreBaseFolderPath == "" {
-		return nil, fmt.Errorf("blobStoreBaseFolderPath(\"\") needs to be a valid folder path")
+func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, so sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+	if so.SlotLength < sd.MinimumStreamingStoreSlotLength {
+		return nil, fmt.Errorf("streaming data store requires minimum of %d SlotLength", sd.MinimumStreamingStoreSlotLength)
 	}
-	return sd.NewStreamingDataStoreExt[TK](ctx, name, trans, blobStoreBaseFolderPath, comparer)
+	if so.IsValueDataInNodeSegment {
+		return nil, fmt.Errorf("streaming data store requires value data to be set for save in separate segment(IsValueDataInNodeSegment = false)")
+	}
+	if !so.IsUnique {
+		return nil, fmt.Errorf("streaming data store requires unique key (IsUnique = true) to be set to true")
+	}
+	if so.BlobStoreBaseFolderPath == "" {
+		return nil, fmt.Errorf("so.BlobStoreBaseFolderPath(\"\") needs to be a valid folder path")
+	}
+	return sd.NewStreamingDataStore[TK](ctx, so, trans, comparer)
 }
 
 // OpenStreamingDataStore is a convenience function to open an existing data store for use in "streaming data".
