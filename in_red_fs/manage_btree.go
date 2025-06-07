@@ -87,24 +87,29 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 	return storeRepository.Remove(ctx, name)
 }
 
-// Reinstate the failed passive targets by delegating call to the Replication Tracker.
+// Reinstate replication of the failed passive targets by delegating call to the Replication Tracker.
+//
 // storesFolders & erasureConfig parameters serve the same purpose as how they got used/
 // values passed in in the call to NewTransactionOptionsWithReplication(..).
 // storesFolders should contain the active & passive stores' base folder paths.
 // erasureConfig should be nil if storesFolders is already specified.
 //
-// Also, if you want SOP to use the global erasure config and there is one set, then these
-// two can be nil.
+// Also, if you want SOP to use the global erasure config and there is one set (in "fs" package), then these
+// two can be nil. In a bit later, SOP may support caching in L2 cache the storesFolders, so,
+// in that version, this function may just take it from L2 cache (Redis).
 //
 // If storesFolders is nil, SOP will use the 1st two drive/paths it can find from the
 // erasureConfig or the global erasure config, whichever is passed in or available.
 // The default erasureConfig map entry (with key "") will be tried for use and if this is not
 // set or it only has one path, then the erasureConfig map will be iterated and whichever
 // entry with at least two drive paths set, then will "win" as the stores base folders paths.
-func ReinstateFailedTargets(ctx context.Context, storesFolders []string, erasureConfig map[string]fs.ErasureCodingConfig) error {
+//
+// Explicitly specifying it in storesFolders param is recommended.
+func ReinstateFailedDrives(ctx context.Context, storesFolders []string, erasureConfig map[string]fs.ErasureCodingConfig) error {
 	if erasureConfig == nil {
 		erasureConfig = fs.GetGlobalErasureConfig()
 	}
+	// Try to extract stores base folders from the erasure config
 	if storesFolders == nil && len(erasureConfig) > 0 {
 		storesFolders = make([]string, 0, 2)
 		defaultEntry := erasureConfig[""]
@@ -122,14 +127,14 @@ func ReinstateFailedTargets(ctx context.Context, storesFolders []string, erasure
 		}
 	}
 	if len(storesFolders) < 2 {
-		return fmt.Errorf("'storeFolders' need to be array of two strings. 'was not able to reuse anything from 'erasureConfig'")
+		return fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths). 'was not able to reuse anything from 'erasureConfig'")
 	}
 
 	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, redis.NewClient())
 	if err != nil {
 		return err
 	}
-	return rt.ReinstateFailedTargets(ctx)
+	return rt.ReinstateFailedDrives(ctx)
 }
 
 // Streaming Data Store related.

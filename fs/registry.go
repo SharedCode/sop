@@ -211,19 +211,19 @@ func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPa
 func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles,
 	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
 
-	if !r.replicationTracker.replicate || r.replicationTracker.replicationStatus.FailedToReplicate {
+	if !r.replicationTracker.replicate || r.replicationTracker.FailedToReplicate {
 		log.Debug(fmt.Sprintf("replicate %v, FailedToReplicate %v, current target %s",
-			r.replicationTracker.replicate, r.replicationTracker.replicationStatus.FailedToReplicate,
+			r.replicationTracker.replicate, r.replicationTracker.FailedToReplicate,
 			r.replicationTracker.getActiveBaseFolder()))
 		return
 	}
 
 	// Open the hashmaps on the passive destination(s). Write the nodes' handle(s) on each.
 	// Close the hashmaps files.
-	af := r.replicationTracker.IsFirstFolderActive
+	af := r.replicationTracker.ActiveFolderToggle
 
 	// Force tracker to treat passive as active folder so replication can write to the passive destinations.
-	r.replicationTracker.IsFirstFolderActive = !af
+	r.replicationTracker.ActiveFolderToggle = !af
 	rm := newRegistryMap(true, r.hashmap.hashmap.hashModValue, r.replicationTracker, r.l2Cache)
 
 	for i := range newRootNodesHandles {
@@ -260,7 +260,7 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 	rm.close()
 
 	// Restore to the proper active destination(s).
-	r.replicationTracker.IsFirstFolderActive = af
+	r.replicationTracker.ActiveFolderToggle = af
 }
 
 func convertToKvp(handles []sop.Handle) []sop.KeyValuePair[sop.UUID, sop.Handle] {
