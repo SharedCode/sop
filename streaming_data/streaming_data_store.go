@@ -33,11 +33,11 @@ func (x StreamingDataKey[TK]) Compare(other interface{}) int {
 	y := other.(StreamingDataKey[TK])
 
 	// Sorted by user define key and followed by the Chunk Index, so we can navigate/iterate it in the chunk's submitted natural order.
-	i := btree.Compare[TK](x.Key, y.Key)
+	i := btree.Compare(x.Key, y.Key)
 	if i != 0 {
 		return i
 	}
-	return cmp.Compare[int](x.ChunkIndex, y.ChunkIndex)
+	return cmp.Compare(x.ChunkIndex, y.ChunkIndex)
 }
 
 // Synonymous to NewStreamingDataStore but expects StoreOptions parameter.
