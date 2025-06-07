@@ -90,7 +90,7 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
 
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
@@ -145,7 +145,7 @@ func TestOpenBtree_TransWithRepl_failed(t *testing.T) {
 
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
 
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
@@ -165,7 +165,7 @@ func TestOpenBtreeWithRepl_succeeded(t *testing.T) {
 
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(nil, sop.ForWriting, -1, fs.MinimumModValue, nil)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
 
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
