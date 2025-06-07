@@ -18,6 +18,8 @@ const (
 // StreamingDataStore contains methods useful for storage & management of entries that allow
 // encoding and decoding to/from data streams.
 type StreamingDataStore[TK btree.Ordered] struct {
+	// Inherit or reuse an Object implementing BtreeInterface. Golang's inheritance is actually better,
+	// it alows to inherit or reuse any object implementing a given interface. "loosely" & nicely done.
 	btree.BtreeInterface[StreamingDataKey[TK], []byte]
 }
 
