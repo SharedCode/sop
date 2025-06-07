@@ -385,9 +385,9 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 // Replicate the updates on stores to the passive target paths.
 func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo) {
 
-	if !sr.replicationTracker.replicate || sr.replicationTracker.replicationStatus.FailedToReplicate {
+	if !sr.replicationTracker.replicate || sr.replicationTracker.FailedToReplicate {
 		log.Debug(fmt.Sprintf("replicate %v, FailedToReplicate %v, current target %s",
-			sr.replicationTracker.replicate, sr.replicationTracker.replicationStatus.FailedToReplicate,
+			sr.replicationTracker.replicate, sr.replicationTracker.FailedToReplicate,
 			sr.replicationTracker.getActiveBaseFolder()))
 		return
 	}

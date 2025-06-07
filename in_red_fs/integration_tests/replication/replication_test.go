@@ -103,7 +103,11 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 	}
-	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, so, trans, nil)
+	b3, err := in_red_fs.NewBtreeWithReplication[int, string](ctx, so, trans, nil)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
 	b3.Add(ctx, 1, "hello world")
 	if err := trans.Commit(ctx); err == nil {
 		t.Error("expected error but none was returned")
