@@ -128,9 +128,6 @@ func (r *replicationTracker) ReinstateFailedTargets(ctx context.Context) error {
 
 	// TODO: see above instructions on what to do.
 
-
-
-	
 	return nil
 }
 

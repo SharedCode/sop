@@ -68,7 +68,7 @@ func NewTransactionOptions(storeFolder string, mode sop.TransactionMode, maxTime
 //
 // storesFolders should contain the active & passive stores' base folder paths.
 // erasureConfig should be nil if storesFolders is already specified.
-// 
+//
 // Also, if you want SOP to use the global erasure config and there is one set, then these
 // two can be nil.
 //
