@@ -64,31 +64,31 @@ func NewTransactionOptions(storeFolder string, mode sop.TransactionMode, maxTime
 }
 
 // Create a new TransactionOptionsWithReplication using defaults for cache related.
-func NewTransactionOptionsWithReplication(storeFolders []string, mode sop.TransactionMode, maxTime time.Duration,
+func NewTransactionOptionsWithReplication(storesFolders []string, mode sop.TransactionMode, maxTime time.Duration,
 	registryHashMod int,
 	erasureConfig map[string]fs.ErasureCodingConfig) (TransationOptionsWithReplication, error) {
 	if erasureConfig == nil {
 		erasureConfig = fs.GetGlobalErasureConfig()
 	}
-	if storeFolders == nil && len(erasureConfig) > 0 {
-		storeFolders = make([]string, 0, 2)
+	if storesFolders == nil && len(erasureConfig) > 0 {
+		storesFolders = make([]string, 0, 2)
 		defaultEntry := erasureConfig[""]
 		if len(defaultEntry.BaseFolderPathsAcrossDrives) >= 2 {
-			storeFolders = append(storeFolders, defaultEntry.BaseFolderPathsAcrossDrives[0])
-			storeFolders = append(storeFolders, defaultEntry.BaseFolderPathsAcrossDrives[1])
+			storesFolders = append(storesFolders, defaultEntry.BaseFolderPathsAcrossDrives[0])
+			storesFolders = append(storesFolders, defaultEntry.BaseFolderPathsAcrossDrives[1])
 		} else {
 			for _, v := range erasureConfig {
 				if len(v.BaseFolderPathsAcrossDrives) >= 2 {
-					storeFolders = append(storeFolders, v.BaseFolderPathsAcrossDrives[0])
-					storeFolders = append(storeFolders, v.BaseFolderPathsAcrossDrives[1])
+					storesFolders = append(storesFolders, v.BaseFolderPathsAcrossDrives[0])
+					storesFolders = append(storesFolders, v.BaseFolderPathsAcrossDrives[1])
 					break
 				}
 			}
 		}
 	}
 
-	if len(storeFolders) == 0 {
-		return TransationOptionsWithReplication{}, fmt.Errorf("storeFolders is nil & can't get extracted from erasureConfig")
+	if len(storesFolders) < 2 {
+		return TransationOptionsWithReplication{}, fmt.Errorf("'storeFolders' need to be array of two strings. 'was not able to reuse anything from 'erasureConfig'")
 	}
 
 	if registryHashMod < fs.MinimumModValue {
@@ -99,7 +99,7 @@ func NewTransactionOptionsWithReplication(storeFolders []string, mode sop.Transa
 	}
 
 	return TransationOptionsWithReplication{
-		StoresBaseFolders:    storeFolders,
+		StoresBaseFolders:    storesFolders,
 		Mode:                 mode,
 		MaxTime:              maxTime,
 		RegistryHashModValue: registryHashMod,

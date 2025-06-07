@@ -112,6 +112,25 @@ func (r *replicationTracker) HandleReplicationRelatedError(ctx context.Context, 
 	}
 }
 
+// ReinstateFailedTargets can be invoked after replacing the failed drives so they can be synchronized with
+// the current Active targets' Stores' contents.
+//
+// Details:
+//   - Tell transactions to start logging commit changes
+//   - Copy the registries & storeRepositories files to the new drives
+//   - Once done, switch over the entire cluster into "InDeltaSync" mode
+//   - Using all the transactions' commit logs' generated during the 2nd step above,
+//     fast forward registries & storeRepositories files
+//   - Update the L2 cache copy of global replication status to turn back on, the replication
+//     to the passive targets
+//   - Turn off the "InDeltaSync" mode to switch over to normal mode
+func (r *replicationTracker) ReinstateFailedTargets(ctx context.Context) error {
+
+	// TODO: see above instructions on what to do.
+
+	return nil
+}
+
 func (r *replicationTracker) handleFailedToReplicate(ctx context.Context) {
 	if !r.replicate || r.replicationStatus.FailedToReplicate {
 		return

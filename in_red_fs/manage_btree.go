@@ -15,6 +15,55 @@ import (
 	sd "github.com/SharedCode/sop/streaming_data"
 )
 
+// NewBtree will create a new B-Tree instance with data persisted to backend storage upon commit.
+// If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
+// and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
+// the OpenBtree function.
+func NewBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		if ct.HandleReplicationRelatedError != nil {
+			return nil, fmt.Errorf("failed in NewBtree as transaction has replication enabled, use NewBtreeWithReplication instead")
+		}
+	}
+	so.DisableRegistryStoreFormatting = true
+	trans, _ := t.GetPhasedTransaction().(*common.Transaction)
+	sr := trans.GetStoreRepository().(*fs.StoreRepository)
+	so.BlobStoreBaseFolderPath = sr.GetStoresBaseFolder()
+	return common.NewBtree[TK, TV](ctx, so, t, comparer)
+}
+
+// OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
+func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		if ct.HandleReplicationRelatedError != nil {
+			return nil, fmt.Errorf("failed in OpenBtree as transaction has replication enabled, use OpenBtreeWithReplication instead")
+		}
+	}
+	return common.OpenBtree[TK, TV](ctx, name, t, comparer)
+}
+
+// NewBtreeWithReplication will (create! &) instantiate a B-tree that has SOP's file system based replication feature.
+func NewBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		if ct.HandleReplicationRelatedError == nil {
+			return nil, fmt.Errorf("failed in NewBtreeWithReplication as transaction has no replication, use NewBtree instead")
+		}
+	}
+	so.DisableRegistryStoreFormatting = true
+	so.DisableBlobStoreFormatting = true
+	return common.NewBtree[TK, TV](ctx, so, t, comparer)
+}
+
+// OpenBtreeWithReplication will (open &) instantiate a B-tree that has SOP's file system based replication feature.
+func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		if ct.HandleReplicationRelatedError == nil {
+			return nil, fmt.Errorf("failed in OpenBtreeWithReplication as transaction has no replication, use OpenBtree instead")
+		}
+	}
+	return common.OpenBtree[TK, TV](ctx, name, t, comparer)
+}
+
 // Removes B-Tree with a given name from the backend storage. This involves dropping tables
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
@@ -38,53 +87,36 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 	return storeRepository.Remove(ctx, name)
 }
 
-// OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
-func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
-	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
-		if ct.HandleReplicationRelatedError != nil {
-			return nil, fmt.Errorf("failed in OpenBtree as transaction has replication enabled, use OpenBtreeWithReplication instead")
+// Reinstated the failed passive targets by delegating call to the Replication Tracker.
+func ReinstateFailedTargets(ctx context.Context, storesFolders []string, erasureConfig map[string]fs.ErasureCodingConfig) error {
+	if erasureConfig == nil {
+		erasureConfig = fs.GetGlobalErasureConfig()
+	}
+	if storesFolders == nil && len(erasureConfig) > 0 {
+		storesFolders = make([]string, 0, 2)
+		defaultEntry := erasureConfig[""]
+		if len(defaultEntry.BaseFolderPathsAcrossDrives) >= 2 {
+			storesFolders = append(storesFolders, defaultEntry.BaseFolderPathsAcrossDrives[0])
+			storesFolders = append(storesFolders, defaultEntry.BaseFolderPathsAcrossDrives[1])
+		} else {
+			for _, v := range erasureConfig {
+				if len(v.BaseFolderPathsAcrossDrives) >= 2 {
+					storesFolders = append(storesFolders, v.BaseFolderPathsAcrossDrives[0])
+					storesFolders = append(storesFolders, v.BaseFolderPathsAcrossDrives[1])
+					break
+				}
+			}
 		}
 	}
-	return common.OpenBtree[TK, TV](ctx, name, t, comparer)
-}
+	if len(storesFolders) < 2 {
+		return fmt.Errorf("'storeFolders' need to be array of two strings. 'was not able to reuse anything from 'erasureConfig'")
+	}
 
-// NewBtree will create a new B-Tree instance with data persisted to backend storage upon commit.
-// If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
-// and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
-// the OpenBtree function.
-func NewBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
-	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
-		if ct.HandleReplicationRelatedError != nil {
-			return nil, fmt.Errorf("failed in NewBtree as transaction has replication enabled, use NewBtreeWithReplication instead")
-		}
+	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, redis.NewClient())
+	if err != nil {
+		return err
 	}
-	so.DisableRegistryStoreFormatting = true
-	trans, _ := t.GetPhasedTransaction().(*common.Transaction)
-	sr := trans.GetStoreRepository().(*fs.StoreRepository)
-	so.BlobStoreBaseFolderPath = sr.GetStoresBaseFolder()
-	return common.NewBtree[TK, TV](ctx, so, t, comparer)
-}
-
-// OpenBtreeWithReplication will (open &) instantiate a B-tree that has SOP's file system based replication feature.
-func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
-	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
-		if ct.HandleReplicationRelatedError == nil {
-			return nil, fmt.Errorf("failed in OpenBtreeWithReplication as transaction has no replication, use OpenBtree instead")
-		}
-	}
-	return common.OpenBtree[TK, TV](ctx, name, t, comparer)
-}
-
-// NewBtreeWithReplication will (create! &) instantiate a B-tree that has SOP's file system based replication feature.
-func NewBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
-	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
-		if ct.HandleReplicationRelatedError == nil {
-			return nil, fmt.Errorf("failed in NewBtreeWithReplication as transaction has no replication, use NewBtree instead")
-		}
-	}
-	so.DisableRegistryStoreFormatting = true
-	so.DisableBlobStoreFormatting = true
-	return common.NewBtree[TK, TV](ctx, so, t, comparer)
+	return rt.ReinstateFailedTargets(ctx)
 }
 
 // Streaming Data Store related.
