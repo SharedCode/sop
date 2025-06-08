@@ -220,10 +220,10 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 
 	// Open the hashmaps on the passive destination(s). Write the nodes' handle(s) on each.
 	// Close the hashmaps files.
-	af := r.replicationTracker.ActiveFolderToggle
+	af := r.replicationTracker.ActiveFolderToggler
 
 	// Force tracker to treat passive as active folder so replication can write to the passive destinations.
-	r.replicationTracker.ActiveFolderToggle = !af
+	r.replicationTracker.ActiveFolderToggler = !af
 	rm := newRegistryMap(true, r.hashmap.hashmap.hashModValue, r.replicationTracker, r.l2Cache)
 
 	for i := range newRootNodesHandles {
@@ -260,7 +260,7 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 	rm.close()
 
 	// Restore to the proper active destination(s).
-	r.replicationTracker.ActiveFolderToggle = af
+	r.replicationTracker.ActiveFolderToggler = af
 }
 
 func convertToKvp(handles []sop.Handle) []sop.KeyValuePair[sop.UUID, sop.Handle] {

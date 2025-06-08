@@ -166,27 +166,6 @@ func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobI
 	return dr.DecodedData, nil
 }
 
-func isShardsEmpty(shards [][]byte) bool {
-	for i := range shards {
-		if shards[i] != nil {
-			return false
-		}
-	}
-	return true
-}
-
-func (b *blobStoreWithEC) getBaseFolderPathsAndErasureConfig(blobTable string) ([]string, *erasure.Erasure) {
-	// Get the blob table specific erasure configuration.
-	baseFolderPathsAcrossDrives := b.baseFolderPathsAcrossDrives[blobTable]
-	erasure := b.erasure[blobTable]
-
-	if baseFolderPathsAcrossDrives == nil {
-		baseFolderPathsAcrossDrives = b.baseFolderPathsAcrossDrives[""]
-		erasure = b.erasure[""]
-	}
-	return baseFolderPathsAcrossDrives, erasure
-}
-
 func (b *blobStoreWithEC) Update(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	return b.Add(ctx, storesblobs)
 }
@@ -195,18 +174,105 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayloa
 	if len(storesblobs) == 0 {
 		return nil
 	}
-	if len(storesblobs) == 1 {
-		return b.writeBlob(ctx, storesblobs, 0)
-	}
 
-	// Sign up a job processor to parallelize blob writing.
 	trBlobs := sop.NewTaskRunner(ctx, maxThreadCount)
+
 	for i := range storesblobs {
 		index := i
+
 		trBlobs.Go(func() error {
-			return b.writeBlob(trBlobs.GetContext(), storesblobs, index)
+			// Get the blob table specific erasure configuration.
+			baseFolderPathsAcrossDrives, erasure := b.getBaseFolderPathsAndErasureConfig(storesblobs[index].BlobTable)
+			if baseFolderPathsAcrossDrives == nil {
+				err := fmt.Errorf("can't find Erasure Config setting for file %s", storesblobs[index].BlobTable)
+				log.Error(err.Error())
+				return err
+			}
+			var lastErr error
+
+			for _, blob := range storesblobs[index].Blobs {
+				ba := blob.Value
+				contentsSize := len(ba)
+
+				shards, err := erasure.Encode(ba)
+				if err != nil {
+					return err
+				}
+
+				// Spin up a job processor of shards count max threads.
+				trShards := sop.NewTaskRunner(trBlobs.GetContext(), -1)
+				ch := make(chan error, len(shards))
+
+				for i := range shards {
+					baseFolderPath := fmt.Sprintf("%s%c%s", baseFolderPathsAcrossDrives[i], os.PathSeparator, storesblobs[index].BlobTable)
+					blobKey := blob.Key
+					shardIndex := i
+
+					// Task WriteFile will add or replace existing file.
+					trShards.Go(func() error {
+						fp := b.toFilePath(baseFolderPath, blobKey)
+						if !b.fileIO.Exists(fp) {
+							if err := b.fileIO.MkdirAll(fp, permission); err != nil {
+								ch <- err
+								return nil
+							}
+						}
+
+						log.Debug(fmt.Sprintf("writing to file %s", fp))
+
+						fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), shardIndex)
+
+						md := erasure.ComputeShardMetadata(contentsSize, shards, shardIndex)
+						buf := make([]byte, len(md)+len(shards[shardIndex]))
+
+						// Prefix the shard w/ metadata followed by the shard.
+						copy(buf, md)
+						copy(buf[len(md):], shards[shardIndex])
+
+						if err := b.fileIO.WriteFile(fn, buf, permission); err != nil {
+							ch <- err
+							// Return nil so we don't generate an error, NOT until we exceed write error beyond parity count.
+							return nil
+						}
+						return nil
+					})
+				}
+				// Keep the last error and return that, enough to rollback the transaction.
+				if err := trShards.Wait(); err != nil {
+					close(ch)
+					lastErr = err
+				} else {
+					c := 0
+					cont := true
+					for cont {
+						select {
+						case err, ok := <-ch:
+							if ok {
+								c++
+								lastErr = err
+							} else {
+								cont = false
+							}
+						default:
+							cont = false
+						}
+					}
+					close(ch)
+					// Short circuit to cause transaction rollback if drive failures are untolerable.
+					if c > erasure.ParityShardsCount {
+						return lastErr
+					} else {
+						if lastErr != nil {
+							log.Warn(fmt.Sprintf("error writing to a drive but EC tolerates it, details: %v", lastErr))
+							lastErr = nil
+						}
+					}
+				}
+			}
+			return lastErr
 		})
 	}
+
 	return trBlobs.Wait()
 }
 
@@ -258,94 +324,23 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.Blobs
 	return lastErr
 }
 
-func (b *blobStoreWithEC) writeBlob(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]], index int) error {
+func isShardsEmpty(shards [][]byte) bool {
+	for i := range shards {
+		if shards[i] != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *blobStoreWithEC) getBaseFolderPathsAndErasureConfig(blobTable string) ([]string, *erasure.Erasure) {
 	// Get the blob table specific erasure configuration.
-	baseFolderPathsAcrossDrives, erasure := b.getBaseFolderPathsAndErasureConfig(storesblobs[index].BlobTable)
+	baseFolderPathsAcrossDrives := b.baseFolderPathsAcrossDrives[blobTable]
+	erasure := b.erasure[blobTable]
+
 	if baseFolderPathsAcrossDrives == nil {
-		err := fmt.Errorf("can't find Erasure Config setting for file %s", storesblobs[index].BlobTable)
-		log.Error(err.Error())
-		return err
+		baseFolderPathsAcrossDrives = b.baseFolderPathsAcrossDrives[""]
+		erasure = b.erasure[""]
 	}
-	var lastErr error
-
-	for _, blob := range storesblobs[index].Blobs {
-		ba := blob.Value
-		contentsSize := len(ba)
-
-		shards, err := erasure.Encode(ba)
-		if err != nil {
-			return err
-		}
-
-		// Spin up a job processor of shards count max threads.
-		trShards := sop.NewTaskRunner(ctx, -1)
-		ch := make(chan error, len(shards))
-
-		for i := range shards {
-			baseFolderPath := fmt.Sprintf("%s%c%s", baseFolderPathsAcrossDrives[i], os.PathSeparator, storesblobs[index].BlobTable)
-			blobKey := blob.Key
-			shardIndex := i
-
-			// Task WriteFile will add or replace existing file.
-			trShards.Go(func() error {
-				fp := b.toFilePath(baseFolderPath, blobKey)
-				if !b.fileIO.Exists(fp) {
-					if err := b.fileIO.MkdirAll(fp, permission); err != nil {
-						ch <- err
-						return nil
-					}
-				}
-
-				log.Debug(fmt.Sprintf("writing to file %s", fp))
-
-				fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), shardIndex)
-
-				md := erasure.ComputeShardMetadata(contentsSize, shards, shardIndex)
-				buf := make([]byte, len(md)+len(shards[shardIndex]))
-
-				// Prefix the shard w/ metadata followed by the shard.
-				copy(buf, md)
-				copy(buf[len(md):], shards[shardIndex])
-
-				if err := b.fileIO.WriteFile(fn, buf, permission); err != nil {
-					ch <- err
-					// Return nil so we don't generate an error, NOT until we exceed write error beyond parity count.
-					return nil
-				}
-				return nil
-			})
-		}
-		// Keep the last error and return that, enough to rollback the transaction.
-		if err := trShards.Wait(); err != nil {
-			close(ch)
-			lastErr = err
-		} else {
-			c := 0
-			cont := true
-			for cont {
-				select {
-				case err, ok := <-ch:
-					if ok {
-						c++
-						lastErr = err
-					} else {
-						cont = false
-					}
-				default:
-					cont = false
-				}
-			}
-			close(ch)
-			// Short circuit to cause transaction rollback if drive failures are untolerable.
-			if c > erasure.ParityShardsCount {
-				return lastErr
-			} else {
-				if lastErr != nil {
-					log.Warn(fmt.Sprintf("error writing to a drive but EC tolerates it, details: %v", lastErr))
-					lastErr = nil
-				}
-			}
-		}
-	}
-	return lastErr
+	return baseFolderPathsAcrossDrives, erasure
 }
