@@ -121,7 +121,7 @@ func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context) error {
 	if err := r.startLoggingCommitChanges(ctx); err != nil {
 		return err
 	}
-	tr := sop.NewTaskRunner(ctx, 2)
+	tr := sop.NewTaskRunner(ctx, -1)
 	tr.Go(func() error {
 		return r.copyStoreRepositories(tr.GetContext())
 	})

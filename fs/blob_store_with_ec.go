@@ -200,7 +200,7 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayloa
 	}
 
 	// Sign up a job processor to parallelize blob writing.
-	trBlobs := sop.NewTaskRunner(ctx, len(storesblobs))
+	trBlobs := sop.NewTaskRunner(ctx, maxThreadCount)
 	for i := range storesblobs {
 		index := i
 		trBlobs.Go(func() error {
@@ -278,7 +278,7 @@ func (b *blobStoreWithEC) writeBlob(ctx context.Context, storesblobs []sop.Blobs
 		}
 
 		// Spin up a job processor of shards count max threads.
-		trShards := sop.NewTaskRunner(ctx, len(shards))
+		trShards := sop.NewTaskRunner(ctx, -1)
 		ch := make(chan error, len(shards))
 
 		for i := range shards {
