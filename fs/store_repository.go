@@ -32,7 +32,7 @@ const (
 )
 
 // NewStoreRepository manages the StoreInfo in a File System.
-func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cache sop.Cache) (sop.StoreRepository, error) {
+func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cache sop.Cache) (*StoreRepository, error) {
 	if rt.replicate && len(rt.storesBaseFolders) != 2 {
 		return nil, fmt.Errorf("'storesBaseFolders' needs to be exactly two elements if 'replicate' parameter is true")
 	}
