@@ -30,7 +30,7 @@ const (
 )
 
 // NewRegistry instantiates a new Registry that manages handle records in a file using hashmap on disk.
-func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, l2Cache sop.Cache) Registry {
+func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, l2Cache sop.Cache) *registryOnDisk {
 	return &registryOnDisk{
 		hashmap:            newRegistryMap(readWrite, hashModValue, rt, l2Cache),
 		replicationTracker: rt,
@@ -40,7 +40,7 @@ func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, l2Cac
 }
 
 // Close all opened file handles.
-func (r registryOnDisk) Close() error {
+func (r *registryOnDisk) Close() error {
 	return r.hashmap.close()
 }
 
