@@ -121,16 +121,24 @@ func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context) error {
 	if err := r.startLoggingCommitChanges(ctx); err != nil {
 		return err
 	}
-	if err := r.copyStoreRepositories(ctx); err != nil {
-		return err
-	}
-	if err := r.copyRegistries(ctx); err != nil {
+	tr := sop.NewTaskRunner(ctx, 2)
+	tr.Go(func() error {
+		return r.copyStoreRepositories(tr.GetContext())
+	})
+	tr.Go(func() error {
+		return r.copyRegistries(tr.GetContext())
+	})
+	if err := tr.Wait(); err != nil {
 		return err
 	}
 	if err := r.fastForward(ctx); err != nil {
 		return err
 	}
-	return r.turnOnReplication(ctx)
+	if err := r.turnOnReplication(ctx); err != nil {
+		return err
+	}
+	// Check fast forward log one last time.
+	return r.fastForward(ctx)
 }
 
 func (r *replicationTracker) startLoggingCommitChanges(ctx context.Context) error {

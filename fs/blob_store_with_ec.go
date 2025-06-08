@@ -204,7 +204,7 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayloa
 	for i := range storesblobs {
 		index := i
 		trBlobs.Go(func() error {
-			return b.writeBlob(ctx, storesblobs, index)
+			return b.writeBlob(trBlobs.GetContext(), storesblobs, index)
 		})
 	}
 	return trBlobs.Wait()

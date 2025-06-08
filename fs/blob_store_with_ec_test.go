@@ -290,7 +290,7 @@ func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
 		fileIO.errorOnSuffixNumber2 = -1
 		id := sop.NewUUID()
 		eba := []byte{1, 2, 3}
-		bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+		bs.Add(tr.GetContext(), []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 			{
 				BlobTable: "b1",
 				Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
@@ -303,7 +303,7 @@ func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
 
 		id2 := sop.NewUUID()
 		eba2 := []byte{1, 2, 3}
-		bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
+		bs.Add(tr.GetContext(), []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 			{
 				BlobTable: "b1",
 				Blobs: []sop.KeyValuePair[sop.UUID, []byte]{
@@ -315,7 +315,7 @@ func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
 			}})
 
 		fileIO.errorOnSuffixNumber = 1
-		ba, _ := bs.GetOne(ctx, "b1", id)
+		ba, _ := bs.GetOne(tr.GetContext(), "b1", id)
 		if !bytes.Equal(ba, eba) {
 			err := fmt.Errorf("got %v, expected %v", ba, eba)
 			return err

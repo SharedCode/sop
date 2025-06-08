@@ -132,9 +132,14 @@ func ReinstateFailedDrives(ctx context.Context, storesFolders []string, erasureC
 
 	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, redis.NewClient())
 	if err != nil {
+		log.Error(fmt.Sprintf("failed instantiating Replication Tracker, details: %v", err))
 		return err
 	}
-	return rt.ReinstateFailedDrives(ctx)
+	if err := rt.ReinstateFailedDrives(ctx); err != nil {
+		log.Error(fmt.Sprintf("failed reinstating failed drives, details: %v", err))
+		return err
+	}
+	return nil
 }
 
 // Streaming Data Store related.
