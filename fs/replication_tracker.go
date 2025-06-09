@@ -193,13 +193,23 @@ func (r *replicationTracker) failover(ctx context.Context) error {
 	return nil
 }
 
-func (r *replicationTracker) logCommitChanges(ctx context.Context, tid sop.UUID, payload []byte) {
+func (r *replicationTracker) logCommitChanges(tid sop.UUID, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
 	if !r.LogCommitChanges {
 		return
 	}
 	fn := r.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", commitChangesLogFolder, os.PathSeparator, tid.String(), logFileExtension))
 
 	fio := NewDefaultFileIO()
+
+	// Payload conversion has to happen here so the payload unpack and operation on it can be done on this file as well.
+	payload, _ := encoding.DefaultMarshaler.Marshal(sop.Tuple[[]sop.StoreInfo, [][]sop.RegistryPayload[sop.Handle]]{
+		First: stores,
+		Second: [][]sop.RegistryPayload[sop.Handle]{
+			newRootNodesHandles, addedNodesHandles,
+			updatedNodesHandles, removedNodesHandles,
+		},
+	})
+
 	fio.WriteFile(fn, payload, permission)
 }
 

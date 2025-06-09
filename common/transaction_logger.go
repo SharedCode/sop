@@ -61,14 +61,7 @@ func (tl *transactionLog) logCommitChanges(ctx context.Context, stores []sop.Sto
 	if transLog, ok := tl.logger.(*fs.TransactionLog); !ok {
 		return
 	} else {
-		payload := toByteArray(sop.Tuple[[]sop.StoreInfo, [][]sop.RegistryPayload[sop.Handle]]{
-			First: stores,
-			Second: [][]sop.RegistryPayload[sop.Handle]{
-				newRootNodesHandles, addedNodesHandles,
-				updatedNodesHandles, removedNodesHandles,
-			},
-		})
-		transLog.LogCommitChanges(ctx, payload)
+		transLog.LogCommitChanges(ctx, stores, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles)
 	}
 }
 

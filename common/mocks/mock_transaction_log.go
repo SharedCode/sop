@@ -131,5 +131,5 @@ func (tl *MockTransactionLog) NewUUID() sop.UUID {
 	return sop.NewUUID()
 }
 
-func (tl *MockTransactionLog) LogCommitChanges(ctx context.Context, payload []byte) {
+func (tl *MockTransactionLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
 }
