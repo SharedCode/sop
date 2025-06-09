@@ -49,7 +49,7 @@ const (
 	lockFileRegionDuration     = time.Duration(5 * time.Minute)
 	idNotFoundErr              = "unable to find the item with id"
 
-	registryFileExtension = "reg"
+	registryFileExtension = ".reg"
 
 	// 250, should generate 1MB file segment. Formula: 250 X 4096 = 1MB
 	// Given a 50 slot size per node, should be able to manage 825,000 B-Tree items (key/value pairs).
@@ -94,7 +94,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 			return result, fmt.Errorf("reached the maximum numer of segment files (1000), can't create another one")
 		}
 
-		segmentFilename := fmt.Sprintf("%s-%d.%s", filename, i, registryFileExtension)
+		segmentFilename := fmt.Sprintf("%s-%d%s", filename, i, registryFileExtension)
 
 		if i > 1 {
 			log.Debug(fmt.Sprintf("checking segment file %s", segmentFilename))
