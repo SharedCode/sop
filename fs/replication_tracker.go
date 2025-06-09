@@ -43,6 +43,7 @@ const (
 	replicationStatusFilename         = "replstat.txt"
 	replicationStatusCacheKey         = "Rreplstat"
 	replicationStatusCacheTTLDuration = 5 * time.Minute
+	commitChangesLogFolder            = "commitlogs"
 )
 
 var globalReplicationDetails *replicationTrackedDetails
@@ -190,6 +191,16 @@ func (r *replicationTracker) failover(ctx context.Context) error {
 
 	log.Info(fmt.Sprintf("failover event occurred, newly active folder is, %s", r.getActiveBaseFolder()))
 	return nil
+}
+
+func (r *replicationTracker) logCommitChanges(ctx context.Context, tid sop.UUID, payload []byte) {
+	if !r.LogCommitChanges {
+		return
+	}
+	fn := r.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", commitChangesLogFolder, os.PathSeparator, tid.String(), logFileExtension))
+
+	fio := NewDefaultFileIO()
+	fio.WriteFile(fn, payload, permission)
 }
 
 func (r *replicationTracker) getActiveBaseFolder() string {
