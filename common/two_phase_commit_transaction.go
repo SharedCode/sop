@@ -473,9 +473,23 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 	}
 
 	// Replicate to passive target paths.
-	t.registry.Replicate(ctx, t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles)
-	t.storeRepository.Replicate(ctx, t.updatedStoresInfo)
+	tr := sop.NewTaskRunner(ctx, -1)
+	tr.Go(func() error {
+		t.registry.Replicate(tr.GetContext(), t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles)
+		return nil
+	})
+	tr.Go(func() error {
+		t.storeRepository.Replicate(tr.GetContext(), t.updatedStoresInfo)
+		return nil
+	})
+	tr.Go(func() error {
+		t.logger.logCommitChanges(tr.GetContext(), t.updatedStoresInfo, t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles)
+		return nil
+	})
 	t.populateMru(ctx)
+
+	// Wait before proceeding to let replication to complete.
+	tr.Wait()
 
 	// Let other transactions get a lock on these updated & removed nodes' keys we've locked.
 	t.unlockNodesKeys(ctx)

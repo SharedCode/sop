@@ -53,6 +53,14 @@ func (tl *transactionLog) setNewTID() {
 	tl.transactionID = tl.logger.NewUUID()
 }
 
+// Log the commited changes within the transaction. Log it in a "transaction commit" log file.
+// This log file is different than where TransactionLog normally logs the transaction logs.
+func (tl *transactionLog) logCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles,
+	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
+	tl.logger.LogCommitChanges(ctx, stores, newRootNodesHandles, addedNodesHandles,
+		updatedNodesHandles, removedNodesHandles)
+}
+
 // Log the about to be committed function state.
 func (tl *transactionLog) log(ctx context.Context, f commitFunction, payload []byte) error {
 	tl.committedState = f

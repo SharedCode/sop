@@ -101,6 +101,11 @@ type TransactionLog interface {
 	// Implement to generate a new UUID. Cassandra transaction logging uses gocql.UUIDFromTime, SOP in file system
 	// should just use the general sop.NewUUID function which currently uses google's uuid package.
 	NewUUID() UUID
+
+	// Log commit changes to its own log file separate than the rest of transaction logs.
+	// This is a special log file only used during "reinstate" of drives back for replication.
+	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles,
+		updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle])
 }
 
 // StoreRepository specifies CRUD methods for StoreInfo (storage &) management.

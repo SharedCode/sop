@@ -130,3 +130,7 @@ func (tl *MockTransactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 func (tl *MockTransactionLog) NewUUID() sop.UUID {
 	return sop.NewUUID()
 }
+
+func (tl *MockTransactionLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles,
+	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
+}
