@@ -16,8 +16,8 @@ import (
 
 const (
 	// DateHourLayout format mask string.
-	DateHourLayout = "2006-01-02T15"
-	logFileSuffix  = "log"
+	DateHourLayout   = "2006-01-02T15"
+	logFileExtension = ".log"
 )
 
 type transactionLog struct {
@@ -169,7 +169,7 @@ func (tl *transactionLog) getOne() (string, sop.UUID, error) {
 		ft, _ := time.Parse(DateHourLayout, fts)
 		if cappedHour.Compare(ft) >= 0 {
 			filename := files[i].Name()
-			tid, err := sop.ParseUUID(filename[0 : len(filename)-(len(logFileSuffix)+1)])
+			tid, err := sop.ParseUUID(filename[0 : len(filename)-len(logFileExtension)])
 			if err != nil {
 				continue
 			}
@@ -215,7 +215,7 @@ func (tl *transactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, 
 }
 
 func (tl *transactionLog) format(tid sop.UUID) string {
-	return tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s.%s", tid.String(), logFileSuffix))
+	return tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), logFileExtension))
 }
 
 // Directory files' reader.
@@ -251,7 +251,7 @@ func getFilesSortedByModifiedTime(directoryPath string) ([]FileInfoWithModTime, 
 	fileInfoWithTimes := make([]FileInfoWithModTime, 0, len(files))
 	for _, file := range files {
 		inf, _ := file.Info()
-		if strings.HasSuffix(file.Name(), fmt.Sprintf(".%s", logFileSuffix)) {
+		if strings.HasSuffix(file.Name(), logFileExtension) {
 			fileInfoWithTimes = append(fileInfoWithTimes, FileInfoWithModTime{file, inf.ModTime()})
 		}
 	}

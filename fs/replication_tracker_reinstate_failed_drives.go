@@ -11,12 +11,11 @@ import (
 // Details:
 //   - Tell transactions to start logging commit changes
 //   - Copy the registries & storeRepositories files to the new drives
-//   - Once done, switch over the entire cluster into "InDeltaSync" mode
 //   - Using all the transactions' commit logs' generated while doing the 2nd step above,
 //     fast forward registries & storeRepositories files
 //   - Update the L2 cache copy of global replication status to turn back on, the replication
 //     to the passive targets
-//   - Turn off the "InDeltaSync" mode to switch over to normal mode
+//   - Run Fast Forward one more time to ensure there are no "remnants" commit log file(s), race condition case
 func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context) error {
 	if !r.replicate {
 		return fmt.Errorf("replicationTracker.replicate flag is off, ReinstateFaileDrives is valid only if this is on")
