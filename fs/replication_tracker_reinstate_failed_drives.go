@@ -128,7 +128,6 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 func (r *replicationTracker) turnOnReplication(ctx context.Context) error {
 	globalReplicationDetails.FailedToReplicate = false
 	globalReplicationDetails.LogCommitChanges = false
-	//globalReplicationDetails.ActiveFolderToggler = !globalReplicationDetails.ActiveFolderToggler
 
 	r.replicationTrackedDetails = *globalReplicationDetails
 	// Update the replication status details.
