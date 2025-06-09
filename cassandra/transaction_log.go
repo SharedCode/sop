@@ -161,9 +161,7 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 
 // Log commit changes to its own log file separate than the rest of transaction logs.
 // This is a special log file only used during "reinstate" of drives back for replication.
-func (tl *transactionLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles,
-	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
-}
+func (tl *transactionLog) LogCommitChanges(ctx context.Context, payload []byte) {}
 
 func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error) {
 	mh, _ := time.Parse(DateHourLayout, Now().Format(DateHourLayout))

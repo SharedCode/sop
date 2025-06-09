@@ -20,7 +20,7 @@ const (
 	logFileExtension = ".log"
 )
 
-type transactionLog struct {
+type TransactionLog struct {
 	hourLockKey        *sop.LockKey
 	cache              sop.Cache
 	replicationTracker *replicationTracker
@@ -33,8 +33,8 @@ type transactionLog struct {
 var ageLimit float64 = 70
 
 // NewTransactionLog instantiates a new TransactionLog instance.
-func NewTransactionLog(cache sop.Cache, rt *replicationTracker) sop.TransactionLog {
-	return &transactionLog{
+func NewTransactionLog(cache sop.Cache, rt *replicationTracker) *TransactionLog {
+	return &TransactionLog{
 		cache:              cache,
 		hourLockKey:        cache.CreateLockKeys([]string{"HBP"})[0],
 		replicationTracker: rt,
@@ -42,7 +42,7 @@ func NewTransactionLog(cache sop.Cache, rt *replicationTracker) sop.TransactionL
 }
 
 // Add transaction log w/ payload blob to the transaction log file.
-func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+func (tl *TransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
 	if tl.file == nil {
 		tl.tid = tid
 		filename := tl.format(tid)
@@ -70,7 +70,7 @@ func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction 
 }
 
 // Remove will delete transaction log(t_log) records given a transaction ID(tid).
-func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
+func (tl *TransactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 	if tl.tid == tid && tl.file != nil {
 		tl.file.Close()
 		tl.file = nil
@@ -79,12 +79,12 @@ func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 }
 
 // NewUUID generates a new sop UUID, currently a pass-through to google's uuid package.
-func (tl *transactionLog) NewUUID() sop.UUID {
+func (tl *TransactionLog) NewUUID() sop.UUID {
 	return sop.NewUUID()
 }
 
 // GetOne fetches an expired Transaction ID(TID), the hour it was created in and transaction logs for this TID.
-func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
+func (tl *TransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
 	duration := time.Duration(7 * time.Hour)
 
 	hlk := []*sop.LockKey{tl.hourLockKey}
@@ -117,7 +117,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 	return sop.UUID(tid), hour, r, nil
 }
 
-func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
+func (tl *TransactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
 	if hour == "" {
 		return sop.NilUUID, nil, nil
 	}
@@ -154,17 +154,11 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 
 // Log commit changes to its own log file separate than the rest of transaction logs.
 // This is a special log file only used during "reinstate" of drives back for replication.
-func (tl *transactionLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles,
-	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
-	if !tl.replicationTracker.LogCommitChanges {
-		return
-	}
-
-	// TODO: Log the parameters' contents to the commit changes log file.
-
+func (tl *TransactionLog) LogCommitChanges(ctx context.Context, payload []byte) {
+	tl.replicationTracker.logCommitChanges(ctx, tl.tid, payload)
 }
 
-func (tl *transactionLog) getOne() (string, sop.UUID, error) {
+func (tl *TransactionLog) getOne() (string, sop.UUID, error) {
 
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 	cappedHour := mh.Add(-time.Duration(time.Duration(ageLimit) * time.Minute))
@@ -194,7 +188,7 @@ func (tl *transactionLog) getOne() (string, sop.UUID, error) {
 	return "", sop.NilUUID, nil
 }
 
-func (tl *transactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
+func (tl *TransactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
 
 	filename := tl.format(tid)
 	file, err := os.Open(filename)
@@ -226,7 +220,7 @@ func (tl *transactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, 
 	return r, nil
 }
 
-func (tl *transactionLog) format(tid sop.UUID) string {
+func (tl *TransactionLog) format(tid sop.UUID) string {
 	return tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), logFileExtension))
 }
 

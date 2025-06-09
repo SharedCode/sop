@@ -2,11 +2,12 @@ package common
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	log "log/slog"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/encoding"
+	"github.com/SharedCode/sop/fs"
 )
 
 type commitFunction int
@@ -57,8 +58,18 @@ func (tl *transactionLog) setNewTID() {
 // This log file is different than where TransactionLog normally logs the transaction logs.
 func (tl *transactionLog) logCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles,
 	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
-	tl.logger.LogCommitChanges(ctx, stores, newRootNodesHandles, addedNodesHandles,
-		updatedNodesHandles, removedNodesHandles)
+	if transLog, ok := tl.logger.(*fs.TransactionLog); !ok {
+		return
+	} else {
+		payload := toByteArray(sop.Tuple[[]sop.StoreInfo, [][]sop.RegistryPayload[sop.Handle]]{
+			First: stores,
+			Second: [][]sop.RegistryPayload[sop.Handle]{
+				newRootNodesHandles, addedNodesHandles,
+				updatedNodesHandles, removedNodesHandles,
+			},
+		})
+		transLog.LogCommitChanges(ctx, payload)
+	}
 }
 
 // Log the about to be committed function state.
@@ -223,11 +234,11 @@ func toStruct[T any](obj []byte) T {
 	if obj == nil {
 		return t
 	}
-	json.Unmarshal(obj, &t)
+	encoding.DefaultMarshaler.Unmarshal(obj, &t)
 	return t
 }
 
 func toByteArray(obj interface{}) []byte {
-	ba, _ := json.Marshal(obj)
+	ba, _ := encoding.DefaultMarshaler.Marshal(obj)
 	return ba
 }
