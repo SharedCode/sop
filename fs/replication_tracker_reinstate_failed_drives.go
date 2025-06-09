@@ -77,17 +77,16 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 	}
 
 	fio := NewDefaultFileIO()
-	ms := NewManageStoreFolder(fio)
 
 	// Set to false the FailedToReplicate so we can issue a successful Replicate call on StoreRepository & Registry.
 	r.replicationTrackedDetails.FailedToReplicate = false
-	sr, err := NewStoreRepository(r, ms, r.l2Cache)
+	sr, err := NewStoreRepository(r, NewManageStoreFolder(fio), r.l2Cache)
 	if err != nil {
 		return err
 	}
 	reg := NewRegistry(true, registryHashModValue, r, r.l2Cache)
 	// Get the oldest first.
-	for i := 0; i < len(files); i++ {
+	for i := range files {
 		filename := files[i].Name()
 
 		ba, err := fio.ReadFile(filename)
