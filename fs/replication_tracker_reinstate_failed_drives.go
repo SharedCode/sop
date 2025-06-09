@@ -2,8 +2,7 @@ package fs
 
 import (
 	"context"
-
-	"github.com/SharedCode/sop"
+	"fmt"
 )
 
 // ReinstateFailedDrives can be invoked after replacing the failed drives so they can be synchronized with
@@ -19,18 +18,17 @@ import (
 //     to the passive targets
 //   - Turn off the "InDeltaSync" mode to switch over to normal mode
 func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context) error {
+	if !r.replicate {
+		return fmt.Errorf("replicationTracker.replicate flag is off, ReinstateFaileDrives is valid only if this is on")
+	}
+	if !r.replicationTrackedDetails.FailedToReplicate {
+		return fmt.Errorf("replicationTracker.FailedToReplicate is false, ReinstateFaileDrives is valid only if this is true")
+	}
 
 	if err := r.startLoggingCommitChanges(ctx); err != nil {
 		return err
 	}
-	tr := sop.NewTaskRunner(ctx, -1)
-	tr.Go(func() error {
-		return r.copyStoreRepositories(tr.GetContext())
-	})
-	tr.Go(func() error {
-		return r.copyRegistries(tr.GetContext())
-	})
-	if err := tr.Wait(); err != nil {
+	if err := r.copyStores(ctx); err != nil {
 		return err
 	}
 	if err := r.fastForward(ctx); err != nil {
@@ -52,15 +50,11 @@ func (r *replicationTracker) startLoggingCommitChanges(ctx context.Context) erro
 	return r.syncWithL2Cache(ctx, true)
 }
 
-func (r *replicationTracker) copyRegistries(ctx context.Context) error {
-	reg := NewRegistry(false, MinimumModValue, r, r.l2Cache)
-	return reg.CopyToPassiveFolders(ctx)
-}
-
-func (r *replicationTracker) copyStoreRepositories(ctx context.Context) error {
+func (r *replicationTracker) copyStores(ctx context.Context) error {
 	if sr, err := NewStoreRepository(r, nil, r.l2Cache); err != nil {
 		return err
 	} else {
+		// Copy Store Repositories & Registries to passive folders being reinstated for replication.
 		return sr.CopyToPassiveFolders(ctx)
 	}
 }
