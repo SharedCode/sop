@@ -7,7 +7,6 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
-	"github.com/SharedCode/sop/fs"
 )
 
 type commitFunction int
@@ -58,11 +57,7 @@ func (tl *transactionLog) setNewTID() {
 // This log file is different than where TransactionLog normally logs the transaction logs.
 func (tl *transactionLog) logCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles,
 	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) {
-	if transLog, ok := tl.logger.(*fs.TransactionLog); !ok {
-		return
-	} else {
-		transLog.LogCommitChanges(ctx, stores, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles)
-	}
+	tl.logger.LogCommitChanges(ctx, stores, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles)
 }
 
 // Log the about to be committed function state.
