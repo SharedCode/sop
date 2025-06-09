@@ -168,7 +168,8 @@ func (tl *TransactionLog) getOne() (string, sop.UUID, error) {
 		return "", sop.NilUUID, err
 	}
 
-	for i := len(files) - 1; i >= 0; i-- {
+	// Get the oldest first.
+	for i := 0; i < len(files); i++ {
 		// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
 		// gap ensures no issue due to overlapping.
 		fts := files[i].ModTime.Format(DateHourLayout)

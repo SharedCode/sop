@@ -12,6 +12,9 @@ type manageStoreFolder struct {
 
 // Manage store(s) folder.
 func NewManageStoreFolder(fileIO FileIO) sop.ManageStore {
+	if fileIO == nil {
+		fileIO = NewDefaultFileIO()
+	}
 	return &manageStoreFolder{
 		fileIO: fileIO,
 	}
