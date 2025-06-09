@@ -104,7 +104,7 @@ type TransactionLog interface {
 
 	// Log commit changes to its own log file separate than the rest of transaction logs.
 	// This is a special log file only used during "reinstate" of drives back for replication.
-	LogCommitChanges(ctx context.Context, payload []byte)
+	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle])
 }
 
 // StoreRepository specifies CRUD methods for StoreInfo (storage &) management.
