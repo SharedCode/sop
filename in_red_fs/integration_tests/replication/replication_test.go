@@ -70,7 +70,7 @@ func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 	}
 	trans.Begin()
 	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "repltable",
+		Name:                     "norepltable",
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 	}, trans, nil)
@@ -81,6 +81,14 @@ func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 	b3.Add(ctx, 1, "hello world")
 	if err := trans.Commit(ctx); err == nil {
 		t.Error("expected error but none was returned")
+		t.FailNow()
+	}
+}
+
+func Test_ReinstateDrive(t *testing.T) {
+	ctx := context.Background()
+	if err := in_red_fs.ReinstateFailedDrives(ctx, nil, nil, fs.MinimumModValue); err != nil {
+		t.Error(err)
 		t.FailNow()
 	}
 }

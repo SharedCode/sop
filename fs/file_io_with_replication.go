@@ -61,6 +61,11 @@ func (fio *fileIO) read(sourceFilename string) ([]byte, error) {
 	return fio.fio.ReadFile(filename)
 }
 
+func (fio *fileIO) remove(sourceFilename string) error {
+	filename := fio.replicationTracker.formatActiveFolderEntity(sourceFilename)
+	return fio.fio.Remove(filename)
+}
+
 func (fio *fileIO) createStore(folderName string) error {
 	folderPath := fio.replicationTracker.formatActiveFolderEntity(folderName)
 	err := fio.fio.MkdirAll(folderPath, permission)

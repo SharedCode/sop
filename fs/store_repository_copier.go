@@ -49,7 +49,7 @@ func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 				return err
 			}
 			// Write the store info.
-			ba, err := encoding.Marshal(store)
+			ba, err := encoding.Marshal(store[0])
 			if err != nil {
 				return err
 			}
