@@ -105,7 +105,7 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 // entry with at least two drive paths set, then will "win" as the stores base folders paths.
 //
 // Explicitly specifying it in storesFolders param is recommended.
-func ReinstateFailedDrives(ctx context.Context, storesFolders []string, erasureConfig map[string]fs.ErasureCodingConfig) error {
+func ReinstateFailedDrives(ctx context.Context, storesFolders []string, erasureConfig map[string]fs.ErasureCodingConfig, registryHashModValue int) error {
 	if erasureConfig == nil {
 		erasureConfig = fs.GetGlobalErasureConfig()
 	}
@@ -135,7 +135,7 @@ func ReinstateFailedDrives(ctx context.Context, storesFolders []string, erasureC
 		log.Error(fmt.Sprintf("failed instantiating Replication Tracker, details: %v", err))
 		return err
 	}
-	if err := rt.ReinstateFailedDrives(ctx); err != nil {
+	if err := rt.ReinstateFailedDrives(ctx, registryHashModValue); err != nil {
 		log.Error(fmt.Sprintf("failed reinstating failed drives, details: %v", err))
 		return err
 	}
