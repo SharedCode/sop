@@ -251,7 +251,7 @@ func (fis ByModTime) Less(i, j int) bool {
 // Reads a directory then returns the filenames sorted in descending order as driven by the files' modified time.
 func getFilesSortedByModifiedTime(directoryPath string) ([]FileInfoWithModTime, error) {
 	files, err := os.ReadDir(directoryPath)
-	if err != nil {
+	if err != nil && len(files) == 0 {
 		return nil, fmt.Errorf("error reading directory: %v", err)
 	}
 
@@ -265,5 +265,5 @@ func getFilesSortedByModifiedTime(directoryPath string) ([]FileInfoWithModTime, 
 
 	sort.Sort(ByModTime(fileInfoWithTimes))
 
-	return fileInfoWithTimes, nil
+	return fileInfoWithTimes, err
 }

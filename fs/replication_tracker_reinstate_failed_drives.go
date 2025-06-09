@@ -3,6 +3,7 @@ package fs
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
@@ -33,14 +34,20 @@ func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context, registry
 	if err := r.copyStores(ctx); err != nil {
 		return err
 	}
-	if err := r.fastForward(ctx, registryHashModValue); err != nil {
+	if _, err := r.fastForward(ctx, registryHashModValue); err != nil {
 		return err
 	}
 	if err := r.turnOnReplication(ctx); err != nil {
 		return err
 	}
 	// Check fast forward log one last time.
-	return r.fastForward(ctx, registryHashModValue)
+	for {
+		if fileFound, err := r.fastForward(ctx, registryHashModValue); err != nil {
+			return err
+		} else if !fileFound {
+			return nil
+		}
+	}
 }
 
 func (r *replicationTracker) startLoggingCommitChanges(ctx context.Context) error {
@@ -61,7 +68,7 @@ func (r *replicationTracker) copyStores(ctx context.Context) error {
 	}
 }
 
-func (r *replicationTracker) fastForward(ctx context.Context, registryHashModValue int) error {
+func (r *replicationTracker) fastForward(ctx context.Context, registryHashModValue int) (bool, error) {
 	// Read the transaction commit logs then sync the passive stores/registries w/ the values from active stores/regs.
 	//   - In case StoreRepository exists in target, use the StoreRepository timestamp to determine if target needs to get updated.
 	//     If missing in passive target then add one from active.
@@ -73,48 +80,55 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 	fn := r.formatActiveFolderEntity(commitChangesLogFolder)
 	files, err := getFilesSortedByModifiedTime(fn)
 	if err != nil {
-		return err
+		if files == nil {
+			return false, nil
+		}
+		return false, err
 	}
-
-	fio := NewDefaultFileIO()
 
 	// Set to false the FailedToReplicate so we can issue a successful Replicate call on StoreRepository & Registry.
 	r.replicationTrackedDetails.FailedToReplicate = false
-	sr, err := NewStoreRepository(r, NewManageStoreFolder(fio), r.l2Cache)
+	fio := NewDefaultFileIO()
+	ms := NewManageStoreFolder(fio)
+	sr, err := NewStoreRepository(r, ms, r.l2Cache)
 	if err != nil {
-		return err
+		return false, err
 	}
 	reg := NewRegistry(true, registryHashModValue, r, r.l2Cache)
+	var foundAndProcessed bool
 	// Get the oldest first.
 	for i := range files {
 		filename := files[i].Name()
+		foundAndProcessed = true
 
-		ba, err := fio.ReadFile(filename)
+		ffn := r.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", commitChangesLogFolder, os.PathSeparator, filename))
+		ba, err := fio.ReadFile(ffn)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		var logData sop.Tuple[[]sop.StoreInfo, [][]sop.RegistryPayload[sop.Handle]]
 
 		err = encoding.DefaultMarshaler.Unmarshal(ba, &logData)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		sr.Replicate(ctx, logData.First)
 		reg.Replicate(ctx, logData.Second[0], logData.Second[1], logData.Second[2], logData.Second[3])
 
-		if err := fio.Remove(filename); err != nil {
-			return err
+		if err := fio.Remove(ffn); err != nil {
+			return false, err
 		}
 	}
 
-	return nil
+	return foundAndProcessed, nil
 }
 
 func (r *replicationTracker) turnOnReplication(ctx context.Context) error {
 	globalReplicationDetails.FailedToReplicate = false
-	globalReplicationDetails.ActiveFolderToggler = !globalReplicationDetails.ActiveFolderToggler
+	globalReplicationDetails.LogCommitChanges = false
+	//globalReplicationDetails.ActiveFolderToggler = !globalReplicationDetails.ActiveFolderToggler
 
 	r.replicationTrackedDetails = *globalReplicationDetails
 	// Update the replication status details.

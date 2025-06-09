@@ -85,7 +85,7 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 	if !ns.IsCompatible(stores[0]) {
 		trans.Rollback(ctx, nil)
 		// Recommend to use the OpenBtree function to open it.
-		return nil, fmt.Errorf("B-Tree '%s' exists, please use OpenBtree to open & create an instance of it", si.Name)
+		return nil, fmt.Errorf("B-Tree '%s' exists & has different configuration, please use OpenBtree to open & create an instance of it", si.Name)
 	}
 	ns = &stores[0]
 	return newBtree[TK, TV](ctx, ns, trans, comparer)
