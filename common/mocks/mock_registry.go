@@ -69,5 +69,6 @@ func (v *Mock_vid_registry) Remove(ctx context.Context, storesLids []sop.Registr
 }
 
 // Mock does NOT replicate.
-func (v *Mock_vid_registry) Replicate(ctx context.Context, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles []sop.RegistryPayload[sop.Handle]) {
+func (v *Mock_vid_registry) Replicate(ctx context.Context, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles []sop.RegistryPayload[sop.Handle]) error {
+	return nil
 }

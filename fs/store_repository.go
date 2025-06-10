@@ -383,13 +383,13 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 }
 
 // Replicate the updates on stores to the passive target paths.
-func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo) {
+func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo) error {
 
 	if !sr.replicationTracker.replicate || sr.replicationTracker.FailedToReplicate {
 		log.Debug(fmt.Sprintf("replicate %v, FailedToReplicate %v, current target %s",
 			sr.replicationTracker.replicate, sr.replicationTracker.FailedToReplicate,
 			sr.replicationTracker.getActiveBaseFolder()))
-		return
+		return nil
 	}
 
 	for i := range stores {
@@ -398,7 +398,7 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 		if err != nil {
 			// For now, 'just log if store marshal fails, it is not supposed to happen.
 			log.Error(fmt.Sprintf("storeRepository.Replicate failed, error Marshal of store '%s', details: %v", stores[i].Name, err))
-			return
+			return err
 		}
 		// When store is being written and it failed, we need to handle whether to turn off writing to the replication's passive destination
 		// because if will break synchronization from here on out, thus, better to just log then turn off replication altogether, until cleared
@@ -406,9 +406,11 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 		filename := sr.replicationTracker.formatPassiveFolderEntity(fmt.Sprintf("%s%c%s", stores[i].Name, os.PathSeparator, storeInfoFilename))
 		if err := sr.fileIO.WriteFile(filename, ba, permission); err != nil {
 			log.Error(fmt.Sprintf("storeRepository.Replicate failed, error writing store '%s' (passive), details: %v", filename, err))
-			return
+			return err
 		}
 	}
+
+	return nil
 }
 
 // Returns the stores' base folder path.

@@ -365,4 +365,6 @@ func (sr *storeRepository) RemoveStore(ctx context.Context, blobStoreName string
 }
 
 // Cassandra StoreRepository table already benefits from Cassandra replication feature, do nothing here.
-func (sr *storeRepository) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) {}
+func (sr *storeRepository) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) error {
+	return nil
+}

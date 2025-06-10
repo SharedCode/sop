@@ -255,7 +255,8 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 }
 
 // Cassandra already provides replication for the registry tables, no need to do anything here.
-func (v *registry) Replicate(ctx context.Context, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles []sop.RegistryPayload[sop.Handle]) {
+func (v *registry) Replicate(ctx context.Context, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles []sop.RegistryPayload[sop.Handle]) error {
+	return nil
 }
 
 func convertToKvp(handles []sop.Handle) []sop.KeyValuePair[sop.UUID, sop.Handle] {

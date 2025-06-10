@@ -43,7 +43,7 @@ type Registry interface {
 	// Implement to write to do the replication of data to passive target paths.
 	// This will be invoked after the transaction got committed to allow the registry to
 	// copy the files or portion of the files that were updated during the transaction.
-	Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle])
+	Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
 }
 
 // ManageStore specifies the methods used to manage the Store(s) container.
@@ -104,7 +104,7 @@ type TransactionLog interface {
 
 	// Log commit changes to its own log file separate than the rest of transaction logs.
 	// This is a special log file only used during "reinstate" of drives back for replication.
-	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle])
+	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
 }
 
 // StoreRepository specifies CRUD methods for StoreInfo (storage &) management.
@@ -126,7 +126,7 @@ type StoreRepository interface {
 	// Implement to write to do the replication of data to passive target paths.
 	// This will be invoked after the transaction got committed to allow the StoreRepository to
 	// copy the files or portion of the files that were updated during the transaction.
-	Replicate(context.Context, []StoreInfo)
+	Replicate(context.Context, []StoreInfo) error
 }
 
 // KeyValue Store Item Action Response has the payload and the error, if in case an error occurred while doing CRUD operation.
