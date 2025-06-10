@@ -66,7 +66,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 				break
 			} else if err != nil {
 				// Unlock the sector just in case it can "get through", before return.
-				hm.unlockFileBlockRegion(ctx, dio, blockOffset, lk)
+				hm.unlockFileBlockRegion(ctx, lk)
 				return err
 			}
 		}
@@ -83,7 +83,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 
 	// Read the block file region data.
 	if n, err := dio.ReadAt(alignedBuffer, blockOffset); n != blockSize || err != nil {
-		hm.unlockFileBlockRegion(ctx, dio, blockOffset, lk)
+		hm.unlockFileBlockRegion(ctx, lk)
 		if err == nil {
 			return fmt.Errorf("only partially (n=%d) read the block at offset %v", n, blockOffset)
 		}
@@ -94,14 +94,14 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 	copy(alignedBuffer[handleInBlockOffset:handleInBlockOffset+sop.HandleSizeInBytes], handleData)
 	// Update the block file region with merged data.
 	if n, err := dio.WriteAt(alignedBuffer, blockOffset); n != blockSize || err != nil {
-		hm.unlockFileBlockRegion(ctx, dio, blockOffset, lk)
+		hm.unlockFileBlockRegion(ctx, lk)
 		if err == nil {
 			return fmt.Errorf("only partially (n=%d) wrote at block offset %v, data: %v", n, blockOffset, handleData)
 		}
 		return err
 	}
 	// Unlock the block file region.
-	return hm.unlockFileBlockRegion(ctx, dio, blockOffset, lk)
+	return hm.unlockFileBlockRegion(ctx, lk)
 }
 
 func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *directIO, offset int64) (bool, *sop.LockKey, error) {
@@ -109,7 +109,7 @@ func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *directIO, offse
 	ok, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
 	return ok, lk[0], err
 }
-func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, dio *directIO, offset int64, lk *sop.LockKey) error {
+func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, lk *sop.LockKey) error {
 	return hm.cache.Unlock(ctx, []*sop.LockKey{lk})
 }
 
