@@ -320,6 +320,21 @@ func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 	return stores, nil
 }
 
+func (sr *StoreRepository) getFromCache(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
+	stores := make([]sop.StoreInfo, 0, len(names))
+	for i := range names {
+		store := sop.StoreInfo{}
+		var err error
+		var found bool
+		found, err = sr.cache.GetStruct(ctx, names[i], &store)
+		if !found || err != nil {
+			continue
+		}
+		stores = append(stores, store)
+	}
+	return stores, nil
+}
+
 // Remove is destructive and shold only be done in an exclusive (admin only) operation.
 // Any deleted tables can't be rolled back. This is equivalent to DDL SQL script, which we
 // don't do part of a transaction.
@@ -397,16 +412,14 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 		ba, err := encoding.Marshal(stores[i])
 		if err != nil {
 			// For now, 'just log if store marshal fails, it is not supposed to happen.
-			log.Error(fmt.Sprintf("storeRepository.Replicate failed, error Marshal of store '%s', details: %v", stores[i].Name, err))
-			return err
+			return fmt.Errorf("storeRepository.Replicate failed, error Marshal of store '%s', details: %w", stores[i].Name, err)
 		}
 		// When store is being written and it failed, we need to handle whether to turn off writing to the replication's passive destination
 		// because if will break synchronization from here on out, thus, better to just log then turn off replication altogether, until cleared
 		// to resume.
 		filename := sr.replicationTracker.formatPassiveFolderEntity(fmt.Sprintf("%s%c%s", stores[i].Name, os.PathSeparator, storeInfoFilename))
 		if err := sr.fileIO.WriteFile(filename, ba, permission); err != nil {
-			log.Error(fmt.Sprintf("storeRepository.Replicate failed, error writing store '%s' (passive), details: %v", filename, err))
-			return err
+			return fmt.Errorf("storeRepository.Replicate failed, error writing store '%s', details: %w", filename, err)
 		}
 	}
 
