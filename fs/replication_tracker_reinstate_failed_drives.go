@@ -55,7 +55,9 @@ func (r *replicationTracker) startLoggingCommitChanges(ctx context.Context) erro
 	r.LogCommitChanges = true
 
 	// Update the replication status details.
-	r.writeReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename))
+	if err := r.writeReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
+		return err
+	}
 	return r.syncWithL2Cache(ctx, true)
 }
 
@@ -114,8 +116,12 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 			return false, err
 		}
 
-		sr.Replicate(ctx, logData.First)
-		reg.Replicate(ctx, logData.Second[0], logData.Second[1], logData.Second[2], logData.Second[3])
+		if err := sr.Replicate(ctx, logData.First); err != nil {
+			return false, err
+		}
+		if err := reg.Replicate(ctx, logData.Second[0], logData.Second[1], logData.Second[2], logData.Second[3]); err != nil {
+			return false, err
+		}
 
 		if err := fio.Remove(ffn); err != nil {
 			return false, err
@@ -131,6 +137,8 @@ func (r *replicationTracker) turnOnReplication(ctx context.Context) error {
 
 	r.replicationTrackedDetails = *globalReplicationDetails
 	// Update the replication status details.
-	r.writeReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename))
+	if err := r.writeReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
+		return err
+	}
 	return r.syncWithL2Cache(ctx, true)
 }

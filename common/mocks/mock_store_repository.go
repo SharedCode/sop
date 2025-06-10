@@ -67,4 +67,6 @@ func (sr *mockStoreRepository) Remove(ctx context.Context, names ...string) erro
 }
 
 // Mocks do not replicate.
-func (sr *mockStoreRepository) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) {}
+func (sr *mockStoreRepository) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) error {
+	return nil
+}

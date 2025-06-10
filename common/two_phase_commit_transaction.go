@@ -475,15 +475,21 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 	// Replicate to passive target paths.
 	tr := sop.NewTaskRunner(ctx, -1)
 	tr.Go(func() error {
-		t.registry.Replicate(tr.GetContext(), t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles)
+		if err := t.registry.Replicate(tr.GetContext(), t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles); err != nil {
+			log.Warn(fmt.Sprintf("registry.Replicate failed but will not fail commit(phase 2 succeeded), details: %v", err))
+		}
 		return nil
 	})
 	tr.Go(func() error {
-		t.storeRepository.Replicate(tr.GetContext(), t.updatedStoresInfo)
+		if err := t.storeRepository.Replicate(tr.GetContext(), t.updatedStoresInfo); err != nil {
+			log.Warn(fmt.Sprintf("storeRepository.Replicate failed but will not fail commit(phase 2 succeeded), details: %v", err))
+		}
 		return nil
 	})
 	tr.Go(func() error {
-		t.logger.logCommitChanges(tr.GetContext(), t.updatedStoresInfo, t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles)
+		if err := t.logger.logCommitChanges(tr.GetContext(), t.updatedStoresInfo, t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles); err != nil {
+			log.Warn(fmt.Sprintf("logger.logCommitChanges failed but will not fail commit(phase 2 succeeded), details: %v", err))
+		}
 		return nil
 	})
 	t.populateMru(ctx)
