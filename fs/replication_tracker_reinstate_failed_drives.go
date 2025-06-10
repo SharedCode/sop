@@ -34,9 +34,15 @@ func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context, registry
 	if err := r.copyStores(ctx); err != nil {
 		return err
 	}
-	if _, err := r.fastForward(ctx, registryHashModValue); err != nil {
-		return err
+	// Consume all Commit logs.
+	for {
+		if fileFound, err := r.fastForward(ctx, registryHashModValue); err != nil {
+			return err
+		} else if !fileFound {
+			break
+		}
 	}
+	// Turn on Replication.
 	if err := r.turnOnReplication(ctx); err != nil {
 		return err
 	}
@@ -116,8 +122,17 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 			return false, err
 		}
 
-		if err := sr.Replicate(ctx, logData.First); err != nil {
-			return false, err
+		if logData.First != nil {
+			// Ensure Store Repo has the latest Count so we don't need to worry about potential race condition
+			// between transaction doing commit logs vs. repliction to the reinstated drives.
+			for i := range logData.First {
+				if sis, _ := sr.getFromCache(ctx, logData.First[i].Name); len(sis) == 1 {
+					logData.First[i].Count = sis[0].Count
+				}
+			}
+			if err := sr.Replicate(ctx, logData.First); err != nil {
+				return false, err
+			}
 		}
 		if err := reg.Replicate(ctx, logData.Second[0], logData.Second[1], logData.Second[2], logData.Second[3]); err != nil {
 			return false, err
