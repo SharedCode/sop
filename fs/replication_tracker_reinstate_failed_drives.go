@@ -124,7 +124,7 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 
 		if logData.First != nil {
 			// Ensure Store Repo has the latest Count so we don't need to worry about potential race condition
-			// between transaction doing commit logs vs. repliction to the reinstated drives.
+			// between transaction doing commit logs vs. replication to the reinstated drives.
 			for i := range logData.First {
 				if sis, _ := sr.getFromCache(ctx, logData.First[i].Name); len(sis) == 1 {
 					logData.First[i].Count = sis[0].Count

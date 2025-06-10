@@ -102,6 +102,17 @@ func (r *replicationTracker) HandleReplicationRelatedError(ctx context.Context, 
 	}
 	if ok1 || ok2 {
 		log.Error(fmt.Sprintf("a replication related error detected (rollback: %v), details: %v", rollbackSucceeded, err1.Error()))
+
+		// No need to failover if rollback succeeded. It means that the IO error itself is temporary.
+
+		// TODO: perhaps we need to fleshen up handling of IO error, create history and upon reaching max threshold of IO error
+		// that get generated in time, then we can auto-failover to the passive drive.
+		// For now, it seems sufficient as a simple rule, that if rollback also failed then it becomes a story that the current
+		// active drive IS faulty, thus, auto-failover will happen.
+		if rollbackSucceeded {
+			return
+		}
+
 		// Cause a failover switch to passive destinations on succeeding transactions.
 		if err := r.failover(ctx); err != nil {
 			log.Error(fmt.Sprintf("failover to folder %s failed, details: %v", r.getPassiveBaseFolder(), err.Error()))
