@@ -17,5 +17,5 @@ type Error[T any] struct {
 }
 
 func (e Error[T]) Error() string {
-	return fmt.Sprintf("Error %d: %w, user data: %v", e.Code, e.Err, e.UserData)
+	return fmt.Errorf("Error %d: %w, user data: %v", e.Code, e.Err, e.UserData).Error()
 }
