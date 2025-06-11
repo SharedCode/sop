@@ -96,7 +96,10 @@ type TransactionLog interface {
 
 	// Given a date hour, returns an available for cleanup set of transaction logs with their Transaction ID.
 	// Or nils if there is no more needing cleanup for this date hour.
-	GetLogsDetails(ctx context.Context, hour string) (UUID, []KeyValuePair[int, []byte], error)
+	GetOneOfHour(ctx context.Context, hour string) (UUID, []KeyValuePair[int, []byte], error)
+
+	// Fetch the transaction logs details given a transaction ID.
+	Get(ctx context.Context, tid UUID) ([]KeyValuePair[int, []byte], error)
 
 	// Implement to generate a new UUID. Cassandra transaction logging uses gocql.UUIDFromTime, SOP in file system
 	// should just use the general sop.NewUUID function which currently uses google's uuid package.
@@ -186,12 +189,15 @@ type Cache interface {
 	FormatLockKey(k string) string
 	// Create lock keys.
 	CreateLockKeys(keys []string) []*LockKey
+	// Create lock keys for a given set of IDs, e.g. Transaction ID.
+	CreateLockKeysForIDs(keys []Tuple[string, UUID]) []*LockKey
 
 	// Returns whether a set of keys are all locked & with TTL.
 	IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
 
-	// Lock a set of keys.
-	Lock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
+	// Lock a set of keys. Returns (1st) true if succeeded, (2nd) UUID of lock owner, e.g. Transaction ID, (3rd) the error encountered.
+	// If error is returned, expect 1st to be false.
+	Lock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, UUID, error)
 	// Returns whether a set of keys are all locked.
 	IsLocked(ctx context.Context, lockKeys []*LockKey) (bool, error)
 	// Returns true if a set of keys are all locked, most likely by other processes (or threads).

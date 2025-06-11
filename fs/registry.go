@@ -65,7 +65,7 @@ func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registr
 		for _, h := range sh.IDs {
 			// Update registry record.
 			lk := r.l2Cache.CreateLockKeys([]string{h.LogicalID.String()})
-			if ok, err := r.l2Cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
+			if ok, _, err := r.l2Cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
 				if err == nil {
 					err = fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key)
 				}
@@ -105,7 +105,6 @@ func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles []sop.
 		}
 		r.l1Cache.Handles.Set(convertToKvp(sh.IDs))
 		for _, h := range sh.IDs {
-			// Tolerate Redis cache failure.
 			if err := r.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis setstruct) failed, details: %v", err))
 			}

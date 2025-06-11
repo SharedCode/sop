@@ -85,7 +85,7 @@ func (tl *transactionLog) NewUUID() sop.UUID {
 func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
 	duration := time.Duration(7 * time.Hour)
 
-	if ok, err := tl.cache.Lock(ctx, duration, []*sop.LockKey{tl.hourLockKey}); !ok || err != nil {
+	if ok, _, err := tl.cache.Lock(ctx, duration, []*sop.LockKey{tl.hourLockKey}); !ok || err != nil {
 		return sop.NilUUID, "", nil, nil
 	}
 
@@ -114,7 +114,7 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 	return sop.UUID(tid), hour, r, nil
 }
 
-func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
+func (tl *transactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
 	if hour == "" {
 		return sop.NilUUID, nil, nil
 	}
@@ -157,6 +157,12 @@ func (tl *transactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.
 
 	r, err := tl.getLogsDetails(ctx, tid)
 	return sop.UUID(tid), r, err
+}
+
+// Fetch the transaction logs details given a tranasction ID.
+func (tl *transactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
+	// Nothing to do here because this is only applicable/in use in File System based transaction logger.
+	return nil, nil
 }
 
 // Log commit changes to its own log file separate than the rest of transaction logs.

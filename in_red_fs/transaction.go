@@ -42,6 +42,9 @@ func NewTwoPhaseCommitTransaction(ctx context.Context, to TransationOptions) (so
 	t, err := common.NewTwoPhaseCommitTransaction(to.Mode, to.MaxTime, true,
 		fs.NewBlobStore(fs.DefaultToFilePath, nil), sr, fs.NewRegistry(to.Mode == sop.ForWriting,
 			to.RegistryHashModValue, replicationTracker, to.Cache), to.Cache, tl)
+
+	// Tell Replication Tracker to use transaction ID as ID when locking registry handle record's file sector during writes.
+	replicationTracker.SetTransactionID(t.GetID())
 	return t, err
 }
 
@@ -90,5 +93,8 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr Trans
 	t, err := common.NewTwoPhaseCommitTransaction(towr.Mode, towr.MaxTime, true, bs, sr,
 		fs.NewRegistry(towr.Mode == sop.ForWriting, towr.RegistryHashModValue, replicationTracker, towr.Cache), towr.Cache, tl)
 	t.HandleReplicationRelatedError = replicationTracker.HandleReplicationRelatedError
+
+	// Tell Replication Tracker to use transaction ID as ID when locking registry handle record's file sector during writes.
+	replicationTracker.SetTransactionID(t.GetID())
 	return t, err
 }

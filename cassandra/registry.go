@@ -73,7 +73,7 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 		for _, h := range sh.IDs {
 			// Update registry record.
 			lk := v.l2Cache.CreateLockKeys([]string{h.LogicalID.String()})
-			if ok, err := v.l2Cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
+			if ok, _, err := v.l2Cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
 				if err == nil {
 					err = fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key)
 				}

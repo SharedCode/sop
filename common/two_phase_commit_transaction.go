@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	log "log/slog"
@@ -284,7 +285,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		}
 
 		//* Start: Try to lock all updated & removed nodes before moving forward.
-		if ok, _ := t.l2Cache.Lock(ctx, t.maxTime, t.nodesKeys); !ok {
+		if ok, _, _ := t.l2Cache.Lock(ctx, t.maxTime, t.nodesKeys); !ok {
 			log.Debug(fmt.Sprintf("cache.Lock can't lock all nodesKeys, tid: %v", t.GetID()))
 			// Unlock in case there are those that got locked.
 			t.l2Cache.Unlock(ctx, t.nodesKeys)
@@ -346,7 +347,14 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 		if successful, t.newRootNodeHandles, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
-			return err
+			var se sop.Error[sop.UUID]
+			if errors.As(err, &se) {
+				if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
 		}
 
 		if successful {
@@ -361,7 +369,14 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		if successful {
 			// Commit updated nodes.
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
-				return err
+				var se sop.Error[sop.UUID]
+				if errors.As(err, &se) {
+					if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
+						return err
+					}
+				} else {
+					return err
+				}
 			}
 			// Log the inactive Blobs' IDs of newly written so we can just easily remove them when cleaning up "dead" transaction logs.
 			if err := t.logger.log(ctx, commitUpdatedNodes, toByteArray(extractInactiveBlobsIDs(updatedNodesHandles))); err != nil {
@@ -378,6 +393,29 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 				return err
 			}
 		}
+
+		// Only do commit added nodes if successful so far.
+		if successful {
+			// Commit added nodes.
+			if err := t.logger.log(ctx, commitAddedNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
+				First:  convertToRegistryRequestPayload(addedNodes),
+				Second: convertToBlobRequestPayload(addedNodes),
+			})); err != nil {
+				return err
+			}
+			if t.addedNodeHandles, err = t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
+				var se sop.Error[sop.UUID]
+				if errors.As(err, &se) {
+					if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
+						return err
+					}
+					successful = false
+				} else {
+					return err
+				}
+			}
+		}
+
 		if !successful {
 			// Rollback partial changes.
 			if rerr := t.rollback(ctx, false); rerr != nil {
@@ -393,19 +431,8 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 
 	log.Debug(fmt.Sprintf("phase 1 commit loop done, tid: %v", t.GetID()))
 
-	// Commit added nodes.
-	if err := t.logger.log(ctx, commitAddedNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
-		First:  convertToRegistryRequestPayload(addedNodes),
-		Second: convertToBlobRequestPayload(addedNodes),
-	})); err != nil {
-		return err
-	}
-	var err error
-	if t.addedNodeHandles, err = t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
-		return err
-	}
-
 	// Commit stores update(CountDelta apply).
+	var err error
 	if err := t.logger.log(ctx, commitStoreInfo, toByteArray(t.getRollbackStoresInfo())); err != nil {
 		return err
 	}
@@ -446,6 +473,21 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 	t.updatedNodes = updatedNodes
 
 	return nil
+}
+
+func (t *Transaction) handleRegistrySectorLockTimeout(ctx context.Context, err sop.Error[sop.UUID]) error {
+	const lockDuration = 5 * time.Minute
+
+	// TODO
+	// t.l2Cache.Lock(ctx, lockDuration, )
+
+	// if logsDetails, err := t.logger.logger.GetLogs(ctx, err.UserData); err != nil {
+	// 	return err
+	// } else {
+
+	// }
+
+	return err
 }
 
 // phase2Commit finalizes the commit process and does cleanup afterwards.

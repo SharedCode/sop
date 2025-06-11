@@ -35,36 +35,41 @@ func (c client) IsLockedTTL(ctx context.Context, duration time.Duration, lockKey
 }
 
 // Lock a set of keys.
-func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
+// 1st returns true if successfully locked otherwise false.
+// 2nd returns the UUID of lock owner if applicable.
+// 3rd returns the error as reported by Redis, if there was.
+func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	for _, lk := range lockKeys {
 		found, readItem, err := c.Get(ctx, lk.Key)
 		if err != nil {
-			return false, err
+			return false, sop.NilUUID, err
 		}
 		if found {
 			// Item found in Redis, check if not ours. Most likely, but check anyway.
 			if readItem != lk.LockID.String() {
-				return false, nil
+				id, _ := sop.ParseUUID(readItem)
+				return false, id, nil
 			}
 			continue
 		}
 
 		// Item does not exist, upsert it.
 		if err := c.Set(ctx, lk.Key, lk.LockID.String(), duration); err != nil {
-			return false, err
+			return false, sop.NilUUID, err
 		}
 		// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
 		if found, readItem2, err := c.Get(ctx, lk.Key); !found || err != nil {
-			return false, err
+			return false, sop.NilUUID, err
 		} else if readItem2 != lk.LockID.String() {
+			id, _ := sop.ParseUUID(readItem)
 			// Item found in Redis, lock attempt failed.
-			return false, nil
+			return false, id, nil
 		}
 		// We got the item locked, ensure we can unlock it.
 		lk.IsLockOwner = true
 	}
 	// Successfully locked.
-	return true, nil
+	return true, sop.NilUUID, nil
 }
 
 // Returns true if lockKeys have claimed lock equivalent.
@@ -125,6 +130,19 @@ func (c client) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 		}
 	}
 	return lastErr
+}
+
+// Create a set of lock keys based on submited data comprised of a "key" & a "lock ID".
+func (c client) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
+	lockKeys := make([]*sop.LockKey, len(keys))
+	for i := range keys {
+		lockKeys[i] = &sop.LockKey{
+			// Prefix key with "L" to increase uniqueness.
+			Key:    c.FormatLockKey(keys[i].First),
+			LockID: keys[i].Second,
+		}
+	}
+	return lockKeys
 }
 
 // Create a set of lock keys.

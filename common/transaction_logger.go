@@ -96,7 +96,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 		}
 		hourBeingProcessed = hr
 	} else {
-		tid, committedFunctionLogs, err = tl.logger.GetLogsDetails(ctx, hourBeingProcessed)
+		tid, committedFunctionLogs, err = tl.logger.GetOneOfHour(ctx, hourBeingProcessed)
 		if err != nil {
 			return err
 		}

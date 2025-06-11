@@ -53,7 +53,7 @@ func TestTransactionLogGetOne(t *testing.T) {
 		t.Errorf("Abc expected: abc, got: %s", p.Abc)
 	}
 
-	uid, tlogdata2, err := tl.GetLogsDetails(ctx, hour)
+	uid, tlogdata2, err := tl.GetOneOfHour(ctx, hour)
 
 	if err != nil {
 		t.Errorf("error got on tl.GetOne, details: %v", err)
