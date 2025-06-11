@@ -88,6 +88,9 @@ func (m *mockRedis) KeyNotFound(err error) bool {
 func (m *mockRedis) CreateLockKeys(keys []string) []*sop.LockKey {
 	return nil
 }
+func (m *mockRedis) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
+	return nil
+}
 
 func (m *mockRedis) LockTTL(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
 	return false, nil
@@ -97,8 +100,8 @@ func (m *mockRedis) IsLockedTTL(ctx context.Context, duration time.Duration, loc
 	return false, nil
 }
 
-func (m *mockRedis) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
-	return false, nil
+func (m *mockRedis) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	return false, sop.NilUUID, nil
 }
 
 func (m *mockRedis) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {

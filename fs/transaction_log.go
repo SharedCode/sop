@@ -88,7 +88,7 @@ func (tl *TransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 	duration := time.Duration(7 * time.Hour)
 
 	hlk := []*sop.LockKey{tl.hourLockKey}
-	if ok, err := tl.cache.Lock(ctx, duration, hlk); !ok || err != nil {
+	if ok, _, err := tl.cache.Lock(ctx, duration, hlk); !ok || err != nil {
 		return sop.NilUUID, "", nil, nil
 	}
 
@@ -117,7 +117,7 @@ func (tl *TransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 	return sop.UUID(tid), hour, r, nil
 }
 
-func (tl *TransactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
+func (tl *TransactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
 	if hour == "" {
 		return sop.NilUUID, nil, nil
 	}
@@ -158,6 +158,11 @@ func (tl *TransactionLog) LogCommitChanges(ctx context.Context, stores []sop.Sto
 	return tl.replicationTracker.logCommitChanges(tl.tid, stores, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles)
 }
 
+// Fetch the transaction logs details given a tranasction ID.
+func (tl *TransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
+	return tl.getLogsDetails(tid)
+}
+
 func (tl *TransactionLog) getOne() (string, sop.UUID, error) {
 
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
@@ -169,7 +174,7 @@ func (tl *TransactionLog) getOne() (string, sop.UUID, error) {
 	}
 
 	// Get the oldest first.
-	for i := 0; i < len(files); i++ {
+	for i := range files {
 		// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
 		// gap ensures no issue due to overlapping.
 		fts := files[i].ModTime.Format(DateHourLayout)

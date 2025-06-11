@@ -54,9 +54,9 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 	var ok bool
 
 	startTime := sop.Now()
-	ctr := 0
+	var tid sop.UUID
 	for {
-		ok, lk, err = hm.lockFileBlockRegion(ctx, dio, blockOffset)
+		ok, tid, lk, err = hm.lockFileBlockRegion(ctx, dio, blockOffset)
 		if err != nil {
 			return err
 		}
@@ -71,14 +71,15 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 			}
 		}
 		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
-			log.Debug(fmt.Sprintf("updateFileBlockRegion retry loop: %v", err))
-			return err
-		}
-		if ctr >= lockSectorRetryMax {
-			return fmt.Errorf("can't lock file '%s' region at block offset %v, it's locked by another", dio.filename, blockOffset)
+			err = fmt.Errorf("updateFileBlockRegion failed: %w", err)
+			log.Debug(err.Error())
+			return sop.Error[sop.UUID]{
+				Code:     sop.LockAcquisitionFailure,
+				Err:      err,
+				UserData: tid,
+			}
 		}
 		sop.RandomSleep(ctx)
-		ctr++
 	}
 
 	// Read the block file region data.
@@ -104,10 +105,18 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 	return hm.unlockFileBlockRegion(ctx, lk)
 }
 
-func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *directIO, offset int64) (bool, *sop.LockKey, error) {
-	lk := hm.cache.CreateLockKeys([]string{hm.formatLockKey(dio.filename, offset)})
-	ok, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
-	return ok, lk[0], err
+func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *directIO, offset int64) (bool, sop.UUID, *sop.LockKey, error) {
+	tid := hm.replicationTracker.tid
+	if tid == sop.NilUUID {
+		tid = sop.NewUUID()
+	}
+	s := hm.formatLockKey(dio.filename, offset)
+	lk := hm.cache.CreateLockKeysForIDs([]sop.Tuple[string, sop.UUID]{{
+		First:  s,
+		Second: tid,
+	}})
+	ok, uuid, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
+	return ok, uuid, lk[0], err
 }
 func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, lk *sop.LockKey) error {
 	return hm.cache.Unlock(ctx, []*sop.LockKey{lk})

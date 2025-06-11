@@ -37,6 +37,7 @@ type replicationTracker struct {
 	storesBaseFolders []string
 	replicate         bool
 	l2Cache           sop.Cache
+	tid               sop.UUID
 }
 
 const (
@@ -86,6 +87,10 @@ func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, repl
 		}
 	}
 	return &rt, nil
+}
+
+func (r *replicationTracker) SetTransactionID(tid sop.UUID) {
+	r.tid = tid
 }
 
 // Handle replication related error is invoked from a transaction when an IO error is encountered.

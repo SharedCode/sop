@@ -43,7 +43,7 @@ func (tl *MockTransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []s
 	return sop.NilUUID, "", nil, nil
 }
 
-func (tl *MockTransactionLog) GetLogsDetails(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
+func (tl *MockTransactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
 	if !tl.datesLogs.FindOne(hour, false) {
 		return sop.NilUUID, nil, nil
 	}
@@ -129,6 +129,12 @@ func (tl *MockTransactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 // Generates a new UUID based on time.
 func (tl *MockTransactionLog) NewUUID() sop.UUID {
 	return sop.NewUUID()
+}
+
+// Fetch the transaction logs details given a tranasction ID.
+func (tl *MockTransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
+	// Nothing to do here because this is only applicable/in use in File System based transaction logger.
+	return nil, nil
 }
 
 func (tl *MockTransactionLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
