@@ -11,6 +11,7 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/cache"
+	"github.com/SharedCode/sop/fs"
 )
 
 type btreeBackend struct {
@@ -50,7 +51,7 @@ type Transaction struct {
 	logger    *transactionLog
 
 	// Handle replication related error.
-	HandleReplicationRelatedError func(ctx context.Context, ioError error, rollbackSucceeded bool)
+	HandleReplicationRelatedError func(ctx context.Context, ioError error, rollbackError error, rollbackSucceeded bool)
 
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles []sop.RegistryPayload[sop.Handle]
@@ -141,7 +142,7 @@ func (t *Transaction) Phase1Commit(ctx context.Context) error {
 
 		// Allow replication handler to handle error related to replication, e.g. IO error.
 		if t.HandleReplicationRelatedError != nil {
-			t.HandleReplicationRelatedError(ctx, err, rerr == nil)
+			t.HandleReplicationRelatedError(ctx, err, rerr, rerr == nil)
 		}
 
 		if rerr != nil {
@@ -175,7 +176,7 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 
 		// Allow replication handler to handle error related to replication, e.g. IO error.
 		if t.HandleReplicationRelatedError != nil {
-			t.HandleReplicationRelatedError(ctx, err, rerr == nil)
+			t.HandleReplicationRelatedError(ctx, err, rerr, rerr == nil)
 		}
 
 		if rerr != nil {
@@ -202,7 +203,7 @@ func (t *Transaction) Rollback(ctx context.Context, err error) error {
 
 		// Allow replication handler to handle error related to replication, e.g. IO error.
 		if t.HandleReplicationRelatedError != nil {
-			t.HandleReplicationRelatedError(ctx, err, false)
+			t.HandleReplicationRelatedError(ctx, err, rerr, false)
 		}
 
 		return fmt.Errorf("rollback failed, details: %w", rerr)
@@ -211,7 +212,7 @@ func (t *Transaction) Rollback(ctx context.Context, err error) error {
 
 	// Allow replication handler to handle error related to replication, e.g. IO error.
 	if t.HandleReplicationRelatedError != nil {
-		t.HandleReplicationRelatedError(ctx, err, true)
+		t.HandleReplicationRelatedError(ctx, err, nil, true)
 	}
 
 	return nil
@@ -248,10 +249,10 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 
 	var preCommitTID sop.UUID
 	if t.logger.committedState == addActivelyPersistedItem {
+		// Keep the pre-commit TID as its logs need to be cleaned up seperately.
 		preCommitTID = t.logger.transactionID
-		// Assign new TID to the transaction as pre-commit logs need to be cleaned up seperately.
-		t.logger.setNewTID()
 	}
+	t.logger.transactionID = t.GetID()
 
 	if err := t.logger.log(ctx, lockTrackedItems, nil); err != nil {
 		return err
@@ -347,7 +348,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 		if successful, t.newRootNodeHandles, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
-			var se sop.Error[sop.UUID]
+			var se sop.Error[*sop.LockKey]
 			if errors.As(err, &se) {
 				if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
 					return err
@@ -369,7 +370,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		if successful {
 			// Commit updated nodes.
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
-				var se sop.Error[sop.UUID]
+				var se sop.Error[*sop.LockKey]
 				if errors.As(err, &se) {
 					if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
 						return err
@@ -404,7 +405,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 				return err
 			}
 			if t.addedNodeHandles, err = t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
-				var se sop.Error[sop.UUID]
+				var se sop.Error[*sop.LockKey]
 				if errors.As(err, &se) {
 					if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
 						return err
@@ -445,6 +446,12 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
+	if len(updatedNodesHandles) > 0 || len(removedNodesHandles) > 0 {
+		// Log the updated nodes & removed nodes handles for use in their rollback in File System Registry implementation.
+		// Cassandra tlogger will ignore this as it has its own "all or nothing" feature handled inside Cassandra cluster.
+		t.logger.log(ctx, CommitUpdatedAndRemovedHandles, toByteArray(append(updatedNodesHandles, removedNodesHandles...)))
+	}
+
 	// Prepare to switch to active "state" the (inactive) updated Nodes, in phase2Commit.
 	uh, err := t.btreesBackend[0].nodeRepository.activateInactiveNodes(updatedNodesHandles)
 	if err != nil {
@@ -475,21 +482,6 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 	return nil
 }
 
-func (t *Transaction) handleRegistrySectorLockTimeout(ctx context.Context, err sop.Error[sop.UUID]) error {
-	const lockDuration = 5 * time.Minute
-
-	// TODO
-	// t.l2Cache.Lock(ctx, lockDuration, )
-
-	// if logsDetails, err := t.logger.logger.GetLogs(ctx, err.UserData); err != nil {
-	// 	return err
-	// } else {
-
-	// }
-
-	return err
-}
-
 // phase2Commit finalizes the commit process and does cleanup afterwards.
 func (t *Transaction) phase2Commit(ctx context.Context) error {
 
@@ -508,14 +500,26 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 		return err
 	}
 
-	// The last step to consider a completed commit.
-	if err := t.registry.UpdateNoLocks(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)); err != nil {
-		t.unlockNodesKeys(ctx)
-		return err
-	}
-
 	// Replicate to passive target paths.
 	tr := sop.NewTaskRunner(ctx, -1)
+
+	if len(t.updatedNodeHandles) > 0 || len(t.removedNodeHandles) > 0 {
+		// The last step to consider a completed commit.
+		if err := t.registry.UpdateNoLocks(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)); err != nil {
+			t.unlockNodesKeys(ctx)
+			return err
+		}
+		if fts, ok := t.logger.logger.(*fs.TransactionLog); ok {
+			tr.Go(func() error {
+				// Also, remove the special commitFunction 77 priority log file as it is no longer needed.
+				if err := fts.RemovePriorityLogFile(ctx, t.GetID()); err != nil {
+					log.Warn(fmt.Sprintf("removing priority log for tid %v failed, details: %v", t.GetID(), err))
+				}
+				return nil
+			})
+		}
+	}
+
 	tr.Go(func() error {
 		if err := t.registry.Replicate(tr.GetContext(), t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles); err != nil {
 			log.Warn(fmt.Sprintf("registry.Replicate failed but will not fail commit(phase 2 succeeded), details: %v", err))
@@ -572,4 +576,28 @@ func (t *Transaction) updateVersionThenPopulateMru(ctx context.Context, handles 
 			t.l1Cache.SetNodeToMRU(ctx, handles[i].IDs[ii].GetActiveID(), target, nodes[i].First.CacheConfig.NodeCacheDuration)
 		}
 	}
+}
+
+func (t *Transaction) handleRegistrySectorLockTimeout(ctx context.Context, err sop.Error[*sop.LockKey]) error {
+	const (
+		lockDuration = 5 * time.Minute
+		lockKey      = "DTrollbk"
+	)
+
+	lk := t.l2Cache.CreateLockKeys([]string{lockKey})
+	if ok, _, _ := t.l2Cache.Lock(ctx, lockDuration, lk); ok {
+		if ok, _ = t.l2Cache.IsLocked(ctx, lk); ok {
+			if err2 := t.logger.priorityRollback(ctx, t, err.UserData.LockID); err2 != nil {
+				log.Info(fmt.Sprintf("error priorityRollback on tid %v, details: %v", err.UserData, err2))
+				t.l2Cache.Unlock(ctx, lk)
+				return err
+			}
+
+			err.UserData.IsLockOwner = true
+			t.l2Cache.Unlock(ctx, []*sop.LockKey{err.UserData})
+			t.l2Cache.Unlock(ctx, lk)
+		}
+	}
+
+	return err
 }

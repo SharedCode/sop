@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/encoding"
 )
 
 const (
 	// DateHourLayout format mask string.
-	DateHourLayout   = "2006-01-02T15"
-	logFileExtension = ".log"
+	DateHourLayout           = "2006-01-02T15"
+	logFileExtension         = ".log"
+	priorityLogFileExtension = ".plg"
 )
 
 type TransactionLog struct {
@@ -43,6 +45,14 @@ func NewTransactionLog(cache sop.Cache, rt *replicationTracker) *TransactionLog 
 
 // Add transaction log w/ payload blob to the transaction log file.
 func (tl *TransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+
+	// Log 77 commitFunction to a separate log file, .
+	if commitFunction == 77 {
+		filename := tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
+		os.WriteFile(filename, payload, permission)
+		return nil
+	}
+
 	if tl.file == nil {
 		tl.tid = tid
 		filename := tl.format(tid)
@@ -69,8 +79,18 @@ func (tl *TransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction 
 	return nil
 }
 
+func (tl *TransactionLog) RemovePriorityLogFile(ctx context.Context, tid sop.UUID) error {
+	fio := NewDefaultFileIO()
+	filename := tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
+	if fio.Exists(filename) {
+		return fio.Remove(filename)
+	}
+	return nil
+}
+
 // Remove will delete transaction log(t_log) records given a transaction ID(tid).
 func (tl *TransactionLog) Remove(ctx context.Context, tid sop.UUID) error {
+
 	if tl.tid == tid && tl.file != nil {
 		tl.file.Close()
 		tl.file = nil
@@ -158,9 +178,48 @@ func (tl *TransactionLog) LogCommitChanges(ctx context.Context, stores []sop.Sto
 	return tl.replicationTracker.logCommitChanges(tl.tid, stores, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles)
 }
 
-// Fetch the transaction logs details given a tranasction ID.
-func (tl *TransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
-	return tl.getLogsDetails(tid)
+// Fetch the transaction priority logs details given a tranasction ID.
+func (tl *TransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
+	filename := tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
+	if ba, err := os.ReadFile(filename); err != nil {
+		return nil, err
+	} else {
+		var data []sop.RegistryPayload[sop.Handle]
+		encoding.DefaultMarshaler.Unmarshal(ba, &data)
+
+		return data, nil
+	}
+}
+
+func (tl *TransactionLog) getPriorityOne() (sop.UUID, error) {
+
+	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
+	cappedHour := mh.Add(-time.Duration(time.Duration(ageLimit) * time.Minute))
+
+	files, err := getFilesSortedByModifiedTime(tl.replicationTracker.getActiveBaseFolder())
+	if err != nil {
+		return sop.NilUUID, err
+	}
+
+	// Get the oldest first.
+	for i := range files {
+		// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
+		// gap ensures no issue due to overlapping.
+		fts := files[i].ModTime.Format(DateHourLayout)
+		ft, _ := time.Parse(DateHourLayout, fts)
+		if cappedHour.Compare(ft) >= 0 {
+			filename := files[i].Name()
+			tid, err := sop.ParseUUID(filename[0 : len(filename)-len(logFileExtension)])
+			if err != nil {
+				continue
+			}
+			return tid, nil
+		} else {
+			break
+		}
+	}
+
+	return sop.NilUUID, nil
 }
 
 func (tl *TransactionLog) getOne() (string, sop.UUID, error) {
@@ -211,7 +270,7 @@ func (tl *TransactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, 
 
 		var data sop.KeyValuePair[int, []byte]
 
-		err := json.Unmarshal([]byte(line), &data)
+		err := encoding.DefaultMarshaler.Unmarshal([]byte(line), &data)
 		if err != nil {
 			log.Error(fmt.Sprintf("error unmarshaling JSON: %v", err))
 			continue // Skip to the next line if there's an error

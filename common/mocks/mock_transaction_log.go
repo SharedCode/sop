@@ -132,7 +132,7 @@ func (tl *MockTransactionLog) NewUUID() sop.UUID {
 }
 
 // Fetch the transaction logs details given a tranasction ID.
-func (tl *MockTransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
+func (tl *MockTransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
 	// Nothing to do here because this is only applicable/in use in File System based transaction logger.
 	return nil, nil
 }

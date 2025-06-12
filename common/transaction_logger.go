@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	log "log/slog"
+	"time"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
+	"github.com/SharedCode/sop/fs"
 )
 
 type commitFunction int
@@ -26,6 +28,9 @@ const (
 	finalizeCommit
 	deleteObsoleteEntries
 	deleteTrackedItemsValues
+	// Cassandra registry should ignore these, File System(FS) registry should save on separate log file.
+	// Transaction for FS registry should rollback on startup all of log files w/ updated & removed handles.
+	CommitUpdatedAndRemovedHandles = 77
 
 	// Pre commit functions.
 	addActivelyPersistedItem    = 99
@@ -48,11 +53,6 @@ func newTransactionLogger(logger sop.TransactionLog, logging bool) *transactionL
 	}
 }
 
-// Assign new UUID to the transactionID field.
-func (tl *transactionLog) setNewTID() {
-	tl.transactionID = tl.logger.NewUUID()
-}
-
 // Log the commited changes within the transaction. Log it in a "transaction commit" log file.
 // This log file is different than where TransactionLog normally logs the transaction logs.
 func (tl *transactionLog) logCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles,
@@ -62,6 +62,9 @@ func (tl *transactionLog) logCommitChanges(ctx context.Context, stores []sop.Sto
 
 // Log the about to be committed function state.
 func (tl *transactionLog) log(ctx context.Context, f commitFunction, payload []byte) error {
+	if f == CommitUpdatedAndRemovedHandles {
+		return tl.logger.Add(ctx, tl.transactionID, int(f), payload)
+	}
 	tl.committedState = f
 	if !tl.logging || f == unknown {
 		return nil
@@ -105,6 +108,39 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 		hourBeingProcessed = ""
 		return nil
 	}
+	return tl.rollback(ctx, t, tid, committedFunctionLogs)
+}
+
+func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) error {
+	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey("Prbs")})
+	if ok, _, _ := t.l2Cache.Lock(ctx, 5*time.Minute, lk); ok {
+
+	}
+	//return tl.priorityRollback(ctx, t, tid, committedFunctionLogs)
+	return nil
+}
+
+func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, tid sop.UUID) error {
+
+	if uhAndrh, err := tl.logger.Get(ctx, tid); err != nil {
+		return err
+	} else {
+		if err := t.registry.UpdateNoLocks(ctx, uhAndrh); err != nil {
+			// When Registry is known to be corrupted, we can raise a failover event.
+			return sop.Error[sop.UUID]{
+				Code:     sop.RestoreRegistryFileSectorFailure,
+				Err:      err,
+				UserData: tid,
+			}
+		}
+		if fts, ok := tl.logger.(*fs.TransactionLog); ok {
+			return fts.RemovePriorityLogFile(ctx, tid)
+		}
+		return nil
+	}
+}
+
+func (tl *transactionLog) rollback(ctx context.Context, t *Transaction, tid sop.UUID, committedFunctionLogs []sop.KeyValuePair[int, []byte]) error {
 	if len(committedFunctionLogs) == 0 {
 		if !tid.IsNil() {
 			return tl.logger.Remove(ctx, tid)
@@ -214,6 +250,7 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 	if err := tl.logger.Remove(ctx, tid); err != nil {
 		lastErr = err
 	}
+
 	return lastErr
 }
 

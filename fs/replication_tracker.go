@@ -95,7 +95,7 @@ func (r *replicationTracker) SetTransactionID(tid sop.UUID) {
 
 // Handle replication related error is invoked from a transaction when an IO error is encountered.
 // This function should handle the act of failing over to the passive destinations making them as active and the active to be passive.
-func (r *replicationTracker) HandleReplicationRelatedError(ctx context.Context, ioError error, rollbackSucceeded bool) {
+func (r *replicationTracker) HandleReplicationRelatedError(ctx context.Context, ioError error, rollbackError error, rollbackSucceeded bool) {
 	if !r.replicate {
 		return
 	}

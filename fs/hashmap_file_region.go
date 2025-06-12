@@ -12,8 +12,7 @@ import (
 )
 
 const (
-	lockSectorRetryMax           = 7
-	lockSectorRetryTimeoutInSecs = 5
+	lockSectorRetryTimeoutInSecs = 30
 )
 
 func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails []fileRegionDetails) error {
@@ -73,10 +72,11 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
 			err = fmt.Errorf("updateFileBlockRegion failed: %w", err)
 			log.Debug(err.Error())
-			return sop.Error[sop.UUID]{
+			lk.LockID = tid
+			return sop.Error[*sop.LockKey]{
 				Code:     sop.LockAcquisitionFailure,
 				Err:      err,
-				UserData: tid,
+				UserData: lk,
 			}
 		}
 		sop.RandomSleep(ctx)

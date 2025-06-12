@@ -7,6 +7,7 @@ type ErrorCode int
 const (
 	Unknown = iota
 	LockAcquisitionFailure
+	RestoreRegistryFileSectorFailure
 )
 
 // SOP custom error.
