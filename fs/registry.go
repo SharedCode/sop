@@ -92,7 +92,7 @@ func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registr
 	return nil
 }
 
-func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs}); err != nil {
 			for _, h := range sh.IDs {

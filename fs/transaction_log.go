@@ -23,13 +23,12 @@ const (
 )
 
 type TransactionLog struct {
-	hourLockKey        *sop.LockKey
-	cache              sop.Cache
-	replicationTracker *replicationTracker
-	tid                sop.UUID
-	file               *os.File
-	encoder            *json.Encoder
-	writer             *bufio.Writer
+	fileSystemSpecificLog
+	hourLockKey *sop.LockKey
+	cache       sop.Cache
+	file        *os.File
+	encoder     *json.Encoder
+	writer      *bufio.Writer
 }
 
 var ageLimit float64 = 70
@@ -37,22 +36,61 @@ var ageLimit float64 = 70
 // NewTransactionLog instantiates a new TransactionLog instance.
 func NewTransactionLog(cache sop.Cache, rt *replicationTracker) *TransactionLog {
 	return &TransactionLog{
-		cache:              cache,
-		hourLockKey:        cache.CreateLockKeys([]string{"HBP"})[0],
-		replicationTracker: rt,
+		cache:       cache,
+		hourLockKey: cache.CreateLockKeys([]string{"HBP"})[0],
+		fileSystemSpecificLog: fileSystemSpecificLog{
+			replicationTracker: rt,
+		},
+	}
+}
+
+type fileSystemSpecificLog struct {
+	replicationTracker *replicationTracker
+	tid                sop.UUID
+}
+
+// Remove will delete transaction log(t_log) records given a transaction ID(tid).
+func (l fileSystemSpecificLog) Remove(ctx context.Context, tid sop.UUID) error {
+	fio := NewDefaultFileIO()
+	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
+	if fio.Exists(filename) {
+		return fio.Remove(filename)
+	}
+	return nil
+}
+
+// Add transaction log w/ payload blob to the transaction log file.
+func (l fileSystemSpecificLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
+	os.WriteFile(filename, payload, permission)
+	return nil
+}
+
+// Log commit changes to its own log file separate than the rest of transaction logs.
+// This is a special log file only used during "reinstate" of drives back for replication.
+func (l fileSystemSpecificLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
+	return l.replicationTracker.logCommitChanges(l.tid, stores, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles)
+}
+
+// Fetch the transaction priority logs details given a tranasction ID.
+func (l fileSystemSpecificLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
+	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
+	fio := NewDefaultFileIO()
+	if !fio.Exists(filename) {
+		return nil, nil
+	}
+	if ba, err := fio.ReadFile(filename); err != nil {
+		return nil, err
+	} else {
+		var data []sop.RegistryPayload[sop.Handle]
+		encoding.DefaultMarshaler.Unmarshal(ba, &data)
+
+		return data, nil
 	}
 }
 
 // Add transaction log w/ payload blob to the transaction log file.
 func (tl *TransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
-
-	// Log 77 commitFunction to a separate log file, .
-	if commitFunction == 77 {
-		filename := tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
-		os.WriteFile(filename, payload, permission)
-		return nil
-	}
-
 	if tl.file == nil {
 		tl.tid = tid
 		filename := tl.format(tid)
@@ -76,15 +114,6 @@ func (tl *TransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction 
 	}
 	tl.writer.Flush()
 
-	return nil
-}
-
-func (tl *TransactionLog) RemovePriorityLogFile(ctx context.Context, tid sop.UUID) error {
-	fio := NewDefaultFileIO()
-	filename := tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
-	if fio.Exists(filename) {
-		return fio.Remove(filename)
-	}
 	return nil
 }
 
@@ -170,29 +199,6 @@ func (tl *TransactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UU
 	r, err := tl.getLogsDetails(tid)
 
 	return tid, r, err
-}
-
-// Log commit changes to its own log file separate than the rest of transaction logs.
-// This is a special log file only used during "reinstate" of drives back for replication.
-func (tl *TransactionLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
-	return tl.replicationTracker.logCommitChanges(tl.tid, stores, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles)
-}
-
-// Fetch the transaction priority logs details given a tranasction ID.
-func (tl *TransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
-	filename := tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
-	fio := NewDefaultFileIO()
-	if !fio.Exists(filename) {
-		return nil, nil
-	}
-	if ba, err := fio.ReadFile(filename); err != nil {
-		return nil, err
-	} else {
-		var data []sop.RegistryPayload[sop.Handle]
-		encoding.DefaultMarshaler.Unmarshal(ba, &data)
-
-		return data, nil
-	}
 }
 
 func (tl *TransactionLog) getPriorityOne() (sop.UUID, error) {

@@ -27,7 +27,7 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	sds.Add(ctx, "fooVideo2", "video content")
 
 	tidLogs := trans.GetPhasedTransaction().(*Transaction).
-		logger.logger.(*mocks.MockTransactionLog).GetTIDLogs(
+		logger.TransactionLog.(*mocks.MockTransactionLog).GetTIDLogs(
 		trans.GetPhasedTransaction().(*Transaction).logger.transactionID)
 
 	if tidLogs == nil {
@@ -37,7 +37,7 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	trans.Rollback(ctx)
 
 	gotTidLogs := trans.GetPhasedTransaction().(*Transaction).
-		logger.logger.(*mocks.MockTransactionLog).GetTIDLogs(
+		logger.TransactionLog.(*mocks.MockTransactionLog).GetTIDLogs(
 		trans.GetPhasedTransaction().(*Transaction).logger.transactionID)
 
 	if gotTidLogs != nil {
@@ -74,7 +74,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	twoPhaseTrans := pt.(*Transaction)
 
 	// GetOne should not get anything as uncommitted transaction is still ongoing or not expired.
-	tid, _, _, _ := twoPhaseTrans.logger.logger.GetOne(ctx)
+	tid, _, _, _ := twoPhaseTrans.logger.GetOne(ctx)
 	if !tid.IsNil() {
 		t.Errorf("Failed, got %v, want nil.", tid)
 	}
@@ -85,7 +85,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	sop.Now = func() time.Time { return today }
 	//Now = func() time.Time { return today }
 
-	tid, _, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
+	tid, _, _, _ = twoPhaseTrans.logger.GetOne(ctx)
 	if tid.IsNil() {
 		t.Errorf("Failed, got nil, want valid Tid.")
 	}
@@ -94,7 +94,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 		t.Errorf("processExpiredTransactionLogs failed, got %v want nil.", err)
 	}
 
-	tid, _, _, _ = twoPhaseTrans.logger.logger.GetOne(ctx)
+	tid, _, _, _ = twoPhaseTrans.logger.GetOne(ctx)
 	if !tid.IsNil() {
 		t.Errorf("Failed, got %v, want nil.", tid)
 	}

@@ -295,7 +295,7 @@ func (nr *nodeRepositoryBackend) commitUpdatedNodes(ctx context.Context, nodes [
 	}
 	log.Debug("outside commitUpdatedNodes forloop trying to AllocateID")
 
-	if err := nr.transaction.registry.UpdateNoLocks(ctx, handles); err != nil {
+	if err := nr.transaction.registry.UpdateNoLocks(ctx, false, handles); err != nil {
 		log.Debug(fmt.Sprintf("commitUpdatedNodes failed registry.Update, details: %v", err))
 		return false, nil, err
 	}
@@ -340,7 +340,7 @@ func (nr *nodeRepositoryBackend) commitRemovedNodes(ctx context.Context, nodes [
 		}
 	}
 	// Persist the handles changes.
-	if err := nr.transaction.registry.UpdateNoLocks(ctx, handles); err != nil {
+	if err := nr.transaction.registry.UpdateNoLocks(ctx, false, handles); err != nil {
 		return false, nil, err
 	}
 	return true, handles, nil
@@ -520,7 +520,7 @@ func (nr *nodeRepositoryBackend) rollbackUpdatedNodes(ctx context.Context, nodes
 	}
 	// Undo changes in virtual ID registry.
 	if nodesAreLocked {
-		if err = nr.transaction.registry.UpdateNoLocks(ctx, handles); err != nil {
+		if err = nr.transaction.registry.UpdateNoLocks(ctx, false, handles); err != nil {
 			lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
 			log.Error(lastErr.Error())
 		}
@@ -599,7 +599,7 @@ func (nr *nodeRepositoryBackend) rollbackRemovedNodes(ctx context.Context, nodes
 
 	// Persist the handles changes.
 	if nodesAreLocked {
-		if err := nr.transaction.registry.UpdateNoLocks(ctx, handlesForRollback); err != nil {
+		if err := nr.transaction.registry.UpdateNoLocks(ctx, false, handlesForRollback); err != nil {
 			err = fmt.Errorf("unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
 			log.Error(err.Error())
 			return err
