@@ -122,7 +122,7 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 
 func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, tid sop.UUID) error {
 
-	if uhAndrh, err := tl.logger.Get(ctx, tid); err != nil {
+	if uhAndrh, err := tl.logger.Get(ctx, tid); uhAndrh == nil || err != nil {
 		return err
 	} else {
 		if err := t.registry.UpdateNoLocks(ctx, uhAndrh); err != nil {

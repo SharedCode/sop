@@ -181,7 +181,11 @@ func (tl *TransactionLog) LogCommitChanges(ctx context.Context, stores []sop.Sto
 // Fetch the transaction priority logs details given a tranasction ID.
 func (tl *TransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
 	filename := tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
-	if ba, err := os.ReadFile(filename); err != nil {
+	fio := NewDefaultFileIO()
+	if !fio.Exists(filename) {
+		return nil, nil
+	}
+	if ba, err := fio.ReadFile(filename); err != nil {
 		return nil, err
 	} else {
 		var data []sop.RegistryPayload[sop.Handle]
