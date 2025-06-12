@@ -90,6 +90,14 @@ func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 		return fmt.Errorf("transaction got committed, 'can't rollback it")
 	}
 
+	if t.logger.committedState >= beforeFinalize {
+		if err := t.logger.priorityRollback(ctx, t, t.GetID()); err != nil {
+			log.Error(err.Error())
+			// Registry can't be restored, fail even the rollback and cause a failover switch
+			return err
+		}
+	}
+
 	updatedNodes, removedNodes, addedNodes, _, rootNodes := t.classifyModifiedNodes()
 
 	if t.logger.committedState > commitStoreInfo {
@@ -477,12 +485,26 @@ func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tup
 
 var lastOnIdleRunTime int64
 var locker = sync.Mutex{}
+var plocker = sync.Mutex{}
+var isPriorityRollback bool
 
 func (t *Transaction) onIdle(ctx context.Context) {
 	// Required to have a backend btree to do cleanup.
 	if len(t.btreesBackend) == 0 {
 		return
 	}
+
+	// Allow only one priority rollback processor.
+	if !isPriorityRollback {
+		plocker.Lock()
+		if !isPriorityRollback {
+			isPriorityRollback = true
+			t.logger.doPriorityRollbacks(ctx, t)
+			isPriorityRollback = false
+		}
+		plocker.Unlock()
+	}
+
 	// If it is known that there is nothing to clean up then do 4hr interval polling,
 	// otherwise do shorter interval of 5 minutes, to allow faster cleanup.
 	// Having "abandoned" commit is a very rare occurrence.

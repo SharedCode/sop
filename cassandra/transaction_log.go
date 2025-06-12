@@ -53,6 +53,11 @@ func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction 
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
 	}
 
+	// Cassandra does NOT use 77 commitFunction, it is for File System transaction logger only.
+	if commitFunction == 77 {
+		return nil
+	}
+
 	insertStatement := fmt.Sprintf("INSERT INTO %s.t_log (id, c_f, c_f_p) VALUES(?,?,?);", connection.Config.Keyspace)
 	qry := connection.Session.Query(insertStatement, gocql.UUID(tid), commitFunction, payload).WithContext(ctx).Consistency(transactionLoggingConsistency)
 	if err := qry.Exec(); err != nil {
@@ -159,8 +164,8 @@ func (tl *transactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UU
 	return sop.UUID(tid), r, err
 }
 
-// Fetch the transaction logs details given a tranasction ID.
-func (tl *transactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
+// Fetch the transaction priority logs details given a tranasction ID.
+func (tl *transactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
 	// Nothing to do here because this is only applicable/in use in File System based transaction logger.
 	return nil, nil
 }

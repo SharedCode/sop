@@ -111,31 +111,39 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 }
 
 func (v *registry) UpdateNoLocks(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+
+	// Do the actual batch logged transaction update in Cassandra.
+	batch := connection.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
+		batch.SetConsistency(connection.Config.ConsistencyBook.RegistryUpdate)
+	}
+
 	for _, sh := range storesHandles {
 		updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
 			connection.Config.Keyspace, sh.RegistryTable)
-		// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 		for _, h := range sh.IDs {
-			qry := connection.Session.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
-				h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalID)).WithContext(ctx)
-			if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
-				qry.Consistency(connection.Config.ConsistencyBook.RegistryUpdate)
-			}
+			// Enqueue update registry record cmd.
+			batch.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
+				h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalID))
+		}
+	}
 
-			// Update registry record.
-			if err := qry.Exec(); err != nil {
-				v.l1Cache.Handles.Delete([]sop.UUID{h.LogicalID})
-				v.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
-				return err
-			}
+	// Execute the batch query, all or nothing.
+	if err := connection.Session.ExecuteBatch(batch); err != nil {
+		// Failed update all, thus, return err to cause rollback.
+		return err
+	}
 
-			// Tolerate Redis cache failure.
+	// Update redis cache.
+	for _, sh := range storesHandles {
+		for _, h := range sh.IDs {
 			if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
 			}
 			v.l1Cache.Handles.Set(convertToKvp([]sop.Handle{h}))
 		}
 	}
+
 	return nil
 }
 
