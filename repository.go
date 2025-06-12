@@ -77,14 +77,20 @@ type BlobsPayload[T UUID | KeyValuePair[UUID, []byte]] struct {
 	Blobs []T
 }
 
-// File system specific log.
-type FileSystemSpecificLog interface {
+// Transaction Priority log.
+type TransactionPriorityLog interface {
+	IsEnabled() bool
 	// Add a transaction log.
-	Add(ctx context.Context, tid UUID, commitFunction int, payload []byte) error
+	Add(ctx context.Context, tid UUID, payload []byte) error
 	// Remove all logs of a given transaciton.
 	Remove(ctx context.Context, tid UUID) error
 	// Fetch the transaction priority logs details given a transaction ID.
 	Get(ctx context.Context, tid UUID) ([]RegistryPayload[Handle], error)
+
+	// GetOne will fetch the oldest transaction (older than 2 min) priority logs details if there are from the
+	// File System active home folder.
+	GetOne(ctx context.Context) (UUID, []RegistryPayload[Handle], error)
+
 	// Log commit changes to its own log file separate than the rest of transaction logs.
 	// This is a special log file only used during "reinstate" of drives back for replication.
 	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
@@ -92,7 +98,12 @@ type FileSystemSpecificLog interface {
 
 // Transaction Log specifies the API(methods) needed to implement logging for the transaction.
 type TransactionLog interface {
-	FileSystemSpecificLog
+	// Returns the transaction priority logger.
+	PriorityLog() TransactionPriorityLog
+	// Add a transaction log.
+	Add(ctx context.Context, tid UUID, commitFunction int, payload []byte) error
+	// Remove all logs of a given transaciton.
+	Remove(ctx context.Context, tid UUID) error
 
 	// GetOne will fetch the oldest transaction logs from the backend, older than 1 hour ago, mark it so succeeding call
 	// will return the next hour and so on, until no more, upon reaching the current hour.

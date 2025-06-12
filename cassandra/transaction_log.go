@@ -45,6 +45,7 @@ func NewTransactionLog() sop.TransactionLog {
 	return &transactionLog{
 		cache:       c,
 		hourLockKey: c.CreateLockKeys([]string{"HBP"})[0],
+		dummy:       dummy{},
 	}
 }
 
@@ -208,12 +209,26 @@ func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([
 	return r, nil
 }
 
+func (tl *transactionLog) PriorityLog() sop.TransactionPriorityLog {
+	return tl.dummy
+}
+
 type dummy struct{}
+
+func (d dummy) IsEnabled() bool {
+	return false
+}
 
 // Fetch the transaction priority logs details given a tranasction ID.
 func (d dummy) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
 	// Nothing to do here because this is only applicable/in use in File System based transaction logger.
 	return nil, nil
+}
+
+// GetOne will fetch the oldest transaction (older than 2 min) priority logs details if there are from the
+// File System active home folder.
+func (d dummy) GetOne(ctx context.Context) (sop.UUID, []sop.RegistryPayload[sop.Handle], error) {
+	return sop.NilUUID, nil, nil
 }
 
 // Log commit changes to its own log file separate than the rest of transaction logs.
@@ -222,7 +237,7 @@ func (d dummy) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, new
 	return nil
 }
 
-func (d dummy) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+func (d dummy) Add(ctx context.Context, tid sop.UUID, payload []byte) error {
 	return nil
 }
 
