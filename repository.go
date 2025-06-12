@@ -93,10 +93,6 @@ type FileSystemSpecificLog interface {
 // Transaction Log specifies the API(methods) needed to implement logging for the transaction.
 type TransactionLog interface {
 	FileSystemSpecificLog
-	// Add a transaction log.
-	Add(ctx context.Context, tid UUID, commitFunction int, payload []byte) error
-	// Remove all logs of a given transaciton.
-	Remove(ctx context.Context, tid UUID) error
 
 	// GetOne will fetch the oldest transaction logs from the backend, older than 1 hour ago, mark it so succeeding call
 	// will return the next hour and so on, until no more, upon reaching the current hour.
