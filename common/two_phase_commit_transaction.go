@@ -11,7 +11,6 @@ import (
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
 	"github.com/SharedCode/sop/cache"
-	"github.com/SharedCode/sop/fs"
 )
 
 type btreeBackend struct {
@@ -332,7 +331,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 
 		// Remove the pre commit logs as not needed anymore from this point.
 		if preCommitTID != sop.NilUUID {
-			t.logger.logger.Remove(ctx, preCommitTID)
+			t.logger.TransactionLog.Remove(ctx, preCommitTID)
 			preCommitTID = sop.NilUUID
 		}
 
@@ -449,7 +448,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 	if len(updatedNodesHandles) > 0 || len(removedNodesHandles) > 0 {
 		// Log the updated nodes & removed nodes handles for use in their rollback in File System Registry implementation.
 		// Cassandra tlogger will ignore this as it has its own "all or nothing" feature handled inside Cassandra cluster.
-		t.logger.log(ctx, CommitUpdatedAndRemovedHandles, toByteArray(append(updatedNodesHandles, removedNodesHandles...)))
+		t.logger.FileSystemSpecificLog.Add(ctx, t.GetID(), 0, toByteArray(append(updatedNodesHandles, removedNodesHandles...)))
 	}
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes, in phase2Commit.
@@ -505,19 +504,17 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 
 	if len(t.updatedNodeHandles) > 0 || len(t.removedNodeHandles) > 0 {
 		// The last step to consider a completed commit.
-		if err := t.registry.UpdateNoLocks(ctx, append(t.updatedNodeHandles, t.removedNodeHandles...)); err != nil {
+		if err := t.registry.UpdateNoLocks(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)); err != nil {
 			t.unlockNodesKeys(ctx)
 			return err
 		}
-		if fts, ok := t.logger.logger.(*fs.TransactionLog); ok {
-			tr.Go(func() error {
-				// Also, remove the special commitFunction 77 priority log file as it is no longer needed.
-				if err := fts.RemovePriorityLogFile(ctx, t.GetID()); err != nil {
-					log.Warn(fmt.Sprintf("removing priority log for tid %v failed, details: %v", t.GetID(), err))
-				}
-				return nil
-			})
-		}
+		tr.Go(func() error {
+			// Also, remove the special commitFunction 77 priority log file as it is no longer needed.
+			if err := t.logger.FileSystemSpecificLog.Remove(ctx, t.GetID()); err != nil {
+				log.Warn(fmt.Sprintf("removing priority log for tid %v failed, details: %v", t.GetID(), err))
+			}
+			return nil
+		})
 	}
 
 	tr.Go(func() error {
@@ -533,7 +530,7 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 		return nil
 	})
 	tr.Go(func() error {
-		if err := t.logger.logCommitChanges(tr.GetContext(), t.updatedStoresInfo, t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles); err != nil {
+		if err := t.logger.FileSystemSpecificLog.LogCommitChanges(tr.GetContext(), t.updatedStoresInfo, t.newRootNodeHandles, t.addedNodeHandles, t.updatedNodeHandles, t.removedNodeHandles); err != nil {
 			log.Warn(fmt.Sprintf("logger.logCommitChanges failed but will not fail commit(phase 2 succeeded), details: %v", err))
 		}
 		return nil

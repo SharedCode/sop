@@ -34,6 +34,7 @@ func IsNil(id gocql.UUID) bool {
 }
 
 type transactionLog struct {
+	dummy
 	hourLockKey *sop.LockKey
 	cache       sop.Cache
 }
@@ -51,11 +52,6 @@ func NewTransactionLog() sop.TransactionLog {
 func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
-	}
-
-	// Cassandra does NOT use 77 commitFunction, it is for File System transaction logger only.
-	if commitFunction == 77 {
-		return nil
 	}
 
 	insertStatement := fmt.Sprintf("INSERT INTO %s.t_log (id, c_f, c_f_p) VALUES(?,?,?);", connection.Config.Keyspace)
@@ -164,18 +160,6 @@ func (tl *transactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UU
 	return sop.UUID(tid), r, err
 }
 
-// Fetch the transaction priority logs details given a tranasction ID.
-func (tl *transactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
-	// Nothing to do here because this is only applicable/in use in File System based transaction logger.
-	return nil, nil
-}
-
-// Log commit changes to its own log file separate than the rest of transaction logs.
-// This is a special log file only used during "reinstate" of drives back for replication.
-func (tl *transactionLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
-	return nil
-}
-
 func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error) {
 	mh, _ := time.Parse(DateHourLayout, Now().Format(DateHourLayout))
 	// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
@@ -222,4 +206,27 @@ func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([
 		return r, err
 	}
 	return r, nil
+}
+
+type dummy struct{}
+
+// Fetch the transaction priority logs details given a tranasction ID.
+func (d dummy) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
+	// Nothing to do here because this is only applicable/in use in File System based transaction logger.
+	return nil, nil
+}
+
+// Log commit changes to its own log file separate than the rest of transaction logs.
+// This is a special log file only used during "reinstate" of drives back for replication.
+func (d dummy) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
+	return nil
+}
+
+func (d dummy) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+	return nil
+}
+
+// Remove will delete transaction log(t_log) records given a transaction ID(tid).
+func (d dummy) Remove(ctx context.Context, tid sop.UUID) error {
+	return nil
 }

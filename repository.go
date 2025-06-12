@@ -36,7 +36,7 @@ type Registry interface {
 	Update(ctx context.Context, handles []RegistryPayload[Handle]) error
 	// Update for use in an active transaction where the registry handles for update were
 	// all pre-locked (& post call unlocked) by the transaction manager.
-	UpdateNoLocks(ctx context.Context, storesHandles []RegistryPayload[Handle]) error
+	UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []RegistryPayload[Handle]) error
 	// Remove will delete handles(given their IDs) from registry table(s).
 	Remove(context.Context, []RegistryPayload[UUID]) error
 
@@ -77,12 +77,22 @@ type BlobsPayload[T UUID | KeyValuePair[UUID, []byte]] struct {
 	Blobs []T
 }
 
-// Transaction Log specifies the API(methods) needed to implement logging for the transaction.
-type TransactionLog interface {
+// File system specific log.
+type FileSystemSpecificLog interface {
 	// Add a transaction log.
 	Add(ctx context.Context, tid UUID, commitFunction int, payload []byte) error
 	// Remove all logs of a given transaciton.
 	Remove(ctx context.Context, tid UUID) error
+	// Fetch the transaction priority logs details given a transaction ID.
+	Get(ctx context.Context, tid UUID) ([]RegistryPayload[Handle], error)
+	// Log commit changes to its own log file separate than the rest of transaction logs.
+	// This is a special log file only used during "reinstate" of drives back for replication.
+	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
+}
+
+// Transaction Log specifies the API(methods) needed to implement logging for the transaction.
+type TransactionLog interface {
+	FileSystemSpecificLog
 
 	// GetOne will fetch the oldest transaction logs from the backend, older than 1 hour ago, mark it so succeeding call
 	// will return the next hour and so on, until no more, upon reaching the current hour.
@@ -98,16 +108,9 @@ type TransactionLog interface {
 	// Or nils if there is no more needing cleanup for this date hour.
 	GetOneOfHour(ctx context.Context, hour string) (UUID, []KeyValuePair[int, []byte], error)
 
-	// Fetch the transaction priority logs details given a transaction ID.
-	Get(ctx context.Context, tid UUID) ([]RegistryPayload[Handle], error)
-
 	// Implement to generate a new UUID. Cassandra transaction logging uses gocql.UUIDFromTime, SOP in file system
 	// should just use the general sop.NewUUID function which currently uses google's uuid package.
 	NewUUID() UUID
-
-	// Log commit changes to its own log file separate than the rest of transaction logs.
-	// This is a special log file only used during "reinstate" of drives back for replication.
-	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
 }
 
 // StoreRepository specifies CRUD methods for StoreInfo (storage &) management.

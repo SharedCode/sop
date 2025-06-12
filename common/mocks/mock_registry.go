@@ -37,7 +37,7 @@ func (v *Mock_vid_registry) Update(ctx context.Context, storesHandles []sop.Regi
 	}
 	return nil
 }
-func (v *Mock_vid_registry) UpdateNoLocks(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+func (v *Mock_vid_registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
 

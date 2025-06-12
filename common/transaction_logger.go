@@ -8,7 +8,6 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
-	"github.com/SharedCode/sop/fs"
 )
 
 type commitFunction int
@@ -28,9 +27,6 @@ const (
 	finalizeCommit
 	deleteObsoleteEntries
 	deleteTrackedItemsValues
-	// Cassandra registry should ignore these, File System(FS) registry should save on separate log file.
-	// Transaction for FS registry should rollback on startup all of log files w/ updated & removed handles.
-	CommitUpdatedAndRemovedHandles = 77
 
 	// Pre commit functions.
 	addActivelyPersistedItem    = 99
@@ -38,8 +34,9 @@ const (
 )
 
 type transactionLog struct {
+	sop.TransactionLog
+	sop.FileSystemSpecificLog
 	committedState commitFunction
-	logger         sop.TransactionLog
 	logging        bool
 	transactionID  sop.UUID
 }
@@ -47,30 +44,21 @@ type transactionLog struct {
 // Instantiate a transaction logger.
 func newTransactionLogger(logger sop.TransactionLog, logging bool) *transactionLog {
 	return &transactionLog{
-		logger:        logger,
-		logging:       logging,
-		transactionID: logger.NewUUID(),
+		TransactionLog:        logger,
+		FileSystemSpecificLog: logger,
+		logging:               logging,
+		transactionID:         logger.NewUUID(),
 	}
-}
-
-// Log the commited changes within the transaction. Log it in a "transaction commit" log file.
-// This log file is different than where TransactionLog normally logs the transaction logs.
-func (tl *transactionLog) logCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles,
-	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
-	return tl.logger.LogCommitChanges(ctx, stores, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles)
 }
 
 // Log the about to be committed function state.
 func (tl *transactionLog) log(ctx context.Context, f commitFunction, payload []byte) error {
-	if f == CommitUpdatedAndRemovedHandles {
-		return tl.logger.Add(ctx, tl.transactionID, int(f), payload)
-	}
 	tl.committedState = f
 	if !tl.logging || f == unknown {
 		return nil
 	}
 
-	return tl.logger.Add(ctx, tl.transactionID, int(f), payload)
+	return tl.TransactionLog.Add(ctx, tl.transactionID, int(f), payload)
 }
 
 // removes logs saved to backend. During commit completion, logs need to be cleared.
@@ -78,7 +66,7 @@ func (tl *transactionLog) removeLogs(ctx context.Context) error {
 	if !tl.logging {
 		return nil
 	}
-	err := tl.logger.Remove(ctx, tl.transactionID)
+	err := tl.TransactionLog.Remove(ctx, tl.transactionID)
 	return err
 }
 
@@ -93,13 +81,13 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 	var committedFunctionLogs []sop.KeyValuePair[int, []byte]
 	var err error
 	if hourBeingProcessed == "" {
-		tid, hr, committedFunctionLogs, err = tl.logger.GetOne(ctx)
+		tid, hr, committedFunctionLogs, err = tl.TransactionLog.GetOne(ctx)
 		if err != nil {
 			return err
 		}
 		hourBeingProcessed = hr
 	} else {
-		tid, committedFunctionLogs, err = tl.logger.GetOneOfHour(ctx, hourBeingProcessed)
+		tid, committedFunctionLogs, err = tl.TransactionLog.GetOneOfHour(ctx, hourBeingProcessed)
 		if err != nil {
 			return err
 		}
@@ -122,10 +110,10 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 
 func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, tid sop.UUID) error {
 
-	if uhAndrh, err := tl.logger.Get(ctx, tid); uhAndrh == nil || err != nil {
+	if uhAndrh, err := tl.TransactionLog.Get(ctx, tid); uhAndrh == nil || err != nil {
 		return err
 	} else {
-		if err := t.registry.UpdateNoLocks(ctx, uhAndrh); err != nil {
+		if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
 			// When Registry is known to be corrupted, we can raise a failover event.
 			return sop.Error[sop.UUID]{
 				Code:     sop.RestoreRegistryFileSectorFailure,
@@ -133,17 +121,14 @@ func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, 
 				UserData: tid,
 			}
 		}
-		if fts, ok := tl.logger.(*fs.TransactionLog); ok {
-			return fts.RemovePriorityLogFile(ctx, tid)
-		}
-		return nil
+		return tl.FileSystemSpecificLog.Remove(ctx, tid)
 	}
 }
 
 func (tl *transactionLog) rollback(ctx context.Context, t *Transaction, tid sop.UUID, committedFunctionLogs []sop.KeyValuePair[int, []byte]) error {
 	if len(committedFunctionLogs) == 0 {
 		if !tid.IsNil() {
-			return tl.logger.Remove(ctx, tid)
+			return tl.TransactionLog.Remove(ctx, tid)
 		}
 		return nil
 	}
@@ -164,7 +149,7 @@ func (tl *transactionLog) rollback(ctx context.Context, t *Transaction, tid sop.
 		if committedFunctionLogs[i].Key == finalizeCommit {
 			if committedFunctionLogs[i].Value == nil {
 				if lastCommittedFunctionLog >= deleteObsoleteEntries {
-					if err := tl.logger.Remove(ctx, tid); err != nil {
+					if err := tl.TransactionLog.Remove(ctx, tid); err != nil {
 						lastErr = err
 					}
 					return lastErr
@@ -181,7 +166,7 @@ func (tl *transactionLog) rollback(ctx context.Context, t *Transaction, tid sop.
 				if err := t.deleteObsoleteEntries(ctx, v.First.First, v.First.Second); err != nil {
 					lastErr = err
 				}
-				if err := tl.logger.Remove(ctx, tid); err != nil {
+				if err := tl.TransactionLog.Remove(ctx, tid); err != nil {
 					lastErr = err
 				}
 				return lastErr
@@ -247,7 +232,7 @@ func (tl *transactionLog) rollback(ctx context.Context, t *Transaction, tid sop.
 		}
 	}
 
-	if err := tl.logger.Remove(ctx, tid); err != nil {
+	if err := tl.TransactionLog.Remove(ctx, tid); err != nil {
 		lastErr = err
 	}
 
