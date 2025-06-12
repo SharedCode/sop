@@ -131,10 +131,20 @@ func (tl *MockTransactionLog) NewUUID() sop.UUID {
 	return sop.NewUUID()
 }
 
+func (tl *MockTransactionLog) PriorityLog() sop.TransactionPriorityLog {
+	return nil
+}
+
 // Fetch the transaction logs details given a tranasction ID.
 func (tl *MockTransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
 	// Nothing to do here because this is only applicable/in use in File System based transaction logger.
 	return nil, nil
+}
+
+// GetLog will fetch the oldest transaction (older than 2 min) priority logs details if there are from the
+// File System active home folder.
+func (tl *MockTransactionLog) GetLog(ctx context.Context) (sop.UUID, []sop.RegistryPayload[sop.Handle], error) {
+	return sop.NilUUID, nil, nil
 }
 
 func (tl *MockTransactionLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {

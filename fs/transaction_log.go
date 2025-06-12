@@ -23,7 +23,7 @@ const (
 )
 
 type TransactionLog struct {
-	fileSystemSpecificLog
+	priorityLog
 	hourLockKey *sop.LockKey
 	cache       sop.Cache
 	file        *os.File
@@ -38,19 +38,23 @@ func NewTransactionLog(cache sop.Cache, rt *replicationTracker) *TransactionLog 
 	return &TransactionLog{
 		cache:       cache,
 		hourLockKey: cache.CreateLockKeys([]string{"HBP"})[0],
-		fileSystemSpecificLog: fileSystemSpecificLog{
+		priorityLog: priorityLog{
 			replicationTracker: rt,
 		},
 	}
 }
 
-type fileSystemSpecificLog struct {
+type priorityLog struct {
 	replicationTracker *replicationTracker
 	tid                sop.UUID
 }
 
+func (l priorityLog) IsEnabled() bool {
+	return true
+}
+
 // Remove will delete transaction log(t_log) records given a transaction ID(tid).
-func (l fileSystemSpecificLog) Remove(ctx context.Context, tid sop.UUID) error {
+func (l priorityLog) Remove(ctx context.Context, tid sop.UUID) error {
 	fio := NewDefaultFileIO()
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
 	if fio.Exists(filename) {
@@ -60,7 +64,7 @@ func (l fileSystemSpecificLog) Remove(ctx context.Context, tid sop.UUID) error {
 }
 
 // Add transaction log w/ payload blob to the transaction log file.
-func (l fileSystemSpecificLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+func (l priorityLog) Add(ctx context.Context, tid sop.UUID, payload []byte) error {
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
 	os.WriteFile(filename, payload, permission)
 	return nil
@@ -68,12 +72,12 @@ func (l fileSystemSpecificLog) Add(ctx context.Context, tid sop.UUID, commitFunc
 
 // Log commit changes to its own log file separate than the rest of transaction logs.
 // This is a special log file only used during "reinstate" of drives back for replication.
-func (l fileSystemSpecificLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
+func (l priorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 	return l.replicationTracker.logCommitChanges(l.tid, stores, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles)
 }
 
 // Fetch the transaction priority logs details given a tranasction ID.
-func (l fileSystemSpecificLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
+func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
 	fio := NewDefaultFileIO()
 	if !fio.Exists(filename) {
@@ -87,6 +91,40 @@ func (l fileSystemSpecificLog) Get(ctx context.Context, tid sop.UUID) ([]sop.Reg
 
 		return data, nil
 	}
+}
+func (l priorityLog) GetOne(ctx context.Context) (sop.UUID, []sop.RegistryPayload[sop.Handle], error) {
+	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
+	cappedHour := mh.Add(-time.Duration(2 * time.Minute))
+
+	files, err := getFilesSortedByModifiedTime(l.replicationTracker.getActiveBaseFolder())
+	if err != nil {
+		return sop.NilUUID, nil, err
+	}
+
+	// Get the oldest first.
+	for i := range files {
+		// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
+		// gap ensures no issue due to overlapping.
+		fts := files[i].ModTime.Format(DateHourLayout)
+		ft, _ := time.Parse(DateHourLayout, fts)
+		if cappedHour.Compare(ft) >= 0 {
+			filename := files[i].Name()
+			tid, err := sop.ParseUUID(filename[0 : len(filename)-len(logFileExtension)])
+			if err != nil {
+				continue
+			}
+			r, e := l.Get(ctx, tid)
+			return tid, r, e
+		} else {
+			break
+		}
+	}
+
+	return sop.NilUUID, nil, nil
+}
+
+func (tl *TransactionLog) PriorityLog() sop.TransactionPriorityLog {
+	return tl.priorityLog
 }
 
 // Add transaction log w/ payload blob to the transaction log file.
@@ -199,37 +237,6 @@ func (tl *TransactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UU
 	r, err := tl.getLogsDetails(tid)
 
 	return tid, r, err
-}
-
-func (tl *TransactionLog) getPriorityOne() (sop.UUID, error) {
-
-	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
-	cappedHour := mh.Add(-time.Duration(time.Duration(ageLimit) * time.Minute))
-
-	files, err := getFilesSortedByModifiedTime(tl.replicationTracker.getActiveBaseFolder())
-	if err != nil {
-		return sop.NilUUID, err
-	}
-
-	// Get the oldest first.
-	for i := range files {
-		// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
-		// gap ensures no issue due to overlapping.
-		fts := files[i].ModTime.Format(DateHourLayout)
-		ft, _ := time.Parse(DateHourLayout, fts)
-		if cappedHour.Compare(ft) >= 0 {
-			filename := files[i].Name()
-			tid, err := sop.ParseUUID(filename[0 : len(filename)-len(logFileExtension)])
-			if err != nil {
-				continue
-			}
-			return tid, nil
-		} else {
-			break
-		}
-	}
-
-	return sop.NilUUID, nil
 }
 
 func (tl *TransactionLog) getOne() (string, sop.UUID, error) {

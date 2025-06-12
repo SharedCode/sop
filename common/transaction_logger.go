@@ -35,7 +35,6 @@ const (
 
 type transactionLog struct {
 	sop.TransactionLog
-	sop.FileSystemSpecificLog
 	committedState commitFunction
 	logging        bool
 	transactionID  sop.UUID
@@ -44,10 +43,9 @@ type transactionLog struct {
 // Instantiate a transaction logger.
 func newTransactionLogger(logger sop.TransactionLog, logging bool) *transactionLog {
 	return &transactionLog{
-		TransactionLog:        logger,
-		FileSystemSpecificLog: logger,
-		logging:               logging,
-		transactionID:         logger.NewUUID(),
+		TransactionLog: logger,
+		logging:        logging,
+		transactionID:  logger.NewUUID(),
 	}
 }
 
@@ -99,18 +97,45 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 	return tl.rollback(ctx, t, tid, committedFunctionLogs)
 }
 
-func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) error {
+func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) (bool, error) {
 	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey("Prbs")})
 	if ok, _, _ := t.l2Cache.Lock(ctx, 5*time.Minute, lk); ok {
+		if ok, _ := t.l2Cache.IsLocked(ctx, lk); !ok {
+			return false, nil
+		}
+		log.Info("Entering doPriorityRollbacks loop(5).")
+		defer t.l2Cache.Unlock(ctx, lk)
+		start := sop.Now()
 
+		for range 5 {
+			if tid, uhAndrh, err := tl.PriorityLog().GetOne(ctx); !tid.IsNil() {
+				if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
+					// When Registry is known to be corrupted, we can raise a failover event.
+					return false, sop.Error[sop.UUID]{
+						Code:     sop.RestoreRegistryFileSectorFailure,
+						Err:      err,
+						UserData: tid,
+					}
+				}
+				if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
+					return false, err
+				}
+			} else if err != nil {
+				return false, err
+			} else {
+				break
+			}
+			// Loop through 5 or until timeout if busy.
+			if err := sop.TimedOut(ctx, "doPriorityRollbacks", start, time.Duration(4.5*time.Hour.Minutes())); err != nil {
+				return true, nil
+			}
+		}
 	}
-	//return tl.priorityRollback(ctx, t, tid, committedFunctionLogs)
-	return nil
+	return false, nil
 }
 
 func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, tid sop.UUID) error {
-
-	if uhAndrh, err := tl.TransactionLog.Get(ctx, tid); uhAndrh == nil || err != nil {
+	if uhAndrh, err := tl.PriorityLog().Get(ctx, tid); uhAndrh == nil || err != nil {
 		return err
 	} else {
 		if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
@@ -121,7 +146,7 @@ func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, 
 				UserData: tid,
 			}
 		}
-		return tl.FileSystemSpecificLog.Remove(ctx, tid)
+		return tl.PriorityLog().Remove(ctx, tid)
 	}
 }
 

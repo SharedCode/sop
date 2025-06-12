@@ -485,8 +485,10 @@ func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tup
 
 var lastOnIdleRunTime int64
 var locker = sync.Mutex{}
+
+var lastPriorityOnIdleTime int64
 var plocker = sync.Mutex{}
-var isPriorityRollback bool
+var pFound bool
 
 func (t *Transaction) onIdle(ctx context.Context) {
 	// Required to have a backend btree to do cleanup.
@@ -495,24 +497,38 @@ func (t *Transaction) onIdle(ctx context.Context) {
 	}
 
 	// Allow only one priority rollback processor.
-	if !isPriorityRollback {
+	interval := 40
+	if pFound {
+		interval = 5
+	}
+	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Second).UnixMilli()
+	if t.logger.PriorityLog().IsEnabled() && lastPriorityOnIdleTime < nextRunTime {
+		runTime := false
 		plocker.Lock()
-		if !isPriorityRollback {
-			isPriorityRollback = true
-			t.logger.doPriorityRollbacks(ctx, t)
-			isPriorityRollback = false
+		if lastPriorityOnIdleTime < nextRunTime {
+			lastPriorityOnIdleTime = sop.Now().UnixMilli()
+			runTime = true
 		}
 		plocker.Unlock()
+		if runTime {
+			if found, err := t.logger.doPriorityRollbacks(ctx, t); err != nil {
+				// Trigger a failover.
+				t.HandleReplicationRelatedError(ctx, err, nil, true)
+				pFound = false
+			} else {
+				pFound = found
+			}
+		}
 	}
 
 	// If it is known that there is nothing to clean up then do 4hr interval polling,
 	// otherwise do shorter interval of 5 minutes, to allow faster cleanup.
 	// Having "abandoned" commit is a very rare occurrence.
-	interval := 4 * 60
+	interval = 4 * 60
 	if hourBeingProcessed != "" {
 		interval = 5
 	}
-	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
+	nextRunTime = sop.Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
 	if lastOnIdleRunTime < nextRunTime {
 		runTime := false
 		locker.Lock()
