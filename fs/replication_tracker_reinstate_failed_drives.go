@@ -87,7 +87,7 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 
 	fn := r.formatActiveFolderEntity(commitChangesLogFolder)
 
-	files, err := getFilesSortedByModifiedTime(fn, logFileExtension, nil)
+	files, err := getFilesSortedDescByModifiedTime(fn, logFileExtension, nil)
 	if err != nil {
 		return false, err
 	}

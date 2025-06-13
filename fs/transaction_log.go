@@ -21,6 +21,7 @@ const (
 	logFileExtension         = ".log"
 	logFolder                = "translogs"
 	priorityLogFileExtension = ".plg"
+	priorityLogMinAgeInMin   = 5
 )
 
 type TransactionLog struct {
@@ -96,7 +97,7 @@ func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPaylo
 }
 func (l priorityLog) GetOne(ctx context.Context) (sop.UUID, []sop.RegistryPayload[sop.Handle], error) {
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
-	cappedHour := mh.Add(-time.Duration(2 * time.Minute))
+	cappedHour := mh.Add(-time.Duration(priorityLogMinAgeInMin * time.Minute))
 
 	f := func(de os.DirEntry) bool {
 		info, _ := de.Info()
@@ -119,7 +120,7 @@ func (l priorityLog) GetOne(ctx context.Context) (sop.UUID, []sop.RegistryPayloa
 		}
 		return sop.NilUUID, nil, nil
 	}
-	files, err := getFilesSortedByModifiedTime(fn, priorityLogFileExtension, f)
+	files, err := getFilesSortedDescByModifiedTime(fn, priorityLogFileExtension, f)
 	if err != nil || len(files) == 0 {
 		return sop.NilUUID, nil, err
 	}
@@ -137,7 +138,6 @@ func (tl *TransactionLog) PriorityLog() sop.TransactionPriorityLog {
 
 // Add transaction log w/ payload blob to the transaction log file.
 func (tl *TransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
-
 	if tl.file == nil {
 		tl.tid = tid
 		filename := tl.format(tid)
@@ -275,7 +275,7 @@ func (tl *TransactionLog) getOne() (string, sop.UUID, error) {
 	}
 
 	fn := tl.replicationTracker.formatActiveFolderEntity(logFolder)
-	files, err := getFilesSortedByModifiedTime(fn, logFileExtension, f)
+	files, err := getFilesSortedDescByModifiedTime(fn, logFileExtension, f)
 	if err != nil || len(files) == 0 {
 		return "", sop.NilUUID, err
 	}
@@ -342,11 +342,11 @@ func (fis ByModTime) Swap(i, j int) {
 }
 
 func (fis ByModTime) Less(i, j int) bool {
-	return fis[i].ModTime.After(fis[j].ModTime)
+	return fis[i].ModTime.Before(fis[j].ModTime)
 }
 
 // Reads a directory then returns the filenames sorted in descending order as driven by the files' modified time.
-func getFilesSortedByModifiedTime(directoryPath string, fileSuffix string, filter func(os.DirEntry) bool) ([]FileInfoWithModTime, error) {
+func getFilesSortedDescByModifiedTime(directoryPath string, fileSuffix string, filter func(os.DirEntry) bool) ([]FileInfoWithModTime, error) {
 	files, err := os.ReadDir(directoryPath)
 	if err != nil && len(files) == 0 {
 		return nil, fmt.Errorf("error reading directory: %v", err)

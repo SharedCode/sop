@@ -15,6 +15,8 @@ const (
 	lockSectorRetryTimeoutInSecs = 30
 )
 
+var zeroSector = bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)
+
 func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails []fileRegionDetails) error {
 	dio := newDirectIO()
 	ba := dio.createAlignedBlock()
@@ -34,12 +36,10 @@ func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails [
 	ba := dio.createAlignedBlock()
 	// Study whether we want to zero out only the "Logical ID" part. For now, zero out entire Handle block
 	// which could aid in cleaner deleted blocks(as marked w/ all zeroes). Negligible difference in IO.
-	ba2 := bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)
 	for _, frd := range fileRegionDetails {
 
 		log.Debug(fmt.Sprintf("marking deleted file %s, sector offset %v, offset in block %v", frd.dio.filename, frd.blockOffset, frd.handleInBlockOffset))
-
-		if err := hm.updateFileBlockRegion(ctx, frd.dio, frd.blockOffset, int(frd.handleInBlockOffset), ba2, ba); err != nil {
+		if err := hm.updateFileBlockRegion(ctx, frd.dio, frd.blockOffset, int(frd.handleInBlockOffset), zeroSector, ba); err != nil {
 			return err
 		}
 	}
