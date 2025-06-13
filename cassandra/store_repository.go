@@ -108,23 +108,18 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 	// Create lock IDs that we can use to logically lock and prevent other updates.
 	lockKeys := sr.cache.CreateLockKeys(keys)
 
-	b := retry.NewFibonacci(1 * time.Second)
-
 	// Lock all keys.
-	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
+	if err := sop.Retry(ctx, func(ctx context.Context) error {
 		// 15 minutes to lock, merge/update details then unlock.
 		if ok, _, err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys); !ok || err != nil {
 			if err == nil {
-				err = fmt.Errorf("lock call detected conflict")
+				err = fmt.Errorf("lock failed, key(s) already locked by another")
 			}
 			log.Warn(err.Error() + ", will retry")
 			return retry.RetryableError(err)
 		}
 		return nil
-	}); err != nil {
-		log.Warn(err.Error() + ", gave up")
-		// Unlock keys since we failed locking all of them.
-		sr.cache.Unlock(ctx, lockKeys)
+	}, func(ctx context.Context) { sr.cache.Unlock(ctx, lockKeys) }); err != nil {
 		return nil, err
 	}
 

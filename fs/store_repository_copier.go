@@ -30,17 +30,17 @@ func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 
 		// Write the store list.
 		ba, _ := encoding.Marshal(storeList)
-		if err := storeWriter.createStore(""); err != nil {
+		if err := storeWriter.createStore(ctx, ""); err != nil {
 			return err
 		}
-		if err := storeWriter.write(storeListFilename, ba); err != nil {
+		if err := storeWriter.write(ctx, storeListFilename, ba); err != nil {
 			return err
 		}
 
 		for _, storeName := range storeList {
 
 			// Create the Store folder.
-			if err := storeWriter.createStore(storeName); err != nil {
+			if err := storeWriter.createStore(ctx, storeName); err != nil {
 				return err
 			}
 
@@ -53,14 +53,14 @@ func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if err := storeWriter.write(fmt.Sprintf("%c%s%c%s", os.PathSeparator, storeName, os.PathSeparator, storeInfoFilename), ba); err != nil {
+			if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, storeName, os.PathSeparator, storeInfoFilename), ba); err != nil {
 				return err
 			}
 
 			// Copy this store's registry segment file(s).
 			sf := sr.replicationTracker.formatPassiveFolderEntity(storeName)
 			tf := sr.replicationTracker.formatActiveFolderEntity(storeName)
-			if err := copyFilesByExtension(sf, tf, registryFileExtension); err != nil {
+			if err := copyFilesByExtension(ctx, sf, tf, registryFileExtension); err != nil {
 				return err
 			}
 		}
@@ -69,8 +69,9 @@ func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 	return nil
 }
 
-func copyFilesByExtension(sourceDir, targetDir, extension string) error {
-	files, err := os.ReadDir(sourceDir)
+func copyFilesByExtension(ctx context.Context, sourceDir, targetDir, extension string) error {
+	fio := NewFileIO()
+	files, err := fio.ReadDir(ctx, sourceDir)
 	if err != nil {
 		return fmt.Errorf("error reading source directory: %w", err)
 	}

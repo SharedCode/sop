@@ -67,7 +67,7 @@ func NewBlobStoreWithEC(toFilePath ToFilePathFunc, fileIO FileIO, erasureConfig 
 		}
 	}
 	if fileIO == nil {
-		fileIO = NewDefaultFileIO()
+		fileIO = NewFileIO()
 	}
 	return &blobStoreWithEC{
 		fileIO:                      fileIO,
@@ -106,7 +106,7 @@ func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobI
 		tr.Go(func() error {
 			log.Debug(fmt.Sprintf("reading from file %s", fn))
 
-			ba, err := b.fileIO.ReadFile(fn)
+			ba, err := b.fileIO.ReadFile(ctx, fn)
 			if err != nil {
 				lastErr = err
 				log.Error("failed reading from file %s, error: %v", fn, err)
@@ -154,7 +154,7 @@ func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobI
 				copy(buf[len(md):], encodedShards[i])
 				shardsWithMetadata[i] = buf
 
-				err := b.fileIO.WriteFile(fn, shardsWithMetadata[i], permission)
+				err := b.fileIO.WriteFile(ctx, fn, shardsWithMetadata[i], permission)
 				// Just log warning if damaged shard can't be repaired as we have reconstructed it part of return.
 				if err != nil {
 					log.Warn(fmt.Sprintf("error encountered repairing a damaged shard (%s)", fn))
@@ -211,8 +211,8 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayloa
 					// Task WriteFile will add or replace existing file.
 					trShards.Go(func() error {
 						fp := b.toFilePath(baseFolderPath, blobKey)
-						if !b.fileIO.Exists(fp) {
-							if err := b.fileIO.MkdirAll(fp, permission); err != nil {
+						if !b.fileIO.Exists(ctx, fp) {
+							if err := b.fileIO.MkdirAll(ctx, fp, permission); err != nil {
 								ch <- err
 								return nil
 							}
@@ -229,7 +229,7 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayloa
 						copy(buf, md)
 						copy(buf[len(md):], shards[shardIndex])
 
-						if err := b.fileIO.WriteFile(fn, buf, permission); err != nil {
+						if err := b.fileIO.WriteFile(ctx, fn, buf, permission); err != nil {
 							ch <- err
 							// Return nil so we don't generate an error, NOT until we exceed write error beyond parity count.
 							return nil
@@ -300,12 +300,12 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.Blobs
 				fn := fmt.Sprintf("%s%c%s_%d", fp, os.PathSeparator, blobKey.String(), i)
 
 				// Do nothing if file already not existent.
-				if !b.fileIO.Exists(fn) {
+				if !b.fileIO.Exists(ctx, fn) {
 					continue
 				}
 
 				tr.Go(func() error {
-					if err := b.fileIO.Remove(fn); err != nil {
+					if err := b.fileIO.Remove(ctx, fn); err != nil {
 						lastErr = err
 					}
 					return nil

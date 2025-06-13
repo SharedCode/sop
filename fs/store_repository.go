@@ -37,13 +37,13 @@ func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cac
 		return nil, fmt.Errorf("'storesBaseFolders' needs to be exactly two elements if 'replicate' parameter is true")
 	}
 	if manageStore == nil {
-		fio := NewDefaultFileIO()
+		fio := NewFileIO()
 		manageStore = NewManageStoreFolder(fio)
 	}
 	return &StoreRepository{
 		cache:              cache,
 		manageStore:        manageStore,
-		fileIO:             NewDefaultFileIO(),
+		fileIO:             NewFileIO(),
 		replicationTracker: rt,
 	}, nil
 }
@@ -92,17 +92,17 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	ba, _ := encoding.Marshal(storeList)
 	if sl == nil {
 		// Ensure the stores base folder is created.
-		if err := storeWriter.createStore(""); err != nil {
+		if err := storeWriter.createStore(ctx, ""); err != nil {
 			return err
 		}
 	}
-	if err := storeWriter.write(storeListFilename, ba); err != nil {
+	if err := storeWriter.write(ctx, storeListFilename, ba); err != nil {
 		return err
 	}
 
 	// 5-6. Create folders and write store info to its tmp file, for each added item.
 	for _, store := range stores {
-		if err := storeWriter.createStore(store.Name); err != nil {
+		if err := storeWriter.createStore(ctx, store.Name); err != nil {
 			return err
 		}
 
@@ -112,13 +112,13 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 			return err
 		}
 
-		if err := storeWriter.write(fmt.Sprintf("%c%s%c%s", os.PathSeparator, store.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
+		if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, store.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
 			return err
 		}
 	}
 
 	// 7. Replicate the files if configured to.
-	if err := storeWriter.replicate(); err != nil {
+	if err := storeWriter.replicate(ctx); err != nil {
 		return err
 	}
 
@@ -154,10 +154,8 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 	// Create lock IDs that we can use to logically lock and prevent other updates.
 	lockKeys := sr.cache.CreateLockKeys(keys)
 
-	b := retry.NewFibonacci(1 * time.Second)
-
 	// Lock all keys.
-	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
+	if err := sop.Retry(ctx, func(ctx context.Context) error {
 		// 15 minutes to lock, merge/update details then unlock.
 		if ok, _, err := sr.cache.Lock(ctx, updateStoresLockDuration, lockKeys); !ok || err != nil {
 			if err == nil {
@@ -167,10 +165,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 			return retry.RetryableError(err)
 		}
 		return nil
-	}); err != nil {
-		log.Warn(err.Error() + ", gave up")
-		// Unlock keys since we failed locking all of them.
-		sr.cache.Unlock(ctx, lockKeys)
+	}, func(ctx context.Context) { sr.cache.Unlock(ctx, lockKeys) }); err != nil {
 		return nil, err
 	}
 
@@ -198,7 +193,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 				continue
 			}
 
-			if err := storeWriter.write(fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
+			if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
 				log.Error(fmt.Sprintf("StoreRepository Update Undo store %s failed write, details: %v", si.Name, err))
 				continue
 			}
@@ -231,7 +226,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 			return nil, err
 		}
 
-		if err := storeWriter.write(fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
+		if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
 			// Undo changes.
 			undo(i, beforeUpdateStores)
 			return nil, err
@@ -254,10 +249,10 @@ func (sr *StoreRepository) GetAll(ctx context.Context) ([]string, error) {
 	fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
 
 	// Just return nil to denote no store yet on store folder.
-	if !fio.exists(storeListFilename) {
+	if !fio.exists(ctx, storeListFilename) {
 		return nil, nil
 	}
-	ba, err := fio.read(storeListFilename)
+	ba, err := fio.read(ctx, storeListFilename)
 	if err != nil {
 		return nil, err
 	}
@@ -296,11 +291,11 @@ func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 	for _, s := range storesNotInCache {
 
 		fn := fmt.Sprintf("%s%c%s", s, os.PathSeparator, storeInfoFilename)
-		if !sio.exists(fn) {
+		if !sio.exists(ctx, fn) {
 			continue
 		}
 
-		ba, err := sio.read(fn)
+		ba, err := sio.read(ctx, fn)
 		if err != nil {
 			return nil, err
 		}
@@ -371,7 +366,7 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 			log.Warn(fmt.Sprintf("StoreRepository Remove (redis Delete) failed, details: %v", err))
 		}
 		// Delete store folder (contains blobs, store config & registry data files).
-		if err := storeWriter.removeStore(storeName); err != nil {
+		if err := storeWriter.removeStore(ctx, storeName); err != nil {
 			return err
 		}
 
@@ -387,10 +382,10 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 	}
 	ba, _ := encoding.Marshal(storeList)
 
-	storeWriter.write(storeListFilename, ba)
+	storeWriter.write(ctx, storeListFilename, ba)
 
 	// Replicate the files if configured to.
-	if err := storeWriter.replicate(); err != nil {
+	if err := storeWriter.replicate(ctx); err != nil {
 		return err
 	}
 
@@ -418,7 +413,7 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 		// because if will break synchronization from here on out, thus, better to just log then turn off replication altogether, until cleared
 		// to resume.
 		filename := sr.replicationTracker.formatPassiveFolderEntity(fmt.Sprintf("%s%c%s", stores[i].Name, os.PathSeparator, storeInfoFilename))
-		if err := sr.fileIO.WriteFile(filename, ba, permission); err != nil {
+		if err := sr.fileIO.WriteFile(ctx, filename, ba, permission); err != nil {
 			return fmt.Errorf("storeRepository.Replicate failed, error writing store '%s', details: %w", filename, err)
 		}
 	}

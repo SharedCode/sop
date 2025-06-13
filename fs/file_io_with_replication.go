@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"context"
 	log "log/slog"
 
 	"github.com/SharedCode/sop"
@@ -19,7 +20,7 @@ type fileIO struct {
 var FileIOSim FileIO
 
 func newFileIOWithReplication(replicationTracker *replicationTracker, manageStore sop.ManageStore, trackActions bool) *fileIO {
-	fio := NewDefaultFileIO()
+	fio := NewFileIO()
 
 	// Allow unit test to inject unit test "fake" for File IO.
 	if FileIOSim != nil {
@@ -34,14 +35,14 @@ func newFileIOWithReplication(replicationTracker *replicationTracker, manageStor
 	}
 }
 
-func (fio *fileIO) exists(targetFilename string) bool {
+func (fio *fileIO) exists(ctx context.Context, targetFilename string) bool {
 	filename := fio.replicationTracker.formatActiveFolderEntity(targetFilename)
-	return fio.fio.Exists(filename)
+	return fio.fio.Exists(ctx, filename)
 }
 
-func (fio *fileIO) write(targetFilename string, contents []byte) error {
+func (fio *fileIO) write(ctx context.Context, targetFilename string, contents []byte) error {
 	filename := fio.replicationTracker.formatActiveFolderEntity(targetFilename)
-	err := fio.fio.WriteFile(filename, contents, permission)
+	err := fio.fio.WriteFile(ctx, filename, contents, permission)
 	if !fio.trackActions {
 		return err
 	}
@@ -56,19 +57,14 @@ func (fio *fileIO) write(targetFilename string, contents []byte) error {
 	return err
 }
 
-func (fio *fileIO) read(sourceFilename string) ([]byte, error) {
+func (fio *fileIO) read(ctx context.Context, sourceFilename string) ([]byte, error) {
 	filename := fio.replicationTracker.formatActiveFolderEntity(sourceFilename)
-	return fio.fio.ReadFile(filename)
+	return fio.fio.ReadFile(ctx, filename)
 }
 
-func (fio *fileIO) remove(sourceFilename string) error {
-	filename := fio.replicationTracker.formatActiveFolderEntity(sourceFilename)
-	return fio.fio.Remove(filename)
-}
-
-func (fio *fileIO) createStore(folderName string) error {
+func (fio *fileIO) createStore(ctx context.Context, folderName string) error {
 	folderPath := fio.replicationTracker.formatActiveFolderEntity(folderName)
-	err := fio.fio.MkdirAll(folderPath, permission)
+	err := fio.fio.MkdirAll(ctx, folderPath, permission)
 	if !fio.trackActions {
 		return err
 	}
@@ -81,9 +77,9 @@ func (fio *fileIO) createStore(folderName string) error {
 	return err
 }
 
-func (fio *fileIO) removeStore(folderName string) error {
+func (fio *fileIO) removeStore(ctx context.Context, folderName string) error {
 	filename := fio.replicationTracker.formatActiveFolderEntity(folderName)
-	err := fio.fio.RemoveAll(filename)
+	err := fio.fio.RemoveAll(ctx, filename)
 	if !fio.trackActions {
 		return err
 	}
@@ -96,7 +92,7 @@ func (fio *fileIO) removeStore(folderName string) error {
 	return err
 }
 
-func (fio *fileIO) replicate() error {
+func (fio *fileIO) replicate(ctx context.Context) error {
 	if !fio.replicationTracker.replicate {
 		return nil
 	}
@@ -107,21 +103,21 @@ func (fio *fileIO) replicate() error {
 			// write file.
 			payload := fio.actionsDone[i].Second.(sop.Tuple[string, []byte])
 			targetFilename := fio.replicationTracker.formatPassiveFolderEntity(payload.First)
-			if err := fio.fio.WriteFile(targetFilename, payload.Second, permission); err != nil {
+			if err := fio.fio.WriteFile(ctx, targetFilename, payload.Second, permission); err != nil {
 				return err
 			}
 		case 2:
 			// create store
 			payload := fio.actionsDone[i].Second.(string)
 			targetFolder := fio.replicationTracker.formatPassiveFolderEntity(payload)
-			if err := fio.fio.MkdirAll(targetFolder, permission); err != nil {
+			if err := fio.fio.MkdirAll(ctx, targetFolder, permission); err != nil {
 				return err
 			}
 		case 3:
 			// remove store
 			payload := fio.actionsDone[i].Second.(string)
 			targetFolder := fio.replicationTracker.formatPassiveFolderEntity(payload)
-			if err := fio.fio.RemoveAll(targetFolder); err != nil {
+			if err := fio.fio.RemoveAll(ctx, targetFolder); err != nil {
 				return err
 			}
 

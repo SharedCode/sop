@@ -13,7 +13,7 @@ type manageStoreFolder struct {
 // Manage store(s) folder.
 func NewManageStoreFolder(fileIO FileIO) sop.ManageStore {
 	if fileIO == nil {
-		fileIO = NewDefaultFileIO()
+		fileIO = NewFileIO()
 	}
 	return &manageStoreFolder{
 		fileIO: fileIO,
@@ -22,10 +22,10 @@ func NewManageStoreFolder(fileIO FileIO) sop.ManageStore {
 
 // Create a new store(s) base folder.
 func (bf *manageStoreFolder) CreateStore(ctx context.Context, blobStoreBaseFolderPath string) error {
-	return bf.fileIO.MkdirAll(blobStoreBaseFolderPath, permission)
+	return bf.fileIO.MkdirAll(ctx, blobStoreBaseFolderPath, permission)
 }
 
 // Remove the store(s) base folder all sub-directories & their files will be removed.
 func (bf *manageStoreFolder) RemoveStore(ctx context.Context, blobStoreBaseFolderPath string) error {
-	return bf.fileIO.RemoveAll(blobStoreBaseFolderPath)
+	return bf.fileIO.RemoveAll(ctx, blobStoreBaseFolderPath)
 }

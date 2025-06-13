@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"context"
 	"os"
 
 	"github.com/SharedCode/sop"
@@ -18,23 +19,27 @@ func (sim *fileIOReplicationSimulator) ToFilePath(basePath string, id sop.UUID) 
 	return ""
 }
 
-func (sim *fileIOReplicationSimulator) WriteFile(name string, data []byte, perm os.FileMode) error {
+func (sim *fileIOReplicationSimulator) WriteFile(ctx context.Context, name string, data []byte, perm os.FileMode) error {
 	return nil
 }
-func (sim *fileIOReplicationSimulator) ReadFile(name string) ([]byte, error) {
+func (sim *fileIOReplicationSimulator) ReadFile(ctx context.Context, name string) ([]byte, error) {
 	return nil, nil
 }
-func (sim *fileIOReplicationSimulator) Remove(name string) error {
+func (sim *fileIOReplicationSimulator) Remove(ctx context.Context, name string) error {
 	return nil
 }
-func (sim *fileIOReplicationSimulator) Exists(path string) bool {
+func (sim *fileIOReplicationSimulator) Exists(ctx context.Context, path string) bool {
 	return true
 }
 
 // Directory API.
-func (sim *fileIOReplicationSimulator) RemoveAll(path string) error {
+func (sim *fileIOReplicationSimulator) RemoveAll(ctx context.Context, path string) error {
 	return nil
 }
-func (sim *fileIOReplicationSimulator) MkdirAll(path string, perm os.FileMode) error {
+func (sim *fileIOReplicationSimulator) MkdirAll(ctx context.Context, path string, perm os.FileMode) error {
 	return nil
+}
+
+func (sim *fileIOReplicationSimulator) ReadDir(ctx context.Context, sourceDir string) ([]os.DirEntry, error) {
+	return nil, nil
 }

@@ -72,7 +72,7 @@ func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, repl
 			rt.replicationTrackedDetails = *globalReplicationDetails
 			globalReplicationDetailsLocker.Unlock()
 		} else {
-			if err := rt.readStatusFromHomeFolder(); err != nil {
+			if err := rt.readStatusFromHomeFolder(ctx); err != nil {
 				return nil, fmt.Errorf("failed reading replication status (%sº file, details: %v", replicationStatusFilename, err)
 			}
 			globalReplicationDetailsLocker.Lock()
@@ -149,7 +149,7 @@ func (r *replicationTracker) handleFailedToReplicate(ctx context.Context) {
 
 	r.FailedToReplicate = true
 	globalReplicationDetails.FailedToReplicate = true
-	if err := r.writeReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
+	if err := r.writeReplicationStatus(ctx, r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
 		log.Warn(fmt.Sprintf("handleFailedToReplicate writeReplicationStatus failed, details: %v", err))
 	}
 
@@ -188,7 +188,7 @@ func (r *replicationTracker) failover(ctx context.Context) error {
 	// replicate on the previously active drive because it failed.
 	r.FailedToReplicate = true
 
-	if err := r.writeReplicationStatus(r.formatPassiveFolderEntity(replicationStatusFilename)); err != nil {
+	if err := r.writeReplicationStatus(ctx, r.formatPassiveFolderEntity(replicationStatusFilename)); err != nil {
 		globalReplicationDetailsLocker.Unlock()
 		return err
 	}
@@ -209,13 +209,13 @@ func (r *replicationTracker) failover(ctx context.Context) error {
 	return nil
 }
 
-func (r *replicationTracker) logCommitChanges(tid sop.UUID, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
+func (r *replicationTracker) logCommitChanges(ctx context.Context, tid sop.UUID, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if !r.LogCommitChanges {
 		return nil
 	}
 	fn := r.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", commitChangesLogFolder, os.PathSeparator, tid.String(), logFileExtension))
 
-	fio := NewDefaultFileIO()
+	fio := NewFileIO()
 
 	// Payload conversion has to happen here so the payload unpack and operation on it can be done on this file as well.
 	payload, err := encoding.DefaultMarshaler.Marshal(sop.Tuple[[]sop.StoreInfo, [][]sop.RegistryPayload[sop.Handle]]{
@@ -229,7 +229,7 @@ func (r *replicationTracker) logCommitChanges(tid sop.UUID, stores []sop.StoreIn
 		return err
 	}
 
-	return fio.WriteFile(fn, payload, permission)
+	return fio.WriteFile(ctx, fn, payload, permission)
 }
 
 func (r *replicationTracker) getActiveBaseFolder() string {
@@ -265,12 +265,12 @@ func (r *replicationTracker) formatPassiveFolderEntity(entityName string) string
 	}
 }
 
-func (r *replicationTracker) readStatusFromHomeFolder() error {
-	fio := NewDefaultFileIO()
+func (r *replicationTracker) readStatusFromHomeFolder(ctx context.Context) error {
+	fio := NewFileIO()
 	// Detect the active folder based on time stamp of the file.
-	if !fio.Exists(r.formatActiveFolderEntity(replicationStatusFilename)) {
-		if fio.Exists(r.formatPassiveFolderEntity(replicationStatusFilename)) {
-			if err := r.readReplicationStatus(r.formatPassiveFolderEntity(replicationStatusFilename)); err == nil {
+	if !fio.Exists(ctx, r.formatActiveFolderEntity(replicationStatusFilename)) {
+		if fio.Exists(ctx, r.formatPassiveFolderEntity(replicationStatusFilename)) {
+			if err := r.readReplicationStatus(ctx, r.formatPassiveFolderEntity(replicationStatusFilename)); err == nil {
 				// Switch passive to active if we are able to read the delta sync status file.
 				r.ActiveFolderToggler = !r.ActiveFolderToggler
 			}
@@ -294,22 +294,22 @@ func (r *replicationTracker) readStatusFromHomeFolder() error {
 		}
 	}
 
-	return r.readReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename))
+	return r.readReplicationStatus(ctx, r.formatActiveFolderEntity(replicationStatusFilename))
 }
 
-func (r *replicationTracker) writeReplicationStatus(filename string) error {
-	fio := NewDefaultFileIO()
+func (r *replicationTracker) writeReplicationStatus(ctx context.Context, filename string) error {
+	fio := NewFileIO()
 	ba, _ := encoding.DefaultMarshaler.Marshal(r.replicationTrackedDetails)
-	if err := fio.WriteFile(filename, ba, permission); err != nil {
+	if err := fio.WriteFile(ctx, filename, ba, permission); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *replicationTracker) readReplicationStatus(filename string) error {
-	fio := NewDefaultFileIO()
+func (r *replicationTracker) readReplicationStatus(ctx context.Context, filename string) error {
+	fio := NewFileIO()
 	// Read the delta sync status.
-	ba, err := fio.ReadFile(filename)
+	ba, err := fio.ReadFile(ctx, filename)
 	if err != nil {
 		return err
 	}
