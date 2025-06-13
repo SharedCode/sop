@@ -21,7 +21,7 @@ func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging boo
 //
 // See SOP FileSystem(sop/fs) package's DefaultToFilePath function for an example how to implement one.
 func NewTransactionExt(toFilePath fs.ToFilePathFunc, mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
-	fio := fs.NewDefaultFileIO()
+	fio := fs.NewFileIO()
 	bs := fs.NewBlobStore(fs.DefaultToFilePath, fio)
 	mbsf := fs.NewManageStoreFolder(fio)
 	twoPT, err := in_red_ck.NewTwoPhaseCommitTransaction(mode, maxTime, logging, bs, cas.NewStoreRepository(mbsf))
@@ -39,7 +39,7 @@ func NewTransactionWithEC(mode sop.TransactionMode, maxTime time.Duration, loggi
 			return nil, fmt.Errorf("erasureConfig can't be nil")
 		}
 	}
-	fio := fs.NewDefaultFileIO()
+	fio := fs.NewFileIO()
 	bs, err := fs.NewBlobStoreWithEC(fs.DefaultToFilePath, fio, erasureConfig)
 	if err != nil {
 		return nil, err

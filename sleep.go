@@ -6,6 +6,8 @@ import (
 	log "log/slog"
 	"math/rand"
 	"time"
+
+	"github.com/sethvargo/go-retry"
 )
 
 // Is it timed out yet?
@@ -45,4 +47,17 @@ func Sleep(ctx context.Context, sleepTime time.Duration) {
 	sleep, cancel := context.WithTimeout(ctx, sleepTime)
 	defer cancel()
 	<-sleep.Done()
+}
+
+// Retry with default backoff & increasing wait in between retries.
+func Retry(ctx context.Context, task func(ctx context.Context) error, gaveUpTask func(ctx context.Context)) error {
+	b := retry.NewFibonacci(1 * time.Second)
+	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), task); err != nil {
+		log.Warn(err.Error() + ", gave up")
+		if gaveUpTask != nil {
+			gaveUpTask(ctx)
+		}
+		return err
+	}
+	return nil
 }

@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -32,7 +33,7 @@ func (sim *fileIOSimulator) ToFilePath(basePath string, id sop.UUID) string {
 	return ""
 }
 
-func (sim *fileIOSimulator) WriteFile(name string, data []byte, perm os.FileMode) error {
+func (sim *fileIOSimulator) WriteFile(ctx context.Context, name string, data []byte, perm os.FileMode) error {
 	if sim.errorOnSuffixNumber >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", sim.errorOnSuffixNumber)) {
 		return fmt.Errorf("induced error on file suffix %d", sim.errorOnSuffixNumber)
 	}
@@ -41,7 +42,7 @@ func (sim *fileIOSimulator) WriteFile(name string, data []byte, perm os.FileMode
 	sim.locker.Unlock()
 	return nil
 }
-func (sim *fileIOSimulator) ReadFile(name string) ([]byte, error) {
+func (sim *fileIOSimulator) ReadFile(ctx context.Context, name string) ([]byte, error) {
 	if sim.errorOnSuffixNumber >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", sim.errorOnSuffixNumber)) {
 		return nil, fmt.Errorf("induced error on file suffix %d", sim.errorOnSuffixNumber)
 	}
@@ -61,7 +62,7 @@ func (sim *fileIOSimulator) ReadFile(name string) ([]byte, error) {
 	ba := sim.lookup[name]
 	return ba, nil
 }
-func (sim *fileIOSimulator) Remove(name string) error {
+func (sim *fileIOSimulator) Remove(ctx context.Context, name string) error {
 	if sim.errorOnSuffixNumber >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", sim.errorOnSuffixNumber)) {
 		return fmt.Errorf("induced error on file suffix %d", sim.errorOnSuffixNumber)
 	}
@@ -70,14 +71,18 @@ func (sim *fileIOSimulator) Remove(name string) error {
 	sim.locker.Unlock()
 	return nil
 }
-func (sim *fileIOSimulator) Exists(path string) bool {
+func (sim *fileIOSimulator) Exists(ctx context.Context, path string) bool {
 	return true
 }
 
 // Directory API.
-func (sim *fileIOSimulator) RemoveAll(path string) error {
+func (sim *fileIOSimulator) RemoveAll(ctx context.Context, path string) error {
 	return nil
 }
-func (sim *fileIOSimulator) MkdirAll(path string, perm os.FileMode) error {
+func (sim *fileIOSimulator) MkdirAll(ctx context.Context, path string, perm os.FileMode) error {
 	return nil
+}
+
+func (sim *fileIOSimulator) ReadDir(ctx context.Context, sourceDir string) ([]os.DirEntry, error) {
+	return nil, nil
 }

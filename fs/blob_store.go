@@ -20,7 +20,7 @@ const permission os.FileMode = os.ModeSticky | os.ModePerm
 // NewBlobStore instantiates a new blobstore for File System storage.
 func NewBlobStore(toFilePath ToFilePathFunc, fileIO FileIO) sop.BlobStore {
 	if fileIO == nil {
-		fileIO = NewDefaultFileIO()
+		fileIO = NewFileIO()
 	}
 	if toFilePath == nil {
 		toFilePath = DefaultToFilePath
@@ -34,7 +34,7 @@ func NewBlobStore(toFilePath ToFilePathFunc, fileIO FileIO) sop.BlobStore {
 func (b blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
 	fp := b.toFilePath(blobFilePath, blobID)
 	fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.String())
-	ba, err := b.fileIO.ReadFile(fn)
+	ba, err := b.fileIO.ReadFile(ctx, fn)
 	if err != nil {
 		return nil, err
 	}
@@ -46,13 +46,13 @@ func (b blobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.K
 		for _, blob := range storeBlobs.Blobs {
 			ba := blob.Value
 			fp := b.toFilePath(storeBlobs.BlobTable, blob.Key)
-			if !b.fileIO.Exists(fp) {
-				if err := b.fileIO.MkdirAll(fp, permission); err != nil {
+			if !b.fileIO.Exists(ctx, fp) {
+				if err := b.fileIO.MkdirAll(ctx, fp, permission); err != nil {
 					return err
 				}
 			}
 			fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blob.Key.String())
-			if err := b.fileIO.WriteFile(fn, ba, permission); err != nil {
+			if err := b.fileIO.WriteFile(ctx, fn, ba, permission); err != nil {
 				return err
 			}
 		}
@@ -70,11 +70,11 @@ func (b blobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload
 			fp := b.toFilePath(storeBlobIDs.BlobTable, blobID)
 			fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.String())
 			// Do nothing if file already not existent.
-			if !b.fileIO.Exists(fn) {
+			if !b.fileIO.Exists(ctx, fn) {
 				continue
 			}
 
-			if err := b.fileIO.Remove(fn); err != nil {
+			if err := b.fileIO.Remove(ctx, fn); err != nil {
 				return err
 			}
 		}

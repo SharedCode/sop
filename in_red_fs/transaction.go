@@ -28,7 +28,7 @@ func NewTwoPhaseCommitTransaction(ctx context.Context, to TransationOptions) (so
 	if to.Cache == nil {
 		to.Cache = redis.NewClient()
 	}
-	fio := fs.NewDefaultFileIO()
+	fio := fs.NewFileIO()
 	replicationTracker, err := fs.NewReplicationTracker(ctx, []string{to.StoresBaseFolder}, false, to.Cache)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr Trans
 			return nil, fmt.Errorf("erasureConfig can't be nil")
 		}
 	}
-	fio := fs.NewDefaultFileIO()
+	fio := fs.NewFileIO()
 	replicationTracker, err := fs.NewReplicationTracker(ctx, towr.StoresBaseFolders, true, towr.Cache)
 	if err != nil {
 		return nil, err

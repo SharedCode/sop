@@ -61,7 +61,7 @@ func (r *replicationTracker) startLoggingCommitChanges(ctx context.Context) erro
 	r.LogCommitChanges = true
 
 	// Update the replication status details.
-	if err := r.writeReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
+	if err := r.writeReplicationStatus(ctx, r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
 		return err
 	}
 	return r.syncWithL2Cache(ctx, true)
@@ -87,7 +87,7 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 
 	fn := r.formatActiveFolderEntity(commitChangesLogFolder)
 
-	files, err := getFilesSortedDescByModifiedTime(fn, logFileExtension, nil)
+	files, err := getFilesSortedDescByModifiedTime(ctx, fn, logFileExtension, nil)
 	if err != nil {
 		return false, err
 	}
@@ -97,7 +97,7 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 
 	// Set to false the FailedToReplicate so we can issue a successful Replicate call on StoreRepository & Registry.
 	r.replicationTrackedDetails.FailedToReplicate = false
-	fio := NewDefaultFileIO()
+	fio := NewFileIO()
 	ms := NewManageStoreFolder(fio)
 	sr, err := NewStoreRepository(r, ms, r.l2Cache)
 	if err != nil {
@@ -111,7 +111,7 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 		foundAndProcessed = true
 
 		ffn := r.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", commitChangesLogFolder, os.PathSeparator, filename))
-		ba, err := fio.ReadFile(ffn)
+		ba, err := fio.ReadFile(ctx, ffn)
 		if err != nil {
 			return false, err
 		}
@@ -139,7 +139,7 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 			return false, err
 		}
 
-		if err := fio.Remove(ffn); err != nil {
+		if err := fio.Remove(ctx, ffn); err != nil {
 			return false, err
 		}
 	}
@@ -153,7 +153,7 @@ func (r *replicationTracker) turnOnReplication(ctx context.Context) error {
 
 	r.replicationTrackedDetails = *globalReplicationDetails
 	// Update the replication status details.
-	if err := r.writeReplicationStatus(r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
+	if err := r.writeReplicationStatus(ctx, r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
 		return err
 	}
 	return r.syncWithL2Cache(ctx, true)
