@@ -91,7 +91,8 @@ func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	}
 
 	if t.logger.committedState >= beforeFinalize {
-		if err := t.logger.priorityRollback(ctx, t, t.GetID()); err != nil {
+		// We just need to remove the priority log file in live rollback.
+		if err := t.logger.PriorityLog().Remove(ctx, t.GetID()); err != nil {
 			log.Error(err.Error())
 			// Registry can't be restored, fail even the rollback and cause a failover switch
 			return err
