@@ -25,7 +25,6 @@ const (
 
 type TransactionLog struct {
 	priorityLog
-	priorityLog
 	hourLockKey *sop.LockKey
 	cache       sop.Cache
 	file        *os.File
