@@ -590,9 +590,11 @@ func (t *Transaction) handleRegistrySectorLockTimeout(ctx context.Context, err s
 				return err
 			}
 
+			log.Info(fmt.Sprintf("priorityRollback on tid %v, success", err.UserData))
 			err.UserData.IsLockOwner = true
 			t.l2Cache.Unlock(ctx, []*sop.LockKey{err.UserData})
 			t.l2Cache.Unlock(ctx, lk)
+			return nil
 		}
 	}
 

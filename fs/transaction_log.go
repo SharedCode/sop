@@ -19,6 +19,7 @@ const (
 	// DateHourLayout format mask string.
 	DateHourLayout           = "2006-01-02T15"
 	logFileExtension         = ".log"
+	logFolder                = "translogs"
 	priorityLogFileExtension = ".plg"
 )
 
@@ -56,7 +57,7 @@ func (l priorityLog) IsEnabled() bool {
 // Remove will delete transaction log(t_log) records given a transaction ID(tid).
 func (l priorityLog) Remove(ctx context.Context, tid sop.UUID) error {
 	fio := NewDefaultFileIO()
-	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
+	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogFileExtension))
 	if fio.Exists(filename) {
 		return fio.Remove(filename)
 	}
@@ -65,8 +66,9 @@ func (l priorityLog) Remove(ctx context.Context, tid sop.UUID) error {
 
 // Add transaction log w/ payload blob to the transaction log file.
 func (l priorityLog) Add(ctx context.Context, tid sop.UUID, payload []byte) error {
-	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
-	os.WriteFile(filename, payload, permission)
+	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogFileExtension))
+	fio := NewDefaultFileIO()
+	fio.WriteFile(filename, payload, permission)
 	return nil
 }
 
@@ -78,7 +80,7 @@ func (l priorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInf
 
 // Fetch the transaction priority logs details given a tranasction ID.
 func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
-	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), priorityLogFileExtension))
+	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogFileExtension))
 	fio := NewDefaultFileIO()
 	if !fio.Exists(filename) {
 		return nil, nil
@@ -96,31 +98,37 @@ func (l priorityLog) GetOne(ctx context.Context) (sop.UUID, []sop.RegistryPayloa
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 	cappedHour := mh.Add(-time.Duration(2 * time.Minute))
 
-	files, err := getFilesSortedByModifiedTime(l.replicationTracker.getActiveBaseFolder())
-	if err != nil {
+	f := func(de os.DirEntry) bool {
+		info, _ := de.Info()
+
+		fts := info.ModTime().Format(DateHourLayout)
+		ft, _ := time.Parse(DateHourLayout, fts)
+		filename := info.Name()
+		_, err := sop.ParseUUID(filename[0 : len(filename)-len(priorityLogFileExtension)])
+		if err != nil {
+			return false
+		}
+		return cappedHour.Compare(ft) >= 0
+	}
+
+	fn := l.replicationTracker.formatActiveFolderEntity(logFolder)
+	fio := NewDefaultFileIO()
+	if !fio.Exists(fn) {
+		if err := fio.MkdirAll(fn, permission); err != nil {
+			log.Warn(fmt.Sprintf("error creating %s, details: %v", fn, err))
+		}
+		return sop.NilUUID, nil, nil
+	}
+	files, err := getFilesSortedByModifiedTime(fn, priorityLogFileExtension, f)
+	if err != nil || len(files) == 0 {
 		return sop.NilUUID, nil, err
 	}
 
 	// Get the oldest first.
-	for i := range files {
-		// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
-		// gap ensures no issue due to overlapping.
-		fts := files[i].ModTime.Format(DateHourLayout)
-		ft, _ := time.Parse(DateHourLayout, fts)
-		if cappedHour.Compare(ft) >= 0 {
-			filename := files[i].Name()
-			tid, err := sop.ParseUUID(filename[0 : len(filename)-len(logFileExtension)])
-			if err != nil {
-				continue
-			}
-			r, e := l.Get(ctx, tid)
-			return tid, r, e
-		} else {
-			break
-		}
-	}
-
-	return sop.NilUUID, nil, nil
+	filename := files[0].Name()
+	tid, _ := sop.ParseUUID(filename[0 : len(filename)-len(priorityLogFileExtension)])
+	r, e := l.Get(ctx, tid)
+	return tid, r, e
 }
 
 func (tl *TransactionLog) PriorityLog() sop.TransactionPriorityLog {
@@ -129,12 +137,22 @@ func (tl *TransactionLog) PriorityLog() sop.TransactionPriorityLog {
 
 // Add transaction log w/ payload blob to the transaction log file.
 func (tl *TransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+
 	if tl.file == nil {
 		tl.tid = tid
 		filename := tl.format(tid)
+
 		f, err := os.Create(filename)
 		if err != nil {
-			return err
+			fio := NewDefaultFileIO()
+			baseFolder := tl.replicationTracker.formatActiveFolderEntity(logFolder)
+			if !fio.Exists(baseFolder) {
+				fio.MkdirAll(baseFolder, permission)
+			}
+			f, err = os.Create(filename)
+			if err != nil {
+				return err
+			}
 		}
 		tl.file = f
 		tl.writer = bufio.NewWriter(f)
@@ -240,34 +258,32 @@ func (tl *TransactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UU
 }
 
 func (tl *TransactionLog) getOne() (string, sop.UUID, error) {
-
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 	cappedHour := mh.Add(-time.Duration(time.Duration(ageLimit) * time.Minute))
 
-	files, err := getFilesSortedByModifiedTime(tl.replicationTracker.getActiveBaseFolder())
-	if err != nil {
+	f := func(de os.DirEntry) bool {
+		info, _ := de.Info()
+
+		fts := info.ModTime().Format(DateHourLayout)
+		ft, _ := time.Parse(DateHourLayout, fts)
+		filename := info.Name()
+		_, err := sop.ParseUUID(filename[0 : len(filename)-len(logFileExtension)])
+		if err != nil {
+			return false
+		}
+		return cappedHour.Compare(ft) >= 0
+	}
+
+	fn := tl.replicationTracker.formatActiveFolderEntity(logFolder)
+	files, err := getFilesSortedByModifiedTime(fn, logFileExtension, f)
+	if err != nil || len(files) == 0 {
 		return "", sop.NilUUID, err
 	}
 
 	// Get the oldest first.
-	for i := range files {
-		// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
-		// gap ensures no issue due to overlapping.
-		fts := files[i].ModTime.Format(DateHourLayout)
-		ft, _ := time.Parse(DateHourLayout, fts)
-		if cappedHour.Compare(ft) >= 0 {
-			filename := files[i].Name()
-			tid, err := sop.ParseUUID(filename[0 : len(filename)-len(logFileExtension)])
-			if err != nil {
-				continue
-			}
-			return fts, tid, nil
-		} else {
-			break
-		}
-	}
-
-	return "", sop.NilUUID, nil
+	filename := files[0].Name()
+	tid, _ := sop.ParseUUID(filename[0 : len(filename)-len(logFileExtension)])
+	return files[0].ModTime.Format(DateHourLayout), tid, nil
 }
 
 func (tl *TransactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, []byte], error) {
@@ -303,7 +319,7 @@ func (tl *TransactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, 
 }
 
 func (tl *TransactionLog) format(tid sop.UUID) string {
-	return tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%s", tid.String(), logFileExtension))
+	return tl.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), logFileExtension))
 }
 
 // Directory files' reader.
@@ -330,16 +346,21 @@ func (fis ByModTime) Less(i, j int) bool {
 }
 
 // Reads a directory then returns the filenames sorted in descending order as driven by the files' modified time.
-func getFilesSortedByModifiedTime(directoryPath string) ([]FileInfoWithModTime, error) {
+func getFilesSortedByModifiedTime(directoryPath string, fileSuffix string, filter func(os.DirEntry) bool) ([]FileInfoWithModTime, error) {
 	files, err := os.ReadDir(directoryPath)
 	if err != nil && len(files) == 0 {
 		return nil, fmt.Errorf("error reading directory: %v", err)
 	}
 
-	fileInfoWithTimes := make([]FileInfoWithModTime, 0, len(files))
+	fileInfoWithTimes := make([]FileInfoWithModTime, 0, len(files)/2)
 	for _, file := range files {
 		inf, _ := file.Info()
-		if strings.HasSuffix(file.Name(), logFileExtension) {
+		if strings.HasSuffix(file.Name(), fileSuffix) {
+			if filter != nil {
+				if !filter(file) {
+					continue
+				}
+			}
 			fileInfoWithTimes = append(fileInfoWithTimes, FileInfoWithModTime{file, inf.ModTime()})
 		}
 	}

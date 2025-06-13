@@ -109,7 +109,7 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 
 		for range 5 {
 			if tid, uhAndrh, err := tl.PriorityLog().GetOne(ctx); !tid.IsNil() {
-				if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
+				if err := t.registry.Update(ctx, uhAndrh); err != nil {
 					// When Registry is known to be corrupted, we can raise a failover event.
 					return false, sop.Error[sop.UUID]{
 						Code:     sop.RestoreRegistryFileSectorFailure,
