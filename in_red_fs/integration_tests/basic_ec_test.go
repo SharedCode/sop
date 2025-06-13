@@ -67,7 +67,7 @@ func Test_Basic_EC(t *testing.T) {
 		t.Errorf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
 		return
 	}
-	t.Logf("Successfully added & found item with key 1.")
+	fmt.Println("Successfully added & found item with key 1.")
 	if err := trans.Commit(ctx); err != nil {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}

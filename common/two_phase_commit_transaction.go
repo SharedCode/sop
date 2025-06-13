@@ -171,6 +171,16 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
+		if p1Err := t.logger.priorityRollback(ctx, t, t.GetID()); p1Err != nil {
+			log.Error(fmt.Sprintf("phase 2 commit priorityRollback failed, details: %v", p1Err))
+			// TODO: Perhaps generate a failover here?
+		} else {
+			if p1Err := t.logger.PriorityLog().Remove(ctx, t.GetID()); p1Err != nil {
+				log.Warn(fmt.Sprintf("phase 2 commit priorityRollback log file delete failed, details: %v", p1Err))
+				// Warn only as we're able to rollback the affected registry entries.
+			}
+		}
+
 		rerr := t.rollback(ctx, true)
 
 		// Allow replication handler to handle error related to replication, e.g. IO error.

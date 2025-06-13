@@ -2,7 +2,11 @@ package fs
 
 import (
 	"encoding/json"
+	"fmt"
+	"os"
+	"sort"
 	"testing"
+	"time"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/redis"
@@ -152,4 +156,70 @@ func TestTransactionLogAddRemove(t *testing.T) {
 	if err != nil {
 		t.Errorf("error got on tl.Add, details: %v", err)
 	}
+}
+
+type fi struct {
+	name  string
+	isDir bool
+	ty    os.FileMode
+	info  os.FileInfo
+}
+
+func (f fi) Name() string {
+	return f.name
+}
+
+func (f fi) IsDir() bool {
+	return f.isDir
+}
+
+func (f fi) Type() os.FileMode {
+	return f.ty
+}
+
+func (f fi) Info() (os.FileInfo, error) {
+	return f.info, nil
+}
+
+func TestGetFilesSorted(t *testing.T) {
+	fileInfoWithTimes := make([]FileInfoWithModTime, 0, 5)
+
+	f := fi{
+		name: "foo",
+		ty:   os.ModeExclusive,
+	}
+
+	fileInfoWithTimes = append(fileInfoWithTimes, FileInfoWithModTime{f, time.Now().Add(-5 * time.Minute)})
+	f = fi{
+		name: "foo2",
+		ty:   os.ModeExclusive,
+	}
+	fileInfoWithTimes = append(fileInfoWithTimes, FileInfoWithModTime{f, time.Now().Add(-10 * time.Minute)})
+	f = fi{
+		name: "bar",
+		ty:   os.ModeExclusive,
+	}
+	fileInfoWithTimes = append(fileInfoWithTimes, FileInfoWithModTime{f, time.Now().Add(-1 * time.Minute)})
+	f = fi{
+		name: "hello",
+		ty:   os.ModeExclusive,
+	}
+	fileInfoWithTimes = append(fileInfoWithTimes, FileInfoWithModTime{f, time.Now().Add(-15 * time.Minute)})
+	f = fi{
+		name: "world",
+		ty:   os.ModeExclusive,
+	}
+	fileInfoWithTimes = append(fileInfoWithTimes, FileInfoWithModTime{f, time.Now().Add(-3 * time.Minute)})
+
+	sort.Sort(ByModTime(fileInfoWithTimes))
+
+	if fileInfoWithTimes[0].Name() != "hello" {
+		t.Errorf("got %s expected hello", fileInfoWithTimes[0].Name())
+	}
+	if fileInfoWithTimes[1].Name() != "foo2" {
+		t.Errorf("got %s expected hello", fileInfoWithTimes[0].Name())
+	}
+
+	fmt.Printf("\nsorted data: %v", fileInfoWithTimes)
+
 }
