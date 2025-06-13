@@ -520,7 +520,7 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 		}
 		tr.Go(func() error {
 			// Also, remove the special priority log file as it is no longer needed.
-			if err := t.logger.PriorityLog().Remove(ctx, t.GetID()); err != nil {
+			if err := t.logger.PriorityLog().Remove(tr.GetContext(), t.GetID()); err != nil {
 				log.Warn(fmt.Sprintf("removing priority log for tid %v failed, details: %v", t.GetID(), err))
 			}
 			return nil
