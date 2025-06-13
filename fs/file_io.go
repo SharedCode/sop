@@ -36,7 +36,11 @@ func (dio defaultFileIO) WriteFile(ctx context.Context, name string, data []byte
 			return sop.Retry(ctx, func(context.Context) error {
 				err := os.WriteFile(name, data, perm)
 				if err != nil {
-					return retry.RetryableError(err)
+					return retry.RetryableError(
+						sop.Error[string]{
+							Code: sop.FileIOError,
+							Err:  err,
+						})
 				}
 				return nil
 			}, nil)
@@ -51,7 +55,11 @@ func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, err
 		var err error
 		ba, err = os.ReadFile(name)
 		if err != nil {
-			return retry.RetryableError(err)
+			return retry.RetryableError(
+				sop.Error[string]{
+					Code: sop.FileIOError,
+					Err:  err,
+				})
 		}
 		return nil
 	}, nil)
@@ -61,7 +69,11 @@ func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
 	return sop.Retry(ctx, func(context.Context) error {
 		err := os.Remove(name)
 		if err != nil {
-			return retry.RetryableError(err)
+			return retry.RetryableError(
+				sop.Error[string]{
+					Code: sop.FileIOError,
+					Err:  err,
+				})
 		}
 		return nil
 	}, nil)
@@ -71,7 +83,11 @@ func (dio defaultFileIO) MkdirAll(ctx context.Context, path string, perm os.File
 	return sop.Retry(ctx, func(context.Context) error {
 		err := os.MkdirAll(path, perm)
 		if err != nil {
-			return retry.RetryableError(err)
+			return retry.RetryableError(
+				sop.Error[string]{
+					Code: sop.FileIOError,
+					Err:  err,
+				})
 		}
 		return nil
 	}, nil)
@@ -80,7 +96,11 @@ func (dio defaultFileIO) RemoveAll(ctx context.Context, path string) error {
 	return sop.Retry(ctx, func(context.Context) error {
 		err := os.RemoveAll(path)
 		if err != nil {
-			return retry.RetryableError(err)
+			return retry.RetryableError(
+				sop.Error[string]{
+					Code: sop.FileIOError,
+					Err:  err,
+				})
 		}
 		return nil
 	}, nil)
@@ -97,7 +117,10 @@ func (dio defaultFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os.Di
 		var err error
 		r, err = os.ReadDir(sourceDir)
 		if err != nil {
-			return retry.RetryableError(err)
+			return retry.RetryableError(sop.Error[string]{
+				Code: sop.FileIOError,
+				Err:  err,
+			})
 		}
 		return nil
 	}, nil)

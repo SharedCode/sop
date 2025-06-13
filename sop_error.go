@@ -8,6 +8,7 @@ const (
 	Unknown = iota
 	LockAcquisitionFailure
 	RestoreRegistryFileSectorFailure
+	FileIOError
 )
 
 // SOP custom error.
