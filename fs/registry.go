@@ -220,14 +220,14 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 	// Open the hashmaps on the passive destination(s). Write the nodes' handle(s) on each.
 	// Close the hashmaps files.
 	af := r.replicationTracker.ActiveFolderToggler
+	copy := *r.replicationTracker
+	copy.ActiveFolderToggler = !af
 
-	// Force tracker to treat passive as active folder so replication can write to the passive destinations.
-	r.replicationTracker.ActiveFolderToggler = !af
-	rm := newRegistryMap(true, r.hashmap.hashmap.hashModValue, r.replicationTracker, r.l2Cache)
+	rm := newRegistryMap(true, r.hashmap.hashmap.hashModValue, &copy, r.l2Cache)
 
 	var lastErr error
 	for i := range newRootNodesHandles {
-		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: newRootNodesHandles[i].RegistryTable,
+		if err := rm.add(ctx, sop.Tuple[string, []sop.Handle]{First: newRootNodesHandles[i].RegistryTable,
 			Second: newRootNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating new root nodes, details: %v", err))
 			r.replicationTracker.handleFailedToReplicate(ctx)
@@ -235,7 +235,7 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 		}
 	}
 	for i := range addedNodesHandles {
-		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: addedNodesHandles[i].RegistryTable,
+		if err := rm.add(ctx, sop.Tuple[string, []sop.Handle]{First: addedNodesHandles[i].RegistryTable,
 			Second: addedNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating new nodes, details: %v", err))
 			r.replicationTracker.handleFailedToReplicate(ctx)
@@ -243,7 +243,7 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 		}
 	}
 	for i := range updatedNodesHandles {
-		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: updatedNodesHandles[i].RegistryTable,
+		if err := rm.set(ctx, sop.Tuple[string, []sop.Handle]{First: updatedNodesHandles[i].RegistryTable,
 			Second: updatedNodesHandles[i].IDs}); err != nil {
 			log.Error(fmt.Sprintf("error replicating updated nodes, details: %v", err))
 			r.replicationTracker.handleFailedToReplicate(ctx)
@@ -253,7 +253,7 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 
 	for i := range removedNodesHandles {
 
-		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: removedNodesHandles[i].RegistryTable,
+		if err := rm.remove(ctx, sop.Tuple[string, []sop.UUID]{First: removedNodesHandles[i].RegistryTable,
 			Second: getIDs(removedNodesHandles[i].IDs)}); err != nil {
 			log.Error(fmt.Sprintf("error replicating removed nodes, details: %v", err))
 			r.replicationTracker.handleFailedToReplicate(ctx)
@@ -264,9 +264,6 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 	if err := rm.close(); err != nil && lastErr == nil {
 		lastErr = err
 	}
-
-	// Restore to the proper active destination(s).
-	r.replicationTracker.ActiveFolderToggler = af
 
 	return lastErr
 }
