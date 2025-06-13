@@ -22,10 +22,10 @@ import (
 //   - Run Fast Forward one more time to ensure there are no "remnants" commit log file(s), race condition case
 func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context, registryHashModValue int) error {
 	if !r.replicate {
-		return fmt.Errorf("replicationTracker.replicate flag is off, ReinstateFaileDrives is valid only if this is on")
+		return fmt.Errorf("replicationTracker.replicate flag is off, ReinstateFailedDrives is valid only if this is on")
 	}
 	if !r.replicationTrackedDetails.FailedToReplicate {
-		return fmt.Errorf("replicationTracker.FailedToReplicate is false, ReinstateFaileDrives is valid only if this is true")
+		return fmt.Errorf("replicationTracker.FailedToReplicate is false, ReinstateFailedDrives is valid only if this is true")
 	}
 
 	if err := r.startLoggingCommitChanges(ctx); err != nil {
@@ -86,12 +86,13 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 	// Repeat this until all commit logs files are done processing (all deleted).
 
 	fn := r.formatActiveFolderEntity(commitChangesLogFolder)
-	files, err := getFilesSortedByModifiedTime(fn)
+
+	files, err := getFilesSortedByModifiedTime(fn, logFileExtension, nil)
 	if err != nil {
-		if files == nil {
-			return false, nil
-		}
 		return false, err
+	}
+	if files == nil {
+		return false, nil
 	}
 
 	// Set to false the FailedToReplicate so we can issue a successful Replicate call on StoreRepository & Registry.
