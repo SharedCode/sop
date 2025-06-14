@@ -95,7 +95,8 @@ func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPaylo
 		return data, nil
 	}
 }
-func (l priorityLog) GetOne(ctx context.Context) (sop.UUID, []sop.RegistryPayload[sop.Handle], error) {
+
+func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 	cappedHour := mh.Add(-time.Duration(priorityLogMinAgeInMin * time.Minute))
 
@@ -118,18 +119,36 @@ func (l priorityLog) GetOne(ctx context.Context) (sop.UUID, []sop.RegistryPayloa
 		if err := fio.MkdirAll(ctx, fn, permission); err != nil {
 			log.Warn(fmt.Sprintf("error creating %s, details: %v", fn, err))
 		}
-		return sop.NilUUID, nil, nil
+		return nil, nil
 	}
 	files, err := getFilesSortedDescByModifiedTime(ctx, fn, priorityLogFileExtension, f)
 	if err != nil || len(files) == 0 {
-		return sop.NilUUID, nil, err
+		return nil, err
 	}
 
-	// Get the oldest first.
-	filename := files[0].Name()
-	tid, _ := sop.ParseUUID(filename[0 : len(filename)-len(priorityLogFileExtension)])
-	r, e := l.Get(ctx, tid)
-	return tid, r, e
+	// 25 is defaut batch size.
+	if batchSize <= 0 {
+		batchSize = 25
+	}
+
+	// Get the oldest first & so on...
+	res := make([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], 0, batchSize)
+	for i := range batchSize {
+		if i == len(files) {
+			break
+		}
+		filename := files[i].Name()
+		tid, _ := sop.ParseUUID(filename[0 : len(filename)-len(priorityLogFileExtension)])
+		r, e := l.Get(ctx, tid)
+		if e != nil {
+			return res, e
+		}
+		res = append(res, sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{
+			Key:   tid,
+			Value: r,
+		})
+	}
+	return res, nil
 }
 
 func (tl *TransactionLog) PriorityLog() sop.TransactionPriorityLog {

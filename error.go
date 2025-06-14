@@ -7,8 +7,8 @@ type ErrorCode int
 const (
 	Unknown = iota
 	LockAcquisitionFailure
-	FailoverQualifiedError = 77
-	FileIOError            = FailoverQualifiedError
+	FailoverQualifiedError = 77 + iota
+	FileIOError
 	RestoreRegistryFileSectorFailure
 )
 

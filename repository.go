@@ -87,9 +87,9 @@ type TransactionPriorityLog interface {
 	// Fetch the transaction priority logs details given a transaction ID.
 	Get(ctx context.Context, tid UUID) ([]RegistryPayload[Handle], error)
 
-	// GetOne will fetch the oldest transaction (older than 2 min) priority logs details if there are from the
-	// File System active home folder.
-	GetOne(ctx context.Context) (UUID, []RegistryPayload[Handle], error)
+	// GetBatch will fetch the oldest transaction (older than 2 min) priority logs details, if there are, from the
+	// File System logs folder (i.e. - <stores home folder>/translogs).
+	GetBatch(ctx context.Context, batchSize int) ([]KeyValuePair[UUID, []RegistryPayload[Handle]], error)
 
 	// Log commit changes to its own log file separate than the rest of transaction logs.
 	// This is a special log file only used during "reinstate" of drives back for replication.
