@@ -225,10 +225,10 @@ func (d dummy) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop
 	return nil, nil
 }
 
-// GetOne will fetch the oldest transaction (older than 2 min) priority logs details if there are from the
+// GetBatch will fetch the oldest transaction (older than 2 min) priority logs details if there are from the
 // File System active home folder.
-func (d dummy) GetOne(ctx context.Context) (sop.UUID, []sop.RegistryPayload[sop.Handle], error) {
-	return sop.NilUUID, nil, nil
+func (d dummy) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
+	return nil, nil
 }
 
 // Log commit changes to its own log file separate than the rest of transaction logs.

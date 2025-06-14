@@ -93,6 +93,11 @@ func Test_ReinstateDrive(t *testing.T) {
 	}
 }
 
+func Test(t *testing.T) {
+	fmt.Printf("Error: %d\n", sop.RestoreRegistryFileSectorFailure)
+	fmt.Printf("equal: %d", sop.FileIOError)
+}
+
 func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 	fs.DirectIOSim = newDirectIOReplicationSim()
 

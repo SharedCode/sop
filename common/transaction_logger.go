@@ -107,29 +107,28 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 		defer t.l2Cache.Unlock(ctx, lk)
 		start := sop.Now()
 
-		for range 5 {
-			if tid, uhAndrh, err := tl.PriorityLog().GetOne(ctx); !tid.IsNil() {
-				if err := t.registry.Update(ctx, uhAndrh); err != nil {
-					// When Registry is known to be corrupted, we can raise a failover event.
-					return false, sop.Error[sop.UUID]{
-						Code:     sop.RestoreRegistryFileSectorFailure,
-						Err:      err,
-						UserData: tid,
-					}
+		v, gerr := tl.PriorityLog().GetBatch(ctx, 20)
+		for i := range v {
+			tid := v[i].Key
+			uhAndrh := v[i].Value
+			if err := t.registry.Update(ctx, uhAndrh); err != nil {
+				// When Registry is known to be corrupted, we can raise a failover event.
+				return false, sop.Error[sop.UUID]{
+					Code:     sop.RestoreRegistryFileSectorFailure,
+					Err:      err,
+					UserData: tid,
 				}
-				if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
-					return false, err
-				}
-			} else if err != nil {
-				return false, err
-			} else {
-				break
 			}
+			if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
+				log.Warn(fmt.Sprintf("error removing priority log file for tid %s, details: %v", tid, err))
+			}
+
 			// Loop through 5 or until timeout if busy.
 			if err := sop.TimedOut(ctx, "doPriorityRollbacks", start, time.Duration(4.5*time.Hour.Minutes())); err != nil {
-				return true, nil
+				return true, gerr
 			}
 		}
+		return len(v) > 0, gerr
 	}
 	return false, nil
 }
