@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/fs"
 )
 
@@ -15,8 +16,9 @@ func newDirectIOReplicationSim() fs.UnitTestInjectableIO {
 }
 
 func (dio *dioReplicationSim) Open(filename string, flag int, permission os.FileMode) error {
-	return fs.ReplicationRelatedError{
-		Err: fmt.Errorf("simulated error on Open"),
+	return sop.Error[sop.UUID]{
+		Code: sop.RestoreRegistryFileSectorFailure,
+		Err:  fmt.Errorf("simulated error on Open"),
 	}
 }
 func (dio *dioReplicationSim) WriteAt(block []byte, offset int64) (int, error) {
