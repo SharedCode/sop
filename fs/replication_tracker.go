@@ -100,13 +100,13 @@ func (r *replicationTracker) HandleReplicationRelatedError(ctx context.Context, 
 		return
 	}
 	rootErr := errors.Unwrap(ioError)
-	err1, ok1 := rootErr.(ReplicationRelatedError)
-	err2, ok2 := ioError.(ReplicationRelatedError)
+	err1, ok1 := rootErr.(sop.ErrorMetadata)
+	err2, ok2 := ioError.(sop.ErrorMetadata)
 	if ok2 {
 		err1 = err2
 	}
 	if ok1 || ok2 {
-		log.Error(fmt.Sprintf("a replication related error detected (rollback: %v), details: %v", rollbackSucceeded, err1.Error()))
+		log.Error(fmt.Sprintf("a replication related error detected (rollback: %v), details: %v", rollbackSucceeded, err1.GetError()))
 
 		// No need to failover if rollback succeeded. It means that the IO error itself is temporary.
 
@@ -117,10 +117,11 @@ func (r *replicationTracker) HandleReplicationRelatedError(ctx context.Context, 
 		if rollbackSucceeded {
 			return
 		}
-
-		// Cause a failover switch to passive destinations on succeeding transactions.
-		if err := r.failover(ctx); err != nil {
-			log.Error(fmt.Sprintf("failover to folder %s failed, details: %v", r.getPassiveBaseFolder(), err.Error()))
+		if err1.GetCode() >= sop.FailoverQualifiedError || err2.GetCode() >= sop.FailoverQualifiedError {
+			// Cause a failover switch to passive destinations on succeeding transactions.
+			if err := r.failover(ctx); err != nil {
+				log.Error(fmt.Sprintf("failover to folder %s failed, details: %v", r.getPassiveBaseFolder(), err.Error()))
+			}
 		}
 	}
 }

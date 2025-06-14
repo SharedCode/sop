@@ -7,15 +7,29 @@ type ErrorCode int
 const (
 	Unknown = iota
 	LockAcquisitionFailure
+	FailoverQualifiedError = 77
+	FileIOError            = FailoverQualifiedError
 	RestoreRegistryFileSectorFailure
-	FileIOError
 )
+
+type ErrorMetadata interface {
+	GetCode() ErrorCode
+	GetError() error
+}
 
 // SOP custom error.
 type Error[T any] struct {
+	ErrorMetadata
 	Code     ErrorCode
 	Err      error
 	UserData T
+}
+
+func (e Error[T]) GetCode() ErrorCode {
+	return e.Code
+}
+func (e Error[T]) GetError() error {
+	return e.Err
 }
 
 func (e Error[T]) Error() string {
