@@ -93,30 +93,7 @@ func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registr
 }
 
 func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
-	var beforeUpdateSet []sop.RegistryPayload[sop.Handle]
-	var err error
-	if allOrNothing {
-		beforeUpdateSet, err = r.Get(ctx, sop.ExtractLogicalIDs(storesHandles))
-		if err != nil {
-			return err
-		}
-	}
 	if err := r.hashmap.set(ctx, storesHandles); err != nil {
-		if uerr := r.hashmap.set(ctx, beforeUpdateSet); uerr != nil {
-			// Remove all cached data since hashmap set failed in case failover does not work, cache should be clean.
-			for _, sh := range storesHandles {
-				for _, h := range sh.IDs {
-					r.l1Cache.Handles.Delete([]sop.UUID{h.LogicalID})
-					if _, err := r.l2Cache.Delete(ctx, []string{h.LogicalID.String()}); err != nil {
-						log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis delete) failed, details: %v", err))
-					}
-				}
-			}
-			return sop.Error{
-				Code: sop.RestoreRegistryFileSectorFailure,
-				Err:  err,
-			}
-		}
 		return err
 	}
 
@@ -206,19 +183,19 @@ func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPa
 }
 
 /*
-	Replication events:
-	- IO (reading or writing) to active drive generated an IO error. SOP should be able to detect that special error and decide to failover if warranted.
-		- perhaps the deciding factor is, if rollback to undo file changes fail as well then we can decide that the active drives are unworkable.
-		Then failover to passive, make that active, log the event as error/fatal & needing manual intervention on the previous active drive
-		that is now unusable. If rollback works then active drive is still intact.
-	- Writing to passive drive errored, log an error/fatal then stop writing to the passive targets. Until a manual reset of the flag is done.
+   Replication events:
+   - IO (reading or writing) to active drive generated an IO error. SOP should be able to detect that special error and decide to failover if warranted.
+       - perhaps the deciding factor is, if rollback to undo file changes fail as well then we can decide that the active drives are unworkable.
+       Then failover to passive, make that active, log the event as error/fatal & needing manual intervention on the previous active drive
+       that is now unusable. If rollback works then active drive is still intact.
+   - Writing to passive drive errored, log an error/fatal then stop writing to the passive targets. Until a manual reset of the flag is done.
 
-	Handling stories:
-	- on rollback error, do a failover to the passive drive.
-	If failed, then log FATAL and stop on succeeding runs.
+   Handling stories:
+   - on rollback error, do a failover to the passive drive.
+   If failed, then log FATAL and stop on succeeding runs.
 
-	Model this on a smaller setup. Perhaps create a simulator so we can synthesize failures, failover and cut out of failing passive IO.
-	We need to also detect manual intervention to cause "recover" (the opposite of failover).
+   Model this on a smaller setup. Perhaps create a simulator so we can synthesize failures, failover and cut out of failing passive IO.
+   We need to also detect manual intervention to cause "recover" (the opposite of failover).
 */
 
 // Write the nodes handles to the target passive destinations.

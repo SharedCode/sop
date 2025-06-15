@@ -174,10 +174,8 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 		if p1Err := t.logger.priorityRollback(ctx, t, t.GetID()); p1Err != nil {
 			log.Error(fmt.Sprintf("phase 2 commit priorityRollback failed, details: %v", p1Err))
 			// Should generate a failover below.
-		} else {
-			if p1Err := t.logger.PriorityLog().Remove(ctx, t.GetID()); p1Err != nil {
-				log.Warn(fmt.Sprintf("phase 2 commit priorityRollback log file delete failed, details: %v", p1Err))
-				// Warn only as we're able to rollback the affected registry entries.
+			if se, ok := p1Err.(sop.Error); ok && se.Code == sop.RestoreRegistryFileSectorFailure {
+				err = se
 			}
 		}
 
