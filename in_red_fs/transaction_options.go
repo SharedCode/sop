@@ -6,6 +6,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/fs"
+	"github.com/SharedCode/sop/in_memory"
 )
 
 // Transaction Options contains the Transaction parameters.
@@ -94,10 +95,19 @@ func NewTransactionOptionsWithReplication(mode sop.TransactionMode, maxTime time
 			storesFolders = append(storesFolders, defaultEntry.BaseFolderPathsAcrossDrives[0])
 			storesFolders = append(storesFolders, defaultEntry.BaseFolderPathsAcrossDrives[1])
 		} else {
-			for _, v := range erasureConfig {
-				if len(v.BaseFolderPathsAcrossDrives) >= 2 {
-					storesFolders = append(storesFolders, v.BaseFolderPathsAcrossDrives[0])
-					storesFolders = append(storesFolders, v.BaseFolderPathsAcrossDrives[1])
+			// Use Btree in-memory to sort the erasureConfig entries and let us pick in a predictable manner.
+			b3 := in_memory.NewBtree[string, fs.ErasureCodingConfig](true)
+			for k, v := range erasureConfig {
+				b3.Add(k, v)
+			}
+			b3.First()
+			for {
+				if len(b3.GetCurrentValue().BaseFolderPathsAcrossDrives) >= 2 {
+					storesFolders = append(storesFolders, b3.GetCurrentValue().BaseFolderPathsAcrossDrives[0])
+					storesFolders = append(storesFolders, b3.GetCurrentValue().BaseFolderPathsAcrossDrives[1])
+					break
+				}
+				if !b3.Next() {
 					break
 				}
 			}
