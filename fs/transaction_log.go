@@ -261,6 +261,13 @@ func (fis ByModTime) Less(i, j int) bool {
 // Reads a directory then returns the filenames sorted in descending order as driven by the files' modified time.
 func getFilesSortedDescByModifiedTime(ctx context.Context, directoryPath string, fileSuffix string, filter func(os.DirEntry) bool) ([]FileInfoWithModTime, error) {
 	fio := NewFileIO()
+
+	// Auto create the directory path if not exists.
+	if !fio.Exists(ctx, directoryPath) {
+		if err := fio.MkdirAll(ctx, directoryPath, permission); err != nil {
+			return nil, err
+		}
+	}
 	files, err := fio.ReadDir(ctx, directoryPath)
 	if err != nil && len(files) == 0 {
 		return nil, fmt.Errorf("error reading directory: %v", err)
