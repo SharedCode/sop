@@ -173,7 +173,7 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	if err := t.phase2Commit(ctx); err != nil {
 		if p1Err := t.logger.priorityRollback(ctx, t, t.GetID()); p1Err != nil {
 			log.Error(fmt.Sprintf("phase 2 commit priorityRollback failed, details: %v", p1Err))
-			// TODO: Perhaps generate a failover here?
+			// Should generate a failover below.
 		} else {
 			if p1Err := t.logger.PriorityLog().Remove(ctx, t.GetID()); p1Err != nil {
 				log.Warn(fmt.Sprintf("phase 2 commit priorityRollback log file delete failed, details: %v", p1Err))
@@ -183,7 +183,7 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 
 		rerr := t.rollback(ctx, true)
 
-		// Allow replication handler to handle error related to replication, e.g. IO error.
+		// Allow replication handler to do failover if needed.
 		if t.HandleReplicationRelatedError != nil {
 			t.HandleReplicationRelatedError(ctx, err, rerr, rerr == nil)
 		}
@@ -357,7 +357,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 			return err
 		}
 		if successful, t.newRootNodeHandles, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
-			var se sop.Error[*sop.LockKey]
+			var se sop.Error
 			if errors.As(err, &se) {
 				if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
 					return err
@@ -379,7 +379,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		if successful {
 			// Commit updated nodes.
 			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
-				var se sop.Error[*sop.LockKey]
+				var se sop.Error
 				if errors.As(err, &se) {
 					if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
 						return err
@@ -414,7 +414,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 				return err
 			}
 			if t.addedNodeHandles, err = t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
-				var se sop.Error[*sop.LockKey]
+				var se sop.Error
 				if errors.As(err, &se) {
 					if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
 						return err
@@ -585,7 +585,7 @@ func (t *Transaction) updateVersionThenPopulateMru(ctx context.Context, handles 
 	}
 }
 
-func (t *Transaction) handleRegistrySectorLockTimeout(ctx context.Context, err sop.Error[*sop.LockKey]) error {
+func (t *Transaction) handleRegistrySectorLockTimeout(ctx context.Context, err sop.Error) error {
 	const (
 		lockDuration = 5 * time.Minute
 		lockKey      = "DTrollbk"
@@ -594,15 +594,20 @@ func (t *Transaction) handleRegistrySectorLockTimeout(ctx context.Context, err s
 	lk := t.l2Cache.CreateLockKeys([]string{lockKey})
 	if ok, _, _ := t.l2Cache.Lock(ctx, lockDuration, lk); ok {
 		if ok, _ = t.l2Cache.IsLocked(ctx, lk); ok {
-			if err2 := t.logger.priorityRollback(ctx, t, err.UserData.LockID); err2 != nil {
+			ud, ok := err.UserData.(*sop.LockKey)
+			if !ok {
+				t.l2Cache.Unlock(ctx, lk)
+				return err
+			}
+			if err2 := t.logger.priorityRollback(ctx, t, ud.LockID); err2 != nil {
 				log.Info(fmt.Sprintf("error priorityRollback on tid %v, details: %v", err.UserData, err2))
 				t.l2Cache.Unlock(ctx, lk)
 				return err
 			}
 
 			log.Info(fmt.Sprintf("priorityRollback on tid %v, success", err.UserData))
-			err.UserData.IsLockOwner = true
-			t.l2Cache.Unlock(ctx, []*sop.LockKey{err.UserData})
+			ud.IsLockOwner = true
+			t.l2Cache.Unlock(ctx, []*sop.LockKey{ud})
 			t.l2Cache.Unlock(ctx, lk)
 			return nil
 		}

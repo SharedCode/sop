@@ -12,26 +12,13 @@ const (
 	RestoreRegistryFileSectorFailure
 )
 
-type ErrorMetadata interface {
-	GetCode() ErrorCode
-	GetError() error
-}
-
 // SOP custom error.
-type Error[T any] struct {
-	ErrorMetadata
+type Error struct {
 	Code     ErrorCode
 	Err      error
-	UserData T
+	UserData any
 }
 
-func (e Error[T]) GetCode() ErrorCode {
-	return e.Code
-}
-func (e Error[T]) GetError() error {
-	return e.Err
-}
-
-func (e Error[T]) Error() string {
-	return fmt.Errorf("Error %d: %w, user data: %v", e.Code, e.Err, e.UserData).Error()
+func (e Error) Error() string {
+	return fmt.Errorf("error code: %d, user data: %v, details: %w", e.Code, e.UserData, e.Err).Error()
 }

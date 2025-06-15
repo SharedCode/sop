@@ -245,3 +245,12 @@ func (d dummy) Add(ctx context.Context, tid sop.UUID, payload []byte) error {
 func (d dummy) Remove(ctx context.Context, tid sop.UUID) error {
 	return nil
 }
+
+// Write a backup file for the priority log contents (payload).
+func (d dummy) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
+	return nil
+}
+
+func (d dummy) RemoveBackup(ctx context.Context, tid sop.UUID) error {
+	return nil
+}

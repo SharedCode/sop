@@ -416,15 +416,12 @@ func (nr *nodeRepositoryBackend) areFetchedItemsIntact(ctx context.Context, node
 	return true, nil
 }
 
-func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollbackData interface{}) error {
-	if rollbackData == nil {
+func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollbackData sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]) error {
+	if len(rollbackData.First) == 0 {
 		return nil
 	}
-	var bibs []sop.BlobsPayload[sop.UUID]
-	var vids []sop.RegistryPayload[sop.UUID]
-	tup := rollbackData.(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]])
-	vids = tup.First
-	bibs = tup.Second
+	vids := rollbackData.First
+	bibs := rollbackData.Second
 	if len(vids) == 0 {
 		return nil
 	}
@@ -456,12 +453,9 @@ func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollb
 	return lastErr
 }
 
-func (nr *nodeRepositoryBackend) rollbackAddedNodes(ctx context.Context, rollbackData interface{}) error {
-	var bibs []sop.BlobsPayload[sop.UUID]
-	var vids []sop.RegistryPayload[sop.UUID]
-	tup := rollbackData.(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]])
-	vids = tup.First
-	bibs = tup.Second
+func (nr *nodeRepositoryBackend) rollbackAddedNodes(ctx context.Context, rollbackData sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]) error {
+	vids := rollbackData.First
+	bibs := rollbackData.Second
 	if len(vids) == 0 {
 		return nil
 	}

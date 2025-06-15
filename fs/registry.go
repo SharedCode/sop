@@ -45,10 +45,10 @@ func (r *registryOnDisk) Close() error {
 }
 
 func (r *registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+	if err := r.hashmap.add(ctx, storesHandles); err != nil {
+		return err
+	}
 	for _, sh := range storesHandles {
-		if err := r.hashmap.add(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs}); err != nil {
-			return err
-		}
 		r.l1Cache.Handles.Set(convertToKvp(sh.IDs))
 		for _, h := range sh.IDs {
 			if err := r.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
@@ -71,7 +71,7 @@ func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registr
 				}
 				return err
 			}
-			if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: []sop.Handle{h}}); err != nil {
+			if err := r.hashmap.set(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: sh.RegistryTable, IDs: []sop.Handle{h}}}); err != nil {
 				r.l1Cache.Handles.Delete([]sop.UUID{h.LogicalID})
 				r.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				// Unlock the object Keys before return.
@@ -93,16 +93,35 @@ func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registr
 }
 
 func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
-	for _, sh := range storesHandles {
-		if err := r.hashmap.set(ctx, sop.Tuple[string, []sop.Handle]{First: sh.RegistryTable, Second: sh.IDs}); err != nil {
-			for _, h := range sh.IDs {
-				r.l1Cache.Handles.Delete([]sop.UUID{h.LogicalID})
-				if _, err := r.l2Cache.Delete(ctx, []string{h.LogicalID.String()}); err != nil {
-					log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis delete) failed, details: %v", err))
-				}
-			}
+	var beforeUpdateSet []sop.RegistryPayload[sop.Handle]
+	var err error
+	if allOrNothing {
+		beforeUpdateSet, err = r.Get(ctx, sop.ExtractLogicalIDs(storesHandles))
+		if err != nil {
 			return err
 		}
+	}
+	if err := r.hashmap.set(ctx, storesHandles); err != nil {
+		if uerr := r.hashmap.set(ctx, beforeUpdateSet); uerr != nil {
+			// Remove all cached data since hashmap set failed in case failover does not work, cache should be clean.
+			for _, sh := range storesHandles {
+				for _, h := range sh.IDs {
+					r.l1Cache.Handles.Delete([]sop.UUID{h.LogicalID})
+					if _, err := r.l2Cache.Delete(ctx, []string{h.LogicalID.String()}); err != nil {
+						log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis delete) failed, details: %v", err))
+					}
+				}
+			}
+			return sop.Error{
+				Code: sop.RestoreRegistryFileSectorFailure,
+				Err:  err,
+			}
+		}
+		return err
+	}
+
+	// Sync L1/L2 cache with updated values.
+	for _, sh := range storesHandles {
 		r.l1Cache.Handles.Set(convertToKvp(sh.IDs))
 		for _, h := range sh.IDs {
 			if err := r.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
@@ -148,13 +167,13 @@ func (r *registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPaylo
 			continue
 		}
 
-		mh, err := r.hashmap.fetch(ctx, sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: lids})
+		mh, err := r.hashmap.fetch(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: storeLids.RegistryTable, IDs: lids}})
 		if err != nil {
 			return nil, err
 		}
 
 		// Add to the handles list the "missing from cache" handles read from registry file.
-		for _, handle := range mh[0].Second {
+		for _, handle := range mh[0].IDs {
 			handles = append(handles, handle)
 			if err := r.l2Cache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("Registry Set (redis setstruct) failed, details: %v", err))
@@ -172,22 +191,18 @@ func (r *registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPaylo
 }
 func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
 	// Flush out the failing records from cache.
-	deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
-		for _, id := range storeLids.IDs {
-			if _, err := r.l2Cache.Delete(ctx, []string{id.String()}); err != nil {
-				log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
+	deleteFromCache := func(storesLids []sop.RegistryPayload[sop.UUID]) {
+		for _, storeLids := range storesLids {
+			r.l1Cache.Handles.Delete(storeLids.IDs)
+			for _, id := range storeLids.IDs {
+				if _, err := r.l2Cache.Delete(ctx, []string{id.String()}); err != nil {
+					log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
+				}
 			}
 		}
 	}
-	for _, storeLids := range storesLids {
-		r.l1Cache.Handles.Delete(storeLids.IDs)
-		if err := r.hashmap.remove(ctx, sop.Tuple[string, []sop.UUID]{First: storeLids.RegistryTable, Second: storeLids.IDs}); err != nil {
-			deleteFromCache(storeLids)
-			return err
-		}
-		deleteFromCache(storeLids)
-	}
-	return nil
+	defer deleteFromCache(storesLids)
+	return r.hashmap.remove(ctx, storesLids)
 }
 
 /*
@@ -226,39 +241,28 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 	rm := newRegistryMap(true, r.hashmap.hashmap.hashModValue, &copy, r.l2Cache)
 
 	var lastErr error
-	for i := range newRootNodesHandles {
-		if err := rm.add(ctx, sop.Tuple[string, []sop.Handle]{First: newRootNodesHandles[i].RegistryTable,
-			Second: newRootNodesHandles[i].IDs}); err != nil {
-			log.Error(fmt.Sprintf("error replicating new root nodes, details: %v", err))
-			r.replicationTracker.handleFailedToReplicate(ctx)
-			lastErr = err
-		}
+
+	if err := rm.add(ctx, newRootNodesHandles); err != nil {
+		log.Error(fmt.Sprintf("error replicating new root nodes, details: %v", err))
+		r.replicationTracker.handleFailedToReplicate(ctx)
+		lastErr = err
 	}
-	for i := range addedNodesHandles {
-		if err := rm.add(ctx, sop.Tuple[string, []sop.Handle]{First: addedNodesHandles[i].RegistryTable,
-			Second: addedNodesHandles[i].IDs}); err != nil {
-			log.Error(fmt.Sprintf("error replicating new nodes, details: %v", err))
-			r.replicationTracker.handleFailedToReplicate(ctx)
-			lastErr = err
-		}
-	}
-	for i := range updatedNodesHandles {
-		if err := rm.set(ctx, sop.Tuple[string, []sop.Handle]{First: updatedNodesHandles[i].RegistryTable,
-			Second: updatedNodesHandles[i].IDs}); err != nil {
-			log.Error(fmt.Sprintf("error replicating updated nodes, details: %v", err))
-			r.replicationTracker.handleFailedToReplicate(ctx)
-			lastErr = err
-		}
+	if err := rm.add(ctx, addedNodesHandles); err != nil {
+		log.Error(fmt.Sprintf("error replicating new nodes, details: %v", err))
+		r.replicationTracker.handleFailedToReplicate(ctx)
+		lastErr = err
 	}
 
-	for i := range removedNodesHandles {
+	if err := rm.set(ctx, updatedNodesHandles); err != nil {
+		log.Error(fmt.Sprintf("error replicating updated nodes, details: %v", err))
+		r.replicationTracker.handleFailedToReplicate(ctx)
+		lastErr = err
+	}
 
-		if err := rm.remove(ctx, sop.Tuple[string, []sop.UUID]{First: removedNodesHandles[i].RegistryTable,
-			Second: getIDs(removedNodesHandles[i].IDs)}); err != nil {
-			log.Error(fmt.Sprintf("error replicating removed nodes, details: %v", err))
-			r.replicationTracker.handleFailedToReplicate(ctx)
-			lastErr = err
-		}
+	if err := rm.remove(ctx, sop.ExtractLogicalIDs(removedNodesHandles)); err != nil {
+		log.Error(fmt.Sprintf("error replicating removed nodes, details: %v", err))
+		r.replicationTracker.handleFailedToReplicate(ctx)
+		lastErr = err
 	}
 
 	if err := rm.close(); err != nil && lastErr == nil {
