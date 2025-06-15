@@ -171,11 +171,18 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
-		if p1Err := t.logger.priorityRollback(ctx, t, t.GetID()); p1Err != nil {
-			log.Error(fmt.Sprintf("phase 2 commit priorityRollback failed, details: %v", p1Err))
-			// Should generate a failover below.
-			if se, ok := p1Err.(sop.Error); ok && se.Code == sop.RestoreRegistryFileSectorFailure {
-				err = se
+		if t.areNodesKeysLocked() {
+			if p1Err := t.logger.priorityRollback(ctx, t, t.GetID()); p1Err != nil {
+				log.Error(fmt.Sprintf("phase 2 commit priorityRollback failed, details: %v", p1Err))
+				// Should generate a failover below.
+				if se, ok := p1Err.(sop.Error); ok && se.Code == sop.RestoreRegistryFileSectorFailure {
+					err = se
+				}
+			}
+			t.unlockNodesKeys(ctx)
+		} else {
+			if err := t.logger.PriorityLog().Remove(ctx, t.GetID()); err != nil {
+				log.Warn(fmt.Sprintf("phase 2 commit priority log remove failed, details: %v", err))
 			}
 		}
 
@@ -513,7 +520,6 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 	if len(t.updatedNodeHandles) > 0 || len(t.removedNodeHandles) > 0 {
 		// The last step to consider a completed commit.
 		if err := t.registry.UpdateNoLocks(ctx, true, append(t.updatedNodeHandles, t.removedNodeHandles...)); err != nil {
-			t.unlockNodesKeys(ctx)
 			return err
 		}
 		tr.Go(func() error {
