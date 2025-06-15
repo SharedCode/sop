@@ -73,7 +73,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 			err = fmt.Errorf("updateFileBlockRegion failed: %w", err)
 			log.Debug(err.Error())
 			lk.LockID = tid
-			return sop.Error[*sop.LockKey]{
+			return sop.Error{
 				Code:     sop.LockAcquisitionFailure,
 				Err:      err,
 				UserData: lk,

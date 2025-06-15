@@ -16,7 +16,7 @@ func newDirectIOReplicationSim() fs.UnitTestInjectableIO {
 }
 
 func (dio *dioReplicationSim) Open(filename string, flag int, permission os.FileMode) error {
-	return sop.Error[sop.UUID]{
+	return sop.Error{
 		Code: sop.RestoreRegistryFileSectorFailure,
 		Err:  fmt.Errorf("simulated error on Open"),
 	}

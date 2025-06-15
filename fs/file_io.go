@@ -37,7 +37,7 @@ func (dio defaultFileIO) WriteFile(ctx context.Context, name string, data []byte
 				err := os.WriteFile(name, data, perm)
 				if err != nil {
 					return retry.RetryableError(
-						sop.Error[string]{
+						sop.Error{
 							Code: sop.FileIOError,
 							Err:  err,
 						})
@@ -56,7 +56,7 @@ func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, err
 		ba, err = os.ReadFile(name)
 		if err != nil {
 			return retry.RetryableError(
-				sop.Error[string]{
+				sop.Error{
 					Code: sop.FileIOError,
 					Err:  err,
 				})
@@ -70,7 +70,7 @@ func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
 		err := os.Remove(name)
 		if err != nil {
 			return retry.RetryableError(
-				sop.Error[string]{
+				sop.Error{
 					Code: sop.FileIOError,
 					Err:  err,
 				})
@@ -84,7 +84,7 @@ func (dio defaultFileIO) MkdirAll(ctx context.Context, path string, perm os.File
 		err := os.MkdirAll(path, perm)
 		if err != nil {
 			return retry.RetryableError(
-				sop.Error[string]{
+				sop.Error{
 					Code: sop.FileIOError,
 					Err:  err,
 				})
@@ -97,7 +97,7 @@ func (dio defaultFileIO) RemoveAll(ctx context.Context, path string) error {
 		err := os.RemoveAll(path)
 		if err != nil {
 			return retry.RetryableError(
-				sop.Error[string]{
+				sop.Error{
 					Code: sop.FileIOError,
 					Err:  err,
 				})
@@ -117,7 +117,7 @@ func (dio defaultFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os.Di
 		var err error
 		r, err = os.ReadDir(sourceDir)
 		if err != nil {
-			return retry.RetryableError(sop.Error[string]{
+			return retry.RetryableError(sop.Error{
 				Code: sop.FileIOError,
 				Err:  err,
 			})

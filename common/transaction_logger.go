@@ -99,7 +99,8 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 
 func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) (bool, error) {
 	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey("Prbs")})
-	if ok, _, _ := t.l2Cache.Lock(ctx, 5*time.Minute, lk); ok {
+	const maxDuration = 5 * time.Minute
+	if ok, _, _ := t.l2Cache.Lock(ctx, maxDuration, lk); ok {
 		if ok, _ := t.l2Cache.IsLocked(ctx, lk); !ok {
 			return false, nil
 		}
@@ -111,23 +112,32 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 		for i := range v {
 			tid := v[i].Key
 			uhAndrh := v[i].Value
-			if err := t.registry.Update(ctx, uhAndrh); err != nil {
+
+			if err := tl.TransactionLog.PriorityLog().WriteBackup(ctx, tid, toByteArray(uhAndrh)); err != nil {
+				log.Warn(fmt.Sprintf("unable to write a priority log backup file for %s, skip priority log rollback", tid.String()))
+				continue
+			}
+			if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
+				log.Info(fmt.Sprintf("priority log file failed to remove (potentially live transaction running too long) for tid %s, details: %v", tid.String(), err))
+				tl.TransactionLog.PriorityLog().RemoveBackup(ctx, tid)
+				continue
+			}
+
+			if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
 				// When Registry is known to be corrupted, we can raise a failover event.
-				return false, sop.Error[sop.UUID]{
+				return false, sop.Error{
 					Code:     sop.RestoreRegistryFileSectorFailure,
 					Err:      err,
 					UserData: tid,
 				}
 			}
-			if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
-				log.Warn(fmt.Sprintf("error removing priority log file for tid %s, details: %v", tid, err))
-			}
 
-			// Loop through 5 or until timeout if busy.
-			if err := sop.TimedOut(ctx, "doPriorityRollbacks", start, time.Duration(4.5*time.Hour.Minutes())); err != nil {
+			// Loop through & consume entire batch or until timeout if busy.
+			if err := sop.TimedOut(ctx, "doPriorityRollbacks", start, maxDuration); err != nil {
 				return true, gerr
 			}
 		}
+
 		return len(v) > 0, gerr
 	}
 	return false, nil
@@ -139,7 +149,7 @@ func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, 
 	} else {
 		if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
 			// When Registry is known to be corrupted, we can raise a failover event.
-			return sop.Error[sop.UUID]{
+			return sop.Error{
 				Code:     sop.RestoreRegistryFileSectorFailure,
 				Err:      err,
 				UserData: tid,

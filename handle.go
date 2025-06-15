@@ -123,3 +123,17 @@ func (x *Handle) IsEqual(y *Handle) bool {
 		x.PhysicalIDA == y.PhysicalIDA &&
 		x.PhysicalIDB == y.PhysicalIDB
 }
+
+// Extract logical UUIDs of a given set of handles.
+func ExtractLogicalIDs(storeHandles []RegistryPayload[Handle]) []RegistryPayload[UUID] {
+	r := make([]RegistryPayload[UUID], len(storeHandles))
+	for i := range storeHandles {
+		r[i].RegistryTable = storeHandles[i].RegistryTable
+		r[i].CacheDuration = storeHandles[i].CacheDuration
+		r[i].IDs = make([]UUID, len(storeHandles[i].IDs))
+		for ii := range storeHandles[i].IDs {
+			r[i].IDs[ii] = storeHandles[i].IDs[ii].LogicalID
+		}
+	}
+	return r
+}

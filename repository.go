@@ -94,6 +94,11 @@ type TransactionPriorityLog interface {
 	// Log commit changes to its own log file separate than the rest of transaction logs.
 	// This is a special log file only used during "reinstate" of drives back for replication.
 	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
+
+	// Write a backup file for the priority log contents (payload).
+	WriteBackup(ctx context.Context, tid UUID, payload []byte) error
+	// Remove a backup file.
+	RemoveBackup(ctx context.Context, tid UUID) error
 }
 
 // Transaction Log specifies the API(methods) needed to implement logging for the transaction.
