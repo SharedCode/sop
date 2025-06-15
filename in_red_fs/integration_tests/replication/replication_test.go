@@ -78,6 +78,7 @@ func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	// Failure due to DirectIO sim will throw on open file and cause rollback & error from trans commit.
 	b3.Add(ctx, 1, "hello world")
 	if err := trans.Commit(ctx); err == nil {
 		t.Error("expected error but none was returned")
@@ -85,6 +86,8 @@ func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 	}
 }
 
+// Test to issue Reinstate of failed drives. But only works if the replcation flag is true and the replication status
+// FailedToReplicate = true.
 func Test_ReinstateDrive(t *testing.T) {
 	ctx := context.Background()
 	if err := in_red_fs.ReinstateFailedDrives(ctx, nil, nil, fs.MinimumModValue); err != nil {

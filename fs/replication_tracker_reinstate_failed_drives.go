@@ -91,7 +91,7 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 	if err != nil {
 		return false, err
 	}
-	if files == nil {
+	if len(files) == 0 {
 		return false, nil
 	}
 
