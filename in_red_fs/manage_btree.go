@@ -110,22 +110,8 @@ func ReinstateFailedDrives(ctx context.Context, storesFolders []string, erasureC
 		erasureConfig = fs.GetGlobalErasureConfig()
 	}
 	// Try to extract stores base folders from the erasure config
-	if storesFolders == nil && len(erasureConfig) > 0 {
-		storesFolders = make([]string, 0, 2)
-		defaultEntry := erasureConfig[""]
-		if len(defaultEntry.BaseFolderPathsAcrossDrives) >= 2 {
-			storesFolders = append(storesFolders, defaultEntry.BaseFolderPathsAcrossDrives[0])
-			storesFolders = append(storesFolders, defaultEntry.BaseFolderPathsAcrossDrives[1])
-		} else {
-			for _, v := range erasureConfig {
-				if len(v.BaseFolderPathsAcrossDrives) >= 2 {
-					storesFolders = append(storesFolders, v.BaseFolderPathsAcrossDrives[0])
-					storesFolders = append(storesFolders, v.BaseFolderPathsAcrossDrives[1])
-					break
-				}
-			}
-		}
-	}
+	storesFolders = pickStoresFoldersFromEC(storesFolders, erasureConfig)
+
 	if len(storesFolders) < 2 {
 		return fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths). 'was not able to reuse anything from 'erasureConfig'")
 	}
