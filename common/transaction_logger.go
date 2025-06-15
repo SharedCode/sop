@@ -144,7 +144,7 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 }
 
 func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, tid sop.UUID) error {
-	if uhAndrh, err := tl.PriorityLog().Get(ctx, tid); uhAndrh == nil || err != nil {
+	if uhAndrh, err := tl.PriorityLog().Get(ctx, tid); err != nil {
 		return err
 	} else {
 		if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {

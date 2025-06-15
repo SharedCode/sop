@@ -106,7 +106,7 @@ func (r *replicationTracker) HandleReplicationRelatedError(ctx context.Context, 
 		err1 = err2
 	}
 	if ok1 || ok2 {
-		log.Error(fmt.Sprintf("a replication related error detected (rollback: %v), details: %v", rollbackSucceeded, err1.Error))
+		log.Error(fmt.Sprintf("a replication related error detected (rollback: %v), details: %v", rollbackSucceeded, err1))
 
 		failoverError := err1.Code == sop.RestoreRegistryFileSectorFailure || err2.Code == sop.RestoreRegistryFileSectorFailure
 
