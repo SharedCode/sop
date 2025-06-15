@@ -87,6 +87,32 @@ func NewTransactionOptionsWithReplication(mode sop.TransactionMode, maxTime time
 	storesFolders []string, erasureConfig map[string]fs.ErasureCodingConfig) (TransationOptionsWithReplication, error) {
 	if erasureConfig == nil {
 		erasureConfig = fs.GetGlobalErasureConfig()
+	}	
+	storesFolders = pickStoresFoldersFromEC(storesFolders, erasureConfig)
+
+	if len(storesFolders) < 2 {
+		return TransationOptionsWithReplication{}, fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths). 'was not able to reuse anything from 'erasureConfig'")
+	}
+
+	if registryHashMod < fs.MinimumModValue {
+		registryHashMod = fs.MinimumModValue
+	}
+	if registryHashMod > fs.MaximumModValue {
+		registryHashMod = fs.MaximumModValue
+	}
+
+	return TransationOptionsWithReplication{
+		StoresBaseFolders:    storesFolders,
+		Mode:                 mode,
+		MaxTime:              maxTime,
+		RegistryHashModValue: registryHashMod,
+		ErasureConfig:        erasureConfig,
+	}, nil
+}
+
+func pickStoresFoldersFromEC(storesFolders []string, erasureConfig map[string]fs.ErasureCodingConfig) []string {
+	if erasureConfig == nil {
+		erasureConfig = fs.GetGlobalErasureConfig()
 	}
 	if storesFolders == nil && len(erasureConfig) > 0 {
 		storesFolders = make([]string, 0, 2)
@@ -113,23 +139,5 @@ func NewTransactionOptionsWithReplication(mode sop.TransactionMode, maxTime time
 			}
 		}
 	}
-
-	if len(storesFolders) < 2 {
-		return TransationOptionsWithReplication{}, fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths). 'was not able to reuse anything from 'erasureConfig'")
-	}
-
-	if registryHashMod < fs.MinimumModValue {
-		registryHashMod = fs.MinimumModValue
-	}
-	if registryHashMod > fs.MaximumModValue {
-		registryHashMod = fs.MaximumModValue
-	}
-
-	return TransationOptionsWithReplication{
-		StoresBaseFolders:    storesFolders,
-		Mode:                 mode,
-		MaxTime:              maxTime,
-		RegistryHashModValue: registryHashMod,
-		ErasureConfig:        erasureConfig,
-	}, nil
+	return storesFolders
 }
