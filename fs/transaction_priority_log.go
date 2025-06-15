@@ -51,9 +51,8 @@ func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPaylo
 		return nil, err
 	} else {
 		var data []sop.RegistryPayload[sop.Handle]
-		encoding.DefaultMarshaler.Unmarshal(ba, &data)
-
-		return data, nil
+		err := encoding.DefaultMarshaler.Unmarshal(ba, &data)
+		return data, err
 	}
 }
 
