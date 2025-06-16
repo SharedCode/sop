@@ -123,7 +123,7 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 				continue
 			}
 			if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
-				log.Info(fmt.Sprintf("priority log file failed to remove (potentially live transaction running too long) for tid %s, details: %v", tid.String(), err))
+				log.Info(fmt.Sprintf("priority log file failed to remove (potentially live transaction running too long) for transaction %s, details: %v", tid.String(), err))
 				tl.PriorityLog().RemoveBackup(ctx, tid)
 				continue
 			}
@@ -136,8 +136,26 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 					// Allow failover event to occur, return the error.
 					return false, se
 				}
-				log.Error(fmt.Sprintf("unable to acquire locks for tid %s, skip priority log rollback, err details: %v", tid.String(), err))
+				log.Error(fmt.Sprintf("unable to acquire locks for transaction %s, skip priority log rollback, err details: %v", tid.String(), err))
 				continue
+			}
+
+			reqIDs := sop.ExtractLogicalIDs(uhAndrh)
+			if cuhAndrh, err := t.registry.Get(ctx, reqIDs); err != nil {
+				log.Info(fmt.Sprintf("error reading (partly expected) current registry sector values for transaction %s, err details: %v", tid.String(), err))
+			} else {
+				for i := range uhAndrh {
+					for ii := range uhAndrh[i].IDs {
+						if !(uhAndrh[i].IDs[ii].Version == cuhAndrh[i].IDs[ii].Version || uhAndrh[i].IDs[ii].Version+1 == cuhAndrh[i].IDs[ii].Version) {
+							// Version in Registry had gone past the value we can repair, 'just trigger a failover.
+							return false, sop.Error{
+								Code:     sop.RestoreRegistryFileSectorFailure,
+								Err:      fmt.Errorf("version in Registry had gone past the value we can repair, 'just trigger a failover"),
+								UserData: tid,
+							}
+						}
+					}
+				}
 			}
 
 			if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
@@ -151,9 +169,9 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 			}
 
 			if err := t.l2Cache.Unlock(ctx, lks); err != nil {
-				log.Warn(fmt.Sprintf("error releasing locks for tid %s, but priority log got rolled back", tid.String()))
+				log.Warn(fmt.Sprintf("error releasing locks for transaction %s, but priority log got rolled back", tid.String()))
 			} else {
-				log.Info(fmt.Sprintf("restoring a priority log for transaction: %s occurred", tid.String()))
+				log.Info(fmt.Sprintf("restoring a priority log for transaction %s occurred", tid.String()))
 			}
 
 			// Remove the backup file as we succeeded in registry file sector restore.
@@ -196,7 +214,7 @@ func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid 
 		if ownerTID.Compare(tid) != 0 {
 			return keys, sop.Error{
 				Code: sop.RestoreRegistryFileSectorFailure,
-				Err:  fmt.Errorf("key(s) is locked by another transaction(tid:%s), 'can't acquire lock to restore registry", ownerTID.String()),
+				Err:  fmt.Errorf("key(s) is locked by another transaction %s, 'can't acquire lock to restore registry", ownerTID.String()),
 			}
 		}
 		for i := range keys {
@@ -206,7 +224,7 @@ func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid 
 				} else {
 					return keys, sop.Error{
 						Code: sop.RestoreRegistryFileSectorFailure,
-						Err:  fmt.Errorf("key(s) %s is locked by another transaction(tid:%s), 'can't acquire lock to restore registry", keys[i].Key, tid2),
+						Err:  fmt.Errorf("key(s) %s is locked by another transaction %s, 'can't acquire lock to restore registry", keys[i].Key, tid2),
 					}
 				}
 			} else if err != nil {
@@ -221,7 +239,7 @@ func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid 
 		} else {
 			return keys, sop.Error{
 				Code: sop.RestoreRegistryFileSectorFailure,
-				Err:  fmt.Errorf("key(s) is locked by another transaction(tid:%s), 'can't acquire lock to restore registry", tid3),
+				Err:  fmt.Errorf("key(s) is locked by another transaction %s, 'can't acquire lock to restore registry", tid3),
 			}
 		}
 	} else {
