@@ -8,6 +8,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
+	"github.com/SharedCode/sop/in_memory"
 )
 
 type commitFunction int
@@ -39,6 +40,10 @@ type transactionLog struct {
 	logging        bool
 	transactionID  sop.UUID
 }
+
+const (
+	defaultLockDuration = 5 * time.Minute
+)
 
 // Instantiate a transaction logger.
 func newTransactionLogger(logger sop.TransactionLog, logging bool) *transactionLog {
@@ -113,17 +118,30 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 			tid := v[i].Key
 			uhAndrh := v[i].Value
 
-			if err := tl.TransactionLog.PriorityLog().WriteBackup(ctx, tid, toByteArray(uhAndrh)); err != nil {
+			if err := tl.PriorityLog().WriteBackup(ctx, tid, toByteArray(uhAndrh)); err != nil {
 				log.Warn(fmt.Sprintf("unable to write a priority log backup file for %s, skip priority log rollback", tid.String()))
 				continue
 			}
 			if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
 				log.Info(fmt.Sprintf("priority log file failed to remove (potentially live transaction running too long) for tid %s, details: %v", tid.String(), err))
-				tl.TransactionLog.PriorityLog().RemoveBackup(ctx, tid)
+				tl.PriorityLog().RemoveBackup(ctx, tid)
+				continue
+			}
+
+			var lks []*sop.LockKey
+			var err error
+			// Acquire locks may involve attempt to override existing locks that may be for the dead transactions.
+			if lks, err = tl.acquireLocks(ctx, t, tid, uhAndrh); err != nil {
+				if se, ok := err.(sop.Error); ok && se.Code == sop.RestoreRegistryFileSectorFailure {
+					// Allow failover event to occur, return the error.
+					return false, se
+				}
+				log.Error(fmt.Sprintf("unable to acquire locks for tid %s, skip priority log rollback, err details: %v", tid.String(), err))
 				continue
 			}
 
 			if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
+				t.l2Cache.Unlock(ctx, lks)
 				// When Registry is known to be corrupted, we can raise a failover event.
 				return false, sop.Error{
 					Code:     sop.RestoreRegistryFileSectorFailure,
@@ -131,6 +149,15 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 					UserData: tid,
 				}
 			}
+
+			if err := t.l2Cache.Unlock(ctx, lks); err != nil {
+				log.Warn(fmt.Sprintf("error releasing locks for tid %s, but priority log got rolled back", tid.String()))
+			} else {
+				log.Info(fmt.Sprintf("restoring a priority log for transaction: %s occurred", tid.String()))
+			}
+
+			// Remove the backup file as we succeeded in registry file sector restore.
+			tl.PriorityLog().RemoveBackup(ctx, tid)
 
 			// Loop through & consume entire batch or until timeout if busy.
 			if err := sop.TimedOut(ctx, "doPriorityRollbacks", start, maxDuration); err != nil {
@@ -141,6 +168,65 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 		return len(v) > 0, gerr
 	}
 	return false, nil
+}
+
+func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid sop.UUID, storesHandles []sop.RegistryPayload[sop.Handle]) ([]*sop.LockKey, error) {
+	logicalIDs := sop.ExtractLogicalIDs(storesHandles)
+	lookupByUUID := in_memory.NewBtree[sop.UUID, *sop.LockKey](true)
+
+	for _, lids := range logicalIDs {
+		for _, id := range lids.IDs {
+			lookupByUUID.Add(id, t.l2Cache.CreateLockKeys([]string{id.String()})[0])
+		}
+	}
+
+	// Map into an array of LockKeys sorted by UUID high, low int64 bit values.
+	lookupByUUID.First()
+	keys := make([]*sop.LockKey, 0, lookupByUUID.Count())
+	for {
+		keys = append(keys, lookupByUUID.GetCurrentValue())
+		if !lookupByUUID.Next() {
+			break
+		}
+	}
+
+	if ok, ownerTID, err := t.l2Cache.Lock(ctx, defaultLockDuration, keys); ok {
+		return keys, nil
+	} else if !ownerTID.IsNil() {
+		if ownerTID.Compare(tid) != 0 {
+			return keys, sop.Error{
+				Code: sop.RestoreRegistryFileSectorFailure,
+				Err:  fmt.Errorf("key(s) is locked by another transaction(tid:%s), 'can't acquire lock to restore registry", ownerTID.String()),
+			}
+		}
+		for i := range keys {
+			if ok, tid2, err := t.l2Cache.GetEx(ctx, keys[i].Key, defaultLockDuration); ok {
+				if tid.String() == tid2 {
+					keys[i].LockID = tid
+				} else {
+					return keys, sop.Error{
+						Code: sop.RestoreRegistryFileSectorFailure,
+						Err:  fmt.Errorf("key(s) %s is locked by another transaction(tid:%s), 'can't acquire lock to restore registry", keys[i].Key, tid2),
+					}
+				}
+			} else if err != nil {
+				return keys, err
+			}
+		}
+		defer t.l2Cache.Unlock(ctx, keys)
+		if ok, tid3, err := t.l2Cache.Lock(ctx, defaultLockDuration, keys); ok {
+			return keys, nil
+		} else if err != nil {
+			return keys, err
+		} else {
+			return keys, sop.Error{
+				Code: sop.RestoreRegistryFileSectorFailure,
+				Err:  fmt.Errorf("key(s) is locked by another transaction(tid:%s), 'can't acquire lock to restore registry", tid3),
+			}
+		}
+	} else {
+		return keys, err
+	}
 }
 
 func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, tid sop.UUID) error {

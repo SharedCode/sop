@@ -591,12 +591,11 @@ func (t *Transaction) updateVersionThenPopulateMru(ctx context.Context, handles 
 
 func (t *Transaction) handleRegistrySectorLockTimeout(ctx context.Context, err sop.Error) error {
 	const (
-		lockDuration = 5 * time.Minute
-		lockKey      = "DTrollbk"
+		lockKey = "DTrollbk"
 	)
 
 	lk := t.l2Cache.CreateLockKeys([]string{lockKey})
-	if ok, _, _ := t.l2Cache.Lock(ctx, lockDuration, lk); ok {
+	if ok, _, _ := t.l2Cache.Lock(ctx, defaultLockDuration, lk); ok {
 		if ok, _ = t.l2Cache.IsLocked(ctx, lk); ok {
 			ud, ok := err.UserData.(*sop.LockKey)
 			if !ok {

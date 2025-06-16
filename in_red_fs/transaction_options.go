@@ -87,7 +87,7 @@ func NewTransactionOptionsWithReplication(mode sop.TransactionMode, maxTime time
 	storesFolders []string, erasureConfig map[string]fs.ErasureCodingConfig) (TransationOptionsWithReplication, error) {
 	if erasureConfig == nil {
 		erasureConfig = fs.GetGlobalErasureConfig()
-	}	
+	}
 	storesFolders = pickStoresFoldersFromEC(storesFolders, erasureConfig)
 
 	if len(storesFolders) < 2 {
