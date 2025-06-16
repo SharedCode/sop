@@ -186,7 +186,9 @@ type KeyValueStore[TK any, TV any] interface {
 // String key and interface{} value are the supported types. Also specifies methods useful for locking.
 type Cache interface {
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
-	// First return bool var signifies success or false if either item was not found or an error occurred during Get.
+	// First return bool var signifies success or false for one or these reasons: item(w/ key) was not found or an error occurred during Get.
+	// Second return is the item's value part.
+	// Third return is the error encountered calling Redis get API, if there is.
 	Get(ctx context.Context, key string) (bool, string, error)
 	// First return bool var signifies success or false if either item was not found or an error occurred during Get.
 	GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error)
