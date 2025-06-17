@@ -33,6 +33,8 @@ How to create/begin & commit/rollback SOP transactions, use its B-tree API to st
 
 5. Once done and you are satisfied with your application development, you can then release your application, SOP library & other dependencies to your next target environment. This will be nothing special than your typical applications development and release process. SOP is just a code library/package. And your microservice (if you made one) that manages your data (using SOP perhaps!) should be released following your team's standard method of releasing a microservice to your target environment, manually and/or CICD.
 
+6. Ensure you have setup a proper application user with proper permission to your target disk drives. Follow the standard way how to do it in your environment. Nothing is special here, SOP uses files/disk drives like ordinary packages, but via DirectIO & OS File System API. SOP enables support for different OS/hardware architectures without requiring anything else, other than what was discussed above. It is like magic, but it is not really. SOP was designed with super scaling in mind (swarm computing), realtime scaleable orchestration and unified locks that enabled support for different OS as a by-product of the design.
+
 # Usability
 See details here: https://github.com/SharedCode/sop/blob/master/README2.md#usability
 
