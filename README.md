@@ -28,7 +28,7 @@ THEN you can import/integrate with this binary in your application. For example,
 4. See SOP's API discussions (link is in bottom below) for more details on how to use different features/functionalities of SOP. Like how to initialize Redis passing the Redis cluster config details.
 How to create/begin & commit/rollback SOP transactions, use its B-tree API to store/manage key/value pairs of data sets (CRUD: Add, GetXx, Update, Remove), and how to do searches (FindOne, navigation methods like First, Last, Next, Previous, etc...).
 
-5. Once done and you are satisfied with your application development, you can then release your application, SOP library & other dependencies to your next target environment. This will be nothing special than your typical applications development and release process. SOP is just a code library/package. And your microservice (if you made one) that manages your data (usin SOP!) should be released following your team's standard method of releasing a microservice to your target environment, manually and/or CICD.
+5. Once done and you are satisfied with your application development, you can then release your application, SOP library & other dependencies to your next target environment. This will be nothing special than your typical applications development and release process. SOP is just a code library/package. And your microservice (if you made one) that manages your data (using SOP perhaps!) should be released following your team's standard method of releasing a microservice to your target environment, manually and/or CICD.
 
 # Usability
 See details here: https://github.com/SharedCode/sop/blob/master/README2.md#usability
