@@ -9,39 +9,10 @@ Scaleable Objects Persistence(SOP) is a raw storage engine that bakes together a
 
 SOP V2 ships as a Golang code library. Thus, it can be used to develop applications of many types across different hardware architectures & Operating Systems, that are supported by the Golang compiler.
 
-See more details here that describe further, the different qualities & attributes/features of SOP, and why it is a good choice as a storage engine for your applications today().
+See more details here that describe further, the different qualities & attributes/features of SOP, and why it is a good choice as a storage engine for your applications today: https://github.com/SharedCode/sop/blob/master/README2.md
 
 ### High level features/usability articles about SOP:
-SOP's Swarm Computing Proposition: https://www.linkedin.com/pulse/geminis-analysis-sops-swarm-computing-gerardo-recinto-cqzqc
-
-Revolutionary Storage & Cache Strategy: https://www.linkedin.com/pulse/revolutionizing-b-tree-performance-universal-l1-cache-gerardo-recinto-87jjc
-
-Google Slides Presentation: https://docs.google.com/presentation/d/17BWiLXcz1fPGVtCkAwvE9wR0cDq_dJPjxKgzMcWKkp4/edit#slide=id.p
-
-SOP as AI database: https://www.linkedin.com/pulse/sop-ai-database-engine-gerardo-recinto-tzlbc/?trackingId=yRXnbOEGSvS2knwVOAyxCA%3D%3D
-
-Anatomy of a Video Blob: https://www.linkedin.com/pulse/sop-anatomy-video-blob-gerardo-recinto-4170c/?trackingId=mXG7oM1IRVyP4yIZtWWlmg%3D%3D
-
-B-Tree, a Native of the Cluster: https://www.linkedin.com/pulse/b-tree-native-cluster-gerardo-recinto-chmjc/?trackingId=oZmC6tUHSiCBcYXUqwfGUQ%3D%3D
-
-SOP in File System: https://www.linkedin.com/pulse/scaleable-object-persistencesop-file-system-gerardo-recinto-zplbc/?trackingId=jPp8ccwvQEydxt3pppa8eg%3D%3D
-
-Hash Map on Disk: https://www.linkedin.com/posts/coolguru_hash-map-on-a-file-can-offer-up-to-13-activity-7313645523024891905-8yem?utm_source=share&utm_medium=member_desktop&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
-
-Master less cluster wide distributed locking (RSRR algorithm) :https://www.linkedin.com/posts/coolguru_new-master-less-cluster-wide-resource-locking-activity-7322020975674302465-lUjl?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
-
-RSRR as compared to DynamoDB's distributed locking: https://www.linkedin.com/posts/coolguru_i-just-found-out-thanks-to-my-eldest-that-activity-7325255314474250241-f07g?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
-
-# Documentation
-A lot has changed in SOP. "sop/in_red_fs" is shaping to be the primary and recommended package. It is a very lean package only needing Redis as dependency. There are still value in below discussions but be very careful, self discerning as they are getting obsolete by the day.
-
-SOP in Redis & File System (in_red_fs) will need a new, simple documentation. Bear with below for now. Please feel free to use the "in_red_fs/integration_tests" automated test code as examples, guide in SOP API usage. Also, you can use below guide and if wanting to use "in_red_fs", replace the package name "in_red_cfs" with "in_red_fs" and most instructions or API call should still work the same way, in theory.
-
-Once the remaining bits in "in_red_fs" like replication for the "registry" gets completed, this documentation will be updated to sync with the "in_red_fs" recommended package, together with additional contents like replication feature.
-
-"in_red_cfs" is complete and (almost!) ready for production but it has Cassandra(C*) dependency. Replication is provided by C* and the ReedSolomon Erasure Coding (EC) based replication on the file based B-tree nodes & large data (if your setup has any) blobs. However, it is not as lean as the "in_red_fs" package because of Cassandra usage in the registry (i.e. - the virtual ID repository) which still has replication on registry being completed. Also, the new "in_red_fs" hash map on disk which is another breakthrough algorithm implementation for what it does, has turned out to outperform C* on managing the registry table. No comparison because of use-fit of hash map on disk w/ direct IO on this module usability, so why a big push on "in_red_fs" completion.
-
-However, both "in_red_fs" & "in_red_cfs" turned out to be a breakthrough tech's first reference implementations. They are showing real cutting edge performance based on the SOP's new "swarm computing" and new "storage & caching strategy", the design of which, had been validated & labelled as "revolutionary and a blue print of high performance, scalable storage system in a complex distributed environment", by an AI engine (name withheld to protect AI's privacy).
+See details here about this section: https://github.com/SharedCode/sop/blob/master/README2.md#high-level-featuresusability-articles-about-sop
 
 # Software Based Efficient Replication
 Quick update, SOP now sports very efficient software based replication via Reed Solomon algorithm erasure coding. SOP's Registry data already had replication via Cassandra & now, the data blobs stored in File System (see sop/in_red_cfs) are safe having very efficient software based modern replication.
