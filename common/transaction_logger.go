@@ -210,7 +210,21 @@ func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid 
 	}
 
 	if ok, ownerTID, err := t.l2Cache.Lock(ctx, defaultLockDuration, keys); ok {
-		return keys, nil
+		if ok, err := t.l2Cache.IsLocked(ctx, keys); ok {
+			return keys, nil
+		} else if err != nil{
+			t.l2Cache.Unlock(ctx, keys)
+			return keys, err
+		} else {
+			t.l2Cache.Unlock(ctx, keys)
+			// Just return failed since partial lock occurred, means there is a competing transaction elsewhere
+			// that got ownership partially of the locks. In this case, we would want to just cause a failover
+			// to minimize risk of potential data corruption.
+			return keys, sop.Error{
+				Code: sop.RestoreRegistryFileSectorFailure,
+				Err:  fmt.Errorf("key(s) is partially locked by another transaction, 'can't acquire lock to restore registry"),
+			}
+		}
 	} else if !ownerTID.IsNil() {
 		if ownerTID.Compare(tid) != 0 {
 			t.l2Cache.Unlock(ctx, keys)
