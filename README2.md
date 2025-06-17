@@ -33,17 +33,6 @@ Master less cluster wide distributed locking (RSRR algorithm) :https://www.linke
 
 RSRR as compared to DynamoDB's distributed locking: https://www.linkedin.com/posts/coolguru_i-just-found-out-thanks-to-my-eldest-that-activity-7325255314474250241-f07g?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
 
-# Documentation
-A lot has changed in SOP. "sop/in_red_fs" is shaping to be the primary and recommended package. It is a very lean package only needing Redis as dependency. There are still value in below discussions but be very careful, self discerning as they are getting obsolete by the day.
-
-SOP in Redis & File System (in_red_fs) will need a new, simple documentation. Bear with below for now. Please feel free to use the "in_red_fs/integration_tests" automated test code as examples, guide in SOP API usage. Also, you can use below guide and if wanting to use "in_red_fs", replace the package name "in_red_cfs" with "in_red_fs" and most instructions or API call should still work the same way, in theory.
-
-Once the remaining bits in "in_red_fs" like replication for the "registry" gets completed, this documentation will be updated to sync with the "in_red_fs" recommended package, together with additional contents like replication feature.
-
-"in_red_cfs" is complete and (almost!) ready for production but it has Cassandra(C*) dependency. Replication is provided by C* and the ReedSolomon Erasure Coding (EC) based replication on the file based B-tree nodes & large data (if your setup has any) blobs. However, it is not as lean as the "in_red_fs" package because of Cassandra usage in the registry (i.e. - the virtual ID repository) which still has replication on registry being completed. Also, the new "in_red_fs" hash map on disk which is another breakthrough algorithm implementation for what it does, has turned out to outperform C* on managing the registry table. No comparison because of use-fit of hash map on disk w/ direct IO on this module usability, so why a big push on "in_red_fs" completion.
-
-However, both "in_red_fs" & "in_red_cfs" turned out to be a breakthrough tech's first reference implementations. They are showing real cutting edge performance based on the SOP's new "swarm computing" and new "storage & caching strategy", the design of which, had been validated & labelled as "revolutionary and a blue print of high performance, scalable storage system in a complex distributed environment", by an AI engine (name withheld to protect AI's privacy).
-
 # Software Based Efficient Replication
 Quick update, SOP now sports very efficient software based replication via Reed Solomon algorithm erasure coding. SOP's Registry data already had replication via Cassandra & now, the data blobs stored in File System (see sop/in_red_cfs) are safe having very efficient software based modern replication.
 The feature is complete, it has auto-repair of detected missing or bitrot shards, if the RepairCorruptedShards flag (passed in the sop/in_red_cfs/NewTransactionWithEC erasure config) is turned on.
