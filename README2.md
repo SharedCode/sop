@@ -2,14 +2,15 @@ Scaleable Objects Persistence (SOP) Framework - Golang V2
 
 Code Coverage: https://app.codecov.io/github/SharedCode/sop
 
-# Introduction
-What is SOP?
+# Summary
 
-Scaleable Objects Persistence(SOP) is a raw storage engine that bakes together a set of storage related features & algorithms in order to provide what was thought as the most efficient technique (so far) of storage management and rich search, as it brings to the application, the raw muscle of "raw storage", direct IO comms w/ disk drives. In a code library form factor today.
+SOP has the low-level B-Tree storage engine in it to offer raw muscle in direct IO based data management. Adds Redis for out of process caching, "ultra fast realtime" orchestration and to provide ultra fast "data merging" surface. Combined with ACID transactions, formed a tightly woven code library that turns your applications/micro-services "cluster" into the (raw!) storage engine (cluster) itself, no across the wire sending of data (other than what Redis is for).
 
-SOP V2 ships as a Golang code library. Thus, it can be used to develop applications of many types across different hardware architectures & Operating Systems, that are supported by the Golang compiler.
+Plus, SOP is multi-modal, not what the industry calls as multi-modal, SOP was built from the ground up & ships with its own B-tree & such. No reuse of 3rd party libraries, re-written storage engine and makes it as a base for other higher level constructs, or for direct IO, raw storage uses!
 
-See more details here that describe further, the different qualities & attributes/features of SOP, and why it is a good choice as a storage engine for your applications today().
+Multi-modal in the sense that, it supports varying data sizes, from small to huge data, it has features to scale management and rich search capabilities. The similarity with other multi-modal databases in the market ends there. Because they do just repackage existing other specialized storage engines and surfaces an API that commands these.
+
+SOP is not, it is a newly architected raw storage engine! No delegation, pure raw storage execution! at your finger tips! In the past, only DBMS like Clipper, DBase 3+, Oracle, C++ Rtree & such, can use or has B-tree to do efficient raw storage mgmt. SOP breaks all of these, it brings to your fingertips the raw storage power of B-trees and more, a complete architecture of a new beast of raw storage management & rich search.
 
 ### High level features/usability articles about SOP:
 SOP's Swarm Computing Proposition: https://www.linkedin.com/pulse/geminis-analysis-sops-swarm-computing-gerardo-recinto-cqzqc
