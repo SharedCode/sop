@@ -15,6 +15,8 @@ See more details here that describe further, the different qualities & attribute
 See the entire list & details here: https://github.com/SharedCode/sop/blob/master/README2.md#high-level-featuresusability-articles-about-sop
 
 # How to Use SOP?
+You will be surprised how easy to use SOP. Because we have shipped in SOP everything you need to manage your data & at scale! Its API is like NoSQL (Key/Value pair based), but it does NOT need anything else other than Redis for caching. That is it. Think of it this way, your Cassandra/MongoDB/Oracle, etc.. & their client libraries IS IN SOP code library. Boom, simple, nothing else needed in this option to do storage management using SOP.
+
 First, you need to decide & pick a hardware/software setup for your production and your development environments (& anything in between). SOP supports all or most of them, so, you will have freedom/flexibility which one to choose. Ensure you have plenty of disk drives storage space, enough to store your planned amount of data to manage.
 
 For software dependency, SOP only depends on Redis & the Golang compiler/runtime (1.24.3 & above). Here are instructions to setup the environments including your development machine:
