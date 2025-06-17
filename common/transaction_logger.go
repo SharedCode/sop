@@ -234,6 +234,8 @@ func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid 
 					keys[i].LockID = tid
 					keys[i].IsLockOwner = true
 				} else {
+					// Unlock any key that got locked by lock call above, if there is any.
+					t.l2Cache.Unlock(ctx, keysCopy)
 					return keys, sop.Error{
 						Code: sop.RestoreRegistryFileSectorFailure,
 						Err:  fmt.Errorf("key(s) %s is locked by another transaction %s, 'can't acquire lock to restore registry", keys[i].Key, tid2),
