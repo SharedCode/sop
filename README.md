@@ -14,7 +14,7 @@ See more details here that describe further, the different qualities & attribute
 Before I go, I would like to say, SOP is a green field, totally new. What is being shipped in V2 is just the start of this new product. We are barely scratching the surface of what can be done that will help storage management at super scale. SOP is a super computing enabler. The way its architecture was laid out, independent features and together, they are meant to give us the best/most efficient performance & IO of a group of computers (cluster), network & their storage, that can possibly give us.
 
 ## High level features/usability articles about SOP
-See the entire list & details here: [high-level-features-articles-about-sop](README2.md)
+See the entire list & details here: https://github.com/SharedCode/sop/blob/master/README2.md#high-level-features-articles-about-sop
 
 # How to Use SOP?
 You will be surprised how easy to use SOP. Because we have shipped in SOP everything you need to manage your data & at SUPER scale! Its API is like NoSQL (Key/Value pair based), but it does NOT need anything else other than Redis for caching. That is it. Think of it this way, your Cassandra/MongoDB/Oracle/ElasticSearch (SOP provides unlimited B-tree! limited only by your hardware), etc.. & their client libraries IS IN SOP code library. Boom, simple, nothing else needed in this option to do storage management using SOP.
@@ -39,7 +39,7 @@ How to create/begin & commit/rollback SOP transactions, use its B-tree API to st
 6. Ensure you have setup a proper application user with proper permission to your target disk drives. Follow the standard way how to do it in your environment. Nothing is special here, SOP uses files/disk drives like ordinary packages, but via DirectIO & OS File System API. SOP enables support for different OS/hardware architectures without requiring anything else, other than what was discussed above. It is like magic, but it is not really. SOP was designed with super scaling in mind (swarm computing), realtime scaleable orchestration and unified locks that enabled support for different OS as a by-product of the design.
 
 # Usability
-See details here: https://github.com/SharedCode/sop/blob/master/README2.md#usability
+See details here: [usability](README2.md)
 
 # SOP API Discussions
 See details here: https://github.com/SharedCode/sop/blob/master/README2.md#software-based-efficient-replication
