@@ -75,6 +75,12 @@ import (
 
 func main() {
 	ctx := context.Background()
+	// Specifying nil on both "storesFolders" and "erasureConfig" last 2 params will allow SOP to use the first two drives/paths
+	// in global Erasure Config as stores' home folders (active and passive drives) & the global EC config for this transaction's
+	// B-trees. You can speciy a different storesFolders if you want to and/or a different erasure config if you don't like the global
+	// EC config. Some shops want to centralize EC config in the global, and some use-case want a private specification.
+	//
+	// For the storesFolders, if you have a standard drives/folders for this, then specify that.
 	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
 
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
