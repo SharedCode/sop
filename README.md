@@ -39,7 +39,7 @@ How to create/begin & commit/rollback SOP transactions, use its B-tree API to st
 6. Ensure you have setup a proper application user with proper permission to your target disk drives. Follow the standard way how to do it in your environment. Nothing is special here, SOP uses files/disk drives like ordinary packages, but via DirectIO & OS File System API. SOP enables support for different OS/hardware architectures without requiring anything else, other than what was discussed above. It is like magic, but it is not really. SOP was designed with super scaling in mind (swarm computing), realtime scaleable orchestration and unified locks that enabled support for different OS as a by-product of the design.
 
 # Usability
-See details here: [usability](README2.md)
+See details here: https://github.com/SharedCode/sop/blob/master/README2.md#usability
 
 # SOP API Discussions
 See details here: https://github.com/SharedCode/sop/blob/master/README2.md#software-based-efficient-replication
