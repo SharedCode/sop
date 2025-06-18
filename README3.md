@@ -33,121 +33,95 @@ Master less cluster wide distributed locking (RSRR algorithm) :https://www.linke
 
 RSRR as compared to DynamoDB's distributed locking: https://www.linkedin.com/posts/coolguru_i-just-found-out-thanks-to-my-eldest-that-activity-7325255314474250241-f07g?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
 
-# Simple Usage
-In this tutorial, we will be showing how to configure and code with a transaction & a B-tree that has replication feature.
-a. setup the Erasure Coding (EC) config in the module "init" function so it can be made available in all of the functions/code blocks
-```
-func init() {
-	// Erasure Coding configuration lookup table (map).
-	ec := make(map[string]fs.ErasureCodingConfig)
-
-	// Erasure Coding config for "barstoreec" table uses three base folder paths across three disks.
-	// Two data shards and one parity shard.
-	ec["barstoreec"] = fs.ErasureCodingConfig{
-		DataShardsCount:   2,
-		ParityShardsCount: 1,
-		BaseFolderPathsAcrossDrives: []string{
-			fmt.Sprintf("//storage%cdisk1", os.PathSeparator),
-			fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
-			fmt.Sprintf("//storage%cdisk3", os.PathSeparator),
-		},
-		RepairCorruptedShards: true,
-	}
-
-	// Assign the EC config as the global configuration that can be referenced in functions.
-	fs.SetGlobalErasureConfig(ec)
-}
-```
-The init function as shown above will create a map containing Erasure Coding information about the three disk drives & paths which will store the replicated data, both Active/Passive(disk1 & disk2) & EC based(disk1, disk2 for data shards &disk3 for parity).
-
-b. instantiate a transaction and b-tree with replication feature, referencing the EC config specified in init (as shown above)
-```
-package main
-
-import (
-	"cmp"
-	"context"
-	"fmt"
-
-	"github.com/SharedCode/sop/fs"
-	"github.com/SharedCode/sop/in_red_fs"
-)
-
-func main() {
-	ctx := context.Background()
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
-
-	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
-	if err != nil {
-		fmt.Println(fmt.Sprintf("error got creating a transction, details: %v", err))
-		return
-	}
-
-	trans.Begin()
-
-	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
-		Name:                     "barstoreec",
-		SlotLength:               200,
-		IsValueDataInNodeSegment: true,
-	}, trans, cmp.Compare)
-
-	b3.Add(ctx, 1, "hello world")
-	b3.FindOne(ctx, 1, false)
-	v, _ := b3.GetCurrentValue(ctx)
-	fmt.Println(fmt.Sprintf("Fetched current value %s from backend", v))
-
-	trans.Commit(ctx)
-}
-```
-The code above:
-* creates a transaction referencing the global EC config, specifying nil,nil on NewTransactionOptionsWithReplication function call does this.
-* creates a B-tree with name "barstoreec" specifying 200 items per node and using the EC config for backend data storage/disk details. It will use the entry with named "barstoreec" in EC config map. And since nil is specified in the 2nd to the last parameter of transaction options, it will pick up first two disks/paths from the EC config map. This should be disk 1 as active & disk 2 as the passive drive.
-* adds an item to the b-tree, shows how to find an item using the FindOne function of the B-tree,
-* and then commit (trans.Commit) the transaction.
-
 # Software Based Efficient Replication
 There are two types of replication in SOP, they are:
 * Active/Passive replication for the StoreRepository & Handles' (a.k.a. virtual IDs) Registry
 * Erasure Coding (EC) based replication for the B-tree & large data nodes
+This section discusses the latter, EC based replication.
 
-## Active/Passive Replication
-StoreRepository, the data files containing the list of all B-trees, a.k.a. store or data store, and the Registry, the data files (.reg) that contain B-tree nodes & large data nodes virtual IDs, a.k.a. handles, are replicated using SOP's Active/Passive replication feature. Each of the stores' data file set (store repository & registry files) have two copies, the active files' set stored in the currently categorized active drive/folder & the passive files' set stored in the currently categorized passive drive/folder.
+SOP sports very efficient software based replication via Reed Solomon algorithm erasure coding. It has auto-repair mode for detected missing or bitrot shards if the RepairCorruptedShards flag is turned on, see in_red_fs/NewTransactionWithReplication API for details.
+Use-case, you can set this flag off then upon disk drive failure detection, you can replace the drive, turn on this flag then restart the application. SOP will then automatically repair the missing shard files (on the newly reinstated drive) that can get reconstructed from the available shards.
 
-So, if ever there is a drive failure in the active file set, SOP will automatically failover to the passive and make it the current active files. And vice versa, meaning, when the failed drives are reinstated, it will be marked as passive and then when another failure occurs in the future in the active drive, it will failover to this passive drive that got reinstated.
+If left untouched, SOP can operate(read-only) even with drive(s) failures so long as data can be reconstructed from the available shards. The sample I made(see in_red_fs/integration_tests/basic_ec_test.go) uses 2 data shards and 1 parity shard. Yes, you can use minimal replication and it will work to your desire, if enough to support drive(s) failure.
 
-Within these replication events and life cycle, 100% data protection is provided at any given point in time. Assuming the IT administrators do their diligence in pro-actively managing the failing drives and reinstating replacement drives. SOP has automated facility that can do auto-failover, syncing replacement drives & reinstating them back to the replication rotation.
+Sample code to use this Erasure Coding based replication feature:
+```
+import (
+	"github.com/SharedCode/sop/in_red_fs"
+	"github.com/SharedCode/sop/in_red_fs/fs"
+)
 
-## Erasure Coding (EC) based Replication
-For the B-tree nodes & large data file nodes, these files are replicated using EC based replication. SOP sports very efficient software based replication via Reed Solomon algorithm erasure coding, similar to MinIO S3's implementation. Based on a given EC configuration, e.g. - data shards & parity shards, data redundancy & thus, high data protection is achieved. Typically, 50% drive failure is tolerated and SOP will allow full read & write operations even in this degraded redundancy state. Admins are expected though to work on bringing back redundancy to the normal state of drive availability.
+// ...
 
-SOP's EC has auto-repair mode for detected missing or bitrot shards if the RepairCorruptedShards flag is turned on (see in_red_fs/NewTransactionWithReplication API support on this flag). Use-case is, you can set this flag off then upon disk drive failure detection, you can replace the drive, turn on this flag then restart the application. SOP will then automatically repair the missing shard files (on the newly reinstated drive) that can get reconstructed from the available shards.
+	// Make sure not to change the ErasureCodingConfig, once set this should be permanent.
+	// Otherwise you have to rebuild entire data set to use new configuration. The EC config
+	// is specific to a given transaction and any btree you create within this transaction(s)
+	// will share the same disk drives and base folder paths specified for the transaction.
+	//
+	// And yes, you are free to use different EC config including different storage data paths
+	// across different transactions. It is up to you/your code to maintain the separate data
+	// boundaries.
+	trans, _ := in_red_fs.NewTransactionWithReplication(sop.ForWriting, -1, true, &fs.ErasureCodingConfig{
+		DataShardsCount:   2,
+		ParityShardsCount: 1,
+		BaseFolderPathsAcrossDrives: []string{
+			"c://sop_data",
+			"d://sop_data",
+			"e://sop_data",
+		},
+		RepairCorruptedShards: false,
+	})
+	trans.Begin()
+	b3, _ := in_red_cfs.NewBtreeWithEC[int, string](ctx, sop.StoreOptions{
+		Name:                     "foobar",
+		SlotLength:               200,
+		// nothing special, use your judgement whether to save on Btree node or a separate segment.
+		IsValueDataInNodeSegment: true,
+	}, trans)
 
-If left untouched, SOP can operate even with drive(s) failures so long as data can be reconstructed from the available shards. The sample I made(see in_red_fs/integration_tests/basic_ec_test.go) uses 2 data shards and 1 parity shard. Yes, you can use minimal replication and it will work to your desire, if enough to support drive(s) failure.
-See above "Sample Usage" section for EC configuration.
+	// Nothing special, use B-Tree interface methods to manage your data then call
+	// trans.Commit to finalize changes, like the usual SOP usage.
+	b3.Add(ctx, 1, "hello world")
 
-# Store Caching Config Guide
-Below examples illustrate how to configure the Store caching config feature. This feature provides automatic Redis based caching of data store's different data sets, both internal, for use to accelerate IO on internal needs of the B-trees and external, the enduser large data.
+```
+
+# Quick Store Caching Config Guide
+At the latest release, V2 Beta 2.1.7+, SOP is able to achieve "persisted data & caching" virtualization. This is a very important milestone, because SOP further cemented its capabilities, estimate is, nothing in the market can compete with SOP for the things it provides & in the magnitude of its "horizontal & vertical scaling" & "data caching virtualization" capabilities. In fact, it is the only solution known that does this.
 
 Sample code for customization of store level caching:
+* Store data cache does not expire
+  
+  NOTE: Setting duration to 0 achieves caching with no expiration
+  ```
+  	b3, _ := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "storecaching",
+		SlotLength:               200,
+		IsValueDataInNodeSegment: true,
+		BlobStoreBaseFolderPath:  dataPath,
+		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(0), false),
+	}, trans)
+  ```
 * Store data cache is "sliding window"
   
   NOTE: Setting 2nd param(isCacheTTL) true of sop.NewStoreCacheConfig(..) sets the store so each operation including fetch(get) will instruct Redis to extend the caching for the target data, a.k.a. "sliding time" or TTL
   ```
-	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
-		Name:                     "barstoreec",
+  	b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "storecachingTTL",
 		SlotLength:               200,
 		IsValueDataInNodeSegment: true,
+		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), true),
-	}, trans, cmp.Compare)
+	}, trans)
   ```
 * Store data cache has absolute expiration(default)
   
   NOTE: This is the default mode and is also achieved in the sop.NewStoreCacheConfig(..) call by passing false to the 2nd param(isCacheTTL) & a > 0 duration.
   ```
-  	b3, _ := in_red_cfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+  	b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecaching",
 		SlotLength:               200,
 		IsValueDataInNodeSegment: true,
+		BlobStoreBaseFolderPath:  dataPath,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), false),
 	}, trans)
   ```
@@ -155,32 +129,34 @@ Sample code for customization of store level caching:
   
   NOTE: You can set app data to get stored in B-Tree Node & make the Node caching as "sliding window", thus, your app data also gets such caching behavior. Here is how:
   ```
-  	b3, _ := in_red_cfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
-		Name:                     "storecaching",
-		SlotLength:               200,
-		IsValueDataInNodeSegment: true,		// true means application data is store in B-tree node!
-		CacheConfig: &sop.StoreCacheConfig{
-			RegistryCacheDuration:  time.Duration(5 * time.Hour),
-			StoreInfoCacheDuration: time.Duration(5 * time.Hour),
-			NodeCacheDuration:      time.Duration(5 * time.Hour),
-			IsNodeCacheTTL   :      true,	// B-tree Node cache is TTL!
-		},
-  	}, trans)
+  b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	Name:                     "storecaching",
+	SlotLength:               200,
+	IsValueDataInNodeSegment: true,
+	BlobStoreBaseFolderPath:  dataPath,
+	CacheConfig: &sop.StoreCacheConfig{
+		RegistryCacheDuration:  time.Duration(5 * time.Hour),
+		StoreInfoCacheDuration: time.Duration(5 * time.Hour),
+		NodeCacheDuration:      time.Duration(5 * time.Hour),
+		IsNodeCacheTTL   :      true,
+	},
+  }, trans)
   ```
 * Application data cache is "sliding window"
   
   NOTE: When you would like to conserve Redis cache but still provide great level of caching of your application data, you can set the application data to do "sliding window"(TTL) and set store meta data to absolute expiration. Here is how to do it:
   ```
-  b3, _ := in_red_cfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+  b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.StoreOptions{
 	Name:                     "storecaching",
 	SlotLength:               200,
-	IsValueDataInNodeSegment: false,		// false specifies Application data to be stored in separate node than the B-tree node!
+	IsValueDataInNodeSegment: false,
+	BlobStoreBaseFolderPath:  dataPath,
 	CacheConfig: &sop.StoreCacheConfig{
 		RegistryCacheDuration:  time.Duration(2 * time.Hour),
 		NodeCacheDuration:      time.Duration(2 * time.Hour),
 		StoreInfoCacheDuration: time.Duration(2 * time.Hour),
 		ValueDataCacheDuration: time.Duration(7 * time.Hour),
-		IsValueDataCacheTTL   : true,		// true here says Value Data (node) will be cached (7hrs as specified above) & using TTL mode!
+		IsValueDataCacheTTL   : true,
 	},
   }, trans)
   ```
@@ -189,7 +165,18 @@ You do need to set the StoreOption field **IsValueDataInNodeSegment** = false in
 
 Of course, you have to do fine tuning as there are tradeoffs :), determine what works best in your particular situation. As there are quite a few "knobs" you can tweak in SOP to achieve what you want. See below discussions for more details in this area.
 
+# In File System(FS) or in Cassandra Blobs
+SOP supports storing the data blobs(containing both SOP metadata, specifically the B-Tree Nodes & application data) either in FS or in Cassandra (via Cassandra's support for blobs storage). Choose whichever you want. However, my favorite is the FS, as it is very lean.
+
+Following are the package locations for the different flavors:
+* in File System w/ registry in Cassandra: 	sop/in_red_cfs
+* in File System (early preview!): 		sop/in_red_fs
+NOTE: **in_red_fs** (under construction) will not require any external system as SOP replaces Cassandra based registry with a more optimal hash map on disk implementation. Redis for caching is still available.
+
+The API for each package to construct a new BTree, Open an existing one or Remove one are pretty much consistent across the three. Streaming Data Store API are also available across the three and consistent in shape too.
+
 # Data Partitioning
+* SOP in Cassandra stores a blob in its own dedicated partition, which is the optimal form.
 * SOP in File System has the following to address data partitioning:
   - Vertical partitioning is built-in, you can take advantage of this by specifying different drive in the directory path field of StoreOptions argument of the BTree constructor function. E.g. - for store1, specify "c://sop_data" and on store2, specify "d://sop_data". This will allow SOP to store the blob files for each store on its own drive. Thus, combined with SOP's efficient I/O(i.e. - 4 level "tree like" directory structuring) achieves super efficient parallel I/O, per store.
   - Horizontal partitioning however, you need to do a little bit of customization, i.e. - specify a lambda expression that has the logic to carve into different drive(s) or storage path(s) per given blob file ID. You can pass in this function in the respective "in_red_xxx.NewTransactionExt(..)" function call and it will be utilized to drive where the file blob(s) will be stored. Sample functions that can allocate(or partition!) across different drives the file blobs are below.
@@ -256,7 +243,7 @@ ff := fileFormatter{
 		{3, "f"},
 	}
 }
-trans, _ := in_red_fs.NewTransactionWithReplication(ff.MyToFilePath, sop.ForWriting, -1, false)
+trans, _ := in_red_cfs.NewTransactionExt(ff.MyToFilePath, sop.ForWriting, -1, false)
 
 ```
 
@@ -287,7 +274,7 @@ For these three use-cases, there is not much competition for what SOP has to off
 
 Please feel free to file a request/discussion entry if you have a special domain-use in mind, as perhaps we can further optimize. Today, SOP piggy backs on the global cache(Redis) re-seeding the local cache of each transaction. It has a lot of advantages including solving data synchronization requirements among different instances running in the cluster without requiring to communicate & "orchestrate" with one another thus, maintaining a fully parallelized execution model with sustained throughput for each instance.
 
-# SOP in Redis & File System
+# SOP in Redis, Cassandra & File System
 M-Way Trie data structures & algorithms based Objects persistence, using Cassandra for Registry, File System as backend storage of Blobs(see in_red_cfs package) & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the ```Redis Lock API```, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
 
 SOP has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your app. No need to have impedance mismatch.

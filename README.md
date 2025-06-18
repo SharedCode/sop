@@ -42,4 +42,4 @@ How to create/begin & commit/rollback SOP transactions, use its B-tree API to st
 See details here: https://github.com/SharedCode/sop/blob/master/README2.md#usability
 
 # SOP API Discussions
-See details here: https://github.com/SharedCode/sop/blob/master/README2.md#software-based-efficient-replication
+See details here: https://github.com/SharedCode/sop/blob/master/README2.md#simple-usage
