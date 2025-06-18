@@ -212,7 +212,7 @@ func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid 
 	if ok, ownerTID, err := t.l2Cache.Lock(ctx, defaultLockDuration, keys); ok {
 		if ok, err := t.l2Cache.IsLocked(ctx, keys); ok {
 			return keys, nil
-		} else if err != nil{
+		} else if err != nil {
 			t.l2Cache.Unlock(ctx, keys)
 			return keys, err
 		} else {

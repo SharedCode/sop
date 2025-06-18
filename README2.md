@@ -191,86 +191,20 @@ Sample code for customization of store level caching:
   }, trans)
   ```
 After 2 hours, Registry, Node & StoreInfo meta data for this "storecaching" SOP store will expire and thus, reduce the data cached in Redis. BUT since the application data(ValueData) is set to do "sliding window" or TTL, then those that got accessed(including fetch!) within the set duration will be retained, so future access to them will take it from Redis cache instead of reading from backend storage, and each access extending cache retention, a.k.a. - "sliding window". Keeping the frequently accessed data in the cache.
-You do need to set the StoreOption field **IsValueDataInNodeSegment** = false in order to make this to work. So the application data is stored in their data segments and not in the B-Tree Nodes themselves.
+The StoreOption field (**IsValueDataInNodeSegment**) defaults to false, which is not set as shown above, will cause application data to be stored in the data segments and not in the B-Tree Nodes themselves.
 
 Of course, you have to do fine tuning as there are tradeoffs :), determine what works best in your particular situation. As there are quite a few "knobs" you can tweak in SOP to achieve what you want. See below discussions for more details in this area.
 
 # Data Partitioning
 * SOP in File System has the following to address data partitioning:
-  - Vertical partitioning is built-in, you can take advantage of this by specifying different drive in the directory path field of StoreOptions argument of the BTree constructor function. E.g. - for store1, specify "c://sop_data" and on store2, specify "d://sop_data". This will allow SOP to store the blob files for each store on its own drive. Thus, combined with SOP's efficient I/O(i.e. - 4 level "tree like" directory structuring) achieves super efficient parallel I/O, per store.
-  - Horizontal partitioning however, you need to do a little bit of customization, i.e. - specify a lambda expression that has the logic to carve into different drive(s) or storage path(s) per given blob file ID. You can pass in this function in the respective "in_red_xxx.NewTransactionExt(..)" function call and it will be utilized to drive where the file blob(s) will be stored. Sample functions that can allocate(or partition!) across different drives the file blobs are below.
-    
-Here is the SOP's **DefaultToFilePath** function(in package sop/in_red_fs) that drives storage of file blobs across passed in **base directory path** argument of StoreOptions in NewBtree call:
-```
-package fs
-
-import (
-	"fmt"
-	"os"
-
-	"github.com/SharedCode/sop"
-)
-
-type ToFilePathFunc func(basePath string, id sop.UUID) string
-
-// ToFilePath is used for formatting a base folder path & a GUID into a file path & file name
-// optimized for efficient I/O. It can be a simple logic as the default function shown below
-// or you can implement as fancy as partitioning across many storage devices, e.g. - using
-// the 1st hex digit, apply modulo to distribute to your different storage devices.
-//
-// Or using the basePath to specify different storage path, this perhaps is the typical case(default).
-var ToFilePath ToFilePathFunc = DefaultToFilePath
-
-// Default file path formatter, given a base path & a GUID.
-func DefaultToFilePath(basePath string, id sop.UUID) string {
-	if len(basePath) > 0 && basePath[len(basePath)-1] == os.PathSeparator {
-		return fmt.Sprintf("%s%s", basePath, Apply4LevelHierarchy(id))
-	}
-	return fmt.Sprintf("%s%c%s", basePath, os.PathSeparator, Apply4LevelHierarchy(id))
-}
-
-// Support 4 level folders file distribution algorithm, a.k.a. tree like folder hierarchy.
-func Apply4LevelHierarchy(id sop.UUID) string {
-	s := id.String()
-	ps := os.PathSeparator
-	return fmt.Sprintf("%x%c%x%c%x%c%x", s[0], ps, s[1], ps, s[2], ps, s[3])
-}
-```
-
-And here is a sample to show how you can specify horizontally partitioned blob files:
-```
-type struct fileFormatter {
-	driveLookup map[int]string
-}
-// My File path formatter, given a base path & a GUID, use the GUID to specify 
-func (ff *fileFormatter)MyToFilePath(basePath string, id sop.UUID) string {
-	// assuming basePath contains a %s format char for the drive, e.g.: "%s://sop_data"
-	// then you can assemble a new drive/dir path that does horizontal partitioning based off of the 1st component of UUID.
-
-	drvIndex := id[0] % 4
-	return fmt.Sprintf(basePath, ff.driveLookup[drvIndex])
-}
-```
-
-And in your code where you construct the Transaction and Btree objects, here is how it looks like plugging in the new custom file formatter:
-```
-ff := fileFormatter{
-	driveLookup: map[int]string{
-		{0, "c"},
-		{1, "d"},
-		{2, "e"},
-		{3, "f"},
-	}
-}
-trans, _ := in_red_fs.NewTransactionWithReplication(ff.MyToFilePath, sop.ForWriting, -1, false)
-
-```
+  - Vertical partitioning (per B-tree/table) is built-in, you can take advantage of this by specifying different drives set in the "storesFolders" & "EC config" of the TransactionOptionsWithReplication. Like use a different Transaction options config params for B-tree "store1" and another set for "store2".
+  - Horizontal partitioning, this is also built-in, EC based replication divides into shards each B-tree node & large data node and thus, spreading out to different disks storage. And causing optimal IO as data writers & readers use multi-threads to efficiently save or read data from these files across drives. So, nothing to do here as it is built-in, 'just specify correctly the EC config you wanted based on your Stores vs. Disk drives data allocations & replication needs.
 
 # Usability
 SOP can be used in a wide, diverse storage usability scenarios. Ranging from general purpose data storage - search & management, to highly scaleable and performant version of the same, to domain specific use-cases. As SOP has many feature knobs you can turn on or off, it can be used and get customized with very little to no coding required. Some examples bundled out of the box are:
   * A. General purpose data/object storage management system
-  * B. Large data storage and management, where your data is stored in its own data segment. See StoreInfo.IsValueDataInNodeSegment = false flag
-  * C. Streaming Data application domain enabling very large data storage - search and management, supporting multi-GBs record or item, limited only by your storage drive/sub-system. See sop/streaming_data package(in_red_cfs) for code & sample usage in test
+  * B. Large data storage and management, where your data is stored in its own data segment. See StoreInfo.IsValueDataInNodeSegment = false (default) flag
+  * C. Streaming Data application domain enabling very large data storage - search and management, supporting multi-GBs record or item, limited only by your storage drive/sub-system. See sop/in_red_fs/NewStreamingDataStore or OpenStreamingDataStore for code & sample usage in test
   * D. High Performance Search Engine, alternative to ElasticSearch/SOLR but also has attributes of a real database engine, with ACID/two phase commit transactions
 
 Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3 & a DBMS like Postgres for indexing). But SOP supports all four of them out of the box.
@@ -281,12 +215,11 @@ In all of these, ACID transactions, high speed, scaleable searches and managemen
 Following are the best practices using SOP outlined so you can get a good understanding of best outcome from SOP for your implementation use-cases:
 
 ## As a general purpose DB engine
-  * Single Writer, many Readers - a dedicated background worker populating your SOP/Cassandra DB doing management operations such as: adds, updates and/or deletes. And having many readers across the cluster.
+  * Single Writer, many Readers - a dedicated background worker populating your SOP DB doing management operations such as: adds, updates and/or deletes. And having many readers across the cluster.
   * Many Writers, many Readers - this setup "can be" slow as you are exposed to having conflicting transactions and data merges. BUT if your use-case or organized the transactions in a way that there is minimal or not excessive conflicts per data submitted, then you can achieve a very decent/great performance considering you are benefiting from ACID transactions, thus achieving higher data quality in high volume mgmt, sorting & searching.
   * No check mode - Transaction mode ```NoCheck``` allows your code to do reader transaction that will not do any check on commit. Useful for cases you are sure there will be no changes to the items & their Nodes(by other transactions in the cluster) you will be reading(or you don't care) in this transaction and thus, can tell SOP not to do any item version check during commit. This is the leanest & most performant mode if such guarantee is met.
 
 Still, you have to bear in mind that these use-cases are geared for achieving higher data quality. Comparing the solution with other ACID transactions data providers, you will find that what SOP provides will match or, most likely, surpass whatever is available in the market. Because the solution provides a sustained throughput as there is no bottleneck and the entire data processing/mgmt solution is as parallelized as possible. The OOA algorithm for orchestration for example, provides decentralized & sustained throughput performance.
-But of course, even SOP can't be compared if you will use or compare it to an ```eventual consistency```(no ACID transaction) with comparable paired caching(e.g. - Redis) DB storage solution. At the cost or in exchange of not having ACID, so, it depends on your needs.
 
 ## As a large or very large Search &/or DB engine - 2nd, 3rd & 4th SOP use-case
 For these three use-cases, there is not much competition for what SOP has to offer here, considering SOP is addressing being able to provide better data quality on top of supporting these use-cases.
@@ -294,32 +227,26 @@ For these three use-cases, there is not much competition for what SOP has to off
 Please feel free to file a request/discussion entry if you have a special domain-use in mind, as perhaps we can further optimize. Today, SOP piggy backs on the global cache(Redis) re-seeding the local cache of each transaction. It has a lot of advantages including solving data synchronization requirements among different instances running in the cluster without requiring to communicate & "orchestrate" with one another thus, maintaining a fully parallelized execution model with sustained throughput for each instance.
 
 # SOP in Redis & File System
-M-Way Trie data structures & algorithms based Objects persistence, using Cassandra for Registry, File System as backend storage of Blobs(see in_red_cfs package) & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the ```Redis Lock API```, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
+M-Way Trie data structures & algorithms based Objects persistence, File System as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the ```Redis Lock API```, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
 
-SOP has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your app. No need to have impedance mismatch.
+SOP has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your application. No need to have impedance mismatch.
 
 Requirements:
-  * Cassandra
   * Redis
   * Storage Drive(s) or sub-system (paths) for Blobs
-  * Read/Write permissions(e.g. - 0777) to the drive(s)/storage path(s)
-  * Golang that supports generics, currently set to 1.21.5 and higher
+  * User that you will use for the process which has Read/Write permissions(e.g. - 0777) to the drive(s)/storage path(s)
+  * Golang that supports generics, SOP package (go.mod) currently is set to use 1.24.3 and higher
 
 ## Sample Code
-Below is a sample code, edited for brevity and to show the important parts.
+Another sample code, edited for brevity and to show the important parts.
 
 ```
 import (
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_cfs"
-	"github.com/SharedCode/sop/cassandra"
+	"github.com/SharedCode/sop/in_red_fs"
 	"github.com/SharedCode/sop/redis"
 )
 
-var cassConfig = cassandra.Config{
-	ClusterHosts: []string{"localhost:9042"},
-	Keyspace:     "btree",
-}
 var redisConfig = redis.Options{
 	Address:                  "localhost:6379",
 	Password:                 "", // no password set
@@ -327,29 +254,25 @@ var redisConfig = redis.Options{
 	DefaultDurationInSeconds: 24 * 60 * 60,
 }
 
-// Initialize Cassandra & Redis.
+// Initialize Redis.
 func init() {
-	in_red_cfs.Initialize(cassConfig, redisConfig)
+	in_red_fs.Initialize(redisConfig)
 }
 
 var ctx = context.Background()
 ...
 
 func main() {
-	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
+	// See above top example on how to setup "ec" or erasureConfig in "init" function. That is required
+	// for this code example to work.
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
+	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
 
-	// Create/instantiate a new B-Tree named "fooStore" w/ 200 slots, Key is unique & other parameters
-	// including the "transaction" that it will participate in. SmallData enum was selected for the
-	// ValueDataSize as the value part of the item will be small in data size, of string type.
-	// If the value part will be small, it is good to choose SmallData so SOP will persist the
-	// value part together with the key in the Node segment itself.
-	//
-	// In this case, when the Node segment is read from its partition, it will contain both the
-	// Keys & the Values (of the Node) ready for consumption. Small value data fits well with this.
-	so := sop.ConfigureStore("fooStore", false, 200, "", sop.SmallData, "/your/blobs/basefolder/here")
-	// Key is of type "int" & Value is of type "string".
-	b3, _ := in_red_cfs.NewBtree[int, string](ctx, so, trans)
+	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+		Name:                     "barstoreec",
+		SlotLength:               200,
+	}, trans)
 
 	b3.Add(ctx, 1, "hello world")
 
@@ -398,15 +321,16 @@ const nodeSlotLength = 500
 func main() {
 
 	// Create and start a transaction session.
-	trans, err := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
+	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
 
 	// Create the B-Tree (store) instance. ValueDataSize can be SmallData or MediumData in this case.
 	// Let's choose MediumData as the person record can get set with medium sized data, that storing it in
 	// separate segment than the Btree node could be beneficial or more optimal per I/O than storing it
 	// in the node itself(as in SmallData case).
-	so := sop.ConfigureStore("persondb", false, nodeSlotLength, "", sop.MediumData, "/your/blobs/basefolder/here")
-	b3, err := in_red_cfs.NewBtree[PersonKey, Person](ctx, so, trans)
+	so := sop.ConfigureStore("persondb", false, nodeSlotLength, "", sop.MediumData, "")
+	b3, err := in_red_cfs.NewBtreeWithReplication[PersonKey, Person](ctx, so, trans)
 
 	// Add a person record w/ details.
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone", "mySSN123")
@@ -430,35 +354,28 @@ You can store or manage any data type in Golang. From native types like int, str
   * ```< 1``` means that the current key(x) is lesser than the other key(y) being compared
 
 You can also create or open one or many B-Trees within a transaction. And you can have/or manage one or many transactions within your application.
-Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_cfs". "in_red_cfs" is an acronym that stands for:
-SOP in Redis, Cassandra & File System(in_red_cfs).
+Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_fs". "in_red_fs" is an acronym that stands for:
+SOP in Redis & File System(in_red_fs).
 
 V2 is in Beta 2 status and there is no known issue.
 
 But yeah, V2 is showing very good results. ACID, two phase commit transaction, and impressive performance as Redis is baked in. SOP V2 actually succeeded in turning M-Way Trie a native "resident" of the cluster. Each of the host running SOP, be it an application or a micro-service, is turned into a high performance database & rich search server. Each, a master, or shall I say, master-less. And, of course, it is objects persistence, thus, you just author your golang struct and SOP takes care of fast storage & ultra fast searches and in the order you specified. No need to worry whether you are hitting an index, because each SOP "store"(or B-Tree) is the index itself! :)
 
-Check out the "Sample Configuration" section below or the unit tests under "in_red_cfs" folder to get idea how to specify the configuration for Cassandra and Redis. The file system is easy, just give it a path to the folder you want to be base folder for each store, can be on a different drive/storage sub-system per store, for better throughput. Also, if you want to specify the Cassandra consistency level per API, you can take a look at the "ConsistencyBook" field of the Cassandra Config struct. Each of the Repository/Store API CRUD operation has Consistency level settable under the "ConsistencyBook", or you can just leave it and default for the session is, "local quorum".
-See here for code details: https://github.com/SharedCode/sop/blob/d473b66f294582dceab6bdf146178b3f00e3dd8d/cassandra/connection.go#L35
-
 ## Streaming Data
-As discussed above, the third usability scenario of SOP is support for very large data. Here is sample config code for creating a Btree that is fit for this use-case:
-```
-	btree, _ := in_red_cfs.NewBtree[StreamingDataKey[TK], []byte](ctx, sop.ConfigureStore("fooStore", true, 500, "Streaming data", sop.BigData, "/your/blobs/basefolder/here"), trans)
-```
-This sample code is from the ```StreamingDataStore struct``` in package ```sop/streaming_data```, it illustrates the ```sop.ConfigureStore``` helper function & ```sop.BigData``` value data size enum use. The streaming data store was implemented to store or manage very large value part of the item. It is a byte array and you can "encode" to it chunks of many MBs. This is the typical use-case for the ```sop.BigData``` enum. See the code here for more details: https://github.com/SharedCode/sop/blob/master/streaming_data/streaming_data_store.go
-
-Sample code to use this ```StreamingDataStore```:
+As discussed above, the third usability scenario of SOP is support for very large data. Sample code to use this ```StreamingDataStore```:
 ```
 import (
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_cfs"
+	"github.com/SharedCode/sop/in_red_fs"
 )
 
 // ...
 	// To create and populate a "streaming data" store.
-	trans, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, _ := in_red_fs.NewTransaction(ctx, to)
 	trans.Begin()
-	sds := in_red_cfs.NewStreamingDataStore[string](ctx, "fooStore", trans, "/your/blobs/basefolder/here")
+	so := sop.ConfigureStore("videoStoreD", true, 100, "", sop.BigData, "")
+	sds := in_red_cfs.NewStreamingDataStore[string](ctx, so, trans, nil)
 	// Add accepts a string parameter, for naming the item, e.g. - "fooVideo".
 	// It returns an "encoder" object which your code can use to upload chunks
 	// of the data.
@@ -469,9 +386,9 @@ import (
 	trans.Commit(ctx)
 
 	// Read back the data.
-	trans, _ = in_red_cfs.NewTransaction(sop.ForReading, -1, true)
+	trans, _ = in_red_fs.NewTransaction(ctx, to)
 	trans.Begin()
-	sds = in_red_cfs.OpenStreamingDataStore[string](ctx, "fooStore", trans)
+	sds, _ = in_red_fs.OpenStreamingDataStore[string](ctx, "videoStoreD", trans, nil)
 
 	// Find the video we uploaded.
 	sds.FindOne(ctx, "fooVideo")
@@ -508,49 +425,21 @@ Alternately, instead of using ```FindOne``` & ```Next``` to skip and position to
 
 If you think about it, this is a very useful feature. For example, you can skip and start downloading (or streaming your movie!) from a given segment. Or if you use SOP to manage/store and to download your big data, e.g. - a software update, a data graph, etc... you can easily support inteligent download, e.g. - "resume and continue" without coding at all.
 
-And since our backing store is Cassandra, benefit from its replication feature across data centers. All free softwares and code is in your hands, 'can enhance it or request for enhancement that you need.
-
-## Default & Custom Store Cache Config
-SOP comes with default cache config that are used by BTree constructor functions(NewBtree(...)) which is set to 12 hour absolute expiration for each data part of a given data store. If this is not acceptable as default, your code can change the default store cache config by using this API:
-  * sop/SetDefaultCacheConfig(StoreCacheConfig) - specify new default store caching config. After the update, future calls to B-Tree constructor(NewBtree(..)) function that has no specification for store cache config(nil), will use this default value.
-
-NOTE: This has no effect for those **NewBtree** calls where a store cache config is specified, see top section - quick guide for setting store cache config for more details.
-
-## Sample Configuration
-```
-var cassConfig = cassandra.Config{
-	ClusterHosts: []string{"localhost:9042"},
-	Keyspace:     "btree",
-}
-var redisConfig = redis.Options{
-	Address:                  "localhost:6379",
-	Password:                 "", // no password set
-	DB:                       0,  // use default DB
-	DefaultDurationInSeconds: 24 * 60 * 60,
-}
-
-func init() {
-	Initialize(cassConfig, redisConfig)
-}
-```
-Above illustrates sample configuration for Cassandra & Redis bits, and how to initialize (via in_red_cfs.Initialize(..) function) the "system". You specify that and call Initialize one time(e.g. in init() like as shown) in your app or microservice and that is it.
-
 ## Transaction Batching
-You read that right, in SOP, all your actions within a transaction becomes the batch that gets submitted to the backend. Thus, you can just focus on your data mining and/or application logic and let the SOP transaction to take care of submitting all your changes for commit. Even items you've fetched are checked for consistency during commit. And yes, there is a "reader" transaction where you just do fetches or item reads, then on commit, SOP will ensure the items you read did not change while in the middle or up to the time you submitted or committed the transaction.
+All your actions within a transaction becomes the batch that gets submitted to the backend. Thus, you can just focus on your data mining and/or application logic and let the SOP transaction to take care of submitting all your changes for commit. Even items you've fetched (GetCurrentValue or GetCurrentItem API call) are checked for consistency during commit. There is a "reader" transaction where you just do fetches or item reads, then on commit, SOP will ensure the items you read did not change while in the middle or up to the time you submitted or committed the transaction.
 
-Recommended size of a transaction is about 500 items(and should typically match the "slot length" of the node, without going over the Cassandra "logged transaction" ceiling), more or less, depending on your data structure sizes. That is, you can fetch(Read) and/or do management actions such as Create, Update, Delete for around 500 items more or less and do commit to finalize the transaction.
+Recommended size of a transaction is about 500 items(and should typically match the "slot length" of the node, That is, you can fetch(Read) and/or do management actions such as Create, Update, Delete for around 500 items more or less and do commit to finalize the transaction.
 
 ## Atomicity, Consistency, Isolation and Durability
 SOP transaction achieves each of these ACID transaction attributes by moving the M-Way Trie(B-Tree for short) within the SOP code library. B-Tree is the heart of database systems. It enables fast storage and searches, a.k.a. - indexing engine. But more than that, by SOP's design, the B-Tree is used as part of the "controller logic" to provide two phase commit, ACID transactions.
 
-It has nifty algorithms controlling/talking to Redis & Cassandra(in behalf of your CRUD operations) in order to ensure each ACID attribute is enforced by the transaction. If ACID attributes spells mission critical for your system, then look no further. SOP provides all that and a whole lot more, e.g. built-in data caching via Redis. So, your data are "cached" in Redis and since SOP transaction also caches your data within the host memory, then you get a L1/L2 caching for free, just by using SOP code library.
+It has nifty algorithms controlling/talking to Redis in order to ensure each ACID attribute is enforced by the transaction. If ACID attributes spells mission critical for your system, then look no further. SOP provides all that and a whole lot more, e.g. built-in data caching via Redis. So, your data are "cached" in Redis and since SOP transaction also caches your data within the host memory, then you get a L1/L2 caching for free, just by using SOP code library.
 
 ## Fine Tuning
 There are four primary ingredients affecting performance and I/O via SOP. They are:
   * Slot Length - typical values are 100, 500, 1,000 and so on... up to 10,000, depends on your application data requirements & usage scenario.
-  * Batch Size - typically aligns with Slot Length, i.e. - set the batch size to the same amount/value as the Slot Length. Fine tune it to an ideal value which does not go over your Cassandra setup's "batch size" ceiling.
+  * Batch Size - typically aligns with Slot Length, i.e. - set the batch size to the same amount/value as the Slot Length.
   * Cache Duration - see respective section above for details about cache duration.
-  * Cassandra Consistency level - specifying what consistency to use per API call can further optimize/fine tune your data mgmgt. SOP's ACID transaction feature totally gives you a new dimension to address consistency, and the other attributes of ACID transaction. See "ConsistencyBook" discussion above for details about configurable consistency levels on API calls. It defaults to the recommended "local quorum", thus, very sufficient, but perhaps you would want to explore a more relaxed or fine grained control on consistency levels (used by SOP) when "talking" to Cassandra.
 
 Base on your data structure size and the amount you intend to store using SOP, there is an opportunity to optimize for I/O and performance. Small to medium size data, will typically fit well with a bigger node size. For typical structure size scenarios, slot length anywhere from 100 to 5,000 may be ideal. You can match the batch size with the slot length. In this case, it means that you are potentially filling in a node with your entire batch. This is faster for example, as compared to your batch requiring multiple nodes, which will require more "virtual Ids" (or handles) in the registry table, thus, will (potentially) require more reads from registry & the node blob table. And more importantly, during commit, the lesser the number of nodes(thus, lesser "virtual Ids") used, the leaner & faster the "logged transaction" performs, which is the deciding step in the commit process, the one that makes your changes available to other transactions/machines, or triggers rollback due to conflict. It is best to keep that (virtual Ids) volume as minimal as possible.
 
@@ -561,19 +450,11 @@ Reduce or increase the "slot length" and see what is fit with your application d
 In the tests that comes with SOP(under "in_red_ck" folder), the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
 But 500 is decent, so, it was used as the test's slot length.
 
-Batch size caveat: In case you get failure on commit with an error of (or due to) "batch size is too big", you can reduce the batch size so you won't reach your configured Cassandra's "logged transaction" batch size ceiling. In the SOP test's case, this error was seen after many re-runs and changes, thus, it was reduced down to 200, from 500(but no change in slot length). This is a good example of fine tuning to match with your Cassandra's (registry tables' logged transaction) limit.
-
-You specify the slot length, one time, during B-Tree creation, see NewBtree(..) call in link below for example.
-Here: https://github.com/SharedCode/sop/blob/800e7e23e9e2dce42f708db9fe9a90f3e9bbe988/in_red_ck/transaction_test.go#L57C13-L57C22
-
 ## Transaction Logging
-SOP supports transaction logging, you can enable this by passing "true" to the third parameter of the ```in_red_cfs.NewTransaction(true, -1, **true**)``` method to create a new transaction. Logging can be important specially when your cluster is not stable yet, and it is somewhat prone to host reboot for maintenance, etc... When a transaction is in "commit" process and the host dies, then the transaction temp resources will be left hanging. If logging is on, then the next time SOP transaction commit occurs, like after reboot of a host, then SOP will cleanup these left hanging temp resources.
-
-Can be a life saver specially if you are storing/managing very large data set, and thus, your temp partitions are occupying huge storage space. Turn logging on in your transactions, it is highly recommended.
+SOP does transaction logging which is used for automated cleanup of un-referenced resoures of dead in-flight transactions.
 
 ## Item Serialization
-By default, uses Golang's built-in JSON marshaller for serialization for simplicity and support for "streaming". But you can override this by assigning your own "Marshaler" interface implementation to ```../in_red_cfs/cassandra``` & ```../redis``` packages.
-See here for details about the "Marshaler" interface: https://github.com/SharedCode/sop/blob/c6d8a1716b1ab7550df7e1d57503fdb7e041f00f/encoding.go#L8C1-L8C27
+By default, uses Golang's built-in JSON marshaller for serialization for simplicity and support for "streaming". There is some future feature to allow code to override serialization, see sop/encoding package for the serialization related objects SOP uses.
 
 ## Two Phase Commit
 Two phase commit is required so SOP can offer "seamless" integration with your App's other DB backend(s)' transactions. On Phase 1 commit, SOP will commit all transaction session changes onto respective new (but geared for permanence) Btree transaction nodes. Your App will then be allowed to commit any other DB(s) transactions it use. Your app is allowed to Rollback any of these transactions and just relay the Rollback to SOP ongoing transaction if needed.
@@ -613,15 +494,16 @@ OOA algorithm was specially cooked by yours truly to make hot-spot free, "decent
 If you are or you know of an investor, perhaps this is the time you dial that number and get them to know SOP project. Hehe.
 
 ## Concurrent or Parallel Commits
-SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record or row level "locking". If not then it means your transaction has conflicting change with another transaction commit elsewhere in the  cluster, and thus, it will be rolled back, or the other one, depends on who got to the final commit step first. SOP uses a combination of algorithmic ingredients like "optimistic locking", intelligent "merging", etc... doing its magic with the M-Way trie and Redis & Cassandra.
+SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record or row level "locking". If not then it means your transaction has conflicting change with another transaction commit elsewhere in the  cluster, and thus, it will be rolled back, or the other one, depends on who got to the final commit step first. SOP uses a combination of algorithmic ingredients like "optimistic locking", intelligent "merging", etc... doing its magic with the M-Way trie and Redis.
 
 The magic will start to happen after you have created the Btree(s) (& transaction committed them) you will be using. Having such enables a lot of the "cool commits merging" features. Typically, you should have "initializer" code block or function somewhere in your app/microservice where you instantiate the B-Tree stores analogous to creating your tables in RDBMS. You run DDL scripts to create the tables before running your application logic that populates the tables, i.e. - DML scripts.
 
 Sample code to illustrate this:
 ```
-t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
+to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+t1, _ := in_red_fs.NewTransaction(ctx, to)
 t1.Begin()
-b3, _ := in_red_cfs.NewBtree[int, string](ctx, sop.ConfigureStore("twoPhase2", true, 50, "", sop.SmallData, "/your/blobs/basefolder/here"), t1)
+b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.ConfigureStore("twoPhase2", true, 50, "", sop.SmallData, ""), t1)
 
 t1.Commit(ctx)
 // ***
@@ -629,9 +511,9 @@ t1.Commit(ctx)
 eg, ctx2 := errgroup.WithContext(ctx)
 
 f1 := func() error {
-	t1, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
+	t1, _ := in_red_fs.NewTransaction(ctx, to)
 	t1.Begin()
-	b3, _ := in_red_cfs.OpenBtree[int, string](ctx2, "twophase2", t1)
+	b3, _ := in_red_fs.OpenBtree[int, string](ctx2, "twophase2", t1)
 	b3.Add(ctx2, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx2, 5001, "I am the value with 5001 key.")
 	b3.Add(ctx2, 5002, "I am the value with 5002 key.")
@@ -639,7 +521,7 @@ f1 := func() error {
 }
 
 f2 := func() error {
-	t2, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
+	t2, _ := in_red_fs.NewTransaction(ctx, to)
 	t2.Begin()
 	b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "twophase2", t2)
 	b32.Add(ctx2, 5500, "I am the value with 5500 key.")
@@ -657,9 +539,9 @@ if err := eg.Wait(); err != nil {
 }
 ```
 
-And yes, there is no resource locking in above code & it is able to merge just fine those records added across different transaction commits that ran concurrently. :)
+One thing to note, is that there is no resource locking in above code & it is able to merge just fine those records added across different transaction commits that ran concurrently.
 
-Check out the integration test that demonstrate this, here: https://github.com/SharedCode/sop/blob/493fba2d6d1ed810bfb4edc9ce568a1c98e159ff/in_red_cfs/integration_tests/transaction_edge_cases_test.go#L315C6-L315C41
+Check out the integration test that demonstrate this, here: https://github.com/SharedCode/sop/blob/493fba2d6d1ed810bfb4edc9ce568a1c98e159ff/in_red_fs/integration_tests/transaction_edge_cases_test.go#L315C6-L315C41
 (the sample adds one record but it is not needed, empty Btree will work just fine)
 
 ## ACID Transactions vs. Big Data
@@ -671,80 +553,12 @@ Streaming Data Store was written for this. And if you are looking for Big Data p
 So, essentially, we have partial update support even for the Big Data with ACID transaction protection. :)
 Without exchanging anything or causing any weakness on any feature we have. So, all you have to do to take advantage of this feature is, to be able to design & organize your big data set into chunks that which, you can have option to update any part(s) of them.
 
-Sample Project: Upload 1TB of big data
-```
-package big_data
-import(
-	github.com/SharedCode/sop/in_red_cfs
-)
-
-type BigKey struct {
-	filename string
-	chunkIndex int
-}
-
-// The Comparer function that defines sort order.
-func (x BigKey) Compare(other interface{}) int {
-	y := other.(BigKey)
-
-	// Sort by filename followed by chunk index.
-	i := cmp.Compare[string](x.filename, y.filename)
-	if i != 0 {
-		return i
-	}
-	return cmp.Compare[int](x.chunkIndex, y.chunkIndex)
-}
-
-func uploader() {
-	t, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
-	t.Begin()
-	b3, _ := in_red_cfs.NewBtree[bigKey, []byte](ctx, sop.StoreOptions{
-		Name:                     "bigstore",
-		SlotLength:               500,
-		IsUnique:                 true,
-		IsValueDataActivelyPersisted: true,
-		BlobStoreBaseFolderPath:  dataPath,
-		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), true),
-	}, t)
-
-	// Add byte array of 50 MB chunk size.
-	b3.Add(ctx, BigKey{filename: "bigfile", chunkIndex: 0}, []byte{..})
-
-	// ...
-	// Commit transaction every 500 inserts, then begin a new one...
-
-	// Add upp to 20,000 will store 1TB of data. :)
-	b3.Add(ctx, BigKey{filename: "bigfile", chunkIndex: 20000}, []byte{..})
-	t.Commit(ctx)
-}
-```
-
-Above is an example how to upload using a single thread of execution. Of course, since Golang supports highly concurrent programming, you can instead write a Micro Service that has endpoint for upload and allows client to submit data files in similar fashion above, but now, you can put this Micro Service in a load balancer, and wala, suddenly, you can support a cluster of services that can do parallel uploads of big data files. Secured and surpassing anything on the market!
-Micro Service endpoint can be secured using OAuth and thus, the setup now can surpass whatever most scaleable "objects system" in the market, may compare or surpass(depends on your design/implementation) even the biggest AWS S3 (or Oracle RDMS, if it can do Big data!) one can afford.
-
-And all "ACID transaction" guarded, "richly searchable", "partially updateable" with better readable code, great concurrency model/control under your fingertips, like using Go channels and Go routines.
+This is what the StreamingDataStore does. See code samples above, specifically, the in_red_fs.NewStreamingDataStore(..) API call for details how to use it.
 
 ## Big Data Partial Updates
-Updating any part(s) of the Big Data file is of no special case, SOP Btree.Update(..) method will take care of updating the target part of the file needing modification. Sample code snippet is shown below for illustration.
-```
-package big_data
-import(
-	github.com/SharedCode/sop/in_red_cfs
-)
+Updating any part(s) of the Big Data file is of no special case, SOP Btree.Update(..) method will take care of updating the target part of the file needing modification.
 
-//...
-
-t, _ := in_red_cfs.NewTransaction(sop.ForWriting, -1, true)
-t.Begin()
-b3, _ := in_red_cfs.OpenBtree[bigKey, []byte](ctx, "bigstore", t)
-
-// Update chunk index # 100, with your new byte array of a given size.
-b3.Update(ctx, BigKey{filename: "bigfile", chunkIndex: 100}, []byte{..})
-
-// Commit the change.
-t.Commit(ctx)
-
-```
+This is also one of the features of the StreamingDataStore. See code samples above, specifically, the in_red_fs.NewStreamingDataStore(..) API call for details how to use it.
 
 ## Tid Bits
 
@@ -759,10 +573,6 @@ Internal Store implementation uses an enhanced, modernized M-Way Trie, implement
 
 Via usage of SOP API, your application will experience low latency, very high performance scalability.
 
-## How to Build & Run
-Nothing special here, just issue a "go build" in the folder where you have the go.mod file and it will build the code libraries. Issue a "go test" to run the unit test on test files, to see they pass. You can debug, step-through the test files to learn how to use the code library.
-The Enterprise version V2 is in package "in_red_cfs"(& "in_red_ck" if wanting to use Cassandra for blobs storage, but file system is recommended), thus, you can peruse through the "integration" tests in this folder & run them selectively. It requires setting up Cassandra & Redis and providing configuration for the two. Which is also illustrated by the mentioned tests, and also briefly discussed above.
-
 ## Brief Background
 SOP is written in Go and is a full re-implementation of the c# version. A lot of key technical features of SOP got carried over and a lot more added. V2 support ACID transactions and turn any application using it into a high performance database server itself. If deployed in a cluster, turns the entire cluster into a well oiled application & database server combo cluster that is masterless and thus, hot-spot free & horizontally scalable.
 
@@ -771,7 +581,7 @@ V1 written in c# dotnet was designed to be a data server. It can be used to crea
 A design where I broke apart the "server" data mgmt and introduced horizontal scale design without losing much of the scaleability and acceleration inherent for a "server" piece. It is not an outcome of luck, it is as designed from the ground up, leaving the legacy or traditional form and out with a new one! :)
 
 ## SOP in Memory
-SOP in-memory was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithms that will work irrespective of backend, be it in-memory or others, such as the "in Cassandra & Redis" implementation, as discussed above.
+SOP in-memory was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithms that will work irrespective of backend, be it in-memory or others, such as the "in Redis & File System" implementation, as discussed above.
 
 SOP in-memory is a full implementation and you can use it if it fits the needs, i.e. - no persistence, map + sorted "range" queries/updates.
 
