@@ -12,7 +12,7 @@ Multi-modal in the sense that, it supports varying data sizes, from small to hug
 
 SOP is not, it is a newly architected raw storage engine! No delegation, pure raw storage execution! at your finger tips! In the past, only DBMS like Clipper, DBase 3+, Oracle, C++ Rtree & such, can use or has B-tree to do efficient raw storage mgmt. SOP breaks all of these, it brings to your fingertips the raw storage power of B-trees and more, a complete architecture of a new beast of raw storage management & rich search.
 
-### High level features/usability articles about SOP:
+# High level features articles about SOP
 SOP's Swarm Computing Proposition: https://www.linkedin.com/pulse/geminis-analysis-sops-swarm-computing-gerardo-recinto-cqzqc
 
 Revolutionary Storage & Cache Strategy: https://www.linkedin.com/pulse/revolutionizing-b-tree-performance-universal-l1-cache-gerardo-recinto-87jjc
