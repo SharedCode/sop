@@ -154,6 +154,31 @@ func (s *StreamingDataStore[TK]) UpdateCurrentItem(ctx context.Context) (*Encode
 	return newEncoder(w), nil
 }
 
+// Add a chunk to a given entry with specified key & chunk index. Key & chunk index should reference a new chunk record.
+// The function call will fail if there is already a given chunk w/ such key & chuink index in the database (B-tree).
+func (s *StreamingDataStore[TK]) AddChunk(ctx context.Context, key TK, chunkIndex int, chunkValue []byte) (bool, error) {
+	return s.BtreeInterface.AddIfNotExist(ctx, StreamingDataKey[TK]{
+		Key:        key,
+		ChunkIndex: chunkIndex,
+	}, chunkValue)
+}
+
+// Update an existing chunk (byte array) of a given entry with specified key & chunk index.
+func (s *StreamingDataStore[TK]) UpdateChunk(ctx context.Context, key TK, chunkIndex int, newChunkValue []byte) (bool, error) {
+	return s.BtreeInterface.Update(ctx, StreamingDataKey[TK]{
+		Key:        key,
+		ChunkIndex: chunkIndex,
+	}, newChunkValue)
+}
+
+// Remove an existing chunk record of a given entry with specified key & chunk index.
+func (s *StreamingDataStore[TK]) RemoveChunk(ctx context.Context, key TK, chunkIndex int) (bool, error) {
+	return s.BtreeInterface.Remove(ctx, StreamingDataKey[TK]{
+		Key:        key,
+		ChunkIndex: chunkIndex,
+	})
+}
+
 // GetCurrentKey returns the current item's key.
 func (s *StreamingDataStore[TK]) GetCurrentKey(ctx context.Context) TK {
 	if s.BtreeInterface.Count() == 0 {

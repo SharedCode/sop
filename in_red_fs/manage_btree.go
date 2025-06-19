@@ -165,4 +165,33 @@ func OpenStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, 
 	}, nil
 }
 
-// TODO: add NewXx/OpenXx "with replication" for streaming data stores.
+// Creates a new Streaming Data Store with replication feature.
+func NewStreamingDataStoreWithReplication[TK btree.Ordered](ctx context.Context, so sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+	if so.SlotLength < sd.MinimumStreamingStoreSlotLength {
+		return nil, fmt.Errorf("streaming data store requires minimum of %d SlotLength", sd.MinimumStreamingStoreSlotLength)
+	}
+	if so.IsValueDataInNodeSegment {
+		return nil, fmt.Errorf("streaming data store requires value data to be set for save in separate segment(IsValueDataInNodeSegment = false)")
+	}
+	if !so.IsUnique {
+		return nil, fmt.Errorf("streaming data store requires unique key (IsUnique = true) to be set to true")
+	}
+	btree, err := NewBtreeWithReplication[sd.StreamingDataKey[TK], []byte](ctx, so, trans, comparer)
+	if err != nil {
+		return nil, err
+	}
+	return &sd.StreamingDataStore[TK]{
+		BtreeInterface: btree,
+	}, nil
+}
+
+// Opens a Streaming Data Store with replication feature. The store (with specified name) should already be existent for this to work.
+func OpenStreamingDataStoreWithReplication[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
+	btree, err := OpenBtreeWithReplication[sd.StreamingDataKey[TK], []byte](ctx, name, trans, comparer)
+	if err != nil {
+		return nil, err
+	}
+	return &sd.StreamingDataStore[TK]{
+		BtreeInterface: btree,
+	}, nil
+}
