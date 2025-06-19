@@ -150,7 +150,7 @@ Sample code for customization of store level caching:
   
   NOTE: This is the default mode and is also achieved in the sop.NewStoreCacheConfig(..) call by passing false to the 2nd param(isCacheTTL) & a > 0 duration.
   ```
-  	b3, _ := in_red_cfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+  	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecaching",
 		SlotLength:               200,
 		IsValueDataInNodeSegment: true,
@@ -161,7 +161,7 @@ Sample code for customization of store level caching:
   
   NOTE: You can set app data to get stored in B-Tree Node & make the Node caching as "sliding window", thus, your app data also gets such caching behavior. Here is how:
   ```
-  	b3, _ := in_red_cfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+  	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecaching",
 		SlotLength:               200,
 		IsValueDataInNodeSegment: true,		// true means application data is store in B-tree node!
@@ -177,7 +177,7 @@ Sample code for customization of store level caching:
   
   NOTE: When you would like to conserve Redis cache but still provide great level of caching of your application data, you can set the application data to do "sliding window"(TTL) and set store meta data to absolute expiration. Here is how to do it:
   ```
-  b3, _ := in_red_cfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+  b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 	Name:                     "storecaching",
 	SlotLength:               200,
 	IsValueDataInNodeSegment: false,		// false specifies Application data to be stored in separate node than the B-tree node!
@@ -331,7 +331,7 @@ func main() {
 	// separate segment than the Btree node could be beneficial or more optimal per I/O than storing it
 	// in the node itself(as in SmallData case).
 	so := sop.ConfigureStore("persondb", false, nodeSlotLength, "", sop.MediumData, "")
-	b3, err := in_red_cfs.NewBtreeWithReplication[PersonKey, Person](ctx, so, trans)
+	b3, err := in_red_fs.NewBtreeWithReplication[PersonKey, Person](ctx, so, trans)
 
 	// Add a person record w/ details.
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone", "mySSN123")
@@ -372,11 +372,20 @@ import (
 
 // ...
 	// To create and populate a "streaming data" store.
-	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, _ := in_red_fs.NewTransaction(ctx, to)
+
+	dataPath := "/Users/grecinto/sop_data"
+
+	// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+	storesFolders = []string{
+		fmt.Sprintf("%s%cdisk4", dataPath, os.PathSeparator),
+		fmt.Sprintf("%s%cdisk5", dataPath, os.PathSeparator),
+	}
+
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	trans, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
 	so := sop.ConfigureStore("videoStoreD", true, 100, "", sop.BigData, "")
-	sds := in_red_cfs.NewStreamingDataStore[string](ctx, so, trans, nil)
+	sds := in_red_fs.NewStreamingDataStoreWithReplication[string](ctx, so, trans, nil)
 	// Add accepts a string parameter, for naming the item, e.g. - "fooVideo".
 	// It returns an "encoder" object which your code can use to upload chunks
 	// of the data.
@@ -387,9 +396,9 @@ import (
 	trans.Commit(ctx)
 
 	// Read back the data.
-	trans, _ = in_red_fs.NewTransaction(ctx, to)
+	trans, _ = in_red_fs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
-	sds, _ = in_red_fs.OpenStreamingDataStore[string](ctx, "videoStoreD", trans, nil)
+	sds, _ = in_red_fs.OpenStreamingDataStoreWithReplication[string](ctx, "videoStoreD", trans, nil)
 
 	// Find the video we uploaded.
 	sds.FindOne(ctx, "fooVideo")
@@ -457,7 +466,7 @@ But of course, you have to consider memory requirements, i.e. - how many bytes o
 You can also consider storing the Value part to a dedicated partition(MediumData), this will keep your Nodes' memory footprint small in exchange of an extra read when fetching the Value data part. And lastly, you can also consider "data streaming"(BigData), which is similar to MediumData, but with global caching turned off, and such... fitted for the "very large data, data streaming" use-case.
 
 Reduce or increase the "slot length" and see what is fit with your application data requirements scenario.
-In the tests that comes with SOP(under "in_red_ck" folder), the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
+In the tests that comes with SOP, the node slot length is set to 500 with matching batch size. This proves decent enough. I tried using 1,000 and it even looks better in my laptop. :)
 But 500 is decent, so, it was used as the test's slot length.
 
 ## Transaction Logging
@@ -510,8 +519,16 @@ The magic will start to happen after you have created the Btree(s) (& transactio
 
 Sample code to illustrate this:
 ```
-to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-t1, _ := in_red_fs.NewTransaction(ctx, to)
+dataPath := "/Users/grecinto/sop_data"
+
+// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+storesFolders = []string{
+	fmt.Sprintf("%s%cdisk4", dataPath, os.PathSeparator),
+	fmt.Sprintf("%s%cdisk5", dataPath, os.PathSeparator),
+}
+
+to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+t1, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
 t1.Begin()
 b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.ConfigureStore("twoPhase2", true, 50, "", sop.SmallData, ""), t1)
 
@@ -521,9 +538,9 @@ t1.Commit(ctx)
 eg, ctx2 := errgroup.WithContext(ctx)
 
 f1 := func() error {
-	t1, _ := in_red_fs.NewTransaction(ctx, to)
+	t1, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
 	t1.Begin()
-	b3, _ := in_red_fs.OpenBtree[int, string](ctx2, "twophase2", t1)
+	b3, _ := in_red_fs.OpenBtreeWithReplication[int, string](ctx2, "twophase2", t1)
 	b3.Add(ctx2, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx2, 5001, "I am the value with 5001 key.")
 	b3.Add(ctx2, 5002, "I am the value with 5002 key.")
@@ -531,9 +548,9 @@ f1 := func() error {
 }
 
 f2 := func() error {
-	t2, _ := in_red_fs.NewTransaction(ctx, to)
+	t2, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
 	t2.Begin()
-	b32, _ := in_red_cfs.OpenBtree[int, string](ctx2, "twophase2", t2)
+	b32, _ := in_red_fs.OpenBtreeWithReplication[int, string](ctx2, "twophase2", t2)
 	b32.Add(ctx2, 5500, "I am the value with 5500 key.")
 	b32.Add(ctx2, 5501, "I am the value with 5501 key.")
 	b32.Add(ctx2, 5502, "I am the value with 5502 key.")
@@ -565,10 +582,96 @@ Without exchanging anything or causing any weakness on any feature we have. So, 
 
 This is what the StreamingDataStore does. See code samples above, specifically, the in_red_fs.NewStreamingDataStore(..) API call for details how to use it.
 
-## Big Data Partial Updates
-Updating any part(s) of the Big Data file is of no special case, SOP Btree.Update(..) method will take care of updating the target part of the file needing modification.
+## Another Big Data Example
+Sample Project: Upload 1TB of big data
+```
+package big_data
+import(
+	github.com/SharedCode/sop/in_red_fs
+)
 
-This is also one of the features of the StreamingDataStore. See code samples above, specifically, the in_red_fs.NewStreamingDataStore(..) API call for details how to use it.
+type BigKey struct {
+	filename string
+	chunkIndex int
+}
+
+// The Comparer function that defines sort order.
+func (x BigKey) Compare(other interface{}) int {
+	y := other.(BigKey)
+
+	// Sort by filename followed by chunk index.
+	i := cmp.Compare[string](x.filename, y.filename)
+	if i != 0 {
+		return i
+	}
+	return cmp.Compare[int](x.chunkIndex, y.chunkIndex)
+}
+
+func uploader() {
+	dataPath := "/Users/grecinto/sop_data"
+
+	// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+	storesFolders = []string{
+		fmt.Sprintf("%s%cdisk4", dataPath, os.PathSeparator),
+		fmt.Sprintf("%s%cdisk5", dataPath, os.PathSeparator),
+	}
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	t1, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
+	t1.Begin()
+	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.ConfigureStore("twoPhase2", true, 50, "", sop.SmallData, ""), 	t, _ := in_red_fs.NewTransactionWithReplication(sop.ForWriting, -1, true)
+	t.Begin()
+	b3, _ := in_red_fs.NewBtreeWithReplication[bigKey, []byte](ctx, sop.StoreOptions{
+		Name:                     "bigstore",
+		SlotLength:               500,
+		IsUnique:                 true,
+		IsValueDataActivelyPersisted: true,
+		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(5*time.Hour), true),
+	}, t)
+
+	// Add byte array of 50 MB chunk size.
+	b3.Add(ctx, BigKey{filename: "bigfile", chunkIndex: 0}, []byte{..})
+
+	// ...
+	// Commit transaction every 500 inserts, then begin a new one...
+
+	// Add upp to 20,000 will store 1TB of data. :)
+	b3.Add(ctx, BigKey{filename: "bigfile", chunkIndex: 20000}, []byte{..})
+	t.Commit(ctx)
+}
+```
+
+Above is an example how to upload using a single thread of execution. Of course, since Golang supports highly concurrent programming, you can instead write a Micro Service that has endpoint for upload and allows client to submit data files in similar fashion above, but now, you can put this Micro Service in a load balancer, and wala, suddenly, you can support a cluster of services that can do parallel uploads of big data files. Secured and surpassing anything on the market in efficiency!
+
+Why? Because the SOP transaction underneath manages the data chunks in the most efficient possible. It pro-actively persist each of the added chunks to the backend storage right when you invoke b-tree.Add(..) method. Then
+at commit time, it only needs to persist the B-tree node as the chunks (large data) are already saved in the storage.
+This very subtle improvement in B-tree data management spells huge performance increase because the large data chunks are not persisted at the same time, preventing very huge spikes in resource utilization. Together with other SOP B-tree backend storage improvements allows SOP to flexibly manage & aligns its operational efficiency for managing small to huge data sizes.
+
+Micro Service endpoint can be secured using OAuth and thus, the setup now can surpass whatever most scaleable "objects system" in the market, may compare or surpass(depends on your design/implementation) even the biggest AWS S3 (or Oracle RDBMS, if it can do Big data!) one can afford.
+
+And all "ACID transaction" guarded, "richly searchable", "partially updateable" with better readable code, great concurrency model/control under your fingertips, like using Go channels and Go routines.
+
+## Big Data Partial Updates
+Updating any part(s) of the Big Data file is of no special case, SOP Btree.Update(..) method will take care of updating the target part of the file needing modification. Sample code snippet is shown below for illustration.
+```
+package big_data
+import(
+	github.com/SharedCode/sop/in_red_fs
+)
+
+//...
+
+
+t, _ := in_red_fs.NewTransactionWithReplication(sop.ForWriting, -1, true)
+t.Begin()
+b3, _ := in_red_fs.OpenBtreeWithReplication[bigKey, []byte](ctx, "bigstore", t)
+
+// Update chunk index # 100, with your new byte array of a given size.
+b3.Update(ctx, BigKey{filename: "bigfile", chunkIndex: 100}, []byte{..})
+
+// Commit the change.
+t.Commit(ctx)
+
+```
 
 ## Tid Bits
 

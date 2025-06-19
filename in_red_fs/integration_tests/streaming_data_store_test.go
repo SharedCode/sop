@@ -14,13 +14,13 @@ import (
 
 func Test_StreamingDataStoreInvalidCases(t *testing.T) {
 	ctx := context.Background()
-	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, _ := in_red_fs.NewTransaction(ctx, to)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	trans, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
 
 	// Empty Store get/update methods test cases.
 	so := sop.ConfigureStore("xyz", true, 100, "", sop.BigData, "")
-	sds, _ := in_red_fs.NewStreamingDataStore[string](ctx, so, trans, nil)
+	sds, _ := in_red_fs.NewStreamingDataStoreWithReplication[string](ctx, so, trans, nil)
 	if _, err := sds.GetCurrentValue(ctx); err == nil {
 		t.Errorf("GetCurrentValue on empty btree failed, got nil want err")
 	}
