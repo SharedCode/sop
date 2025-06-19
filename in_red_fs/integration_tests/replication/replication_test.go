@@ -50,13 +50,18 @@ func initErasureCoding() {
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
-			fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
-			fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
-			fmt.Sprintf("%s%cdisk3", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk8", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk10", dataPath, os.PathSeparator),
 		},
 		RepairCorruptedShards: true,
 	}
 	fs.SetGlobalErasureConfig(ec)
+}
+
+var storesFolders = []string{
+	fmt.Sprintf("%s%cdisk8", dataPath, os.PathSeparator),
+	fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
 }
 
 func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
@@ -101,7 +106,7 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
@@ -160,7 +165,7 @@ func TestOpenBtree_TransWithRepl_failed(t *testing.T) {
 
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
@@ -180,7 +185,7 @@ func TestOpenBtreeWithRepl_succeeded(t *testing.T) {
 
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	if err != nil {

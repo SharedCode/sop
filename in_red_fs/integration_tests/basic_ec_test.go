@@ -28,12 +28,35 @@ func initErasureCoding() {
 		},
 		RepairCorruptedShards: true,
 	}
+	// Erasure Coding config for default. Any B-tree that does not have a matching key in the EC config, will be given
+	// a place in the default(key = "") eonfig entry.
+	ec[""] = fs.ErasureCodingConfig{
+		DataShardsCount:   2,
+		ParityShardsCount: 2,
+		BaseFolderPathsAcrossDrives: []string{
+			fmt.Sprintf("%s%cdisk4", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk5", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk6", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk7", dataPath, os.PathSeparator),
+		},
+		RepairCorruptedShards: true,
+	}
+
 	fs.SetGlobalErasureConfig(ec)
+}
+
+var storesFolders = []string{
+	fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
+	fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
+}
+var storesFoldersDefault = []string{
+	fmt.Sprintf("%s%cdisk4", dataPath, os.PathSeparator),
+	fmt.Sprintf("%s%cdisk5", dataPath, os.PathSeparator),
 }
 
 func Test_Basic_EC(t *testing.T) {
 	ctx := context.Background()
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -75,7 +98,7 @@ func Test_Basic_EC(t *testing.T) {
 
 func Test_Basic_EC_Get(t *testing.T) {
 	ctx := context.Background()
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())

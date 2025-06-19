@@ -106,14 +106,8 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 //
 // Explicitly specifying it in storesFolders param is recommended.
 func ReinstateFailedDrives(ctx context.Context, storesFolders []string, erasureConfig map[string]fs.ErasureCodingConfig, registryHashModValue int) error {
-	if erasureConfig == nil {
-		erasureConfig = fs.GetGlobalErasureConfig()
-	}
-	// Try to extract stores base folders from the erasure config
-	storesFolders = pickStoresFoldersFromEC(storesFolders, erasureConfig)
-
-	if len(storesFolders) < 2 {
-		return fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths). 'was not able to reuse anything from 'erasureConfig'")
+	if len(storesFolders) != 2 {
+		return fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths)")
 	}
 
 	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, redis.NewClient())

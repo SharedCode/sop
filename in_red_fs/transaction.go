@@ -60,10 +60,13 @@ func NewTransactionWithReplication(ctx context.Context, towr TransationOptionsWi
 // Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
 // Returns sop.TwoPhaseCommitTransaction type useful for integration with your custom application transaction where code would like to get access to SOP's two phase commit transaction API.
 func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr TransationOptionsWithReplication) (sop.TwoPhaseCommitTransaction, error) {
+	if towr.IsEmpty() {
+		return nil, fmt.Errorf("towr can't be empty")
+	}
 	if towr.ErasureConfig == nil {
 		towr.ErasureConfig = fs.GetGlobalErasureConfig()
 		if towr.ErasureConfig == nil {
-			return nil, fmt.Errorf("erasureConfig can't be nil")
+			return nil, fmt.Errorf("towr.ErasureConfig can't be nil")
 		}
 	}
 	fio := fs.NewFileIO()

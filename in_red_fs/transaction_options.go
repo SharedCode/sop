@@ -6,7 +6,6 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/fs"
-	"github.com/SharedCode/sop/in_memory"
 )
 
 // Transaction Options contains the Transaction parameters.
@@ -39,6 +38,11 @@ type TransationOptionsWithReplication struct {
 	Cache sop.Cache
 	// Erasure Config contains config data useful for Erasure Coding based file IO (& replication).
 	ErasureConfig map[string]fs.ErasureCodingConfig
+}
+
+// Returns true if this TransactionOptionsWithReplication is empty.
+func (towr *TransationOptionsWithReplication) IsEmpty() bool {
+	return len(towr.StoresBaseFolders) == 0 && towr.Cache == nil && towr.ErasureConfig == nil && towr.RegistryHashModValue == 0
 }
 
 // Create a new TransactionOptions using defaults for cache related.
@@ -88,10 +92,8 @@ func NewTransactionOptionsWithReplication(mode sop.TransactionMode, maxTime time
 	if erasureConfig == nil {
 		erasureConfig = fs.GetGlobalErasureConfig()
 	}
-	storesFolders = pickStoresFoldersFromEC(storesFolders, erasureConfig)
-
-	if len(storesFolders) < 2 {
-		return TransationOptionsWithReplication{}, fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths). 'was not able to reuse anything from 'erasureConfig'")
+	if len(storesFolders) != 2 {
+		return TransationOptionsWithReplication{}, fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths)")
 	}
 
 	if registryHashMod < fs.MinimumModValue {
@@ -108,36 +110,4 @@ func NewTransactionOptionsWithReplication(mode sop.TransactionMode, maxTime time
 		RegistryHashModValue: registryHashMod,
 		ErasureConfig:        erasureConfig,
 	}, nil
-}
-
-func pickStoresFoldersFromEC(storesFolders []string, erasureConfig map[string]fs.ErasureCodingConfig) []string {
-	if erasureConfig == nil {
-		erasureConfig = fs.GetGlobalErasureConfig()
-	}
-	if storesFolders == nil && len(erasureConfig) > 0 {
-		storesFolders = make([]string, 0, 2)
-		defaultEntry := erasureConfig[""]
-		if len(defaultEntry.BaseFolderPathsAcrossDrives) >= 2 {
-			storesFolders = append(storesFolders, defaultEntry.BaseFolderPathsAcrossDrives[0])
-			storesFolders = append(storesFolders, defaultEntry.BaseFolderPathsAcrossDrives[1])
-		} else {
-			// Use Btree in-memory to sort the erasureConfig entries and let us pick in a predictable manner.
-			b3 := in_memory.NewBtree[string, fs.ErasureCodingConfig](true)
-			for k, v := range erasureConfig {
-				b3.Add(k, v)
-			}
-			b3.First()
-			for {
-				if len(b3.GetCurrentValue().BaseFolderPathsAcrossDrives) >= 2 {
-					storesFolders = append(storesFolders, b3.GetCurrentValue().BaseFolderPathsAcrossDrives[0])
-					storesFolders = append(storesFolders, b3.GetCurrentValue().BaseFolderPathsAcrossDrives[1])
-					break
-				}
-				if !b3.Next() {
-					break
-				}
-			}
-		}
-	}
-	return storesFolders
 }
