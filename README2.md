@@ -426,6 +426,14 @@ Alternately, instead of using ```FindOne``` & ```Next``` to skip and position to
 
 If you think about it, this is a very useful feature. For example, you can skip and start downloading (or streaming your movie!) from a given segment. Or if you use SOP to manage/store and to download your big data, e.g. - a software update, a data graph, etc... you can easily support inteligent download, e.g. - "resume and continue" without coding at all.
 
+### Direct Chunks Management
+Streaming Data Store has these three APIs to allow direct management of chunks:
+* AddChunk(ctx context.Context, key TK, chunkIndex int, chunkValue []byte)
+* UpdateChunk(ctx context.Context, key TK, chunkIndex int, newChunkValue []byte)
+* RemoveChunk(ctx context.Context, key TK, chunkIndex int)
+
+See the code for more details in: sop/streaming_data/streaming_data_store.go
+
 ## Transaction Batching
 All your actions within a transaction becomes the batch that gets submitted to the backend. Thus, you can just focus on your data mining and/or application logic and let the SOP transaction to take care of submitting all your changes for commit. Even items you've fetched (GetCurrentValue or GetCurrentItem API call) are checked for consistency during commit. There is a "reader" transaction where you just do fetches or item reads, then on commit, SOP will ensure the items you read did not change while in the middle or up to the time you submitted or committed the transaction.
 
