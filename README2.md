@@ -75,13 +75,16 @@ import (
 
 func main() {
 	ctx := context.Background()
-	// Specifying nil on both "storesFolders" and "erasureConfig" last 2 params will allow SOP to use the first two drives/paths
-	// in global Erasure Config as stores' home folders (active and passive drives) & the global EC config for this transaction's
-	// B-trees. You can speciy a different storesFolders if you want to and/or a different erasure config if you don't like the global
-	// EC config. Some shops want to centralize EC config in the global, and some use-case want a private specification.
-	//
-	// For the storesFolders, if you have a standard drives/folders for this, then specify that.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
+	dataPath := "/Users/grecinto/sop_data"
+	// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+	storesFolders = []string{
+		fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
+		fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
+	}
+
+	// Specifying nil on "erasureConfig" (last) param will allow SOP to use the global Erasure Config.
+	// You can speciy a different erasure config if you don't like the global EC config.
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
@@ -266,7 +269,14 @@ var ctx = context.Background()
 func main() {
 	// See above top example on how to setup "ec" or erasureConfig in "init" function. That is required
 	// for this code example to work.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
+	dataPath := "/Users/grecinto/sop_data"
+
+	// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+	storesFolders = []string{
+		fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
+		fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
+	}
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
 
@@ -322,7 +332,14 @@ const nodeSlotLength = 500
 func main() {
 
 	// Create and start a transaction session.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, nil, nil)
+	dataPath := "/Users/grecinto/sop_data"
+
+	// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+	storesFolders = []string{
+		fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
+		fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
+	}	
+	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
 
@@ -377,8 +394,8 @@ import (
 
 	// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
 	storesFolders = []string{
-		fmt.Sprintf("%s%cdisk4", dataPath, os.PathSeparator),
-		fmt.Sprintf("%s%cdisk5", dataPath, os.PathSeparator),
+		fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
+		fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
 	}
 
 	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
