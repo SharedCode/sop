@@ -427,11 +427,12 @@ Alternately, instead of using ```FindOne``` & ```Next``` to skip and position to
 If you think about it, this is a very useful feature. For example, you can skip and start downloading (or streaming your movie!) from a given segment. Or if you use SOP to manage/store and to download your big data, e.g. - a software update, a data graph, etc... you can easily support inteligent download, e.g. - "resume and continue" without coding at all.
 
 ### Direct Chunks Management
-Streaming Data Store has these three APIs to allow direct management of chunks:
+Streaming Data Store has these three APIs to allow direct management of chunks. It means you get to interact indirectly with the B-tree to manage the entries' chunks, which is very useful for things like video editing, etc... Imagine, you upload video chunks that each chunk index aligns w/ the chapters of the video. Then you would like to manage a given set of chapter(s) retaining most of the chapters (chunks!) untouched. It is very powerful if used that way.
+```
 * AddChunk(ctx context.Context, key TK, chunkIndex int, chunkValue []byte)
 * UpdateChunk(ctx context.Context, key TK, chunkIndex int, newChunkValue []byte)
 * RemoveChunk(ctx context.Context, key TK, chunkIndex int)
-
+```
 See the code for more details in: sop/streaming_data/streaming_data_store.go
 
 ## Transaction Batching
