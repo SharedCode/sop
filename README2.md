@@ -197,7 +197,8 @@ Of course, you have to do fine tuning as there are tradeoffs :), determine what 
 
 # Data Partitioning
 * SOP in File System has the following to address data partitioning:
-  - Vertical partitioning (per B-tree/table) is built-in, you can take advantage of this by specifying different drives set in the "storesFolders" & "EC config" of the TransactionOptionsWithReplication. Like use a different Transaction options config params for B-tree "store1" and another set for "store2".
+  - Vertical partitioning (per B-tree/table) is built-in, you can take advantage of this by specifying different drives set in the "storesFolders" & "EC config" of the TransactionOptionsWithReplication. For example, use a different "storesFolders" value & an entry in EC config params (map) for B-tree "store1" and another set for "store2".
+  EC config is a map that can have a different set of disk drives/paths for each key. E.g. - "store1" key w/ different drives & "store2" key with another set.
   - Horizontal partitioning, this is also built-in, EC based replication divides into shards each B-tree node & large data node and thus, spreading out to different disks storage. And causing optimal IO as data writers & readers use multi-threads to efficiently save or read data from these files across drives. So, nothing to do here as it is built-in, 'just specify correctly the EC config you wanted based on your Stores vs. Disk drives data allocations & replication needs.
 
 # Usability
