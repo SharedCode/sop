@@ -458,6 +458,11 @@ Streaming Data Store has these three APIs to allow direct management of chunks. 
 * AddChunk(ctx context.Context, key TK, chunkIndex int, chunkValue []byte)
 * UpdateChunk(ctx context.Context, key TK, chunkIndex int, newChunkValue []byte)
 * RemoveChunk(ctx context.Context, key TK, chunkIndex int)
+
+Sample snippet to do direct update of a given video file's 1st chunk record:
+	sds, _ = in_red_fs.OpenStreamingDataStoreWithReplication[string](ctx, "videoStoreD", trans, nil)
+	sds.UpdateChunk(ctx, "fooVideo", 1, []byte{1,2,3})
+	trans.Commit(ctx)
 ```
 See the code for more details in: sop/streaming_data/streaming_data_store.go
 
