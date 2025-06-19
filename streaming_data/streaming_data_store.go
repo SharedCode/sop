@@ -155,7 +155,7 @@ func (s *StreamingDataStore[TK]) UpdateCurrentItem(ctx context.Context) (*Encode
 }
 
 // Add a chunk to a given entry with specified key & chunk index. Key & chunk index should reference a new chunk record.
-// The function call will fail if there is already a given chunk w/ such key & chuink index in the database (B-tree).
+// The function call will fail if there is already a given chunk w/ such key & chunk index in the database (B-tree).
 func (s *StreamingDataStore[TK]) AddChunk(ctx context.Context, key TK, chunkIndex int, chunkValue []byte) (bool, error) {
 	return s.BtreeInterface.AddIfNotExist(ctx, StreamingDataKey[TK]{
 		Key:        key,
