@@ -669,9 +669,7 @@ Why? Because the SOP transaction underneath manages the data chunks in the most 
 at commit time, it only needs to persist the B-tree node as the chunks (large data) are already saved in the storage.
 This very subtle improvement in B-tree data management spells huge performance increase because the large data chunks are not persisted at the same time, preventing very huge spikes in resource utilization. Together with other SOP B-tree backend storage improvements allows SOP to flexibly manage & aligns its operational efficiency for managing small to huge data sizes.
 
-Micro Service endpoint can be secured using OAuth and thus, the setup now can surpass/match whatever most scalable "objects system" in the market in sustained overall throughput.
-
-And all "ACID transaction" guarded, "richly searchable", "partially updateable" with better readable code, great concurrency model/control under your fingertips, like using Go channels and Go routines.
+All "ACID transaction" guarded, "richly searchable", "partially updateable" encouraging readable code & having great concurrency model/control under your fingertips, like using Go channels and Go routines.
 
 ## Big Data Partial Updates
 Updating any part(s) of the Big Data file is of no special case, SOP Btree.Update(..) method (or the AddChunk, UpdateChunk & RemoveChunk methods in StreamingDataSgtore), will take care of updating the target part of the file needing modification. Sample code snippet is shown below for illustration.
