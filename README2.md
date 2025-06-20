@@ -109,8 +109,9 @@ func main() {
 }
 ```
 The code above:
-* creates a transaction referencing the global EC config, specifying nil,nil on NewTransactionOptionsWithReplication function call does this.
-* creates a B-tree with name "barstoreec" specifying 200 items per node and using the EC config for backend data storage/disk details. It will use the entry with named "barstoreec" in EC config map. And since nil is specified in the 2nd to the last parameter of transaction options, it will pick up first two disks/paths from the EC config map. This should be disk 1 as active & disk 2 as the passive drive.
+* creates a transaction referencing the global EC config, specifying nil on last parameter of NewTransactionOptionsWithReplication function call does this.
+* specify two disks/paths, one for Active & another for Passive, as stores home base folder (storesFolders array).
+* creates a B-tree with name "barstoreec" specifying 200 items per node and using the EC config for backend data storage/disk details. It will use the entry with named "barstoreec" in EC config map. 
 * adds an item to the b-tree, shows how to find an item using the FindOne function of the B-tree,
 * and then commit (trans.Commit) the transaction.
 
