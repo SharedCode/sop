@@ -665,7 +665,7 @@ func uploader() {
 
 Above is an example how to upload using a single thread of execution. Of course, since Golang supports highly concurrent programming, you can instead write a Micro Service that has endpoint for upload and allows client to submit data files in similar fashion above, but now, you can put this Micro Service in a load balancer, and wala, suddenly, you can support a cluster of services that can do parallel uploads of big data files. Secured and surpassing anything on the market in efficiency!
 
-Why? Because the SOP transaction underneath manages the data chunks in the most efficient possible. It pro-actively persist each of the added chunks to the backend storage right when you invoke b-tree.Add(..) method. Then
+Why? Because the SOP transaction underneath manages the data chunks in the most efficient way possible. It pro-actively persist each of the added chunks to the backend storage right when you invoke b-tree.Add(..) method. Then
 at commit time, it only needs to persist the B-tree node as the chunks (large data) are already saved in the storage.
 This very subtle improvement in B-tree data management spells huge performance increase because the large data chunks are not persisted at the same time, preventing very huge spikes in resource utilization. Together with other SOP B-tree backend storage improvements allows SOP to flexibly manage & aligns its operational efficiency for managing small to huge data sizes.
 
@@ -674,7 +674,7 @@ Micro Service endpoint can be secured using OAuth and thus, the setup now can su
 And all "ACID transaction" guarded, "richly searchable", "partially updateable" with better readable code, great concurrency model/control under your fingertips, like using Go channels and Go routines.
 
 ## Big Data Partial Updates
-Updating any part(s) of the Big Data file is of no special case, SOP Btree.Update(..) method will take care of updating the target part of the file needing modification. Sample code snippet is shown below for illustration.
+Updating any part(s) of the Big Data file is of no special case, SOP Btree.Update(..) method (or the AddChunk, UpdateChunk & RemoveChunk methods in StreamingDataSgtore), will take care of updating the target part of the file needing modification. Sample code snippet is shown below for illustration.
 ```
 package big_data
 import(
