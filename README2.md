@@ -672,7 +672,7 @@ This very subtle improvement in B-tree data management spells huge performance i
 All "ACID transaction" guarded, "richly searchable", "partially updateable" encouraging readable code & having great concurrency model/control under your fingertips, like using Go channels and Go routines.
 
 ## Big Data Partial Updates
-Updating any part(s) of the Big Data file is of no special case, SOP Btree.Update(..) method (or the AddChunk, UpdateChunk & RemoveChunk methods in StreamingDataSgtore), will take care of updating the target part of the file needing modification. Sample code snippet is shown below for illustration.
+Updating any part(s) of the Big Data file is of no special case, SOP Btree.Update(..) method (or the AddChunk, UpdateChunk & RemoveChunk methods in StreamingDataStore), will take care of updating the target part of the file needing modification. Sample code snippet is shown below for illustration.
 ```
 package big_data
 import(
