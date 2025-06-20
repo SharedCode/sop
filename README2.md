@@ -205,7 +205,7 @@ Of course, you have to do fine tuning as there are tradeoffs :), determine what 
   - Horizontal partitioning, this is also built-in, EC based replication divides into shards each B-tree node & large data node and thus, spreading out to different disks storage. And causing optimal IO as data writers & readers use multi-threads to efficiently save or read data from these files across drives. So, nothing to do here as it is built-in, 'just specify correctly the EC config you wanted based on your Stores vs. Disk drives data allocations & replication needs.
 
 # Usability
-SOP can be used in a wide, diverse storage usability scenarios. Ranging from general purpose data storage - search & management, to highly scaleable and performant version of the same, to domain specific use-cases. As SOP has many feature knobs you can turn on or off, it can be used and get customized with very little to no coding required. Some examples bundled out of the box are:
+SOP can be used in a wide, diverse storage usability scenarios. Ranging from general purpose data storage - search & management, to highly scalable and performant version of the same, to domain specific use-cases. As SOP has many feature knobs you can turn on or off, it can be used and get customized with very little to no coding required. Some examples bundled out of the box are:
   * A. General purpose data/object storage management system
   * B. Large data storage and management, where your data is stored in its own data segment. See StoreInfo.IsValueDataInNodeSegment = false (default) flag
   * C. Streaming Data application domain enabling very large data storage - search and management, supporting multi-GBs record or item, limited only by your storage drive/sub-system. See sop/in_red_fs/NewStreamingDataStore or OpenStreamingDataStore for code & sample usage in test
@@ -213,7 +213,7 @@ SOP can be used in a wide, diverse storage usability scenarios. Ranging from gen
 
 Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3 & a DBMS like Postgres for indexing). But SOP supports all four of them out of the box.
 
-In all of these, ACID transactions, high speed, scaleable searches and management comes built-in. As SOP turned M-Way Trie data structures & algorithms a commodity available in all of its usage scenarios. Horizontally scaleable in the cluster, meaning, there is no single point of failure. SOP offers a decentralized approach in searching & management of your data. It works with optimal efficiency in the cluster. It fully parallelize I/O in the cluster, not needing any communication for "orchestration"(see new "communication free" OOA algorithm section below) to detect conflict and auto-merging of changes across transactions occuring simultaneously or in time.
+In all of these, ACID transactions, high speed, scalable searches and management comes built-in. As SOP turned M-Way Trie data structures & algorithms a commodity available in all of its usage scenarios. Horizontally scalable in the cluster, meaning, there is no single point of failure. SOP offers a decentralized approach in searching & management of your data. It works with optimal efficiency in the cluster. It fully parallelize I/O in the cluster, not needing any communication for "orchestration"(see new "communication free" OOA algorithm section below) to detect conflict and auto-merging of changes across transactions occuring simultaneously or in time.
 
 # Best Practices
 Following are the best practices using SOP outlined so you can get a good understanding of best outcome from SOP for your implementation use-cases:
@@ -526,7 +526,7 @@ B. If Item does not exist in Redis...
 Now at this point, the "lock" attained only works for about 99% of the cases, thus, another Redis "fetch" for the in-flight item(s) version check is done right before the final step of commit.
 Then, as a "final final" step(after doing the mentioned Redis ```fetch``` for in-flight item(s)' version check), SOP uses the backend storage's feature to ensure only one management action for the target item(s) in-flight is done.
 
-The entire multi-step & multi-data locks, e.g. ```lock keys``` & in-flight item(s)' version checks, "lock attainment" process is called OOA and ensures highly scaleable data conflict resolution and merging. Definitely not the Redis "lock" API. :)
+The entire multi-step & multi-data locks, e.g. ```lock keys``` & in-flight item(s)' version checks, "lock attainment" process is called OOA and ensures highly scalable data conflict resolution and merging. Definitely not the Redis "lock" API. :)
 The estimated time complexity is: O(3r) + O(r) or simply: O(4r)
 where:
   * r represents the number of items needing lock and doing a single Redis fetch or set operation, a very quick, global cache/in-memory I/O. I stayed away from using "n" and used "r" to denote that it is a very very quick Redis I/O, not a database I/O.
@@ -668,7 +668,7 @@ Why? Because the SOP transaction underneath manages the data chunks in the most 
 at commit time, it only needs to persist the B-tree node as the chunks (large data) are already saved in the storage.
 This very subtle improvement in B-tree data management spells huge performance increase because the large data chunks are not persisted at the same time, preventing very huge spikes in resource utilization. Together with other SOP B-tree backend storage improvements allows SOP to flexibly manage & aligns its operational efficiency for managing small to huge data sizes.
 
-Micro Service endpoint can be secured using OAuth and thus, the setup now can surpass whatever most scaleable "objects system" in the market, may compare or surpass(depends on your design/implementation) even the biggest AWS S3 (or Oracle RDBMS, if it can do Big data!) one can afford.
+Micro Service endpoint can be secured using OAuth and thus, the setup now can surpass whatever most scalable "objects system" in the market, may compare or surpass(depends on your design/implementation) even the biggest AWS S3 (or Oracle RDBMS, if it can do Big data!) one can afford.
 
 And all "ACID transaction" guarded, "richly searchable", "partially updateable" with better readable code, great concurrency model/control under your fingertips, like using Go channels and Go routines.
 
@@ -711,7 +711,7 @@ Via usage of SOP API, your application will experience low latency, very high pe
 ## Brief Background
 SOP is written in Go and is a full re-implementation of the c# version. A lot of key technical features of SOP got carried over and a lot more added. V2 support ACID transactions and turn any application using it into a high performance database server itself. If deployed in a cluster, turns the entire cluster into a well oiled application & database server combo cluster that is masterless and thus, hot-spot free & horizontally scalable.
 
-V1 written in c# dotnet was designed to be a data server. It can be used to create a server app where clients submit requests for data storage and mgmt. BUT realizing that this is not horizontally scaleable, I designed V2(this current version in Golang!) to address the horizontal scale, without sacrificing much of the vertical scaleability. I think I succeeded. :)
+V1 written in c# dotnet was designed to be a data server. It can be used to create a server app where clients submit requests for data storage and mgmt. BUT realizing that this is not horizontally scalable, I designed V2(this current version in Golang!) to address the horizontal scale, without sacrificing much of the vertical scaleability. I think I succeeded. :)
 
 A design where I broke apart the "server" data mgmt and introduced horizontal scale design without losing much of the scaleability and acceleration inherent for a "server" piece. It is not an outcome of luck, it is as designed from the ground up, leaving the legacy or traditional form and out with a new one! :)
 
