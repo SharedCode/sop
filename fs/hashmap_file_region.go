@@ -18,13 +18,11 @@ const (
 var zeroSector = bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)
 
 func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails []fileRegionDetails) error {
-	dio := newDirectIO()
-	ba := dio.createAlignedBlock()
 	m := encoding.NewHandleMarshaler()
 	buffer := make([]byte, 0, sop.HandleSizeInBytes)
 	for _, frd := range fileRegionDetails {
 		ba2, _ := m.Marshal(frd.handle, buffer)
-		if err := hm.updateFileBlockRegion(ctx, frd.dio, frd.blockOffset, int(frd.handleInBlockOffset), ba2, ba); err != nil {
+		if err := hm.updateFileBlockRegion(ctx, frd.dio, frd.blockOffset, int(frd.handleInBlockOffset), ba2); err != nil {
 			return err
 		}
 	}
@@ -32,21 +30,19 @@ func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails []fil
 }
 
 func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails []fileRegionDetails) error {
-	dio := newDirectIO()
-	ba := dio.createAlignedBlock()
 	// Study whether we want to zero out only the "Logical ID" part. For now, zero out entire Handle block
 	// which could aid in cleaner deleted blocks(as marked w/ all zeroes). Negligible difference in IO.
 	for _, frd := range fileRegionDetails {
 
 		log.Debug(fmt.Sprintf("marking deleted file %s, sector offset %v, offset in block %v", frd.dio.filename, frd.blockOffset, frd.handleInBlockOffset))
-		if err := hm.updateFileBlockRegion(ctx, frd.dio, frd.blockOffset, int(frd.handleInBlockOffset), zeroSector, ba); err != nil {
+		if err := hm.updateFileBlockRegion(ctx, frd.dio, frd.blockOffset, int(frd.handleInBlockOffset), zeroSector); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blockOffset int64, handleInBlockOffset int, handleData []byte, alignedBuffer []byte) error {
+func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blockOffset int64, handleInBlockOffset int, handleData []byte) error {
 	// Lock the block file region.
 	var lk *sop.LockKey
 	var err error
@@ -81,6 +77,8 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 		}
 		sop.RandomSleep(ctx)
 	}
+
+	alignedBuffer := dio.createAlignedBlock()
 
 	// Read the block file region data.
 	if n, err := dio.ReadAt(alignedBuffer, blockOffset); n != blockSize || err != nil {

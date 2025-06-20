@@ -109,38 +109,3 @@ func (dio *directIO) createAlignedBlock() []byte {
 func (dio *directIO) createAlignedBlockOfSize(blockSize int) []byte {
 	return directio.AlignedBlock(blockSize)
 }
-
-func (dio *directIO) writeAt(block []byte, offset int64) (int, error) {
-	if DirectIOSim != nil {
-		return DirectIOSim.WriteAt(block, offset)
-	}
-	if dio.file == nil {
-		return 0, fmt.Errorf("can't write, there is no opened file")
-	}
-	return dio.file.WriteAt(block, offset)
-}
-
-func (dio *directIO) readAt(block []byte, offset int64) (int, error) {
-	if DirectIOSim != nil {
-		return DirectIOSim.ReadAt(block, offset)
-	}
-	if dio.file == nil {
-		return 0, fmt.Errorf("can't read, there is no opened file")
-	}
-	return dio.file.ReadAt(block, offset)
-}
-
-func (dio *directIO) close() error {
-	if DirectIOSim != nil {
-		return DirectIOSim.Close()
-	}
-
-	if dio.file == nil {
-		return nil
-	}
-
-	err := dio.file.Close()
-	dio.file = nil
-	dio.filename = ""
-	return err
-}

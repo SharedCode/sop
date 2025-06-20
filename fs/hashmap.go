@@ -84,6 +84,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 	var dio *directIO
 	var result fileRegionDetails
 
+	alignedBuffer := dio.createAlignedBlock()
 	i := 0
 	for {
 		// Not found or there is no space left in the block, try (or create if writing) other file segments.
@@ -135,10 +136,9 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 
 		// Read entire block for the ID hash mod, deserialize each Handle and check if anyone matches the one we are trying to find.
 		// For add use-case with "collision", when there is no more slot on the block, we need to automatically create a new segment file.
-		ba := dio.createAlignedBlock()
 		blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
 
-		n, err := dio.ReadAt(ba, blockOffset)
+		n, err := dio.ReadAt(alignedBuffer, blockOffset)
 		if err != nil {
 			if dio.isEOF(err) {
 				if forWriting {
@@ -153,7 +153,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				return result, err
 			}
 		}
-		if n != len(ba) {
+		if n != len(alignedBuffer) {
 			return result, fmt.Errorf("only able to read partially (%d bytes) the block record at offset %v", n, blockOffset)
 		}
 
@@ -162,7 +162,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 		var h sop.Handle
 
 		// Special process for the ideal id location (handle in block offset).
-		hbuf := ba[handleInBlockOffset : handleInBlockOffset+sop.HandleSizeInBytes]
+		hbuf := alignedBuffer[handleInBlockOffset : handleInBlockOffset+sop.HandleSizeInBytes]
 		if isZeroData(hbuf) {
 			if forWriting {
 				result.blockOffset = blockOffset
@@ -198,7 +198,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				continue
 			}
 
-			hbuf := ba[bao : bao+sop.HandleSizeInBytes]
+			hbuf := alignedBuffer[bao : bao+sop.HandleSizeInBytes]
 			result.handleInBlockOffset = int64(bao)
 
 			if isZeroData(hbuf) {
