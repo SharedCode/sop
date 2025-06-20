@@ -669,7 +669,7 @@ Why? Because the SOP transaction underneath manages the data chunks in the most 
 at commit time, it only needs to persist the B-tree node as the chunks (large data) are already saved in the storage.
 This very subtle improvement in B-tree data management spells huge performance increase because the large data chunks are not persisted at the same time, preventing very huge spikes in resource utilization. Together with other SOP B-tree backend storage improvements allows SOP to flexibly manage & aligns its operational efficiency for managing small to huge data sizes.
 
-Micro Service endpoint can be secured using OAuth and thus, the setup now can surpass whatever most scalable "objects system" in the market, may compare or surpass(depends on your design/implementation) even the biggest AWS S3 (or Oracle RDBMS, if it can do Big data!) one can afford.
+Micro Service endpoint can be secured using OAuth and thus, the setup now can surpass/match whatever most scalable "objects system" in the market in sustained overall throughput.
 
 And all "ACID transaction" guarded, "richly searchable", "partially updateable" with better readable code, great concurrency model/control under your fingertips, like using Go channels and Go routines.
 
