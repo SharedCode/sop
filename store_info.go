@@ -16,7 +16,7 @@ type StoreInfo struct {
 	// IsUnique tells whether key/value pair (items) of this tree should be unique on key.
 	IsUnique bool `json:"is_unique"`
 	// (optional) Description of the Store.
-	Description string `json:"description" maxLength:"250"`
+	Description string `json:"description" maxLength:"500"`
 	// Virtual ID registry table name.
 	RegistryTable string `json:"registry_table" minLength:"1" maxLength:"20"`
 	// Blob table name if using a table or (base) file path if storing blobs in File System.
