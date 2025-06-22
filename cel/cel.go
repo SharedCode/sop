@@ -7,6 +7,7 @@ import (
 	"github.com/google/cel-go/cel"
 )
 
+// Evaluator struct contains the CEL expression & the cel program used to evaluate expression vs. input variables.
 type Evaluator struct {
 	Expression string
 	program    cel.Program
