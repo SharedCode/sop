@@ -122,6 +122,8 @@ func (j *JsonStringWrapper) Remove(ctx context.Context, jsonDataKeys string) (bo
 	return true, nil
 }
 
+// TODO: add support for navigation methods: First, Last, Find() bool, GetItems(<page #>, <page size>, forward | backward direction)
+
 // GetCurrentValue returns the current item's value.
 func (j *JsonStringWrapper) GetValues(ctx context.Context, jsonDataKeys string) (string, error) {
 	var keys []map[string]any
