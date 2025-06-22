@@ -36,9 +36,13 @@ func (j *JsonStringWrapper) Add(ctx context.Context, jsonData string) (bool, err
 	if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonData), &items); err != nil {
 		return false, err
 	}
+	j.jsonDB.compareError = nil
 	for i := range items {
 		if ok, err := j.jsonDB.Add(ctx, items[i].Key, items[i].Value); !ok || err != nil {
 			return false, err
+		}
+		if j.jsonDB.compareError != nil {
+			return false, j.jsonDB.compareError
 		}
 	}
 	return true, nil
@@ -52,9 +56,13 @@ func (j *JsonStringWrapper) AddIfNotExist(ctx context.Context, jsonData string) 
 	if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonData), &items); err != nil {
 		return false, err
 	}
+	j.jsonDB.compareError = nil
 	for i := range items {
 		if ok, err := j.jsonDB.AddIfNotExist(ctx, items[i].Key, items[i].Value); !ok || err != nil {
 			return false, err
+		}
+		if j.jsonDB.compareError != nil {
+			return false, j.jsonDB.compareError
 		}
 	}
 	return true, nil
@@ -66,9 +74,13 @@ func (j *JsonStringWrapper) Update(ctx context.Context, jsonData string) (bool, 
 	if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonData), &items); err != nil {
 		return false, err
 	}
+	j.jsonDB.compareError = nil
 	for i := range items {
 		if ok, err := j.jsonDB.Update(ctx, items[i].Key, items[i].Value); !ok || err != nil {
 			return false, err
+		}
+		if j.jsonDB.compareError != nil {
+			return false, j.jsonDB.compareError
 		}
 	}
 	return true, nil
@@ -80,9 +92,13 @@ func (j *JsonStringWrapper) Upsert(ctx context.Context, jsonData string) (bool, 
 	if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonData), &items); err != nil {
 		return false, err
 	}
+	j.jsonDB.compareError = nil
 	for i := range items {
 		if ok, err := j.jsonDB.Upsert(ctx, items[i].Key, items[i].Value); !ok || err != nil {
 			return false, err
+		}
+		if j.jsonDB.compareError != nil {
+			return false, j.jsonDB.compareError
 		}
 	}
 	return true, nil
@@ -94,9 +110,13 @@ func (j *JsonStringWrapper) Remove(ctx context.Context, jsonDataKeys string) (bo
 	if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonDataKeys), &keys); err != nil {
 		return false, err
 	}
+	j.jsonDB.compareError = nil
 	for i := range keys {
 		if ok, err := j.jsonDB.Remove(ctx, keys[i]); !ok || err != nil {
 			return false, err
+		}
+		if j.jsonDB.compareError != nil {
+			return false, j.jsonDB.compareError
 		}
 	}
 	return true, nil
@@ -110,9 +130,13 @@ func (j *JsonStringWrapper) GetValues(ctx context.Context, jsonDataKeys string) 
 	}
 	values := make([]map[string]any, len(keys))
 	var err error
+	j.jsonDB.compareError = nil
 	for i := range keys {
 		if ok, err := j.jsonDB.FindOne(ctx, keys[i], true); !ok || err != nil {
 			return "", err
+		}
+		if j.jsonDB.compareError != nil {
+			return "", j.jsonDB.compareError
 		}
 		values[i], err = j.jsonDB.GetCurrentValue(ctx)
 		if err != nil {

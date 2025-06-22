@@ -13,12 +13,16 @@ import (
 // JSON DB that can take in any JSON data marshalled as map[string]any on Key & Value pair.
 type JsonDB struct {
 	btree.BtreeInterface[map[string]any, map[string]any]
-	evaluator *cel.Evaluator
+	evaluator    *cel.Evaluator
+	compareError error
 }
 
 // Comparer for map[string]any key type.
 func (j *JsonDB) Comparer(mapX map[string]any, mapY map[string]any) int {
-	r, _ := j.evaluator.Evaluate(mapX, mapY)
+	r, err := j.evaluator.Evaluate(mapX, mapY)
+	if err != nil {
+		j.compareError = err
+	}
 	return r
 }
 
