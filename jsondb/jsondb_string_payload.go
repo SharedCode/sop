@@ -9,6 +9,7 @@ import (
 
 // Item contains Key & Value pair.
 type Item struct {
+	ID    sop.UUID
 	Key   map[string]any
 	Value map[string]any
 }
