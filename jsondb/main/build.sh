@@ -1,1 +1,1 @@
-go build -buildmode=c-shared -o hello.dylib hello.go
+go build -buildmode=c-shared -o ../python/hello.dylib hello.go
