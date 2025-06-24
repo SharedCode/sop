@@ -95,60 +95,78 @@ class Btree(Generic[TK, TV]):
 
     @staticmethod
     def new(options: BtreeOptions, trans: Transaction):
-        Btree()
+        """
+        Create a new B-tree in the backend storage with the options specified then return an instance
+        of Btree that can let caller code to manage the items.
+        """
+        b3 = Btree()
+        return b3
 
     @staticmethod
     def open(name: str, trans: Transaction):
-        return self
+        b3 = Btree()
+        return b3
 
     @classmethod
     def add(items: list[Item[TK, TV]]) -> bool:
-        return false
+        return False
 
     @classmethod
     def add_if_not_exists(items: list[Item[TK, TV]]) -> bool:
-        return false
+        return False
 
     @classmethod
     def update(items: list[Item[TK, TV]]) -> bool:
-        return false
+        return False
 
     @classmethod
     def upsert(items: list[Item[TK, TV]]) -> bool:
-        return false
+        return False
 
     @classmethod
     def remove(keys: list[TK]) -> bool:
-        return false
+        return False
 
     @classmethod
     def get_items(
         page_number: int, page_size: int, direction: PagingDirection
     ) -> list[Item[TK, TV]]:
-        return false
+        return None
 
     @classmethod
-    def find(key: TK, firstItemWithKey: bool) -> bool:
-        return false
+    def get_values(
+        page_number: int, page_size: int, direction: PagingDirection
+    ) -> list[Item[TV]]:
+        return None
+
+    @classmethod
+    def get_keys(
+        page_number: int, page_size: int, direction: PagingDirection
+    ) -> list[Item[TK]]:
+        return None
+
+    @classmethod
+    def find(key: TK, first_item_with_key: bool) -> bool:
+        return False
 
     @classmethod
     def find_with_id(key: TK, id: uuid.uuid4) -> bool:
-        return false
+        return False
 
     @classmethod
     def first() -> bool:
-        return false
+        return False
 
     @classmethod
     def last() -> bool:
-        return false
+        return False
 
     @classmethod
     def is_unique() -> bool:
-        return false
+        return False
 
     @classmethod
-    def count() -> numpy.int64:
+    def count() -> int:
         return 0
 
     @classmethod
