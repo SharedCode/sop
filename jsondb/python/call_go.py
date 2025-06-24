@@ -4,16 +4,16 @@ import os
 # Determine the shared library extension based on the operating system
 uname = os.uname().sysname
 print(uname)
-if uname == 'Darwin':
-    ext = '.dylib'
-elif uname == 'Windows':
-    ext = '.dll'
+if uname == "Darwin":
+    ext = ".dylib"
+elif uname == "Windows":
+    ext = ".dll"
 else:
-    ext = '.so'
+    ext = ".so"
 
 # Load the shared library
 try:
-    lib = ctypes.CDLL(f'./hello{ext}')
+    lib = ctypes.CDLL(f"./hello{ext}")
 except OSError as e:
     print(f"Error loading library: {e}")
     print("Ensure 'hello.so' (or .dll/.dylib) is in the same directory.")
