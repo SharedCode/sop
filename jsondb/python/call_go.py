@@ -13,23 +13,31 @@ else:
 
 # Load the shared library
 try:
-    lib = ctypes.CDLL(f"./hello{ext}")
+    lib = ctypes.CDLL(f"./jsondb{ext}")
 except OSError as e:
     print(f"Error loading library: {e}")
-    print("Ensure 'hello.so' (or .dll/.dylib) is in the same directory.")
+    print("Ensure 'jsondb.so' (or .dll/.dylib) is in the same directory.")
     exit()
 
 # Call the 'hello' function (no arguments, no return value)
-print("Calling Go's hello() function:")
-lib.hello()
+print("Calling Go's open_redis_connection() function:")
+open_redis_conn = lib.open_redis_connection
 
 # Call the 'add' function with arguments and set argument/return types
-add_func = lib.add
-add_func.argtypes = [ctypes.c_long, ctypes.c_long]  # Specify argument types
-add_func.restype = ctypes.c_long  # Specify return type
+open_redis_conn.argtypes = [
+    ctypes.c_char_p,
+    ctypes.c_int,
+    ctypes.c_char_p,
+]  # Specify argument types
+open_redis_conn.restype = ctypes.c_char_p  # Specify return type
 
-num1 = 10
-num2 = 15
-result = add_func(num1, num2)
-print(f"Calling Go's add({num1}, {num2}) function:")
-print(f"Result: {result}")
+
+def open_redis_connection(host: str, port: int, password: str) -> str:
+    """
+    Open the Redis connection.
+    """
+
+    res = open_redis_conn(host, port, password)
+    if res == None:
+        return res
+    return res.value.decode("utf-8")
