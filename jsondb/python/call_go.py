@@ -23,13 +23,20 @@ except OSError as e:
 print("Calling Go's open_redis_connection() function:")
 open_redis_conn = lib.open_redis_connection
 
-# Call the 'add' function with arguments and set argument/return types
+# Call the 'open+_redis_connection' function with arguments and set argument/return types
 open_redis_conn.argtypes = [
     ctypes.c_char_p,
     ctypes.c_int,
     ctypes.c_char_p,
 ]  # Specify argument types
 open_redis_conn.restype = ctypes.c_char_p  # Specify return type
+
+close_redis_conn = lib.close_redis_connection
+close_redis_conn.restype = ctypes.c_char_p  # Specify return type
+
+# De-allocate backing memory for a string.
+free_string = lib.free_string
+free_string.argtypes = [ctypes.c_char_p]
 
 
 def open_redis_connection(host: str, port: int, password: str) -> str:
@@ -40,4 +47,23 @@ def open_redis_connection(host: str, port: int, password: str) -> str:
     res = open_redis_conn(host, port, password)
     if res == None:
         return res
-    return res.value.decode("utf-8")
+
+    s = res.value.decode("utf-8")
+    # free the string allocated in C heap using malloc.
+    free_string(res)
+    return s
+
+
+def close_redis_connection() -> str:
+    """
+    Close the Redis connection.
+    """
+
+    res = close_redis_conn()
+    if res == None:
+        return res
+
+    s = res.value.decode("utf-8")
+    # free the string allocated in C heap using malloc.
+    free_string(res)
+    return s

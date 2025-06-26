@@ -79,8 +79,9 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
-extern void FreeString(char* cString);
+extern void free_string(char* cString);
 extern char* open_redis_connection(char* host, int port, char* password);
+extern char* close_redis_connection();
 
 #ifdef __cplusplus
 }

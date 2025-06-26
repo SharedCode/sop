@@ -1,8 +1,7 @@
 import uuid
 
 from typing import TypeVar, Generic
-
-from jsondb.python.transaction import Transaction
+from transaction import Transaction
 
 # Define TypeVars 'TK' & 'TV' to represent Key & Value generic types.
 TK = TypeVar("TK")
@@ -24,7 +23,7 @@ class PagingDirection(Enum):
     Backward = 1
 
 
-MIN_CACHE_DURATION = 5 * timedelta.minute
+MIN_CACHE_DURATION = timedelta(minutes=5)
 
 
 class CacheConfig:
@@ -136,13 +135,13 @@ class Btree(Generic[TK, TV]):
     @classmethod
     def get_values(
         page_number: int, page_size: int, direction: PagingDirection
-    ) -> list[Item[TV]]:
+    ) -> list[TV]:
         return None
 
     @classmethod
     def get_keys(
         page_number: int, page_size: int, direction: PagingDirection
-    ) -> list[Item[TK]]:
+    ) -> list[TK]:
         return None
 
     @classmethod

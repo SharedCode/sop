@@ -10,8 +10,8 @@ import "fmt"
 import log "log/slog"
 import "github.com/SharedCode/sop/redis"
 
-//export FreeString
-func FreeString(cString *C.char) {
+//export free_string
+func free_string(cString *C.char) {
 	if cString != nil {
 		C.free(unsafe.Pointer(cString))
 	}
@@ -29,6 +29,19 @@ func open_redis_connection(host *C.char, port C.int, password *C.char) *C.char {
 		log.Error(errMsg)
 
 		// Remember to deallocate errInfo.message!
+		return C.CString(errMsg)
+	}
+	return nil
+}
+
+//export close_redis_connection
+func close_redis_connection() *C.char {
+	err := redis.CloseConnection()
+	if err != nil {
+		errMsg := fmt.Sprintf("error encountered closing Redis connection, details: %v", err)
+		log.Error(errMsg)
+
+		// Remember to deallocate errMsg!
 		return C.CString(errMsg)
 	}
 	return nil

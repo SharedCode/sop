@@ -1,6 +1,4 @@
 import ctypes
-import os
-
 import call_go
 
 
@@ -15,7 +13,10 @@ class RedisOptions:
         self.password = ""
 
 
-def OpenRedisConnection(options: RedisOptions):
+def open_redis_connection(options: RedisOptions):
+    """
+    Open the global Redis connection.
+    """
     print("inside OpenRedisConnection")
     s1 = options.host.encode("utf-8")
     p = ctypes.c_int(options.port)
@@ -27,5 +28,16 @@ def OpenRedisConnection(options: RedisOptions):
         raise Exception(f"Redis connection failed to open, details: {errMsg}")
 
 
-# Open the Redis Connection in SOP.
-OpenRedisConnection(RedisOptions())
+# Open the Redis Connection in SOP Go side.
+open_redis_connection(RedisOptions())
+
+
+def close_redis_connection():
+    """
+    Close the global Redis connection.
+    """
+    errMsg = call_go.close_redis_connection()
+    if errMsg == None:
+        print("Redis connection was successfully closed")
+    else:
+        raise Exception(f"Redis connection failed to close, details: {errMsg}")
