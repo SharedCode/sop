@@ -58,7 +58,7 @@ func init() {
 	fs.SetGlobalErasureConfig(ec)
 }
 ```
-The init function as shown above will create a map containing Erasure Coding information about the three disk drives & paths which will store the replicated data, both Active/Passive(disk1 & disk2) & EC based(disk1, disk2 for data shards &disk3 for parity).
+The init function as shown above will create a map containing Erasure Coding information about the three disk drives & paths which will store the replicated data, EC based, i.e. - disk1, disk2 for data shards & disk3 for parity.
 
 b. instantiate a transaction and b-tree with replication feature, referencing the EC config specified in init (as shown above)
 ```
@@ -75,11 +75,12 @@ import (
 
 func main() {
 	ctx := context.Background()
-	dataPath := "/Users/grecinto/sop_data"
+
 	// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+	// I used disk1 & disk2 as stores' base folders (active & passive) but you can use another set of disks.
 	storesFolders = []string{
-		fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
-		fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
+		fmt.Sprintf("//storage%cdisk1", os.PathSeparator),
+		fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
 	}
 
 	// Specifying nil on "erasureConfig" (last) param will allow SOP to use the global Erasure Config.
@@ -270,13 +271,14 @@ var ctx = context.Background()
 func main() {
 	// See above top example on how to setup "ec" or erasureConfig in "init" function. That is required
 	// for this code example to work.
-	dataPath := "/Users/grecinto/sop_data"
 
 	// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+	// I used //storage/disk1 & ../disk2 as stores' base folders (active & passive) but you can use another set of disks.
 	storesFolders = []string{
-		fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
-		fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
+		fmt.Sprintf("//storage%cdisk1", os.PathSeparator),
+		fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
 	}
+
 	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
@@ -333,13 +335,14 @@ const nodeSlotLength = 500
 func main() {
 
 	// Create and start a transaction session.
-	dataPath := "/Users/grecinto/sop_data"
 
 	// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+	// I used disk1 & disk2 as stores' base folders (active & passive) but you can use another set of disks.
 	storesFolders = []string{
-		fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
-		fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
-	}	
+		fmt.Sprintf("//storage%cdisk1", os.PathSeparator),
+		fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
+	}
+
 	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
@@ -391,12 +394,11 @@ import (
 // ...
 	// To create and populate a "streaming data" store.
 
-	dataPath := "/Users/grecinto/sop_data"
-
 	// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+	// I used disk1 & disk2 as stores' base folders (active & passive) but you can use another set of disks.
 	storesFolders = []string{
-		fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
-		fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
+		fmt.Sprintf("//storage%cdisk1", os.PathSeparator),
+		fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
 	}
 
 	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
@@ -542,12 +544,12 @@ The magic will start to happen after you have created the Btree(s) (& transactio
 
 Sample code to illustrate this:
 ```
-dataPath := "/Users/grecinto/sop_data"
 
 // Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+// I used disk1 & disk2 as stores' base folders (active & passive) but you can use another set of disks.
 storesFolders = []string{
-	fmt.Sprintf("%s%cdisk4", dataPath, os.PathSeparator),
-	fmt.Sprintf("%s%cdisk5", dataPath, os.PathSeparator),
+	fmt.Sprintf("//storage%cdisk1", os.PathSeparator),
+	fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
 }
 
 to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
@@ -631,13 +633,13 @@ func (x BigKey) Compare(other interface{}) int {
 }
 
 func uploader() {
-	dataPath := "/Users/grecinto/sop_data"
-
 	// Stores' home base folder w/ Active (1st) & Passive (2nd) folders specified.
+	// I used disk1 & disk2 as stores' base folders (active & passive) but you can use another set of disks.
 	storesFolders = []string{
-		fmt.Sprintf("%s%cdisk4", dataPath, os.PathSeparator),
-		fmt.Sprintf("%s%cdisk5", dataPath, os.PathSeparator),
+		fmt.Sprintf("//storage%cdisk1", os.PathSeparator),
+		fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
 	}
+
 	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 	t1, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
 	t1.Begin()
