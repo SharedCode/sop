@@ -28,10 +28,6 @@ def open_redis_connection(options: RedisOptions):
         raise Exception(f"Redis connection failed to open, details: {errMsg}")
 
 
-# Open the Redis Connection in SOP Go side.
-open_redis_connection(RedisOptions())
-
-
 def close_redis_connection():
     """
     Close the global Redis connection.

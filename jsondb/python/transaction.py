@@ -38,10 +38,10 @@ class TransationOptions:
 
     def __init__(
         self,
-        stores_folders: str,
         mode: TransactionMode,
         max_time: timedelta,
         registry_hash_mod: int,
+        stores_folders: list[str],
         erasure_config: dict[str, ErasureCodingConfig],
     ):
         if erasure_config == None:
@@ -55,8 +55,10 @@ class TransationOptions:
             registry_hash_mod = MAX_HASH_MOD_VALUE
 
         # Default to 15 minute commit time.
-        if max_time < 0:
+        if max_time.total_seconds() <= 0:
             max_time = 15 * timedelta.minutes
+        if max_time.total_seconds() > 1 * 60 * 60:
+            max_time = 60 * timedelta.minutes
 
         # Base folder where the Stores (registry, blob & store repository) subdirectories & files
         # will be created in. This is expected to be two element array, the 2nd element specifies
@@ -77,13 +79,13 @@ class Transaction:
         self.options = options
 
     @classmethod
-    def begin():
+    def begin(self):
         return
 
     @classmethod
-    def commit():
+    def commit(self):
         return
 
     @classmethod
-    def rollback():
+    def rollback(self):
         return

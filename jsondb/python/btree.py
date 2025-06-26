@@ -32,9 +32,9 @@ class CacheConfig:
     """
 
     def __init__(self, cache_duration: timedelta, is_ttl: bool):
-        if cache_duration > 0 and cache_duration < MIN_CACHE_DURATION:
+        if cache_duration.total_seconds() > 0 and cache_duration < MIN_CACHE_DURATION:
             cache_duration = MIN_CACHE_DURATION
-        if cache_duration == 0 and is_ttl:
+        if cache_duration.total_seconds() == 0 and is_ttl:
             is_ttl = False
         self.registry_cache_duration = cache_duration
         self.is_registry_cache_ttl = is_ttl
@@ -107,67 +107,67 @@ class Btree(Generic[TK, TV]):
         return b3
 
     @classmethod
-    def add(items: list[Item[TK, TV]]) -> bool:
+    def add(self, items: list[Item[TK, TV]]) -> bool:
         return False
 
     @classmethod
-    def add_if_not_exists(items: list[Item[TK, TV]]) -> bool:
+    def add_if_not_exists(self, items: list[Item[TK, TV]]) -> bool:
         return False
 
     @classmethod
-    def update(items: list[Item[TK, TV]]) -> bool:
+    def update(self, items: list[Item[TK, TV]]) -> bool:
         return False
 
     @classmethod
-    def upsert(items: list[Item[TK, TV]]) -> bool:
+    def upsert(self, items: list[Item[TK, TV]]) -> bool:
         return False
 
     @classmethod
-    def remove(keys: list[TK]) -> bool:
+    def remove(self, keys: list[TK]) -> bool:
         return False
 
     @classmethod
     def get_items(
-        page_number: int, page_size: int, direction: PagingDirection
+        self, page_number: int, page_size: int, direction: PagingDirection
     ) -> list[Item[TK, TV]]:
         return None
 
     @classmethod
     def get_values(
-        page_number: int, page_size: int, direction: PagingDirection
+        self, page_number: int, page_size: int, direction: PagingDirection
     ) -> list[TV]:
         return None
 
     @classmethod
     def get_keys(
-        page_number: int, page_size: int, direction: PagingDirection
+        self, page_number: int, page_size: int, direction: PagingDirection
     ) -> list[TK]:
         return None
 
     @classmethod
-    def find(key: TK, first_item_with_key: bool) -> bool:
+    def find(self, key: TK, first_item_with_key: bool) -> bool:
         return False
 
     @classmethod
-    def find_with_id(key: TK, id: uuid.uuid4) -> bool:
+    def find_with_id(self, key: TK, id: uuid.uuid4) -> bool:
         return False
 
     @classmethod
-    def first() -> bool:
+    def first(self) -> bool:
         return False
 
     @classmethod
-    def last() -> bool:
+    def last(self) -> bool:
         return False
 
     @classmethod
-    def is_unique() -> bool:
+    def is_unique(self) -> bool:
         return False
 
     @classmethod
-    def count() -> int:
+    def count(self) -> int:
         return 0
 
     @classmethod
-    def get_store_info() -> BtreeOptions:
+    def get_store_info(self) -> BtreeOptions:
         return BtreeOptions()
