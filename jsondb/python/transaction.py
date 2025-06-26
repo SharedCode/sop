@@ -80,6 +80,7 @@ class Transaction:
 
     @classmethod
     def begin(self):
+
         return
 
     @classmethod

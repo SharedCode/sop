@@ -82,6 +82,8 @@ extern "C" {
 extern void free_string(char* cString);
 extern char* open_redis_connection(char* host, int port, char* password);
 extern char* close_redis_connection();
+extern char* manage_transaction_action(int action, char* payload);
+extern char* manage_btree_action(int action, char* payload);
 
 #ifdef __cplusplus
 }

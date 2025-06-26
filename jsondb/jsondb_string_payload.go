@@ -9,9 +9,9 @@ import (
 
 // Item contains Key & Value pair.
 type Item struct {
-	ID    sop.UUID
-	Key   map[string]any
-	Value map[string]any
+	ID    sop.UUID       `json:"id"`
+	Key   map[string]any `json:"key"`
+	Value map[string]any `json:"value"`
 }
 
 // B-tree that can operate on JSON String "wrapper". Has no logic except to take in and return

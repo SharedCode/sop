@@ -56,14 +56,14 @@ class BtreeOptions:
         name: str,
         is_unique: bool,
         slot_length: int,
-        desc: str,
+        description: str,
         value_size: ValueDataSize,
         cache_config: CacheConfig,
     ):
         self.name = name
         self.is_unique = is_unique
         self.slot_length = slot_length
-        self.desc = desc
+        self.desc = description
         # Defaults to Small data size.
         self.is_value_data_in_node_segment = True
         self.is_value_data_globally_cached = False

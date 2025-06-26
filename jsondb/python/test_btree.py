@@ -2,6 +2,7 @@ import unittest
 
 from btree import *
 from transaction import *
+from redis import *
 
 stores_folders = ["/Users/grecinto/sop_data/disk1", "/Users/grecinto/sop_data/disk2"]
 ec = {
@@ -20,6 +21,13 @@ ec = {
 
 
 class TestBtree(unittest.TestCase):
+    def setUpClass():
+        ro = RedisOptions()
+        Redis.open_connection(ro)
+
+    def tearDownClass():
+        Redis.close_connection()
+
     def test_new_btree(self):
         # ro = RedisOptions()
         # open_redis_connection()

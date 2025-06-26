@@ -27,17 +27,17 @@ type TransationOptionsWithReplication struct {
 	// Base folder where the Stores (registry, blob & store repository) subdirectories & files
 	// will be created in. This is expected to be two element array, the 2nd element specifies
 	// a 2nd folder for use in SOP replication.
-	StoresBaseFolders []string
+	StoresBaseFolders []string `json:"stores_folders"`
 	// Transaction Mode can be Read-only or Read-Write.
-	Mode sop.TransactionMode
+	Mode sop.TransactionMode `json:"mode"`
 	// Transaction maximum "commit" time. If commits takes longer than this then transaction will roll back.
-	MaxTime time.Duration
+	MaxTime time.Duration `json:"max_time"`
 	// Registry hash modulo value used for hashing.
-	RegistryHashModValue int
+	RegistryHashModValue int `json:"registry_hash_mod"`
 	// Cache interface, will default to Redis if not specified.
 	Cache sop.Cache
 	// Erasure Config contains config data useful for Erasure Coding based file IO (& replication).
-	ErasureConfig map[string]fs.ErasureCodingConfig
+	ErasureConfig map[string]fs.ErasureCodingConfig `json:"erasure_config"`
 }
 
 // Returns true if this TransactionOptionsWithReplication is empty.
