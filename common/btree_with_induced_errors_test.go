@@ -34,13 +34,6 @@ func (b3 b3WithInducedErrors[TK, TV]) Add(ctx context.Context, key TK, value TV)
 	}
 	return true, nil
 }
-func (b3 b3WithInducedErrors[TK, TV]) AddItem(ctx context.Context, item *btree.Item[TK, TV]) (bool, error) {
-	b3.t.Helper()
-	if b3.induceErrorOnMethod == 16 {
-		return false, fmt.Errorf("foobar")
-	}
-	return true, nil
-}
 func (b3 b3WithInducedErrors[TK, TV]) AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error) {
 	b3.t.Helper()
 	if b3.induceErrorOnMethod == 2 {

@@ -74,27 +74,6 @@ func Test_TransactionWithInducedErrorOnAdd(t *testing.T) {
 	}
 }
 
-func Test_TransactionWithInducedErrorOnAddItem(t *testing.T) {
-	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
-
-	var t3 interface{} = t2.GetPhasedTransaction()
-	trans := t3.(*Transaction)
-
-	b3 := newBTreeWithInducedErrors[int, string](t)
-	b3t := btree.NewBtreeWithTransaction(trans, b3)
-	b3.induceErrorOnMethod = 16
-	s := "foo"
-	b3t.AddItem(ctx, &btree.Item[int, string]{
-		Key:   1,
-		Value: &s,
-		ID:    sop.NewUUID(),
-	})
-	if trans.HasBegun() {
-		t.Error("Transaction is not rolled back.")
-	}
-}
-
 func Test_TransactionWithInducedErrorOnAddIfNotExist(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin()
