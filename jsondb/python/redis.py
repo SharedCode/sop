@@ -20,11 +20,8 @@ class Redis:
         Open the global Redis connection.
         """
         print("inside OpenRedisConnection")
-        s1 = options.host.encode("utf-8")
-        p = ctypes.c_int(options.port)
-        pwd = options.password.encode("utf-8")
         errMsg = call_go.open_redis_connection(
-            ctypes.c_char_p(s1), p, ctypes.c_char_p(pwd)
+            options.host, options.port, options.password
         )
         if errMsg == None:
             print("Redis connection was successfully opened")

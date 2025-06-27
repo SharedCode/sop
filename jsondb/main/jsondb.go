@@ -68,8 +68,8 @@ const (
 	Rollback
 )
 
-//export manage_transaction_action
-func manage_transaction_action(action C.int, payload *C.char) *C.char {
+//export manage_transaction
+func manage_transaction(action C.int, payload *C.char) *C.char {
 	ps := C.GoString(payload)
 
 	extractTrans := func() (sop.Transaction, *C.char) {
@@ -112,6 +112,7 @@ func manage_transaction_action(action C.int, payload *C.char) *C.char {
 		}
 		if err := t.Begin(); err != nil {
 			errMsg := fmt.Sprintf("transaction %v Begin failed, details: %v", t.GetID().String(), err)
+			delete(transactionLookup, t.GetID())
 			return C.CString(errMsg)
 		}
 	case Commit:
@@ -121,8 +122,11 @@ func manage_transaction_action(action C.int, payload *C.char) *C.char {
 		}
 		if err := t.Commit(ctx); err != nil {
 			errMsg := fmt.Sprintf("transaction %v Commit failed, details: %v", t.GetID().String(), err)
+			delete(transactionLookup, t.GetID())
 			return C.CString(errMsg)
 		}
+		delete(transactionLookup, t.GetID())
+
 	case Rollback:
 		t, err := extractTrans()
 		if err != nil {
@@ -130,8 +134,11 @@ func manage_transaction_action(action C.int, payload *C.char) *C.char {
 		}
 		if err := t.Rollback(ctx); err != nil {
 			errMsg := fmt.Sprintf("transaction %v Rollback failed, details: %v", t.GetID().String(), err)
+			delete(transactionLookup, t.GetID())
 			return C.CString(errMsg)
 		}
+		delete(transactionLookup, t.GetID())
+
 	default:
 		errMsg := fmt.Sprintf("unsupported action %d", int(action))
 		return C.CString(errMsg)
@@ -162,8 +169,8 @@ const (
 	GetStoreInfo
 )
 
-//export manage_btree_action
-func manage_btree_action(action C.int, payload *C.char) *C.char {
+//export manage_btree
+func manage_btree(action C.int, payload *C.char) *C.char {
 	return nil
 }
 

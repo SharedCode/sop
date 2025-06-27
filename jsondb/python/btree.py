@@ -1,6 +1,8 @@
 import uuid
 
 from typing import TypeVar, Generic
+from dataclasses import dataclass, asdict
+
 from transaction import Transaction
 
 # Define TypeVars 'TK' & 'TV' to represent Key & Value generic types.
@@ -26,65 +28,42 @@ class PagingDirection(Enum):
 MIN_CACHE_DURATION = timedelta(minutes=5)
 
 
+@dataclass
 class CacheConfig:
     """
     Cache config specify the options available for caching in B-tree.
     """
 
-    def __init__(self, cache_duration: timedelta, is_ttl: bool):
-        if cache_duration.total_seconds() > 0 and cache_duration < MIN_CACHE_DURATION:
-            cache_duration = MIN_CACHE_DURATION
-        if cache_duration.total_seconds() == 0 and is_ttl:
-            is_ttl = False
-        self.registry_cache_duration = cache_duration
-        self.is_registry_cache_ttl = is_ttl
-        self.node_cache_duration = cache_duration
-        self.is_node_cache_ttl = is_ttl
-        self.store_info_cache_duration = cache_duration
-        self.is_store_info_cache_ttl = is_ttl
-        self.value_data_cache_duration = cache_duration
-        self.is_value_data_cache_ttl = is_ttl
+    # Registry cache duration in minutes.
+    registry_cache_duration: int = 10
+    is_registry_cache_ttl: bool = False
+    node_cache_duration: int = 5
+    is_node_cache_ttl: bool = False
+    store_info_cache_duration: int = 5
+    is_store_info_cache_ttl: bool = False
+    value_data_cache_duration: int = 0
+    is_value_data_cache_ttl: bool = False
 
 
+@dataclass
 class BtreeOptions:
     """
     Btree options specify the options available for making a B-tree.
     """
 
-    def __init__(
-        self,
-        name: str,
-        is_unique: bool,
-        slot_length: int,
-        description: str,
-        value_size: ValueDataSize,
-        cache_config: CacheConfig,
-    ):
-        self.name = name
-        self.is_unique = is_unique
-        self.slot_length = slot_length
-        self.desc = description
-        # Defaults to Small data size.
-        self.is_value_data_in_node_segment = True
-        self.is_value_data_globally_cached = False
-        self.is_value_data_actively_persisted = False
-        if value_size == ValueDataSize.Medium:
-            self.is_value_data_in_node_segment = False
-            self.is_value_data_globally_cached = True
-        if value_size == ValueDataSize.Big:
-            self.is_value_data_in_node_segment = False
-            self.is_value_data_globally_cached = False
-            self.is_value_data_actively_persisted = True
-        self.cache_config = cache_config
+    name: str
+    is_unique: bool
+    slot_length: int
+    description: str
+    value_size: ValueDataSize
+    cache_config: CacheConfig
 
 
+@dataclass
 class Item(Generic[TK, TV]):
-    def __init__(
-        self, key: TK = None, value: TV = None, id: uuid.uuid4 = uuid.UUID(int=0)
-    ):
-        self.key = key
-        self.value = value
-        self.id = id
+    key: TK
+    value: TV
+    id: uuid.uuid4 = uuid.UUID(int=0)
 
 
 class Btree(Generic[TK, TV]):
@@ -98,76 +77,62 @@ class Btree(Generic[TK, TV]):
         Create a new B-tree in the backend storage with the options specified then return an instance
         of Btree that can let caller code to manage the items.
         """
+
         b3 = Btree()
         return b3
 
-    @staticmethod
+    @classmethod
     def open(name: str, trans: Transaction):
         b3 = Btree()
         return b3
 
-    @classmethod
     def add(self, items: list[Item[TK, TV]]) -> bool:
         return False
 
-    @classmethod
     def add_if_not_exists(self, items: list[Item[TK, TV]]) -> bool:
         return False
 
-    @classmethod
     def update(self, items: list[Item[TK, TV]]) -> bool:
         return False
 
-    @classmethod
     def upsert(self, items: list[Item[TK, TV]]) -> bool:
         return False
 
-    @classmethod
     def remove(self, keys: list[TK]) -> bool:
         return False
 
-    @classmethod
     def get_items(
         self, page_number: int, page_size: int, direction: PagingDirection
     ) -> list[Item[TK, TV]]:
         return None
 
-    @classmethod
     def get_values(
         self, page_number: int, page_size: int, direction: PagingDirection
     ) -> list[TV]:
         return None
 
-    @classmethod
     def get_keys(
         self, page_number: int, page_size: int, direction: PagingDirection
     ) -> list[TK]:
         return None
 
-    @classmethod
     def find(self, key: TK, first_item_with_key: bool) -> bool:
         return False
 
-    @classmethod
     def find_with_id(self, key: TK, id: uuid.uuid4) -> bool:
         return False
 
-    @classmethod
     def first(self) -> bool:
         return False
 
-    @classmethod
     def last(self) -> bool:
         return False
 
-    @classmethod
     def is_unique(self) -> bool:
         return False
 
-    @classmethod
     def count(self) -> int:
         return 0
 
-    @classmethod
     def get_store_info(self) -> BtreeOptions:
         return BtreeOptions()

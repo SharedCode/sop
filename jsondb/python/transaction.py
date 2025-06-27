@@ -1,5 +1,9 @@
-from datetime import timedelta
+import json
+import call_go
+import uuid
+
 from enum import Enum
+from dataclasses import dataclass, asdict
 
 
 class TransactionMode(Enum):
@@ -19,74 +23,87 @@ MIN_HASH_MOD_VALUE = 250
 MAX_HASH_MOD_VALUE = 750000
 
 
+@dataclass
 class ErasureCodingConfig:
-    def __init__(
-        self,
-        data_shards_count: int,
-        parity_shards_count: int,
-        base_folder_paths_across_drives: list[str],
-        repair_corrupted_shards: bool,
-    ):
-        self.data_shards_count = data_shards_count
-        self.parity_shards_count = parity_shards_count
-        self.base_folder_paths_across_drives = base_folder_paths_across_drives
-        self.repair_corrupted_shards = repair_corrupted_shards
+    data_shards_count: int
+    parity_shards_count: int
+    base_folder_paths_across_drives: str
+    repair_corrupted_shards: bool
+
+    def __eq__(self, other):
+        return (
+            self.data_shards_count == other.data_shards_count
+            and self.parity_shards_count == other.parity_shards_count
+            and self.repair_corrupted_shards == other.repair_corrupted_shards
+            and self.base_folder_paths_across_drives
+            == other.base_folder_paths_across_drives
+        )
+
+    def __hash__(self):
+        return hash(
+            (
+                self.data_shards_count,
+                self.parity_shards_count,
+                self.base_folder_paths_across_drives,
+                self.repair_corrupted_shards,
+            )
+        )
 
 
+@dataclass
 class TransationOptions:
-    glolbal_erasure_config: ErasureCodingConfig
+    mode: int
+    # max_time in Python is in minutes, SOP in Golang will convert that to respective time.duration value.
+    max_time: int
+    registry_hash_mod: int
+    stores_folders: str
+    erasure_config: dict[str, ErasureCodingConfig]
 
-    def __init__(
-        self,
-        mode: TransactionMode,
-        max_time: timedelta,
-        registry_hash_mod: int,
-        stores_folders: list[str],
-        erasure_config: dict[str, ErasureCodingConfig],
-    ):
-        if erasure_config == None:
-            erasure_config = TransationOptions.glolbal_erasure_config
-        if len(stores_folders) != 2:
-            raise "'stores_folders' need to be array of two strings(drive/folder paths)"
 
-        if registry_hash_mod < MIN_HASH_MOD_VALUE:
-            registry_hash_mod = MIN_HASH_MOD_VALUE
-        if registry_hash_mod > MAX_HASH_MOD_VALUE:
-            registry_hash_mod = MAX_HASH_MOD_VALUE
+class TransactionError(Exception):
+    """Base exception for transaction-related errors."""
 
-        # Default to 15 minute commit time.
-        if max_time.total_seconds() <= 0:
-            max_time = 15 * timedelta.minutes
-        if max_time.total_seconds() > 1 * 60 * 60:
-            max_time = 60 * timedelta.minutes
+    pass
 
-        # Base folder where the Stores (registry, blob & store repository) subdirectories & files
-        # will be created in. This is expected to be two element array, the 2nd element specifies
-        # a 2nd folder for use in SOP replication.
-        self.store_folders = stores_folders
-        # Transaction Mode can be Read-only or Read-Write.
-        self.mode = mode
-        # Transaction maximum "commit" time. If commits takes longer than this then transaction will roll back.
-        self.max_time = max_time
-        # Registry hash modulo value used for hashing.
-        self.registry_hash_mod = registry_hash_mod
-        # Erasure Config contains config data useful for Erasure Coding based file IO (& replication).
-        self.erasure_config = erasure_config
+
+class InvalidTransactionStateError(TransactionError):
+    """Raised when a transaction is attempted in an invalid state."""
+
+    pass
 
 
 class Transaction:
     def __init__(self, options: TransationOptions):
         self.options = options
+        self.transaction_id = uuid.UUID(int=0)
 
-    @classmethod
+        res = call_go.manage_transaction(1, json.dumps(asdict(options)))
+
+        if res == None:
+            raise TransactionError("unable to create a Tranasaction object in SOP")
+        try:
+            self.transaction_id = uuid.UUID(res)
+        except:
+            # if res can't be converted to UUID, it is expected to be an error msg from SOP.
+            raise TransactionError(res)
+
     def begin(self):
+        if self.transaction_id == uuid.UUID(int=0):
+            raise InvalidTransactionStateError("transaction_id is missing")
+        res = call_go.manage_transaction(2, str(self.transaction_id))
+        if res != None:
+            raise TransactionError(f"Transaction begin failed, details {res}")
 
-        return
-
-    @classmethod
     def commit(self):
-        return
+        if self.transaction_id == uuid.UUID(int=0):
+            raise InvalidTransactionStateError("transaction_id is missing")
+        res = call_go.manage_transaction(3, str(self.transaction_id))
+        if res != None:
+            raise TransactionError(f"Transaction commit failed, details {res}")
 
-    @classmethod
     def rollback(self):
-        return
+        if self.transaction_id == uuid.UUID(int=0):
+            raise InvalidTransactionStateError("transaction_id is missing")
+        res = call_go.manage_transaction(4, str(self.transaction_id))
+        if res != None:
+            raise TransactionError(f"Transaction rollback failed, details {res}")

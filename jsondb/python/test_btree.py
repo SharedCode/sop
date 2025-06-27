@@ -1,23 +1,29 @@
+import json
 import unittest
+import transaction
+import btree
 
-from btree import *
-from transaction import *
+from datetime import timedelta
 from redis import *
 
-stores_folders = ["/Users/grecinto/sop_data/disk1", "/Users/grecinto/sop_data/disk2"]
+from dataclasses import dataclass, asdict
+
+stores_folders = ("/Users/grecinto/sop_data/disk1", "/Users/grecinto/sop_data/disk2")
 ec = {
-    "barstoreec",
-    ErasureCodingConfig(
+    "barstoreec": transaction.ErasureCodingConfig(
         2,
         1,
-        [
+        (
             "/Users/grecinto/sop_data/disk1",
             "/Users/grecinto/sop_data/disk2",
             "/Users/grecinto/sop_data/disk3",
-        ],
+        ),
         True,
-    ),
+    )
 }
+
+# Run unit tests in cmdline:
+# python3 -m unittest -v
 
 
 class TestBtree(unittest.TestCase):
@@ -31,20 +37,23 @@ class TestBtree(unittest.TestCase):
     def test_new_btree(self):
         # ro = RedisOptions()
         # open_redis_connection()
-        to = TransationOptions(
-            TransactionMode.ForWriting,
-            timedelta(minutes=5),
-            MIN_HASH_MOD_VALUE,
+        to = transaction.TransationOptions(
+            transaction.TransactionMode.ForWriting.value,
+            5,
+            transaction.MIN_HASH_MOD_VALUE,
             stores_folders,
             ec,
         )
-        t = Transaction(to)
+
+        t = transaction.Transaction(to)
         t.begin()
 
-        cache = CacheConfig(timedelta(minutes=5), False)
-        bo = BtreeOptions("barstoreec", True, 8, "", ValueDataSize.Small, cache)
-        b3 = Btree.new(bo, t)
-        l = [Item(1, "foo")]
+        cache = btree.CacheConfig()
+        bo = btree.BtreeOptions(
+            "barstoreec", True, 8, "", btree.ValueDataSize.Small, cache
+        )
+        b3 = btree.Btree.new(bo, t)
+        l = [btree.Item(1, "foo")]
         b3.add(l)
 
         t.commit()
