@@ -51,6 +51,21 @@ func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value T
 	return r, err
 }
 
+func (b3 *btreeWithTransaction[TK, TV]) AddItem(ctx context.Context, item *Item[TK, TV]) (bool, error) {
+	if !b3.transaction.HasBegun() {
+		return false, errTransHasNotBegunMsg
+	}
+	if b3.transaction.GetMode() != sop.ForWriting {
+		b3.transaction.Rollback(ctx, nil)
+		return false, fmt.Errorf("can't add item, transaction is not for writing")
+	}
+	r, err := b3.BtreeInterface.AddItem(ctx, item)
+	if err != nil {
+		b3.transaction.Rollback(ctx, err)
+	}
+	return r, err
+}
+
 // AddIfNotExist adds an item if there is no item matching the key yet.
 // Otherwise, it will do nothing and return false, for not adding the item.
 // This is useful for cases one wants to add an item without creating a duplicate entry.

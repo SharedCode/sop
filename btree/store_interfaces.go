@@ -10,6 +10,11 @@ import (
 type BtreeInterface[TK Ordered, TV any] interface {
 	// Add adds an item to the b-tree and does not check for duplicates.
 	Add(ctx context.Context, key TK, value TV) (bool, error)
+
+	// AddItem adds an item to the b-tree and does not check for duplicates.
+	// This add method is used both internally in the B-tree & externally, allowing client to supply the item ID.
+	AddItem(ctx context.Context, item *Item[TK, TV]) (bool, error)
+
 	// AddIfNotExist adds an item if there is no item matching the key yet.
 	// Otherwise, it will do nothing and return false, for not adding the item.
 	// This is useful for cases one wants to add an item without creating a duplicate entry.
