@@ -77,3 +77,23 @@ class TestBtree(unittest.TestCase):
 
         t.commit()
         print("test open")
+
+    def test_if_not_exists(self):
+        to = transaction.TransationOptions(
+            transaction.TransactionMode.ForWriting.value,
+            5,
+            transaction.MIN_HASH_MOD_VALUE,
+            stores_folders,
+            ec,
+        )
+
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("barstoreec", True, t)
+        l = [btree.Item(1, "foo")]
+        if b3.add_if_not_exists(l):
+            print("addIfNotExists should have failed.")
+
+        t.commit()
+        print("test add_if_not_exists")

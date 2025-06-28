@@ -13,7 +13,7 @@ TV = TypeVar("TV")
 
 from datetime import timedelta
 
-from enum import Enum
+from enum import Enum, auto
 
 
 class ValueDataSize(Enum):
@@ -100,6 +100,26 @@ class ManageBtreePayload(Generic[TK, TV]):
     items: Item[TK, TV]
 
 
+class BtreeAction(Enum):
+    NewBtree = auto()
+    OpenBtree = auto()
+    Add = auto()
+    AddIfNotExist = auto()
+    Update = auto()
+    Upsert = auto()
+    Remove = auto()
+    Find = auto()
+    FindWithID = auto()
+    GetItems = auto()
+    GetValues = auto()
+    GetKeys = auto()
+    First = auto()
+    Last = auto()
+    IsUnique = auto()
+    Count = auto()
+    GetStoreInfo = auto()
+
+
 class Btree(Generic[TK, TV]):
     id: uuid.uuid4
 
@@ -134,7 +154,9 @@ class Btree(Generic[TK, TV]):
         options.transaction_id = str(trans.transaction_id)
         options.is_primitive_key = is_primitive_key
 
-        res = call_go.manage_btree(1, json.dumps(asdict(options)), "")
+        res = call_go.manage_btree(
+            BtreeAction.NewBtree.value, json.dumps(asdict(options)), ""
+        )
 
         if res == None:
             raise BtreeError("unable to create a Btree in SOP")
@@ -153,7 +175,9 @@ class Btree(Generic[TK, TV]):
         options: BtreeOptions = BtreeOptions(name=name)
         options.transaction_id = str(trans.transaction_id)
         options.is_primitive_key = is_primitive_key
-        res = call_go.manage_btree(2, json.dumps(asdict(options)), "")
+        res = call_go.manage_btree(
+            BtreeAction.OpenBtree.value, json.dumps(asdict(options)), ""
+        )
 
         if res == None:
             raise BtreeError("unable to open a Btree in SOP")
@@ -174,7 +198,9 @@ class Btree(Generic[TK, TV]):
         print(f"items: {items}")
         payload: ManageBtreePayload = ManageBtreePayload(items=items)
         res = call_go.manage_btree(
-            3, json.dumps(asdict(metadata)), json.dumps(asdict(payload))
+            BtreeAction.Add.value,
+            json.dumps(asdict(metadata)),
+            json.dumps(asdict(payload)),
         )
         if res == None:
             raise BtreeError("unable to add item to a Btree in SOP")
@@ -186,16 +212,34 @@ class Btree(Generic[TK, TV]):
 
         raise BtreeError(res)
 
-    def add_if_not_exists(self, items: list[Item[TK, TV]]) -> bool:
+    def add_if_not_exists(self, items: Item[TK, TV]) -> bool:
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
+        )
+        metadata.is_primitive_key = self.is_primitive_key
+        payload: ManageBtreePayload = ManageBtreePayload(items=items)
+        res = call_go.manage_btree(
+            BtreeAction.AddIfNotExist.value,
+            json.dumps(asdict(metadata)),
+            json.dumps(asdict(payload)),
+        )
+        if res == None:
+            raise BtreeError("unable to add_if_not_exist item to a Btree in SOP")
+
+        if res.lower() == "true":
+            return True
+        if res.lower() == "false":
+            return False
+
+        raise BtreeError(res)
+
+    def update(self, items: Item[TK, TV]) -> bool:
         return False
 
-    def update(self, items: list[Item[TK, TV]]) -> bool:
+    def upsert(self, items: Item[TK, TV]) -> bool:
         return False
 
-    def upsert(self, items: list[Item[TK, TV]]) -> bool:
-        return False
-
-    def remove(self, keys: list[TK]) -> bool:
+    def remove(self, keys: TK) -> bool:
         return False
 
     def get_items(
