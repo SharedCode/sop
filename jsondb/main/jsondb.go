@@ -10,8 +10,8 @@ import (
 	"time"
 	"unsafe"
 
-	log "log/slog"
 	"github.com/google/uuid"
+	log "log/slog"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"

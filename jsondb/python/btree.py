@@ -110,8 +110,8 @@ class Btree(Generic[TK, TV]):
     @classmethod
     def new(
         cls: Type["Btree[TK,TV]"],
-        is_primitive_key: bool,
         options: BtreeOptions,
+        is_primitive_key: bool,
         trans: Transaction,
     ) -> "Btree[TK,TV]":
         """
