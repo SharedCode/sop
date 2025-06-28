@@ -10,7 +10,7 @@ from dataclasses import dataclass, asdict
 
 stores_folders = ("/Users/grecinto/sop_data/disk1", "/Users/grecinto/sop_data/disk2")
 ec = {
-    "barstoreec": transaction.ErasureCodingConfig(
+    "": transaction.ErasureCodingConfig(
         2,
         1,
         (
@@ -24,6 +24,11 @@ ec = {
 
 # Run unit tests in cmdline:
 # python3 -m unittest -v
+
+
+@dataclass
+class pKey:
+    key: str
 
 
 class TestBtree(unittest.TestCase):
@@ -51,8 +56,9 @@ class TestBtree(unittest.TestCase):
         bo.set_value_data_size(btree.ValueDataSize.Small)
 
         b3 = btree.Btree.new(bo, True, t)
-        # l = (btree.Item({"k":1,"k2":"l"}, {"v":1,"v2":"l"}))
-        l = [btree.Item(1, "foo")]
+        l = [
+            btree.Item(1, "foo"),
+        ]
         b3.add(l)
 
         t.commit()
@@ -71,14 +77,16 @@ class TestBtree(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("barstoreec", True, t)
-        l = [btree.Item(1, "foo")]
+        l = [
+            btree.Item(1, "foo"),
+        ]
         if b3.add(l):
             print("add should have failed.")
 
         t.commit()
         print("test open")
 
-    def test_if_not_exists(self):
+    def test_add_if_not_exists(self):
         to = transaction.TransationOptions(
             transaction.TransactionMode.ForWriting.value,
             5,
@@ -91,9 +99,39 @@ class TestBtree(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("barstoreec", True, t)
-        l = [btree.Item(1, "foo")]
+        l = [
+            btree.Item(1, "foo"),
+        ]
         if b3.add_if_not_exists(l):
             print("addIfNotExists should have failed.")
+
+        t.commit()
+        print("test add_if_not_exists")
+
+    def test_add_if_not_exists_mapkey(self):
+        to = transaction.TransationOptions(
+            transaction.TransactionMode.ForWriting.value,
+            5,
+            transaction.MIN_HASH_MOD_VALUE,
+            stores_folders,
+            ec,
+        )
+
+        t = transaction.Transaction(to)
+        t.begin()
+
+        cache = btree.CacheConfig()
+        bo = btree.BtreeOptions("barstoreec_mk", True, cache_config=cache)
+        bo.set_value_data_size(btree.ValueDataSize.Small)
+
+        b3 = btree.Btree.new(bo, False, t)
+
+        pk = pKey("foo")
+        l = [
+            btree.Item(pk, "foo"),
+        ]
+        if b3.add_if_not_exists(l) == False:
+            print("addIfNotExistsMapkey should fail.")
 
         t.commit()
         print("test add_if_not_exists")
