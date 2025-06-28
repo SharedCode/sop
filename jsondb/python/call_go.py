@@ -22,6 +22,7 @@ except OSError as e:
 # Call the 'hello' function (no arguments, no return value)
 print("Calling Go's open_redis_connection() function:")
 _open_redis_conn = lib.open_redis_connection
+_open_redis_conn = lib.open_redis_connection
 
 # Call the 'open+_redis_connection' function with arguments and set argument/return types
 _open_redis_conn.argtypes = [

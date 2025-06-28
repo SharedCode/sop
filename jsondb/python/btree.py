@@ -101,6 +101,7 @@ class ManageBtreePayload(Generic[TK, TV]):
 
 
 class Btree(Generic[TK, TV]):
+    id: uuid.uuid4
 
     def __init__(self, id: uuid.uuid4, is_primitive_key: bool):
         self.id = id
@@ -117,6 +118,18 @@ class Btree(Generic[TK, TV]):
         Create a new B-tree in the backend storage with the options specified then return an instance
         of Python Btree (facade) that can let caller code to manage the items.
         """
+
+        options.transaction_id = str(trans.transaction_id)
+
+        res = call_go.manage_btree(1, json.dumps(asdict(options)), "")
+
+        if res == None:
+            raise TransactionError("unable to create a Btree object in SOP")
+        try:
+            b3id = uuid.UUID(res)
+        except:
+            # if res can't be converted to UUID, it is expected to be an error msg from SOP.
+            raise TransactionError(res)
 
         options.transaction_id = str(trans.transaction_id)
         options.is_primitive_key = is_primitive_key

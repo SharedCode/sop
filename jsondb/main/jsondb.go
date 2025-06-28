@@ -11,13 +11,13 @@ import (
 	"unsafe"
 
 	log "log/slog"
+	"github.com/google/uuid"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
 	"github.com/SharedCode/sop/in_red_fs"
 	"github.com/SharedCode/sop/jsondb"
 	"github.com/SharedCode/sop/redis"
-	"github.com/google/uuid"
 )
 
 //export open_redis_connection
