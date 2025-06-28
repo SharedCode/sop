@@ -248,163 +248,15 @@ func manage_btree(action C.int, payload *C.char, payload2 *C.char) *C.char {
 
 	switch int(action) {
 	case NewBtree:
-		var b3o BtreeOptions
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &b3o); err != nil {
-			// Rare for an error to occur, but do return an errMsg if it happens.
-			errMsg := fmt.Sprintf("error Unmarshal BtreeOptions, details: %v", err)
-			return C.CString(errMsg)
-		}
-		log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
-		b3id := sop.NewUUID()
-		t, ok := transactionLookup[sop.UUID(b3o.TransactionID)]
-		if !ok {
-			errMsg := fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String())
-			return C.CString(errMsg)
-		}
-		so := convertTo(&b3o)
-
-		if b3o.IsPrimitiveKey {
-			b3, err := jsondb.NewJsonBtree(ctx, *so, t)
-			if err != nil {
-				errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
-				return C.CString(errMsg)
-			}
-			btreeLookup[b3id] = b3
-		} else {
-			b3, err := jsondb.NewJsonMapKeyBtree(ctx, *so, t, b3o.CELexpression)
-			if err != nil {
-				errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
-				return C.CString(errMsg)
-			}
-			btreeLookupMapKey[b3id] = b3
-		}
-		// Return the Btree ID if succeeded.
-		return C.CString(b3id.String())
+		return newBtree(ctx, ps)
 	case OpenBtree:
-		var b3o BtreeOptions
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &b3o); err != nil {
-			// Rare for an error to occur, but do return an errMsg if it happens.
-			errMsg := fmt.Sprintf("error Unmarshal BtreeOptions, details: %v", err)
-			return C.CString(errMsg)
-		}
-		log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
-		b3id := sop.NewUUID()
-		t, ok := transactionLookup[sop.UUID(b3o.TransactionID)]
-		if !ok {
-			errMsg := fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String())
-			return C.CString(errMsg)
-		}
-		so := convertTo(&b3o)
-
-		if b3o.IsPrimitiveKey {
-			b3, err := jsondb.OpenJsonBtree(ctx, so.Name, t)
-			if err != nil {
-				errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
-				return C.CString(errMsg)
-			}
-			btreeLookup[b3id] = b3
-		} else {
-			b3, err := jsondb.OpenJsonMapKeyBtree(ctx, so.Name, t)
-			if err != nil {
-				errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
-				return C.CString(errMsg)
-			}
-			btreeLookupMapKey[b3id] = b3
-		}
-		// Return the Btree ID if succeeded.
-		return C.CString(b3id.String())
+		return openBtree(ctx, ps)
 	case Add:
-		var p ManageBtreeMetaData
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-			errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-			return C.CString(errMsg)
-		}
-
-		if p.IsPrimitiveKey {
-			b3, ok := btreeLookup[sop.UUID(p.BtreeID)]
-			if !ok {
-				errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-				return C.CString(errMsg)
-			}
-
-			ps2 := C.GoString(payload2)
-			var payload ManageBtreePayload
-			if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
-				errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
-				return C.CString(errMsg)
-			}
-			ok, err := b3.Add(ctx, payload.Items)
-			if err != nil {
-				errMsg := fmt.Sprintf("error add of item to B-tree (id=%v), details: %v", p.BtreeID, err)
-				return C.CString(errMsg)
-			}
-			return C.CString(fmt.Sprintf("%v", ok))
-		} else {
-			b3, ok := btreeLookupMapKey[sop.UUID(p.BtreeID)]
-			if !ok {
-				errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-				return C.CString(errMsg)
-			}
-
-			ps2 := C.GoString(payload2)
-			var payload ManageBtreePayloadMapKey
-			if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
-				errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
-				return C.CString(errMsg)
-			}
-			ok, err := b3.Add(ctx, payload.Items)
-			if err != nil {
-				errMsg := fmt.Sprintf("error add of item to B-tree (id=%v), details: %v", p.BtreeID, err)
-				return C.CString(errMsg)
-			}
-			return C.CString(fmt.Sprintf("%v", ok))
-		}
+		return add(ctx, ps, payload2)
 	case AddIfNotExist:
-		var p ManageBtreeMetaData
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-			errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-			return C.CString(errMsg)
-		}
+		return addIfNotExists(ctx, ps, payload2)
+	case Update:
 
-		if p.IsPrimitiveKey {
-			b3, ok := btreeLookup[sop.UUID(p.BtreeID)]
-			if !ok {
-				errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-				return C.CString(errMsg)
-			}
-
-			ps2 := C.GoString(payload2)
-			var payload ManageBtreePayload
-			if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
-				errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
-				return C.CString(errMsg)
-			}
-			ok, err := b3.AddIfNotExist(ctx, payload.Items)
-			if err != nil {
-				errMsg := fmt.Sprintf("error addIfNotExist of item to B-tree (id=%v), details: %v", p.BtreeID, err)
-				return C.CString(errMsg)
-			}
-			return C.CString(fmt.Sprintf("%v", ok))
-		} else {
-			b3, ok := btreeLookupMapKey[sop.UUID(p.BtreeID)]
-			if !ok {
-				errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-				return C.CString(errMsg)
-			}
-
-			ps2 := C.GoString(payload2)
-			var payload ManageBtreePayloadMapKey
-			if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
-				errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
-				return C.CString(errMsg)
-			}
-			ok, err := b3.AddIfNotExist(ctx, payload.Items)
-			if err != nil {
-				errMsg := fmt.Sprintf("error addIfNotExist of item to B-tree (id=%v), details: %v", p.BtreeID, err)
-				return C.CString(errMsg)
-			}
-			return C.CString(fmt.Sprintf("%v", ok))
-		}
 	}
 
 	return nil
@@ -414,6 +266,172 @@ func manage_btree(action C.int, payload *C.char, payload2 *C.char) *C.char {
 func free_string(cString *C.char) {
 	if cString != nil {
 		C.free(unsafe.Pointer(cString))
+	}
+}
+
+func newBtree(ctx context.Context, ps string) *C.char {
+	var b3o BtreeOptions
+	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &b3o); err != nil {
+		// Rare for an error to occur, but do return an errMsg if it happens.
+		errMsg := fmt.Sprintf("error Unmarshal BtreeOptions, details: %v", err)
+		return C.CString(errMsg)
+	}
+	log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
+	b3id := sop.NewUUID()
+	t, ok := transactionLookup[sop.UUID(b3o.TransactionID)]
+	if !ok {
+		errMsg := fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String())
+		return C.CString(errMsg)
+	}
+	so := convertTo(&b3o)
+
+	if b3o.IsPrimitiveKey {
+		b3, err := jsondb.NewJsonBtree(ctx, *so, t)
+		if err != nil {
+			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
+			return C.CString(errMsg)
+		}
+		btreeLookup[b3id] = b3
+	} else {
+		b3, err := jsondb.NewJsonMapKeyBtree(ctx, *so, t, b3o.CELexpression)
+		if err != nil {
+			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
+			return C.CString(errMsg)
+		}
+		btreeLookupMapKey[b3id] = b3
+	}
+	// Return the Btree ID if succeeded.
+	return C.CString(b3id.String())
+}
+
+func openBtree(ctx context.Context, ps string) *C.char {
+	var b3o BtreeOptions
+	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &b3o); err != nil {
+		// Rare for an error to occur, but do return an errMsg if it happens.
+		errMsg := fmt.Sprintf("error Unmarshal BtreeOptions, details: %v", err)
+		return C.CString(errMsg)
+	}
+	log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
+	b3id := sop.NewUUID()
+	t, ok := transactionLookup[sop.UUID(b3o.TransactionID)]
+	if !ok {
+		errMsg := fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String())
+		return C.CString(errMsg)
+	}
+	so := convertTo(&b3o)
+
+	if b3o.IsPrimitiveKey {
+		b3, err := jsondb.OpenJsonBtree(ctx, so.Name, t)
+		if err != nil {
+			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
+			return C.CString(errMsg)
+		}
+		btreeLookup[b3id] = b3
+	} else {
+		b3, err := jsondb.OpenJsonMapKeyBtree(ctx, so.Name, t)
+		if err != nil {
+			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
+			return C.CString(errMsg)
+		}
+		btreeLookupMapKey[b3id] = b3
+	}
+	// Return the Btree ID if succeeded.
+	return C.CString(b3id.String())
+}
+
+func add(ctx context.Context, ps string, payload2 *C.char) *C.char {
+	var p ManageBtreeMetaData
+	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
+		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
+		return C.CString(errMsg)
+	}
+
+	if p.IsPrimitiveKey {
+		b3, ok := btreeLookup[sop.UUID(p.BtreeID)]
+		if !ok {
+			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		ps2 := C.GoString(payload2)
+		var payload ManageBtreePayload
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
+			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
+			return C.CString(errMsg)
+		}
+		ok, err := b3.Add(ctx, payload.Items)
+		if err != nil {
+			errMsg := fmt.Sprintf("error add of item to B-tree (id=%v), details: %v", p.BtreeID, err)
+			return C.CString(errMsg)
+		}
+		return C.CString(fmt.Sprintf("%v", ok))
+	} else {
+		b3, ok := btreeLookupMapKey[sop.UUID(p.BtreeID)]
+		if !ok {
+			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		ps2 := C.GoString(payload2)
+		var payload ManageBtreePayloadMapKey
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
+			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
+			return C.CString(errMsg)
+		}
+		ok, err := b3.Add(ctx, payload.Items)
+		if err != nil {
+			errMsg := fmt.Sprintf("error add of item to B-tree (id=%v), details: %v", p.BtreeID, err)
+			return C.CString(errMsg)
+		}
+		return C.CString(fmt.Sprintf("%v", ok))
+	}
+}
+
+func addIfNotExists(ctx context.Context, ps string, payload2 *C.char) *C.char {
+	var p ManageBtreeMetaData
+	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
+		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
+		return C.CString(errMsg)
+	}
+
+	if p.IsPrimitiveKey {
+		b3, ok := btreeLookup[sop.UUID(p.BtreeID)]
+		if !ok {
+			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		ps2 := C.GoString(payload2)
+		var payload ManageBtreePayload
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
+			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
+			return C.CString(errMsg)
+		}
+		ok, err := b3.AddIfNotExist(ctx, payload.Items)
+		if err != nil {
+			errMsg := fmt.Sprintf("error addIfNotExist of item to B-tree (id=%v), details: %v", p.BtreeID, err)
+			return C.CString(errMsg)
+		}
+		return C.CString(fmt.Sprintf("%v", ok))
+	} else {
+		b3, ok := btreeLookupMapKey[sop.UUID(p.BtreeID)]
+		if !ok {
+			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		ps2 := C.GoString(payload2)
+		var payload ManageBtreePayloadMapKey
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
+			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
+			return C.CString(errMsg)
+		}
+		ok, err := b3.AddIfNotExist(ctx, payload.Items)
+		if err != nil {
+			errMsg := fmt.Sprintf("error addIfNotExist of item to B-tree (id=%v), details: %v", p.BtreeID, err)
+			return C.CString(errMsg)
+		}
+		return C.CString(fmt.Sprintf("%v", ok))
 	}
 }
 

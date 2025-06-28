@@ -194,8 +194,6 @@ class Btree(Generic[TK, TV]):
             is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
         )
         metadata.is_primitive_key = self.is_primitive_key
-        print(f"payload: {metadata}")
-        print(f"items: {items}")
         payload: ManageBtreePayload = ManageBtreePayload(items=items)
         res = call_go.manage_btree(
             BtreeAction.Add.value,
