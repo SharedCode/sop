@@ -11,13 +11,20 @@ import (
 
 // JSON DB that can take in any JSON data marshalled as map[string]any on Key & Value pair.
 type JsonDB struct {
-	btree.BtreeInterface[map[string]any, map[string]any]
+	btree.BtreeInterface[map[string]any, any]
 	evaluator    *cel.Evaluator
 	compareError error
 }
 
+func (j *JsonDB) proxyComparer(mapX map[string]any, mapY map[string]any) int {
+	if j.evaluator != nil {
+		return j.celComparer(mapX, mapY)
+	}
+	return defaultComparer(mapX, mapY)
+}
+
 // Comparer for map[string]any key type using CEL expression.
-func (j *JsonDB) CELComparer(mapX map[string]any, mapY map[string]any) int {
+func (j *JsonDB) celComparer(mapX map[string]any, mapY map[string]any) int {
 	r, err := j.evaluator.Evaluate(mapX, mapY)
 	if err != nil {
 		j.compareError = err
@@ -26,9 +33,9 @@ func (j *JsonDB) CELComparer(mapX map[string]any, mapY map[string]any) int {
 }
 
 // Default Comparer of Items can compare two maps with no nested map.
-func DefaultComparer(a map[string]any, b map[string]any) int {
-	for k, v := range a {
-		i := btree.Compare(v, b[k])
+func defaultComparer(mapX map[string]any, mapY map[string]any) int {
+	for k, v := range mapX {
+		i := btree.Compare(v, mapY[k])
 		if i != 0 {
 			return i
 		}
@@ -38,22 +45,22 @@ func DefaultComparer(a map[string]any, b map[string]any) int {
 
 // Instantiates a Btree for schema-less usage. I.e. - JSONy type of data marshaled by Go as map[string]any
 // data type for key & value pairs.
-// And using user provided CEL expression as comparer.
+// And using user provided CEL expression as comparer. If not provided, will use default comparer that compares each field of the key.
 func NewBtree(ctx context.Context, so sop.StoreOptions, t sop.Transaction, celExpressionComparer string) (*JsonDB, error) {
 	var comparer btree.ComparerFunc[map[string]any]
 	j := JsonDB{}
 	if celExpressionComparer == "" {
-		comparer = DefaultComparer
+		comparer = defaultComparer
 	} else {
 		e, err := cel.NewEvaluator("comparer", celExpressionComparer)
 		if err != nil {
 			return nil, err
 		}
 		j.evaluator = e
-		comparer = j.CELComparer
+		comparer = j.celComparer
 	}
 
-	b3, err := in_red_fs.NewBtreeWithReplication[map[string]any, map[string]any](ctx, so, t, comparer)
+	b3, err := in_red_fs.NewBtreeWithReplication[map[string]any, any](ctx, so, t, comparer)
 	if err != nil {
 		return nil, err
 	}
@@ -62,25 +69,26 @@ func NewBtree(ctx context.Context, so sop.StoreOptions, t sop.Transaction, celEx
 	return &j, nil
 }
 
-// Open an existing B-tree & use its StoreInfo.Description as the comparer's CEL expression.
-func OpenBtree(ctx context.Context, name string, t sop.Transaction, celExpressionComparer string) (*JsonDB, error) {
-	var comparer btree.ComparerFunc[map[string]any]
+// Open an existing B-tree w/ option to using user provided CEL expression as comparer.
+// If CEL expression is not provided, will use default comparer that compares each field of the key.
+func OpenBtree(ctx context.Context, name string, t sop.Transaction) (*JsonDB, error) {
 	j := JsonDB{}
-	if celExpressionComparer == "" {
-		comparer = DefaultComparer
-	} else {
-		e, err := cel.NewEvaluator("comparer", celExpressionComparer)
+
+	b3, err := in_red_fs.OpenBtreeWithReplication[map[string]any, any](ctx, name, t, j.proxyComparer)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resurrect the CEL expression evaluator if CEL expression was originally provided when creating B-tree.
+	ce := b3.GetStoreInfo().CELexpression
+	if ce != "" {
+		e, err := cel.NewEvaluator("comparer", ce)
 		if err != nil {
 			return nil, err
 		}
 		j.evaluator = e
-		comparer = j.CELComparer
 	}
 
-	b3, err := in_red_fs.OpenBtree[map[string]any, map[string]any](ctx, name, t, comparer)
-	if err != nil {
-		return nil, err
-	}
 	j.BtreeInterface = b3
 	return &j, nil
 }
