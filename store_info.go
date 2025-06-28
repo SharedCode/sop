@@ -46,6 +46,9 @@ type StoreInfo struct {
 	// Redis cache specification for this store's objects(registry, nodes, item value part).
 	// Defaults to the global specification and can be overriden for each store.
 	CacheConfig StoreCacheConfig `json:"cache_config"`
+
+	// CEL Expression used as comparer for comparing Keys.
+	CELexpression string `json:"cel_expression"`
 }
 
 // Store Cache config specificaiton.

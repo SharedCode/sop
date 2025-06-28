@@ -79,11 +79,11 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
-extern void free_string(char* cString);
 extern char* open_redis_connection(char* host, int port, char* password);
 extern char* close_redis_connection();
 extern char* manage_transaction(int action, char* payload);
 extern char* manage_btree(int action, char* payload);
+extern void free_string(char* cString);
 
 #ifdef __cplusplus
 }

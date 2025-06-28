@@ -35,8 +35,6 @@ class TestBtree(unittest.TestCase):
         Redis.close_connection()
 
     def test_new_btree(self):
-        # ro = RedisOptions()
-        # open_redis_connection()
         to = transaction.TransationOptions(
             transaction.TransactionMode.ForWriting.value,
             5,
@@ -49,9 +47,9 @@ class TestBtree(unittest.TestCase):
         t.begin()
 
         cache = btree.CacheConfig()
-        bo = btree.BtreeOptions(
-            "barstoreec", True, 8, "", btree.ValueDataSize.Small, cache
-        )
+        bo = btree.BtreeOptions("barstoreec", True, cache_config=cache)
+        bo.set_value_data_size(btree.ValueDataSize.Small)
+
         b3 = btree.Btree.new(bo, t)
         l = [btree.Item(1, "foo")]
         b3.add(l)
