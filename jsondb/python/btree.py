@@ -1,9 +1,11 @@
+import json
 import uuid
+import call_go
 
 from typing import TypeVar, Generic
 from dataclasses import dataclass, asdict
 
-from transaction import Transaction
+from transaction import Transaction, TransactionError
 
 # Define TypeVars 'TK' & 'TV' to represent Key & Value generic types.
 TK = TypeVar("TK")
@@ -53,10 +55,24 @@ class BtreeOptions:
 
     name: str
     is_unique: bool
-    slot_length: int
-    description: str
-    value_size: ValueDataSize
-    cache_config: CacheConfig
+    slot_length: int = 500
+    description: str = ""
+    is_value_data_in_node_segment: bool = True
+    is_value_data_actively_persisted: bool = False
+    is_value_data_globally_cached: bool = False
+    cel_expressions: str = ""
+    transaction_id: str = str(uuid.UUID(int=0))
+    cache_config: CacheConfig = None
+
+    def set_value_data_size(self, s: ValueDataSize):
+        if s == ValueDataSize.Medium:
+            self.is_value_data_actively_persisted = False
+            self.is_value_data_globally_cached = True
+            self.is_value_data_in_node_segment = False
+        if s == ValueDataSize.Big:
+            self.is_value_data_actively_persisted = True
+            self.is_value_data_globally_cached = False
+            self.is_value_data_in_node_segment = False
 
 
 @dataclass
@@ -67,6 +83,7 @@ class Item(Generic[TK, TV]):
 
 
 class Btree(Generic[TK, TV]):
+    id: uuid.uuid4
 
     # @staticmethod
     # def comparerBuilder()
@@ -75,13 +92,26 @@ class Btree(Generic[TK, TV]):
     def new(options: BtreeOptions, trans: Transaction):
         """
         Create a new B-tree in the backend storage with the options specified then return an instance
-        of Btree that can let caller code to manage the items.
+        of Python Btree (facade) that can let caller code to manage the items.
         """
 
+        options.transaction_id = str(trans.transaction_id)
+
+        res = call_go.manage_btree(1, json.dumps(asdict(options)))
+
+        if res == None:
+            raise TransactionError("unable to create a Btree object in SOP")
+        try:
+            b3id = uuid.UUID(res)
+        except:
+            # if res can't be converted to UUID, it is expected to be an error msg from SOP.
+            raise TransactionError(res)
+
         b3 = Btree()
+        b3.id = b3id
         return b3
 
-    @classmethod
+    @staticmethod
     def open(name: str, trans: Transaction):
         b3 = Btree()
         return b3

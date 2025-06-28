@@ -2,8 +2,10 @@ package btree
 
 import (
 	"cmp"
+	"fmt"
 
 	"github.com/SharedCode/sop"
+	"github.com/google/uuid"
 )
 
 // Comparer interface specifies the Compare function.
@@ -82,6 +84,10 @@ func Compare[T Ordered](x, y T) int {
 		x1, _ := anyX.(string)
 		y1, _ := anyY.(string)
 		return cmp.Compare(x1, y1)
+	case uuid.UUID:
+		x1, _ := anyX.(sop.UUID)
+		y1, _ := anyY.(sop.UUID)
+		return x1.Compare(y1)
 	case sop.UUID:
 		x1, _ := anyX.(sop.UUID)
 		y1, _ := anyY.(sop.UUID)
@@ -96,7 +102,13 @@ func Compare[T Ordered](x, y T) int {
 		if anyY == nil {
 			return 1
 		}
-		cX, _ := anyX.(Comparer)
-		return cX.Compare(y)
+		cX, ok := anyX.(Comparer)
+		if ok {
+			return cX.Compare(y)
+		}
+		// Last resort, compare their string values.
+		s1 := fmt.Sprintf("%v", anyX)
+		s2 := fmt.Sprintf("%v", anyY)
+		return cmp.Compare(s1, s2)
 	}
 }
