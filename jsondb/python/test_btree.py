@@ -50,9 +50,29 @@ class TestBtree(unittest.TestCase):
         bo = btree.BtreeOptions("barstoreec", True, cache_config=cache)
         bo.set_value_data_size(btree.ValueDataSize.Small)
 
-        b3 = btree.Btree.new(bo, t)
+        b3 = btree.Btree.new(True, bo, t)
+        # l = (btree.Item({"k":1,"k2":"l"}, {"v":1,"v2":"l"}))
         l = [btree.Item(1, "foo")]
         b3.add(l)
 
         t.commit()
-        print("test")
+        print("test new")
+
+    # def test_open_btree(self):
+    #     to = transaction.TransationOptions(
+    #         transaction.TransactionMode.ForWriting.value,
+    #         5,
+    #         transaction.MIN_HASH_MOD_VALUE,
+    #         stores_folders,
+    #         ec,
+    #     )
+
+    #     t = transaction.Transaction(to)
+    #     t.begin()
+
+    #     b3 = btree.Btree.open("barstoreec", t)
+    #     l = [btree.Item(1, "foo")]
+    #     b3.add(l)
+
+    #     t.commit()
+    #     print("test open")

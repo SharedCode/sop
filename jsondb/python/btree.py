@@ -2,7 +2,7 @@ import json
 import uuid
 import call_go
 
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, Type
 from dataclasses import dataclass, asdict
 
 from transaction import Transaction, TransactionError
@@ -54,7 +54,7 @@ class BtreeOptions:
     """
 
     name: str
-    is_unique: bool
+    is_unique: bool = False
     slot_length: int = 500
     description: str = ""
     is_value_data_in_node_segment: bool = True
@@ -63,6 +63,7 @@ class BtreeOptions:
     cel_expressions: str = ""
     transaction_id: str = str(uuid.UUID(int=0))
     cache_config: CacheConfig = None
+    is_primitive_key: bool = True
 
     def set_value_data_size(self, s: ValueDataSize):
         if s == ValueDataSize.Medium:
@@ -79,45 +80,98 @@ class BtreeOptions:
 class Item(Generic[TK, TV]):
     key: TK
     value: TV
-    id: uuid.uuid4 = uuid.UUID(int=0)
+    id: str = str(uuid.UUID(int=0))
+
+
+class BtreeError(TransactionError):
+    """Exception for Btree-related errors, 'is derived from TransactionError."""
+
+    pass
+
+
+@dataclass
+class ManageBtreeMetaData(Generic[TK, TV]):
+    is_primitive_key: bool
+    btree_id: str
+
+
+@dataclass
+class ManageBtreePayload(Generic[TK, TV]):
+    items: Item[TK, TV]
 
 
 class Btree(Generic[TK, TV]):
-    id: uuid.uuid4
 
-    # @staticmethod
-    # def comparerBuilder()
+    def __init__(self, id: uuid.uuid4, is_primitive_key: bool):
+        self.id = id
+        self.is_primitive_key = is_primitive_key
 
-    @staticmethod
-    def new(options: BtreeOptions, trans: Transaction):
+    @classmethod
+    def new(
+        cls: Type["Btree[TK,TV]"],
+        is_primitive_key: bool,
+        options: BtreeOptions,
+        trans: Transaction,
+    ) -> "Btree[TK,TV]":
         """
         Create a new B-tree in the backend storage with the options specified then return an instance
         of Python Btree (facade) that can let caller code to manage the items.
         """
 
         options.transaction_id = str(trans.transaction_id)
+        options.is_primitive_key = is_primitive_key
 
-        res = call_go.manage_btree(1, json.dumps(asdict(options)))
+        res = call_go.manage_btree(1, json.dumps(asdict(options)), "")
 
         if res == None:
-            raise TransactionError("unable to create a Btree object in SOP")
+            raise BtreeError("unable to create a Btree in SOP")
         try:
             b3id = uuid.UUID(res)
         except:
             # if res can't be converted to UUID, it is expected to be an error msg from SOP.
-            raise TransactionError(res)
+            raise BtreeError(res)
 
-        b3 = Btree()
-        b3.id = b3id
-        return b3
+        return cls(b3id, is_primitive_key)
 
-    @staticmethod
-    def open(name: str, trans: Transaction):
-        b3 = Btree()
-        return b3
+    @classmethod
+    def open(
+        cls: Type["Btree[TK,TV]"], name: str, is_primitive_key: bool, trans: Transaction
+    ) -> "Btree[TK,TV]":
+        options: BtreeOptions = BtreeOptions(name=name)
+        options.transaction_id = str(trans.transaction_id)
+        options.is_primitive_key = is_primitive_key
+        res = call_go.manage_btree(2, json.dumps(asdict(options)), "")
 
-    def add(self, items: list[Item[TK, TV]]) -> bool:
-        return False
+        if res == None:
+            raise BtreeError("unable to open a Btree in SOP")
+        try:
+            b3id = uuid.UUID(res)
+        except:
+            # if res can't be converted to UUID, it is expected to be an error msg from SOP.
+            raise BtreeError(res)
+
+        return cls(b3id, is_primitive_key)
+
+    def add(self, items: Item[TK, TV]) -> bool:
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
+        )
+        metadata.is_primitive_key = self.is_primitive_key
+        print(f"payload: {metadata}")
+        print(f"items: {items}")
+        payload: ManageBtreePayload = ManageBtreePayload(items=items)
+        res = call_go.manage_btree(
+            3, json.dumps(asdict(metadata)), json.dumps(asdict(payload))
+        )
+        if res == None:
+            raise BtreeError("unable to add item to a Btree in SOP")
+
+        if res.lower() == "true":
+            return True
+        if res.lower() == "false":
+            return False
+
+        raise BtreeError(res)
 
     def add_if_not_exists(self, items: list[Item[TK, TV]]) -> bool:
         return False

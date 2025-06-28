@@ -51,6 +51,7 @@ _manage_btree = lib.manage_btree
 _manage_btree.argtypes = [
     ctypes.c_int,
     ctypes.c_char_p,
+    ctypes.c_char_p,
 ]  # Specify argument types
 _manage_btree.restype = ctypes.c_char_p  # Specify return type
 
@@ -102,12 +103,12 @@ def manage_transaction(action: int, payload: str) -> str:
     return s
 
 
-def manage_btree(action: int, payload: str) -> str:
+def manage_btree(action: int, payload: str, payload2: str) -> str:
     """
     Manage a SOP btree.
     """
 
-    res = _manage_btree(to_cint(action), to_cstring(payload))
+    res = _manage_btree(to_cint(action), to_cstring(payload), to_cstring(payload2))
     if res == None:
         return res
 
