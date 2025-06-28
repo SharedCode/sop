@@ -232,7 +232,25 @@ class Btree(Generic[TK, TV]):
         raise BtreeError(res)
 
     def update(self, items: Item[TK, TV]) -> bool:
-        return False
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
+        )
+        metadata.is_primitive_key = self.is_primitive_key
+        payload: ManageBtreePayload = ManageBtreePayload(items=items)
+        res = call_go.manage_btree(
+            BtreeAction.Update.value,
+            json.dumps(asdict(metadata)),
+            json.dumps(asdict(payload)),
+        )
+        if res == None:
+            raise BtreeError("unable to update item to a Btree in SOP")
+
+        if res.lower() == "true":
+            return True
+        if res.lower() == "false":
+            return False
+
+        raise BtreeError(res)
 
     def upsert(self, items: Item[TK, TV]) -> bool:
         return False

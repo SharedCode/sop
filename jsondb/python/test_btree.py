@@ -11,6 +11,7 @@ from dataclasses import dataclass, asdict
 
 stores_folders = ("/Users/grecinto/sop_data/disk1", "/Users/grecinto/sop_data/disk2")
 ec = {
+    # Erasure Config default entry(key="") will allow different B-tree(tables) to share same EC structure.
     "": transaction.ErasureCodingConfig(
         2,
         1,

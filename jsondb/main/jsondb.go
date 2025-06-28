@@ -252,11 +252,11 @@ func manage_btree(action C.int, payload *C.char, payload2 *C.char) *C.char {
 	case OpenBtree:
 		return openBtree(ctx, ps)
 	case Add:
-		return add(ctx, ps, payload2)
+		fallthrough
 	case AddIfNotExist:
-		return addIfNotExists(ctx, ps, payload2)
+		fallthrough
 	case Update:
-
+		return manage(ctx, int(action), ps, payload2)
 	}
 
 	return nil
@@ -339,7 +339,7 @@ func openBtree(ctx context.Context, ps string) *C.char {
 	return C.CString(b3id.String())
 }
 
-func add(ctx context.Context, ps string, payload2 *C.char) *C.char {
+func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.char {
 	var p ManageBtreeMetaData
 	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
 		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
@@ -359,9 +359,19 @@ func add(ctx context.Context, ps string, payload2 *C.char) *C.char {
 			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
 			return C.CString(errMsg)
 		}
-		ok, err := b3.Add(ctx, payload.Items)
+
+		var err error
+		switch(action) {
+		case Add:
+			ok, err = b3.Add(ctx, payload.Items)
+		case AddIfNotExist:
+			ok, err = b3.AddIfNotExist(ctx, payload.Items)
+		case Update:
+			ok, err = b3.Update(ctx, payload.Items)
+		}
+
 		if err != nil {
-			errMsg := fmt.Sprintf("error add of item to B-tree (id=%v), details: %v", p.BtreeID, err)
+			errMsg := fmt.Sprintf("error manage of item to B-tree (id=%v), details: %v", p.BtreeID, err)
 			return C.CString(errMsg)
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
@@ -378,57 +388,18 @@ func add(ctx context.Context, ps string, payload2 *C.char) *C.char {
 			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
 			return C.CString(errMsg)
 		}
-		ok, err := b3.Add(ctx, payload.Items)
+		var err error
+		switch(action) {
+		case Add:
+			ok, err = b3.Add(ctx, payload.Items)
+		case AddIfNotExist:
+			ok, err = b3.AddIfNotExist(ctx, payload.Items)
+		case Update:
+			ok, err = b3.Update(ctx, payload.Items)
+		}
+
 		if err != nil {
-			errMsg := fmt.Sprintf("error add of item to B-tree (id=%v), details: %v", p.BtreeID, err)
-			return C.CString(errMsg)
-		}
-		return C.CString(fmt.Sprintf("%v", ok))
-	}
-}
-
-func addIfNotExists(ctx context.Context, ps string, payload2 *C.char) *C.char {
-	var p ManageBtreeMetaData
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-		return C.CString(errMsg)
-	}
-
-	if p.IsPrimitiveKey {
-		b3, ok := btreeLookup[sop.UUID(p.BtreeID)]
-		if !ok {
-			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-			return C.CString(errMsg)
-		}
-
-		ps2 := C.GoString(payload2)
-		var payload ManageBtreePayload
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
-			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
-			return C.CString(errMsg)
-		}
-		ok, err := b3.AddIfNotExist(ctx, payload.Items)
-		if err != nil {
-			errMsg := fmt.Sprintf("error addIfNotExist of item to B-tree (id=%v), details: %v", p.BtreeID, err)
-			return C.CString(errMsg)
-		}
-		return C.CString(fmt.Sprintf("%v", ok))
-	} else {
-		b3, ok := btreeLookupMapKey[sop.UUID(p.BtreeID)]
-		if !ok {
-			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-			return C.CString(errMsg)
-		}
-
-		ps2 := C.GoString(payload2)
-		var payload ManageBtreePayloadMapKey
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
-			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
-			return C.CString(errMsg)
-		}
-		ok, err := b3.AddIfNotExist(ctx, payload.Items)
-		if err != nil {
-			errMsg := fmt.Sprintf("error addIfNotExist of item to B-tree (id=%v), details: %v", p.BtreeID, err)
+			errMsg := fmt.Sprintf("error manage of item to B-tree (id=%v), details: %v", p.BtreeID, err)
 			return C.CString(errMsg)
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
