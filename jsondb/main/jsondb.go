@@ -371,6 +371,8 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 			ok, err = b3.AddIfNotExist(ctx, payload.Items)
 		case Update:
 			ok, err = b3.Update(ctx, payload.Items)
+		case Upsert:
+			ok, err = b3.Upsert(ctx, payload.Items)
 		default:
 			errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (id=%v)", action, p.BtreeID)
 			return C.CString(errMsg)
@@ -402,6 +404,8 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 			ok, err = b3.AddIfNotExist(ctx, payload.Items)
 		case Update:
 			ok, err = b3.Update(ctx, payload.Items)
+		case Upsert:
+			ok, err = b3.Upsert(ctx, payload.Items)
 		default:
 			errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (id=%v)", action, p.BtreeID)
 			return C.CString(errMsg)
