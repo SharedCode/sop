@@ -255,11 +255,14 @@ func manage_btree(action C.int, payload *C.char, payload2 *C.char) *C.char {
 		fallthrough
 	case AddIfNotExist:
 		fallthrough
+	case Upsert:
+		fallthrough
 	case Update:
 		return manage(ctx, int(action), ps, payload2)
+	default:
+		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
+		return C.CString(errMsg)
 	}
-
-	return nil
 }
 
 //export free_string
