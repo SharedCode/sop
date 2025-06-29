@@ -190,52 +190,16 @@ class Btree(Generic[TK, TV]):
         return cls(b3id, is_primitive_key)
 
     def add(self, items: Item[TK, TV]) -> bool:
-        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
-            is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
-        )
-        metadata.is_primitive_key = self.is_primitive_key
-        payload: ManageBtreePayload = ManageBtreePayload(items=items)
-        res = call_go.manage_btree(
-            BtreeAction.Add.value,
-            json.dumps(asdict(metadata)),
-            json.dumps(asdict(payload)),
-        )
-        if res == None:
-            raise BtreeError("unable to add item to a Btree in SOP")
-
-        if res.lower() == "true":
-            return True
-        if res.lower() == "false":
-            return False
-
-        raise BtreeError(res)
+        return self._manage(BtreeAction.Add.value, items)
 
     def add_if_not_exists(self, items: Item[TK, TV]) -> bool:
-        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
-            is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
-        )
-        metadata.is_primitive_key = self.is_primitive_key
-        payload: ManageBtreePayload = ManageBtreePayload(items=items)
-        res = call_go.manage_btree(
-            BtreeAction.AddIfNotExist.value,
-            json.dumps(asdict(metadata)),
-            json.dumps(asdict(payload)),
-        )
-        if res == None:
-            raise BtreeError("unable to add_if_not_exist item to a Btree in SOP")
-
-        if res.lower() == "true":
-            return True
-        if res.lower() == "false":
-            return False
-
-        raise BtreeError(res)
+        return self._manage(BtreeAction.AddIfNotExist.value, items)
 
     def update(self, items: Item[TK, TV]) -> bool:
-        return self._manage(self, BtreeAction.Update.value, items)
+        return self._manage(BtreeAction.Update.value, items)
 
     def upsert(self, items: Item[TK, TV]) -> bool:
-        return self._manage(self, BtreeAction.Upsert.value, items)
+        return self._manage(BtreeAction.Upsert.value, items)
 
     def remove(self, keys: TK) -> bool:
         return False
