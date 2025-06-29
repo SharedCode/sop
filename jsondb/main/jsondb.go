@@ -361,13 +361,16 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 		}
 
 		var err error
-		switch(action) {
+		switch action {
 		case Add:
 			ok, err = b3.Add(ctx, payload.Items)
 		case AddIfNotExist:
 			ok, err = b3.AddIfNotExist(ctx, payload.Items)
 		case Update:
 			ok, err = b3.Update(ctx, payload.Items)
+		default:
+			errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (id=%v)", action, p.BtreeID)
+			return C.CString(errMsg)
 		}
 
 		if err != nil {
@@ -389,13 +392,16 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 			return C.CString(errMsg)
 		}
 		var err error
-		switch(action) {
+		switch action {
 		case Add:
 			ok, err = b3.Add(ctx, payload.Items)
 		case AddIfNotExist:
 			ok, err = b3.AddIfNotExist(ctx, payload.Items)
 		case Update:
 			ok, err = b3.Update(ctx, payload.Items)
+		default:
+			errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (id=%v)", action, p.BtreeID)
+			return C.CString(errMsg)
 		}
 
 		if err != nil {
