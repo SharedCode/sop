@@ -7,11 +7,13 @@ import "C"
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 	"unsafe"
 
-	"github.com/google/uuid"
 	log "log/slog"
+
+	"github.com/google/uuid"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
@@ -52,10 +54,12 @@ func close_redis_connection() *C.char {
 
 // Transaction lookup table.
 var transactionLookup map[sop.UUID]sop.Tuple[sop.Transaction, []sop.UUID] = make(map[sop.UUID]sop.Tuple[sop.Transaction, []sop.UUID])
+var transactionLookupLocker sync.Mutex
 
 // Btree lookup tables.
 var btreeLookup map[sop.UUID]*jsondb.JsonAnyKey = make(map[sop.UUID]*jsondb.JsonAnyKey)
 var btreeLookupMapKey map[sop.UUID]*jsondb.JsonMapKey = make(map[sop.UUID]*jsondb.JsonMapKey)
+var btreeLookupLocker sync.Mutex
 
 type transactionAction int
 
@@ -77,7 +81,11 @@ func manage_transaction(action C.int, payload *C.char) *C.char {
 			errMsg := fmt.Sprintf("error parsing UUID, details: %v", err)
 			return nil, C.CString(errMsg)
 		}
+
+		transactionLookupLocker.Lock()
 		tup, ok := transactionLookup[uuid]
+		transactionLookupLocker.Unlock()
+
 		if !ok {
 			errMsg := fmt.Sprintf("UUID %v not found", uuid.String())
 			return nil, C.CString(errMsg)
@@ -105,7 +113,10 @@ func manage_transaction(action C.int, payload *C.char) *C.char {
 			errMsg := fmt.Sprintf("error creating a Transaction, details: %v", err)
 			return C.CString(errMsg)
 		}
+		transactionLookupLocker.Lock()
 		transactionLookup[tid] = sop.Tuple[sop.Transaction, []sop.UUID]{First: t}
+		transactionLookupLocker.Unlock()
+
 		// Return the transction ID if succeeded.
 		return C.CString(tid.String())
 
@@ -116,7 +127,11 @@ func manage_transaction(action C.int, payload *C.char) *C.char {
 		}
 		if err := t.First.Begin(); err != nil {
 			errMsg := fmt.Sprintf("transaction %v Begin failed, details: %v", t.First.GetID().String(), err)
+
+			transactionLookupLocker.Lock()
 			delete(transactionLookup, t.First.GetID())
+			transactionLookupLocker.Unlock()
+
 			return C.CString(errMsg)
 		}
 	case Commit:
@@ -127,16 +142,23 @@ func manage_transaction(action C.int, payload *C.char) *C.char {
 
 		// Remove from the b-tree lookup all the related b-trees of the transaction.
 		for _, b3id := range t.Second {
+			btreeLookupLocker.Lock()
 			delete(btreeLookup, b3id)
 			delete(btreeLookupMapKey, b3id)
+			btreeLookupLocker.Unlock()
 		}
 
 		if err := t.First.Commit(ctx); err != nil {
 			errMsg := fmt.Sprintf("transaction %v Commit failed, details: %v", t.First.GetID().String(), err)
+			transactionLookupLocker.Lock()
 			delete(transactionLookup, t.First.GetID())
+			transactionLookupLocker.Unlock()
 			return C.CString(errMsg)
 		}
+
+		transactionLookupLocker.Lock()
 		delete(transactionLookup, t.First.GetID())
+		transactionLookupLocker.Unlock()
 
 	case Rollback:
 		t, err := extractTrans()
@@ -146,16 +168,23 @@ func manage_transaction(action C.int, payload *C.char) *C.char {
 
 		// Remove from the b-tree lookup all the related b-trees of the transaction.
 		for _, b3id := range t.Second {
+			btreeLookupLocker.Lock()
 			delete(btreeLookup, b3id)
 			delete(btreeLookupMapKey, b3id)
+			btreeLookupLocker.Unlock()
 		}
 
 		if err := t.First.Rollback(ctx); err != nil {
 			errMsg := fmt.Sprintf("transaction %v Rollback failed, details: %v", t.First.GetID().String(), err)
+			transactionLookupLocker.Lock()
 			delete(transactionLookup, t.First.GetID())
+			transactionLookupLocker.Unlock()
 			return C.CString(errMsg)
 		}
+
+		transactionLookupLocker.Lock()
 		delete(transactionLookup, t.First.GetID())
+		transactionLookupLocker.Unlock()
 
 	default:
 		errMsg := fmt.Sprintf("unsupported action %d", int(action))
@@ -297,7 +326,11 @@ func newBtree(ctx context.Context, ps string) *C.char {
 	}
 	log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
 	b3id := sop.NewUUID()
+
+	transactionLookupLocker.Lock()
 	tup, ok := transactionLookup[sop.UUID(b3o.TransactionID)]
+	transactionLookupLocker.Unlock()
+
 	if !ok {
 		errMsg := fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String())
 		return C.CString(errMsg)
@@ -310,18 +343,28 @@ func newBtree(ctx context.Context, ps string) *C.char {
 			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
 			return C.CString(errMsg)
 		}
+
+		btreeLookupLocker.Lock()
 		btreeLookup[b3id] = b3
+		btreeLookupLocker.Unlock()
+
 	} else {
 		b3, err := jsondb.NewJsonMapKeyBtree(ctx, *so, tup.First, b3o.CELexpression)
 		if err != nil {
 			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
 			return C.CString(errMsg)
+
 		}
+		btreeLookupLocker.Lock()
 		btreeLookupMapKey[b3id] = b3
+		btreeLookupLocker.Unlock()
 	}
 	// Add the B-tree to the transaction list so it can get removed upon commit/rollback.
 	tup.Second = append(tup.Second, b3id)
+
+	transactionLookupLocker.Lock()
 	transactionLookup[tup.First.GetID()] = tup
+	transactionLookupLocker.Unlock()
 
 	// Return the Btree ID if succeeded.
 	return C.CString(b3id.String())
@@ -336,7 +379,11 @@ func openBtree(ctx context.Context, ps string) *C.char {
 	}
 	log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
 	b3id := sop.NewUUID()
+
+	transactionLookupLocker.Lock()
 	tup, ok := transactionLookup[sop.UUID(b3o.TransactionID)]
+	transactionLookupLocker.Unlock()
+
 	if !ok {
 		errMsg := fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String())
 		return C.CString(errMsg)
@@ -349,19 +396,28 @@ func openBtree(ctx context.Context, ps string) *C.char {
 			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
 			return C.CString(errMsg)
 		}
+
+		btreeLookupLocker.Lock()
 		btreeLookup[b3id] = b3
+		btreeLookupLocker.Unlock()
+
 	} else {
 		b3, err := jsondb.OpenJsonMapKeyBtree(ctx, so.Name, tup.First)
 		if err != nil {
 			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
 			return C.CString(errMsg)
 		}
+		btreeLookupLocker.Lock()
 		btreeLookupMapKey[b3id] = b3
+		btreeLookupLocker.Unlock()
 	}
 
 	// Add the B-tree to the transaction list so it can get removed upon commit/rollback.
 	tup.Second = append(tup.Second, b3id)
+
+	transactionLookupLocker.Lock()
 	transactionLookup[tup.First.GetID()] = tup
+	transactionLookupLocker.Unlock()
 
 	// Return the Btree ID if succeeded.
 	return C.CString(b3id.String())
@@ -375,7 +431,9 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 	}
 
 	if p.IsPrimitiveKey {
+		btreeLookupLocker.Lock()
 		b3, ok := btreeLookup[sop.UUID(p.BtreeID)]
+		btreeLookupLocker.Unlock()
 		if !ok {
 			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
 			return C.CString(errMsg)
@@ -409,7 +467,10 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
+		btreeLookupLocker.Lock()
 		b3, ok := btreeLookupMapKey[sop.UUID(p.BtreeID)]
+		btreeLookupLocker.Unlock()
+
 		if !ok {
 			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
 			return C.CString(errMsg)
@@ -452,7 +513,9 @@ func remove(ctx context.Context, ps string, payload2 *C.char) *C.char {
 	}
 
 	if p.IsPrimitiveKey {
+		btreeLookupLocker.Lock()
 		b3, ok := btreeLookup[sop.UUID(p.BtreeID)]
+		btreeLookupLocker.Unlock()
 		if !ok {
 			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
 			return C.CString(errMsg)
@@ -471,7 +534,10 @@ func remove(ctx context.Context, ps string, payload2 *C.char) *C.char {
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
+		btreeLookupLocker.Lock()
 		b3, ok := btreeLookupMapKey[sop.UUID(p.BtreeID)]
+		btreeLookupLocker.Unlock()
+
 		if !ok {
 			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
 			return C.CString(errMsg)

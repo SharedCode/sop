@@ -24,7 +24,7 @@ type L1Cache struct {
 	lookup       map[sop.UUID]*l1CacheEntry
 	mru          *l1_mru
 	l2CacheNodes sop.Cache
-	locker       *sync.Mutex
+	locker       sync.Mutex
 	Handles      Cache[sop.UUID, sop.Handle]
 }
 
@@ -58,7 +58,6 @@ func NewL1Cache(l2cn sop.Cache, minCapacity, maxCapacity int) *L1Cache {
 	l1c := &L1Cache{
 		lookup:       make(map[sop.UUID]*l1CacheEntry, maxCapacity),
 		l2CacheNodes: l2cn,
-		locker:       &sync.Mutex{},
 		Handles:      NewSynchronizedCache[sop.UUID, sop.Handle](minCapacity, maxCapacity),
 	}
 	l1c.mru = newL1Mru(l1c, minCapacity, maxCapacity)
