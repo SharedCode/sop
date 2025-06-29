@@ -92,6 +92,7 @@ class BtreeError(TransactionError):
 @dataclass
 class ManageBtreeMetaData(Generic[TK, TV]):
     is_primitive_key: bool
+    transaction_id: str
     btree_id: str
 
 
@@ -121,11 +122,13 @@ class BtreeAction(Enum):
 
 
 class Btree(Generic[TK, TV]):
+    transaction_id: uuid.uuid4
     id: uuid.uuid4
 
-    def __init__(self, id: uuid.uuid4, is_primitive_key: bool):
+    def __init__(self, id: uuid.uuid4, is_primitive_key: bool, tid: uuid.uuid4):
         self.id = id
         self.is_primitive_key = is_primitive_key
+        self.transaction_id = tid
 
     @classmethod
     def new(
@@ -166,7 +169,7 @@ class Btree(Generic[TK, TV]):
             # if res can't be converted to UUID, it is expected to be an error msg from SOP.
             raise BtreeError(res)
 
-        return cls(b3id, is_primitive_key)
+        return cls(b3id, is_primitive_key, trans.transaction_id)
 
     @classmethod
     def open(
@@ -187,7 +190,7 @@ class Btree(Generic[TK, TV]):
             # if res can't be converted to UUID, it is expected to be an error msg from SOP.
             raise BtreeError(res)
 
-        return cls(b3id, is_primitive_key)
+        return cls(b3id, is_primitive_key, trans.transaction_id)
 
     def add(self, items: Item[TK, TV]) -> bool:
         return self._manage(BtreeAction.Add.value, items)
@@ -203,9 +206,10 @@ class Btree(Generic[TK, TV]):
 
     def remove(self, keys: TK) -> bool:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
-            is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
         )
-        metadata.is_primitive_key = self.is_primitive_key
         res = call_go.manage_btree(
             BtreeAction.Remove.value,
             json.dumps(asdict(metadata)),
@@ -259,9 +263,10 @@ class Btree(Generic[TK, TV]):
 
     def _manage(self, action: int, items: Item[TK, TV]) -> bool:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
-            is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
         )
-        metadata.is_primitive_key = self.is_primitive_key
         payload: ManageBtreePayload = ManageBtreePayload(items=items)
         res = call_go.manage_btree(
             action,

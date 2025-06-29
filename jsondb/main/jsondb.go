@@ -52,14 +52,9 @@ func close_redis_connection() *C.char {
 	return nil
 }
 
-// Transaction lookup table.
-var transactionLookup map[sop.UUID]sop.Tuple[sop.Transaction, []sop.UUID] = make(map[sop.UUID]sop.Tuple[sop.Transaction, []sop.UUID])
+// Transaction lookup table is comprised of the transaction & its related B-trees.
+var transactionLookup map[sop.UUID]sop.Tuple[sop.Transaction, map[sop.UUID]any] = make(map[sop.UUID]sop.Tuple[sop.Transaction, map[sop.UUID]any])
 var transactionLookupLocker sync.Mutex
-
-// Btree lookup tables.
-var btreeLookup map[sop.UUID]*jsondb.JsonAnyKey = make(map[sop.UUID]*jsondb.JsonAnyKey)
-var btreeLookupMapKey map[sop.UUID]*jsondb.JsonMapKey = make(map[sop.UUID]*jsondb.JsonMapKey)
-var btreeLookupLocker sync.Mutex
 
 type transactionAction int
 
@@ -75,7 +70,7 @@ const (
 func manage_transaction(action C.int, payload *C.char) *C.char {
 	ps := C.GoString(payload)
 
-	extractTrans := func() (*sop.Tuple[sop.Transaction, []sop.UUID], *C.char) {
+	extractTrans := func() (*sop.Tuple[sop.Transaction, map[sop.UUID]any], *C.char) {
 		uuid, err := sop.ParseUUID(ps)
 		if err != nil {
 			errMsg := fmt.Sprintf("error parsing UUID, details: %v", err)
@@ -114,7 +109,7 @@ func manage_transaction(action C.int, payload *C.char) *C.char {
 			return C.CString(errMsg)
 		}
 		transactionLookupLocker.Lock()
-		transactionLookup[tid] = sop.Tuple[sop.Transaction, []sop.UUID]{First: t}
+		transactionLookup[tid] = sop.Tuple[sop.Transaction, map[sop.UUID]any]{First: t, Second: map[sop.UUID]any{}}
 		transactionLookupLocker.Unlock()
 
 		// Return the transction ID if succeeded.
@@ -140,14 +135,6 @@ func manage_transaction(action C.int, payload *C.char) *C.char {
 			return err
 		}
 
-		// Remove from the b-tree lookup all the related b-trees of the transaction.
-		for _, b3id := range t.Second {
-			btreeLookupLocker.Lock()
-			delete(btreeLookup, b3id)
-			delete(btreeLookupMapKey, b3id)
-			btreeLookupLocker.Unlock()
-		}
-
 		if err := t.First.Commit(ctx); err != nil {
 			errMsg := fmt.Sprintf("transaction %v Commit failed, details: %v", t.First.GetID().String(), err)
 			transactionLookupLocker.Lock()
@@ -164,14 +151,6 @@ func manage_transaction(action C.int, payload *C.char) *C.char {
 		t, err := extractTrans()
 		if err != nil {
 			return err
-		}
-
-		// Remove from the b-tree lookup all the related b-trees of the transaction.
-		for _, b3id := range t.Second {
-			btreeLookupLocker.Lock()
-			delete(btreeLookup, b3id)
-			delete(btreeLookupMapKey, b3id)
-			btreeLookupLocker.Unlock()
 		}
 
 		if err := t.First.Rollback(ctx); err != nil {
@@ -273,6 +252,7 @@ type PagingInfo struct {
 // BtreeID is used to lookup the Btree from the Btree lookup table.
 type ManageBtreeMetaData struct {
 	IsPrimitiveKey bool      `json:"is_primitive_key"`
+	TransactionID  uuid.UUID `json:"transaction_id"`
 	BtreeID        uuid.UUID `json:"btree_id"`
 }
 type ManageBtreePayload struct {
@@ -343,24 +323,17 @@ func newBtree(ctx context.Context, ps string) *C.char {
 			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
 			return C.CString(errMsg)
 		}
-
-		btreeLookupLocker.Lock()
-		btreeLookup[b3id] = b3
-		btreeLookupLocker.Unlock()
-
+		// Add the B-tree to the transaction btree map so it can get lookedup.
+		tup.Second[b3id] = b3
 	} else {
 		b3, err := jsondb.NewJsonMapKeyBtree(ctx, *so, tup.First, b3o.CELexpression)
 		if err != nil {
 			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
 			return C.CString(errMsg)
-
 		}
-		btreeLookupLocker.Lock()
-		btreeLookupMapKey[b3id] = b3
-		btreeLookupLocker.Unlock()
+		// Add the B-tree to the transaction btree map so it can get lookedup.
+		tup.Second[b3id] = b3
 	}
-	// Add the B-tree to the transaction list so it can get removed upon commit/rollback.
-	tup.Second = append(tup.Second, b3id)
 
 	transactionLookupLocker.Lock()
 	transactionLookup[tup.First.GetID()] = tup
@@ -396,24 +369,15 @@ func openBtree(ctx context.Context, ps string) *C.char {
 			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
 			return C.CString(errMsg)
 		}
-
-		btreeLookupLocker.Lock()
-		btreeLookup[b3id] = b3
-		btreeLookupLocker.Unlock()
-
+		tup.Second[b3id] = b3
 	} else {
 		b3, err := jsondb.OpenJsonMapKeyBtree(ctx, so.Name, tup.First)
 		if err != nil {
 			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
 			return C.CString(errMsg)
 		}
-		btreeLookupLocker.Lock()
-		btreeLookupMapKey[b3id] = b3
-		btreeLookupLocker.Unlock()
+		tup.Second[b3id] = b3
 	}
-
-	// Add the B-tree to the transaction list so it can get removed upon commit/rollback.
-	tup.Second = append(tup.Second, b3id)
 
 	transactionLookupLocker.Lock()
 	transactionLookup[tup.First.GetID()] = tup
@@ -431,11 +395,19 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 	}
 
 	if p.IsPrimitiveKey {
-		btreeLookupLocker.Lock()
-		b3, ok := btreeLookup[sop.UUID(p.BtreeID)]
-		btreeLookupLocker.Unlock()
+		tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
+		if !ok {
+			errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
+			return C.CString(errMsg)
+		}
+		b32, ok := tup.Second[sop.UUID(p.BtreeID)]
 		if !ok {
 			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+			return C.CString(errMsg)
+		}
+		b3, ok := b32.(*jsondb.JsonAnyKey)
+		if !ok {
+			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
 		}
 
@@ -467,12 +439,20 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
-		btreeLookupLocker.Lock()
-		b3, ok := btreeLookupMapKey[sop.UUID(p.BtreeID)]
-		btreeLookupLocker.Unlock()
-
+		tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
+		if !ok {
+			errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
+			return C.CString(errMsg)
+		}
+		b32, ok := tup.Second[sop.UUID(p.BtreeID)]
 		if !ok {
 			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		b3, ok := b32.(*jsondb.JsonMapKey)
+		if !ok {
+			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
 		}
 
@@ -513,11 +493,20 @@ func remove(ctx context.Context, ps string, payload2 *C.char) *C.char {
 	}
 
 	if p.IsPrimitiveKey {
-		btreeLookupLocker.Lock()
-		b3, ok := btreeLookup[sop.UUID(p.BtreeID)]
-		btreeLookupLocker.Unlock()
+		tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
+		if !ok {
+			errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
+			return C.CString(errMsg)
+		}
+		b32, ok := tup.Second[sop.UUID(p.BtreeID)]
 		if !ok {
 			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		b3, ok := b32.(*jsondb.JsonAnyKey)
+		if !ok {
+			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
 		}
 
@@ -534,12 +523,20 @@ func remove(ctx context.Context, ps string, payload2 *C.char) *C.char {
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
-		btreeLookupLocker.Lock()
-		b3, ok := btreeLookupMapKey[sop.UUID(p.BtreeID)]
-		btreeLookupLocker.Unlock()
-
+		tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
+		if !ok {
+			errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
+			return C.CString(errMsg)
+		}
+		b32, ok := tup.Second[sop.UUID(p.BtreeID)]
 		if !ok {
 			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		b3, ok := b32.(*jsondb.JsonMapKey)
+		if !ok {
+			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
 		}
 
