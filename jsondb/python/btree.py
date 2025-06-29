@@ -202,7 +202,24 @@ class Btree(Generic[TK, TV]):
         return self._manage(BtreeAction.Upsert.value, items)
 
     def remove(self, keys: TK) -> bool:
-        return False
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
+        )
+        metadata.is_primitive_key = self.is_primitive_key
+        res = call_go.manage_btree(
+            BtreeAction.Remove.value,
+            json.dumps(asdict(metadata)),
+            json.dumps(asdict(keys)),
+        )
+        if res == None:
+            raise BtreeError("unable to remove item from a Btree in SOP")
+
+        if res.lower() == "true":
+            return True
+        if res.lower() == "false":
+            return False
+
+        raise BtreeError(res)
 
     def get_items(
         self, page_number: int, page_size: int, direction: PagingDirection

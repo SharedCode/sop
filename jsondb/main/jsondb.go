@@ -259,6 +259,8 @@ func manage_btree(action C.int, payload *C.char, payload2 *C.char) *C.char {
 		fallthrough
 	case Update:
 		return manage(ctx, int(action), ps, payload2)
+	case Remove:
+		return remove(ctx, ps, payload2)
 	default:
 		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
 		return C.CString(errMsg)
@@ -411,6 +413,55 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 			return C.CString(errMsg)
 		}
 
+		if err != nil {
+			errMsg := fmt.Sprintf("error manage of item to B-tree (id=%v), details: %v", p.BtreeID, err)
+			return C.CString(errMsg)
+		}
+		return C.CString(fmt.Sprintf("%v", ok))
+	}
+}
+
+func remove(ctx context.Context, ps string, payload2 *C.char) *C.char {
+	var p ManageBtreeMetaData
+	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
+		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
+		return C.CString(errMsg)
+	}
+
+	if p.IsPrimitiveKey {
+		b3, ok := btreeLookup[sop.UUID(p.BtreeID)]
+		if !ok {
+			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		ps2 := C.GoString(payload2)
+		var payload []any
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
+			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
+			return C.CString(errMsg)
+		}
+		ok, err := b3.Remove(ctx, payload)
+		if err != nil {
+			errMsg := fmt.Sprintf("error manage of item to B-tree (id=%v), details: %v", p.BtreeID, err)
+			return C.CString(errMsg)
+		}
+		return C.CString(fmt.Sprintf("%v", ok))
+	} else {
+		b3, ok := btreeLookupMapKey[sop.UUID(p.BtreeID)]
+		if !ok {
+			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		ps2 := C.GoString(payload2)
+		var payload []map[string]any
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
+			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
+			return C.CString(errMsg)
+		}
+		var err error
+		ok, err = b3.Remove(ctx, payload)
 		if err != nil {
 			errMsg := fmt.Sprintf("error manage of item to B-tree (id=%v), details: %v", p.BtreeID, err)
 			return C.CString(errMsg)
