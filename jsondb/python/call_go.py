@@ -30,10 +30,10 @@ _open_redis_conn.argtypes = [
     ctypes.c_int,
     ctypes.c_char_p,
 ]  # Specify argument types
-_open_redis_conn.restype = ctypes.c_char_p  # Specify return type
+_open_redis_conn.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
 _close_redis_conn = lib.close_redis_connection
-_close_redis_conn.restype = ctypes.c_char_p  # Specify return type
+_close_redis_conn.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
 # De-allocate backing memory for a string.
 _free_string = lib.free_string
@@ -46,7 +46,7 @@ _manage_tran.argtypes = [
     ctypes.c_int,
     ctypes.c_char_p,
 ]  # Specify argument types
-_manage_tran.restype = ctypes.c_char_p  # Specify return type
+_manage_tran.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
 _manage_btree = lib.manage_btree
 _manage_btree.argtypes = [
@@ -54,7 +54,7 @@ _manage_btree.argtypes = [
     ctypes.c_char_p,
     ctypes.c_char_p,
 ]  # Specify argument types
-_manage_btree.restype = ctypes.c_char_p  # Specify return type
+_manage_btree.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
 
 def open_redis_connection(host: str, port: int, password: str) -> str:
@@ -63,12 +63,12 @@ def open_redis_connection(host: str, port: int, password: str) -> str:
     """
 
     res = _open_redis_conn(to_cstring(host), to_cint(port), to_cstring(password))
-    if res == None:
-        return res
+    if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
+        return None
 
     s = to_str(res)
     # free the string allocated in C heap using malloc.
-    # free_string(res)
+    _free_string(res)
     return s
 
 
@@ -78,13 +78,12 @@ def close_redis_connection() -> str:
     """
 
     res = _close_redis_conn()
-    if res == None:
-        return res
+    if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
+        return None
 
     s = to_str(res)
     # free the string allocated in C heap using malloc.
-    # TODO: understand why we are getting "can't free, not allocated" error.
-    # free_string(res)
+    _free_string(res)
     return s
 
 
@@ -94,12 +93,12 @@ def manage_transaction(action: int, payload: str) -> str:
     """
 
     res = _manage_tran(to_cint(action), to_cstring(payload))
-    if res == None:
-        return res
+    if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
+        return None
 
     s = to_str(res)
     # free the string allocated in C heap using malloc.
-    # free_string(res)
+    _free_string(res)
 
     return s
 
@@ -110,18 +109,18 @@ def manage_btree(action: int, payload: str, payload2: str) -> str:
     """
 
     res = _manage_btree(to_cint(action), to_cstring(payload), to_cstring(payload2))
-    if res == None:
-        return res
+    if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
+        return None
 
     s = to_str(res)
     # free the string allocated in C heap using malloc.
-    # free_string(res)
+    _free_string(res)
 
     return s
 
 
 def to_str(s: ctypes.c_char_p) -> str:
-    return s.decode("utf-8")
+    return ctypes.cast(s, ctypes.c_char_p).value.decode("utf-8")
 
 
 def to_cstring(s: str) -> ctypes.c_char_p:

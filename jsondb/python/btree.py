@@ -232,46 +232,10 @@ class Btree(Generic[TK, TV]):
         raise BtreeError(res)
 
     def update(self, items: Item[TK, TV]) -> bool:
-        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
-            is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
-        )
-        metadata.is_primitive_key = self.is_primitive_key
-        payload: ManageBtreePayload = ManageBtreePayload(items=items)
-        res = call_go.manage_btree(
-            BtreeAction.Update.value,
-            json.dumps(asdict(metadata)),
-            json.dumps(asdict(payload)),
-        )
-        if res == None:
-            raise BtreeError("unable to update item to a Btree in SOP")
-
-        if res.lower() == "true":
-            return True
-        if res.lower() == "false":
-            return False
-
-        raise BtreeError(res)
+        return self._manage(self, BtreeAction.Update.value, items)
 
     def upsert(self, items: Item[TK, TV]) -> bool:
-        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
-            is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
-        )
-        metadata.is_primitive_key = self.is_primitive_key
-        payload: ManageBtreePayload = ManageBtreePayload(items=items)
-        res = call_go.manage_btree(
-            BtreeAction.Upsert.value,
-            json.dumps(asdict(metadata)),
-            json.dumps(asdict(payload)),
-        )
-        if res == None:
-            raise BtreeError("unable to upsert item to a Btree in SOP")
-
-        if res.lower() == "true":
-            return True
-        if res.lower() == "false":
-            return False
-
-        raise BtreeError(res)
+        return self._manage(self, BtreeAction.Upsert.value, items)
 
     def remove(self, keys: TK) -> bool:
         return False
@@ -311,3 +275,24 @@ class Btree(Generic[TK, TV]):
 
     def get_store_info(self) -> BtreeOptions:
         return BtreeOptions()
+
+    def _manage(self, action: int, items: Item[TK, TV]) -> bool:
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key, btree_id=str(self.id)
+        )
+        metadata.is_primitive_key = self.is_primitive_key
+        payload: ManageBtreePayload = ManageBtreePayload(items=items)
+        res = call_go.manage_btree(
+            action,
+            json.dumps(asdict(metadata)),
+            json.dumps(asdict(payload)),
+        )
+        if res == None:
+            raise BtreeError("unable to manage item to a Btree in SOP")
+
+        if res.lower() == "true":
+            return True
+        if res.lower() == "false":
+            return False
+
+        raise BtreeError(res)
