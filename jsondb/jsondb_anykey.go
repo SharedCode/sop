@@ -19,7 +19,7 @@ type Item struct {
 	ID    uuid.UUID `json:"id"`
 }
 
-func (itm *Item) convert(source *btree.Item[any, any]) {
+func (itm *Item) extract(source *btree.Item[any, any]) {
 	itm.Key = source.Key
 	itm.Value = source.Value
 	itm.ID = uuid.UUID(source.ID)
@@ -105,9 +105,17 @@ func (j *JsonAnyKey) Remove(ctx context.Context, keys []any) (bool, error) {
 	return true, nil
 }
 
-func (j *JsonAnyKey) GetItems(ctx context.Context, pagingInfo PagingInfo) (string, error) {
-	if j.BtreeInterface.GetCurrentKey() == nil {
-		return "", fmt.Errorf("can't fetch items, try calling First, Last or Find/FindWithID prior to GetItems")
+func (j *JsonAnyKey) GetKeys(ctx context.Context, pagingInfo PagingInfo) (string, error) {
+	if j.BtreeInterface.GetCurrentKey().Key == nil {
+		if pagingInfo.PageOffset != 0 {
+			return "", fmt.Errorf("can't fetch keys, try calling First, Last or Find/FindWithID prior to GetItems")
+		}
+		// Auto navigate to first item of the B-tree if page offset == 0.
+		if ok, err := j.BtreeInterface.First(ctx); err != nil {
+			return "", err
+		} else if !ok {
+			return "", fmt.Errorf("can't fetch from an empty btree")
+		}
 	}
 
 	if pagingInfo.PageOffset > 0 {
@@ -131,45 +139,98 @@ func (j *JsonAnyKey) GetItems(ctx context.Context, pagingInfo PagingInfo) (strin
 		}
 	}
 
-	// Encode to JSON string the items.
-	f := func(items []Item) (string, error) {
-		if len(items) == 0 {
-			return "", nil
+	keys := make([]Item, 0, pagingInfo.PageSize)
+	for range pagingInfo.PageSize {
+		key := j.BtreeInterface.GetCurrentKey()
+		itm := Item{
+			Key: key.Key,
+			ID:  uuid.UUID(key.ID),
 		}
-		// Package as JSON string the result.
-		ba, err := encoding.DefaultMarshaler.Marshal(items)
-		if err != nil {
+		keys = append(keys, itm)
+		if pagingInfo.Direction == Forward {
+			if ok, err := j.BtreeInterface.Next(ctx); err != nil {
+				p, _ := toJsonString(keys)
+				return p, err
+			} else if !ok {
+				return toJsonString(keys)
+			}
+			continue
+		}
+		if ok, err := j.BtreeInterface.Previous(ctx); err != nil {
+			p, _ := toJsonString(keys)
+			return p, err
+		} else if !ok {
+			return toJsonString(keys)
+		}
+	}
+
+	// Package as JSON string the result.
+	return toJsonString(keys)
+}
+
+func (j *JsonAnyKey) GetItems(ctx context.Context, pagingInfo PagingInfo) (string, error) {
+	if j.BtreeInterface.GetCurrentKey().Key == nil {
+		if pagingInfo.PageOffset != 0 {
+			return "", fmt.Errorf("can't fetch items, try calling First, Last or Find/FindWithID prior to GetItems")
+		}
+		// Auto navigate to first item of the B-tree if page offset == 0.
+		if ok, err := j.BtreeInterface.First(ctx); err != nil {
 			return "", err
+		} else if !ok {
+			return "", fmt.Errorf("can't fetch from an empty btree")
 		}
-		return string(ba), nil
+	}
+
+	if pagingInfo.PageOffset > 0 {
+		for range pagingInfo.PageOffset {
+			for range pagingInfo.PageSize {
+				if pagingInfo.Direction == Forward {
+					if ok, err := j.BtreeInterface.Next(ctx); err != nil {
+						return "", err
+					} else if !ok {
+						return "", fmt.Errorf("reached the end of B-tree, no items fetched")
+					}
+					continue
+				}
+				// Walk in backwards direction.
+				if ok, err := j.BtreeInterface.Previous(ctx); err != nil {
+					return "", err
+				} else if !ok {
+					return "", fmt.Errorf("reached the top of B-tree, no items fetched")
+				}
+			}
+		}
 	}
 
 	items := make([]Item, 0, pagingInfo.PageSize)
 	for range pagingInfo.PageSize {
 		item, err := j.BtreeInterface.GetCurrentItem(ctx)
 		if err != nil {
-			return "", err
+			p, _ := toJsonString(items)
+			return p, err
 		}
 		var itm Item
-		itm.convert(&item)
+		itm.extract(&item)
 		items = append(items, itm)
 		if pagingInfo.Direction == Forward {
 			if ok, err := j.BtreeInterface.Next(ctx); err != nil {
-				return "", err
+				p, _ := toJsonString(items)
+				return p, err
 			} else if !ok {
-				return f(items)
+				return toJsonString(items)
 			}
 			continue
 		}
 		if ok, err := j.BtreeInterface.Previous(ctx); err != nil {
-			return "", err
+			p, _ := toJsonString(items)
+			return p, err
 		} else if !ok {
-			return f(items)
+			return toJsonString(items)
 		}
 	}
 
 	// Package as JSON string the result.
-	return f(items)
+	return toJsonString(items)
 }
 
 // GetCurrentValue returns the current item's value.
@@ -177,15 +238,30 @@ func (j *JsonAnyKey) GetValues(ctx context.Context, keys []any) (string, error) 
 	values := make([]any, len(keys))
 	var err error
 	for i := range keys {
-		if ok, err := j.BtreeInterface.FindOne(ctx, keys[i], true); !ok || err != nil {
-			return "", err
+		if ok, err := j.BtreeInterface.FindOne(ctx, keys[i], true); err != nil {
+			p, _ := toJsonString(values)
+			return p, err
+		} else if !ok {
+			// Skip assigning the Value as is not found, means it will be nil. Caller has to interpret
+			// as not found.
+			continue
 		}
 		values[i], err = j.BtreeInterface.GetCurrentValue(ctx)
 		if err != nil {
-			return "", err
+			p, _ := toJsonString(values)
+			return p, err
 		}
 	}
-	ba, err := encoding.DefaultMarshaler.Marshal(values)
+	return toJsonString(values)
+}
+
+// Encode to JSON string the items.
+func toJsonString[T any](objects []T) (string, error) {
+	if len(objects) == 0 {
+		return "", nil
+	}
+	// Package as JSON string the result.
+	ba, err := encoding.DefaultMarshaler.Marshal(objects)
 	if err != nil {
 		return "", err
 	}

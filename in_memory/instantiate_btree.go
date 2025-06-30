@@ -66,6 +66,11 @@ func (b3 BtreeInterface[TK, TV]) FindOne(key TK, firstItemWithKey bool) bool {
 	return ok
 }
 
+// GetCurrentKey returns the current item's value.
+func (b3 BtreeInterface[TK, TV]) GetCurrentKey() TK {
+	return b3.Btree.GetCurrentKey().Key
+}
+
 // GetCurrentValue returns the current item's value.
 func (b3 BtreeInterface[TK, TV]) GetCurrentValue() TV {
 	v, _ := b3.Btree.GetCurrentValue(nil)

@@ -69,14 +69,14 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 		b3, _ = OpenBtree[int, string](ctx, "twophase1", t1, cmp.Compare)
 		twoPhase = t1.GetPhasedTransaction()
 
-		if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey() != 5000 {
-			t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
+		if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey().Key != 5000 {
+			t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey().Key)
 		}
-		if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5000 {
-			t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey())
+		if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey().Key != 5000 {
+			t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey().Key)
 		}
-		if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5001 {
-			t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey())
+		if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey().Key != 5001 {
+			t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey().Key)
 		}
 		// Call the two phase committers just for demo, but t1.Commit(..) will work fine too.
 		if err = twoPhase.Phase1Commit(ctx); err != nil {
@@ -129,11 +129,11 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 			b3.Add(ctx, 5000, "I am the value with 5000 key.")
 			b3.Add(ctx, 5001, "I am the value with 5001 key.")
 
-			if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey() != 5000 {
-				t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
+			if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey().Key != 5000 {
+				t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey().Key)
 			}
-			if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5001 {
-				t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey())
+			if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey().Key != 5001 {
+				t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey().Key)
 			}
 
 			// Call 1st phase commit.

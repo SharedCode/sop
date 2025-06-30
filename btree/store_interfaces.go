@@ -40,8 +40,9 @@ type BtreeInterface[TK Ordered, TV any] interface {
 	// This is useful for B-Tree that allows duplicate keys(IsUnique = false) as it provides a way to
 	// differentiate duplicated keys via the unique ID(sop.UUID).
 	FindOneWithID(ctx context.Context, key TK, id sop.UUID) (bool, error)
-	// GetCurrentKey returns the current item's key.
-	GetCurrentKey() TK
+	// GetCurrentKey returns the current item's key (& Item ID). If B-tree allows duplicates,
+	// having the Item ID available allows finding that item conveniently (see FindOneWithID).
+	GetCurrentKey() Item[TK, TV]
 	// GetCurrentValue returns the current item's value.
 	GetCurrentValue(ctx context.Context) (TV, error)
 	// GetCurrentItem returns the current item.

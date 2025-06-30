@@ -283,8 +283,12 @@ func getFromBtree(action C.int, payload *C.char, payload2 *C.char) (*C.char, *C.
 	ctx := context.Background()
 
 	switch int(action) {
+	case GetKeys:
+		fallthrough
 	case GetItems:
-		return getItems(ctx, ps, payload2)
+		return get(ctx, int(action), ps, payload2)
+	case GetValues:
+		return nil, nil
 	default:
 		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
 		return nil, C.CString(errMsg)

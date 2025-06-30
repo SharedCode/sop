@@ -60,7 +60,7 @@ func TestMockNodeWithLeftNilChild(t *testing.T) {
 	ctr := 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Next(ctx); !ok {
 			break
@@ -75,7 +75,7 @@ func TestMockNodeWithLeftNilChild(t *testing.T) {
 	ctr = 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Previous(ctx); !ok {
 			break
@@ -137,7 +137,7 @@ func TestMockNodeWithRightNilChild(t *testing.T) {
 	ctr := 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Next(ctx); !ok {
 			break
@@ -152,7 +152,7 @@ func TestMockNodeWithRightNilChild(t *testing.T) {
 	ctr = 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Previous(ctx); !ok {
 			break
@@ -197,7 +197,7 @@ func TestMockNodeWithLeftNilChild2(t *testing.T) {
 	ctr := 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Next(ctx); !ok {
 			break
@@ -212,7 +212,7 @@ func TestMockNodeWithLeftNilChild2(t *testing.T) {
 	ctr = 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Previous(ctx); !ok {
 			break
@@ -255,7 +255,7 @@ func TestMockNodeWithMidNilChildMoveNext(t *testing.T) {
 	ctr := 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Next(ctx); !ok {
 			break
@@ -298,7 +298,7 @@ func TestMockNodeWithMidNilChildMovePrevious(t *testing.T) {
 	ctr := 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Previous(ctx); !ok {
 			break
@@ -341,7 +341,7 @@ func TestMockNodeWithRightNilChildMoveNext(t *testing.T) {
 	ctr := 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Next(ctx); !ok {
 			break
@@ -386,7 +386,7 @@ func TestMockNodeWithRightNilChildAnd3LevelsMoveNext(t *testing.T) {
 	ctr := 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Next(ctx); !ok {
 			break
@@ -434,7 +434,7 @@ func TestMockNodeHasNilChild(t *testing.T) {
 	ctr := 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Next(ctx); !ok {
 			break
@@ -477,7 +477,7 @@ func TestMockNodeWithLeftNilChildMovePrevious(t *testing.T) {
 	ctr := 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Previous(ctx); !ok {
 			break
@@ -522,7 +522,7 @@ func TestMockNodeWithLeftNilChildAnd3LevelsMovePrevious(t *testing.T) {
 	ctr := 0
 	for {
 		ctr++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Previous(ctx); !ok {
 			break
@@ -588,7 +588,7 @@ func TestMockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	got := 0
 	for {
 		got++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Next(ctx); !ok {
 			break
@@ -603,7 +603,7 @@ func TestMockDistributeItemOnNodeWithRightNilChild(t *testing.T) {
 	got = 0
 	for {
 		got++
-		k := b3.GetCurrentKey()
+		k := b3.GetCurrentKey().Key
 		t.Logf("key: %d", k)
 		if ok, _ := b3.Previous(ctx); !ok {
 			break

@@ -85,9 +85,9 @@ func (b3 b3WithInducedErrors[TK, TV]) FindOneWithID(ctx context.Context, key TK,
 	}
 	return true, nil
 }
-func (b3 b3WithInducedErrors[TK, TV]) GetCurrentKey() TK {
+func (b3 b3WithInducedErrors[TK, TV]) GetCurrentKey() btree.Item[TK, TV] {
 	b3.t.Helper()
-	var zero TK
+	var zero btree.Item[TK, TV]
 	return zero
 }
 func (b3 b3WithInducedErrors[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {

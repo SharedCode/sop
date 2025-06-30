@@ -112,14 +112,14 @@ func (s *StreamingDataStore[TK]) RemoveCurrentItem(ctx context.Context) (bool, e
 		return false, fmt.Errorf("failed to remove current item, store is empty")
 	}
 
-	key := s.BtreeInterface.GetCurrentKey().Key
+	key := s.BtreeInterface.GetCurrentKey().Key.Key
 	keys := make([]StreamingDataKey[TK], 0, 5)
 	for {
-		keys = append(keys, StreamingDataKey[TK]{Key: key, ChunkIndex: s.BtreeInterface.GetCurrentKey().ChunkIndex})
+		keys = append(keys, StreamingDataKey[TK]{Key: key, ChunkIndex: s.BtreeInterface.GetCurrentKey().Key.ChunkIndex})
 		if ok, err := s.BtreeInterface.Next(ctx); err != nil {
 			return false, err
 		} else if !ok ||
-			s.BtreeInterface.GetCurrentKey().Compare(StreamingDataKey[TK]{Key: key, ChunkIndex: s.BtreeInterface.GetCurrentKey().ChunkIndex}) != 0 {
+			s.BtreeInterface.GetCurrentKey().Key.Compare(StreamingDataKey[TK]{Key: key, ChunkIndex: s.BtreeInterface.GetCurrentKey().Key.ChunkIndex}) != 0 {
 			break
 		}
 	}
@@ -150,7 +150,7 @@ func (s *StreamingDataStore[TK]) UpdateCurrentItem(ctx context.Context) (*Encode
 	if s.BtreeInterface.Count() == 0 {
 		return nil, fmt.Errorf("failed to update current item, store is empty")
 	}
-	w := newWriter(ctx, false, s.BtreeInterface.GetCurrentKey().Key, s.BtreeInterface)
+	w := newWriter(ctx, false, s.BtreeInterface.GetCurrentKey().Key.Key, s.BtreeInterface)
 	return newEncoder(w), nil
 }
 
@@ -185,7 +185,7 @@ func (s *StreamingDataStore[TK]) GetCurrentKey(ctx context.Context) TK {
 		var d TK
 		return d
 	}
-	k := s.BtreeInterface.GetCurrentKey()
+	k := s.BtreeInterface.GetCurrentKey().Key
 	return k.Key
 }
 
@@ -194,7 +194,7 @@ func (s *StreamingDataStore[TK]) GetCurrentItem(ctx context.Context) (btree.Item
 	if s.BtreeInterface.Count() == 0 {
 		return btree.Item[TK, json.Decoder]{}, fmt.Errorf("failed to get current item, store is empty")
 	}
-	ck := s.BtreeInterface.GetCurrentKey()
+	ck := s.BtreeInterface.GetCurrentKey().Key
 	r := newReader(ctx, ck.Key, ck.ChunkIndex, s.BtreeInterface)
 	return btree.Item[TK, json.Decoder]{
 		Key:   ck.Key,
@@ -207,7 +207,7 @@ func (s *StreamingDataStore[TK]) GetCurrentValue(ctx context.Context) (*json.Dec
 	if s.BtreeInterface.Count() == 0 {
 		return nil, fmt.Errorf("failed to get current value, store is empty")
 	}
-	ck := s.BtreeInterface.GetCurrentKey()
+	ck := s.BtreeInterface.GetCurrentKey().Key
 	r := newReader(ctx, ck.Key, ck.ChunkIndex, s.BtreeInterface)
 	return json.NewDecoder(r), nil
 }

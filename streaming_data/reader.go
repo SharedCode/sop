@@ -39,7 +39,7 @@ func (r *reader[TK]) Read(p []byte) (int, error) {
 
 	var found bool
 	var err error
-	ck := r.btree.GetCurrentKey()
+	ck := r.btree.GetCurrentKey().Key
 	ck.ChunkIndex++
 	sdk := StreamingDataKey[TK]{
 		Key:        r.key,
@@ -47,7 +47,7 @@ func (r *reader[TK]) Read(p []byte) (int, error) {
 	}
 	if ck.Compare(sdk) == 0 {
 		found, err = r.btree.Next(r.ctx)
-		if found && r.btree.GetCurrentKey().Compare(sdk) != 0 {
+		if found && r.btree.GetCurrentKey().Key.Compare(sdk) != 0 {
 			found = false
 		}
 	} else {

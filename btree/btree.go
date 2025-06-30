@@ -223,12 +223,23 @@ func (btree *Btree[TK, TV]) FindOneWithID(ctx context.Context, key TK, id sop.UU
 }
 
 // GetCurrentKey returns the current item's key part.
-func (btree *Btree[TK, TV]) GetCurrentKey() TK {
-	var zero TK
+func (btree *Btree[TK, TV]) GetCurrentKey() Item[TK, TV] {
+	var item Item[TK, TV]
 	if btree.currentItem == nil {
-		return zero
+		return item
 	}
-	return btree.currentItem.Key
+	return Item[TK, TV]{
+		Key: btree.currentItem.Key,
+		ID:  btree.currentItem.ID,
+	}
+}
+
+// Returns the current item's ID.
+func (btree *Btree[TK, TV]) GetCurrentItemID() sop.UUID {
+	if btree.currentItem == nil {
+		return sop.NilUUID
+	}
+	return btree.currentItem.ID
 }
 
 // GetCurrentValue returns the current item's value part.

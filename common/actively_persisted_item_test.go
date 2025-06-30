@@ -105,7 +105,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "xyz2", trans, Compare)
 
 	b3.First(ctx)
-	k := b3.GetCurrentKey()
+	k := b3.GetCurrentKey().Key
 	if k.Firstname == pk.Firstname && k.Lastname == pk.Lastname {
 		if ok, _ := b3.Next(ctx); ok {
 			t.Errorf("Failed, got true, want false.")

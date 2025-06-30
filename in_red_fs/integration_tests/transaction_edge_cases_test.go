@@ -692,7 +692,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	b3.First(ctx)
 	i := 1
 	for {
-		fmt.Printf("Item with key: %v\n", b3.GetCurrentKey())
+		fmt.Printf("Item with key: %v\n", b3.GetCurrentKey().Key)
 		if ok, err := b3.Next(ctx); err != nil {
 			t.Error(err)
 		} else if !ok {
@@ -796,7 +796,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	b3.First(ctx)
 	i := 1
 	for {
-		fmt.Printf("Item with key: %v\n", b3.GetCurrentKey())
+		fmt.Printf("Item with key: %v\n", b3.GetCurrentKey().Key)
 		if ok, err := b3.Next(ctx); err != nil {
 			t.Error(err)
 		} else if !ok {

@@ -21,14 +21,14 @@ func Test_HelloWorld(t *testing.T) {
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
 	b3.Add(ctx, 5000, "I am also a value with 5000 key.")
 
-	if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey() != 5000 {
-		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
+	if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey().Key != 5000 {
+		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey().Key)
 	}
-	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5000 {
-		t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey())
+	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey().Key != 5000 {
+		t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey().Key)
 	}
-	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5001 {
-		t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey())
+	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey().Key != 5001 {
+		t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey().Key)
 	}
 
 	t1.Commit(ctx)
@@ -72,14 +72,14 @@ func Test_FunctionalityTests(t *testing.T) {
 	// Add more checks here as needed..
 
 	// Check if B-Tree items are intact.
-	if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey() != 5000 {
-		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
+	if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey().Key != 5000 {
+		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey().Key)
 	}
-	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5000 {
-		t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey())
+	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey().Key != 5000 {
+		t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey().Key)
 	}
-	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5001 {
-		t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey())
+	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey().Key != 5001 {
+		t.Errorf("Next() failed, got = %v, want = 5001", b3.GetCurrentKey().Key)
 	}
 
 	// Test Next on EOF.
@@ -110,7 +110,7 @@ func Test_FunctionalityTests(t *testing.T) {
 		t.Errorf("RemoveCurrentItem() failed.")
 	}
 	b3.FindOne(ctx, 5000, true)
-	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey() != 5001 {
+	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey().Key != 5001 {
 		t.Errorf("Next() after RemoveCurrentItem failed, expected item(5001) not found.")
 	}
 	if v, _ := b3.GetCurrentValue(ctx); v != five001Value {
@@ -273,11 +273,11 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 			for i := test.startRange + 1; i <= test.endRange; i++ {
 				k = i
 				if ok, _ := b3.Next(ctx); ok {
-					if b3.GetCurrentKey() == k {
+					if b3.GetCurrentKey().Key == k {
 						itemsFoundCount++
 						continue
 					}
-					t.Errorf("got %d key, want %d key", b3.GetCurrentKey(), k)
+					t.Errorf("got %d key, want %d key", b3.GetCurrentKey().Key, k)
 				}
 			}
 			if itemsFoundCount != test.wantFound {

@@ -77,7 +77,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 		t.Errorf("FindOne('joe',false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
-	if k := b3.GetCurrentKey(); k.Firstname != pk.Firstname {
+	if k := b3.GetCurrentKey().Key; k.Firstname != pk.Firstname {
 		// Rollback before generating an error.
 		trans.Rollback(ctx)
 		t.Errorf("GetCurrentKey() failed, got = %v, %v, want = 1, nil.", k, err)
@@ -381,8 +381,8 @@ func Test_MixedOperations(t *testing.T) {
 		switch n {
 		// Read on 0.
 		case 0:
-			if ok, _ := b3.FindOne(ctx, pk, false); !ok || b3.GetCurrentKey().Lastname != pk.Lastname {
-				t.Errorf("FindOne failed, got = %v, want = %v.", b3.GetCurrentKey(), pk)
+			if ok, _ := b3.FindOne(ctx, pk, false); !ok || b3.GetCurrentKey().Key.Lastname != pk.Lastname {
+				t.Errorf("FindOne failed, got = %v, want = %v.", b3.GetCurrentKey().Key, pk)
 				t.Fail()
 			}
 		// Delete on 1.

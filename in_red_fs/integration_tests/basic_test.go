@@ -159,7 +159,7 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
-	if k := b3.GetCurrentKey(); k != 1 {
+	if k := b3.GetCurrentKey().Key; k != 1 {
 		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
 		return
 	}
@@ -201,7 +201,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		trans.Rollback(ctx)
 		return
 	}
-	if k := b3.GetCurrentKey(); k != 1 {
+	if k := b3.GetCurrentKey().Key; k != 1 {
 		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
 		trans.Rollback(ctx)
 		return
@@ -249,7 +249,7 @@ func Test_RegistryZeroDurationCache(t *testing.T) {
 		trans.Rollback(ctx)
 		return
 	}
-	if k := b3.GetCurrentKey(); k != 1 {
+	if k := b3.GetCurrentKey().Key; k != 1 {
 		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
 		trans.Rollback(ctx)
 		return
@@ -292,7 +292,7 @@ func Test_StoreCaching(t *testing.T) {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
-	if k := b3.GetCurrentKey(); k != 1 {
+	if k := b3.GetCurrentKey().Key; k != 1 {
 		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
 		trans.Rollback(ctx)
 		return
