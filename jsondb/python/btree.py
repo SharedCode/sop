@@ -238,7 +238,9 @@ class Btree(Generic[TK, TV]):
     ) -> Item[TK, TV]:
         return self._get(BtreeAction.GetItems.value, page_offset, page_size, direction)
 
-    def get_values(self, keys: Item[TK, TV]) -> TV:
+    # Keys array contains the keys & their IDs to fetch value data of. Both input & output
+    # are Item type though input only has Key & ID field populated to find the data & output has Value of found data.
+    def get_values(self, keys: Item[TK, TV]) -> Item[TK, TV]:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
