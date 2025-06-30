@@ -115,7 +115,33 @@ func (j *JsonMapKey) Remove(ctx context.Context, keys []map[string]any) (bool, e
 	return true, nil
 }
 
-// TODO: add support for navigation methods: First, Last, Find() bool, GetItems(<page #>, <page size>, forward | backward direction)
+func (j *JsonMapKey) GetItems(ctx context.Context, pagingInfo PagingInfo) (string, error) {
+	return "", nil
+}
+
+func (j *JsonMapKey) GetKeys(ctx context.Context, pagingInfo PagingInfo) (string, error) {
+	// keys := make([]any, size)
+	// var err error
+	// j.jsonDB.compareError = nil
+	// for i := range keys {
+	// 	if ok, err := j.jsonDB.FindOne(ctx, keys[i], true); !ok || err != nil {
+	// 		return "", err
+	// 	}
+	// 	if j.jsonDB.compareError != nil {
+	// 		return "", j.jsonDB.compareError
+	// 	}
+	// 	keys[i], err = j.jsonDB.GetCurrentValue(ctx)
+	// 	if err != nil {
+	// 		return "", err
+	// 	}
+	// }
+	// ba, err := encoding.DefaultMarshaler.Marshal(keys)
+	// if err != nil {
+	// 	return "", err
+	// }
+	// return string(ba), nil
+	return "", nil
+}
 
 // GetCurrentValue returns the current item's value.
 func (j *JsonMapKey) GetValues(ctx context.Context, keys []map[string]any) (string, error) {
@@ -140,6 +166,19 @@ func (j *JsonMapKey) GetValues(ctx context.Context, keys []map[string]any) (stri
 	}
 	return string(ba), nil
 }
+
+// FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error)
+// // FindOneWithID is synonymous to FindOne but allows code to supply the Item's ID to identify it.
+// // This is useful for B-Tree that allows duplicate keys(IsUnique = false) as it provides a way to
+// // differentiate duplicated keys via the unique ID(sop.UUID).
+// FindOneWithID(ctx context.Context, key TK, id sop.UUID) (bool, error)
+
+// // First positions the "cursor" to the first item as per key ordering.
+// // Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
+// First(ctx context.Context) (bool, error)
+// // Last positionts the "cursor" to the last item as per key ordering.
+// // Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
+// Last(ctx context.Context) (bool, error)
 
 // IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
 // Specifying uniqueness base on key makes the B-Tree permanently set. If you want just a temporary

@@ -192,6 +192,11 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 	// Apply SOP minimum caching rule if needed.
 	si.CacheConfig.enforceMinimumRule()
 
+	// Turn off global caching flag if user specifies "no caching" (-1) on value data cache duration.
+	if si.CacheConfig.ValueDataCacheDuration < 0 {
+		si.IsValueDataGloballyCached = false
+	}
+
 	return &StoreInfo{
 		Name:                         si.Name,
 		SlotLength:                   si.SlotLength,

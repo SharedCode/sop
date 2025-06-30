@@ -22,8 +22,8 @@ import (
 	"github.com/SharedCode/sop/redis"
 )
 
-//export open_redis_connection
-func open_redis_connection(host *C.char, port C.int, password *C.char) *C.char {
+//export openRedisConnection
+func openRedisConnection(host *C.char, port C.int, password *C.char) *C.char {
 	_, err := redis.OpenConnection(redis.Options{
 		Address:  fmt.Sprintf("%s:%d", C.GoString(host), int(port)),
 		DB:       0,
@@ -39,8 +39,8 @@ func open_redis_connection(host *C.char, port C.int, password *C.char) *C.char {
 	return nil
 }
 
-//export close_redis_connection
-func close_redis_connection() *C.char {
+//export closeRedisConnection
+func closeRedisConnection() *C.char {
 	err := redis.CloseConnection()
 	if err != nil {
 		errMsg := fmt.Sprintf("error encountered closing Redis connection, details: %v", err)
@@ -66,8 +66,8 @@ const (
 	Rollback
 )
 
-//export manage_transaction
-func manage_transaction(action C.int, payload *C.char) *C.char {
+//export manageTransaction
+func manageTransaction(action C.int, payload *C.char) *C.char {
 	ps := C.GoString(payload)
 
 	extractTrans := func() (*sop.Tuple[sop.Transaction, map[sop.UUID]any], *C.char) {
@@ -233,19 +233,6 @@ func convertTo(si *BtreeOptions) *sop.StoreOptions {
 	return &so
 }
 
-type PagingDirection int
-
-const (
-	Forward = iota
-	Backward
-)
-
-type PagingInfo struct {
-	PageNumber int             `json:"page_number"`
-	PageSize   int             `json:"page_size"`
-	Direction  PagingDirection `json:"direction"`
-}
-
 // Manage Btree payload struct is used for communication between SOP language binding, e.g. Python,
 // and the SOP's jsondb package each of the B-tree management action parameters including data payload.
 //
@@ -256,16 +243,16 @@ type ManageBtreeMetaData struct {
 	BtreeID        uuid.UUID `json:"btree_id"`
 }
 type ManageBtreePayload struct {
-	Items []jsondb.Item `json:"items"`
-	// PagingInfo `json:"paging_info"`
+	Items      []jsondb.Item      `json:"items"`
+	PagingInfo *jsondb.PagingInfo `json:"paging_info"`
 }
 type ManageBtreePayloadMapKey struct {
-	Items []jsondb.ItemMapKey `json:"items"`
-	//PagingInfo `json:"paging_info"`
+	Items      []jsondb.ItemMapKey `json:"items"`
+	PagingInfo *jsondb.PagingInfo  `json:"paging_info"`
 }
 
-//export manage_btree
-func manage_btree(action C.int, payload *C.char, payload2 *C.char) *C.char {
+//export manageBtree
+func manageBtree(action C.int, payload *C.char, payload2 *C.char) *C.char {
 	ps := C.GoString(payload)
 	ctx := context.Background()
 
@@ -290,8 +277,22 @@ func manage_btree(action C.int, payload *C.char, payload2 *C.char) *C.char {
 	}
 }
 
-//export free_string
-func free_string(cString *C.char) {
+//export getFromBtree
+func getFromBtree(action C.int, payload *C.char, payload2 *C.char) (*C.char, *C.char) {
+	ps := C.GoString(payload)
+	ctx := context.Background()
+
+	switch int(action) {
+	case GetItems:
+		return getItems(ctx, ps, payload2)
+	default:
+		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
+		return nil, C.CString(errMsg)
+	}
+}
+
+//export freeString
+func freeString(cString *C.char) {
 	if cString != nil {
 		C.free(unsafe.Pointer(cString))
 	}

@@ -2,6 +2,7 @@ package jsondb
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 
@@ -16,6 +17,12 @@ type Item struct {
 	Key   any       `json:"key"`
 	Value any       `json:"value"`
 	ID    uuid.UUID `json:"id"`
+}
+
+func (itm *Item) convert(source *btree.Item[any, any]) {
+	itm.Key = source.Key
+	itm.Value = source.Value
+	itm.ID = uuid.UUID(source.ID)
 }
 
 // B-tree that can operate on JSON String "wrapper". Has no logic except to take in and return
@@ -98,7 +105,72 @@ func (j *JsonAnyKey) Remove(ctx context.Context, keys []any) (bool, error) {
 	return true, nil
 }
 
-// TODO: add support for navigation methods: First, Last, Find() bool, GetItems(<page #>, <page size>, forward | backward direction)
+func (j *JsonAnyKey) GetItems(ctx context.Context, pagingInfo PagingInfo) (string, error) {
+	if j.BtreeInterface.GetCurrentKey() == nil {
+		return "", fmt.Errorf("can't fetch items, try calling First, Last or Find/FindWithID prior to GetItems")
+	}
+
+	if pagingInfo.PageOffset > 0 {
+		for range pagingInfo.PageOffset {
+			for range pagingInfo.PageSize {
+				if pagingInfo.Direction == Forward {
+					if ok, err := j.BtreeInterface.Next(ctx); err != nil {
+						return "", err
+					} else if !ok {
+						return "", fmt.Errorf("reached the end of B-tree, no items fetched")
+					}
+					continue
+				}
+				// Walk in backwards direction.
+				if ok, err := j.BtreeInterface.Previous(ctx); err != nil {
+					return "", err
+				} else if !ok {
+					return "", fmt.Errorf("reached the top of B-tree, no items fetched")
+				}
+			}
+		}
+	}
+
+	// Encode to JSON string the items.
+	f := func(items []Item) (string, error) {
+		if len(items) == 0 {
+			return "", nil
+		}
+		// Package as JSON string the result.
+		ba, err := encoding.DefaultMarshaler.Marshal(items)
+		if err != nil {
+			return "", err
+		}
+		return string(ba), nil
+	}
+
+	items := make([]Item, 0, pagingInfo.PageSize)
+	for range pagingInfo.PageSize {
+		item, err := j.BtreeInterface.GetCurrentItem(ctx)
+		if err != nil {
+			return "", err
+		}
+		var itm Item
+		itm.convert(&item)
+		items = append(items, itm)
+		if pagingInfo.Direction == Forward {
+			if ok, err := j.BtreeInterface.Next(ctx); err != nil {
+				return "", err
+			} else if !ok {
+				return f(items)
+			}
+			continue
+		}
+		if ok, err := j.BtreeInterface.Previous(ctx); err != nil {
+			return "", err
+		} else if !ok {
+			return f(items)
+		}
+	}
+
+	// Package as JSON string the result.
+	return f(items)
+}
 
 // GetCurrentValue returns the current item's value.
 func (j *JsonAnyKey) GetValues(ctx context.Context, keys []any) (string, error) {

@@ -21,8 +21,8 @@ except OSError as e:
 
 # Call the 'hello' function (no arguments, no return value)
 print("Calling Go's open_redis_connection() function:")
-_open_redis_conn = lib.open_redis_connection
-_open_redis_conn = lib.open_redis_connection
+_open_redis_conn = lib.openRedisConnection
+_open_redis_conn = lib.openRedisConnection
 
 # Call the 'open+_redis_connection' function with arguments and set argument/return types
 _open_redis_conn.argtypes = [
@@ -32,15 +32,15 @@ _open_redis_conn.argtypes = [
 ]  # Specify argument types
 _open_redis_conn.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
-_close_redis_conn = lib.close_redis_connection
+_close_redis_conn = lib.closeRedisConnection
 _close_redis_conn.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
 # De-allocate backing memory for a string.
-_free_string = lib.free_string
+_free_string = lib.freeString
 _free_string.argtypes = [ctypes.c_char_p]
 _free_string.restype = None
 
-_manage_tran = lib.manage_transaction
+_manage_tran = lib.manageTransaction
 
 _manage_tran.argtypes = [
     ctypes.c_int,
@@ -48,13 +48,30 @@ _manage_tran.argtypes = [
 ]  # Specify argument types
 _manage_tran.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
-_manage_btree = lib.manage_btree
+_manage_btree = lib.manageBtree
 _manage_btree.argtypes = [
     ctypes.c_int,
     ctypes.c_char_p,
     ctypes.c_char_p,
 ]  # Specify argument types
 _manage_btree.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
+
+
+# Define the structure for return values
+class ResultStruct(ctypes.Structure):
+    _fields_ = [
+        ("payload", ctypes.POINTER(ctypes.c_char)),  # First return value (C string)
+        ("error", ctypes.POINTER(ctypes.c_char)),  # Second return value (C string)
+    ]
+
+
+_get_from_btree = lib.getFromBtree
+_get_from_btree.argtypes = [
+    ctypes.c_int,
+    ctypes.c_char_p,
+    ctypes.c_char_p,
+]  # Specify argument types
+_get_from_btree.restype = ResultStruct  # Specify return type
 
 
 def open_redis_connection(host: str, port: int, password: str) -> str:
@@ -117,6 +134,35 @@ def manage_btree(action: int, payload: str, payload2: str) -> str:
     _free_string(res)
 
     return s
+
+
+def get_from_btree(action: int, payload: str, payload2: str):
+    """
+    Fetch/Navigate from SOP btree.
+    """
+
+    result = _get_from_btree(to_cint(action), to_cstring(payload), to_cstring(payload2))
+    if (
+        result.error is not None
+        and ctypes.cast(result.error, ctypes.c_char_p).value is not None
+    ):
+        se = to_str(result.error)
+        # free the string allocated in C heap using malloc.
+        _free_string(result.error)
+        if (
+            result.payload is not None
+            and ctypes.cast(result.payload, ctypes.c_char_p).value is not None
+        ):
+            sp = to_str(result.payload)
+            _free_string(result.payload)
+            return sp, se
+        return None, se
+
+    s = to_str(result.payload)
+    # free the string allocated in C heap using malloc.
+    _free_string(result.payload)
+
+    return s, None
 
 
 def to_str(s: ctypes.c_char_p) -> str:

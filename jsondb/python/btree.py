@@ -27,7 +27,18 @@ class PagingDirection(Enum):
     Backward = 1
 
 
-MIN_CACHE_DURATION = timedelta(minutes=5)
+@dataclass
+class PagingInfo:
+    """
+    Paging Info is used to package paging details to SOP.
+    """
+
+    # Offset defaults to 0, meaning, fetch from current cursor position in SOP backend.
+    page_offset: int = 0
+    # Fetch size of 20 is default.
+    page_size: int = 20
+    # Fetch direction of forward(0) is default.
+    direction: int = 0
 
 
 @dataclass
@@ -217,27 +228,42 @@ class Btree(Generic[TK, TV]):
         )
         if res == None:
             raise BtreeError("unable to remove item from a Btree in SOP")
-
-        if res.lower() == "true":
-            return True
-        if res.lower() == "false":
-            return False
-
-        raise BtreeError(res)
+        return self._return_result(res)
 
     def get_items(
-        self, page_number: int, page_size: int, direction: PagingDirection
-    ) -> list[Item[TK, TV]]:
-        return None
+        self, page_offset: int, page_size: int, direction: PagingDirection
+    ) -> Item[TK, TV]:
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
+        )
+        pagingInfo = PagingInfo(
+            page_offset=page_offset, page_size=page_size, direction=direction.value
+        )
+        result, error = call_go.get_from_btree(
+            BtreeAction.GetItems.value,
+            json.dumps(asdict(metadata)),
+            json.dumps(asdict(pagingInfo)),
+        )
+        if error is not None:
+            raise BtreeError(f"{error}")
 
-    def get_values(
-        self, page_number: int, page_size: int, direction: PagingDirection
-    ) -> list[TV]:
+        print(f"getItems result: {result}")
+
+        return None
+        # data_dict = json.loads(result)
+
+        # print(f"getItems result: {data_dict}")
+
+        # return Item[TK, TV](**data_dict)
+
+    def get_values(self, keys: TK) -> TV:
         return None
 
     def get_keys(
-        self, page_number: int, page_size: int, direction: PagingDirection
-    ) -> list[TK]:
+        self, page_offset: int, page_size: int, direction: PagingDirection
+    ) -> TK:
         return None
 
     def find(self, key: TK, first_item_with_key: bool) -> bool:
@@ -276,6 +302,9 @@ class Btree(Generic[TK, TV]):
         if res == None:
             raise BtreeError("unable to manage item to a Btree in SOP")
 
+        return self._return_result(res)
+
+    def _return_result(self, res: str) -> bool:
         if res.lower() == "true":
             return True
         if res.lower() == "false":

@@ -33,6 +33,15 @@ class pKey:
     key: str
 
 
+to = transaction.TransationOptions(
+    transaction.TransactionMode.ForWriting.value,
+    5,
+    transaction.MIN_HASH_MOD_VALUE,
+    stores_folders,
+    ec,
+)
+
+
 class TestBtree(unittest.TestCase):
     def setUpClass():
         ro = RedisOptions()
@@ -42,14 +51,6 @@ class TestBtree(unittest.TestCase):
         Redis.close_connection()
 
     def test_new_btree(self):
-        to = transaction.TransationOptions(
-            transaction.TransactionMode.ForWriting.value,
-            5,
-            transaction.MIN_HASH_MOD_VALUE,
-            stores_folders,
-            ec,
-        )
-
         t = transaction.Transaction(to)
         t.begin()
 
@@ -67,14 +68,6 @@ class TestBtree(unittest.TestCase):
         print("test new")
 
     def test_open_btree(self):
-        to = transaction.TransationOptions(
-            transaction.TransactionMode.ForWriting.value,
-            5,
-            transaction.MIN_HASH_MOD_VALUE,
-            stores_folders,
-            ec,
-        )
-
         t = transaction.Transaction(to)
         t.begin()
 
@@ -89,14 +82,6 @@ class TestBtree(unittest.TestCase):
         print("test open")
 
     def test_add_if_not_exists(self):
-        to = transaction.TransationOptions(
-            transaction.TransactionMode.ForWriting.value,
-            5,
-            transaction.MIN_HASH_MOD_VALUE,
-            stores_folders,
-            ec,
-        )
-
         t = transaction.Transaction(to)
         t.begin()
 
@@ -111,14 +96,6 @@ class TestBtree(unittest.TestCase):
         print("test add_if_not_exists")
 
     def test_add_if_not_exists_mapkey(self):
-        to = transaction.TransationOptions(
-            transaction.TransactionMode.ForWriting.value,
-            5,
-            transaction.MIN_HASH_MOD_VALUE,
-            stores_folders,
-            ec,
-        )
-
         t = transaction.Transaction(to)
         t.begin()
 
@@ -139,14 +116,6 @@ class TestBtree(unittest.TestCase):
         print("test add_if_not_exists")
 
     def test_add_if_not_exists_mapkey_fail(self):
-        to = transaction.TransationOptions(
-            transaction.TransactionMode.ForWriting.value,
-            5,
-            transaction.MIN_HASH_MOD_VALUE,
-            stores_folders,
-            ec,
-        )
-
         t = transaction.Transaction(to)
         t.begin()
 
@@ -168,3 +137,13 @@ class TestBtree(unittest.TestCase):
 
         t.commit()
         print("test add_if_not_exists mapkey fail case")
+
+    def test_get_items(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("barstoreec", True, t)
+        res = b3.get_items(0, 5, btree.PagingDirection.Forward)
+        print(f"get_items succeeded {res}.")
+
+        t.commit()

@@ -79,11 +79,18 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
-extern char* open_redis_connection(char* host, int port, char* password);
-extern char* close_redis_connection();
-extern char* manage_transaction(int action, char* payload);
-extern char* manage_btree(int action, char* payload, char* payload2);
-extern void free_string(char* cString);
+extern char* openRedisConnection(char* host, int port, char* password);
+extern char* closeRedisConnection();
+extern char* manageTransaction(int action, char* payload);
+extern char* manageBtree(int action, char* payload, char* payload2);
+
+/* Return type for getFromBtree */
+struct getFromBtree_return {
+	char* r0;
+	char* r1;
+};
+extern struct getFromBtree_return getFromBtree(int action, char* payload, char* payload2);
+extern void freeString(char* cString);
 
 #ifdef __cplusplus
 }
