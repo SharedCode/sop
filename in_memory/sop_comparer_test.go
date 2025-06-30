@@ -44,7 +44,7 @@ func Test_PersonLookup(t *testing.T) {
 	b3 := NewBtree[personKey, person](false)
 	b3.Add(p.personKey, p)
 
-	if b3.FindOne(p.personKey, false) {
+	if b3.Find(p.personKey, false) {
 		t.Logf("Person w/ key %v found.", b3.GetCurrentKey())
 	}
 
@@ -57,63 +57,63 @@ func Test_PersonLookup(t *testing.T) {
 
 func passBtreeAround(b3 BtreeInterface[personKey, person]) bool {
 	key := personKey{firstname: "joe", lastname: "krueger"}
-	return b3.FindOne(key, false)
+	return b3.Find(key, false)
 }
 
 func Test_TypesInCompare(t *testing.T) {
 	b3Int := NewBtree[int, int](true)
 	b3Int.Add(1, 1)
-	b3Int.FindOne(1, false)
+	b3Int.Find(1, false)
 
 	b3Int8 := NewBtree[int8, int8](true)
 	b3Int8.Add(1, 1)
-	b3Int8.FindOne(1, false)
+	b3Int8.Find(1, false)
 
 	b3Int16 := NewBtree[int16, int16](true)
 	b3Int16.Add(1, 1)
-	b3Int16.FindOne(1, false)
+	b3Int16.Find(1, false)
 
 	b3Int32 := NewBtree[int32, int32](true)
 	b3Int32.Add(1, 1)
-	b3Int32.FindOne(1, false)
+	b3Int32.Find(1, false)
 
 	b3Int64 := NewBtree[int64, int64](true)
 	b3Int64.Add(1, 1)
-	b3Int64.FindOne(1, false)
+	b3Int64.Find(1, false)
 
 	b3UInt := NewBtree[uint, uint](true)
 	b3UInt.Add(1, 1)
-	b3UInt.FindOne(1, false)
+	b3UInt.Find(1, false)
 
 	b3UInt8 := NewBtree[uint8, uint8](true)
 	b3UInt8.Add(1, 1)
-	b3UInt8.FindOne(1, false)
+	b3UInt8.Find(1, false)
 
 	b3UInt16 := NewBtree[uint16, uint16](true)
 	b3UInt16.Add(1, 1)
-	b3UInt16.FindOne(1, false)
+	b3UInt16.Find(1, false)
 
 	b3UInt32 := NewBtree[uint32, uint32](true)
 	b3UInt32.Add(1, 1)
-	b3UInt32.FindOne(1, false)
+	b3UInt32.Find(1, false)
 
 	b3UInt64 := NewBtree[uint64, uint64](true)
 	b3UInt64.Add(1, 1)
-	b3UInt64.FindOne(1, false)
+	b3UInt64.Find(1, false)
 
 	b3uintptr := NewBtree[uintptr, uintptr](true)
 	b3uintptr.Add(1, 1)
-	b3uintptr.FindOne(1, false)
+	b3uintptr.Find(1, false)
 
 	b3float32 := NewBtree[float32, float32](true)
 	b3float32.Add(1, 1)
-	b3float32.FindOne(1, false)
+	b3float32.Find(1, false)
 
 	b3float64 := NewBtree[float64, float64](true)
 	b3float64.Add(1, 1)
-	b3float64.FindOne(1, false)
+	b3float64.Find(1, false)
 
 	b3str := NewBtree[string, string](true)
 	b3str.Add("1", "1")
-	b3str.FindOne("1", false)
+	b3str.Find("1", false)
 }

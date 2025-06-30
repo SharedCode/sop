@@ -61,8 +61,8 @@ func (b3 BtreeInterface[TK, TV]) AddIfNotExist(key TK, value TV) bool {
 // otherwise false. firstItemWithKey is useful when there are items with same key.
 // true will position pointer to the first item with the given key,
 // according to key ordering sequence.
-func (b3 BtreeInterface[TK, TV]) FindOne(key TK, firstItemWithKey bool) bool {
-	ok, _ := b3.Btree.FindOne(nil, key, firstItemWithKey)
+func (b3 BtreeInterface[TK, TV]) Find(key TK, firstItemWithKey bool) bool {
+	ok, _ := b3.Btree.Find(nil, key, firstItemWithKey)
 	return ok
 }
 

@@ -164,7 +164,7 @@ func Test_TransactionWithInducedErrorOnFindOne(t *testing.T) {
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 7
-	b3t.FindOne(ctx, 1, false)
+	b3t.Find(ctx, 1, false)
 	if trans.HasBegun() {
 		t.Error("Transaction is not rolled back.")
 	}
@@ -180,7 +180,7 @@ func Test_TransactionWithInducedErrorOnFindOneWithID(t *testing.T) {
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 8
-	b3t.FindOneWithID(ctx, 1, sop.NewUUID())
+	b3t.FindWithID(ctx, 1, sop.NewUUID())
 	if trans.HasBegun() {
 		t.Error("Transaction is not rolled back.")
 	}

@@ -52,7 +52,7 @@ func (w *writer[TK]) Write(p []byte) (int, error) {
 			ok = false
 		}
 	} else {
-		ok, err = w.btree.FindOne(w.ctx, StreamingDataKey[TK]{Key: w.key, ChunkIndex: w.chunkIndex}, false)
+		ok, err = w.btree.Find(w.ctx, StreamingDataKey[TK]{Key: w.key, ChunkIndex: w.chunkIndex}, false)
 	}
 	if err != nil {
 		return 0, err

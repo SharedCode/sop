@@ -38,7 +38,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	pk, p := newPerson("peter", "swift", "male", "email", "phone")
 	pk2, p2 := newPerson("peter", "parker", "male", "email", "phone")
 
-	found, _ := b3.FindOne(ctx, pk, false)
+	found, _ := b3.Find(ctx, pk, false)
 	if !found {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
@@ -69,11 +69,11 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	// edit "peter parker" in both btrees.
 	pk3, p3 := newPerson("gokue", "kakarot", "male", "email", "phone")
 	b3.Add(ctx, pk3, p3)
-	b3.FindOne(ctx, pk2, false)
+	b3.Find(ctx, pk2, false)
 	p2.SSN = "789"
 	b3.UpdateCurrentItem(ctx, p2)
 
-	b32.FindOne(ctx, pk2, false)
+	b32.Find(ctx, pk2, false)
 	p2.SSN = "xyz"
 	b32.UpdateCurrentItem(ctx, p2)
 
@@ -90,7 +90,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t1.Begin()
 	b3, _ = in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	var person Person
-	b3.FindOne(ctx, pk2, false)
+	b3.Find(ctx, pk2, false)
 	person, _ = b3.GetCurrentValue(ctx)
 	if err1 == nil {
 		if person.SSN != "789" {
@@ -133,7 +133,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	pk, p := newPerson("joe", "pirelli", "male", "email", "phone")
 	pk2, p2 := newPerson("joe2", "pirelli", "male", "email", "phone")
 
-	found, _ := b3.FindOne(ctx, pk, false)
+	found, _ := b3.Find(ctx, pk, false)
 	if !found {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
@@ -146,11 +146,11 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t2, Compare)
 
 	// edit both "pirellis" in both btrees, one each.
-	b3.FindOne(ctx, pk, false)
+	b3.Find(ctx, pk, false)
 	p.SSN = "789"
 	b3.UpdateCurrentItem(ctx, p)
 
-	b32.FindOne(ctx, pk2, false)
+	b32.Find(ctx, pk2, false)
 	p2.SSN = "abc"
 	b32.UpdateCurrentItem(ctx, p2)
 
@@ -190,7 +190,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	pk, p := newPerson("joe", "zoey", "male", "email", "phone")
 	pk2, p2 := newPerson("joe2", "zoey", "male", "email", "phone")
 
-	found, _ := b3.FindOne(ctx, pk, false)
+	found, _ := b3.Find(ctx, pk, false)
 	if !found {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
@@ -203,13 +203,13 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t2, Compare)
 
 	// Read both records.
-	b32.FindOne(ctx, pk2, false)
+	b32.Find(ctx, pk2, false)
 	b32.GetCurrentValue(ctx)
-	b32.FindOne(ctx, pk, false)
+	b32.Find(ctx, pk, false)
 	b32.GetCurrentValue(ctx)
 
 	// update one of the two records read on the reader transaction.
-	b3.FindOne(ctx, pk, false)
+	b3.Find(ctx, pk, false)
 	p.SSN = "789"
 	b3.UpdateCurrentItem(ctx, p)
 
@@ -249,7 +249,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	pk2, p2 := newPerson("joe2", "zoeya", "male", "email", "phone")
 	pk3, p3 := newPerson("joe3", "zoeya", "male", "email", "phone")
 
-	found, _ := b3.FindOne(ctx, pk, false)
+	found, _ := b3.Find(ctx, pk, false)
 	if !found {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
@@ -263,13 +263,13 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t2, Compare)
 
 	// Read both records.
-	b32.FindOne(ctx, pk2, false)
+	b32.Find(ctx, pk2, false)
 	b32.GetCurrentValue(ctx)
-	b32.FindOne(ctx, pk, false)
+	b32.Find(ctx, pk, false)
 	b32.GetCurrentValue(ctx)
 
 	// update item #3 that should be on same node.
-	b3.FindOne(ctx, pk3, false)
+	b3.Find(ctx, pk3, false)
 	p.SSN = "789"
 	b3.UpdateCurrentItem(ctx, p)
 
@@ -310,7 +310,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	pk4, p4 := newPerson("joe4", "zoeyb", "male", "email", "phone")
 	pk5, p5 := newPerson("joe5", "zoeyb", "male", "email", "phone")
 
-	found, _ := b3.FindOne(ctx, pk, false)
+	found, _ := b3.Find(ctx, pk, false)
 	if !found {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
@@ -325,35 +325,35 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 
 	b32, _ := in_red_cfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t2, Compare)
 
-	b3.FindOne(ctx, pk, false)
+	b3.Find(ctx, pk, false)
 	ci, _ := b3.GetCurrentItem(ctx)
 	itemID := ci.ID
 	p.SSN = "789"
 	b3.UpdateCurrentItem(ctx, p)
 
 	// Cause an update to "joe zoeyb" on t2, 'should generate conflict!
-	b32.FindOneWithID(ctx, pk, itemID)
+	b32.FindWithID(ctx, pk, itemID)
 	p.SSN = "555"
 	b32.UpdateCurrentItem(ctx, p)
 
-	b3.FindOne(ctx, pk2, false)
+	b3.Find(ctx, pk2, false)
 	b3.GetCurrentValue(ctx)
-	b3.FindOne(ctx, pk3, false)
+	b3.Find(ctx, pk3, false)
 	b3.GetCurrentValue(ctx)
-	b3.FindOne(ctx, pk4, false)
+	b3.Find(ctx, pk4, false)
 	b3.GetCurrentValue(ctx)
-	b3.FindOne(ctx, pk5, false)
+	b3.Find(ctx, pk5, false)
 	b3.GetCurrentValue(ctx)
 
-	b32.FindOne(ctx, pk5, false)
+	b32.Find(ctx, pk5, false)
 	p.SSN = "789"
 	b32.UpdateCurrentItem(ctx, p)
 
-	b32.FindOne(ctx, pk4, false)
+	b32.Find(ctx, pk4, false)
 	b32.GetCurrentValue(ctx)
-	b32.FindOne(ctx, pk3, false)
+	b32.Find(ctx, pk3, false)
 	b32.GetCurrentValue(ctx)
-	b32.FindOne(ctx, pk2, false)
+	b32.Find(ctx, pk2, false)
 	b32.GetCurrentValue(ctx)
 
 	// Commit t1 & t2.

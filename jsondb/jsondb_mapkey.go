@@ -144,12 +144,12 @@ func (j *JsonMapKey) GetKeys(ctx context.Context, pagingInfo PagingInfo) (string
 }
 
 // GetCurrentValue returns the current item's value.
-func (j *JsonMapKey) GetValues(ctx context.Context, keys []map[string]any) (string, error) {
+func (j *JsonMapKey) GetValues(ctx context.Context, keys []ItemMapKey) (string, error) {
 	values := make([]any, len(keys))
 	var err error
 	j.jsonDB.compareError = nil
 	for i := range keys {
-		if ok, err := j.jsonDB.FindOne(ctx, keys[i], true); !ok || err != nil {
+		if ok, err := j.jsonDB.FindWithID(ctx, keys[i].Key, sop.UUID(keys[i].ID)); !ok || err != nil {
 			return "", err
 		}
 		if j.jsonDB.compareError != nil {

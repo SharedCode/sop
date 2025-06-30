@@ -1,6 +1,9 @@
 import json
 import uuid
+import logging
 import call_go
+
+logger = logging.getLogger(__name__)
 
 from typing import TypeVar, Generic, Type
 from dataclasses import dataclass, asdict
@@ -233,38 +236,37 @@ class Btree(Generic[TK, TV]):
     def get_items(
         self, page_offset: int, page_size: int, direction: PagingDirection
     ) -> Item[TK, TV]:
+        return self._get(BtreeAction.GetItems.value, page_offset, page_size, direction)
+
+    def get_values(self, keys: Item[TK, TV]) -> TV:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
             transaction_id=str(self.transaction_id),
         )
-        pagingInfo = PagingInfo(
-            page_offset=page_offset, page_size=page_size, direction=direction.value
-        )
+        payload: ManageBtreePayload = ManageBtreePayload(items=keys)
         result, error = call_go.get_from_btree(
-            BtreeAction.GetItems.value,
+            BtreeAction.GetValues.value,
             json.dumps(asdict(metadata)),
-            json.dumps(asdict(pagingInfo)),
+            json.dumps(asdict(payload)),
         )
         if error is not None:
-            raise BtreeError(f"{error}")
+            if result is None:
+                raise BtreeError(f"{error}")
+            else:
+                # just log the error since there are partial results we can return.
+                logger.error(error)
 
-        print(f"getItems result: {result}")
+        if result is None:
+            return None
 
-        return None
-        # data_dict = json.loads(result)
-
-        # print(f"getItems result: {data_dict}")
-
-        # return Item[TK, TV](**data_dict)
-
-    def get_values(self, keys: TK) -> TV:
-        return None
+        data_dicts = json.loads(result)
+        return [Item[TK, TV](**data_dict) for data_dict in data_dicts]
 
     def get_keys(
         self, page_offset: int, page_size: int, direction: PagingDirection
-    ) -> TK:
-        return None
+    ) -> Item[TK, TV]:
+        return self._get(BtreeAction.GetKeys.value, page_offset, page_size, direction)
 
     def find(self, key: TK, first_item_with_key: bool) -> bool:
         return False
@@ -303,6 +305,39 @@ class Btree(Generic[TK, TV]):
             raise BtreeError("unable to manage item to a Btree in SOP")
 
         return self._return_result(res)
+
+    def _get(
+        self,
+        getAction: int,
+        page_offset: int,
+        page_size: int,
+        direction: PagingDirection,
+    ) -> Item[TK, TV]:
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
+        )
+        pagingInfo = PagingInfo(
+            page_offset=page_offset, page_size=page_size, direction=direction.value
+        )
+        result, error = call_go.get_from_btree(
+            getAction,
+            json.dumps(asdict(metadata)),
+            json.dumps(asdict(pagingInfo)),
+        )
+        if error is not None:
+            if result is None:
+                raise BtreeError(f"{error}")
+            else:
+                # just log the error since there are partial results we can return.
+                logger.error(error)
+
+        if result is None:
+            return None
+
+        data_dicts = json.loads(result)
+        return [Item[TK, TV](**data_dict) for data_dict in data_dicts]
 
     def _return_result(self, res: str) -> bool:
         if res.lower() == "true":

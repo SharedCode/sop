@@ -180,7 +180,7 @@ func (btree *Btree[TK, TV]) compare(a TK, b TK) int {
 }
 
 // FindOne will traverse the tree to find an item with such key.
-func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
+func (btree *Btree[TK, TV]) Find(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
 	// return default value & no error if B-Tree is empty.
 	if btree.StoreInfo.Count == 0 {
 		return false, nil
@@ -205,8 +205,8 @@ func (btree *Btree[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKe
 }
 
 // FindOneWithID is synonymous to FindOne but allows code to supply the Item's ID to identify it.
-func (btree *Btree[TK, TV]) FindOneWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
-	if ok, err := btree.FindOne(ctx, key, true); ok && err == nil {
+func (btree *Btree[TK, TV]) FindWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
+	if ok, err := btree.Find(ctx, key, true); ok && err == nil {
 		for {
 			if item, err := btree.getCurrentItem(ctx); err != nil {
 				return false, err
@@ -384,7 +384,7 @@ func (btree *Btree[TK, TV]) Previous(ctx context.Context) (bool, error) {
 // Update will find the item with matching key as the key parameter & update its value
 // with the provided value parameter.
 func (btree *Btree[TK, TV]) Update(ctx context.Context, key TK, newValue TV) (bool, error) {
-	ok, err := btree.FindOne(ctx, key, false)
+	ok, err := btree.Find(ctx, key, false)
 	if err != nil {
 		return false, err
 	}
@@ -451,7 +451,7 @@ func (btree *Btree[TK, TV]) Upsert(ctx context.Context, key TK, value TV) (bool,
 
 // Remove will find the item with given key and delete it.
 func (btree *Btree[TK, TV]) Remove(ctx context.Context, key TK) (bool, error) {
-	ok, err := btree.FindOne(ctx, key, false)
+	ok, err := btree.Find(ctx, key, false)
 	if err != nil {
 		return false, err
 	}

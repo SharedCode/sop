@@ -85,7 +85,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		return
 	}
 
-	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+	if ok, err := b3.Find(ctx, 1, false); !ok || err != nil {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
@@ -128,7 +128,7 @@ func Test_ByteArrayValue(t *testing.T) {
 		return
 	}
 
-	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+	if ok, err := b3.Find(ctx, 1, false); !ok || err != nil {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
@@ -164,7 +164,7 @@ func Test_ByteArrayValueGet(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+	if ok, err := b3.Find(ctx, 1, false); !ok || err != nil {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}

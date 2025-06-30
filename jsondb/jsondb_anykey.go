@@ -234,23 +234,24 @@ func (j *JsonAnyKey) GetItems(ctx context.Context, pagingInfo PagingInfo) (strin
 }
 
 // GetCurrentValue returns the current item's value.
-func (j *JsonAnyKey) GetValues(ctx context.Context, keys []any) (string, error) {
-	values := make([]any, len(keys))
-	var err error
+func (j *JsonAnyKey) GetValues(ctx context.Context, keys []Item) (string, error) {
+	values := make([]Item, len(keys))
 	for i := range keys {
-		if ok, err := j.BtreeInterface.FindOne(ctx, keys[i], true); err != nil {
+		if ok, err := j.BtreeInterface.FindWithID(ctx, keys[i].Key, sop.UUID(keys[i].ID)); err != nil {
 			p, _ := toJsonString(values)
 			return p, err
 		} else if !ok {
-			// Skip assigning the Value as is not found, means it will be nil. Caller has to interpret
-			// as not found.
+			// Assign the source key to allow caller to deduce that item was not found, Value field is empty.
+			values[i] = keys[i]
 			continue
 		}
-		values[i], err = j.BtreeInterface.GetCurrentValue(ctx)
+		item, err := j.BtreeInterface.GetCurrentItem(ctx)
 		if err != nil {
 			p, _ := toJsonString(values)
 			return p, err
 		}
+		values[i] = Item{}
+		values[i].extract(&item)
 	}
 	return toJsonString(values)
 }

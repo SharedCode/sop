@@ -175,7 +175,7 @@ func refetchAndMergeClosure[TK btree.Ordered, TV any](si *StoreInterface[TK, TV]
 				}
 				continue
 			}
-			if ok, err := b3.FindOneWithID(ctx, ci.item.Key, uuid); !ok || err != nil {
+			if ok, err := b3.FindWithID(ctx, ci.item.Key, uuid); !ok || err != nil {
 				if err != nil {
 					return err
 				}

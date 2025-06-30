@@ -17,8 +17,8 @@ func Test_HelloWorld(t *testing.T) {
 		t.Errorf("Count() failed, got = %d, want = 3.", b3.Count())
 	}
 
-	if !b3.FindOne(5000, true) || b3.GetCurrentKey() != 5000 {
-		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
+	if !b3.Find(5000, true) || b3.GetCurrentKey() != 5000 {
+		t.Errorf("Find(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
 	fmt.Printf("Hello, %s.\n", b3.GetCurrentValue())
 
@@ -41,29 +41,29 @@ func Test_FunctionalityTests(t *testing.T) {
 	const five001Value = "I am the value with 5001 key."
 
 	// Check get on empty tree, returns false always as is empty.
-	if b3.FindOne(1, false) {
-		t.Errorf("FindOne(1) failed, got true, want false.")
+	if b3.Find(1, false) {
+		t.Errorf("Find(1) failed, got true, want false.")
 	}
 
 	// Test Upsert.
 	b3.Upsert(1234, "I am the value with 1234 key.")
 	b3.Upsert(567, "I am the value with 567 key.")
-	if !b3.FindOne(1234, false) {
-		t.Errorf("Upsert(1234) failed, FindOne(1234) got false, want true.")
+	if !b3.Find(1234, false) {
+		t.Errorf("Upsert(1234) failed, Find(1234) got false, want true.")
 	}
-	if !b3.FindOne(567, false) {
-		t.Errorf("Upsert(567) failed, FindOne(567) got false, want true.")
+	if !b3.Find(567, false) {
+		t.Errorf("Upsert(567) failed, Find(567) got false, want true.")
 	}
 	b3.Upsert(1234, "I am coolio.")
 	b3.Upsert(567, "I am hottie.")
-	if !b3.FindOne(1234, false) {
-		t.Errorf("Upsert(1234) #2 failed, FindOne(1234) got false, want true.")
+	if !b3.Find(1234, false) {
+		t.Errorf("Upsert(1234) #2 failed, Find(1234) got false, want true.")
 	}
 	if b3.GetCurrentValue() != "I am coolio." {
 		t.Errorf("Upsert(1234) #2 failed, GetCurrentValue got %s, want 'I am coolio.'", b3.GetCurrentValue())
 	}
-	if !b3.FindOne(567, false) {
-		t.Errorf("Upsert(567) failed, FindOne(567) got false, want true.")
+	if !b3.Find(567, false) {
+		t.Errorf("Upsert(567) failed, Find(567) got false, want true.")
 	}
 	if b3.GetCurrentValue() != "I am hottie." {
 		t.Errorf("Upsert(567) #2 failed, GetCurrentValue got %s, want 'I am hottie.'", b3.GetCurrentValue())
@@ -90,8 +90,8 @@ func Test_FunctionalityTests(t *testing.T) {
 	// Add more checks here as needed..
 
 	// Check if B-Tree items are intact.
-	if !b3.FindOne(5000, true) || b3.GetCurrentKey() != 5000 {
-		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
+	if !b3.Find(5000, true) || b3.GetCurrentKey() != 5000 {
+		t.Errorf("Find(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey())
 	}
 	if !b3.Next() || b3.GetCurrentKey() != 5000 {
 		t.Errorf("Next() failed, got = %v, want = 5000", b3.GetCurrentKey())
@@ -106,22 +106,22 @@ func Test_FunctionalityTests(t *testing.T) {
 	}
 
 	// Test UpdateCurrentItem.
-	b3.FindOne(5000, true)
+	b3.Find(5000, true)
 	newVal := "Updated with new Value."
 	if !b3.UpdateCurrentItem(newVal) || b3.GetCurrentValue() != newVal {
 		t.Errorf("UpdateCurrentItem() failed, got = %s, want = %s", b3.GetCurrentValue(), newVal)
 	}
 
-	if !b3.FindOne(5000, true) || b3.GetCurrentValue() != newVal {
-		t.Errorf("UpdateCurrentItem(<k>) succeeded but FindOne(<k>, true) failed, got = %s, want = %s", b3.GetCurrentValue(), newVal)
+	if !b3.Find(5000, true) || b3.GetCurrentValue() != newVal {
+		t.Errorf("UpdateCurrentItem(<k>) succeeded but Find(<k>, true) failed, got = %s, want = %s", b3.GetCurrentValue(), newVal)
 	}
 
 	// Test RemoveCurrentItem
-	b3.FindOne(5000, true)
+	b3.Find(5000, true)
 	if !b3.RemoveCurrentItem() {
 		t.Errorf("RemoveCurrentItem() failed.")
 	}
-	b3.FindOne(5000, true)
+	b3.Find(5000, true)
 	if !b3.Next() || b3.GetCurrentKey() != 5001 {
 		t.Errorf("Next() after RemoveCurrentItem failed, expected item(5001) not found.")
 	}
@@ -271,7 +271,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 			itemsFoundCount := 0
 			for i := test.startRange; i <= test.endRange; i++ {
 				k = i
-				if b3.FindOne(k, true) {
+				if b3.Find(k, true) {
 					itemsFoundCount++
 				}
 			}
@@ -285,7 +285,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 		if test.action == 5 {
 			itemsFoundCount := 0
 			k = test.startRange
-			if b3.FindOne(k, true) {
+			if b3.Find(k, true) {
 				itemsFoundCount++
 			}
 			for i := test.startRange + 1; i <= test.endRange; i++ {
@@ -315,7 +315,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 					t.Errorf("Failed Add item with key %d.\n", k)
 				}
 			case 2:
-				if !b3.FindOne(k, true) {
+				if !b3.Find(k, true) {
 					t.Errorf("Failed FindOne item with key %d.\n", k)
 				}
 			case 3:
@@ -406,7 +406,7 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 					t.Errorf("Failed Add item with key %s.\n", k)
 				}
 			case 2:
-				if !b3.FindOne(k, true) {
+				if !b3.Find(k, true) {
 					t.Errorf("Failed FindOne item with key %s.\n", k)
 				}
 			case 3:

@@ -32,7 +32,7 @@ func (e *Encoder[TK]) Close() error {
 		return nil
 	}
 	for {
-		found, err := e.w.btree.FindOne(e.w.ctx, StreamingDataKey[TK]{Key: e.w.key, ChunkIndex: e.w.chunkIndex}, false)
+		found, err := e.w.btree.Find(e.w.ctx, StreamingDataKey[TK]{Key: e.w.key, ChunkIndex: e.w.chunkIndex}, false)
 		if err != nil {
 			return err
 		}

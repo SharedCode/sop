@@ -147,3 +147,25 @@ class TestBtree(unittest.TestCase):
         print(f"get_items succeeded {res}.")
 
         t.commit()
+
+    def test_get_keys(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("barstoreec", True, t)
+        res = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        print(f"get_keys succeeded {res}.")
+
+        t.commit()
+
+    def test_get_values(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("barstoreec", True, t)
+        keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        res = b3.get_values(keys)
+
+        print(f"get_values succeeded {res}.")
+
+        t.commit()

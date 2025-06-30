@@ -71,14 +71,14 @@ func (b3 b3WithInducedErrors[TK, TV]) RemoveCurrentItem(ctx context.Context) (bo
 	}
 	return true, nil
 }
-func (b3 b3WithInducedErrors[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
+func (b3 b3WithInducedErrors[TK, TV]) Find(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
 	b3.t.Helper()
 	if b3.induceErrorOnMethod == 7 {
 		return false, fmt.Errorf("foobar")
 	}
 	return true, nil
 }
-func (b3 b3WithInducedErrors[TK, TV]) FindOneWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
+func (b3 b3WithInducedErrors[TK, TV]) FindWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
 	b3.t.Helper()
 	if b3.induceErrorOnMethod == 8 {
 		return false, fmt.Errorf("foobar")

@@ -128,7 +128,7 @@ func getByKey(c *gin.Context) {
 	}
 
 	var found bool
-	if found, err = b3.FindOne(c, itemKey, false); err != nil {
+	if found, err = b3.Find(c, itemKey, false); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("fetching item %s failed, error: %v", itemKey, err)})
 		return
 	}
@@ -179,7 +179,7 @@ func addItem(c *gin.Context) {
 	}
 
 	var found bool
-	if found, err = b3.FindOne(c, itemKey, false); err != nil {
+	if found, err = b3.Find(c, itemKey, false); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("fetching item %s failed, error: %v", itemKey, err)})
 		trans.Rollback(c)
 		return

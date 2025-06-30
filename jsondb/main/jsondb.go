@@ -288,7 +288,7 @@ func getFromBtree(action C.int, payload *C.char, payload2 *C.char) (*C.char, *C.
 	case GetItems:
 		return get(ctx, int(action), ps, payload2)
 	case GetValues:
-		return nil, nil
+		return getValues(ctx, ps, payload2)
 	default:
 		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
 		return nil, C.CString(errMsg)
@@ -399,17 +399,17 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 		return C.CString(errMsg)
 	}
 
+	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
+		return C.CString(errMsg)
+	}
+	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+		return C.CString(errMsg)
+	}
 	if p.IsPrimitiveKey {
-		tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-		if !ok {
-			errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-			return C.CString(errMsg)
-		}
-		b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-		if !ok {
-			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-			return C.CString(errMsg)
-		}
 		b3, ok := b32.(*jsondb.JsonAnyKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
@@ -444,17 +444,6 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
-		tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-		if !ok {
-			errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-			return C.CString(errMsg)
-		}
-		b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-		if !ok {
-			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-			return C.CString(errMsg)
-		}
-
 		b3, ok := b32.(*jsondb.JsonMapKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
@@ -497,18 +486,17 @@ func remove(ctx context.Context, ps string, payload2 *C.char) *C.char {
 		return C.CString(errMsg)
 	}
 
+	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
+		return C.CString(errMsg)
+	}
+	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+		return C.CString(errMsg)
+	}
 	if p.IsPrimitiveKey {
-		tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-		if !ok {
-			errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-			return C.CString(errMsg)
-		}
-		b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-		if !ok {
-			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-			return C.CString(errMsg)
-		}
-
 		b3, ok := b32.(*jsondb.JsonAnyKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
@@ -528,17 +516,6 @@ func remove(ctx context.Context, ps string, payload2 *C.char) *C.char {
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
-		tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-		if !ok {
-			errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-			return C.CString(errMsg)
-		}
-		b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-		if !ok {
-			errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-			return C.CString(errMsg)
-		}
-
 		b3, ok := b32.(*jsondb.JsonMapKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)

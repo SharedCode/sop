@@ -74,7 +74,7 @@ func Test_Rollback(t *testing.T) {
 
 	pk, _ = newPerson("joe", "shroeger", "male", "email", "phone")
 
-	b3.FindOne(ctx, pk, false)
+	b3.Find(ctx, pk, false)
 	v, _ := b3.GetCurrentValue(ctx)
 
 	if v.Email != "email" {
@@ -110,7 +110,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 		return
 	}
 
-	if ok, err := b3.FindOne(ctx, pk, false); !ok || err != nil {
+	if ok, err := b3.Find(ctx, pk, false); !ok || err != nil {
 		t.Errorf("FindOne('joe',false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
@@ -183,7 +183,7 @@ func Test_NoCheckCommit(t *testing.T) {
 	trans.Begin()
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondbnc", trans, Compare)
-	b3.FindOne(ctx, pk, false)
+	b3.Find(ctx, pk, false)
 
 	trans.Commit(ctx)
 }
@@ -301,7 +301,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 	}
 	for i := start; i < end; i++ {
 		pk, _ := newPerson(fmt.Sprintf("tracy%d", i), "swift", "female", "email", "phone")
-		if ok, err := b3.FindOne(ctx, pk, true); !ok || err != nil {
+		if ok, err := b3.Find(ctx, pk, true); !ok || err != nil {
 			t.Errorf("b3.FIndOne('%s') failed, got(ok, err) = %v, %v, want = true, nil.", pk.Firstname, ok, err)
 			return
 		}
@@ -355,7 +355,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	for i := start; i <= end; i++ {
 		lname := fmt.Sprintf("reepper%d", i)
 		pk, _ := newPerson("jack", lname, "male", "email very very long long long", "phone123")
-		if found, err := b3.FindOne(ctx, pk, false); !found || err != nil {
+		if found, err := b3.Find(ctx, pk, false); !found || err != nil {
 			t.Error(err)
 			t.Fail()
 		}
@@ -454,7 +454,7 @@ func Test_MixedOperations(t *testing.T) {
 
 		if i > start+100 {
 			pk2, _ := newPerson(firstName, fmt.Sprintf("%s%d", lastNamePrefix, i-99), "male", "email very very long long long", "phone123")
-			ok, err := b3.FindOne(ctx, pk2, false)
+			ok, err := b3.Find(ctx, pk2, false)
 			if err != nil {
 				t.Log(err)
 				t.Fail()
@@ -491,7 +491,7 @@ func Test_MixedOperations(t *testing.T) {
 		switch n {
 		// Read on 0.
 		case 0:
-			if ok, _ := b3.FindOne(ctx, pk, false); !ok || b3.GetCurrentKey().Key.Lastname != pk.Lastname {
+			if ok, _ := b3.Find(ctx, pk, false); !ok || b3.GetCurrentKey().Key.Lastname != pk.Lastname {
 				t.Errorf("FindOne failed, got = %v, want = %v.", b3.GetCurrentKey(), pk)
 				t.Fail()
 			}

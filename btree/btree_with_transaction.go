@@ -155,23 +155,23 @@ func (b3 *btreeWithTransaction[TK, TV]) RemoveCurrentItem(ctx context.Context) (
 // true will position pointer to the first item with the given key,
 // according to key ordering sequence.
 // Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
-func (b3 *btreeWithTransaction[TK, TV]) FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
+func (b3 *btreeWithTransaction[TK, TV]) Find(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx, nil)
 		return false, errTransHasNotBegunMsg
 	}
-	r, err := b3.BtreeInterface.FindOne(ctx, key, firstItemWithKey)
+	r, err := b3.BtreeInterface.Find(ctx, key, firstItemWithKey)
 	if err != nil {
 		b3.transaction.Rollback(ctx, err)
 	}
 	return r, err
 }
-func (b3 *btreeWithTransaction[TK, TV]) FindOneWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
+func (b3 *btreeWithTransaction[TK, TV]) FindWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx, nil)
 		return false, errTransHasNotBegunMsg
 	}
-	r, err := b3.BtreeInterface.FindOneWithID(ctx, key, id)
+	r, err := b3.BtreeInterface.FindWithID(ctx, key, id)
 	if err != nil {
 		b3.transaction.Rollback(ctx, err)
 	}

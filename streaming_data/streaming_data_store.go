@@ -217,7 +217,7 @@ func (s *StreamingDataStore[TK]) GetCurrentValue(ctx context.Context) (*json.Dec
 // Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or decoder).
 func (s *StreamingDataStore[TK]) FindOne(ctx context.Context, key TK) (bool, error) {
 	k := StreamingDataKey[TK]{Key: key}
-	return s.BtreeInterface.FindOne(ctx, k, false)
+	return s.BtreeInterface.Find(ctx, k, false)
 }
 
 // Synonymous to FindChunk.
@@ -231,5 +231,5 @@ func (s *StreamingDataStore[TK]) FindOneWithID(ctx context.Context, key TK, chun
 // You can use FindChunk or FindOne & Next to navigate to the fragment or chunk # you are targeting to download.
 func (s *StreamingDataStore[TK]) FindChunk(ctx context.Context, key TK, chunkIndex int) (bool, error) {
 	k := StreamingDataKey[TK]{Key: key, ChunkIndex: chunkIndex}
-	return s.BtreeInterface.FindOne(ctx, k, false)
+	return s.BtreeInterface.Find(ctx, k, false)
 }

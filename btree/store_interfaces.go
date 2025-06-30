@@ -30,16 +30,16 @@ type BtreeInterface[TK Ordered, TV any] interface {
 	// RemoveCurrentItem will remove the current key/value pair from the store.
 	RemoveCurrentItem(ctx context.Context) (bool, error)
 
-	// FindOne will search Btree for an item with a given key. Return true if found,
+	// Find will search Btree for an item with a given key. Return true if found,
 	// otherwise false. firstItemWithKey is useful when there are items with same key.
 	// true will position pointer to the first item with the given key,
 	// according to key ordering sequence.
 	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
-	FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error)
-	// FindOneWithID is synonymous to FindOne but allows code to supply the Item's ID to identify it.
+	Find(ctx context.Context, key TK, firstItemWithKey bool) (bool, error)
+	// FindWithID is synonymous to Find but allows code to supply the Item's ID to identify it.
 	// This is useful for B-Tree that allows duplicate keys(IsUnique = false) as it provides a way to
 	// differentiate duplicated keys via the unique ID(sop.UUID).
-	FindOneWithID(ctx context.Context, key TK, id sop.UUID) (bool, error)
+	FindWithID(ctx context.Context, key TK, id sop.UUID) (bool, error)
 	// GetCurrentKey returns the current item's key (& Item ID). If B-tree allows duplicates,
 	// having the Item ID available allows finding that item conveniently (see FindOneWithID).
 	GetCurrentKey() Item[TK, TV]

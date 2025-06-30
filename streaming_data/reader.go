@@ -51,7 +51,7 @@ func (r *reader[TK]) Read(p []byte) (int, error) {
 			found = false
 		}
 	} else {
-		found, err = r.btree.FindOne(r.ctx, StreamingDataKey[TK]{Key: r.key, ChunkIndex: r.chunkIndex}, false)
+		found, err = r.btree.Find(r.ctx, StreamingDataKey[TK]{Key: r.key, ChunkIndex: r.chunkIndex}, false)
 	}
 	if err != nil {
 		return 0, err

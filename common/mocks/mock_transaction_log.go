@@ -44,7 +44,7 @@ func (tl *MockTransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []s
 }
 
 func (tl *MockTransactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
-	if !tl.datesLogs.FindOne(hour, false) {
+	if !tl.datesLogs.Find(hour, false) {
 		return sop.NilUUID, nil, nil
 	}
 	v := tl.datesLogs.GetCurrentValue()
@@ -85,7 +85,7 @@ func (tl *MockTransactionLog) GetTIDLogs(tid sop.UUID) []sop.KeyValuePair[int, [
 // Add blob(s) to the Blob store.
 func (tl *MockTransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
 	date := cas.Now().Format(cas.DateHourLayout)
-	found := tl.datesLogs.FindOne(date, false)
+	found := tl.datesLogs.Find(date, false)
 	dayLogs := tl.datesLogs.GetCurrentValue()
 	if dayLogs == nil {
 		dayLogs = make(map[sop.UUID][]sop.KeyValuePair[int, []byte])
@@ -106,7 +106,7 @@ func (tl *MockTransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunct
 // Remove will delete(non-logged) node records from different Blob stores(node tables).
 func (tl *MockTransactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 	date := tl.logsDates[tid]
-	if tl.datesLogs.FindOne(date, false) {
+	if tl.datesLogs.Find(date, false) {
 		for {
 			dayLogs := tl.datesLogs.GetCurrentValue()
 			if _, ok := dayLogs[tid]; ok {

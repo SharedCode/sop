@@ -21,7 +21,7 @@ func Test_HelloWorld(t *testing.T) {
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")
 	b3.Add(ctx, 5000, "I am also a value with 5000 key.")
 
-	if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey().Key != 5000 {
+	if ok, _ := b3.Find(ctx, 5000, true); !ok || b3.GetCurrentKey().Key != 5000 {
 		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey().Key)
 	}
 	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey().Key != 5000 {
@@ -50,7 +50,7 @@ func Test_FunctionalityTests(t *testing.T) {
 	const five001Value = "I am the value with 5001 key."
 
 	// Check get on empty tree, returns false always as is empty.
-	if ok, _ := b3.FindOne(ctx, 1, false); ok {
+	if ok, _ := b3.Find(ctx, 1, false); ok {
 		t.Errorf("FindOne(1) failed, got true, want false.")
 	}
 
@@ -72,7 +72,7 @@ func Test_FunctionalityTests(t *testing.T) {
 	// Add more checks here as needed..
 
 	// Check if B-Tree items are intact.
-	if ok, _ := b3.FindOne(ctx, 5000, true); !ok || b3.GetCurrentKey().Key != 5000 {
+	if ok, _ := b3.Find(ctx, 5000, true); !ok || b3.GetCurrentKey().Key != 5000 {
 		t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey().Key)
 	}
 	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey().Key != 5000 {
@@ -88,7 +88,7 @@ func Test_FunctionalityTests(t *testing.T) {
 	}
 
 	// Test UpdateCurrentItem.
-	b3.FindOne(ctx, 5000, true)
+	b3.Find(ctx, 5000, true)
 	newVal := "Updated with new Value."
 	if ok, _ := b3.UpdateCurrentItem(ctx, newVal); !ok {
 		t.Errorf("UpdateCurrentItem() failed, got = false, want = true")
@@ -97,7 +97,7 @@ func Test_FunctionalityTests(t *testing.T) {
 		t.Errorf("UpdateCurrentItem() failed, got = %s, want = %s", v, newVal)
 	}
 
-	if ok, _ := b3.FindOne(ctx, 5000, true); !ok {
+	if ok, _ := b3.Find(ctx, 5000, true); !ok {
 		t.Errorf("UpdateCurrentItem(<k>) succeeded but FindOne(<k>, true) failed, got = false, want = true")
 	}
 	if v, _ := b3.GetCurrentValue(ctx); v != newVal {
@@ -105,11 +105,11 @@ func Test_FunctionalityTests(t *testing.T) {
 	}
 
 	// Test RemoveCurrentItem
-	b3.FindOne(ctx, 5000, true)
+	b3.Find(ctx, 5000, true)
 	if ok, _ := b3.RemoveCurrentItem(ctx); !ok {
 		t.Errorf("RemoveCurrentItem() failed.")
 	}
-	b3.FindOne(ctx, 5000, true)
+	b3.Find(ctx, 5000, true)
 	if ok, _ := b3.Next(ctx); !ok || b3.GetCurrentKey().Key != 5001 {
 		t.Errorf("Next() after RemoveCurrentItem failed, expected item(5001) not found.")
 	}
@@ -253,7 +253,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 			itemsFoundCount := 0
 			for i := test.startRange; i <= test.endRange; i++ {
 				k = i
-				if ok, _ := b3.FindOne(ctx, k, true); ok {
+				if ok, _ := b3.Find(ctx, k, true); ok {
 					itemsFoundCount++
 				}
 			}
@@ -267,7 +267,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 		if test.action == 5 {
 			itemsFoundCount := 0
 			k = test.startRange
-			if ok, _ := b3.FindOne(ctx, k, true); ok {
+			if ok, _ := b3.Find(ctx, k, true); ok {
 				itemsFoundCount++
 			}
 			for i := test.startRange + 1; i <= test.endRange; i++ {
@@ -297,7 +297,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 					t.Errorf("Failed Add item with key %d.\n", k)
 				}
 			case 2:
-				if ok, _ := b3.FindOne(ctx, k, true); !ok {
+				if ok, _ := b3.Find(ctx, k, true); !ok {
 					t.Errorf("Failed FindOne item with key %d.\n", k)
 				}
 			case 3:
@@ -326,7 +326,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 
 			switch test.action {
 			case 2:
-				if ok, _ := b3.FindOne(ctx, k, true); !ok {
+				if ok, _ := b3.Find(ctx, k, true); !ok {
 					t.Errorf("Failed FindOne item with key %d.\n", k)
 				}
 			}
@@ -415,7 +415,7 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 					t.Errorf("Failed Add item with key %s.\n", k)
 				}
 			case 2:
-				if ok, _ := b3.FindOne(ctx, k, true); !ok {
+				if ok, _ := b3.Find(ctx, k, true); !ok {
 					t.Errorf("Failed FindOne item with key %s.\n", k)
 				}
 			case 3:
@@ -439,7 +439,7 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 
 			switch test.action {
 			case 2:
-				if ok, _ := b3.FindOne(ctx, k, true); !ok {
+				if ok, _ := b3.Find(ctx, k, true); !ok {
 					t.Errorf("Failed FindOne item with key %s.\n", k)
 				}
 			}

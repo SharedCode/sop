@@ -145,7 +145,7 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 	if b3.Count() == 0 {
 		return
 	}
-	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+	if ok, err := b3.Find(ctx, 1, false); !ok || err != nil {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
@@ -195,7 +195,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 		return
 	}
 
-	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+	if ok, err := b3.Find(ctx, 1, false); !ok || err != nil {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		trans.Rollback(ctx)
 		return
@@ -242,7 +242,7 @@ func Test_RegistryZeroDurationCache(t *testing.T) {
 		return
 	}
 
-	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+	if ok, err := b3.Find(ctx, 1, false); !ok || err != nil {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		trans.Rollback(ctx)
 		return
@@ -285,7 +285,7 @@ func Test_StoreCaching(t *testing.T) {
 		return
 	}
 
-	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+	if ok, err := b3.Find(ctx, 1, false); !ok || err != nil {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}
@@ -326,7 +326,7 @@ func Test_StoreCachingTTL(t *testing.T) {
 		return
 	}
 
-	if ok, err := b3.FindOne(ctx, 1, false); !ok || err != nil {
+	if ok, err := b3.Find(ctx, 1, false); !ok || err != nil {
 		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
 		return
 	}

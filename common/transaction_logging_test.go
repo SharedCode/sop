@@ -39,7 +39,7 @@ func Test_TLog_Rollback(t *testing.T) {
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "tlogtable", trans, Compare)
 	pk, _ = newPerson("joe", "shroeger", "male", "email", "phone")
 
-	b3.FindOne(ctx, pk, false)
+	b3.Find(ctx, pk, false)
 	v, _ := b3.GetCurrentValue(ctx)
 
 	if v.Email != "email" {
