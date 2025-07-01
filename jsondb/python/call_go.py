@@ -40,13 +40,13 @@ _free_string = lib.freeString
 _free_string.argtypes = [ctypes.c_char_p]
 _free_string.restype = None
 
-_manage_tran = lib.manageTransaction
+_manage_transaction = lib.manageTransaction
 
-_manage_tran.argtypes = [
+_manage_transaction.argtypes = [
     ctypes.c_int,
     ctypes.c_char_p,
 ]  # Specify argument types
-_manage_tran.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
+_manage_transaction.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
 _manage_btree = lib.manageBtree
 _manage_btree.argtypes = [
@@ -81,11 +81,11 @@ _navigate_btree.argtypes = [
 ]  # Specify argument types
 _navigate_btree.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
-_is_unique = lib.isUnique
-_is_unique.argtypes = [
+_is_unique_btree = lib.isUnique
+_is_unique_btree.argtypes = [
     ctypes.c_char_p,
 ]  # Specify argument types
-_is_unique.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
+_is_unique_btree.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
 
 class getBtreeCountResult(ctypes.Structure):
@@ -137,7 +137,7 @@ def manage_transaction(action: int, payload: str) -> str:
     Manage a SOP transaction.
     """
 
-    res = _manage_tran(to_cint(action), to_cstring(payload))
+    res = _manage_transaction(to_cint(action), to_cstring(payload))
     if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
         return None
 
@@ -212,12 +212,12 @@ def get_from_btree(action: int, payload: str, payload2: str):
     return s, None
 
 
-def is_unique(payload: str) -> str:
+def is_unique_btree(payload: str) -> str:
     """
     IsUnique btree.
     """
 
-    res = _is_unique(to_cstring(payload))
+    res = _is_unique_btree(to_cstring(payload))
     if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
         return None
 

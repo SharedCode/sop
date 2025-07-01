@@ -344,7 +344,7 @@ class Btree(Generic[TK, TV]):
             btree_id=str(self.id),
             transaction_id=str(self.transaction_id),
         )
-        res = call_go.is_unique(
+        res = call_go.is_unique_btree(
             json.dumps(asdict(metadata)),
         )
         if res == None:
