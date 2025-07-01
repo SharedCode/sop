@@ -15,7 +15,7 @@ import (
 // Item contains Key & Value pair.
 type Item struct {
 	Key   any       `json:"key"`
-	Value any       `json:"value"`
+	Value *any      `json:"value"`
 	ID    uuid.UUID `json:"id"`
 }
 

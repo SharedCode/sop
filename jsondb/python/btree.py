@@ -93,7 +93,7 @@ class BtreeOptions:
 @dataclass
 class Item(Generic[TK, TV]):
     key: TK
-    value: TV
+    value: TV = None
     id: str = str(uuid.UUID(int=0))
 
 
@@ -197,7 +197,7 @@ class Btree(Generic[TK, TV]):
         )
 
         if res == None:
-            raise BtreeError("unable to open a Btree in SOP")
+            raise BtreeError(f"unable to open a Btree:{name} in SOP")
         try:
             b3id = uuid.UUID(res)
         except:
@@ -230,8 +230,10 @@ class Btree(Generic[TK, TV]):
             json.dumps(asdict(keys)),
         )
         if res == None:
-            raise BtreeError("unable to remove item from a Btree in SOP")
-        return self._return_result(res)
+            raise BtreeError(
+                f"unable to remove item w/ key:{keys} from a Btree:{self.id} in SOP"
+            )
+        return self._to_bool(res)
 
     def get_items(
         self, page_offset: int, page_size: int, direction: PagingDirection
@@ -254,7 +256,7 @@ class Btree(Generic[TK, TV]):
         )
         if error is not None:
             if result is None:
-                raise BtreeError(f"{error}")
+                raise BtreeError(error)
             else:
                 # just log the error since there are partial results we can return.
                 logger.error(error)
@@ -270,23 +272,98 @@ class Btree(Generic[TK, TV]):
     ) -> Item[TK, TV]:
         return self._get(BtreeAction.GetKeys.value, page_offset, page_size, direction)
 
-    def find(self, key: TK, first_item_with_key: bool) -> bool:
-        return False
+    def find(self, key: TK) -> bool:
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
+        )
+        payload: ManageBtreePayload = ManageBtreePayload(items=(Item(key=key),))
+        res = call_go.navigate_btree(
+            BtreeAction.Find.value,
+            json.dumps(asdict(metadata)),
+            json.dumps(asdict(payload)),
+        )
+        if res == None:
+            raise BtreeError(
+                f"unable to Find using key:{key} the item of a Btree:{self.id} in SOP"
+            )
+
+        return self._to_bool(res)
 
     def find_with_id(self, key: TK, id: uuid.uuid4) -> bool:
-        return False
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
+        )
+        payload: ManageBtreePayload = ManageBtreePayload(items=(Item(key=key, id=id),))
+        res = call_go.navigate_btree(
+            BtreeAction.FindWithID.value,
+            json.dumps(asdict(metadata)),
+            json.dumps(asdict(payload)),
+        )
+        if res == None:
+            raise BtreeError(
+                f"unable to Find using key:{key} & ID:{id} the item of a Btree:{self.id} in SOP"
+            )
+
+        return self._to_bool(res)
 
     def first(self) -> bool:
-        return False
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
+        )
+        res = call_go.navigate_btree(
+            BtreeAction.First.value, json.dumps(asdict(metadata)), None
+        )
+        if res == None:
+            raise BtreeError(f"First call failed for Btree:{self.id} in SOP")
+
+        return self._to_bool(res)
 
     def last(self) -> bool:
-        return False
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
+        )
+        res = call_go.navigate_btree(
+            BtreeAction.Last.value, json.dumps(asdict(metadata)), None
+        )
+        if res == None:
+            raise BtreeError(f"Last call failed for Btree:{self.id} in SOP")
+
+        return self._to_bool(res)
 
     def is_unique(self) -> bool:
-        return False
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
+        )
+        res = call_go.is_unique(
+            json.dumps(asdict(metadata)),
+        )
+        if res == None:
+            raise BtreeError(f"IsUnique call failed for Btree:{self.id} in SOP")
+
+        return self._to_bool(res)
 
     def count(self) -> int:
-        return 0
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
+        )
+        count, error = call_go.get_btree_item_count(
+            json.dumps(asdict(metadata)),
+        )
+        if error is not None:
+            raise BtreeError(error)
+        return count
 
     def get_store_info(self) -> BtreeOptions:
         return BtreeOptions()
@@ -304,9 +381,9 @@ class Btree(Generic[TK, TV]):
             json.dumps(asdict(payload)),
         )
         if res == None:
-            raise BtreeError("unable to manage item to a Btree in SOP")
+            raise BtreeError(f"unable to manage item to a Btree:{self.id} in SOP")
 
-        return self._return_result(res)
+        return self._to_bool(res)
 
     def _get(
         self,
@@ -330,7 +407,7 @@ class Btree(Generic[TK, TV]):
         )
         if error is not None:
             if result is None:
-                raise BtreeError(f"{error}")
+                raise BtreeError(error)
             else:
                 # just log the error since there are partial results we can return.
                 logger.error(error)
@@ -341,7 +418,10 @@ class Btree(Generic[TK, TV]):
         data_dicts = json.loads(result)
         return [Item[TK, TV](**data_dict) for data_dict in data_dicts]
 
-    def _return_result(self, res: str) -> bool:
+    def _to_bool(self, res: str) -> bool:
+        """
+        Converts result string "true" or "false" to bool or an errmsg to raise an error.
+        """
         if res.lower() == "true":
             return True
         if res.lower() == "false":

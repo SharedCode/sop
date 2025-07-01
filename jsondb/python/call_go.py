@@ -73,6 +73,34 @@ _get_from_btree.argtypes = [
 ]  # Specify argument types
 _get_from_btree.restype = ResultStruct  # Specify return type
 
+_navigate_btree = lib.navigateBtree
+_navigate_btree.argtypes = [
+    ctypes.c_int,
+    ctypes.c_char_p,
+    ctypes.c_char_p,
+]  # Specify argument types
+_navigate_btree.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
+
+_is_unique = lib.isUnique
+_is_unique.argtypes = [
+    ctypes.c_char_p,
+]  # Specify argument types
+_is_unique.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
+
+
+class getBtreeCountResult(ctypes.Structure):
+    _fields_ = [
+        ("count", ctypes.c_long),  # First return value (C long)
+        ("error", ctypes.POINTER(ctypes.c_char)),  # Second return value (C string)
+    ]
+
+
+_get_btree_item_count = lib.getBtreeItemCount
+_get_btree_item_count.argtypes = [
+    ctypes.c_char_p,
+]  # Specify argument types
+_get_btree_item_count.restype = getBtreeCountResult  # Specify return type
+
 
 def open_redis_connection(host: str, port: int, password: str) -> str:
     """
@@ -136,6 +164,25 @@ def manage_btree(action: int, payload: str, payload2: str) -> str:
     return s
 
 
+def navigate_btree(action: int, payload: str, payload2: str) -> str:
+    """
+    Navigate a SOP btree.
+    """
+
+    p2 = None
+    if payload2 is not None:
+        p2 = to_cstring(payload2)
+    res = _navigate_btree(to_cint(action), to_cstring(payload), p2)
+    if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
+        return None
+
+    s = to_str(res)
+    # free the string allocated in C heap using malloc.
+    _free_string(res)
+
+    return s
+
+
 def get_from_btree(action: int, payload: str, payload2: str):
     """
     Fetch/Navigate from SOP btree.
@@ -163,6 +210,40 @@ def get_from_btree(action: int, payload: str, payload2: str):
     _free_string(result.payload)
 
     return s, None
+
+
+def is_unique(payload: str) -> str:
+    """
+    IsUnique btree.
+    """
+
+    res = _is_unique(to_cstring(payload))
+    if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
+        return None
+
+    s = to_str(res)
+    # free the string allocated in C heap using malloc.
+    _free_string(res)
+
+    return s
+
+
+def get_btree_item_count(payload: str) -> str:
+    """
+    Get btree item count.
+    """
+
+    result = _get_btree_item_count(to_cstring(payload))
+    if (
+        result.error is not None
+        and ctypes.cast(result.error, ctypes.c_char_p).value is not None
+    ):
+        se = to_str(result.error)
+        # free the string allocated in C heap using malloc.
+        _free_string(result.error)
+        return 0, se
+
+    return result.count, None
 
 
 def to_str(s: ctypes.c_char_p) -> str:

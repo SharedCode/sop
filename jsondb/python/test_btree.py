@@ -47,10 +47,6 @@ class TestBtree(unittest.TestCase):
         ro = RedisOptions()
         Redis.open_connection(ro)
 
-    def tearDownClass():
-        Redis.close_connection()
-
-    def test_new_btree(self):
         t = transaction.Transaction(to)
         t.begin()
 
@@ -65,21 +61,10 @@ class TestBtree(unittest.TestCase):
         b3.add(l)
 
         t.commit()
-        print("test new")
+        print("new B3 succeeded")
 
-    def test_open_btree(self):
-        t = transaction.Transaction(to)
-        t.begin()
-
-        b3 = btree.Btree.open("barstoreec", True, t)
-        l = [
-            btree.Item(1, "foo"),
-        ]
-        if b3.add(l):
-            print("add should have failed.")
-
-        t.commit()
-        print("test open")
+    def tearDownClass():
+        Redis.close_connection()
 
     def test_add_if_not_exists(self):
         t = transaction.Transaction(to)
@@ -168,4 +153,67 @@ class TestBtree(unittest.TestCase):
 
         print(f"get_values succeeded {res}.")
 
+        t.commit()
+
+    def test_find(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("barstoreec", True, t)
+        res = b3.find(1)
+
+        print(f"find succeeded {res}.")
+
+        t.commit()
+
+    def test_find_with_id(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("barstoreec", True, t)
+        keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        res = b3.find_with_id(keys[0].key, keys[0].id)
+
+        print(f"find with id succeeded {res}.")
+
+        t.commit()
+
+    def test_goto_first(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("barstoreec", True, t)
+        res = b3.first()
+
+        print(f"goto first succeeded {res}.")
+        t.commit()
+
+    def test_goto_last(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("barstoreec", True, t)
+        res = b3.last()
+
+        print(f"goto last succeeded {res}.")
+        t.commit()
+
+    def test_is_unique(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("barstoreec", True, t)
+        res = b3.is_unique()
+
+        print(f"is_unique succeeded {res}.")
+        t.commit()
+
+    def test_count(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("barstoreec", True, t)
+        res = b3.count()
+
+        print(f"count succeeded {res}.")
         t.commit()

@@ -18,6 +18,10 @@ func navigateBtree(action C.int, payload *C.char, payload2 *C.char) *C.char {
 	ctx := context.Background()
 
 	switch int(action) {
+	case First:
+		fallthrough
+	case Last:
+		return moveTo(ctx, int(action), ps)
 	case Find:
 		fallthrough
 	case FindWithID:
@@ -25,6 +29,46 @@ func navigateBtree(action C.int, payload *C.char, payload2 *C.char) *C.char {
 	default:
 		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
 		return C.CString(errMsg)
+	}
+}
+
+//export isUnique
+func isUnique(payload *C.char) *C.char {
+	ps := C.GoString(payload)
+	var p ManageBtreeMetaData
+	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
+		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
+		return C.CString(errMsg)
+	}
+
+	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
+		return C.CString(errMsg)
+	}
+	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+		return C.CString(errMsg)
+	}
+	if p.IsPrimitiveKey {
+		b3, ok := b32.(*jsondb.JsonAnyKey)
+		if !ok {
+			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		ok = b3.IsUnique()
+		return C.CString(fmt.Sprintf("%v", ok))
+	} else {
+		b3, ok := b32.(*jsondb.JsonMapKey)
+		if !ok {
+			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		ok = b3.IsUnique()
+		return C.CString(fmt.Sprintf("%v", ok))
 	}
 }
 
@@ -43,6 +87,47 @@ func getFromBtree(action C.int, payload *C.char, payload2 *C.char) (*C.char, *C.
 	default:
 		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
 		return nil, C.CString(errMsg)
+	}
+}
+
+//export getBtreeItemCount
+func getBtreeItemCount(payload *C.char) (C.long, *C.char) {
+	ps := C.GoString(payload)
+
+	var p ManageBtreeMetaData
+	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
+		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
+		return 0, C.CString(errMsg)
+	}
+
+	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
+		return 0, C.CString(errMsg)
+	}
+	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+		return 0, C.CString(errMsg)
+	}
+	if p.IsPrimitiveKey {
+		b3, ok := b32.(*jsondb.JsonAnyKey)
+		if !ok {
+			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
+			return 0, C.CString(errMsg)
+		}
+
+		res := b3.Count()
+		return C.long(res), nil
+	} else {
+		b3, ok := b32.(*jsondb.JsonMapKey)
+		if !ok {
+			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
+			return 0, C.CString(errMsg)
+		}
+
+		res := b3.Count()
+		return C.long(res), nil
 	}
 }
 
@@ -244,6 +329,72 @@ func find(ctx context.Context, ps string, payload2 *C.char) *C.char {
 		if err != nil {
 			errMsg := fmt.Sprintf("error find with ID from B-tree (id=%v), details: %v", p.BtreeID, err)
 			return C.CString(errMsg)
+		}
+		return C.CString(fmt.Sprintf("%v", ok))
+	}
+}
+
+func moveTo(ctx context.Context, action int, ps string) *C.char {
+	var p ManageBtreeMetaData
+	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
+		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
+		return C.CString(errMsg)
+	}
+
+	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
+		return C.CString(errMsg)
+	}
+	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+		return C.CString(errMsg)
+	}
+	if p.IsPrimitiveKey {
+		b3, ok := b32.(*jsondb.JsonAnyKey)
+		if !ok {
+			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		var err error
+		switch action {
+		case First:
+			ok, err = b3.First(ctx)
+			if err != nil {
+				errMsg := fmt.Sprintf("error moving cursor to First item of B-tree (id=%v), details: %v", p.BtreeID, err)
+				return C.CString(errMsg)
+			}
+		case Last:
+			ok, err = b3.Last(ctx)
+			if err != nil {
+				errMsg := fmt.Sprintf("error moving cursor to Last item of B-tree (id=%v), details: %v", p.BtreeID, err)
+				return C.CString(errMsg)
+			}
+		}
+		return C.CString(fmt.Sprintf("%v", ok))
+	} else {
+		b3, ok := b32.(*jsondb.JsonMapKey)
+		if !ok {
+			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
+			return C.CString(errMsg)
+		}
+
+		var err error
+		switch action {
+		case First:
+			ok, err = b3.First(ctx)
+			if err != nil {
+				errMsg := fmt.Sprintf("error moving cursor to First item of B-tree (id=%v), details: %v", p.BtreeID, err)
+				return C.CString(errMsg)
+			}
+		case Last:
+			ok, err = b3.Last(ctx)
+			if err != nil {
+				errMsg := fmt.Sprintf("error moving cursor to Last item of B-tree (id=%v), details: %v", p.BtreeID, err)
+				return C.CString(errMsg)
+			}
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	}
