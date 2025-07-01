@@ -25,13 +25,9 @@ type ManageBtreeMetaData struct {
 	TransactionID  uuid.UUID `json:"transaction_id"`
 	BtreeID        uuid.UUID `json:"btree_id"`
 }
-type ManageBtreePayload struct {
-	Items      []jsondb.Item[any, any] `json:"items"`
-	PagingInfo *jsondb.PagingInfo      `json:"paging_info"`
-}
-type ManageBtreePayloadMapKey struct {
-	Items      []jsondb.Item[map[string]any, any] `json:"items"`
-	PagingInfo *jsondb.PagingInfo                 `json:"paging_info"`
+type ManageBtreePayload[TK, TV any] struct {
+	Items      []jsondb.Item[TK, TV] `json:"items"`
+	PagingInfo *jsondb.PagingInfo    `json:"paging_info"`
 }
 
 //export manageBtree
@@ -132,6 +128,12 @@ func openBtree(ctx context.Context, ps string) *C.char {
 			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
 			return C.CString(errMsg)
 		}
+		ce := b3.GetStoreInfo().CELexpression
+		if ce != "" {
+			errMsg := fmt.Sprintf("error opening for 'Primitive Type' Btree (%s), CELexpression %s is restricted for class type Key", so.Name, ce)
+			log.Error(errMsg)
+			return C.CString(errMsg)
+		}
 		tup.Second[b3id] = b3
 	} else {
 		b3, err := jsondb.OpenJsonBtreeMapKey(ctx, so.Name, tup.First)
@@ -175,7 +177,7 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 		}
 
 		ps2 := C.GoString(payload2)
-		var payload ManageBtreePayload
+		var payload ManageBtreePayload[any, any]
 		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
 			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
 			return C.CString(errMsg)
@@ -209,7 +211,7 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 		}
 
 		ps2 := C.GoString(payload2)
-		var payload ManageBtreePayloadMapKey
+		var payload ManageBtreePayload[map[string]any, any]
 		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
 			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
 			return C.CString(errMsg)

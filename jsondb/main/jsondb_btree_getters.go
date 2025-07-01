@@ -14,18 +14,17 @@ import (
 
 //export navigateBtree
 func navigateBtree(action C.int, payload *C.char, payload2 *C.char) *C.char {
-	ps := C.GoString(payload)
 	ctx := context.Background()
 
 	switch int(action) {
 	case First:
 		fallthrough
 	case Last:
-		return moveTo(ctx, int(action), ps)
+		return moveTo(ctx, int(action), payload)
 	case Find:
 		fallthrough
 	case FindWithID:
-		return find(ctx, ps, payload2)
+		return find(ctx, payload, payload2)
 	default:
 		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
 		return C.CString(errMsg)
@@ -34,22 +33,9 @@ func navigateBtree(action C.int, payload *C.char, payload2 *C.char) *C.char {
 
 //export isUniqueBtree
 func isUniqueBtree(payload *C.char) *C.char {
-	ps := C.GoString(payload)
-	var p ManageBtreeMetaData
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-		return C.CString(errMsg)
-	}
-
-	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-		return C.CString(errMsg)
-	}
-	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-		return C.CString(errMsg)
+	p, b32, errMsg := extractMetaData(payload)
+	if errMsg != nil {
+		return errMsg
 	}
 	if p.IsPrimitiveKey {
 		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
@@ -74,11 +60,9 @@ func isUniqueBtree(payload *C.char) *C.char {
 
 //export getFromBtree
 func getFromBtree(action C.int, payload *C.char, payload2 *C.char) (*C.char, *C.char) {
-	ps := C.GoString(payload)
-
 	// GetStoreInfo does not need Context.
 	if action == GetStoreInfo {
-		return getStoreInfo(ps)
+		return getStoreInfo(payload)
 	}
 
 	ctx := context.Background()
@@ -87,9 +71,9 @@ func getFromBtree(action C.int, payload *C.char, payload2 *C.char) (*C.char, *C.
 	case GetKeys:
 		fallthrough
 	case GetItems:
-		return get(ctx, int(action), ps, payload2)
+		return get(ctx, int(action), payload, payload2)
 	case GetValues:
-		return getValues(ctx, ps, payload2)
+		return getValues(ctx, payload, payload2)
 	default:
 		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
 		return nil, C.CString(errMsg)
@@ -98,23 +82,9 @@ func getFromBtree(action C.int, payload *C.char, payload2 *C.char) (*C.char, *C.
 
 //export getBtreeItemCount
 func getBtreeItemCount(payload *C.char) (C.long, *C.char) {
-	ps := C.GoString(payload)
-
-	var p ManageBtreeMetaData
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-		return 0, C.CString(errMsg)
-	}
-
-	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-		return 0, C.CString(errMsg)
-	}
-	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-		return 0, C.CString(errMsg)
+	p, b32, errMsg := extractMetaData(payload)
+	if errMsg != nil {
+		return 0, errMsg
 	}
 	if p.IsPrimitiveKey {
 		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
@@ -137,22 +107,10 @@ func getBtreeItemCount(payload *C.char) (C.long, *C.char) {
 	}
 }
 
-func getStoreInfo(ps string) (*C.char, *C.char) {
-	var p ManageBtreeMetaData
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-		return nil, C.CString(errMsg)
-	}
-
-	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-		return nil, C.CString(errMsg)
-	}
-	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-		return nil, C.CString(errMsg)
+func getStoreInfo(payload *C.char) (*C.char, *C.char) {
+	p, b32, errMsg := extractMetaData(payload)
+	if errMsg != nil {
+		return nil, errMsg
 	}
 	if p.IsPrimitiveKey {
 		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
@@ -191,22 +149,10 @@ func getStoreInfo(ps string) (*C.char, *C.char) {
 	}
 }
 
-func get(ctx context.Context, getAction int, ps string, payload2 *C.char) (*C.char, *C.char) {
-	var p ManageBtreeMetaData
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-		return nil, C.CString(errMsg)
-	}
-
-	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-		return nil, C.CString(errMsg)
-	}
-	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-		return nil, C.CString(errMsg)
+func get(ctx context.Context, getAction int, payload *C.char, payload2 *C.char) (*C.char, *C.char) {
+	p, b32, errMsg := extractMetaData(payload)
+	if errMsg != nil {
+		return nil, errMsg
 	}
 	if p.IsPrimitiveKey {
 		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
@@ -263,22 +209,10 @@ func get(ctx context.Context, getAction int, ps string, payload2 *C.char) (*C.ch
 	}
 }
 
-func getValues(ctx context.Context, ps string, payload2 *C.char) (*C.char, *C.char) {
-	var p ManageBtreeMetaData
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-		return nil, C.CString(errMsg)
-	}
-
-	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-		return nil, C.CString(errMsg)
-	}
-	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-		return nil, C.CString(errMsg)
+func getValues(ctx context.Context, payload, payload2 *C.char) (*C.char, *C.char) {
+	p, b32, errMsg := extractMetaData(payload)
+	if errMsg != nil {
+		return nil, errMsg
 	}
 	if p.IsPrimitiveKey {
 		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
@@ -288,7 +222,7 @@ func getValues(ctx context.Context, ps string, payload2 *C.char) (*C.char, *C.ch
 		}
 
 		ps2 := C.GoString(payload2)
-		var payload ManageBtreePayload
+		var payload ManageBtreePayload[any, any]
 		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
 			errMsg := fmt.Sprintf("error Unmarshal keys array, details: %v", err)
 			return nil, C.CString(errMsg)
@@ -307,7 +241,7 @@ func getValues(ctx context.Context, ps string, payload2 *C.char) (*C.char, *C.ch
 		}
 
 		ps2 := C.GoString(payload2)
-		var payload ManageBtreePayloadMapKey
+		var payload ManageBtreePayload[map[string]any, any]
 		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
 			errMsg := fmt.Sprintf("error Unmarshal keys array, details: %v", err)
 			return nil, C.CString(errMsg)
@@ -321,22 +255,10 @@ func getValues(ctx context.Context, ps string, payload2 *C.char) (*C.char, *C.ch
 	}
 }
 
-func find(ctx context.Context, ps string, payload2 *C.char) *C.char {
-	var p ManageBtreeMetaData
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-		return C.CString(errMsg)
-	}
-
-	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-		return C.CString(errMsg)
-	}
-	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-		return C.CString(errMsg)
+func find(ctx context.Context, payload, payload2 *C.char) *C.char {
+	p, b32, errMsg := extractMetaData(payload)
+	if errMsg != nil {
+		return errMsg
 	}
 	if p.IsPrimitiveKey {
 		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
@@ -349,7 +271,7 @@ func find(ctx context.Context, ps string, payload2 *C.char) *C.char {
 
 		log.Info(fmt.Sprintf("Payload: %v", ps2))
 
-		var payload ManageBtreePayload
+		var payload ManageBtreePayload[any, any]
 		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
 			errMsg := fmt.Sprintf("error Unmarshal keys array, details: %v", err)
 			return C.CString(errMsg)
@@ -374,7 +296,7 @@ func find(ctx context.Context, ps string, payload2 *C.char) *C.char {
 		}
 
 		ps2 := C.GoString(payload2)
-		var payload ManageBtreePayloadMapKey
+		var payload ManageBtreePayload[map[string]any, any]
 		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
 			errMsg := fmt.Sprintf("error Unmarshal keys array, details: %v", err)
 			return C.CString(errMsg)
@@ -394,22 +316,10 @@ func find(ctx context.Context, ps string, payload2 *C.char) *C.char {
 	}
 }
 
-func moveTo(ctx context.Context, action int, ps string) *C.char {
-	var p ManageBtreeMetaData
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-		return C.CString(errMsg)
-	}
-
-	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-		return C.CString(errMsg)
-	}
-	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-		return C.CString(errMsg)
+func moveTo(ctx context.Context, action int, payload *C.char) *C.char {
+	p, b32, errMsg := extractMetaData(payload)
+	if errMsg != nil {
+		return errMsg
 	}
 	if p.IsPrimitiveKey {
 		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
@@ -458,4 +368,25 @@ func moveTo(ctx context.Context, action int, ps string) *C.char {
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	}
+}
+
+func extractMetaData(payload *C.char) (*ManageBtreeMetaData, any, *C.char) {
+	ps := C.GoString(payload)
+	var p *ManageBtreeMetaData
+	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
+		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
+		return nil, nil, C.CString(errMsg)
+	}
+
+	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
+		return nil, nil, C.CString(errMsg)
+	}
+	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
+	if !ok {
+		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
+		return nil, nil, C.CString(errMsg)
+	}
+	return p, b32, nil
 }
