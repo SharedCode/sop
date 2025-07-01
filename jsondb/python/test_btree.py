@@ -63,9 +63,6 @@ class TestBtree(unittest.TestCase):
         t.commit()
         print("new B3 succeeded")
 
-    def tearDownClass():
-        Redis.close_connection()
-
     def test_add_if_not_exists(self):
         t = transaction.Transaction(to)
         t.begin()
@@ -223,6 +220,147 @@ class TestBtree(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("barstoreec", True, t)
+        res = b3.get_store_info()
+
+        print(f"storeInfo: {res}")
+        t.commit()
+
+
+class TestBtreeMapKey(unittest.TestCase):
+    def setUpClass():
+        ro = RedisOptions()
+        Redis.open_connection(ro)
+
+        t = transaction.Transaction(to)
+        t.begin()
+
+        cache = btree.CacheConfig()
+        bo = btree.BtreeOptions("foobar", True, cache_config=cache)
+        bo.set_value_data_size(btree.ValueDataSize.Small)
+
+        b3 = btree.Btree.new(bo, False, t)
+        l = [
+            btree.Item(pKey(key="123"), "foo"),
+        ]
+        b3.add(l)
+
+        t.commit()
+        print("new B3 succeeded")
+
+    def test_add_if_not_exists(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("foobar", False, t)
+        l = [
+            btree.Item(pKey(key="123"), "foo"),
+        ]
+        if b3.add_if_not_exists(l):
+            print("addIfNotExists should have failed.")
+
+        t.commit()
+        print("test add_if_not_exists")
+
+    def test_get_items(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("foobar", False, t)
+        res = b3.get_items(0, 5, btree.PagingDirection.Forward)
+        print(f"get_items succeeded {res}.")
+
+        t.commit()
+
+    def test_get_keys(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("foobar", False, t)
+        res = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        print(f"get_keys succeeded {res}.")
+
+        t.commit()
+
+    def test_get_values(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("foobar", False, t)
+        keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        res = b3.get_values(keys)
+
+        print(f"get_values succeeded {res}.")
+
+        t.commit()
+
+    def test_find(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("foobar", False, t)
+        res = b3.find(pKey(key="123"))
+
+        print(f"find succeeded {res}.")
+
+        t.commit()
+
+    def test_find_with_id(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("foobar", False, t)
+        keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        res = b3.find_with_id(keys[0].key, keys[0].id)
+
+        print(f"find with id succeeded {res}.")
+
+        t.commit()
+
+    def test_goto_first(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("foobar", False, t)
+        res = b3.first()
+
+        print(f"goto first succeeded {res}.")
+        t.commit()
+
+    def test_goto_last(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("foobar", False, t)
+        res = b3.last()
+
+        print(f"goto last succeeded {res}.")
+        t.commit()
+
+    def test_is_unique(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("foobar", False, t)
+        res = b3.is_unique()
+
+        print(f"is_unique succeeded {res}.")
+        t.commit()
+
+    def test_count(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("foobar", False, t)
+        res = b3.count()
+
+        print(f"count succeeded {res}.")
+        t.commit()
+
+    def test_get_store_info(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("foobar", False, t)
         res = b3.get_store_info()
 
         print(f"storeInfo: {res}")

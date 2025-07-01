@@ -2,184 +2,109 @@ package jsondb
 
 import (
 	"context"
-	"github.com/google/uuid"
 
 	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/encoding"
+	"github.com/SharedCode/sop/btree"
+	"github.com/SharedCode/sop/cel"
 )
 
-// Item contains Key & Value pair.
-type ItemMapKey struct {
-	Key   map[string]any `json:"key"`
-	Value *any           `json:"value"`
-	ID    uuid.UUID      `json:"id"`
+type PagingDirection int
+
+const (
+	Forward = iota
+	Backward
+)
+
+// Paging Info specifies fetching details.
+type PagingInfo struct {
+	// -1 or 0 means to fetch data starting from the current "cursor" location.
+	// > 0 means to traverse to that page offset and fetch data from that "cursor" location.
+	PageOffset int `json:"page_offset"`
+	// Number of data elements(Keys or Items) to fetch.
+	PageSize int `json:"page_size"`
+	// Direction of fetch is either forward(0) or backwards(1).
+	Direction PagingDirection `json:"direction"`
 }
 
-// B-tree that can operate on JSON String "wrapper". Has no logic except to take in and return
-// JSON string payload.
-type JsonMapKey struct {
-	*JsonDB
+// JSON DB that can take in any JSON data marshalled as map[string]any on Key & Value pair.
+type JsonDBMapKey struct {
+	*JsonDBAnyKey[map[string]any, any]
+	evaluator *cel.Evaluator
 }
 
-// Instantiates and creates a new B-tree that supports JSON string payloads.
-func NewJsonMapKeyBtree(ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparerCELexpression string) (*JsonMapKey, error) {
-	j, err := NewBtree(ctx, so, t, comparerCELexpression)
+func (j *JsonDBMapKey) proxyComparer(mapX map[string]any, mapY map[string]any) int {
+	if j.evaluator != nil {
+		return j.celComparer(mapX, mapY)
+	}
+	return defaultComparer(mapX, mapY)
+}
+
+// Comparer for map[string]any key type using CEL expression.
+func (j *JsonDBMapKey) celComparer(mapX map[string]any, mapY map[string]any) int {
+	r, err := j.evaluator.Evaluate(mapX, mapY)
 	if err != nil {
-		return nil, err
+		j.compareError = err
 	}
-	return &JsonMapKey{
-		JsonDB: j,
-	}, nil
+	return r
 }
 
-// Instantiates and opens a B-tree that supports JSON string payloads.
-func OpenJsonMapKeyBtree(ctx context.Context, name string, t sop.Transaction) (*JsonMapKey, error) {
-	j, err := OpenBtree(ctx, name, t)
-	if err != nil {
-		return nil, err
-	}
-	return &JsonMapKey{
-		JsonDB: j,
-	}, nil
-}
-
-// Add adds an array of item to the b-tree and does not check for duplicates.
-func (j *JsonMapKey) Add(ctx context.Context, items []ItemMapKey) (bool, error) {
-	j.JsonDB.compareError = nil
-	for i := range items {
-		if ok, err := j.JsonDB.Add(ctx, items[i].Key, items[i].Value); !ok || err != nil {
-			return false, err
-		}
-		if j.JsonDB.compareError != nil {
-			return false, j.JsonDB.compareError
+// Default Comparer of Items can compare two maps with no nested map.
+func defaultComparer(mapX map[string]any, mapY map[string]any) int {
+	for k, v := range mapX {
+		i := btree.Compare(v, mapY[k])
+		if i != 0 {
+			return i
 		}
 	}
-	return true, nil
+	return 0
 }
 
-// AddIfNotExist adds an item if there is no item matching the key yet.
-// Otherwise, it will do nothing and return false, for not adding the item.
-// This is useful for cases one wants to add an item without creating a duplicate entry.
-func (j *JsonMapKey) AddIfNotExist(ctx context.Context, items []ItemMapKey) (bool, error) {
-	j.JsonDB.compareError = nil
-	for i := range items {
-		if ok, err := j.JsonDB.AddIfNotExist(ctx, items[i].Key, items[i].Value); !ok || err != nil {
-			return false, err
-		}
-		if j.JsonDB.compareError != nil {
-			return false, j.JsonDB.compareError
-		}
-	}
-	return true, nil
-}
-
-// Update finds the item with key and update its value to the incoming value argument.
-func (j *JsonMapKey) Update(ctx context.Context, items []ItemMapKey) (bool, error) {
-	j.JsonDB.compareError = nil
-	for i := range items {
-		if ok, err := j.JsonDB.Update(ctx, items[i].Key, items[i].Value); !ok || err != nil {
-			return false, err
-		}
-		if j.JsonDB.compareError != nil {
-			return false, j.JsonDB.compareError
-		}
-	}
-	return true, nil
-}
-
-// Add if not exist or update item if it exists.
-func (j *JsonMapKey) Upsert(ctx context.Context, items []ItemMapKey) (bool, error) {
-	j.JsonDB.compareError = nil
-	for i := range items {
-		if ok, err := j.JsonDB.Upsert(ctx, items[i].Key, items[i].Value); !ok || err != nil {
-			return false, err
-		}
-		if j.JsonDB.compareError != nil {
-			return false, j.JsonDB.compareError
-		}
-	}
-	return true, nil
-}
-
-// Remove will find the item with a given key then remove that item.
-func (j *JsonMapKey) Remove(ctx context.Context, keys []map[string]any) (bool, error) {
-	j.JsonDB.compareError = nil
-	for i := range keys {
-		if ok, err := j.JsonDB.Remove(ctx, keys[i]); !ok || err != nil {
-			return false, err
-		}
-		if j.JsonDB.compareError != nil {
-			return false, j.JsonDB.compareError
-		}
-	}
-	return true, nil
-}
-
-func (j *JsonMapKey) GetItems(ctx context.Context, pagingInfo PagingInfo) (string, error) {
-	return "", nil
-}
-
-func (j *JsonMapKey) GetKeys(ctx context.Context, pagingInfo PagingInfo) (string, error) {
-	// keys := make([]any, size)
-	// var err error
-	// j.jsonDB.compareError = nil
-	// for i := range keys {
-	// 	if ok, err := j.jsonDB.FindOne(ctx, keys[i], true); !ok || err != nil {
-	// 		return "", err
-	// 	}
-	// 	if j.jsonDB.compareError != nil {
-	// 		return "", j.jsonDB.compareError
-	// 	}
-	// 	keys[i], err = j.jsonDB.GetCurrentValue(ctx)
-	// 	if err != nil {
-	// 		return "", err
-	// 	}
-	// }
-	// ba, err := encoding.DefaultMarshaler.Marshal(keys)
-	// if err != nil {
-	// 	return "", err
-	// }
-	// return string(ba), nil
-	return "", nil
-}
-
-// GetCurrentValue returns the current item's value.
-func (j *JsonMapKey) GetValues(ctx context.Context, keys []ItemMapKey) (string, error) {
-	values := make([]any, len(keys))
-	var err error
-	j.JsonDB.compareError = nil
-	for i := range keys {
-		if ok, err := j.JsonDB.FindWithID(ctx, keys[i].Key, sop.UUID(keys[i].ID)); !ok || err != nil {
-			return "", err
-		}
-		if j.JsonDB.compareError != nil {
-			return "", j.JsonDB.compareError
-		}
-		values[i], err = j.JsonDB.GetCurrentValue(ctx)
+// Instantiates a Btree for schema-less usage. I.e. - JSONy type of data marshaled by Go as map[string]any
+// data type for key & value pairs.
+// And using user provided CEL expression as comparer. If not provided, will use default comparer that compares each field of the key.
+func NewJsonBtreeMapKey(ctx context.Context, so sop.StoreOptions, t sop.Transaction, celExpressionComparer string) (*JsonDBMapKey, error) {
+	var comparer btree.ComparerFunc[map[string]any]
+	j := JsonDBMapKey{}
+	if celExpressionComparer == "" {
+		comparer = defaultComparer
+	} else {
+		e, err := cel.NewEvaluator("comparer", celExpressionComparer)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
+		j.evaluator = e
+		comparer = j.celComparer
 	}
-	ba, err := encoding.DefaultMarshaler.Marshal(values)
+
+	b3, err := NewJsonBtree[map[string]any, any](ctx, so, t, comparer)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(ba), nil
+
+	j.JsonDBAnyKey = b3
+	return &j, nil
 }
 
-// FindOne(ctx context.Context, key TK, firstItemWithKey bool) (bool, error)
-// // FindOneWithID is synonymous to FindOne but allows code to supply the Item's ID to identify it.
-// // This is useful for B-Tree that allows duplicate keys(IsUnique = false) as it provides a way to
-// // differentiate duplicated keys via the unique ID(sop.UUID).
-// FindOneWithID(ctx context.Context, key TK, id sop.UUID) (bool, error)
+// Open an existing B-tree w/ option to using user provided CEL expression as comparer.
+// If CEL expression is not provided, will use default comparer that compares each field of the key.
+func OpenJsonBtreeMapKey(ctx context.Context, name string, t sop.Transaction) (*JsonDBMapKey, error) {
+	j := JsonDBMapKey{}
 
-// // First positions the "cursor" to the first item as per key ordering.
-// // Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
-// First(ctx context.Context) (bool, error)
-// // Last positionts the "cursor" to the last item as per key ordering.
-// // Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
-// Last(ctx context.Context) (bool, error)
+	b3, err := OpenJsonBtree[map[string]any, any](ctx, name, t, j.proxyComparer)
+	if err != nil {
+		return nil, err
+	}
 
-// IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
-// Specifying uniqueness base on key makes the B-Tree permanently set. If you want just a temporary
-// unique check during Add of an item, then you can use AddIfNotExist method for that.
+	// Resurrect the CEL expression evaluator if CEL expression was originally provided when creating B-tree.
+	ce := b3.GetStoreInfo().CELexpression
+	if ce != "" {
+		e, err := cel.NewEvaluator("comparer", ce)
+		if err != nil {
+			return nil, err
+		}
+		j.evaluator = e
+	}
+
+	j.JsonDBAnyKey = b3
+	return &j, nil
+}

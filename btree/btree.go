@@ -234,14 +234,6 @@ func (btree *Btree[TK, TV]) GetCurrentKey() Item[TK, TV] {
 	}
 }
 
-// Returns the current item's ID.
-func (btree *Btree[TK, TV]) GetCurrentItemID() sop.UUID {
-	if btree.currentItem == nil {
-		return sop.NilUUID
-	}
-	return btree.currentItem.ID
-}
-
 // GetCurrentValue returns the current item's value part.
 func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	var zero TV

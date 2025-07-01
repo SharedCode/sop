@@ -26,12 +26,12 @@ type ManageBtreeMetaData struct {
 	BtreeID        uuid.UUID `json:"btree_id"`
 }
 type ManageBtreePayload struct {
-	Items      []jsondb.Item      `json:"items"`
-	PagingInfo *jsondb.PagingInfo `json:"paging_info"`
+	Items      []jsondb.Item[any, any] `json:"items"`
+	PagingInfo *jsondb.PagingInfo      `json:"paging_info"`
 }
 type ManageBtreePayloadMapKey struct {
-	Items      []jsondb.ItemMapKey `json:"items"`
-	PagingInfo *jsondb.PagingInfo  `json:"paging_info"`
+	Items      []jsondb.Item[map[string]any, any] `json:"items"`
+	PagingInfo *jsondb.PagingInfo                 `json:"paging_info"`
 }
 
 //export manageBtree
@@ -81,7 +81,7 @@ func newBtree(ctx context.Context, ps string) *C.char {
 	so := convertTo(&b3o)
 
 	if b3o.IsPrimitiveKey {
-		b3, err := jsondb.NewJsonBtree(ctx, *so, tup.First)
+		b3, err := jsondb.NewJsonBtree[any, any](ctx, *so, tup.First, nil)
 		if err != nil {
 			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
 			return C.CString(errMsg)
@@ -89,7 +89,7 @@ func newBtree(ctx context.Context, ps string) *C.char {
 		// Add the B-tree to the transaction btree map so it can get lookedup.
 		tup.Second[b3id] = b3
 	} else {
-		b3, err := jsondb.NewJsonMapKeyBtree(ctx, *so, tup.First, b3o.CELexpression)
+		b3, err := jsondb.NewJsonBtreeMapKey(ctx, *so, tup.First, b3o.CELexpression)
 		if err != nil {
 			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
 			return C.CString(errMsg)
@@ -127,14 +127,14 @@ func openBtree(ctx context.Context, ps string) *C.char {
 	so := convertTo(&b3o)
 
 	if b3o.IsPrimitiveKey {
-		b3, err := jsondb.OpenJsonBtree(ctx, so.Name, tup.First)
+		b3, err := jsondb.OpenJsonBtree[any, any](ctx, so.Name, tup.First, nil)
 		if err != nil {
 			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
 			return C.CString(errMsg)
 		}
 		tup.Second[b3id] = b3
 	} else {
-		b3, err := jsondb.OpenJsonMapKeyBtree(ctx, so.Name, tup.First)
+		b3, err := jsondb.OpenJsonBtreeMapKey(ctx, so.Name, tup.First)
 		if err != nil {
 			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
 			return C.CString(errMsg)
@@ -168,7 +168,7 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 		return C.CString(errMsg)
 	}
 	if p.IsPrimitiveKey {
-		b3, ok := b32.(*jsondb.JsonAnyKey)
+		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
@@ -202,7 +202,7 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
-		b3, ok := b32.(*jsondb.JsonMapKey)
+		b3, ok := b32.(*jsondb.JsonDBMapKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
@@ -255,7 +255,7 @@ func remove(ctx context.Context, ps string, payload2 *C.char) *C.char {
 		return C.CString(errMsg)
 	}
 	if p.IsPrimitiveKey {
-		b3, ok := b32.(*jsondb.JsonAnyKey)
+		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
@@ -274,7 +274,7 @@ func remove(ctx context.Context, ps string, payload2 *C.char) *C.char {
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
-		b3, ok := b32.(*jsondb.JsonMapKey)
+		b3, ok := b32.(*jsondb.JsonDBMapKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)

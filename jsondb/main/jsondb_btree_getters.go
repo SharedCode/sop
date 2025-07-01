@@ -52,7 +52,7 @@ func isUniqueBtree(payload *C.char) *C.char {
 		return C.CString(errMsg)
 	}
 	if p.IsPrimitiveKey {
-		b3, ok := b32.(*jsondb.JsonAnyKey)
+		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
@@ -61,7 +61,7 @@ func isUniqueBtree(payload *C.char) *C.char {
 		ok = b3.IsUnique()
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
-		b3, ok := b32.(*jsondb.JsonMapKey)
+		b3, ok := b32.(*jsondb.JsonDBMapKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
@@ -117,7 +117,7 @@ func getBtreeItemCount(payload *C.char) (C.long, *C.char) {
 		return 0, C.CString(errMsg)
 	}
 	if p.IsPrimitiveKey {
-		b3, ok := b32.(*jsondb.JsonAnyKey)
+		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return 0, C.CString(errMsg)
@@ -126,7 +126,7 @@ func getBtreeItemCount(payload *C.char) (C.long, *C.char) {
 		res := b3.Count()
 		return C.long(res), nil
 	} else {
-		b3, ok := b32.(*jsondb.JsonMapKey)
+		b3, ok := b32.(*jsondb.JsonDBMapKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return 0, C.CString(errMsg)
@@ -155,7 +155,7 @@ func getStoreInfo(ps string) (*C.char, *C.char) {
 		return nil, C.CString(errMsg)
 	}
 	if p.IsPrimitiveKey {
-		b3, ok := b32.(*jsondb.JsonAnyKey)
+		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return nil, C.CString(errMsg)
@@ -172,7 +172,7 @@ func getStoreInfo(ps string) (*C.char, *C.char) {
 		}
 		return C.CString(string(ba)), nil
 	} else {
-		b3, ok := b32.(*jsondb.JsonMapKey)
+		b3, ok := b32.(*jsondb.JsonDBMapKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return nil, C.CString(errMsg)
@@ -209,7 +209,7 @@ func get(ctx context.Context, getAction int, ps string, payload2 *C.char) (*C.ch
 		return nil, C.CString(errMsg)
 	}
 	if p.IsPrimitiveKey {
-		b3, ok := b32.(*jsondb.JsonAnyKey)
+		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return nil, C.CString(errMsg)
@@ -235,7 +235,7 @@ func get(ctx context.Context, getAction int, ps string, payload2 *C.char) (*C.ch
 		}
 		return C.CString(res), nil
 	} else {
-		b3, ok := b32.(*jsondb.JsonMapKey)
+		b3, ok := b32.(*jsondb.JsonDBMapKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return nil, C.CString(errMsg)
@@ -281,7 +281,7 @@ func getValues(ctx context.Context, ps string, payload2 *C.char) (*C.char, *C.ch
 		return nil, C.CString(errMsg)
 	}
 	if p.IsPrimitiveKey {
-		b3, ok := b32.(*jsondb.JsonAnyKey)
+		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return nil, C.CString(errMsg)
@@ -300,7 +300,7 @@ func getValues(ctx context.Context, ps string, payload2 *C.char) (*C.char, *C.ch
 		}
 		return C.CString(res), nil
 	} else {
-		b3, ok := b32.(*jsondb.JsonMapKey)
+		b3, ok := b32.(*jsondb.JsonDBMapKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return nil, C.CString(errMsg)
@@ -339,7 +339,7 @@ func find(ctx context.Context, ps string, payload2 *C.char) *C.char {
 		return C.CString(errMsg)
 	}
 	if p.IsPrimitiveKey {
-		b3, ok := b32.(*jsondb.JsonAnyKey)
+		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
@@ -367,7 +367,7 @@ func find(ctx context.Context, ps string, payload2 *C.char) *C.char {
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
-		b3, ok := b32.(*jsondb.JsonMapKey)
+		b3, ok := b32.(*jsondb.JsonDBMapKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
@@ -412,7 +412,7 @@ func moveTo(ctx context.Context, action int, ps string) *C.char {
 		return C.CString(errMsg)
 	}
 	if p.IsPrimitiveKey {
-		b3, ok := b32.(*jsondb.JsonAnyKey)
+		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
@@ -435,7 +435,7 @@ func moveTo(ctx context.Context, action int, ps string) *C.char {
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
-		b3, ok := b32.(*jsondb.JsonMapKey)
+		b3, ok := b32.(*jsondb.JsonDBMapKey)
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
 			return C.CString(errMsg)
