@@ -81,7 +81,7 @@ _navigate_btree.argtypes = [
 ]  # Specify argument types
 _navigate_btree.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
-_is_unique_btree = lib.isUnique
+_is_unique_btree = lib.isUniqueBtree
 _is_unique_btree.argtypes = [
     ctypes.c_char_p,
 ]  # Specify argument types
@@ -188,7 +188,10 @@ def get_from_btree(action: int, payload: str, payload2: str):
     Fetch/Navigate from SOP btree.
     """
 
-    result = _get_from_btree(to_cint(action), to_cstring(payload), to_cstring(payload2))
+    p2 = None
+    if payload2 is not None:
+        p2 = to_cstring(payload2)
+    result = _get_from_btree(to_cint(action), to_cstring(payload), p2)
     if (
         result.error is not None
         and ctypes.cast(result.error, ctypes.c_char_p).value is not None
@@ -228,7 +231,7 @@ def is_unique_btree(payload: str) -> str:
     return s
 
 
-def get_btree_item_count(payload: str) -> str:
+def get_btree_item_count(payload: str):
     """
     Get btree item count.
     """

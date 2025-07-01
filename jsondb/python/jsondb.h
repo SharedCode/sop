@@ -87,7 +87,7 @@ extern "C" {
 #endif
 
 extern char* navigateBtree(int action, char* payload, char* payload2);
-extern char* isUnique(char* payload);
+extern char* isUniqueBtree(char* payload);
 
 /* Return type for getFromBtree */
 struct getFromBtree_return {

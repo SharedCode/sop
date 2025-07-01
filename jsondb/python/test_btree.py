@@ -217,3 +217,13 @@ class TestBtree(unittest.TestCase):
 
         print(f"count succeeded {res}.")
         t.commit()
+
+    def test_get_store_info(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("barstoreec", True, t)
+        res = b3.get_store_info()
+
+        print(f"storeInfo: {res}")
+        t.commit()

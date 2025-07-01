@@ -74,10 +74,11 @@ class BtreeOptions:
     is_value_data_in_node_segment: bool = True
     is_value_data_actively_persisted: bool = False
     is_value_data_globally_cached: bool = False
-    cel_expressions: str = ""
+    cel_expression: str = ""
     transaction_id: str = str(uuid.UUID(int=0))
     cache_config: CacheConfig = None
     is_primitive_key: bool = True
+    leaf_load_balancing: bool = False
 
     def set_value_data_size(self, s: ValueDataSize):
         if s == ValueDataSize.Medium:
@@ -366,7 +367,19 @@ class Btree(Generic[TK, TV]):
         return count
 
     def get_store_info(self) -> BtreeOptions:
-        return BtreeOptions()
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
+        )
+        payload, error = call_go.get_from_btree(
+            BtreeAction.GetStoreInfo.value, json.dumps(asdict(metadata)), None
+        )
+        if error is not None:
+            raise BtreeError(error)
+
+        data_dict = json.loads(payload)
+        return BtreeOptions(**data_dict)
 
     def _manage(self, action: int, items: Item[TK, TV]) -> bool:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(

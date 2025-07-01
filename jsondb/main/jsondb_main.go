@@ -231,6 +231,22 @@ func convertTo(si *BtreeOptions) *sop.StoreOptions {
 	so.CacheConfig.ValueDataCacheDuration = so.CacheConfig.ValueDataCacheDuration * time.Minute
 	return &so
 }
+func (bo *BtreeOptions) extract(si *sop.StoreInfo) {
+	bo.Name = si.Name
+	bo.SlotLength = si.SlotLength
+	bo.IsUnique = si.IsUnique
+	bo.IsValueDataActivelyPersisted = si.IsValueDataActivelyPersisted
+	bo.IsValueDataGloballyCached = si.IsValueDataGloballyCached
+	bo.IsValueDataInNodeSegment = si.IsValueDataInNodeSegment
+	bo.LeafLoadBalancing = si.LeafLoadBalancing
+	bo.Description = si.Description
+	bo.CacheConfig = si.CacheConfig
+	// Restore back to "minute" unit.
+	bo.CacheConfig.NodeCacheDuration = si.CacheConfig.NodeCacheDuration / time.Minute
+	bo.CacheConfig.RegistryCacheDuration = si.CacheConfig.RegistryCacheDuration / time.Minute
+	bo.CacheConfig.StoreInfoCacheDuration = si.CacheConfig.StoreInfoCacheDuration / time.Minute
+	bo.CacheConfig.ValueDataCacheDuration = si.CacheConfig.ValueDataCacheDuration / time.Minute
+}
 
 //export freeString
 func freeString(cString *C.char) {
