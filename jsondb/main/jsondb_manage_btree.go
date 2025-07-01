@@ -7,11 +7,13 @@ import "C"
 import (
 	"context"
 	"fmt"
+
 	"github.com/google/uuid"
 
 	log "log/slog"
 
 	"github.com/SharedCode/sop"
+	"github.com/SharedCode/sop/common"
 	"github.com/SharedCode/sop/encoding"
 	"github.com/SharedCode/sop/jsondb"
 )
@@ -47,9 +49,9 @@ func manageBtree(action C.int, payload *C.char, payload2 *C.char) *C.char {
 	case Upsert:
 		fallthrough
 	case Update:
-		return manage(ctx, int(action), ps, payload2)
+		return manage(ctx, int(action), payload, payload2)
 	case Remove:
-		return remove(ctx, ps, payload2)
+		return remove(ctx, payload, payload2)
 	default:
 		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
 		return C.CString(errMsg)
@@ -122,7 +124,20 @@ func openBtree(ctx context.Context, ps string) *C.char {
 	}
 	so := convertTo(&b3o)
 
-	if b3o.IsPrimitiveKey {
+	// Get StoreInfo from backend DB and determine if key is primitive or not.
+	intf := tup.First.(interface{})
+	t2 := intf.(*sop.SinglePhaseTransaction).SopPhaseCommitTransaction
+	intf = t2
+	t := intf.(*common.Transaction)
+
+	sr := t.StoreRepository
+	si, err := sr.Get(ctx, so.Name)
+	isPrimitiveKey := false
+	if err == nil {
+		isPrimitiveKey = si[0].IsPrimitiveKey
+	}
+
+	if isPrimitiveKey {
 		b3, err := jsondb.OpenJsonBtree[any, any](ctx, so.Name, tup.First, nil)
 		if err != nil {
 			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
@@ -152,24 +167,39 @@ func openBtree(ctx context.Context, ps string) *C.char {
 	return C.CString(b3id.String())
 }
 
-func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.char {
-	var p ManageBtreeMetaData
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-		return C.CString(errMsg)
+func manage(ctx context.Context, action int, payload, payload2 *C.char) *C.char {
+	p, b32, errMsg := extractMetaData(payload)
+	if errMsg != nil {
+		return errMsg
 	}
+	if b3, ok := b32.(*jsondb.JsonDBMapKey); ok {
+		ps2 := C.GoString(payload2)
+		var payload ManageBtreePayload[map[string]any, any]
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
+			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
+			return C.CString(errMsg)
+		}
+		var err error
+		switch action {
+		case Add:
+			ok, err = b3.Add(ctx, payload.Items)
+		case AddIfNotExist:
+			ok, err = b3.AddIfNotExist(ctx, payload.Items)
+		case Update:
+			ok, err = b3.Update(ctx, payload.Items)
+		case Upsert:
+			ok, err = b3.Upsert(ctx, payload.Items)
+		default:
+			errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (id=%v)", action, p.BtreeID)
+			return C.CString(errMsg)
+		}
 
-	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-		return C.CString(errMsg)
-	}
-	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-		return C.CString(errMsg)
-	}
-	if p.IsPrimitiveKey {
+		if err != nil {
+			errMsg := fmt.Sprintf("error manage of item to B-tree (id=%v), details: %v", p.BtreeID, err)
+			return C.CString(errMsg)
+		}
+		return C.CString(fmt.Sprintf("%v", ok))
+	} else {
 		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
@@ -203,60 +233,29 @@ func manage(ctx context.Context, action int, ps string, payload2 *C.char) *C.cha
 			return C.CString(errMsg)
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
-	} else {
-		b3, ok := b32.(*jsondb.JsonDBMapKey)
-		if !ok {
-			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
-			return C.CString(errMsg)
-		}
-
-		ps2 := C.GoString(payload2)
-		var payload ManageBtreePayload[map[string]any, any]
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
-			errMsg := fmt.Sprintf("error Unmarshal ManageBtreePayload, details: %v", err)
-			return C.CString(errMsg)
-		}
-		var err error
-		switch action {
-		case Add:
-			ok, err = b3.Add(ctx, payload.Items)
-		case AddIfNotExist:
-			ok, err = b3.AddIfNotExist(ctx, payload.Items)
-		case Update:
-			ok, err = b3.Update(ctx, payload.Items)
-		case Upsert:
-			ok, err = b3.Upsert(ctx, payload.Items)
-		default:
-			errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (id=%v)", action, p.BtreeID)
-			return C.CString(errMsg)
-		}
-
-		if err != nil {
-			errMsg := fmt.Sprintf("error manage of item to B-tree (id=%v), details: %v", p.BtreeID, err)
-			return C.CString(errMsg)
-		}
-		return C.CString(fmt.Sprintf("%v", ok))
 	}
 }
 
-func remove(ctx context.Context, ps string, payload2 *C.char) *C.char {
-	var p ManageBtreeMetaData
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &p); err != nil {
-		errMsg := fmt.Sprintf("error Unmarshal ManageBtreeMetaData, details: %v", err)
-		return C.CString(errMsg)
+func remove(ctx context.Context, payload, payload2 *C.char) *C.char {
+	p, b32, errMsg := extractMetaData(payload)
+	if errMsg != nil {
+		return errMsg
 	}
-
-	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-		return C.CString(errMsg)
-	}
-	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
-	if !ok {
-		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
-		return C.CString(errMsg)
-	}
-	if p.IsPrimitiveKey {
+	if b3, ok := b32.(*jsondb.JsonDBMapKey); ok {
+		ps2 := C.GoString(payload2)
+		var payload []map[string]any
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
+			errMsg := fmt.Sprintf("error Unmarshal keys array, details: %v", err)
+			return C.CString(errMsg)
+		}
+		var err error
+		ok, err = b3.Remove(ctx, payload)
+		if err != nil {
+			errMsg := fmt.Sprintf("error remove of item from B-tree (id=%v), details: %v", p.BtreeID, err)
+			return C.CString(errMsg)
+		}
+		return C.CString(fmt.Sprintf("%v", ok))
+	} else {
 		b3, ok := b32.(*jsondb.JsonDBAnyKey[any, any])
 		if !ok {
 			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
@@ -270,26 +269,6 @@ func remove(ctx context.Context, ps string, payload2 *C.char) *C.char {
 			return C.CString(errMsg)
 		}
 		ok, err := b3.Remove(ctx, payload)
-		if err != nil {
-			errMsg := fmt.Sprintf("error remove of item from B-tree (id=%v), details: %v", p.BtreeID, err)
-			return C.CString(errMsg)
-		}
-		return C.CString(fmt.Sprintf("%v", ok))
-	} else {
-		b3, ok := b32.(*jsondb.JsonDBMapKey)
-		if !ok {
-			errMsg := fmt.Sprintf("found B-tree(id=%v) from lookup is of wrong type", p.BtreeID)
-			return C.CString(errMsg)
-		}
-
-		ps2 := C.GoString(payload2)
-		var payload []map[string]any
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps2), &payload); err != nil {
-			errMsg := fmt.Sprintf("error Unmarshal keys array, details: %v", err)
-			return C.CString(errMsg)
-		}
-		var err error
-		ok, err = b3.Remove(ctx, payload)
 		if err != nil {
 			errMsg := fmt.Sprintf("error remove of item from B-tree (id=%v), details: %v", p.BtreeID, err)
 			return C.CString(errMsg)

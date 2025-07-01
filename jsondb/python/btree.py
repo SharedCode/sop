@@ -188,11 +188,10 @@ class Btree(Generic[TK, TV]):
 
     @classmethod
     def open(
-        cls: Type["Btree[TK,TV]"], name: str, is_primitive_key: bool, trans: Transaction
+        cls: Type["Btree[TK,TV]"], name: str, trans: Transaction
     ) -> "Btree[TK,TV]":
         options: BtreeOptions = BtreeOptions(name=name)
         options.transaction_id = str(trans.transaction_id)
-        options.is_primitive_key = is_primitive_key
         res = call_go.manage_btree(
             BtreeAction.OpenBtree.value, json.dumps(asdict(options)), ""
         )
@@ -205,7 +204,7 @@ class Btree(Generic[TK, TV]):
             # if res can't be converted to UUID, it is expected to be an error msg from SOP.
             raise BtreeError(res)
 
-        return cls(b3id, is_primitive_key, trans.transaction_id)
+        return cls(b3id, False, trans.transaction_id)
 
     def add(self, items: Item[TK, TV]) -> bool:
         return self._manage(BtreeAction.Add.value, items)

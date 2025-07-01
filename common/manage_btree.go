@@ -24,7 +24,7 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*Transaction)
-	stores, err := trans.storeRepository.Get(ctx, name)
+	stores, err := trans.StoreRepository.Get(ctx, name)
 	if len(stores) == 0 || stores[0].IsEmpty() || err != nil {
 		if err == nil {
 			trans.Rollback(ctx, nil)
@@ -57,9 +57,9 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 	var stores []sop.StoreInfo
 	var err error
 	if si.CacheConfig != nil {
-		stores, err = trans.storeRepository.GetWithTTL(ctx, si.CacheConfig.IsStoreInfoCacheTTL, si.CacheConfig.StoreInfoCacheDuration, si.Name)
+		stores, err = trans.StoreRepository.GetWithTTL(ctx, si.CacheConfig.IsStoreInfoCacheTTL, si.CacheConfig.StoreInfoCacheDuration, si.Name)
 	} else {
-		stores, err = trans.storeRepository.Get(ctx, si.Name)
+		stores, err = trans.StoreRepository.Get(ctx, si.Name)
 	}
 	if err != nil {
 		trans.Rollback(ctx, err)
@@ -73,9 +73,9 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 			ns.RootNodeID = sop.NewUUID()
 			ns.Timestamp = sop.Now().UnixMilli()
 		}
-		if err := trans.storeRepository.Add(ctx, *ns); err != nil {
+		if err := trans.StoreRepository.Add(ctx, *ns); err != nil {
 			// Cleanup the store if there was anything added in backend.
-			trans.storeRepository.Remove(ctx, ns.Name)
+			trans.StoreRepository.Remove(ctx, ns.Name)
 			trans.Rollback(ctx, err)
 			return nil, err
 		}
@@ -115,7 +115,7 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 		// Node blob repository.
 		nodeRepository: nrw.nodeRepositoryBackend,
 		// Needed for auto-merging of Node contents.
-		refetchAndMerge: refetchAndMergeClosure(&si, b3, trans.storeRepository),
+		refetchAndMerge: refetchAndMergeClosure(&si, b3, trans.StoreRepository),
 		// Needed when applying the "delta" to the Store Count field.
 		getStoreInfo: func() *sop.StoreInfo { return b3.StoreInfo },
 

@@ -67,7 +67,7 @@ class TestBtree(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("barstoreec", True, t)
+        b3 = btree.Btree.open("barstoreec", t)
         l = [
             btree.Item(1, "foo"),
         ]
@@ -124,7 +124,7 @@ class TestBtree(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("barstoreec", True, t)
+        b3 = btree.Btree.open("barstoreec", t)
         res = b3.get_items(0, 5, btree.PagingDirection.Forward)
         print(f"get_items succeeded {res}.")
 
@@ -134,7 +134,7 @@ class TestBtree(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("barstoreec", True, t)
+        b3 = btree.Btree.open("barstoreec", t)
         res = b3.get_keys(0, 5, btree.PagingDirection.Forward)
         print(f"get_keys succeeded {res}.")
 
@@ -144,7 +144,7 @@ class TestBtree(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("barstoreec", True, t)
+        b3 = btree.Btree.open("barstoreec", t)
         keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
         res = b3.get_values(keys)
 
@@ -156,7 +156,7 @@ class TestBtree(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("barstoreec", True, t)
+        b3 = btree.Btree.open("barstoreec", t)
         res = b3.find(1)
 
         print(f"find succeeded {res}.")
@@ -167,7 +167,7 @@ class TestBtree(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("barstoreec", True, t)
+        b3 = btree.Btree.open("barstoreec", t)
         keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
         res = b3.find_with_id(keys[0].key, keys[0].id)
 
@@ -179,7 +179,7 @@ class TestBtree(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("barstoreec", True, t)
+        b3 = btree.Btree.open("barstoreec", t)
         res = b3.first()
 
         print(f"goto first succeeded {res}.")
@@ -189,7 +189,7 @@ class TestBtree(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("barstoreec", True, t)
+        b3 = btree.Btree.open("barstoreec", t)
         res = b3.last()
 
         print(f"goto last succeeded {res}.")
@@ -199,7 +199,7 @@ class TestBtree(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("barstoreec", True, t)
+        b3 = btree.Btree.open("barstoreec", t)
         res = b3.is_unique()
 
         print(f"is_unique succeeded {res}.")
@@ -209,7 +209,7 @@ class TestBtree(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("barstoreec", True, t)
+        b3 = btree.Btree.open("barstoreec", t)
         res = b3.count()
 
         print(f"count succeeded {res}.")
@@ -219,7 +219,7 @@ class TestBtree(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("barstoreec", True, t)
+        b3 = btree.Btree.open("barstoreec", t)
         res = b3.get_store_info()
 
         print(f"storeInfo: {res}")
@@ -251,7 +251,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("foobar", False, t)
+        b3 = btree.Btree.open("foobar", t)
         l = [
             btree.Item(pKey(key="123"), "foo"),
         ]
@@ -265,7 +265,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("foobar", False, t)
+        b3 = btree.Btree.open("foobar", t)
         res = b3.get_items(0, 5, btree.PagingDirection.Forward)
         print(f"get_items succeeded {res}.")
 
@@ -275,7 +275,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("foobar", False, t)
+        b3 = btree.Btree.open("foobar", t)
         res = b3.get_keys(0, 5, btree.PagingDirection.Forward)
         print(f"get_keys succeeded {res}.")
 
@@ -285,7 +285,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("foobar", False, t)
+        b3 = btree.Btree.open("foobar", t)
         keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
         res = b3.get_values(keys)
 
@@ -297,7 +297,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("foobar", False, t)
+        b3 = btree.Btree.open("foobar", t)
         res = b3.find(pKey(key="123"))
 
         print(f"find succeeded {res}.")
@@ -308,7 +308,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("foobar", False, t)
+        b3 = btree.Btree.open("foobar", t)
         keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
         res = b3.find_with_id(keys[0].key, keys[0].id)
 
@@ -320,7 +320,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("foobar", False, t)
+        b3 = btree.Btree.open("foobar", t)
         res = b3.first()
 
         print(f"goto first succeeded {res}.")
@@ -330,7 +330,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("foobar", False, t)
+        b3 = btree.Btree.open("foobar", t)
         res = b3.last()
 
         print(f"goto last succeeded {res}.")
@@ -340,7 +340,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("foobar", False, t)
+        b3 = btree.Btree.open("foobar", t)
         res = b3.is_unique()
 
         print(f"is_unique succeeded {res}.")
@@ -350,7 +350,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("foobar", False, t)
+        b3 = btree.Btree.open("foobar", t)
         res = b3.count()
 
         print(f"count succeeded {res}.")
@@ -360,7 +360,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t = transaction.Transaction(to)
         t.begin()
 
-        b3 = btree.Btree.open("foobar", False, t)
+        b3 = btree.Btree.open("foobar", t)
         res = b3.get_store_info()
 
         print(f"storeInfo: {res}")

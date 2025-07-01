@@ -229,6 +229,8 @@ func convertTo(si *BtreeOptions) *sop.StoreOptions {
 	so.CacheConfig.RegistryCacheDuration = so.CacheConfig.RegistryCacheDuration * time.Minute
 	so.CacheConfig.StoreInfoCacheDuration = so.CacheConfig.StoreInfoCacheDuration * time.Minute
 	so.CacheConfig.ValueDataCacheDuration = so.CacheConfig.ValueDataCacheDuration * time.Minute
+	so.CELexpression = si.CELexpression
+	so.IsPrimitiveKey = si.IsPrimitiveKey
 	return &so
 }
 func (bo *BtreeOptions) extract(si *sop.StoreInfo) {
@@ -241,6 +243,8 @@ func (bo *BtreeOptions) extract(si *sop.StoreInfo) {
 	bo.LeafLoadBalancing = si.LeafLoadBalancing
 	bo.Description = si.Description
 	bo.CacheConfig = si.CacheConfig
+	bo.CELexpression = si.CELexpression
+	bo.IsPrimitiveKey = si.IsPrimitiveKey
 	// Restore back to "minute" unit.
 	bo.CacheConfig.NodeCacheDuration = si.CacheConfig.NodeCacheDuration / time.Minute
 	bo.CacheConfig.RegistryCacheDuration = si.CacheConfig.RegistryCacheDuration / time.Minute

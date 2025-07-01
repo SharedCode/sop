@@ -43,6 +43,11 @@ type StoreOptions struct {
 	// Redis cache specification for this store's objects(registry, nodes, item value part).
 	// Defaults to the global specification and can be overriden for each store.
 	CacheConfig *StoreCacheConfig
+
+	// CEL Expression used as comparer for comparing Keys.
+	CELexpression string
+	// Hint that tells the Python binding which JSON B-tree type to instantiate on Open method.
+	IsPrimitiveKey bool
 }
 
 // ValueDataSize enumeration.

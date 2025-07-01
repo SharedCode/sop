@@ -49,6 +49,9 @@ type StoreInfo struct {
 
 	// CEL Expression used as comparer for comparing Keys.
 	CELexpression string `json:"cel_expression"`
+
+	// Hint that tells the Python binding which JSON B-tree type to instantiate on Open method.
+	IsPrimitiveKey bool `json:"is_primitive_key"`
 }
 
 // Store Cache config specificaiton.
@@ -209,6 +212,8 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 		IsValueDataGloballyCached:    si.IsValueDataGloballyCached,
 		LeafLoadBalancing:            si.LeafLoadBalancing,
 		CacheConfig:                  *si.CacheConfig,
+		CELexpression:                si.CELexpression,
+		IsPrimitiveKey:               si.IsPrimitiveKey,
 	}
 }
 

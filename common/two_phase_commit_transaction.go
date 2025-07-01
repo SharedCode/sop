@@ -39,7 +39,7 @@ type Transaction struct {
 	blobStore       sop.BlobStore
 	l1Cache         *cache.L1Cache
 	l2Cache         sop.Cache
-	storeRepository sop.StoreRepository
+	StoreRepository sop.StoreRepository
 	// VirtualIDRegistry manages the virtual IDs, a.k.a. "handle".
 	registry sop.Registry
 	// true if transaction allows upserts & deletes, false(read-only mode) otherwise.
@@ -87,7 +87,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 	return &Transaction{
 		mode:            mode,
 		maxTime:         maxTime,
-		storeRepository: storeRepository,
+		StoreRepository: storeRepository,
 		registry:        registry,
 		l2Cache:         l2Cache,
 		l1Cache:         cache.GetGlobalCache(),
@@ -243,12 +243,12 @@ func (t *Transaction) HasBegun() bool {
 }
 
 func (t *Transaction) GetStores(ctx context.Context) ([]string, error) {
-	return t.storeRepository.GetAll(ctx)
+	return t.StoreRepository.GetAll(ctx)
 }
 
 // Returns this transaction's StoreRepository.
 func (t *Transaction) GetStoreRepository() sop.StoreRepository {
-	return t.storeRepository
+	return t.StoreRepository
 }
 
 func (t *Transaction) GetID() sop.UUID {
@@ -538,7 +538,7 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 		return nil
 	})
 	tr.Go(func() error {
-		if err := t.storeRepository.Replicate(tr.GetContext(), t.updatedStoresInfo); err != nil {
+		if err := t.StoreRepository.Replicate(tr.GetContext(), t.updatedStoresInfo); err != nil {
 			log.Warn(fmt.Sprintf("storeRepository.Replicate failed but will not fail commit(phase 2 succeeded), details: %v", err))
 		}
 		return nil

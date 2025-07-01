@@ -32,6 +32,24 @@ type JsonDBAnyKey[TK btree.Ordered, TV any] struct {
 	compareError error
 }
 
+type PagingDirection int
+
+const (
+	Forward = iota
+	Backward
+)
+
+// Paging Info specifies fetching details.
+type PagingInfo struct {
+	// -1 or 0 means to fetch data starting from the current "cursor" location.
+	// > 0 means to traverse to that page offset and fetch data from that "cursor" location.
+	PageOffset int `json:"page_offset"`
+	// Number of data elements(Keys or Items) to fetch.
+	PageSize int `json:"page_size"`
+	// Direction of fetch is either forward(0) or backwards(1).
+	Direction PagingDirection `json:"direction"`
+}
+
 // Instantiates and creates a new B-tree that supports JSON string payloads.
 func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
 	b3, err := in_red_fs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)

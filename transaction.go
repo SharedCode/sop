@@ -77,8 +77,8 @@ type TwoPhaseCommitTransaction interface {
 
 // Enduser facing Transaction (wrapper) implementation.
 
-type singlePhaseTransaction struct {
-	sopPhaseCommitTransaction TwoPhaseCommitTransaction
+type SinglePhaseTransaction struct {
+	SopPhaseCommitTransaction TwoPhaseCommitTransaction
 	otherTransactions         []TwoPhaseCommitTransaction
 }
 
@@ -97,14 +97,14 @@ func NewTransaction(mode TransactionMode,
 	twoPhaseCommitTrans TwoPhaseCommitTransaction,
 	maxTime time.Duration, logging bool) (Transaction, error) {
 	twoPhase := twoPhaseCommitTrans // NewTwoPhaseCommitTransaction(mode, maxTime, logging)
-	return &singlePhaseTransaction{
-		sopPhaseCommitTransaction: twoPhase,
+	return &SinglePhaseTransaction{
+		SopPhaseCommitTransaction: twoPhase,
 	}, nil
 }
 
 // Begin the transaction.
-func (t *singlePhaseTransaction) Begin() error {
-	if err := t.sopPhaseCommitTransaction.Begin(); err != nil {
+func (t *SinglePhaseTransaction) Begin() error {
+	if err := t.SopPhaseCommitTransaction.Begin(); err != nil {
 		return err
 	}
 	for _, t := range t.otherTransactions {
@@ -117,16 +117,16 @@ func (t *singlePhaseTransaction) Begin() error {
 }
 
 // Close will call the inner transaction object's Close function.
-func (t *singlePhaseTransaction) Close() error {
-	return t.sopPhaseCommitTransaction.Close()
+func (t *SinglePhaseTransaction) Close() error {
+	return t.SopPhaseCommitTransaction.Close()
 }
 
 // Commit the transaction. If multiple phase 1 commit erors are returned,
 // this will return the sop phase 1 commit error or
 // your other transactions phase 1 commits' last error.
-func (t *singlePhaseTransaction) Commit(ctx context.Context) error {
+func (t *SinglePhaseTransaction) Commit(ctx context.Context) error {
 	// Phase 1 commit.
-	if err := t.sopPhaseCommitTransaction.Phase1Commit(ctx); err != nil {
+	if err := t.SopPhaseCommitTransaction.Phase1Commit(ctx); err != nil {
 		t.Rollback(ctx)
 		return err
 	}
@@ -139,7 +139,7 @@ func (t *singlePhaseTransaction) Commit(ctx context.Context) error {
 	}
 
 	// Phase 2 commit.
-	if err := t.sopPhaseCommitTransaction.Phase2Commit(ctx); err != nil {
+	if err := t.SopPhaseCommitTransaction.Phase2Commit(ctx); err != nil {
 		log.Debug(fmt.Sprintf("Phase2Commit error: %v", err))
 		t.Rollback(ctx)
 		return err
@@ -154,8 +154,8 @@ func (t *singlePhaseTransaction) Commit(ctx context.Context) error {
 
 // Rollback the transaction. If multiple transaction rollbacks errored,
 // this will return the last error.
-func (t *singlePhaseTransaction) Rollback(ctx context.Context) error {
-	t.sopPhaseCommitTransaction.Rollback(ctx, nil)
+func (t *SinglePhaseTransaction) Rollback(ctx context.Context) error {
+	t.SopPhaseCommitTransaction.Rollback(ctx, nil)
 	var lastErr error
 	for _, ot := range t.otherTransactions {
 		if err := ot.Rollback(ctx, nil); err != nil {
@@ -166,31 +166,31 @@ func (t *singlePhaseTransaction) Rollback(ctx context.Context) error {
 }
 
 // Returns the transaction's mode.
-func (t *singlePhaseTransaction) GetMode() TransactionMode {
-	return t.sopPhaseCommitTransaction.GetMode()
+func (t *SinglePhaseTransaction) GetMode() TransactionMode {
+	return t.SopPhaseCommitTransaction.GetMode()
 }
 
 // Returns true if transaction has begun, false otherwise.
-func (t *singlePhaseTransaction) HasBegun() bool {
-	return t.sopPhaseCommitTransaction.HasBegun()
+func (t *SinglePhaseTransaction) HasBegun() bool {
+	return t.SopPhaseCommitTransaction.HasBegun()
 }
 
 // Returns the two phased commit transaction object. Useful for integration with your application
 // "other" database transactions. Returned transaction object will allow your code to call the
 // two phases commit of SOP.
-func (t *singlePhaseTransaction) GetPhasedTransaction() TwoPhaseCommitTransaction {
-	return t.sopPhaseCommitTransaction
+func (t *SinglePhaseTransaction) GetPhasedTransaction() TwoPhaseCommitTransaction {
+	return t.SopPhaseCommitTransaction
 }
 
 // Add your two phases commit implementation for managing your/3rd party database transaction.
-func (t *singlePhaseTransaction) AddPhasedTransaction(otherTransaction ...TwoPhaseCommitTransaction) {
+func (t *SinglePhaseTransaction) AddPhasedTransaction(otherTransaction ...TwoPhaseCommitTransaction) {
 	t.otherTransactions = append(t.otherTransactions, otherTransaction...)
 }
 
-func (t *singlePhaseTransaction) GetStores(ctx context.Context) ([]string, error) {
-	return t.sopPhaseCommitTransaction.GetStores(ctx)
+func (t *SinglePhaseTransaction) GetStores(ctx context.Context) ([]string, error) {
+	return t.SopPhaseCommitTransaction.GetStores(ctx)
 }
 
-func (t *singlePhaseTransaction) GetID() UUID {
-	return t.sopPhaseCommitTransaction.GetID()
+func (t *SinglePhaseTransaction) GetID() UUID {
+	return t.SopPhaseCommitTransaction.GetID()
 }

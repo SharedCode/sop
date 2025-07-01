@@ -101,7 +101,7 @@ func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 
 	if t.logger.committedState > commitStoreInfo {
 		rollbackStoresInfo := t.getRollbackStoresInfo()
-		if _, err := t.storeRepository.Update(ctx, rollbackStoresInfo); err != nil {
+		if _, err := t.StoreRepository.Update(ctx, rollbackStoresInfo); err != nil {
 			lastErr = err
 		}
 	}
@@ -320,7 +320,7 @@ func (t *Transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []int
 
 func (t *Transaction) commitStores(ctx context.Context) ([]sop.StoreInfo, error) {
 	stores := t.getCommitStoresInfo()
-	return t.storeRepository.Update(ctx, stores)
+	return t.StoreRepository.Update(ctx, stores)
 }
 
 func (t *Transaction) getCommitStoresInfo() []sop.StoreInfo {

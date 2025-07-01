@@ -463,7 +463,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	// Preserve the good, nicely populated repositories.
 	t2 := trans.GetPhasedTransaction().(*Transaction)
 
-	goodStoreRepository := t2.storeRepository
+	goodStoreRepository := t2.StoreRepository
 	goodRegistry := t2.registry
 	goodRedisCache := t2.l2Cache
 	goodBlobStore := t2.blobStore
@@ -472,7 +472,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	t2 = trans.GetPhasedTransaction().(*Transaction)
 
 	// Restore the populated repos.
-	t2.storeRepository = goodStoreRepository
+	t2.StoreRepository = goodStoreRepository
 	t2.l2Cache = goodRedisCache
 	t2.blobStore = goodBlobStore
 
@@ -491,7 +491,7 @@ func Test_CommitThrowsException(t *testing.T) {
 	}
 
 	// Capture the repos' state which we will check for validity.
-	goodStoreRepository = t2.storeRepository
+	goodStoreRepository = t2.StoreRepository
 	goodRegistry = t2.registry
 	goodRegistry.(*mocks.Mock_vid_registry).InducedErrorOnUpdateAllOrNothing = false
 	goodRedisCache = t2.l2Cache
@@ -499,7 +499,7 @@ func Test_CommitThrowsException(t *testing.T) {
 
 	trans, _ = newMockTransaction(t, sop.ForReading, -1)
 	t2 = trans.GetPhasedTransaction().(*Transaction)
-	t2.storeRepository = goodStoreRepository
+	t2.StoreRepository = goodStoreRepository
 	t2.registry = goodRegistry
 	t2.l2Cache = goodRedisCache
 	t2.blobStore = goodBlobStore

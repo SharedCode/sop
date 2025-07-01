@@ -8,24 +8,6 @@ import (
 	"github.com/SharedCode/sop/cel"
 )
 
-type PagingDirection int
-
-const (
-	Forward = iota
-	Backward
-)
-
-// Paging Info specifies fetching details.
-type PagingInfo struct {
-	// -1 or 0 means to fetch data starting from the current "cursor" location.
-	// > 0 means to traverse to that page offset and fetch data from that "cursor" location.
-	PageOffset int `json:"page_offset"`
-	// Number of data elements(Keys or Items) to fetch.
-	PageSize int `json:"page_size"`
-	// Direction of fetch is either forward(0) or backwards(1).
-	Direction PagingDirection `json:"direction"`
-}
-
 // JSON DB that can take in any JSON data marshalled as map[string]any on Key & Value pair.
 type JsonDBMapKey struct {
 	*JsonDBAnyKey[map[string]any, any]

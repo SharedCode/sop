@@ -336,7 +336,7 @@ func (tl *transactionLog) rollback(ctx context.Context, t *Transaction, tid sop.
 		if committedFunctionLogs[i].Key == commitStoreInfo {
 			if lastCommittedFunctionLog > commitStoreInfo && committedFunctionLogs[i].Value != nil {
 				sis := toStruct[[]sop.StoreInfo](committedFunctionLogs[i].Value)
-				if _, err := t.storeRepository.Update(ctx, sis); err != nil {
+				if _, err := t.StoreRepository.Update(ctx, sis); err != nil {
 					lastErr = err
 				}
 			}

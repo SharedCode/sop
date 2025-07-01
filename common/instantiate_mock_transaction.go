@@ -38,7 +38,7 @@ func newMockTwoPhaseCommitTransaction(t *testing.T, mode sop.TransactionMode, ma
 	return &Transaction{
 		mode:            mode,
 		maxTime:         maxTime,
-		storeRepository: mockStoreRepository,
+		StoreRepository: mockStoreRepository,
 		registry:        mockRegistry,
 		l2Cache:         mockRedisCache,
 		blobStore:       mockNodeBlobStore,
