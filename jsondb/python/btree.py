@@ -396,6 +396,11 @@ class Btree(Generic[TK, TV]):
         getAction: int,
         pagingInfo: PagingInfo,
     ) -> Item[TK, TV]:
+        if pagingInfo.direction > PagingDirection.Backward.value:
+            pagingInfo.direction = PagingDirection.Backward.value
+        if pagingInfo.direction < PagingDirection.Forward.value:
+            pagingInfo.direction = PagingDirection.Forward.value
+
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
