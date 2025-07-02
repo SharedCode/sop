@@ -33,6 +33,12 @@ class pKey:
     key: str
 
 
+@dataclass
+class Person:
+    first_name: str
+    last_name: str
+
+
 to = transaction.TransationOptions(
     transaction.TransactionMode.ForWriting.value,
     5,
@@ -244,7 +250,12 @@ class TestBtreeMapKey(unittest.TestCase):
         ]
         print(f"foobar b3 add result: {b3.add(l)}")
 
+        bo = btree.BtreeOptions("person", True, cache_config=cache)
+        bo.set_value_data_size(btree.ValueDataSize.Small)
+        btree.Btree.new(bo, False, t)
+
         t.commit()
+
         print("new B3 succeeded")
 
     def test_add_if_not_exists(self):
@@ -364,4 +375,18 @@ class TestBtreeMapKey(unittest.TestCase):
         res = b3.get_store_info()
 
         print(f"storeInfo: {res}")
+        t.commit()
+
+    def test_add_people(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("person", t)
+        l = []
+        for i in range(500):
+            l.append(btree.Item(pKey(key=f"{i}"), Person(f"joe{i}", "petit")))
+
+        if not b3.add_if_not_exists(l):
+            print("failed to add list of persons to backend db")
+
         t.commit()

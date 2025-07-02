@@ -74,12 +74,19 @@ func OpenJsonBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t
 
 // Add adds an array of item to the b-tree and does not check for duplicates.
 func (j *JsonDBAnyKey[TK, TV]) Add(ctx context.Context, items []Item[TK, TV]) (bool, error) {
+	j.compareError = nil
+	allSucceeded := true
 	for i := range items {
-		if ok, err := j.BtreeInterface.Add(ctx, items[i].Key, *items[i].Value); !ok || err != nil {
+		if ok, err := j.BtreeInterface.Add(ctx, items[i].Key, *items[i].Value); err != nil {
 			return false, err
+		} else if !ok {
+			allSucceeded = false
+		}
+		if j.compareError != nil {
+			return false, j.compareError
 		}
 	}
-	return true, nil
+	return allSucceeded, nil
 }
 
 // AddIfNotExist adds an item if there is no item matching the key yet.
@@ -87,57 +94,69 @@ func (j *JsonDBAnyKey[TK, TV]) Add(ctx context.Context, items []Item[TK, TV]) (b
 // This is useful for cases one wants to add an item without creating a duplicate entry.
 func (j *JsonDBAnyKey[TK, TV]) AddIfNotExist(ctx context.Context, items []Item[TK, TV]) (bool, error) {
 	j.compareError = nil
+	allSucceeded := true
 	for i := range items {
-		if ok, err := j.BtreeInterface.AddIfNotExist(ctx, items[i].Key, *items[i].Value); !ok || err != nil {
+		if ok, err := j.BtreeInterface.AddIfNotExist(ctx, items[i].Key, *items[i].Value); err != nil {
 			return false, err
+		} else if !ok {
+			allSucceeded = false
 		}
 		if j.compareError != nil {
 			return false, j.compareError
 		}
 	}
-	return true, nil
+	return allSucceeded, nil
 }
 
 // Update finds the item with key and update its value to the incoming value argument.
 func (j *JsonDBAnyKey[TK, TV]) Update(ctx context.Context, items []Item[TK, TV]) (bool, error) {
 	j.compareError = nil
+	allSucceeded := true
 	for i := range items {
-		if ok, err := j.BtreeInterface.Update(ctx, items[i].Key, *items[i].Value); !ok || err != nil {
+		if ok, err := j.BtreeInterface.Update(ctx, items[i].Key, *items[i].Value); err != nil {
 			return false, err
+		} else if !ok {
+			allSucceeded = false
 		}
 		if j.compareError != nil {
 			return false, j.compareError
 		}
 	}
-	return true, nil
+	return allSucceeded, nil
 }
 
 // Add if not exist or update item if it exists.
 func (j *JsonDBAnyKey[TK, TV]) Upsert(ctx context.Context, items []Item[TK, TV]) (bool, error) {
 	j.compareError = nil
+	allSucceeded := true
 	for i := range items {
-		if ok, err := j.BtreeInterface.Upsert(ctx, items[i].Key, *items[i].Value); !ok || err != nil {
+		if ok, err := j.BtreeInterface.Upsert(ctx, items[i].Key, *items[i].Value); err != nil {
 			return false, err
+		} else if !ok {
+			allSucceeded = false
 		}
 		if j.compareError != nil {
 			return false, j.compareError
 		}
 	}
-	return true, nil
+	return allSucceeded, nil
 }
 
 // Remove will find the item with a given key then remove that item.
 func (j *JsonDBAnyKey[TK, TV]) Remove(ctx context.Context, keys []TK) (bool, error) {
 	j.compareError = nil
+	allSucceeded := true
 	for i := range keys {
-		if ok, err := j.BtreeInterface.Remove(ctx, keys[i]); !ok || err != nil {
+		if ok, err := j.BtreeInterface.Remove(ctx, keys[i]); err != nil {
 			return false, err
+		} else if !ok {
+			allSucceeded = false
 		}
 		if j.compareError != nil {
 			return false, j.compareError
 		}
 	}
-	return true, nil
+	return allSucceeded, nil
 }
 
 func (j *JsonDBAnyKey[TK, TV]) GetKeys(ctx context.Context, pagingInfo PagingInfo) (string, error) {
