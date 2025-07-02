@@ -29,7 +29,6 @@ func (itm *Item[TK, TV]) extract(source *btree.Item[TK, TV]) {
 // JSON string payload.
 type JsonDBAnyKey[TK btree.Ordered, TV any] struct {
 	btree.BtreeInterface[TK, TV]
-	compareError error
 }
 
 type PagingDirection int
@@ -78,16 +77,12 @@ func OpenJsonBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t
 
 // Add adds an array of item to the b-tree and does not check for duplicates.
 func (j *JsonDBAnyKey[TK, TV]) Add(ctx context.Context, items []Item[TK, TV]) (bool, error) {
-	j.compareError = nil
 	allSucceeded := true
 	for i := range items {
 		if ok, err := j.BtreeInterface.Add(ctx, items[i].Key, *items[i].Value); err != nil {
 			return false, err
 		} else if !ok {
 			allSucceeded = false
-		}
-		if j.compareError != nil {
-			return false, j.compareError
 		}
 	}
 	return allSucceeded, nil
@@ -97,7 +92,6 @@ func (j *JsonDBAnyKey[TK, TV]) Add(ctx context.Context, items []Item[TK, TV]) (b
 // Otherwise, it will do nothing and return false, for not adding the item.
 // This is useful for cases one wants to add an item without creating a duplicate entry.
 func (j *JsonDBAnyKey[TK, TV]) AddIfNotExist(ctx context.Context, items []Item[TK, TV]) (bool, error) {
-	j.compareError = nil
 	allSucceeded := true
 	for i := range items {
 		if ok, err := j.BtreeInterface.AddIfNotExist(ctx, items[i].Key, *items[i].Value); err != nil {
@@ -105,16 +99,12 @@ func (j *JsonDBAnyKey[TK, TV]) AddIfNotExist(ctx context.Context, items []Item[T
 		} else if !ok {
 			allSucceeded = false
 		}
-		if j.compareError != nil {
-			return false, j.compareError
-		}
 	}
 	return allSucceeded, nil
 }
 
 // Update finds the item with key and update its value to the incoming value argument.
 func (j *JsonDBAnyKey[TK, TV]) Update(ctx context.Context, items []Item[TK, TV]) (bool, error) {
-	j.compareError = nil
 	allSucceeded := true
 	for i := range items {
 		if ok, err := j.BtreeInterface.Update(ctx, items[i].Key, *items[i].Value); err != nil {
@@ -122,16 +112,12 @@ func (j *JsonDBAnyKey[TK, TV]) Update(ctx context.Context, items []Item[TK, TV])
 		} else if !ok {
 			allSucceeded = false
 		}
-		if j.compareError != nil {
-			return false, j.compareError
-		}
 	}
 	return allSucceeded, nil
 }
 
 // Add if not exist or update item if it exists.
 func (j *JsonDBAnyKey[TK, TV]) Upsert(ctx context.Context, items []Item[TK, TV]) (bool, error) {
-	j.compareError = nil
 	allSucceeded := true
 	for i := range items {
 		if ok, err := j.BtreeInterface.Upsert(ctx, items[i].Key, *items[i].Value); err != nil {
@@ -139,16 +125,12 @@ func (j *JsonDBAnyKey[TK, TV]) Upsert(ctx context.Context, items []Item[TK, TV])
 		} else if !ok {
 			allSucceeded = false
 		}
-		if j.compareError != nil {
-			return false, j.compareError
-		}
 	}
 	return allSucceeded, nil
 }
 
 // Remove will find the item with a given key then remove that item.
 func (j *JsonDBAnyKey[TK, TV]) Remove(ctx context.Context, keys []TK) (bool, error) {
-	j.compareError = nil
 	allSucceeded := true
 	for i := range keys {
 		if ok, err := j.BtreeInterface.Remove(ctx, keys[i]); err != nil {
@@ -156,15 +138,11 @@ func (j *JsonDBAnyKey[TK, TV]) Remove(ctx context.Context, keys []TK) (bool, err
 		} else if !ok {
 			allSucceeded = false
 		}
-		if j.compareError != nil {
-			return false, j.compareError
-		}
 	}
 	return allSucceeded, nil
 }
 
 func (j *JsonDBAnyKey[TK, TV]) GetKeys(ctx context.Context, pagingInfo PagingInfo) (string, error) {
-	j.compareError = nil
 	if j.BtreeInterface.GetCurrentKey().ID == sop.NilUUID {
 		if pagingInfo.PageOffset != 0 {
 			return "", fmt.Errorf("can't fetch keys, try calling First, Last or Find/FindWithID prior to GetItems")
@@ -180,15 +158,11 @@ func (j *JsonDBAnyKey[TK, TV]) GetKeys(ctx context.Context, pagingInfo PagingInf
 	if pagingInfo.PageOffset > 0 {
 		for range pagingInfo.PageOffset {
 			for range pagingInfo.PageSize {
-				j.compareError = nil
 				if pagingInfo.Direction == Forward {
 					if ok, err := j.BtreeInterface.Next(ctx); err != nil {
 						return "", err
 					} else if !ok {
 						return "", fmt.Errorf("reached the end of B-tree, no items fetched")
-					}
-					if j.compareError != nil {
-						return "", j.compareError
 					}
 					continue
 				}
@@ -197,9 +171,6 @@ func (j *JsonDBAnyKey[TK, TV]) GetKeys(ctx context.Context, pagingInfo PagingInf
 					return "", err
 				} else if !ok {
 					return "", fmt.Errorf("reached the top of B-tree, no items fetched")
-				}
-				if j.compareError != nil {
-					return "", j.compareError
 				}
 			}
 		}
@@ -212,7 +183,6 @@ func (j *JsonDBAnyKey[TK, TV]) GetKeys(ctx context.Context, pagingInfo PagingInf
 	}
 	keys := make([]Item[TK, TV], 0, fetchCount)
 	for range fetchCount {
-		j.compareError = nil
 
 		key := j.BtreeInterface.GetCurrentKey()
 		itm := Item[TK, TV]{
@@ -227,9 +197,6 @@ func (j *JsonDBAnyKey[TK, TV]) GetKeys(ctx context.Context, pagingInfo PagingInf
 			} else if !ok {
 				return toJsonString(keys)
 			}
-			if j.compareError != nil {
-				return "", j.compareError
-			}
 			continue
 		}
 		if ok, err := j.BtreeInterface.Previous(ctx); err != nil {
@@ -237,9 +204,6 @@ func (j *JsonDBAnyKey[TK, TV]) GetKeys(ctx context.Context, pagingInfo PagingInf
 			return p, err
 		} else if !ok {
 			return toJsonString(keys)
-		}
-		if j.compareError != nil {
-			return "", j.compareError
 		}
 	}
 
@@ -263,15 +227,11 @@ func (j *JsonDBAnyKey[TK, TV]) GetItems(ctx context.Context, pagingInfo PagingIn
 	if pagingInfo.PageOffset > 0 {
 		for range pagingInfo.PageOffset {
 			for range pagingInfo.PageSize {
-				j.compareError = nil
 				if pagingInfo.Direction == Forward {
 					if ok, err := j.BtreeInterface.Next(ctx); err != nil {
 						return "", err
 					} else if !ok {
 						return "", fmt.Errorf("reached the end of B-tree, no items fetched")
-					}
-					if j.compareError != nil {
-						return "", j.compareError
 					}
 					continue
 				}
@@ -280,9 +240,6 @@ func (j *JsonDBAnyKey[TK, TV]) GetItems(ctx context.Context, pagingInfo PagingIn
 					return "", err
 				} else if !ok {
 					return "", fmt.Errorf("reached the top of B-tree, no items fetched")
-				}
-				if j.compareError != nil {
-					return "", j.compareError
 				}
 			}
 		}
@@ -303,16 +260,12 @@ func (j *JsonDBAnyKey[TK, TV]) GetItems(ctx context.Context, pagingInfo PagingIn
 		var itm Item[TK, TV]
 		itm.extract(&item)
 		items = append(items, itm)
-		j.compareError = nil
 		if pagingInfo.Direction == Forward {
 			if ok, err := j.BtreeInterface.Next(ctx); err != nil {
 				p, _ := toJsonString(items)
 				return p, err
 			} else if !ok {
 				return toJsonString(items)
-			}
-			if j.compareError != nil {
-				return "", j.compareError
 			}
 			continue
 		}
@@ -321,9 +274,6 @@ func (j *JsonDBAnyKey[TK, TV]) GetItems(ctx context.Context, pagingInfo PagingIn
 			return p, err
 		} else if !ok {
 			return toJsonString(items)
-		}
-		if j.compareError != nil {
-			return "", j.compareError
 		}
 	}
 
@@ -335,7 +285,6 @@ func (j *JsonDBAnyKey[TK, TV]) GetItems(ctx context.Context, pagingInfo PagingIn
 func (j *JsonDBAnyKey[TK, TV]) GetValues(ctx context.Context, keys []Item[TK, TV]) (string, error) {
 	values := make([]Item[TK, TV], len(keys))
 	for i := range keys {
-		j.compareError = nil
 		var err error
 		var ok bool
 		id := sop.UUID(keys[i].ID)
@@ -350,13 +299,7 @@ func (j *JsonDBAnyKey[TK, TV]) GetValues(ctx context.Context, keys []Item[TK, TV
 		} else if !ok {
 			// Assign the source key to allow caller to deduce that item was not found, Value field is empty.
 			values[i] = keys[i]
-			if j.compareError != nil {
-				return "", j.compareError
-			}
 			continue
-		}
-		if j.compareError != nil {
-			return "", j.compareError
 		}
 		item, err := j.BtreeInterface.GetCurrentItem(ctx)
 		if err != nil {
