@@ -131,7 +131,9 @@ class TestBtree(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("barstoreec", t)
-        res = b3.get_items(0, 5, btree.PagingDirection.Forward)
+        res = b3.get_items(
+            btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
+        )
         print(f"get_items succeeded {res}.")
 
         t.commit()
@@ -141,7 +143,9 @@ class TestBtree(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("barstoreec", t)
-        res = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        res = b3.get_keys(
+            btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
+        )
         print(f"get_keys succeeded {res}.")
 
         t.commit()
@@ -151,7 +155,9 @@ class TestBtree(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("barstoreec", t)
-        keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        keys = b3.get_keys(
+            btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
+        )
         res = b3.get_values(keys)
 
         print(f"get_values succeeded {res}.")
@@ -174,7 +180,9 @@ class TestBtree(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("barstoreec", t)
-        keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        keys = b3.get_keys(
+            btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
+        )
         res = b3.find_with_id(keys[0].key, keys[0].id)
 
         print(f"find with id succeeded {res}.")
@@ -277,7 +285,9 @@ class TestBtreeMapKey(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("foobar", t)
-        res = b3.get_items(0, 5, btree.PagingDirection.Forward)
+        res = b3.get_items(
+            btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
+        )
         print(f"get_items succeeded {res}.")
 
         t.commit()
@@ -287,7 +297,9 @@ class TestBtreeMapKey(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("foobar", t)
-        res = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        res = b3.get_keys(
+            btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
+        )
         print(f"get_keys succeeded {res}.")
 
         t.commit()
@@ -297,7 +309,9 @@ class TestBtreeMapKey(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("foobar", t)
-        keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        keys = b3.get_keys(
+            btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
+        )
         res = b3.get_values(keys)
 
         print(f"get_values succeeded {res}.")
@@ -320,7 +334,9 @@ class TestBtreeMapKey(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("foobar", t)
-        keys = b3.get_keys(0, 5, btree.PagingDirection.Forward)
+        keys = b3.get_keys(
+            btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
+        )
         res = b3.find_with_id(keys[0].key, keys[0].id)
 
         print(f"find with id succeeded {res}.")
@@ -388,5 +404,19 @@ class TestBtreeMapKey(unittest.TestCase):
 
         if not b3.add_if_not_exists(l):
             print("failed to add list of persons to backend db")
+
+        t.commit()
+
+    def test_get_keys_get_values(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("person", t)
+        b3.first()
+        keys = b3.get_keys(
+            btree.PagingInfo(10, 20, 2, direction=btree.PagingDirection.Forward.value)
+        )
+        values = b3.get_values(keys)
+        print(f"values: {values}")
 
         t.commit()

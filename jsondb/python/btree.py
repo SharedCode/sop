@@ -40,6 +40,10 @@ class PagingInfo:
     page_offset: int = 0
     # Fetch size of 20 is default.
     page_size: int = 20
+    # Count of elements to fetch starting with the page offset. If left 0, 'will fetch PageSize number of elements
+    # after traversing the B-tree, bringing the cursor to the requested page offset.
+    # Otherwise, will fetch FetchCount number of data elements starting from the page offset.
+    fetch_count: int = 0
     # Fetch direction of forward(0) is default.
     direction: int = 0
 
@@ -224,9 +228,10 @@ class Btree(Generic[TK, TV]):
         return self._to_bool(res)
 
     def get_items(
-        self, page_offset: int, page_size: int, direction: PagingDirection
+        self,
+        pagingInfo: PagingInfo,
     ) -> Item[TK, TV]:
-        return self._get(BtreeAction.GetItems.value, page_offset, page_size, direction)
+        return self._get(BtreeAction.GetItems.value, pagingInfo)
 
     # Keys array contains the keys & their IDs to fetch value data of. Both input & output
     # are Item type though input only has Key & ID field populated to find the data & output has Value of found data.
@@ -256,9 +261,10 @@ class Btree(Generic[TK, TV]):
         return [Item[TK, TV](**data_dict) for data_dict in data_dicts]
 
     def get_keys(
-        self, page_offset: int, page_size: int, direction: PagingDirection
+        self,
+        pagingInfo: PagingInfo,
     ) -> Item[TK, TV]:
-        return self._get(BtreeAction.GetKeys.value, page_offset, page_size, direction)
+        return self._get(BtreeAction.GetKeys.value, pagingInfo)
 
     def find(self, key: TK) -> bool:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
@@ -388,17 +394,12 @@ class Btree(Generic[TK, TV]):
     def _get(
         self,
         getAction: int,
-        page_offset: int,
-        page_size: int,
-        direction: PagingDirection,
+        pagingInfo: PagingInfo,
     ) -> Item[TK, TV]:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
             transaction_id=str(self.transaction_id),
-        )
-        pagingInfo = PagingInfo(
-            page_offset=page_offset, page_size=page_size, direction=direction.value
         )
         result, error = call_go.get_from_btree(
             getAction,

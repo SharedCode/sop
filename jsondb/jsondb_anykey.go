@@ -44,8 +44,12 @@ type PagingInfo struct {
 	// -1 or 0 means to fetch data starting from the current "cursor" location.
 	// > 0 means to traverse to that page offset and fetch data from that "cursor" location.
 	PageOffset int `json:"page_offset"`
-	// Number of data elements(Keys or Items) to fetch.
+	// Number of data elements(Keys or Items) per page.
 	PageSize int `json:"page_size"`
+	// Count of elements to fetch starting with the page offset. If left 0, 'will fetch PageSize number of elements
+	// after traversing the B-tree, bringing the cursor to the requested page offset.
+	// Otherwise, will fetch FetchCount number of data elements starting from the page offset.
+	FetchCount int `json:"fetch_count"`
 	// Direction of fetch is either forward(0) or backwards(1).
 	Direction PagingDirection `json:"direction"`
 }
@@ -201,8 +205,13 @@ func (j *JsonDBAnyKey[TK, TV]) GetKeys(ctx context.Context, pagingInfo PagingInf
 		}
 	}
 
-	keys := make([]Item[TK, TV], 0, pagingInfo.PageSize)
-	for range pagingInfo.PageSize {
+	// Fetch the data elements starting with current cursor location.
+	fetchCount := pagingInfo.FetchCount
+	if fetchCount <= 0 {
+		fetchCount = pagingInfo.PageSize
+	}
+	keys := make([]Item[TK, TV], 0, fetchCount)
+	for range fetchCount {
 		j.compareError = nil
 
 		key := j.BtreeInterface.GetCurrentKey()
@@ -279,8 +288,13 @@ func (j *JsonDBAnyKey[TK, TV]) GetItems(ctx context.Context, pagingInfo PagingIn
 		}
 	}
 
-	items := make([]Item[TK, TV], 0, pagingInfo.PageSize)
-	for range pagingInfo.PageSize {
+	// Fetch the data elements starting with current cursor location.
+	fetchCount := pagingInfo.FetchCount
+	if fetchCount <= 0 {
+		fetchCount = pagingInfo.PageSize
+	}
+	items := make([]Item[TK, TV], 0, fetchCount)
+	for range fetchCount {
 		item, err := j.BtreeInterface.GetCurrentItem(ctx)
 		if err != nil {
 			p, _ := toJsonString(items)
