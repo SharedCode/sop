@@ -398,10 +398,13 @@ class TestBtreeMapKey(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("person", t)
+
+        # Prepare a batch of 500 Person records.
         l = []
         for i in range(500):
             l.append(btree.Item(pKey(key=f"{i}"), Person(f"joe{i}", "petit")))
 
+        # Add the batch to the B-tree.
         if not b3.add_if_not_exists(l):
             print("failed to add list of persons to backend db")
 
@@ -426,10 +429,13 @@ class TestBtreeMapKey(unittest.TestCase):
         t.begin()
 
         b3 = btree.Btree.open("person", t)
+        # Position cursor to the last item.
         b3.last()
+        # Navigate to the 200th item backwards then fetch that item & the item previous to it.
         keys = b3.get_keys(
             btree.PagingInfo(10, 20, 2, direction=btree.PagingDirection.Backward.value)
         )
+        # Use the returned keys to ask B-tree to fetch the values of these keys.
         values = b3.get_values(keys)
         print(f"values: {values}")
 
@@ -442,8 +448,11 @@ class TestBtreeMapKey(unittest.TestCase):
         b3 = btree.Btree.open("person", t)
         b3.first()
         keys = b3.get_keys(
+            # There are 500 records in the DB, navigate to the 490th then fetch last 10 records.
+            # Since there are only 10 records after reaching 490 item location, fetching 20 will just return remaining 10 records.
             btree.PagingInfo(49, 10, 20, direction=btree.PagingDirection.Forward.value)
         )
+        # Use the returned keys to ask B-tree to fetch the values of these keys.
         values = b3.get_values(keys)
         print(f"values: {values}")
 
