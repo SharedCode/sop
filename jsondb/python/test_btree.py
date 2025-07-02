@@ -420,3 +420,31 @@ class TestBtreeMapKey(unittest.TestCase):
         print(f"values: {values}")
 
         t.commit()
+
+    def test_get_keys_backwards_get_values(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("person", t)
+        b3.last()
+        keys = b3.get_keys(
+            btree.PagingInfo(10, 20, 2, direction=btree.PagingDirection.Backward.value)
+        )
+        values = b3.get_values(keys)
+        print(f"values: {values}")
+
+        t.commit()
+
+    def test_get_keys_over_the_edge_get_values(self):
+        t = transaction.Transaction(to)
+        t.begin()
+
+        b3 = btree.Btree.open("person", t)
+        b3.first()
+        keys = b3.get_keys(
+            btree.PagingInfo(49, 10, 20, direction=btree.PagingDirection.Forward.value)
+        )
+        values = b3.get_values(keys)
+        print(f"values: {values}")
+
+        t.commit()
