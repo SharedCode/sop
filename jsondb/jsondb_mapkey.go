@@ -2,6 +2,7 @@ package jsondb
 
 import (
 	"context"
+	"sort"
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
@@ -11,20 +12,31 @@ import (
 // JSON DB that can take in any JSON data marshalled as map[string]any on Key & Value pair.
 type JsonDBMapKey struct {
 	*JsonDBAnyKey[map[string]any, any]
-	indexSpecification *IndexSpecification
+	indexSpecification          *IndexSpecification
+	defaultComparerSortedFields []string
 }
 
 func (j *JsonDBMapKey) proxyComparer(mapX map[string]any, mapY map[string]any) int {
 	if j.indexSpecification != nil {
 		return j.indexSpecification.Comparer(mapX, mapY)
 	}
-	return defaultComparer(mapX, mapY)
+	return j.defaultComparer(mapX, mapY)
 }
 
 // Default Comparer of Items can compare two maps with no nested map.
-func defaultComparer(mapX map[string]any, mapY map[string]any) int {
-	for k, v := range mapX {
-		i := btree.Compare(v, mapY[k])
+func (j *JsonDBMapKey) defaultComparer(mapX map[string]any, mapY map[string]any) int {
+	if j.defaultComparerSortedFields == nil {
+		arr := make([]string, len(mapX))
+		i := 0
+		for k := range mapX {
+			arr[i] = k
+			i++
+		}
+		sort.Strings(arr)
+		j.defaultComparerSortedFields = arr
+	}
+	for _, k := range j.defaultComparerSortedFields {
+		i := btree.Compare(mapX[k], mapY[k])
 		if i != 0 {
 			return i
 		}
@@ -38,7 +50,7 @@ func NewJsonBtreeMapKey(ctx context.Context, so sop.StoreOptions, t sop.Transact
 	var comparer btree.ComparerFunc[map[string]any]
 	j := JsonDBMapKey{}
 	if indexSpecification == "" {
-		comparer = defaultComparer
+		comparer = j.defaultComparer
 	} else {
 		// Create the comparer from the IndexSpecification JSON string that defines the fields list comprising the index (on key) & their sort order.
 		var is IndexSpecification
