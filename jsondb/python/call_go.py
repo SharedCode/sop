@@ -22,7 +22,6 @@ except OSError as e:
 # Call the 'hello' function (no arguments, no return value)
 print("Calling Go's open_redis_connection() function:")
 _open_redis_conn = lib.openRedisConnection
-_open_redis_conn = lib.openRedisConnection
 
 # Call the 'open+_redis_connection' function with arguments and set argument/return types
 _open_redis_conn.argtypes = [
@@ -153,7 +152,10 @@ def manage_btree(action: int, payload: str, payload2: str) -> str:
     Manage a SOP btree.
     """
 
-    res = _manage_btree(to_cint(action), to_cstring(payload), to_cstring(payload2))
+    p2 = None
+    if payload2 is not None:
+        p2 = to_cstring(payload2)
+    res = _manage_btree(to_cint(action), to_cstring(payload), p2)
     if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
         return None
 

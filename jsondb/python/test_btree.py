@@ -60,7 +60,7 @@ class TestBtree(unittest.TestCase):
         bo = btree.BtreeOptions("barstoreec", True, cache_config=cache)
         bo.set_value_data_size(btree.ValueDataSize.Small)
 
-        b3 = btree.Btree.new(bo, True, t)
+        b3 = btree.Btree.new(bo, t)
         l = [
             btree.Item(1, "foo"),
         ]
@@ -90,8 +90,9 @@ class TestBtree(unittest.TestCase):
         cache = btree.CacheConfig()
         bo = btree.BtreeOptions("barstoreec_mk", True, cache_config=cache)
         bo.set_value_data_size(btree.ValueDataSize.Small)
+        bo.is_primitive_key = False
 
-        b3 = btree.Btree.new(bo, False, t)
+        b3 = btree.Btree.new(bo, t)
 
         pk = pKey("foo")
         l = [
@@ -110,8 +111,9 @@ class TestBtree(unittest.TestCase):
         cache = btree.CacheConfig()
         bo = btree.BtreeOptions("barstoreec_mk2", True, cache_config=cache)
         bo.set_value_data_size(btree.ValueDataSize.Small)
+        bo.is_primitive_key = False
 
-        b3 = btree.Btree.new(bo, False, t)
+        b3 = btree.Btree.new(bo, t)
 
         l = [
             btree.Item(1, "foo"),
@@ -251,8 +253,9 @@ class TestBtreeMapKey(unittest.TestCase):
         cache = btree.CacheConfig()
         bo = btree.BtreeOptions("foobar", True, cache_config=cache)
         bo.set_value_data_size(btree.ValueDataSize.Small)
+        bo.is_primitive_key = False
 
-        b3 = btree.Btree.new(bo, False, t)
+        b3 = btree.Btree.new(bo, t)
         l = [
             btree.Item(pKey(key="123"), "foo"),
         ]
@@ -260,7 +263,9 @@ class TestBtreeMapKey(unittest.TestCase):
 
         bo = btree.BtreeOptions("person", True, cache_config=cache)
         bo.set_value_data_size(btree.ValueDataSize.Small)
-        btree.Btree.new(bo, False, t)
+        bo.is_primitive_key = False
+
+        btree.Btree.new(bo, t)
 
         t.commit()
 

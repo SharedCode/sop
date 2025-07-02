@@ -47,8 +47,8 @@ type StoreInfo struct {
 	// Defaults to the global specification and can be overriden for each store.
 	CacheConfig StoreCacheConfig `json:"cache_config"`
 
-	// CEL Expression used as comparer for comparing Keys.
-	CELexpression string `json:"cel_expression"`
+	// MapKey index specification or CEL expression, if/when we support CEL expression based comparer.
+	MapKeyIndexSpecification string `json:"mapkey_index_spec"`
 
 	// Hint that tells the Python binding which JSON B-tree type to instantiate on Open method.
 	IsPrimitiveKey bool `json:"is_primitive_key"`
@@ -212,7 +212,7 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 		IsValueDataGloballyCached:    si.IsValueDataGloballyCached,
 		LeafLoadBalancing:            si.LeafLoadBalancing,
 		CacheConfig:                  *si.CacheConfig,
-		CELexpression:                si.CELexpression,
+		MapKeyIndexSpecification:     si.CELexpression,
 		IsPrimitiveKey:               si.IsPrimitiveKey,
 	}
 }
@@ -235,7 +235,7 @@ func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 		s.IsValueDataGloballyCached == b.IsValueDataGloballyCached &&
 		s.LeafLoadBalancing == b.LeafLoadBalancing &&
 		s.IsPrimitiveKey == b.IsPrimitiveKey &&
-		s.CELexpression == b.CELexpression
+		s.MapKeyIndexSpecification == b.MapKeyIndexSpecification
 }
 
 // Format a given name into a registry table name by adding suffix.

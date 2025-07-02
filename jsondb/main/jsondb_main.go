@@ -206,9 +206,9 @@ type BtreeOptions struct {
 	LeafLoadBalancing            bool                 `json:"leaf_load_balancing"`
 	CacheConfig                  sop.StoreCacheConfig `json:"cache_config"`
 
-	CELexpression  string    `json:"cel_expression"`
-	TransactionID  uuid.UUID `json:"transaction_id"`
-	IsPrimitiveKey bool      `json:"is_primitive_key"`
+	IndexSpecification string    `json:"index_specification"`
+	TransactionID      uuid.UUID `json:"transaction_id"`
+	IsPrimitiveKey     bool      `json:"is_primitive_key"`
 }
 
 // Extract from StoreInfo. StoreInfo has annotations useful for JSON serialization, thus, it can get used
@@ -229,7 +229,7 @@ func convertTo(si *BtreeOptions) *sop.StoreOptions {
 	so.CacheConfig.RegistryCacheDuration = so.CacheConfig.RegistryCacheDuration * time.Minute
 	so.CacheConfig.StoreInfoCacheDuration = so.CacheConfig.StoreInfoCacheDuration * time.Minute
 	so.CacheConfig.ValueDataCacheDuration = so.CacheConfig.ValueDataCacheDuration * time.Minute
-	so.CELexpression = si.CELexpression
+	so.CELexpression = si.IndexSpecification
 	so.IsPrimitiveKey = si.IsPrimitiveKey
 	return &so
 }
@@ -243,7 +243,7 @@ func (bo *BtreeOptions) extract(si *sop.StoreInfo) {
 	bo.LeafLoadBalancing = si.LeafLoadBalancing
 	bo.Description = si.Description
 	bo.CacheConfig = si.CacheConfig
-	bo.CELexpression = si.CELexpression
+	bo.IndexSpecification = si.MapKeyIndexSpecification
 	bo.IsPrimitiveKey = si.IsPrimitiveKey
 	// Restore back to "minute" unit.
 	bo.CacheConfig.NodeCacheDuration = si.CacheConfig.NodeCacheDuration / time.Minute

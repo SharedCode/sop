@@ -336,7 +336,15 @@ func (j *JsonDBAnyKey[TK, TV]) GetValues(ctx context.Context, keys []Item[TK, TV
 	values := make([]Item[TK, TV], len(keys))
 	for i := range keys {
 		j.compareError = nil
-		if ok, err := j.BtreeInterface.FindWithID(ctx, keys[i].Key, sop.UUID(keys[i].ID)); err != nil {
+		var err error
+		var ok bool
+		id := sop.UUID(keys[i].ID)
+		if id.IsNil() {
+			ok, err = j.BtreeInterface.Find(ctx, keys[i].Key, true)
+		} else {
+			ok, err = j.BtreeInterface.FindWithID(ctx, keys[i].Key, sop.UUID(keys[i].ID))
+		}
+		if err != nil {
 			p, _ := toJsonString(values)
 			return p, err
 		} else if !ok {

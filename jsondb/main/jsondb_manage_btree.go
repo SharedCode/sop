@@ -89,7 +89,7 @@ func newBtree(ctx context.Context, ps string) *C.char {
 		tup.Second[b3id] = b3
 	} else {
 		log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
-		b3, err := jsondb.NewJsonBtreeMapKey(ctx, *so, tup.First, b3o.CELexpression)
+		b3, err := jsondb.NewJsonBtreeMapKey(ctx, *so, tup.First, b3o.IndexSpecification)
 		if err != nil {
 			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
 			return C.CString(errMsg)
@@ -145,7 +145,7 @@ func openBtree(ctx context.Context, ps string) *C.char {
 			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
 			return C.CString(errMsg)
 		}
-		ce := b3.GetStoreInfo().CELexpression
+		ce := b3.GetStoreInfo().MapKeyIndexSpecification
 		if ce != "" {
 			errMsg := fmt.Sprintf("error opening for 'Primitive Type' Btree (%s), CELexpression %s is restricted for class type Key", so.Name, ce)
 			log.Error(errMsg)

@@ -66,6 +66,21 @@ class CacheConfig:
 
 
 @dataclass
+class IndexFieldSpecification:
+    field_name: str
+    ascending_sort_order: bool = True
+
+
+@dataclass
+class IndexSpecification:
+    """
+    Index Specification lists the fields comprising the index on the Key class & their sort order.
+    """
+
+    index_fields: IndexFieldSpecification = None
+
+
+@dataclass
 class BtreeOptions:
     """
     Btree options specify the options available for making a B-tree.
@@ -78,7 +93,7 @@ class BtreeOptions:
     is_value_data_in_node_segment: bool = True
     is_value_data_actively_persisted: bool = False
     is_value_data_globally_cached: bool = False
-    cel_expression: str = ""
+    index_specification: str = ""
     transaction_id: str = str(uuid.UUID(int=0))
     cache_config: CacheConfig = None
     is_primitive_key: bool = True
@@ -153,8 +168,8 @@ class Btree(Generic[TK, TV]):
     def new(
         cls: Type["Btree[TK,TV]"],
         options: BtreeOptions,
-        is_primitive_key: bool,
         trans: Transaction,
+        index_spec: IndexSpecification = None,
     ) -> "Btree[TK,TV]":
         """
         Create a new B-tree in the backend storage with the options specified then return an instance
@@ -162,10 +177,11 @@ class Btree(Generic[TK, TV]):
         """
 
         options.transaction_id = str(trans.transaction_id)
-        options.is_primitive_key = is_primitive_key
+        if index_spec is not None:
+            options.index_specification = json.dumps(asdict(index_spec))
 
         res = call_go.manage_btree(
-            BtreeAction.NewBtree.value, json.dumps(asdict(options)), ""
+            BtreeAction.NewBtree.value, json.dumps(asdict(options)), None
         )
 
         if res == None:
@@ -176,7 +192,7 @@ class Btree(Generic[TK, TV]):
             # if res can't be converted to UUID, it is expected to be an error msg from SOP.
             raise BtreeError(res)
 
-        return cls(b3id, is_primitive_key, trans.transaction_id)
+        return cls(b3id, options.is_primitive_key, trans.transaction_id)
 
     @classmethod
     def open(

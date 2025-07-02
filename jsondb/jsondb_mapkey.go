@@ -5,29 +5,20 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/cel"
+	"github.com/SharedCode/sop/encoding"
 )
 
 // JSON DB that can take in any JSON data marshalled as map[string]any on Key & Value pair.
 type JsonDBMapKey struct {
 	*JsonDBAnyKey[map[string]any, any]
-	evaluator *cel.Evaluator
+	indexSpecification *IndexSpecification
 }
 
 func (j *JsonDBMapKey) proxyComparer(mapX map[string]any, mapY map[string]any) int {
-	if j.evaluator != nil {
-		return j.celComparer(mapX, mapY)
+	if j.indexSpecification != nil {
+		return j.indexSpecification.Comparer(mapX, mapY)
 	}
 	return defaultComparer(mapX, mapY)
-}
-
-// Comparer for map[string]any key type using CEL expression.
-func (j *JsonDBMapKey) celComparer(mapX map[string]any, mapY map[string]any) int {
-	r, err := j.evaluator.Evaluate(mapX, mapY)
-	if err != nil {
-		j.compareError = err
-	}
-	return r
 }
 
 // Default Comparer of Items can compare two maps with no nested map.
@@ -42,20 +33,20 @@ func defaultComparer(mapX map[string]any, mapY map[string]any) int {
 }
 
 // Instantiates a Btree for schema-less usage. I.e. - JSONy type of data marshaled by Go as map[string]any
-// data type for key & value pairs.
-// And using user provided CEL expression as comparer. If not provided, will use default comparer that compares each field of the key.
-func NewJsonBtreeMapKey(ctx context.Context, so sop.StoreOptions, t sop.Transaction, celExpressionComparer string) (*JsonDBMapKey, error) {
+// data type for key & any value pairs.
+func NewJsonBtreeMapKey(ctx context.Context, so sop.StoreOptions, t sop.Transaction, indexSpecification string) (*JsonDBMapKey, error) {
 	var comparer btree.ComparerFunc[map[string]any]
 	j := JsonDBMapKey{}
-	if celExpressionComparer == "" {
+	if indexSpecification == "" {
 		comparer = defaultComparer
 	} else {
-		e, err := cel.NewEvaluator("comparer", celExpressionComparer)
-		if err != nil {
+		// Create the comparer from the IndexSpecification JSON string that defines the fields list comprising the index (on key) & their sort order.
+		var is IndexSpecification
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(indexSpecification), &is); err != nil {
 			return nil, err
 		}
-		j.evaluator = e
-		comparer = j.celComparer
+		j.indexSpecification = &is
+		comparer = is.Comparer
 	}
 
 	b3, err := NewJsonBtree[map[string]any, any](ctx, so, t, comparer)
@@ -78,13 +69,14 @@ func OpenJsonBtreeMapKey(ctx context.Context, name string, t sop.Transaction) (*
 	}
 
 	// Resurrect the CEL expression evaluator if CEL expression was originally provided when creating B-tree.
-	ce := b3.GetStoreInfo().CELexpression
-	if ce != "" {
-		e, err := cel.NewEvaluator("comparer", ce)
-		if err != nil {
+	iss := b3.GetStoreInfo().MapKeyIndexSpecification
+	if iss != "" {
+		// Create the comparer from the IndexSpecification JSON string that defines the fields list comprising the index (on key) & their sort order.
+		var is IndexSpecification
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(iss), &is); err != nil {
 			return nil, err
 		}
-		j.evaluator = e
+		j.indexSpecification = &is
 	}
 
 	j.JsonDBAnyKey = b3
