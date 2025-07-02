@@ -12,8 +12,9 @@ import (
 // JSON DB that can take in any JSON data marshalled as map[string]any on Key & Value pair.
 type JsonDBMapKey struct {
 	*JsonDBAnyKey[map[string]any, any]
-	indexSpecification          *IndexSpecification
-	defaultComparerSortedFields []string
+	indexSpecification            *IndexSpecification
+	defaultComparerSortedFields   []string
+	defaultCoercedFieldsComparers []func(a, b any) int
 }
 
 func (j *JsonDBMapKey) proxyComparer(mapX map[string]any, mapY map[string]any) int {
@@ -34,11 +35,16 @@ func (j *JsonDBMapKey) defaultComparer(mapX map[string]any, mapY map[string]any)
 		}
 		sort.Strings(arr)
 		j.defaultComparerSortedFields = arr
+		j.defaultCoercedFieldsComparers = make([]func(a any, b any) int, len(arr))
 	}
-	for _, k := range j.defaultComparerSortedFields {
-		i := btree.Compare(mapX[k], mapY[k])
-		if i != 0 {
-			return i
+	for i, k := range j.defaultComparerSortedFields {
+		// Coerce the default Comparers needed by each field of the Key class (which is an entry in the MapKey).
+		if j.defaultCoercedFieldsComparers[i] == nil {
+			j.defaultCoercedFieldsComparers[i] = btree.CoerceComparer(mapX[k])
+		}
+		res := j.defaultCoercedFieldsComparers[i](mapX[k], mapY[k])
+		if res != 0 {
+			return res
 		}
 	}
 	return 0

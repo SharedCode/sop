@@ -8,6 +8,7 @@ type IndexFieldSpecification struct {
 	FieldName string `json:"field_name"`
 	// Sort order can be ascending (true) or descending (false).
 	AscendingSortOrder bool `json:"ascending_sort_order"`
+	coercedComparer    func(a, b any) int
 }
 
 // B-Tree Index specification.
@@ -26,7 +27,11 @@ func NewIndexSpecification(indexFields []IndexFieldSpecification) *IndexSpecific
 // Comparer that consumes the IndexSpecification supplied by enduser.
 func (idx *IndexSpecification) Comparer(x map[string]any, y map[string]any) int {
 	for i := range idx.IndexFields {
-		res := btree.Compare(x[idx.IndexFields[i].FieldName], y[idx.IndexFields[i].FieldName])
+		// Coerce the comparer to allow runtime to be able to optimize & even if not, coerced one is still better by a step.
+		if idx.IndexFields[i].coercedComparer == nil {
+			idx.IndexFields[i].coercedComparer = btree.CoerceComparer(x[idx.IndexFields[i].FieldName])
+		}
+		res := idx.IndexFields[i].coercedComparer(x[idx.IndexFields[i].FieldName], y[idx.IndexFields[i].FieldName])
 		if res != 0 {
 			if !idx.IndexFields[i].AscendingSortOrder {
 				// Reverse the result if Descending order.
