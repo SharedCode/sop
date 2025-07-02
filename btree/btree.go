@@ -36,6 +36,7 @@ type Btree[TK Ordered, TV any] struct {
 	distributeAction   distributeAction[TK, TV]
 	promoteAction      promoteAction[TK, TV]
 	comparer           ComparerFunc[TK]
+	coercedComparer    func(x, y any) int
 }
 
 // currentItemRef contains node ID & item slot index position in the node.
@@ -176,7 +177,10 @@ func (btree *Btree[TK, TV]) compare(a TK, b TK) int {
 	if btree.comparer != nil {
 		return btree.comparer(a, b)
 	}
-	return Compare(a, b)
+	if btree.coercedComparer == nil {
+		btree.coercedComparer = CoerceComparer(a)
+	}
+	return btree.coercedComparer(a, b)
 }
 
 // FindOne will traverse the tree to find an item with such key.

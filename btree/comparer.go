@@ -25,10 +25,8 @@ type Ordered interface {
 }
 
 // Compare can Compare an Ordered type.
-func Compare[T Ordered](x, y T) int {
-	anyX := any(x)
-	anyY := any(y)
-	switch any(x).(type) {
+func Compare(anyX, anyY any) int {
+	switch anyX.(type) {
 	case int:
 		x1, _ := anyX.(int)
 		y1, _ := anyY.(int)
@@ -109,11 +107,139 @@ func Compare[T Ordered](x, y T) int {
 		}
 		cX, ok := anyX.(Comparer)
 		if ok {
-			return cX.Compare(y)
+			return cX.Compare(anyY)
 		}
 		// Last resort, compare their string values.
 		s1 := fmt.Sprintf("%v", anyX)
 		s2 := fmt.Sprintf("%v", anyY)
 		return cmp.Compare(s1, s2)
+	}
+}
+
+// Determine a more elaborate comparer given an object of any type.
+func CoerceComparer(anyX any) func(x, y any) int {
+	switch anyX.(type) {
+	case int:
+		return func(x, y any) int {
+			x1, _ := x.(int)
+			y1, _ := y.(int)
+			return cmp.Compare(x1, y1)
+		}
+	case int8:
+		return func(x, y any) int {
+			x1, _ := x.(int8)
+			y1, _ := y.(int8)
+			return cmp.Compare(x1, y1)
+		}
+	case int16:
+		return func(x, y any) int {
+			x1, _ := x.(int16)
+			y1, _ := y.(int16)
+			return cmp.Compare(x1, y1)
+		}
+	case int32:
+		return func(x, y any) int {
+			x1, _ := x.(int32)
+			y1, _ := y.(int32)
+			return cmp.Compare(x1, y1)
+		}
+	case int64:
+		return func(x, y any) int {
+			x1, _ := x.(int64)
+			y1, _ := y.(int64)
+			return cmp.Compare(x1, y1)
+		}
+	case uint:
+		return func(x, y any) int {
+			x1, _ := x.(uint)
+			y1, _ := y.(uint)
+			return cmp.Compare(x1, y1)
+		}
+	case uint8:
+		return func(x, y any) int {
+			x1, _ := x.(uint8)
+			y1, _ := y.(uint8)
+			return cmp.Compare(x1, y1)
+		}
+	case uint16:
+		return func(x, y any) int {
+			x1, _ := x.(uint16)
+			y1, _ := y.(uint16)
+			return cmp.Compare(x1, y1)
+		}
+	case uint32:
+		return func(x, y any) int {
+			x1, _ := x.(uint32)
+			y1, _ := y.(uint32)
+			return cmp.Compare(x1, y1)
+		}
+	case uint64:
+		return func(x, y any) int {
+			x1, _ := x.(uint64)
+			y1, _ := y.(uint64)
+			return cmp.Compare(x1, y1)
+		}
+	case uintptr:
+		return func(x, y any) int {
+			x1, _ := x.(uintptr)
+			y1, _ := y.(uintptr)
+			return cmp.Compare(x1, y1)
+		}
+	case float32:
+		return func(x, y any) int {
+			x1, _ := x.(float32)
+			y1, _ := y.(float32)
+			return cmp.Compare(x1, y1)
+		}
+	case float64:
+		return func(x, y any) int {
+			x1, _ := x.(float64)
+			y1, _ := y.(float64)
+			return cmp.Compare(x1, y1)
+		}
+	case string:
+		return func(x, y any) int {
+			x1, _ := x.(string)
+			y1, _ := y.(string)
+			return cmp.Compare(x1, y1)
+		}
+	case uuid.UUID:
+		return func(x, y any) int {
+			x1, _ := x.(sop.UUID)
+			y1, _ := y.(sop.UUID)
+			return x1.Compare(y1)
+		}
+	case sop.UUID:
+		return func(x, y any) int {
+			x1, _ := x.(sop.UUID)
+			y1, _ := y.(sop.UUID)
+			return x1.Compare(y1)
+		}
+	case time.Time:
+		return func(x, y any) int {
+			x1, _ := x.(time.Time)
+			y1, _ := y.(time.Time)
+			return x1.Compare(y1)
+		}
+	default:
+		return func(x, y any) int {
+			if x == nil && y == nil {
+				return 0
+			}
+			if x == nil {
+				return -1
+			}
+			if y == nil {
+				return 1
+			}
+			cX, ok := x.(Comparer)
+			if ok {
+				return cX.Compare(y)
+			}
+			// Last resort, compare their string values.
+			s1 := fmt.Sprintf("%v", x)
+			s2 := fmt.Sprintf("%v", y)
+			return cmp.Compare(s1, s2)
+		}
 	}
 }
