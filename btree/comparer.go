@@ -3,6 +3,7 @@ package btree
 import (
 	"cmp"
 	"fmt"
+	"time"
 
 	"github.com/SharedCode/sop"
 	"github.com/google/uuid"
@@ -91,6 +92,10 @@ func Compare[T Ordered](x, y T) int {
 	case sop.UUID:
 		x1, _ := anyX.(sop.UUID)
 		y1, _ := anyY.(sop.UUID)
+		return x1.Compare(y1)
+	case time.Time:
+		x1, _ := anyX.(time.Time)
+		y1, _ := anyY.(time.Time)
 		return x1.Compare(y1)
 	default:
 		if anyX == nil && anyY == nil {
