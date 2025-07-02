@@ -242,7 +242,7 @@ class TestBtreeMapKey(unittest.TestCase):
         l = [
             btree.Item(pKey(key="123"), "foo"),
         ]
-        b3.add(l)
+        print(f"foobar b3 add result: {b3.add(l)}")
 
         t.commit()
         print("new B3 succeeded")

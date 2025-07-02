@@ -233,7 +233,9 @@ func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 		s.IsValueDataInNodeSegment == b.IsValueDataInNodeSegment &&
 		s.IsValueDataActivelyPersisted == b.IsValueDataActivelyPersisted &&
 		s.IsValueDataGloballyCached == b.IsValueDataGloballyCached &&
-		s.LeafLoadBalancing == b.LeafLoadBalancing
+		s.LeafLoadBalancing == b.LeafLoadBalancing &&
+		s.IsPrimitiveKey == b.IsPrimitiveKey &&
+		s.CELexpression == b.CELexpression
 }
 
 // Format a given name into a registry table name by adding suffix.

@@ -79,6 +79,7 @@ func newBtree(ctx context.Context, ps string) *C.char {
 	so := convertTo(&b3o)
 
 	if b3o.IsPrimitiveKey {
+		log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
 		b3, err := jsondb.NewJsonBtree[any, any](ctx, *so, tup.First, nil)
 		if err != nil {
 			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
@@ -87,6 +88,7 @@ func newBtree(ctx context.Context, ps string) *C.char {
 		// Add the B-tree to the transaction btree map so it can get lookedup.
 		tup.Second[b3id] = b3
 	} else {
+		log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
 		b3, err := jsondb.NewJsonBtreeMapKey(ctx, *so, tup.First, b3o.CELexpression)
 		if err != nil {
 			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)

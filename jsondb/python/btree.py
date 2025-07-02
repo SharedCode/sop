@@ -158,18 +158,6 @@ class Btree(Generic[TK, TV]):
         """
 
         options.transaction_id = str(trans.transaction_id)
-
-        res = call_go.manage_btree(1, json.dumps(asdict(options)), "")
-
-        if res == None:
-            raise TransactionError("unable to create a Btree object in SOP")
-        try:
-            b3id = uuid.UUID(res)
-        except:
-            # if res can't be converted to UUID, it is expected to be an error msg from SOP.
-            raise TransactionError(res)
-
-        options.transaction_id = str(trans.transaction_id)
         options.is_primitive_key = is_primitive_key
 
         res = call_go.manage_btree(
