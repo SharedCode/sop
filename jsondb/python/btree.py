@@ -2,6 +2,7 @@ import json
 import uuid
 import logging
 import call_go
+import context
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +168,7 @@ class Btree(Generic[TK, TV]):
     @classmethod
     def new(
         cls: Type["Btree[TK,TV]"],
+        ctx: context.Context,
         options: BtreeOptions,
         trans: Transaction,
         index_spec: IndexSpecification = None,
@@ -181,7 +183,7 @@ class Btree(Generic[TK, TV]):
             options.index_specification = json.dumps(asdict(index_spec))
 
         res = call_go.manage_btree(
-            BtreeAction.NewBtree.value, json.dumps(asdict(options)), None
+            ctx.id, BtreeAction.NewBtree.value, json.dumps(asdict(options)), None
         )
 
         if res == None:
@@ -196,12 +198,12 @@ class Btree(Generic[TK, TV]):
 
     @classmethod
     def open(
-        cls: Type["Btree[TK,TV]"], name: str, trans: Transaction
+        cls: Type["Btree[TK,TV]"], ctx: context.Context, name: str, trans: Transaction
     ) -> "Btree[TK,TV]":
         options: BtreeOptions = BtreeOptions(name=name)
         options.transaction_id = str(trans.transaction_id)
         res = call_go.manage_btree(
-            BtreeAction.OpenBtree.value, json.dumps(asdict(options)), ""
+            ctx.id, BtreeAction.OpenBtree.value, json.dumps(asdict(options)), ""
         )
 
         if res == None:
@@ -214,25 +216,26 @@ class Btree(Generic[TK, TV]):
 
         return cls(b3id, False, trans.transaction_id)
 
-    def add(self, items: Item[TK, TV]) -> bool:
-        return self._manage(BtreeAction.Add.value, items)
+    def add(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
+        return self._manage(ctx, BtreeAction.Add.value, items)
 
-    def add_if_not_exists(self, items: Item[TK, TV]) -> bool:
-        return self._manage(BtreeAction.AddIfNotExist.value, items)
+    def add_if_not_exists(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
+        return self._manage(ctx, BtreeAction.AddIfNotExist.value, items)
 
-    def update(self, items: Item[TK, TV]) -> bool:
-        return self._manage(BtreeAction.Update.value, items)
+    def update(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
+        return self._manage(ctx, BtreeAction.Update.value, items)
 
-    def upsert(self, items: Item[TK, TV]) -> bool:
-        return self._manage(BtreeAction.Upsert.value, items)
+    def upsert(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
+        return self._manage(ctx, BtreeAction.Upsert.value, items)
 
-    def remove(self, keys: TK) -> bool:
+    def remove(self, ctx: context.Context, keys: TK) -> bool:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
             transaction_id=str(self.transaction_id),
         )
         res = call_go.manage_btree(
+            ctx.id,
             BtreeAction.Remove.value,
             json.dumps(asdict(metadata)),
             json.dumps(asdict(keys)),
@@ -245,13 +248,14 @@ class Btree(Generic[TK, TV]):
 
     def get_items(
         self,
+        ctx: context.Context,
         pagingInfo: PagingInfo,
     ) -> Item[TK, TV]:
-        return self._get(BtreeAction.GetItems.value, pagingInfo)
+        return self._get(ctx, BtreeAction.GetItems.value, pagingInfo)
 
     # Keys array contains the keys & their IDs to fetch value data of. Both input & output
     # are Item type though input only has Key & ID field populated to find the data & output has Value of found data.
-    def get_values(self, keys: Item[TK, TV]) -> Item[TK, TV]:
+    def get_values(self, ctx: context.Context, keys: Item[TK, TV]) -> Item[TK, TV]:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
@@ -259,6 +263,7 @@ class Btree(Generic[TK, TV]):
         )
         payload: ManageBtreePayload = ManageBtreePayload(items=keys)
         result, error = call_go.get_from_btree(
+            ctx.id,
             BtreeAction.GetValues.value,
             json.dumps(asdict(metadata)),
             json.dumps(asdict(payload)),
@@ -278,11 +283,12 @@ class Btree(Generic[TK, TV]):
 
     def get_keys(
         self,
+        ctx: context.Context,
         pagingInfo: PagingInfo,
     ) -> Item[TK, TV]:
-        return self._get(BtreeAction.GetKeys.value, pagingInfo)
+        return self._get(ctx, BtreeAction.GetKeys.value, pagingInfo)
 
-    def find(self, key: TK) -> bool:
+    def find(self, ctx: context.Context, key: TK) -> bool:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
@@ -290,6 +296,7 @@ class Btree(Generic[TK, TV]):
         )
         payload: ManageBtreePayload = ManageBtreePayload(items=(Item(key=key),))
         res = call_go.navigate_btree(
+            ctx.id,
             BtreeAction.Find.value,
             json.dumps(asdict(metadata)),
             json.dumps(asdict(payload)),
@@ -301,7 +308,7 @@ class Btree(Generic[TK, TV]):
 
         return self._to_bool(res)
 
-    def find_with_id(self, key: TK, id: uuid.uuid4) -> bool:
+    def find_with_id(self, ctx: context.Context, key: TK, id: uuid.uuid4) -> bool:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
@@ -309,6 +316,7 @@ class Btree(Generic[TK, TV]):
         )
         payload: ManageBtreePayload = ManageBtreePayload(items=(Item(key=key, id=id),))
         res = call_go.navigate_btree(
+            ctx.id,
             BtreeAction.FindWithID.value,
             json.dumps(asdict(metadata)),
             json.dumps(asdict(payload)),
@@ -320,28 +328,34 @@ class Btree(Generic[TK, TV]):
 
         return self._to_bool(res)
 
-    def first(self) -> bool:
+    def first(
+        self,
+        ctx: context.Context,
+    ) -> bool:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
             transaction_id=str(self.transaction_id),
         )
         res = call_go.navigate_btree(
-            BtreeAction.First.value, json.dumps(asdict(metadata)), None
+            ctx.id, BtreeAction.First.value, json.dumps(asdict(metadata)), None
         )
         if res == None:
             raise BtreeError(f"First call failed for Btree:{self.id} in SOP")
 
         return self._to_bool(res)
 
-    def last(self) -> bool:
+    def last(
+        self,
+        ctx: context.Context,
+    ) -> bool:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
             transaction_id=str(self.transaction_id),
         )
         res = call_go.navigate_btree(
-            BtreeAction.Last.value, json.dumps(asdict(metadata)), None
+            ctx.id, BtreeAction.Last.value, json.dumps(asdict(metadata)), None
         )
         if res == None:
             raise BtreeError(f"Last call failed for Btree:{self.id} in SOP")
@@ -382,7 +396,7 @@ class Btree(Generic[TK, TV]):
             transaction_id=str(self.transaction_id),
         )
         payload, error = call_go.get_from_btree(
-            BtreeAction.GetStoreInfo.value, json.dumps(asdict(metadata)), None
+            0, BtreeAction.GetStoreInfo.value, json.dumps(asdict(metadata)), None
         )
         if error is not None:
             raise BtreeError(error)
@@ -390,7 +404,7 @@ class Btree(Generic[TK, TV]):
         data_dict = json.loads(payload)
         return BtreeOptions(**data_dict)
 
-    def _manage(self, action: int, items: Item[TK, TV]) -> bool:
+    def _manage(self, ctx: context.Context, action: int, items: Item[TK, TV]) -> bool:
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
@@ -398,6 +412,7 @@ class Btree(Generic[TK, TV]):
         )
         payload: ManageBtreePayload = ManageBtreePayload(items=items)
         res = call_go.manage_btree(
+            ctx.id,
             action,
             json.dumps(asdict(metadata)),
             json.dumps(asdict(payload)),
@@ -409,6 +424,7 @@ class Btree(Generic[TK, TV]):
 
     def _get(
         self,
+        ctx: context.Context,
         getAction: int,
         pagingInfo: PagingInfo,
     ) -> Item[TK, TV]:
@@ -423,6 +439,7 @@ class Btree(Generic[TK, TV]):
             transaction_id=str(self.transaction_id),
         )
         result, error = call_go.get_from_btree(
+            ctx.id,
             getAction,
             json.dumps(asdict(metadata)),
             json.dumps(asdict(pagingInfo)),

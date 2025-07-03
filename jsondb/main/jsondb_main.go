@@ -1,6 +1,7 @@
 package main
 
 /*
+#include <stdio.h> // C.longlong
 #include <stdlib.h> // For free
 */
 import "C"
@@ -20,6 +21,53 @@ import (
 	"github.com/SharedCode/sop/in_red_fs"
 	"github.com/SharedCode/sop/redis"
 )
+
+var contextLookup map[int64]context.Context = make(map[int64]context.Context)
+var contextLookupLocker sync.Mutex
+var contextLastID int64
+
+//export createContext
+func createContext() C.longlong {
+	ctx := context.Background()
+	contextLookupLocker.Lock()
+	contextLastID++
+	id := contextLastID
+
+	contextLookup[id] = ctx
+	contextLookupLocker.Unlock()
+	return C.longlong(id)
+}
+
+//export cancelContext
+func cancelContext(ctxID C.longlong) {
+	id := int64(ctxID)
+	contextLookupLocker.Lock()
+
+	ctx, ok := contextLookup[id]
+	if ok {
+		_, c := context.WithCancel(ctx)
+		// Call the cancel function for the ctx context.
+		c()
+	}
+	delete(contextLookup, id)
+
+	contextLookupLocker.Unlock()
+}
+
+//export removeContext
+func removeContext(ctxID C.longlong) {
+	id := int64(ctxID)
+	contextLookupLocker.Lock()
+	delete(contextLookup, id)
+	contextLookupLocker.Unlock()
+}
+
+func getContext(ctxID C.longlong) context.Context {
+	contextLookupLocker.Lock()
+	ctx := contextLookup[int64(ctxID)]
+	contextLookupLocker.Unlock()
+	return ctx
+}
 
 //export openRedisConnection
 func openRedisConnection(host *C.char, port C.int, password *C.char) *C.char {
@@ -66,7 +114,7 @@ const (
 )
 
 //export manageTransaction
-func manageTransaction(action C.int, payload *C.char) *C.char {
+func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char {
 	ps := C.GoString(payload)
 
 	extractTrans := func() (*sop.Tuple[sop.Transaction, map[sop.UUID]any], *C.char) {
@@ -87,7 +135,13 @@ func manageTransaction(action C.int, payload *C.char) *C.char {
 		return &tup, nil
 	}
 
-	ctx := context.Background()
+	var ctx context.Context
+	if int64(ctxID) > 0 {
+		ctx = getContext(ctxID)
+		if ctx == nil {
+			return C.CString(fmt.Sprintf("context with ID %v not found", int64(ctxID)))
+		}
+	}
 	switch int(action) {
 	case NewTransaction:
 		var to in_red_fs.TransationOptionsWithReplication

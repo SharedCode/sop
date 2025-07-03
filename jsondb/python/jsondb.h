@@ -22,6 +22,7 @@ typedef struct { const char *p; ptrdiff_t n; } _GoString_;
 
 #line 3 "jsondb_main.go"
 
+#include <stdio.h> // C.longlong
 #include <stdlib.h> // For free
 
 #line 1 "cgo-generated-wrapper"
@@ -86,7 +87,7 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
-extern char* navigateBtree(int action, char* payload, char* payload2);
+extern char* navigateBtree(long long ctxID, int action, char* payload, char* payload2);
 extern char* isUniqueBtree(char* payload);
 
 /* Return type for getFromBtree */
@@ -94,19 +95,22 @@ struct getFromBtree_return {
 	char* r0;
 	char* r1;
 };
-extern struct getFromBtree_return getFromBtree(int action, char* payload, char* payload2);
+extern struct getFromBtree_return getFromBtree(long long ctxID, int action, char* payload, char* payload2);
 
 /* Return type for getBtreeItemCount */
 struct getBtreeItemCount_return {
-	long r0;
+	long long r0;
 	char* r1;
 };
 extern struct getBtreeItemCount_return getBtreeItemCount(char* payload);
+extern long long createContext();
+extern void cancelContext(long long ctxID);
+extern void removeContext(long long ctxID);
 extern char* openRedisConnection(char* host, int port, char* password);
 extern char* closeRedisConnection();
-extern char* manageTransaction(int action, char* payload);
+extern char* manageTransaction(long long ctxID, int action, char* payload);
 extern void freeString(char* cString);
-extern char* manageBtree(int action, char* payload, char* payload2);
+extern char* manageBtree(long long ctxID, int action, char* payload, char* payload2);
 
 #ifdef __cplusplus
 }

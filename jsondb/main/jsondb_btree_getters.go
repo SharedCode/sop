@@ -13,8 +13,11 @@ import (
 )
 
 //export navigateBtree
-func navigateBtree(action C.int, payload *C.char, payload2 *C.char) *C.char {
-	ctx := context.Background()
+func navigateBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.char) *C.char {
+	ctx := getContext(ctxID)
+	if ctx == nil {
+		return C.CString(fmt.Sprintf("context with ID %v not found", int64(ctxID)))
+	}
 
 	switch int(action) {
 	case First:
@@ -46,13 +49,16 @@ func isUniqueBtree(payload *C.char) *C.char {
 }
 
 //export getFromBtree
-func getFromBtree(action C.int, payload *C.char, payload2 *C.char) (*C.char, *C.char) {
+func getFromBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.char) (*C.char, *C.char) {
 	// GetStoreInfo does not need Context.
 	if action == GetStoreInfo {
 		return getStoreInfo(payload)
 	}
 
-	ctx := context.Background()
+	ctx := getContext(ctxID)
+	if ctx == nil {
+		return nil, C.CString(fmt.Sprintf("context with ID %v not found", int64(ctxID)))
+	}
 
 	switch int(action) {
 	case GetKeys:
@@ -68,18 +74,18 @@ func getFromBtree(action C.int, payload *C.char, payload2 *C.char) (*C.char, *C.
 }
 
 //export getBtreeItemCount
-func getBtreeItemCount(payload *C.char) (C.long, *C.char) {
+func getBtreeItemCount(payload *C.char) (C.longlong, *C.char) {
 	_, b32, errMsg := extractMetaData(payload)
 	if errMsg != nil {
 		return 0, errMsg
 	}
 	if b3, ok := b32.(*jsondb.JsonDBMapKey); ok {
 		res := b3.Count()
-		return C.long(res), nil
+		return C.longlong(res), nil
 	} else {
 		b3, _ := b32.(*jsondb.JsonDBAnyKey[any, any])
 		res := b3.Count()
-		return C.long(res), nil
+		return C.longlong(res), nil
 	}
 }
 

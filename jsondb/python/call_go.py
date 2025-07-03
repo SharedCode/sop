@@ -39,9 +39,20 @@ _free_string = lib.freeString
 _free_string.argtypes = [ctypes.c_char_p]
 _free_string.restype = None
 
+_create_context = lib.createContext
+_create_context.argtypes = None
+_create_context.restype = ctypes.c_int64  # Specify return type
+_remove_context = lib.removeContext
+_remove_context.argtypes = [ctypes.c_int64]  # Specify return type
+_remove_context.restype = None
+_cancel_context = lib.cancelContext
+_cancel_context.argtypes = [ctypes.c_int64]  # Specify return type
+_cancel_context.restype = None
+
 _manage_transaction = lib.manageTransaction
 
 _manage_transaction.argtypes = [
+    ctypes.c_int64,
     ctypes.c_int,
     ctypes.c_char_p,
 ]  # Specify argument types
@@ -49,6 +60,7 @@ _manage_transaction.restype = ctypes.POINTER(ctypes.c_char)  # Specify return ty
 
 _manage_btree = lib.manageBtree
 _manage_btree.argtypes = [
+    ctypes.c_int64,
     ctypes.c_int,
     ctypes.c_char_p,
     ctypes.c_char_p,
@@ -66,6 +78,7 @@ class ResultStruct(ctypes.Structure):
 
 _get_from_btree = lib.getFromBtree
 _get_from_btree.argtypes = [
+    ctypes.c_int64,
     ctypes.c_int,
     ctypes.c_char_p,
     ctypes.c_char_p,
@@ -74,6 +87,7 @@ _get_from_btree.restype = ResultStruct  # Specify return type
 
 _navigate_btree = lib.navigateBtree
 _navigate_btree.argtypes = [
+    ctypes.c_int64,
     ctypes.c_int,
     ctypes.c_char_p,
     ctypes.c_char_p,
@@ -89,7 +103,7 @@ _is_unique_btree.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
 class getBtreeCountResult(ctypes.Structure):
     _fields_ = [
-        ("count", ctypes.c_long),  # First return value (C long)
+        ("count", ctypes.c_int64),  # First return value (C long)
         ("error", ctypes.POINTER(ctypes.c_char)),  # Second return value (C string)
     ]
 
@@ -99,6 +113,18 @@ _get_btree_item_count.argtypes = [
     ctypes.c_char_p,
 ]  # Specify argument types
 _get_btree_item_count.restype = getBtreeCountResult  # Specify return type
+
+
+def create_context() -> int:
+    return ctypes.c_int64(_create_context()).value
+
+
+def remove_context(ctxid: int):
+    _remove_context(ctypes.c_int64(ctxid).value)
+
+
+def cancel_context(ctxid: int):
+    _cancel_context(ctypes.c_int64(ctxid).value)
 
 
 def open_redis_connection(host: str, port: int, password: str) -> str:
@@ -131,12 +157,14 @@ def close_redis_connection() -> str:
     return s
 
 
-def manage_transaction(action: int, payload: str) -> str:
+def manage_transaction(ctxID: int, action: int, payload: str) -> str:
     """
     Manage a SOP transaction.
     """
 
-    res = _manage_transaction(to_cint(action), to_cstring(payload))
+    res = _manage_transaction(
+        ctypes.c_int64(ctxID).value, to_cint(action), to_cstring(payload)
+    )
     if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
         return None
 
@@ -147,7 +175,7 @@ def manage_transaction(action: int, payload: str) -> str:
     return s
 
 
-def manage_btree(action: int, payload: str, payload2: str) -> str:
+def manage_btree(ctxID: int, action: int, payload: str, payload2: str) -> str:
     """
     Manage a SOP btree.
     """
@@ -155,7 +183,9 @@ def manage_btree(action: int, payload: str, payload2: str) -> str:
     p2 = None
     if payload2 is not None:
         p2 = to_cstring(payload2)
-    res = _manage_btree(to_cint(action), to_cstring(payload), p2)
+    res = _manage_btree(
+        ctypes.c_int64(ctxID).value, to_cint(action), to_cstring(payload), p2
+    )
     if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
         return None
 
@@ -166,7 +196,7 @@ def manage_btree(action: int, payload: str, payload2: str) -> str:
     return s
 
 
-def navigate_btree(action: int, payload: str, payload2: str) -> str:
+def navigate_btree(ctxID: int, action: int, payload: str, payload2: str) -> str:
     """
     Navigate a SOP btree.
     """
@@ -174,7 +204,9 @@ def navigate_btree(action: int, payload: str, payload2: str) -> str:
     p2 = None
     if payload2 is not None:
         p2 = to_cstring(payload2)
-    res = _navigate_btree(to_cint(action), to_cstring(payload), p2)
+    res = _navigate_btree(
+        ctypes.c_int64(ctxID).value, to_cint(action), to_cstring(payload), p2
+    )
     if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
         return None
 
@@ -185,7 +217,7 @@ def navigate_btree(action: int, payload: str, payload2: str) -> str:
     return s
 
 
-def get_from_btree(action: int, payload: str, payload2: str):
+def get_from_btree(ctxID: int, action: int, payload: str, payload2: str):
     """
     Fetch/Navigate from SOP btree.
     """
@@ -193,7 +225,9 @@ def get_from_btree(action: int, payload: str, payload2: str):
     p2 = None
     if payload2 is not None:
         p2 = to_cstring(payload2)
-    result = _get_from_btree(to_cint(action), to_cstring(payload), p2)
+    result = _get_from_btree(
+        ctypes.c_int64(ctxID).value, to_cint(action), to_cstring(payload), p2
+    )
     if (
         result.error is not None
         and ctypes.cast(result.error, ctypes.c_char_p).value is not None

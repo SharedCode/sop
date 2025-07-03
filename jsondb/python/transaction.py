@@ -1,6 +1,7 @@
 import json
 import call_go
 import uuid
+import context
 
 from enum import Enum
 from dataclasses import dataclass, asdict
@@ -73,11 +74,11 @@ class InvalidTransactionStateError(TransactionError):
 
 
 class Transaction:
-    def __init__(self, options: TransationOptions):
+    def __init__(self, ctx: context.Context, options: TransationOptions):
         self.options = options
         self.transaction_id = uuid.UUID(int=0)
 
-        res = call_go.manage_transaction(1, json.dumps(asdict(options)))
+        res = call_go.manage_transaction(ctx.id, 1, json.dumps(asdict(options)))
 
         if res == None:
             raise TransactionError("unable to create a Tranasaction object in SOP")
@@ -90,20 +91,26 @@ class Transaction:
     def begin(self):
         if self.transaction_id == uuid.UUID(int=0):
             raise InvalidTransactionStateError("transaction_id is missing")
-        res = call_go.manage_transaction(2, str(self.transaction_id))
+        res = call_go.manage_transaction(0, 2, str(self.transaction_id))
         if res != None:
             raise TransactionError(f"Transaction begin failed, details {res}")
 
-    def commit(self):
+    def commit(
+        self,
+        ctx: context.Context,
+    ):
         if self.transaction_id == uuid.UUID(int=0):
             raise InvalidTransactionStateError("transaction_id is missing")
-        res = call_go.manage_transaction(3, str(self.transaction_id))
+        res = call_go.manage_transaction(ctx.id, 3, str(self.transaction_id))
         if res != None:
             raise TransactionError(f"Transaction commit failed, details {res}")
 
-    def rollback(self):
+    def rollback(
+        self,
+        ctx: context.Context,
+    ):
         if self.transaction_id == uuid.UUID(int=0):
             raise InvalidTransactionStateError("transaction_id is missing")
-        res = call_go.manage_transaction(4, str(self.transaction_id))
+        res = call_go.manage_transaction(ctx.id, 4, str(self.transaction_id))
         if res != None:
             raise TransactionError(f"Transaction rollback failed, details {res}")

@@ -33,9 +33,12 @@ type ManageBtreePayload[TK, TV any] struct {
 }
 
 //export manageBtree
-func manageBtree(action C.int, payload *C.char, payload2 *C.char) *C.char {
+func manageBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.char) *C.char {
 	ps := C.GoString(payload)
-	ctx := context.Background()
+	ctx := getContext(ctxID)
+	if ctx == nil {
+		return C.CString(fmt.Sprintf("context with ID %v not found", int64(ctxID)))
+	}
 
 	switch int(action) {
 	case NewBtree:
