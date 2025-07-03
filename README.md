@@ -38,6 +38,8 @@ How to create/begin & commit/rollback SOP transactions, use its B-tree API to st
 
 6. Ensure you have setup a proper application user with proper permission to your target disk drives. Follow the standard way how to do it in your environment. Nothing is special here, SOP uses files/disk drives like ordinary packages, but via DirectIO & OS File System API. SOP enables support for different OS/hardware architectures without requiring anything else, other than what was discussed above. It uses the same locking mechanism via Redis to lock the virtual IDs and the low-level file sectors. And what is called as "unified locks", because the same can serve both purposes, high level & low level locks.
 
+7. SOP Python bindings: when ready & your team is into Python applications development, the SOP Python bindings package under https://github.com/SharedCode/sop/tree/master/jsondb/python make it a breeze reusing SOP in Python. The API was designed to be easy to use and fit for Python "idiomatic" usage for database management & rich search. Please checkout the unit tests under this folder (test_btree.py & test_btree_idx.py) to get idea how to use the SOP Python bindings API for managing data & rich search within transactions. More documentation content to follow. :)
+
 # Usability
 See details here: https://github.com/SharedCode/sop/blob/master/README2.md#usability
 
