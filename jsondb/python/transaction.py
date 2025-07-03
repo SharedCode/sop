@@ -8,6 +8,16 @@ from dataclasses import dataclass, asdict
 
 
 class TransactionMode(Enum):
+    """
+    Transaction mode enumeration.
+
+    Args:
+        Enum (_type_):
+        NoCheck - No check on commit, most performant but does NOT guarantee ACIDity
+        ForWriting - Mode for writing/updates/deletes.
+        ForReading - Mode for reading only. Checks all read items' version # on commit to guarantee ACIDity.
+    """
+
     NoCheck = 0
     ForWriting = 1
     ForReading = 2
@@ -26,6 +36,19 @@ MAX_HASH_MOD_VALUE = 750000
 
 @dataclass
 class ErasureCodingConfig:
+    """
+    Erasure Coding config is used to package the parameter configuration of Reed Solomon based EC replication.
+    This is a special algorithm for replication allowing full operational capability even if you lose a half of your
+    storage drives. :)
+
+    For example, if you have 100% redundancy on four drives, losing two drives SOP will still be able to give you Read & Write.
+    BUT of course, your IT needs to replace the drives and allow SOP to auto-reconstruct the redundant "shards" so your setup
+    can offer tolerance once again.
+
+    Returns:
+        _type_: _description_
+    """
+
     data_shards_count: int
     parity_shards_count: int
     base_folder_paths_across_drives: str
@@ -56,8 +79,12 @@ class TransationOptions:
     mode: int
     # max_time in Python is in minutes, SOP in Golang will convert that to respective time.duration value.
     max_time: int
+    # Registry hash mod, minimum value is 250, max is 750000. Hash mod is used on Registry map on disk.
+    # At 250, 1MB segment file is generated. See comment about the equivalent in Golang side (for now).
     registry_hash_mod: int
+    # Stores' base folder path (home folder).
     stores_folders: str
+    # EC config.
     erasure_config: dict[str, ErasureCodingConfig]
 
 
@@ -74,6 +101,10 @@ class InvalidTransactionStateError(TransactionError):
 
 
 class Transaction:
+    """
+    Transaction object is used to manage transaction (begin, commit, rollback).
+    """
+
     def __init__(self, ctx: context.Context, options: TransationOptions):
         self.options = options
         self.transaction_id = uuid.UUID(int=0)

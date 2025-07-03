@@ -157,6 +157,35 @@ class BtreeAction(Enum):
 
 
 class Btree(Generic[TK, TV]):
+    """
+    B-tree manager.
+
+    Args:
+        Generic (_type_): _description_
+
+    Raises:
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        BtreeError: _description_
+        an: _description_
+        BtreeError: _description_
+
+    Returns:
+        _type_: _description_
+    """
+
     transaction_id: uuid.uuid4
     id: uuid.uuid4
 
