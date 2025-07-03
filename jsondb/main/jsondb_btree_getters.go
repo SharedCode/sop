@@ -120,6 +120,7 @@ func getStoreInfo(payload *C.char) (*C.char, *C.char) {
 	}
 }
 
+// Getter for fetching Keys or Items.
 func get(ctx context.Context, getAction int, payload *C.char, payload2 *C.char) (*C.char, *C.char) {
 	p, b32, errMsg := extractMetaData(payload)
 	if errMsg != nil {
@@ -214,6 +215,8 @@ func getValues(ctx context.Context, payload, payload2 *C.char) (*C.char, *C.char
 	}
 }
 
+// Find item by key or key & its ID (UUID) will also position the cursor to this found item or nearest item
+// giving chance for the code to be able to still fetch and implement logic in case missing.
 func find(ctx context.Context, payload, payload2 *C.char) *C.char {
 	p, b32, errMsg := extractMetaData(payload)
 	if errMsg != nil {
@@ -269,6 +272,7 @@ func find(ctx context.Context, payload, payload2 *C.char) *C.char {
 	}
 }
 
+// Move cursor to First or to Last item of the B-tree.
 func moveTo(ctx context.Context, action int, payload *C.char) *C.char {
 	p, b32, errMsg := extractMetaData(payload)
 	if errMsg != nil {

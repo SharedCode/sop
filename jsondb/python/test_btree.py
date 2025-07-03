@@ -462,7 +462,7 @@ class TestBtreeMapKey(unittest.TestCase):
             # Since there are only 10 records after reaching 490 item location, fetching 20 will just return remaining 10 records.
             btree.PagingInfo(49, 10, 20, direction=btree.PagingDirection.Forward.value),
         )
-        # Use the returned keys to ask B-tree to fetch the values of these keys.
+        # Use the returned keys to ask B-tree to fetch the value parts of these keys.
         values = b3.get_values(ctx, keys)
         print(f"values: {values}")
 

@@ -9,7 +9,7 @@ import (
 	"github.com/SharedCode/sop/encoding"
 )
 
-// JSON DB that can take in any JSON data marshalled as map[string]any on Key & Value pair.
+// JSON DB that can take in any JSON data marshalled as map[string]any on Key & any Value pair.
 type JsonDBMapKey struct {
 	*JsonDBAnyKey[map[string]any, any]
 	indexSpecification            *IndexSpecification
@@ -17,6 +17,8 @@ type JsonDBMapKey struct {
 	defaultCoercedFieldsComparers []func(a, b any) int
 }
 
+// Proxy comparer is used for delayed construction of the comparer, as details about the store is only
+// available after the tree is created and able to read store details from the backend.
 func (j *JsonDBMapKey) proxyComparer(mapX map[string]any, mapY map[string]any) int {
 	if j.indexSpecification != nil {
 		return j.indexSpecification.Comparer(mapX, mapY)
@@ -24,7 +26,7 @@ func (j *JsonDBMapKey) proxyComparer(mapX map[string]any, mapY map[string]any) i
 	return j.defaultComparer(mapX, mapY)
 }
 
-// Default Comparer of Items can compare two maps with no nested map.
+// Default Comparer of Items can compare two maps with no nested map(for now).
 func (j *JsonDBMapKey) defaultComparer(mapX map[string]any, mapY map[string]any) int {
 	if j.defaultComparerSortedFields == nil {
 		arr := make([]string, len(mapX))
@@ -76,8 +78,8 @@ func NewJsonBtreeMapKey(ctx context.Context, so sop.StoreOptions, t sop.Transact
 	return &j, nil
 }
 
-// Open an existing B-tree w/ option to using user provided CEL expression as comparer.
-// If CEL expression is not provided, will use default comparer that compares each field of the key.
+// Open an existing B-tree & recreate the Index specification object containing the index fields' details
+// used for sorting records of the tree.
 func OpenJsonBtreeMapKey(ctx context.Context, name string, t sop.Transaction) (*JsonDBMapKey, error) {
 	j := JsonDBMapKey{}
 
@@ -86,7 +88,7 @@ func OpenJsonBtreeMapKey(ctx context.Context, name string, t sop.Transaction) (*
 		return nil, err
 	}
 
-	// Resurrect the CEL expression evaluator if CEL expression was originally provided when creating B-tree.
+	// Resurrect the Key index specification originally provided when creating B-tree.
 	iss := b3.GetStoreInfo().MapKeyIndexSpecification
 	if iss != "" {
 		// Create the comparer from the IndexSpecification JSON string that defines the fields list comprising the index (on key) & their sort order.

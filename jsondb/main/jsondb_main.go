@@ -26,6 +26,9 @@ var contextLookup map[int64]context.Context = make(map[int64]context.Context)
 var contextLookupLocker sync.Mutex
 var contextLastID int64
 
+// Context related API to allow Python code to be able to get access to the context objects and thus,
+// allow things like cancellation if needed.
+
 //export createContext
 func createContext() C.longlong {
 	ctx := context.Background()
@@ -43,6 +46,7 @@ func cancelContext(ctxID C.longlong) {
 	id := int64(ctxID)
 	contextLookupLocker.Lock()
 
+	defer contextLookupLocker.Unlock()
 	ctx, ok := contextLookup[id]
 	if ok {
 		_, c := context.WithCancel(ctx)
@@ -50,8 +54,6 @@ func cancelContext(ctxID C.longlong) {
 		c()
 	}
 	delete(contextLookup, id)
-
-	contextLookupLocker.Unlock()
 }
 
 //export removeContext
@@ -62,6 +64,7 @@ func removeContext(ctxID C.longlong) {
 	contextLookupLocker.Unlock()
 }
 
+// Private get context for use internally here.
 func getContext(ctxID C.longlong) context.Context {
 	contextLookupLocker.Lock()
 	ctx := contextLookup[int64(ctxID)]
@@ -69,6 +72,8 @@ func getContext(ctxID C.longlong) context.Context {
 	return ctx
 }
 
+// Redis global connection management related.
+//
 //export openRedisConnection
 func openRedisConnection(host *C.char, port C.int, password *C.char) *C.char {
 	_, err := redis.OpenConnection(redis.Options{
@@ -98,6 +103,8 @@ func closeRedisConnection() *C.char {
 	}
 	return nil
 }
+
+// Transaction management related.
 
 // Transaction lookup table is comprised of the transaction & its related B-trees.
 var transactionLookup map[sop.UUID]sop.Tuple[sop.Transaction, map[sop.UUID]any] = make(map[sop.UUID]sop.Tuple[sop.Transaction, map[sop.UUID]any])
@@ -224,6 +231,8 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 	}
 	return nil
 }
+
+// Some B-tree related artifacts.
 
 type btreeAction int
 
