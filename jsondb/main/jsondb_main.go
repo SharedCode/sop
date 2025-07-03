@@ -46,14 +46,18 @@ func cancelContext(ctxID C.longlong) {
 	id := int64(ctxID)
 	contextLookupLocker.Lock()
 
-	defer contextLookupLocker.Unlock()
 	ctx, ok := contextLookup[id]
+	var c context.CancelFunc
 	if ok {
-		_, c := context.WithCancel(ctx)
-		// Call the cancel function for the ctx context.
-		c()
+		_, c = context.WithCancel(ctx)
 	}
 	delete(contextLookup, id)
+	contextLookupLocker.Unlock()
+
+	// Call the cancel function for the ctx context.
+	if c != nil {
+		c()
+	}
 }
 
 //export removeContext
