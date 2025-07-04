@@ -106,6 +106,9 @@ extern struct getBtreeItemCount_return getBtreeItemCount(char* payload);
 extern long long createContext();
 extern void cancelContext(long long ctxID);
 extern void removeContext(long long ctxID);
+
+// Redis global connection management related.
+//
 extern char* openRedisConnection(char* host, int port, char* password);
 extern char* closeRedisConnection();
 extern char* manageTransaction(long long ctxID, int action, char* payload);

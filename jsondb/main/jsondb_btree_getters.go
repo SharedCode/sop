@@ -329,7 +329,9 @@ func extractMetaData(payload *C.char) (*ManageBtreeMetaData, any, *C.char) {
 		return p, nil, C.CString(errMsg)
 	}
 
+	transactionLookupLocker.Lock()
 	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
+	transactionLookupLocker.Unlock()
 	if !ok {
 		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
 		return p, nil, C.CString(errMsg)
