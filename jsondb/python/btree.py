@@ -68,6 +68,14 @@ class CacheConfig:
 
 @dataclass
 class IndexFieldSpecification:
+    """
+    Make sure to specify correct field name so Key data comparer will be able to make a good comparison
+    between two Items when organizing Key/Value item pairs in the b-tree.
+
+    Otherwise it will treat all of item's to have the same key field value and thus, will affect both
+    performance and give incorrect ordering of the items.
+    """
+
     field_name: str
     ascending_sort_order: bool = True
 
@@ -158,32 +166,10 @@ class BtreeAction(Enum):
 
 class Btree(Generic[TK, TV]):
     """
-    B-tree manager.
+    B-tree manager. See "new" & "open" class methods below for details how to use.
 
     Args:
-        Generic (_type_): _description_
-
-    Raises:
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        BtreeError: _description_
-        an: _description_
-        BtreeError: _description_
-
-    Returns:
-        _type_: _description_
+        Generic (TK, TV): TK - type of the Key part. TV - type of the Value part.
     """
 
     transaction_id: uuid.uuid4
@@ -203,8 +189,8 @@ class Btree(Generic[TK, TV]):
         index_spec: IndexSpecification = None,
     ) -> "Btree[TK,TV]":
         """
-        Create a new B-tree in the backend storage with the options specified then return an instance
-        of Python Btree (facade) that can let caller code to manage the items.
+        Create a new B-tree store in the backend storage with the options specified then returns an instance
+        of Python Btree (facade) that can let caller code to manage or search/fetch  the items of the store.
         """
 
         options.transaction_id = str(trans.transaction_id)
@@ -229,6 +215,19 @@ class Btree(Generic[TK, TV]):
     def open(
         cls: Type["Btree[TK,TV]"], ctx: context.Context, name: str, trans: Transaction
     ) -> "Btree[TK,TV]":
+        """Open an existing B-tree store on the backend and returns a B-tree manager that can allow code to do operations on it.
+        Args:
+            cls (Type[&quot;Btree[TK,TV]&quot;]): Supports generics for Key (TK) & Value (TV) pair.
+            ctx (context.Context): context.Context object, useful for telling SOP in the backend the ID of the context for use in calls.
+            name (str): Name of the B-tree store to open.
+            trans (Transaction): instance of a Transaction that the B-tree store to be opened belongs.
+
+        Raises:
+            BtreeError: error message generated when calling different methods of the B-tree.
+
+        Returns:
+            Btree[TK,TV]: Btree instance
+        """
         options: BtreeOptions = BtreeOptions(name=name)
         options.transaction_id = str(trans.transaction_id)
         res = call_go.manage_btree(
@@ -280,11 +279,30 @@ class Btree(Generic[TK, TV]):
         ctx: context.Context,
         pagingInfo: PagingInfo,
     ) -> Item[TK, TV]:
+        """Fetch items from the B-tree store.
+
+        Args:
+            ctx (context.Context): context.Context object
+            pagingInfo (PagingInfo): Paging details that describe how to navigate(walk the b-tree) & fetch a batch of items.
+
+        Returns: Item[TK, TV]: the fetched batch of items.
+        """
         return self._get(ctx, BtreeAction.GetItems.value, pagingInfo)
 
     # Keys array contains the keys & their IDs to fetch value data of. Both input & output
     # are Item type though input only has Key & ID field populated to find the data & output has Value of found data.
     def get_values(self, ctx: context.Context, keys: Item[TK, TV]) -> Item[TK, TV]:
+        """Fetch items' Value parts from the B-tree store.
+
+        Args:
+            ctx (context.Context): context.Context object
+            keys (Item[TK, TV]): Keys that which, their Value parts will be fetched from the store.
+
+        Raises:
+            BtreeError: error message containing details what failed during (Values) fetch.
+
+        Returns: Item[TK, TV]: items containing the fetched (Values) data.
+        """
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
@@ -315,9 +333,32 @@ class Btree(Generic[TK, TV]):
         ctx: context.Context,
         pagingInfo: PagingInfo,
     ) -> Item[TK, TV]:
+        """Fetch a set of Keys from the store.
+
+        Args:
+            ctx (context.Context): context.Context object used when calling the SOP b-tree methods.
+            pagingInfo (PagingInfo): Paging details specifying how to navigate/walk the b-tree and fetch keys.
+
+        Returns: Item[TK, TV]: items with the Keys populated with the fetched data.
+        """
         return self._get(ctx, BtreeAction.GetKeys.value, pagingInfo)
 
     def find(self, ctx: context.Context, key: TK) -> bool:
+        """Find will navigate the b-tree and stop when the matching item, its Key matches with the key param, is found.
+        Or a nearby item if there is no match found.
+        This positions the cursor so on succeeding call to one or the fetch methods, get_keys, get_values, get_items, will
+        fetch the data (items) starting from this cursor (item) position.
+
+        Args:
+            ctx (context.Context): _description_
+            key (TK): key of the item to search for.
+
+        Raises:
+            BtreeError: error message pertaining to the error encountered while searching for the item.
+
+        Returns: bool: true means the item with such key is found, false otherwise. If true is returned, the cursor is positioned
+        to the item with matching key, otherwise to an item with key similar to the requested key.
+        """
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
@@ -338,6 +379,20 @@ class Btree(Generic[TK, TV]):
         return self._to_bool(res)
 
     def find_with_id(self, ctx: context.Context, key: TK, id: uuid.uuid4) -> bool:
+        """Similar to Find but which, includes the ID of the item to search for. This is useful when there are duplicated (on key) items.
+        Code can then search for the right one despite having many items of same key, based on the item ID.
+
+        Args:
+            ctx (context.Context): _description_
+            key (TK): _description_
+            id (uuid.uuid4): _description_
+
+        Raises:
+            BtreeError: _description_
+
+        Returns:
+            bool: _description_
+        """
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
@@ -361,6 +416,17 @@ class Btree(Generic[TK, TV]):
         self,
         ctx: context.Context,
     ) -> bool:
+        """Navigate or positions the cursor to the first or top of the b-tree store.
+
+        Args:
+            ctx (context.Context): _description_
+
+        Raises:
+            BtreeError: _description_
+
+        Returns:
+            bool: _description_
+        """
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
@@ -378,6 +444,17 @@ class Btree(Generic[TK, TV]):
         self,
         ctx: context.Context,
     ) -> bool:
+        """Navigate or positions the cursor to the last or bottom of the b-tree store.
+
+        Args:
+            ctx (context.Context): _description_
+
+        Raises:
+            BtreeError: _description_
+
+        Returns:
+            bool: _description_
+        """
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
@@ -392,6 +469,14 @@ class Btree(Generic[TK, TV]):
         return self._to_bool(res)
 
     def is_unique(self) -> bool:
+        """true specifies that the b-tree store has no duplicated keyed items. false otherwise.
+
+        Raises:
+            BtreeError: _description_
+
+        Returns:
+            bool: _description_
+        """
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
@@ -406,6 +491,14 @@ class Btree(Generic[TK, TV]):
         return self._to_bool(res)
 
     def count(self) -> int:
+        """Returns the count of items in the b-tree store.
+
+        Raises:
+            BtreeError: _description_
+
+        Returns:
+            int: _description_
+        """
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),
@@ -419,6 +512,14 @@ class Btree(Generic[TK, TV]):
         return count
 
     def get_store_info(self) -> BtreeOptions:
+        """Returns the b-tree information as specified during creation (Btree.new method call).
+
+        Raises:
+            BtreeError: _description_
+
+        Returns:
+            BtreeOptions: _description_
+        """
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),

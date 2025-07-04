@@ -130,6 +130,16 @@ class Transaction:
         self,
         ctx: context.Context,
     ):
+        """Commit will finalize the transaction, all b-tree management operations to the backend storage. The committed changes
+        will start to reflect on succeeding transactions b-tree store fetches/operations.
+
+        Args:
+            ctx (context.Context): _description_
+
+        Raises:
+            InvalidTransactionStateError: _description_
+            TransactionError: _description_
+        """
         if self.transaction_id == uuid.UUID(int=0):
             raise InvalidTransactionStateError("transaction_id is missing")
         res = call_go.manage_transaction(ctx.id, 3, str(self.transaction_id))
@@ -140,6 +150,15 @@ class Transaction:
         self,
         ctx: context.Context,
     ):
+        """Undo or rollback the changes done within the transaction.
+
+        Args:
+            ctx (context.Context): _description_
+
+        Raises:
+            InvalidTransactionStateError: _description_
+            TransactionError: _description_
+        """
         if self.transaction_id == uuid.UUID(int=0):
             raise InvalidTransactionStateError("transaction_id is missing")
         res = call_go.manage_transaction(ctx.id, 4, str(self.transaction_id))
