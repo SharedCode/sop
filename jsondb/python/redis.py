@@ -14,6 +14,7 @@ class RedisOptions:
 
 
 class Redis:
+    """Redis Python wrapper. Delegates API calls to the SOP library that does Direct IO to disk drives w/ built-in L1/L2 caching."""
 
     def open_connection(options: RedisOptions):
         """

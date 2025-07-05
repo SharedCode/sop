@@ -167,6 +167,7 @@ class BtreeAction(Enum):
 class Btree(Generic[TK, TV]):
     """
     B-tree manager. See "new" & "open" class methods below for details how to use.
+    Delegates API calls to the SOP library that does Direct IO to disk drives w/ built-in L1/L2 caching.
 
     Args:
         Generic (TK, TV): TK - type of the Key part. TV - type of the Value part.
@@ -188,9 +189,21 @@ class Btree(Generic[TK, TV]):
         trans: Transaction,
         index_spec: IndexSpecification = None,
     ) -> "Btree[TK,TV]":
-        """
-        Create a new B-tree store in the backend storage with the options specified then returns an instance
+        """Create a new B-tree store in the backend storage with the options specified then returns an instance
         of Python Btree (facade) that can let caller code to manage or search/fetch  the items of the store.
+
+        Args:
+            cls (Type[&quot;Btree[TK,TV]&quot;]): Supports generics for Key (TK) & Value (TV) pair.
+            ctx (context.Context): context.Context object, useful for telling SOP in the backend the ID of the context for use in calls.
+            options (BtreeOptions): _description_
+            trans (Transaction): instance of a Transaction that the B-tree store to be opened belongs.
+            index_spec (IndexSpecification, optional): Defaults to None.
+
+        Raises:
+            BtreeError: error message pertaining to creation of a b-tree store related in the backend.
+
+        Returns:
+            Btree[TK,TV]: B-tree instance
         """
 
         options.transaction_id = str(trans.transaction_id)

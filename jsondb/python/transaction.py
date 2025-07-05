@@ -103,6 +103,7 @@ class InvalidTransactionStateError(TransactionError):
 class Transaction:
     """
     Transaction object is used to manage transaction (begin, commit, rollback).
+    Delegates API calls to the SOP library that does Direct IO to disk drives w/ built-in L1/L2 caching.
     """
 
     def __init__(self, ctx: context.Context, options: TransationOptions):

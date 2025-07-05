@@ -21,6 +21,7 @@ class Person:
     last_name: str
 
 
+# create a context for use in Transaction & B-tree API calls.
 ctx = context.Context()
 
 
@@ -40,6 +41,8 @@ class TestBtreeIndexSpecs(unittest.TestCase):
             ctx,
             bo,
             t,
+            # specify the Index fields of the Key class. You control how many fields get included
+            # and each field's sort order (asc or desc).
             btree.IndexSpecification(
                 index_fields=(
                     btree.IndexFieldSpecification(
