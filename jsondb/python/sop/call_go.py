@@ -5,18 +5,18 @@ import os
 uname = os.uname().sysname
 print(uname)
 if uname == "Darwin":
-    ext = ".dylib"
+    ext = "amd64darwin.dylib"
 elif uname == "Windows":
-    ext = ".dll"
+    ext = "amd64windows.dll"
 else:
-    ext = ".so"
+    ext = "amd64linux.so"
 
 # Load the shared library
 try:
-    lib = ctypes.CDLL(f"./jsondb{ext}")
+    lib = ctypes.CDLL(f"./libjsondb_{ext}")
 except OSError as e:
     print(f"Error loading library: {e}")
-    print("Ensure 'jsondb.so' (or .dll/.dylib) is in the same directory.")
+    print("Ensure 'libjsondb_<arch><os>.so' (or .dll/.dylib) is in the same directory.")
     exit()
 
 # Call the 'hello' function (no arguments, no return value)
