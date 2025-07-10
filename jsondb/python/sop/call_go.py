@@ -1,15 +1,22 @@
 import ctypes
 import os
+import platform
 
-# Determine the shared library extension based on the operating system
+# Determine the shared library extension based on the architecture & operating system
+architecture = platform.machine()
+if architecture == 'arm64' or architecture == 'aarch64':
+    arch = "arm64"
+elif architecture == 'x86_64' or architecture == 'AMD64':
+    arch = "amd64"
+
 uname = os.uname().sysname
 print(uname)
 if uname == "Darwin":
-    ext = "amd64darwin.dylib"
+    ext = f"{arch}darwin.dylib"
 elif uname == "Windows":
-    ext = "amd64windows.dll"
+    ext = f"{arch}windows.dll"
 else:
-    ext = "amd64linux.so"
+    ext = f"{arch}linux.so"
 
 # Load the shared library
 try:

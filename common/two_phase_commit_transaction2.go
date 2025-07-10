@@ -486,8 +486,8 @@ var lastOnIdleRunTime int64
 var locker = sync.Mutex{}
 
 var lastPriorityOnIdleTime int64
-var plocker = sync.Mutex{}
-var pFound bool
+var prioritylocker = sync.Mutex{}
+var priorityLogFound bool
 
 func (t *Transaction) onIdle(ctx context.Context) {
 	// Required to have a backend btree to do cleanup.
@@ -497,25 +497,25 @@ func (t *Transaction) onIdle(ctx context.Context) {
 
 	// Allow only one priority rollback processor.
 	interval := 40
-	if pFound {
+	if priorityLogFound {
 		interval = 5
 	}
 	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Second).UnixMilli()
 	if t.logger.PriorityLog().IsEnabled() && lastPriorityOnIdleTime < nextRunTime {
 		runTime := false
-		plocker.Lock()
+		prioritylocker.Lock()
 		if lastPriorityOnIdleTime < nextRunTime {
 			lastPriorityOnIdleTime = sop.Now().UnixMilli()
 			runTime = true
 		}
-		plocker.Unlock()
+		prioritylocker.Unlock()
 		if runTime {
 			if found, err := t.logger.doPriorityRollbacks(ctx, t); err != nil {
 				// Trigger a failover.
 				t.HandleReplicationRelatedError(ctx, err, nil, true)
-				pFound = false
+				priorityLogFound = false
 			} else {
-				pFound = found
+				priorityLogFound = found
 			}
 		}
 	}
