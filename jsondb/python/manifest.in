@@ -1,0 +1,10 @@
+include sop/libjsondb_amd64darwin.dylib
+include sop/libjsondb_amd64darwin.h
+include sop/libjsondb_arm64darwin.dylib
+include sop/libjsondb_arm64darwin.h
+include sop/libjsondb_amd64linux.so
+include sop/libjsondb_amd64linux.h
+include sop/libjsondb_arm64linux.so
+include sop/libjsondb_arm64linux.h
+include sop/libjsondb_amd64windows.dll
+include sop/libjsondb_amd64windows.h

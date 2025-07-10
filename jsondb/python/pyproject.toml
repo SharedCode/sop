@@ -2,9 +2,12 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+    include-package-data = true
+
 [project]
-name = "sop-python-beta"
-version = "3.0.0"
+name = "sop-python-beta-3"
+version = "3.0.1"
 authors = [
     { name="Gerardo Recinto", email="gerardorecinto@yahoo.com" },
 ]
