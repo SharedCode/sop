@@ -34,4 +34,4 @@ dependencies = [
 
 # build: python3 -m build
 # upload to pypi using twine: python3 -m twine upload dist/*
-# project link: https://pypi.org/project/sop-python/2.0.0/
+# project link: https://pypi.org/project/sop-python-beta-3
