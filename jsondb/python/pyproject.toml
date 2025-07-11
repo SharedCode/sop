@@ -6,12 +6,12 @@ build-backend = "setuptools.build_meta"
     include-package-data = true
 
 [project]
-name = "sop-python-beta-3"
-version = "3.0.9"
+name = "sop4py"
+version = "2.0.1"
 authors = [
     { name="Gerardo Recinto", email="gerardorecinto@yahoo.com" },
 ]
-description = "Scalable Objects Persistence for Python."
+description = "Scalable Objects Persistence for Python. Beta 3 Release"
 readme = "README.md"
 requires-python = ">=3.7"
 classifiers = [
