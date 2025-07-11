@@ -29,7 +29,7 @@ SOP supports popular architectures & Operating Systems such as Linux, Darwin & M
 
 # SOP for Python package
 Following steps outlines how to use the Scalable Objects Persistence code library for Python:
-* Install the package using: pip install sop-python-beta-3
+* Install the package using: pip install sop4py
 * Follow standard Python package import and start coding to use the SOP for Python code library for data management. Import the sop package in your python code file.
 * Specify Home base folders where Store info & Registry data files will be stored.
 * Specify Erasure Coding (EC) configuration details which will be used by SOP's EC based replication.
@@ -40,7 +40,7 @@ Following steps outlines how to use the Scalable Objects Persistence code librar
 * Manage data, do some CRUD operations
 * Commit the transaction
 
-Below is an example code black for illustrating the above steps. For other SOP B-tree examples, you can checkout the code in the unit tests test_btree.py & test_btree_idx.py files that comes w/ the SOP package you downloaded from pypi.
+Below is an example code block for illustrating the above steps. For other SOP B-tree examples, you can checkout the code in the unit tests test_btree.py & test_btree_idx.py files that comes w/ the SOP package you downloaded from pypi.
 
 ```
 from sop import transaction
@@ -50,7 +50,8 @@ from sop import redis
 
 stores_folders = ("/disk1", "/disk2")
 ec = {
-    # Erasure Config default entry(key="") will allow different B-tree(tables) to share same EC structure.
+    # Erasure Config default entry(key="") will allow different B-tree (data store) to share same EC structure.
+    # You can also specify a different one exclusive to a B-tree with the given name.
     "": transaction.ErasureCodingConfig(
         2,  # two data shards
         2,  # two parity shards
@@ -80,7 +81,8 @@ to = transaction.TransationOptions(
     ec,
 )
 
-# Context object.
+# Context object. Your code can call the "cancel" method of the context if you want to abort the operation & rollback the transaction.
+# Useful for example, if you have a concurrently running python code and wanted to abort the running SOP transaction.
 ctx = context.Context()
 
 # initialize/open SOP global Redis connection. You can specify your Redis cluster host address(es) & port, etc
