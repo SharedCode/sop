@@ -119,3 +119,4 @@ print("ended.")
 SOP open source project (MIT license) is in github. You can checkout the "...sop/jsondb/" package which contains the Go code enabling general purpose JSON data management & the Python wrapper, coding guideline of which, was described above.
 
 Please feel free to join the SOP project if you have the bandwidth and participate/co-own/lead! the project engineering.
+SOP project link: https://github.com/sharedcode/sop
