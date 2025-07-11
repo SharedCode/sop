@@ -1,6 +1,17 @@
 # What is SOP?
 
-Scalable Objects Persistence (SOP) is a raw storage engine that bakes together a set of storage related features & algorithms in order to provide the most efficient & reliable (ACID attributes of transactions) technique (known) of storage management and rich search, as it brings to the application, the raw muscle of "raw storage", direct IO communications w/ disk drives. In a code library form factor.
+Scalable Objects Persistence (SOP) is a raw storage engine that bakes together a set of storage related features & algorithms in order to provide the most efficient & reliable (ACID attributes of transactions) technique (known) of storage management and rich search, as it brings to the application, the raw muscle of "raw storage", direct IO operations w/ disk drives. In a code library form factor.
+
+Other "key advances" in database technology available in this SOP release:
+* Serverless (or all servers!) operations mode in the cluster, i.e. - your applications that use SOP library are server-less
+* Uses a new storage & L1/L2 caching strategy that is ground breaking in performance & efficiency
+* New superfast realtime Orchestration engine fit for database transactions
+* Support for small, medium to large/very large (multi-GBs/TB) data management
+* Sports advanced/efficient/high tolerance software based (via Erasure Coding) replication
+* Horizontal & Vertical scaling in storage and cluster processes
+* New database storage strategy that uses segment files which avoids having to manage a huge file, resulting in higher IO efficiency & file system/disk drive friendly (medium sized) data files
+* Built-in data caching, your application data can be cached automatically via config setting. No need to write special code to cache certain data set in Redis, for example. SOP can provide that if configured
+* Host your applications across platforms, e.g. - microservice cluster running in Linux, another cluster or instance running in Windows, and all SOPs inter-operating with one another seamlessly and data stored in same set of disk drives. Freedom to use popular hardware architecture & OS of your choice(s)!
 
 # SOP supported Hardware/OS
 SOP supports popular architectures & Operating Systems such as Linux, Darwin & Microsoft Windows, in both ARM64 & AMD64 architectures. For Windows, only AMD64 is supported since it is the only architecture Windows is available in.
@@ -21,6 +32,7 @@ Following steps outlines how to use the Scalable Objects Persistence code librar
 * Follow standard Python package import and start coding to use the SOP for Python code library for data management. Import the sop package in your python code file.
 * Specify Home base folders where Store info & Registry data files will be stored.
 * Specify Erasure Coding (EC) configuration details which will be used by SOP's EC based replication.
+* Open the global Redis connection
 * Create a transaction
 * Begin a transaction
 * Create a new B-tree, or Open an existing B-tree
@@ -30,9 +42,10 @@ Following steps outlines how to use the Scalable Objects Persistence code librar
 Below is an example code black for illustrating the above steps. For other SOP B-tree examples, you can checkout the code in the unit tests test_btree.py & test_btree_idx.py files that comes w/ the SOP package you downloaded from pypi.
 
 ```
-import sop.transaction
-import sop.btree
-import sop.context
+from sop import transaction
+from sop import btree
+from sop import context
+from sop import redis
 
 stores_folders = ("/disk1", "/disk2")
 ec = {
@@ -55,8 +68,8 @@ ec = {
 # Transaction Options (to).
 to = transaction.TransationOptions(
     transaction.TransactionMode.ForWriting.value,
-    # commit timeout of 5mins
-    5,
+    # commit timeout of 15mins
+    15,
     # Min Registry hash mod value is 250, you can specify higher value like 1000. A 250 hashmod
     # will use 1MB sized file segments. Good for demo, but for Prod, perhaps a bigger value is better.
     transaction.MIN_HASH_MOD_VALUE,
@@ -69,9 +82,10 @@ to = transaction.TransationOptions(
 # Context object.
 ctx = context.Context()
 
-# initialize/open SOP global Redis connection
-ro = RedisOptions()
-Redis.open_connection(ro)
+# initialize/open SOP global Redis connection. You can specify your Redis cluster host address(es) & port, etc
+# but defaults to localhost and default Redis port # if none is specified.
+ro = redis.RedisOptions()
+redis.Redis.open_connection(ro)
 
 t = transaction.Transaction(ctx, to)
 t.begin()
@@ -82,7 +96,9 @@ cache = btree.CacheConfig()
 bo = btree.BtreeOptions("barstoreec", True, cache_config=cache)
 bo.set_value_data_size(btree.ValueDataSize.Small)
 
-# create the new "barstoreec" b-tree store.
+# create the new "barstoreec" b-tree store. Once created, you can just use the "open" method. Perhaps
+# you can have a code set for creating B-trees like "admin only" script. Then all other app code uses
+# the "open" method.
 b3 = btree.Btree.new(ctx, bo, t)
 
 # Since we've specified Native data type = True in BtreeOptions, we can use "integer" values as Key.
@@ -90,11 +106,12 @@ l = [
     btree.Item(1, "foo"),
 ]
 
-# Add Item to the B-tree,
+# Add Item to the B-tree.
 b3.add(ctx, l)
 
 # Commit the transaction to finalize the new B-tree (store) change.
 t.commit(ctx)
+print("ended.")
 ```
 
 # SOP in Github

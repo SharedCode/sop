@@ -20,7 +20,9 @@ else:
 
 # Load the shared library
 try:
-    lib = ctypes.CDLL(f"./libjsondb_{ext}")
+    script_dir = os.path.dirname(__file__) # Get directory of the current script
+    library_path = os.path.join(script_dir, f"libjsondb_{ext}") # Adjust filename
+    lib = ctypes.CDLL(library_path)
 except OSError as e:
     print(f"Error loading library: {e}")
     print("Ensure 'libjsondb_<arch><os>.so' (or .dll/.dylib) is in the same directory.")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/SharedCode/sop"
 	retry "github.com/sethvargo/go-retry"
@@ -82,7 +83,7 @@ func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
 func (dio defaultFileIO) MkdirAll(ctx context.Context, path string, perm os.FileMode) error {
 	return sop.Retry(ctx, func(context.Context) error {
 		err := os.MkdirAll(path, perm)
-		if err != nil {
+		if err != nil && !strings.Contains(err.Error(), "read-only file system") {
 			return retry.RetryableError(
 				sop.Error{
 					Code: sop.FileIOError,

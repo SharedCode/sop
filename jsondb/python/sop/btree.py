@@ -1,15 +1,15 @@
 import json
 import uuid
 import logging
-import call_go
-import context
+from . import call_go
+from . import context
 
 logger = logging.getLogger(__name__)
 
 from typing import TypeVar, Generic, Type
 from dataclasses import dataclass, asdict
 
-from transaction import Transaction, TransactionError
+from . import transaction
 
 # Define TypeVars 'TK' & 'TV' to represent Key & Value generic types.
 TK = TypeVar("TK")
@@ -19,12 +19,10 @@ from datetime import timedelta
 
 from enum import Enum, auto
 
-
 class ValueDataSize(Enum):
     Small = 0
     Medium = 1
     Big = 2
-
 
 class PagingDirection(Enum):
     Forward = 0
@@ -126,8 +124,8 @@ class Item(Generic[TK, TV]):
     id: str = str(uuid.UUID(int=0))
 
 
-class BtreeError(TransactionError):
-    """Exception for Btree-related errors, 'is derived from TransactionError."""
+class BtreeError(transaction.TransactionError):
+    """Exception for Btree-related errors, 'is derived from transaction.TransactionError."""
 
     pass
 
@@ -186,7 +184,7 @@ class Btree(Generic[TK, TV]):
         cls: Type["Btree[TK,TV]"],
         ctx: context.Context,
         options: BtreeOptions,
-        trans: Transaction,
+        trans: transaction.Transaction,
         index_spec: IndexSpecification = None,
     ) -> "Btree[TK,TV]":
         """Create a new B-tree store in the backend storage with the options specified then returns an instance
@@ -196,7 +194,7 @@ class Btree(Generic[TK, TV]):
             cls (Type[&quot;Btree[TK,TV]&quot;]): Supports generics for Key (TK) & Value (TV) pair.
             ctx (context.Context): context.Context object, useful for telling SOP in the backend the ID of the context for use in calls.
             options (BtreeOptions): _description_
-            trans (Transaction): instance of a Transaction that the B-tree store to be opened belongs.
+            trans (transaction.Transaction): instance of a transaction.Transaction that the B-tree store to be opened belongs.
             index_spec (IndexSpecification, optional): Defaults to None.
 
         Raises:
@@ -226,14 +224,14 @@ class Btree(Generic[TK, TV]):
 
     @classmethod
     def open(
-        cls: Type["Btree[TK,TV]"], ctx: context.Context, name: str, trans: Transaction
+        cls: Type["Btree[TK,TV]"], ctx: context.Context, name: str, trans: transaction.Transaction
     ) -> "Btree[TK,TV]":
         """Open an existing B-tree store on the backend and returns a B-tree manager that can allow code to do operations on it.
         Args:
             cls (Type[&quot;Btree[TK,TV]&quot;]): Supports generics for Key (TK) & Value (TV) pair.
             ctx (context.Context): context.Context object, useful for telling SOP in the backend the ID of the context for use in calls.
             name (str): Name of the B-tree store to open.
-            trans (Transaction): instance of a Transaction that the B-tree store to be opened belongs.
+            trans (transaction.Transaction): instance of a transaction.Transaction that the B-tree store to be opened belongs.
 
         Raises:
             BtreeError: error message generated when calling different methods of the B-tree.

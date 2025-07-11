@@ -1,4 +1,4 @@
-import call_go
+from . import call_go
 
 
 class Context:

@@ -1,7 +1,7 @@
 import json
-import call_go
+from . import call_go
 import uuid
-import context
+from . import context
 
 from enum import Enum
 from dataclasses import dataclass, asdict

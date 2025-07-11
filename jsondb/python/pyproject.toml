@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sop-python-beta-3"
-version = "3.0.3"
+version = "3.0.9"
 authors = [
     { name="Gerardo Recinto", email="gerardorecinto@yahoo.com" },
 ]
@@ -19,18 +19,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = [
-    "libjsondb_amd64darwin.dylib",
-    "libjsondb_amd64darwin.h",
-    "libjsondb_arm64darwin.dylib",
-    "libjsondb_arm64darwin.h",
-    "libjsondb_amd64linux.so",
-    "libjsondb_amd64linux.h",
-    "libjsondb_arm64linux.so",
-    "libjsondb_arm64linux.h",
-    "libjsondb_amd64windows.dll",
-    "libjsondb_amd64windows.h",
-]
+dependencies = []
 
 # build: python3 -m build
 # upload to pypi using twine: python3 -m twine upload dist/*
