@@ -12,6 +12,7 @@ Other "key advances" in database technology available in this SOP release:
 * New database storage strategy that uses segment files which avoids having to manage a huge file, resulting in higher IO efficiency & file system/disk drive friendly (medium sized) data files
 * Built-in data caching, your application data can be cached automatically via config setting. No need to write special code to cache certain data set in Redis, for example. SOP can provide that if configured
 * Host your applications across platforms, e.g. - microservice cluster running in Linux, another cluster or instance running in Windows, and all SOPs inter-operating with one another seamlessly and data stored in same set of disk drives. Freedom to use popular hardware architecture & OS of your choice(s)!
+* Unlimited B-trees, limited only by your hardware resources. Each B-tree store, as the name implies, is a B-tree serving super-fast, sorted by Key (Key & Value pair) data sets
 
 # SOP supported Hardware/OS
 SOP supports popular architectures & Operating Systems such as Linux, Darwin & Microsoft Windows, in both ARM64 & AMD64 architectures. For Windows, only AMD64 is supported since it is the only architecture Windows is available in.
