@@ -1,11 +1,11 @@
 import pytest
 import unittest
-import transaction
-import btree
-import context
+from . import transaction
+from . import btree
+from . import context
 
 from datetime import timedelta
-from redis import *
+from .redis import *
 
 from dataclasses import dataclass
 

@@ -1,10 +1,10 @@
 import unittest
-import transaction
-import btree
-import context
+from . import transaction
+from . import btree
+from . import context
 
-from redis import *
-from test_btree import to
+from .redis import *
+from .test_btree import to
 
 from dataclasses import dataclass
 
