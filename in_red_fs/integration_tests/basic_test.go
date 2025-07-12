@@ -343,3 +343,50 @@ func Test_StoreCachingTTL(t *testing.T) {
 		t.Errorf("Commit returned error, details: %v.", err)
 	}
 }
+
+func Test_BtreeOpenedTwice(t *testing.T) {
+	ctx := context.Background()
+	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	trans, err := in_red_fs.NewTransaction(ctx, to)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	trans.Begin()
+	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name:                     "opentwice",
+		SlotLength:               8,
+		IsUnique: true,
+		IsValueDataInNodeSegment: true,
+		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(30*time.Minute), true),
+	}, trans, nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if _, err := b3.AddIfNotExist(ctx, 1, "hello world"); err != nil {
+		t.Errorf("Add(1, 'hello world') failed, got(err) = %v, want = nil.", err)
+		return
+	}
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+
+	// Do the test, open the btree twice (2 instances!) then commit.
+	trans, err = in_red_fs.NewTransaction(ctx, to)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	trans.Begin()
+	_, err = in_red_fs.OpenBtree[int, string](ctx, "opentwice", trans, nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	_, err = in_red_fs.OpenBtree[int, string](ctx, "opentwice", trans, nil)
+	if err == nil {
+		t.Error("got nil, expected error")
+		return
+	}
+
+	trans.Commit(ctx)
+}

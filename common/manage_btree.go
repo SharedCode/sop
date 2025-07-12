@@ -92,6 +92,15 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 }
 
 func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, trans *Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	// Fail if b-tree with a given name is already in the transaction's list.
+	for i := range trans.btreesBackend {
+		if s.Name == trans.btreesBackend[i].getStoreInfo().Name {
+			err := fmt.Errorf("B-tree '%s' is already in the transaction's b-tree instances list", s.Name)
+			trans.Rollback(ctx, err)
+			return nil, err
+		}
+	}
+
 	si := StoreInterface[TK, TV]{}
 
 	// Assign the item action tracker frontend and backend bits.
