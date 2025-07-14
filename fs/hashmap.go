@@ -10,6 +10,7 @@ import (
 
 	"github.com/SharedCode/sop"
 	"github.com/SharedCode/sop/encoding"
+	"github.com/ncw/directio"
 )
 
 /*
@@ -22,7 +23,7 @@ type hashmap struct {
 	replicationTracker *replicationTracker
 	readWrite          bool
 	// File handles of all known (traversed & opened) data segment file of the hash map.
-	fileHandles map[string]*directIO
+	fileHandles map[string]*fileDirectIO
 	cache       sop.Cache
 }
 
@@ -30,7 +31,7 @@ type hashmap struct {
 // details about discovered (file &) location, i.e. - file offset, of a given UUID & its current record's
 // value (unmarshalled to a Handle) read from the file.
 type fileRegionDetails struct {
-	dio                 *directIO
+	dio                 *fileDirectIO
 	blockOffset         int64
 	handleInBlockOffset int64
 	handle              sop.Handle
@@ -68,7 +69,7 @@ func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicatio
 		hashModValue:       hashModValue,
 		replicationTracker: replicationTracker,
 		readWrite:          readWrite,
-		fileHandles:        make(map[string]*directIO, 5),
+		fileHandles:        make(map[string]*fileDirectIO, 5),
 		cache:              cache,
 	}
 }
@@ -81,10 +82,10 @@ func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicatio
 // with the default numbers shown, can be used to hold 825 million items of the B-Tree, given a
 // slot length of 500.
 func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filename string, id sop.UUID) (fileRegionDetails, error) {
-	var dio *directIO
+	var dio *fileDirectIO
 	var result fileRegionDetails
 
-	alignedBuffer := dio.createAlignedBlock()
+	alignedBuffer := directio.AlignedBlock(blockSize)
 	i := 0
 	for {
 		// Not found or there is no space left in the block, try (or create if writing) other file segments.
@@ -105,7 +106,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 		if f, ok := hm.fileHandles[fn]; ok {
 			dio = f
 		} else {
-			dio = newDirectIO()
+			dio = newFileDirectIO()
 			fileExists := dio.fileExists(fn)
 			var fs int64
 			if fileExists {
@@ -126,7 +127,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				if !hm.readWrite {
 					flag = os.O_RDONLY
 				}
-				if err := dio.Open(fn, flag, permission); err != nil {
+				if err := dio.open(fn, flag, permission); err != nil {
 					return result, err
 				}
 				dio.filename = segmentFilename
@@ -138,7 +139,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 		// For add use-case with "collision", when there is no more slot on the block, we need to automatically create a new segment file.
 		blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
 
-		n, err := dio.ReadAt(alignedBuffer, blockOffset)
+		n, err := dio.readAt(alignedBuffer, blockOffset)
 		if err != nil {
 			if dio.isEOF(err) {
 				if forWriting {
@@ -268,12 +269,12 @@ func (hm *hashmap) findFileRegion(ctx context.Context, filename string, ids []so
 func (hm *hashmap) close() error {
 	var lastError error
 	for _, f := range hm.fileHandles {
-		if err := f.Close(); err != nil {
+		if err := f.close(); err != nil {
 			lastError = err
 		}
 	}
 	// Clear the file handles for cleanup.
-	hm.fileHandles = make(map[string]*directIO)
+	hm.fileHandles = make(map[string]*fileDirectIO)
 	return lastError
 }
 
@@ -284,7 +285,7 @@ func (hm *hashmap) getBlockOffsetAndHandleInBlockOffset(id sop.UUID) (int64, int
 	return int64(blockOffset * blockSize), int64(offsetInBlock * sop.HandleSizeInBytes)
 }
 
-func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename string, id sop.UUID, dio *directIO) (fileRegionDetails, error) {
+func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename string, id sop.UUID, dio *fileDirectIO) (fileRegionDetails, error) {
 	var result fileRegionDetails
 	flag := os.O_CREATE | os.O_RDWR
 	if !forWriting {
@@ -299,7 +300,7 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 		return result, err
 	}
 
-	if err := dio.Open(filename, flag, permission); err != nil {
+	if err := dio.open(filename, flag, permission); err != nil {
 		hm.cache.Unlock(ctx, lk)
 		return result, err
 	}

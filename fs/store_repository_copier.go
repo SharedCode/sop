@@ -19,13 +19,13 @@ func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 		return err
 	} else {
 
-		oaf := sr.replicationTracker.replicationTrackedDetails.ActiveFolderToggler
-		sr.replicationTracker.replicationTrackedDetails.ActiveFolderToggler = !oaf
+		oaf := sr.replicationTracker.ReplicationTrackedDetails.ActiveFolderToggler
+		sr.replicationTracker.ReplicationTrackedDetails.ActiveFolderToggler = !oaf
 		storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
 
 		// Restore the active folder toggler value upon out of scope.
 		defer func() {
-			sr.replicationTracker.replicationTrackedDetails.ActiveFolderToggler = oaf
+			sr.replicationTracker.ReplicationTrackedDetails.ActiveFolderToggler = oaf
 		}()
 
 		// Write the store list.

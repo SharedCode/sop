@@ -16,7 +16,7 @@ import (
 	"github.com/SharedCode/sop/redis"
 )
 
-type replicationTrackedDetails struct {
+type ReplicationTrackedDetails struct {
 	FailedToReplicate bool
 	// If true, folder as specified in storesBaseFolders[0] will be the active folder,
 	// otherwise the 2nd folder, as specified in storesBaseFolders[1].
@@ -27,12 +27,12 @@ type replicationTrackedDetails struct {
 	LogCommitChanges bool
 }
 
-func (a replicationTrackedDetails) isEqual(b replicationTrackedDetails) bool {
+func (a ReplicationTrackedDetails) isEqual(b ReplicationTrackedDetails) bool {
 	return a.ActiveFolderToggler == b.ActiveFolderToggler && a.FailedToReplicate == b.FailedToReplicate
 }
 
 type replicationTracker struct {
-	replicationTrackedDetails
+	ReplicationTrackedDetails
 	// Array so we can use in replication across two folders, if in replication mode.
 	storesBaseFolders []string
 	replicate         bool
@@ -47,7 +47,7 @@ const (
 	commitChangesLogFolder            = "commitlogs"
 )
 
-var globalReplicationDetails *replicationTrackedDetails
+var GlobalReplicationDetails *ReplicationTrackedDetails
 var globalReplicationDetailsLocker sync.Mutex = sync.Mutex{}
 
 // Instantiates a replication tracker.
@@ -67,17 +67,17 @@ func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, repl
 			log.Warn(fmt.Sprintf("error while updating global replication status & L2 cache, details: %v", err))
 		}
 		// Minimize reading the replication "status" if we have read it and is tracking it globally.
-		if globalReplicationDetails != nil {
+		if GlobalReplicationDetails != nil {
 			globalReplicationDetailsLocker.Lock()
-			rt.replicationTrackedDetails = *globalReplicationDetails
+			rt.ReplicationTrackedDetails = *GlobalReplicationDetails
 			globalReplicationDetailsLocker.Unlock()
 		} else {
 			if err := rt.readStatusFromHomeFolder(ctx); err != nil {
 				return nil, fmt.Errorf("failed reading replication status (%sº file, details: %v", replicationStatusFilename, err)
 			}
 			globalReplicationDetailsLocker.Lock()
-			copy := rt.replicationTrackedDetails
-			globalReplicationDetails = &copy
+			copy := rt.ReplicationTrackedDetails
+			GlobalReplicationDetails = &copy
 			// Sync l2 cache.
 			if err := rt.syncWithL2Cache(ctx, true); err != nil {
 				log.Warn(fmt.Sprintf("error while updating global replication status & L2 cache, details: %v", err))
@@ -134,7 +134,7 @@ func (r *replicationTracker) handleFailedToReplicate(ctx context.Context) {
 	}
 
 	// L2 cache "knows" of failure, just return.
-	if globalReplicationDetails.FailedToReplicate {
+	if GlobalReplicationDetails.FailedToReplicate {
 		r.FailedToReplicate = true
 		return
 	}
@@ -147,7 +147,7 @@ func (r *replicationTracker) handleFailedToReplicate(ctx context.Context) {
 	}
 
 	r.FailedToReplicate = true
-	globalReplicationDetails.FailedToReplicate = true
+	GlobalReplicationDetails.FailedToReplicate = true
 	if err := r.writeReplicationStatus(ctx, r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
 		log.Warn(fmt.Sprintf("handleFailedToReplicate writeReplicationStatus failed, details: %v", err))
 	}
@@ -161,7 +161,7 @@ func (r *replicationTracker) handleFailedToReplicate(ctx context.Context) {
 }
 
 func (r *replicationTracker) failover(ctx context.Context) error {
-	if globalReplicationDetails.ActiveFolderToggler == !r.ActiveFolderToggler ||
+	if GlobalReplicationDetails.ActiveFolderToggler == !r.ActiveFolderToggler ||
 		r.FailedToReplicate {
 		// Do nothing if global tracker already knows that a failover already occurred.
 		return nil
@@ -171,13 +171,13 @@ func (r *replicationTracker) failover(ctx context.Context) error {
 		log.Warn(fmt.Sprintf("error while updating global replication status & L2 cache, details: %v", err))
 	}
 
-	if globalReplicationDetails.ActiveFolderToggler == !r.ActiveFolderToggler {
+	if GlobalReplicationDetails.ActiveFolderToggler == !r.ActiveFolderToggler {
 		// Do nothing if global tracker already knows that a failover already occurred.
 		return nil
 	}
 
 	globalReplicationDetailsLocker.Lock()
-	if globalReplicationDetails.ActiveFolderToggler == !r.ActiveFolderToggler {
+	if GlobalReplicationDetails.ActiveFolderToggler == !r.ActiveFolderToggler {
 		globalReplicationDetailsLocker.Unlock()
 		// Do nothing if global tracker already knows that a failover already occurred.
 		return nil
@@ -194,8 +194,8 @@ func (r *replicationTracker) failover(ctx context.Context) error {
 
 	// Switch the passive into active & vice versa.
 	r.ActiveFolderToggler = !r.ActiveFolderToggler
-	copy := r.replicationTrackedDetails
-	globalReplicationDetails = &copy
+	copy := r.ReplicationTrackedDetails
+	GlobalReplicationDetails = &copy
 
 	// Sync l2 cache.
 	if err := r.syncWithL2Cache(ctx, true); err != nil {
@@ -298,7 +298,7 @@ func (r *replicationTracker) readStatusFromHomeFolder(ctx context.Context) error
 
 func (r *replicationTracker) writeReplicationStatus(ctx context.Context, filename string) error {
 	fio := NewFileIO()
-	ba, _ := encoding.DefaultMarshaler.Marshal(r.replicationTrackedDetails)
+	ba, _ := encoding.DefaultMarshaler.Marshal(r.ReplicationTrackedDetails)
 	if err := fio.WriteFile(ctx, filename, ba, permission); err != nil {
 		return err
 	}
@@ -312,7 +312,7 @@ func (r *replicationTracker) readReplicationStatus(ctx context.Context, filename
 	if err != nil {
 		return err
 	}
-	if err = encoding.DefaultMarshaler.Unmarshal(ba, &r.replicationTrackedDetails); err != nil {
+	if err = encoding.DefaultMarshaler.Unmarshal(ba, &r.ReplicationTrackedDetails); err != nil {
 		return err
 	}
 	return nil
@@ -321,27 +321,27 @@ func (r *replicationTracker) readReplicationStatus(ctx context.Context, filename
 // Sync global and this replication trackers with the L2 cache record.
 func (r *replicationTracker) syncWithL2Cache(ctx context.Context, pushValue bool) error {
 
-	var rtd replicationTrackedDetails
+	var rtd ReplicationTrackedDetails
 	// Update L2 cache of new value in global status.
 	if pushValue {
 		// When stable, perhaps we just issue a SetStruct here to sync L2 cache.
 		if found, err := r.l2Cache.GetStructEx(ctx, replicationStatusCacheKey, &rtd, replicationStatusCacheTTLDuration); err != nil {
 			return err
 		} else if !found {
-			if err := r.l2Cache.SetStruct(ctx, replicationStatusCacheKey, *globalReplicationDetails, replicationStatusCacheTTLDuration); err != nil {
+			if err := r.l2Cache.SetStruct(ctx, replicationStatusCacheKey, *GlobalReplicationDetails, replicationStatusCacheTTLDuration); err != nil {
 				return err
 			}
 			return nil
 		}
 		// Found in L2 cache, sync it if needed.
-		if rtd.isEqual(*globalReplicationDetails) {
+		if rtd.isEqual(*GlobalReplicationDetails) {
 			log.Debug("global replication details & l2 Cache copy is found to be in sync")
 			return nil
 		}
-		if err := r.l2Cache.SetStruct(ctx, replicationStatusCacheKey, *globalReplicationDetails, replicationStatusCacheTTLDuration); err != nil {
+		if err := r.l2Cache.SetStruct(ctx, replicationStatusCacheKey, *GlobalReplicationDetails, replicationStatusCacheTTLDuration); err != nil {
 			return err
 		}
-		log.Debug(fmt.Sprintf("l2 cache had been updated with global replication details value: %v", globalReplicationDetails))
+		log.Debug(fmt.Sprintf("l2 cache had been updated with global replication details value: %v", GlobalReplicationDetails))
 		return nil
 	}
 	// pull or update global replication details with l2 cache copy.
@@ -355,7 +355,7 @@ func (r *replicationTracker) syncWithL2Cache(ctx context.Context, pushValue bool
 	log.Debug(fmt.Sprintf("global replication details & this repl object are being updated w/ l2 cache copy: %v", rtd))
 
 	// Just assign to global replication details the read rtd value from l2 cache.
-	globalReplicationDetails = &rtd
+	GlobalReplicationDetails = &rtd
 
 	return nil
 }

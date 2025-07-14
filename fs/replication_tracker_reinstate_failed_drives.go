@@ -24,7 +24,7 @@ func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context, registry
 	if !r.replicate {
 		return fmt.Errorf("replicationTracker.replicate flag is off, ReinstateFailedDrives is valid only if this is on")
 	}
-	if !r.replicationTrackedDetails.FailedToReplicate {
+	if !r.ReplicationTrackedDetails.FailedToReplicate {
 		return fmt.Errorf("replicationTracker.FailedToReplicate is false, ReinstateFailedDrives is valid only if this is true")
 	}
 
@@ -57,7 +57,7 @@ func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context, registry
 }
 
 func (r *replicationTracker) startLoggingCommitChanges(ctx context.Context) error {
-	globalReplicationDetails.LogCommitChanges = true
+	GlobalReplicationDetails.LogCommitChanges = true
 	r.LogCommitChanges = true
 
 	// Update the replication status details.
@@ -96,7 +96,7 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 	}
 
 	// Set to false the FailedToReplicate so we can issue a successful Replicate call on StoreRepository & Registry.
-	r.replicationTrackedDetails.FailedToReplicate = false
+	r.ReplicationTrackedDetails.FailedToReplicate = false
 	fio := NewFileIO()
 	ms := NewManageStoreFolder(fio)
 	sr, err := NewStoreRepository(r, ms, r.l2Cache)
@@ -148,10 +148,10 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 }
 
 func (r *replicationTracker) turnOnReplication(ctx context.Context) error {
-	globalReplicationDetails.FailedToReplicate = false
-	globalReplicationDetails.LogCommitChanges = false
+	GlobalReplicationDetails.FailedToReplicate = false
+	GlobalReplicationDetails.LogCommitChanges = false
 
-	r.replicationTrackedDetails = *globalReplicationDetails
+	r.ReplicationTrackedDetails = *GlobalReplicationDetails
 	// Update the replication status details.
 	if err := r.writeReplicationStatus(ctx, r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
 		return err
