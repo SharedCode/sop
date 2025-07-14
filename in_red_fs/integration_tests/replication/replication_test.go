@@ -28,15 +28,7 @@ func init() {
 		Level: log.LevelDebug,
 	}))
 	log.SetDefault(l) // configures log package to print with LevelInfo
-
 	in_red_fs.Initialize(redisConfig)
-
-	// cache := redis.NewClient()
-	// log.Info("about to issue cache.Clear")
-	// ctx := context.Background()
-	// if err := cache.Clear(ctx); err != nil {
-	// 	log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
-	// }
 	initErasureCoding()
 }
 
@@ -46,7 +38,7 @@ func initErasureCoding() {
 
 	// Erasure Coding config for "barstoreec" table uses three base folder paths that mimicks three disks.
 	// Two data shards and one parity shard.
-	ec["repltable"] = fs.ErasureCodingConfig{
+	ec[""] = fs.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -64,77 +56,37 @@ var storesFolders = []string{
 	fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
 }
 
-func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
-	fs.DirectIOSim = newDirectIOReplicationSim()
-
-	ctx := context.Background()
-	to, _ := in_red_fs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	trans, err := in_red_fs.NewTransaction(ctx, to)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	trans.Begin()
-	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name:                     "norepltable",
-		SlotLength:               8,
-		IsValueDataInNodeSegment: true,
-	}, trans, nil)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	// Failure due to DirectIO sim will throw on open file and cause rollback & error from trans commit.
-	b3.Add(ctx, 1, "hello world")
-	if err := trans.Commit(ctx); err == nil {
-		t.Error("expected error but none was returned")
-		t.FailNow()
-	}
-}
-
 // Test to issue Reinstate of failed drives. But only works if the replcation flag is true and the replication status
 // FailedToReplicate = true.
-func Test_ReinstateDrive(t *testing.T) {
+func reinstateDrive(t *testing.T) {
 	ctx := context.Background()
-	if err := in_red_fs.ReinstateFailedDrives(ctx, nil, nil, fs.MinimumModValue); err != nil {
+	if err := in_red_fs.ReinstateFailedDrives(ctx, storesFolders, nil, fs.MinimumModValue); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
 }
 
-func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
-	fs.DirectIOSim = newDirectIOReplicationSim()
+var transOptions, _ = in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 
-	ctx := context.Background()
+func TestMain(t *testing.T) {
+	fs.DirectIOSim = NewDirectIOReplicationSim(0)
+
+	setupBtreeWithOneItem("repltable2", t)
+
+	// Generate a synthetic failure on Write causing fallback event.
+	fs.DirectIOSim = NewDirectIOReplicationSim(2)
+	failOnWrite("repltable2", t)
+
+	// Reinstate drive should succeed to flip active & passive.
+	reinstateDrive(t)
+	
+}
+
+func setupBtreeWithOneItem(name string, t *testing.T) {
 	// Take from global EC config the data paths & EC config details.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
-
-	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
-	if err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	trans.Begin()
-	so := sop.StoreOptions{
-		Name:                     "repltable",
-		SlotLength:               8,
-		IsValueDataInNodeSegment: true,
-	}
-	b3, err := in_red_fs.NewBtreeWithReplication[int, string](ctx, so, trans, nil)
-	if err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	b3.Add(ctx, 1, "hello world")
-	if err := trans.Commit(ctx); err == nil {
-		t.Error("expected error but none was returned")
-		t.FailNow()
-	}
-
-	// Now, check whether transaction IO on new "active" target paths will be successful.
-	fs.DirectIOSim = nil
-
-	ctx = context.Background()
-	trans, err = in_red_fs.NewTransactionWithReplication(ctx, to)
+	ctx := context.Background()
+	// Setup a good B-tree succeeding with adding one entry & committed.
+	trans, err := in_red_fs.NewTransactionWithReplication(ctx, transOptions)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -143,7 +95,12 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	b3, err = in_red_fs.NewBtreeWithReplication[int, string](ctx, so, trans, nil)
+	so := sop.StoreOptions{
+		Name:                     name,
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+	}
+	b3, err := in_red_fs.NewBtreeWithReplication[int, string](ctx, so, trans, nil)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -157,52 +114,40 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 		t.Errorf("expected no error but got: %v", err)
 		t.FailNow()
 	}
-
+	fmt.Printf("GlobalReplication ActiveFolderToggler at End: %v\n", fs.GlobalReplicationDetails.ActiveFolderToggler)
 }
 
-func TestOpenBtree_TransWithRepl_failed(t *testing.T) {
-	fs.DirectIOSim = newDirectIOReplicationSim()
-
+func failOnWrite(name string, t *testing.T) {
 	ctx := context.Background()
-	// Take from global EC config the data paths & EC config details.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
-
-	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
+	trans, err := in_red_fs.NewTransactionWithReplication(ctx, transOptions)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
-	trans.Begin()
-	_, err = in_red_fs.OpenBtree[int, string](ctx, "repltable", trans, nil)
-	if err == nil {
-		t.Error("expected to fail but succeeded")
+	if err = trans.Begin(); err != nil {
+		t.Error(err)
 		t.FailNow()
 	}
-}
 
-func TestOpenBtreeWithRepl_succeeded(t *testing.T) {
-	fs.DirectIOSim = newDirectIOReplicationSim()
-
-	ctx := context.Background()
-	// Take from global EC config the data paths & EC config details.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
-
-	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
+	b3, err := in_red_fs.OpenBtreeWithReplication[int, string](ctx, name, trans, nil)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
-	trans.Begin()
-	_, err = in_red_fs.OpenBtreeWithReplication[int, string](ctx, "repltable", trans, nil)
+	_, err = b3.Add(ctx, 2, "hello world")
 	if err != nil {
-		t.Errorf("expected to succeed but failed, details: %v", err)
+		t.Errorf("expected no error but got: %v", err)
 		t.FailNow()
 	}
+	if err := trans.Commit(ctx); err == nil {
+		t.Errorf("got nil, expected error")
+		t.FailNow()
+	}
+	fmt.Printf("GlobalReplication ActiveFolderToggler at End: %v\n", fs.GlobalReplicationDetails.ActiveFolderToggler)
 }
 
 func TestDirectIOReadFromFileFailure(t *testing.T) {
-}
-func TestDirectIOWriteToFileFailure(t *testing.T) {
+
 }
 func TestDirectIOCloseFileFailure(t *testing.T) {
 }

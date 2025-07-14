@@ -42,7 +42,7 @@ func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails [
 	return nil
 }
 
-func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blockOffset int64, handleInBlockOffset int, handleData []byte) error {
+func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO, blockOffset int64, handleInBlockOffset int, handleData []byte) error {
 	// Lock the block file region.
 	var lk *sop.LockKey
 	var err error
@@ -81,7 +81,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 	alignedBuffer := dio.createAlignedBlock()
 
 	// Read the block file region data.
-	if n, err := dio.ReadAt(alignedBuffer, blockOffset); n != blockSize || err != nil {
+	if n, err := dio.readAt(alignedBuffer, blockOffset); n != blockSize || err != nil {
 		hm.unlockFileBlockRegion(ctx, lk)
 		if err == nil {
 			return fmt.Errorf("only partially (n=%d) read the block at offset %v", n, blockOffset)
@@ -92,7 +92,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 	// Merge the updated Handle record w/ the read block file region data.
 	copy(alignedBuffer[handleInBlockOffset:handleInBlockOffset+sop.HandleSizeInBytes], handleData)
 	// Update the block file region with merged data.
-	if n, err := dio.WriteAt(alignedBuffer, blockOffset); n != blockSize || err != nil {
+	if n, err := dio.writeAt(alignedBuffer, blockOffset); n != blockSize || err != nil {
 		hm.unlockFileBlockRegion(ctx, lk)
 		if err == nil {
 			return fmt.Errorf("only partially (n=%d) wrote at block offset %v, data: %v", n, blockOffset, handleData)
@@ -103,7 +103,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *directIO, blo
 	return hm.unlockFileBlockRegion(ctx, lk)
 }
 
-func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *directIO, offset int64) (bool, sop.UUID, *sop.LockKey, error) {
+func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *fileDirectIO, offset int64) (bool, sop.UUID, *sop.LockKey, error) {
 	tid := hm.replicationTracker.tid
 	if tid == sop.NilUUID {
 		tid = sop.NewUUID()
