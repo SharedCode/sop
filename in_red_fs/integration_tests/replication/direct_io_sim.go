@@ -38,6 +38,12 @@ func (dio dioReplicationSim) WriteAt(ctx context.Context, file *os.File, block [
 			Err:  fmt.Errorf("simulated error on WriteAt"),
 		}
 	}
+	if dio.failOnMethod == 22 {
+		return 0, sop.Error{
+			Code: sop.FileIOError,
+			Err:  fmt.Errorf("simulated error on WriteAt"),
+		}
+	}
 	return dio.DirectIO.WriteAt(ctx, file, block, offset)
 }
 func (dio dioReplicationSim) ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {

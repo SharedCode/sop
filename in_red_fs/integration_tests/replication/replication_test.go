@@ -88,7 +88,7 @@ func TestMain(t *testing.T) {
 	writeData(tableName, rand.Intn(50)+1, "bar bar", t)
 	fmt.Printf("End of error\n")
 
-	// Reinstate drive should succeed to flip active & passive.
+	// Reinstate drive should succeed to reinstate the (failed) drives back to replication.
 	reinstateDrive(t)
 
 	fmt.Printf("Failed over and read foll. item Values: %v\n", readData(tableName, t))
@@ -109,6 +109,22 @@ func TestMain(t *testing.T) {
 	// Set sim to fail on ReadAt.
 	fs.DirectIOSim = NewDirectIOReplicationSim(3)
 	fmt.Printf("Failed on read, 'should be nil, %v\n", readData(tableName, t))
+
+}
+
+func TestMain2(t *testing.T) {
+	fs.DirectIOSim = NewDirectIOReplicationSim(0)
+	tableName := "repltable3"
+	setupBtreeWithOneItem(tableName, rand.Intn(50)+1, t)
+
+	writeData(tableName, rand.Intn(50)+1, "foobar", t)
+	fmt.Printf("No error here.\n")
+
+	// Set sim to fail on WriteAt, no failover, just IO error.
+	fs.DirectIOSim = NewDirectIOReplicationSim(22)
+	fmt.Printf("Error here!\n")
+	writeData(tableName, rand.Intn(50)+1, "bar bar", t)
+	fmt.Printf("End of error\n")
 
 }
 
