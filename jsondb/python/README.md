@@ -119,6 +119,121 @@ t.commit(ctx)
 print("ended.")
 ```
 
+# Index Specification
+You can specify a Key structure that can be complex like a class and cherry pick the fields you want to affect the indexing and data organization in the B-tree. Like pick two fields from the Key class as comprised your index. And optionally specify the sort order, like 1st field is descending order and the 2nd field ascending.
+
+Here is a good example to illustrate this use-case.
+```
+import unittest
+from . import transaction
+from . import btree
+from . import context
+
+from .redis import *
+from .test_btree import to
+
+from dataclasses import dataclass
+
+# Define your Key data class with two fields.
+@dataclass
+class Key:
+    address1: str
+    address2: str
+
+# Define your Value data class.
+@dataclass
+class Person:
+    first_name: str
+    last_name: str
+
+# Create a context for use in Transaction & B-tree API calls.
+ctx = context.Context()
+
+class TestBtreeIndexSpecs(unittest.TestCase):
+    def setUpClass():
+        ro = RedisOptions()
+        Redis.open_connection(ro)
+
+        t = transaction.Transaction(ctx, to)
+        t.begin()
+
+        cache = btree.CacheConfig()
+        bo = btree.BtreeOptions("personidx", True, cache_config=cache)
+
+        # Specify Small size, meaning, both Key & Value object values will be stored in the B-tree node segment.
+        # This is very efficient/appropriate for small data structure sizes (of Key & Value pairs).
+        bo.set_value_data_size(btree.ValueDataSize.Small)
+
+        # Specify that the B-tree will host non-primitive Key data type, i.e. - it is a dataclass.
+        bo.is_primitive_key = False
+
+        btree.Btree.new(
+            ctx,
+            bo,
+            t,
+            # Specify the Index fields of the Key class. You control how many fields get included
+            # and each field's sort order (asc or desc).
+            btree.IndexSpecification(
+                index_fields=(
+                    # 1st field is "address1" in descending order.
+                    btree.IndexFieldSpecification(
+                        "address1", ascending_sort_order=False
+                    ),
+                    # 2nd field is "address2" in ascending order (default).
+                    btree.IndexFieldSpecification("address2"),
+                )
+            ),
+        )
+
+        # Commit the transaction to finalize it.
+        t.commit(ctx)
+
+    def test_add(self):
+        t = transaction.Transaction(ctx, to)
+        t.begin()
+
+        b3 = btree.Btree.open(ctx, "personidx", t)
+
+        pk = Key(address1="123 main st", address2="Fremont, CA")
+        l = [btree.Item(pk, Person(first_name="joe", last_name="petit"))]
+
+        # Populate with some sample Key & Value pairs of data set.
+        for i in range(20):
+            pk = Key(address1=f"{i}123 main st", address2="Fremont, CA")
+            l.append(btree.Item(pk, Person(first_name=f"joe{i}", last_name="petit")))
+
+        # Submit the entire generated batch to be added to B-tree in one call.
+        b3.add_if_not_exists(ctx, l)
+
+        # Commit the changes.
+        t.commit(ctx)
+
+    def test_get_items_batch(self):
+        t = transaction.Transaction(ctx, to)
+        t.begin()
+
+        b3 = btree.Btree.open(ctx, "personidx", t)
+
+        # Fetch the data starting with 1st record up to 10th.
+        # Paging info is:
+        # 0 page offset means the current record where the cursor is located, 0 skipped items, 10 items to fetch.
+        # In forward direction.
+        items = b3.get_items(
+            ctx,
+            btree.PagingInfo(0, 0, 10, direction=btree.PagingDirection.Forward.value),
+        )
+
+        print(f"read items from indexed keyed b-tree {items}")
+
+        # End the transaction by calling commit. Commit in this case will also double check that the fetched items
+        # did not change while in the transaction. If there is then it will return an error to denote this and
+        # thus, your code can treat it as failure if it needs to, like in a financial transaction.
+        t.commit(ctx)
+
+```
+
+** Above is the same code of "sop/test_btree_idx.py" unit test file.
+
 # SOP in Github
 SOP open source project (MIT license) is in github. You can checkout the "...sop/jsondb/" package which contains the Go code enabling general purpose JSON data management & the Python wrapper, coding guideline of which, was described above.
 
