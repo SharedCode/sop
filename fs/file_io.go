@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/SharedCode/sop"
 	retry "github.com/sethvargo/go-retry"
@@ -36,7 +35,7 @@ func (dio defaultFileIO) WriteFile(ctx context.Context, name string, data []byte
 		if derr := dio.MkdirAll(ctx, dirPath, perm); derr == nil {
 			return sop.Retry(ctx, func(context.Context) error {
 				err := os.WriteFile(name, data, perm)
-				if err != nil {
+				if sop.ShouldRetry(err) {
 					return retry.RetryableError(
 						sop.Error{
 							Code: sop.FileIOError,
@@ -55,7 +54,7 @@ func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, err
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
 		ba, err = os.ReadFile(name)
-		if err != nil {
+		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
 					Code: sop.FileIOError,
@@ -69,7 +68,7 @@ func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, err
 func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
 	return sop.Retry(ctx, func(context.Context) error {
 		err := os.Remove(name)
-		if err != nil {
+		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
 					Code: sop.FileIOError,
@@ -83,7 +82,7 @@ func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
 func (dio defaultFileIO) MkdirAll(ctx context.Context, path string, perm os.FileMode) error {
 	return sop.Retry(ctx, func(context.Context) error {
 		err := os.MkdirAll(path, perm)
-		if err != nil && !strings.Contains(err.Error(), "read-only file system") {
+		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
 					Code: sop.FileIOError,
@@ -96,7 +95,7 @@ func (dio defaultFileIO) MkdirAll(ctx context.Context, path string, perm os.File
 func (dio defaultFileIO) RemoveAll(ctx context.Context, path string) error {
 	return sop.Retry(ctx, func(context.Context) error {
 		err := os.RemoveAll(path)
-		if err != nil {
+		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
 					Code: sop.FileIOError,
@@ -117,7 +116,7 @@ func (dio defaultFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os.Di
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
 		r, err = os.ReadDir(sourceDir)
-		if err != nil {
+		if sop.ShouldRetry(err) {
 			return retry.RetryableError(sop.Error{
 				Code: sop.FileIOError,
 				Err:  err,

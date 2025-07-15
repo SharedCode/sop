@@ -64,6 +64,11 @@ func reinstateDrive(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
+	if fs.GlobalReplicationDetails.ActiveFolderToggler {
+		fmt.Printf("Active Folder is: %s\n", storesFolders[0])
+		return
+	}
+		fmt.Printf("Active Folder is: %s\n", storesFolders[1])
 }
 
 var transOptions, _ = in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
