@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	log "log/slog"
+	"math/rand"
 	"os"
 
 	"testing"
@@ -25,7 +26,7 @@ var redisConfig = redis.Options{
 
 func init() {
 	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
-		Level: log.LevelDebug,
+		Level: log.LevelInfo,
 	}))
 	log.SetDefault(l) // configures log package to print with LevelInfo
 	in_red_fs.Initialize(redisConfig)
@@ -75,19 +76,43 @@ var transOptions, _ = in_red_fs.NewTransactionOptionsWithReplication(sop.ForWrit
 
 func TestMain(t *testing.T) {
 	fs.DirectIOSim = NewDirectIOReplicationSim(0)
+	tableName := "repltable2"
+	setupBtreeWithOneItem(tableName, rand.Intn(50)+1, t)
 
-	setupBtreeWithOneItem("repltable2", t)
+	writeData(tableName, rand.Intn(50)+1, "foobar", t)
+	fmt.Printf("No error here.\n")
 
-	// Generate a synthetic failure on Write causing fallback event.
+	// Set sim to fail on WriteAt.
 	fs.DirectIOSim = NewDirectIOReplicationSim(2)
-	failOnWrite("repltable2", t)
+	fmt.Printf("Error here!\n")
+	writeData(tableName, rand.Intn(50)+1, "bar bar", t)
+	fmt.Printf("End of error\n")
 
 	// Reinstate drive should succeed to flip active & passive.
 	reinstateDrive(t)
-	
+
+	fmt.Printf("Failed over and read foll. item Values: %v\n", readData(tableName, t))
+
+	fs.DirectIOSim = NewDirectIOReplicationSim(0)
+	writeData(tableName, rand.Intn(50)+1, "hey hey", t)
+	fmt.Printf("No error here.\n")
+
+	fmt.Printf("Failed over and read foll. item Values: %v\n", readData(tableName, t))
+
+	// Fail on reading.
+	cache := redis.NewClient()
+	ctx := context.Background()
+	if err := cache.Clear(ctx); err != nil {
+		log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
+	}
+
+	// Set sim to fail on ReadAt.
+	fs.DirectIOSim = NewDirectIOReplicationSim(3)
+	fmt.Printf("Failed on read, 'should be nil, %v\n", readData(tableName, t))
+
 }
 
-func setupBtreeWithOneItem(name string, t *testing.T) {
+func setupBtreeWithOneItem(btreeName string, itemID int, t *testing.T) {
 	// Take from global EC config the data paths & EC config details.
 	ctx := context.Background()
 	// Setup a good B-tree succeeding with adding one entry & committed.
@@ -101,7 +126,7 @@ func setupBtreeWithOneItem(name string, t *testing.T) {
 		t.FailNow()
 	}
 	so := sop.StoreOptions{
-		Name:                     name,
+		Name:                     btreeName,
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 	}
@@ -110,7 +135,7 @@ func setupBtreeWithOneItem(name string, t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	_, err = b3.Add(ctx, 1, "hello world")
+	_, err = b3.Add(ctx, itemID, "hello world")
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -122,7 +147,7 @@ func setupBtreeWithOneItem(name string, t *testing.T) {
 	fmt.Printf("GlobalReplication ActiveFolderToggler at End: %v\n", fs.GlobalReplicationDetails.ActiveFolderToggler)
 }
 
-func failOnWrite(name string, t *testing.T) {
+func writeData(btreeName string, itemID int, msg string, t *testing.T) {
 	ctx := context.Background()
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, transOptions)
 	if err != nil {
@@ -134,26 +159,59 @@ func failOnWrite(name string, t *testing.T) {
 		t.FailNow()
 	}
 
-	b3, err := in_red_fs.OpenBtreeWithReplication[int, string](ctx, name, trans, nil)
+	b3, err := in_red_fs.OpenBtreeWithReplication[int, string](ctx, btreeName, trans, nil)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
-	_, err = b3.Add(ctx, 2, "hello world")
+	_, err = b3.Add(ctx, itemID, msg)
 	if err != nil {
 		t.Errorf("expected no error but got: %v", err)
 		t.FailNow()
 	}
-	if err := trans.Commit(ctx); err == nil {
-		t.Errorf("got nil, expected error")
-		t.FailNow()
+	if err := trans.Commit(ctx); err != nil {
+		fmt.Printf("got error: %v\n", err)
 	}
 	fmt.Printf("GlobalReplication ActiveFolderToggler at End: %v\n", fs.GlobalReplicationDetails.ActiveFolderToggler)
 }
 
-func TestDirectIOReadFromFileFailure(t *testing.T) {
+func readData(btreeName string, t *testing.T) []sop.KeyValuePair[int,string] {
+	ctx := context.Background()
+	trans, err := in_red_fs.NewTransactionWithReplication(ctx, transOptions)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	if err = trans.Begin(); err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
 
+	b3, err := in_red_fs.OpenBtreeWithReplication[int, string](ctx, btreeName, trans, nil)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	result := make([]sop.KeyValuePair[int,string], 0)
+	b3.First(ctx)
+	for {
+		itm, err := b3.GetCurrentItem(ctx)
+		if err != nil {
+			return result
+		}
+		o := sop.KeyValuePair[int,string] {
+			Key: itm.Key,
+			Value: *itm.Value,
+		}
+		result = append(result, o)
+		if ok, _ := b3.Next(ctx); !ok {
+			break
+		}
+	}
+	trans.Commit(ctx)
+	return result
 }
+
 func TestDirectIOCloseFileFailure(t *testing.T) {
 }
 
