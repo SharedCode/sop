@@ -7,11 +7,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sop4py"
-version = "2.0.6"
+version = "2.0.7"
 authors = [
     { name="Gerardo Recinto", email="gerardorecinto@yahoo.com" },
 ]
-description = "Scalable Objects Persistence for Python. Beta 3 Release"
+description = "Scalable Objects Persistence for Python. Release Candidate 1 (RC1) Release"
 readme = "README.md"
 requires-python = ">=3.7"
 classifiers = [

@@ -379,7 +379,7 @@ You can also create or open one or many B-Trees within a transaction. And you ca
 Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_fs". "in_red_fs" is an acronym that stands for:
 SOP in Redis & File System(in_red_fs).
 
-V2 is in Beta 2 status and there is no known issue.
+V2 is in Release Candidate 1 (RC1) status and there is no known issue. If things go well, RC1 will be declared the Released version of V2.
 
 But yeah, V2 is showing very good results. ACID, two phase commit transaction, and impressive performance as Redis is baked in. SOP V2 actually succeeded in turning M-Way Trie a native "resident" of the cluster. Each of the host running SOP, be it an application or a micro-service, is turned into a high performance database & rich search server. Each, a master, or shall I say, master-less. And, of course, it is objects persistence, thus, you just author your golang struct and SOP takes care of fast storage & ultra fast searches and in the order you specified. No need to worry whether you are hitting an index, because each SOP "store"(or B-Tree) is the index itself! :)
 

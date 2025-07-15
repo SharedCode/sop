@@ -45,3 +45,6 @@ See details here: https://github.com/SharedCode/sop/blob/master/README2.md#usabi
 
 # SOP API Discussions
 See details here: https://github.com/SharedCode/sop/blob/master/README2.md#simple-usage
+
+# SOP for Python (sop4py)
+See details here: https://github.com/SharedCode/sop/tree/master/jsondb/python#readme

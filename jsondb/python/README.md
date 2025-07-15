@@ -36,7 +36,7 @@ Following steps outlines how to use the Scalable Objects Persistence code librar
 * Open the global Redis connection
 * Create a transaction
 * Begin a transaction
-* Create a new B-tree, or Open an existing B-tree
+* Create new B-tree(s), or Open existing B-tree(s)
 * Manage data, do some CRUD operations
 * Commit the transaction
 
@@ -48,7 +48,9 @@ from sop import btree
 from sop import context
 from sop import redis
 
+# Store info & Registry home base folders. Array of strings of two elements, one for Active & another, for passive folder.
 stores_folders = ("/disk1", "/disk2")
+
 ec = {
     # Erasure Config default entry(key="") will allow different B-tree (data store) to share same EC structure.
     # You can also specify a different one exclusive to a B-tree with the given name.
@@ -121,4 +123,4 @@ print("ended.")
 SOP open source project (MIT license) is in github. You can checkout the "...sop/jsondb/" package which contains the Go code enabling general purpose JSON data management & the Python wrapper, coding guideline of which, was described above.
 
 Please feel free to join the SOP project if you have the bandwidth and participate/co-own/lead! the project engineering.
-SOP project link: https://github.com/sharedcode/sop
+SOP project links: https://github.com/sharedcode/sop & https://pypi.org/project/sop4py
