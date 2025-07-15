@@ -2,9 +2,12 @@ package sop
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	log "log/slog"
 	"math/rand"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/sethvargo/go-retry"
@@ -60,4 +63,19 @@ func Retry(ctx context.Context, task func(ctx context.Context) error, gaveUpTask
 		return err
 	}
 	return nil
+}
+
+// false means error is considered non-retryable error.
+func ShouldRetry(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrPermission) || errors.Is(err, os.ErrClosed) {
+		return false
+	}
+	if strings.Contains(err.Error(), "read-only file system") {
+		return false
+	}
+
+	return true
 }

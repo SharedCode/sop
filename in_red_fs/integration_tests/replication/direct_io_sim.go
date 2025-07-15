@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -21,32 +22,32 @@ func NewDirectIOReplicationSim(failOnMethod int) *dioReplicationSim {
 	}
 }
 
-func (dio dioReplicationSim) Open(filename string, flag int, permission os.FileMode) (*os.File,error) {
+func (dio dioReplicationSim) Open(ctx context.Context, filename string, flag int, permission os.FileMode) (*os.File,error) {
 	if dio.failOnMethod == 1 {
 		return nil, sop.Error{
 			Code: sop.RestoreRegistryFileSectorFailure,
 			Err:  fmt.Errorf("simulated error on Open"),
 		}
 	}
-	return dio.DirectIO.Open(filename, flag, permission)
+	return dio.DirectIO.Open(ctx, filename, flag, permission)
 }
-func (dio dioReplicationSim) WriteAt(file *os.File, block []byte, offset int64) (int, error) {
+func (dio dioReplicationSim) WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
 	if dio.failOnMethod == 2 {
 		return 0, sop.Error{
 			Code: sop.RestoreRegistryFileSectorFailure,
 			Err:  fmt.Errorf("simulated error on WriteAt"),
 		}
 	}
-	return dio.DirectIO.WriteAt(file, block, offset)
+	return dio.DirectIO.WriteAt(ctx, file, block, offset)
 }
-func (dio dioReplicationSim) ReadAt(file *os.File, block []byte, offset int64) (int, error) {
+func (dio dioReplicationSim) ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
 	if dio.failOnMethod == 3 {
 		return 0, sop.Error{
 			Code: sop.RestoreRegistryFileSectorFailure,
 			Err:  fmt.Errorf("simulated error on ReadAt"),
 		}
 	}
-	return dio.DirectIO.ReadAt(file, block, offset)
+	return dio.DirectIO.ReadAt(ctx, file, block, offset)
 }
 func (dio dioReplicationSim) Close(file *os.File) error {
 	if dio.failOnMethod == 4 {

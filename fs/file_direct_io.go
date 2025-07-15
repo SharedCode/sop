@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -29,11 +30,11 @@ func newFileDirectIO() *fileDirectIO {
 }
 
 // open the file with a given filename.
-func (fio *fileDirectIO) open(filename string, flag int, permission os.FileMode) error {
+func (fio *fileDirectIO) open(ctx context.Context, filename string, flag int, permission os.FileMode) error {
 	if fio.file != nil {
 		return fmt.Errorf("there is an opened file for this directIO object, 'not allowed to open file again")
 	}
-	f, err := fio.directIO.Open(filename, flag, permission)
+	f, err := fio.directIO.Open(ctx, filename, flag, permission)
 	if err != nil {
 		return err
 	}
@@ -42,18 +43,18 @@ func (fio *fileDirectIO) open(filename string, flag int, permission os.FileMode)
 	return nil
 }
 
-func (fio *fileDirectIO) writeAt(block []byte, offset int64) (int, error) {
+func (fio *fileDirectIO) writeAt(ctx context.Context, block []byte, offset int64) (int, error) {
 	if fio.file == nil {
 		return 0, fmt.Errorf("can't write, there is no opened file")
 	}
-	return fio.directIO.WriteAt(fio.file, block, offset)
+	return fio.directIO.WriteAt(ctx, fio.file, block, offset)
 }
 
-func (fio *fileDirectIO) readAt(block []byte, offset int64) (int, error) {
+func (fio *fileDirectIO) readAt(ctx context.Context, block []byte, offset int64) (int, error) {
 	if fio.file == nil {
 		return 0, fmt.Errorf("can't read, there is no opened file")
 	}
-	return fio.directIO.ReadAt(fio.file, block, offset)
+	return fio.directIO.ReadAt(ctx, fio.file, block, offset)
 }
 
 func (fio *fileDirectIO) close() error {

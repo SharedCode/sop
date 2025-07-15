@@ -81,7 +81,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 	alignedBuffer := dio.createAlignedBlock()
 
 	// Read the block file region data.
-	if n, err := dio.readAt(alignedBuffer, blockOffset); n != blockSize || err != nil {
+	if n, err := dio.readAt(ctx, alignedBuffer, blockOffset); n != blockSize || err != nil {
 		hm.unlockFileBlockRegion(ctx, lk)
 		if err == nil {
 			return fmt.Errorf("only partially (n=%d) read the block at offset %v", n, blockOffset)
@@ -92,7 +92,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 	// Merge the updated Handle record w/ the read block file region data.
 	copy(alignedBuffer[handleInBlockOffset:handleInBlockOffset+sop.HandleSizeInBytes], handleData)
 	// Update the block file region with merged data.
-	if n, err := dio.writeAt(alignedBuffer, blockOffset); n != blockSize || err != nil {
+	if n, err := dio.writeAt(ctx, alignedBuffer, blockOffset); n != blockSize || err != nil {
 		hm.unlockFileBlockRegion(ctx, lk)
 		if err == nil {
 			return fmt.Errorf("only partially (n=%d) wrote at block offset %v, data: %v", n, blockOffset, handleData)

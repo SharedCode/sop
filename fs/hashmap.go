@@ -127,7 +127,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				if !hm.readWrite {
 					flag = os.O_RDONLY
 				}
-				if err := dio.open(fn, flag, permission); err != nil {
+				if err := dio.open(ctx, fn, flag, permission); err != nil {
 					return result, err
 				}
 				dio.filename = segmentFilename
@@ -139,7 +139,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 		// For add use-case with "collision", when there is no more slot on the block, we need to automatically create a new segment file.
 		blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
 
-		n, err := dio.readAt(alignedBuffer, blockOffset)
+		n, err := dio.readAt(ctx, alignedBuffer, blockOffset)
 		if err != nil {
 			if dio.isEOF(err) {
 				if forWriting {
@@ -300,7 +300,7 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 		return result, err
 	}
 
-	if err := dio.open(filename, flag, permission); err != nil {
+	if err := dio.open(ctx, filename, flag, permission); err != nil {
 		hm.cache.Unlock(ctx, lk)
 		return result, err
 	}
