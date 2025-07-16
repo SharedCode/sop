@@ -1,3 +1,3 @@
 rm -rf dist/
-rm -rf sop_python_beta_3.egg-info/
+rm -rf sop4py.egg-info/
 python3 -m build

@@ -234,6 +234,19 @@ class TestBtreeIndexSpecs(unittest.TestCase):
 
 ** Above is the same code of "sop/test_btree_idx.py" unit test file.
 
+# Navigation methods such as Find, First, Last then Fetch
+B-tree fetch operations are all cursor oriented. That is, you position the cursor to the item you want to fetch then fetch a batch. Each fetch (or getXx) call will move the cursor forward or backward to allow you to easily navigate and retrieve items (records) from a B-tree. There are the navigation set of methods to help in traversing the B-tree.
+
+The navigate then fetch batch (pattern) using "PagingInfo" as shown in above section is quite handy, specially when you are working on a UI that allows enduser(s) to browse through a series of data pages and needs to work out the B-tree, slice and dice the items (across thru data pages) and allows enduser operations/data entry-management.
+
+There are few navigation methods such as:
+* First - this will position the cursor to the first item of the B-tree, as per the "key sort order".
+* Last - this will position the cursor to the last item of the B-tree.
+* Find/FindWithID - allows you to find an item with a given Key, or at least, an item nearby. When there is no exact match found for the Key, B-tree will position the cursor to the item with a similar Key (one compare unit greater than the Key sought for). This is very handy, for example, you can issue a Find, or FindWithID if there are duplicates by key and you have ID of the one you are interested in. Then use the fetch methods (see get_keys, get_items, get_values) with paging info describing relative offset (from current or few pages forward or backward, & how many) to fetch the batch of items.
+
+# Other Management Methods
+And also, there are other methods of the B-tree you can use to manage the items such as: Update, Remove, Upsert. All of these accepts an array or a batch of items (key &/or value pairs as appropriate). See btree.py of the sop4py's "sop" package for complete list.
+
 # SOP in Github
 SOP open source project (MIT license) is in github. You can checkout the "...sop/jsondb/" package which contains the Go code enabling general purpose JSON data management & the Python wrapper, coding guideline of which, was described above.
 
