@@ -61,7 +61,7 @@ var storesFolders = []string{
 // FailedToReplicate = true.
 func reinstateDrive(t *testing.T) {
 	ctx := context.Background()
-	if err := in_red_fs.ReinstateFailedDrives(ctx, storesFolders, nil, fs.MinimumModValue); err != nil {
+	if err := in_red_fs.ReinstateFailedDrives(ctx, storesFolders, fs.MinimumModValue); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
