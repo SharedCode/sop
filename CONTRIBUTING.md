@@ -15,11 +15,3 @@ But indeed, there is a bit of knowledge that needs to be established and, simple
 module, functionality and then avoid duplication of effort.
 * Ensure to test your code, provide unit test(s) as deemed necessary.
 * Follow git dev't best practice, such as Branch forking, submitting a "pull request" for merging code with the main(master) branch.
-
-Following are the main modules being worked on:
-* Cassandra adaptor
-* Btree algorithm rewrite
-* Redis based out of process caching
-* Btree Transaction behavior
-* Two Phase Commit ACID Transaction for Cassandra
-

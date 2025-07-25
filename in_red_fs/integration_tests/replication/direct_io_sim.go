@@ -22,7 +22,7 @@ func NewDirectIOReplicationSim(failOnMethod int) *dioReplicationSim {
 	}
 }
 
-func (dio dioReplicationSim) Open(ctx context.Context, filename string, flag int, permission os.FileMode) (*os.File,error) {
+func (dio dioReplicationSim) Open(ctx context.Context, filename string, flag int, permission os.FileMode) (*os.File, error) {
 	if dio.failOnMethod == 1 {
 		return nil, sop.Error{
 			Code: sop.RestoreRegistryFileSectorFailure,

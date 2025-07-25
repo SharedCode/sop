@@ -34,10 +34,18 @@ func NewTwoPhaseCommitTransaction(ctx context.Context, to TransationOptions) (so
 		return nil, err
 	}
 	mbsf := fs.NewManageStoreFolder(fio)
-	sr, err := fs.NewStoreRepository(replicationTracker, mbsf, to.Cache)
+	sr, err := fs.NewStoreRepository(ctx, replicationTracker, mbsf, to.Cache, to.RegistryHashModValue)
 	if err != nil {
 		return nil, err
 	}
+
+	// Override with the read registry hash mod value (if there is).
+	if i, err := sr.GetRegistryHashModValue(ctx); err != nil {
+		return nil, err
+	} else if i > 0 {
+		to.RegistryHashModValue = i
+	}
+
 	tl := fs.NewTransactionLog(to.Cache, replicationTracker)
 	t, err := common.NewTwoPhaseCommitTransaction(to.Mode, to.MaxTime, true,
 		fs.NewBlobStore(fs.DefaultToFilePath, nil), sr, fs.NewRegistry(to.Mode == sop.ForWriting,
@@ -86,9 +94,17 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr Trans
 	if !IsInitialized() {
 		return nil, fmt.Errorf("Redis was not initialized")
 	}
-	sr, err := fs.NewStoreRepository(replicationTracker, mbsf, towr.Cache)
+	sr, err := fs.NewStoreRepository(ctx, replicationTracker, mbsf, towr.Cache, towr.RegistryHashModValue)
 	if err != nil {
 		return nil, err
+	}
+
+	// Override with the read registry hash mod value (if there is).
+	// Override with the read registry hash mod value (if there is).
+	if i, err := sr.GetRegistryHashModValue(ctx); err != nil {
+		return nil, err
+	} else if i > 0 {
+		towr.RegistryHashModValue = i
 	}
 
 	tl := fs.NewTransactionLog(towr.Cache, replicationTracker)

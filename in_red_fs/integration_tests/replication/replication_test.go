@@ -61,7 +61,7 @@ var storesFolders = []string{
 // FailedToReplicate = true.
 func reinstateDrive(t *testing.T) {
 	ctx := context.Background()
-	if err := in_red_fs.ReinstateFailedDrives(ctx, storesFolders, fs.MinimumModValue); err != nil {
+	if err := in_red_fs.ReinstateFailedDrives(ctx, storesFolders); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -69,7 +69,7 @@ func reinstateDrive(t *testing.T) {
 		fmt.Printf("Active Folder is: %s\n", storesFolders[0])
 		return
 	}
-		fmt.Printf("Active Folder is: %s\n", storesFolders[1])
+	fmt.Printf("Active Folder is: %s\n", storesFolders[1])
 }
 
 var transOptions, _ = in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
@@ -191,7 +191,7 @@ func writeData(btreeName string, itemID int, msg string, t *testing.T) {
 	fmt.Printf("GlobalReplication ActiveFolderToggler at End: %v\n", fs.GlobalReplicationDetails.ActiveFolderToggler)
 }
 
-func readData(btreeName string, t *testing.T) []sop.KeyValuePair[int,string] {
+func readData(btreeName string, t *testing.T) []sop.KeyValuePair[int, string] {
 	ctx := context.Background()
 	trans, err := in_red_fs.NewTransactionWithReplication(ctx, transOptions)
 	if err != nil {
@@ -208,15 +208,15 @@ func readData(btreeName string, t *testing.T) []sop.KeyValuePair[int,string] {
 		t.Error(err)
 		t.FailNow()
 	}
-	result := make([]sop.KeyValuePair[int,string], 0)
+	result := make([]sop.KeyValuePair[int, string], 0)
 	b3.First(ctx)
 	for {
 		itm, err := b3.GetCurrentItem(ctx)
 		if err != nil {
 			return result
 		}
-		o := sop.KeyValuePair[int,string] {
-			Key: itm.Key,
+		o := sop.KeyValuePair[int, string]{
+			Key:   itm.Key,
 			Value: *itm.Value,
 		}
 		result = append(result, o)

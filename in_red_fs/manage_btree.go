@@ -79,7 +79,7 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 	if err != nil {
 		return err
 	}
-	storeRepository, err := fs.NewStoreRepository(replicationTracker, nil, cache)
+	storeRepository, err := fs.NewStoreRepository(ctx, replicationTracker, nil, cache, 0)
 	if err != nil {
 		return err
 	}
@@ -93,17 +93,19 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 // values passed in in the call to NewTransactionOptionsWithReplication(..).
 //
 // storesFolders should contain the active & passive stores' base folder paths.
-func ReinstateFailedDrives(ctx context.Context, storesFolders []string, registryHashModValue int) error {
+func ReinstateFailedDrives(ctx context.Context, storesFolders []string) error {
 	if len(storesFolders) != 2 {
 		return fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths)")
 	}
 
-	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, redis.NewClient())
+	cache := redis.NewClient()
+	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, cache)
 	if err != nil {
 		log.Error(fmt.Sprintf("failed instantiating Replication Tracker, details: %v", err))
 		return err
 	}
-	if err := rt.ReinstateFailedDrives(ctx, registryHashModValue); err != nil {
+
+	if err := rt.ReinstateFailedDrives(ctx); err != nil {
 		log.Error(fmt.Sprintf("failed reinstating failed drives, details: %v", err))
 		return err
 	}

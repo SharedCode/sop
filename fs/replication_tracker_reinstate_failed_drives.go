@@ -20,7 +20,7 @@ import (
 //   - Update the L2 cache copy of global replication status to turn back on, the replication
 //     to the passive targets
 //   - Run Fast Forward one more time to ensure there are no "remnants" commit log file(s), race condition case
-func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context, registryHashModValue int) error {
+func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context) error {
 	if !r.replicate {
 		return fmt.Errorf("replicationTracker.replicate flag is off, ReinstateFailedDrives is valid only if this is on")
 	}
@@ -36,7 +36,7 @@ func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context, registry
 	}
 	// Consume all Commit logs.
 	for {
-		if fileFound, err := r.fastForward(ctx, registryHashModValue); err != nil {
+		if fileFound, err := r.fastForward(ctx); err != nil {
 			return err
 		} else if !fileFound {
 			break
@@ -48,7 +48,7 @@ func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context, registry
 	}
 	// Check fast forward log one last time.
 	for {
-		if fileFound, err := r.fastForward(ctx, registryHashModValue); err != nil {
+		if fileFound, err := r.fastForward(ctx); err != nil {
 			return err
 		} else if !fileFound {
 			return nil
@@ -68,7 +68,7 @@ func (r *replicationTracker) startLoggingCommitChanges(ctx context.Context) erro
 }
 
 func (r *replicationTracker) copyStores(ctx context.Context) error {
-	if sr, err := NewStoreRepository(r, nil, r.l2Cache); err != nil {
+	if sr, err := NewStoreRepository(ctx, r, nil, r.l2Cache, 0); err != nil {
 		return err
 	} else {
 		// Copy Store Repositories & Registries to passive folders being reinstated for replication.
@@ -76,7 +76,7 @@ func (r *replicationTracker) copyStores(ctx context.Context) error {
 	}
 }
 
-func (r *replicationTracker) fastForward(ctx context.Context, registryHashModValue int) (bool, error) {
+func (r *replicationTracker) fastForward(ctx context.Context) (bool, error) {
 	// Read the transaction commit logs then sync the passive stores/registries w/ the values from active stores/regs.
 	//   - In case StoreRepository exists in target, use the StoreRepository timestamp to determine if target needs to get updated.
 	//     If missing in passive target then add one from active.
@@ -99,11 +99,17 @@ func (r *replicationTracker) fastForward(ctx context.Context, registryHashModVal
 	r.ReplicationTrackedDetails.FailedToReplicate = false
 	fio := NewFileIO()
 	ms := NewManageStoreFolder(fio)
-	sr, err := NewStoreRepository(r, ms, r.l2Cache)
+	sr, err := NewStoreRepository(ctx, r, ms, r.l2Cache, 0)
 	if err != nil {
 		return false, err
 	}
-	reg := NewRegistry(true, registryHashModValue, r, r.l2Cache)
+
+	regHashMod := 0
+	if regHashMod, err = sr.GetRegistryHashModValue(ctx); err != nil {
+		return false, err
+	}
+
+	reg := NewRegistry(true, regHashMod, r, r.l2Cache)
 	var foundAndProcessed bool
 	// Get the oldest first.
 	for i := range files {

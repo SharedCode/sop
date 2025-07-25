@@ -23,14 +23,14 @@ const (
 	blockSize = directio.BlockSize
 )
 
-type directIO struct {}
+type directIO struct{}
 
 // NewDirectIO creates the DirectIO instance that implements the "direct IO" calls.
 func NewDirectIO() DirectIO {
 	return &directIO{}
 }
 
-func (dio directIO)	Open(ctx context.Context, filename string, flag int, permission os.FileMode) (*os.File, error) {
+func (dio directIO) Open(ctx context.Context, filename string, flag int, permission os.FileMode) (*os.File, error) {
 	var f *os.File
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
@@ -46,7 +46,7 @@ func (dio directIO)	Open(ctx context.Context, filename string, flag int, permiss
 	}, nil)
 	return f, err
 }
-func (dio directIO)	WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
+func (dio directIO) WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
 	var i int
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
@@ -62,7 +62,7 @@ func (dio directIO)	WriteAt(ctx context.Context, file *os.File, block []byte, of
 	}, nil)
 	return i, err
 }
-func (dio directIO)	ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
+func (dio directIO) ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
 	var i int
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
@@ -79,6 +79,6 @@ func (dio directIO)	ReadAt(ctx context.Context, file *os.File, block []byte, off
 	return i, err
 }
 
-func (dio directIO)	Close(file *os.File) error {
+func (dio directIO) Close(file *os.File) error {
 	return file.Close()
 }

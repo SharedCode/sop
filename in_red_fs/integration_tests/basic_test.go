@@ -355,7 +355,7 @@ func Test_BtreeOpenedTwice(t *testing.T) {
 	b3, err := in_red_fs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "opentwice",
 		SlotLength:               8,
-		IsUnique: true,
+		IsUnique:                 true,
 		IsValueDataInNodeSegment: true,
 		CacheConfig:              sop.NewStoreCacheConfig(time.Duration(30*time.Minute), true),
 	}, trans, nil)

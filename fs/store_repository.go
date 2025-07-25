@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	retry "github.com/sethvargo/go-retry"
@@ -16,23 +17,24 @@ import (
 
 // StoreRepository is a File System based implementation of store repository.
 type StoreRepository struct {
-	cache              sop.Cache
-	fileIO             FileIO
-	manageStore        sop.ManageStore
-	replicationTracker *replicationTracker
+	cache                sop.Cache
+	manageStore          sop.ManageStore
+	replicationTracker   *replicationTracker
+	registryHashModValue int
 }
 
 const (
-	lockStoreListKey      = "infs_sr"
-	lockStoreListDuration = time.Duration(10 * time.Minute)
-	storeListFilename     = "storelist.txt"
-	storeInfoFilename     = "storeinfo.txt"
+	lockStoreListKey             = "infs_sr"
+	lockStoreListDuration        = time.Duration(10 * time.Minute)
+	storeListFilename            = "storelist.txt"
+	storeInfoFilename            = "storeinfo.txt"
+	registryHashModValueFilename = "reghashmod.txt"
 	// Lock time out for the cache based locking of update store set function.
 	updateStoresLockDuration = time.Duration(15 * time.Minute)
 )
 
 // NewStoreRepository manages the StoreInfo in a File System.
-func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cache sop.Cache) (*StoreRepository, error) {
+func NewStoreRepository(ctx context.Context, rt *replicationTracker, manageStore sop.ManageStore, cache sop.Cache, registryHashModVal int) (*StoreRepository, error) {
 	if rt.replicate && len(rt.storesBaseFolders) != 2 {
 		return nil, fmt.Errorf("'storesBaseFolders' needs to be exactly two elements if 'replicate' parameter is true")
 	}
@@ -40,12 +42,42 @@ func NewStoreRepository(rt *replicationTracker, manageStore sop.ManageStore, cac
 		fio := NewFileIO()
 		manageStore = NewManageStoreFolder(fio)
 	}
+
+	if registryHashModVal > 0 {
+		sw := newFileIOWithReplication(rt, manageStore, true)
+		if !sw.exists(ctx, registryHashModValueFilename) {
+			// Write to file the global registry hash mod value.
+			sw.write(ctx, registryHashModValueFilename, []byte(fmt.Sprintf("%d", registryHashModVal)))
+			// Replicate to passive drive so it has a copy of it.
+			sw.replicate(ctx)
+		}
+	}
+
 	return &StoreRepository{
-		cache:              cache,
-		manageStore:        manageStore,
-		fileIO:             NewFileIO(),
-		replicationTracker: rt,
+		cache:                cache,
+		manageStore:          manageStore,
+		replicationTracker:   rt,
+		registryHashModValue: registryHashModVal,
 	}, nil
+}
+
+// Returns the Registry Hash Mod Value.
+func (sr *StoreRepository) GetRegistryHashModValue(ctx context.Context) (int, error) {
+	if sr.registryHashModValue == 0 {
+		fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
+		if fio.exists(ctx, registryHashModValueFilename) {
+			if ba, err := fio.read(ctx, registryHashModValueFilename); err != nil {
+				return 0, fmt.Errorf("failed reading registry hash mod value from %s, details: %v", registryHashModValueFilename, err)
+			} else {
+				if i, err := strconv.Atoi(string(ba)); err != nil {
+					return 0, fmt.Errorf("read invalid registry hash mod value from %s, details: %v", registryHashModValueFilename, err)
+				} else {
+					sr.registryHashModValue = i
+				}
+			}
+		}
+	}
+	return sr.registryHashModValue, nil
 }
 
 // In the File System implementation, Add function manages the store list in its own file in the base folder
@@ -402,6 +434,7 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 		return nil
 	}
 
+	fio := NewFileIO()
 	for i := range stores {
 		// Persist store info into a JSON text file.
 		ba, err := encoding.Marshal(stores[i])
@@ -413,7 +446,7 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 		// because if will break synchronization from here on out, thus, better to just log then turn off replication altogether, until cleared
 		// to resume.
 		filename := sr.replicationTracker.formatPassiveFolderEntity(fmt.Sprintf("%s%c%s", stores[i].Name, os.PathSeparator, storeInfoFilename))
-		if err := sr.fileIO.WriteFile(ctx, filename, ba, permission); err != nil {
+		if err := fio.WriteFile(ctx, filename, ba, permission); err != nil {
 			return fmt.Errorf("storeRepository.Replicate failed, error writing store '%s', details: %w", filename, err)
 		}
 	}

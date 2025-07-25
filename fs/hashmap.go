@@ -65,6 +65,9 @@ const (
 
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
 func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache) *hashmap {
+	if hashModValue <= 0 {
+		hashModValue = MinimumModValue
+	}
 	return &hashmap{
 		hashModValue:       hashModValue,
 		replicationTracker: replicationTracker,
