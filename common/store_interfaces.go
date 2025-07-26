@@ -1,7 +1,7 @@
 package common
 
 import (
-	"github.com/SharedCode/sop/btree"
+	"github.com/sharedcode/sop/btree"
 )
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.

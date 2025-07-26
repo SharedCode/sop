@@ -7,8 +7,8 @@ import (
 	log "log/slog"
 	"time"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/encoding"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/encoding"
 )
 
 const (

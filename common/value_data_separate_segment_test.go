@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 func Test_ValueDataInSeparateSegment_Rollback(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 
 	log "log/slog"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/encoding"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/encoding"
 )
 
 func (t *itemActionTracker[TK, TV]) commitTrackedItemsValues(ctx context.Context) error {

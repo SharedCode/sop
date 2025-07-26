@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/encoding"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/encoding"
 )
 
 // ReinstateFailedDrives can be invoked after replacing the failed drives so they can be synchronized with

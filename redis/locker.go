@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 // Returns true if lockKeys have claimed lock equivalent. And extends the lock by another 30 seconds for each call (TTL).

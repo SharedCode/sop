@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
-// Tests were copied from in_memory package, refactored to work for in_red_ck.
+// Tests were copied from inmemory package, refactored to work for in_red_ck.
 
 func Test_HelloWorld(t *testing.T) {
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)

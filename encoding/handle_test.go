@@ -3,8 +3,8 @@ package encoding
 import (
 	"testing"
 
-	"github.com/SharedCode/sop"
 	"github.com/google/uuid"
+	"github.com/sharedcode/sop"
 )
 
 func TestUUIDMarshalling(t *testing.T) {

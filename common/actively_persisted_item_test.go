@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SharedCode/sop"
-	cas "github.com/SharedCode/sop/cassandra"
-	"github.com/SharedCode/sop/common/mocks"
+	"github.com/sharedcode/sop"
+	cas "github.com/sharedcode/sop/cassandra"
+	"github.com/sharedcode/sop/common/mocks"
 )
 
 func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {

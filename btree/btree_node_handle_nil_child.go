@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 // removeItemOnNodeWithNilChild will manage these remove item cases.

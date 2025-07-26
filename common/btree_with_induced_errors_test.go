@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/btree"
 )
 
 type b3WithInducedErrors[TK btree.Ordered, TV any] struct {

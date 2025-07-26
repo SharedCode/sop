@@ -3,7 +3,7 @@ package btree
 import (
 	"context"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 // BtreeInterface defines publicly callable methods of Btree.

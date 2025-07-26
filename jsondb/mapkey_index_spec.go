@@ -1,7 +1,7 @@
 package jsondb
 
 import (
-	"github.com/SharedCode/sop/btree"
+	"github.com/sharedcode/sop/btree"
 )
 
 type IndexFieldSpecification struct {

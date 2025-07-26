@@ -16,10 +16,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/encoding"
-	"github.com/SharedCode/sop/in_red_fs"
-	"github.com/SharedCode/sop/redis"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/redis"
 )
 
 var contextLookup map[int64]context.Context = make(map[int64]context.Context)
@@ -155,7 +155,7 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 	}
 	switch int(action) {
 	case NewTransaction:
-		var to in_red_fs.TransationOptionsWithReplication
+		var to inredfs.TransationOptionsWithReplication
 		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &to); err != nil {
 			// Rare for an error to occur, but do return an errMsg if it happens.
 			errMsg := fmt.Sprintf("error Unmarshal TransactionOptions, details: %v", err)
@@ -167,7 +167,7 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 
 		log.Debug(fmt.Sprintf("TransactionOptions: %v", to))
 		tid := sop.NewUUID()
-		t, err := in_red_fs.NewTransactionWithReplication(ctx, to)
+		t, err := inredfs.NewTransactionWithReplication(ctx, to)
 		if err != nil {
 			errMsg := fmt.Sprintf("error creating a Transaction, details: %v", err)
 			return C.CString(errMsg)

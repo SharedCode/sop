@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 const (

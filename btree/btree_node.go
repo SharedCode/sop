@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 // MetaDataType specifies object meta data fields such as ID & Version.

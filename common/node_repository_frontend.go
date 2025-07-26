@@ -3,8 +3,8 @@ package common
 import (
 	"context"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/btree"
 )
 
 // Frontend facing Node Repository. Implements the NodeRepository interface CRUD methods.

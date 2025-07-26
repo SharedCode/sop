@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 type HandleEncoder struct{}

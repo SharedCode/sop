@@ -6,8 +6,8 @@ import (
 	"fmt"
 	log "log/slog"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/btree"
 )
 
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.

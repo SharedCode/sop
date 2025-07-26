@@ -5,7 +5,7 @@ import (
 	"fmt"
 	log "log/slog"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 type registryMap struct {

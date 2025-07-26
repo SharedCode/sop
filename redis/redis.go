@@ -7,8 +7,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/encoding"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/encoding"
 )
 
 type client struct {

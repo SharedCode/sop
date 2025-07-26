@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/cache"
-	"github.com/SharedCode/sop/redis"
 	"github.com/gocql/gocql"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/cache"
+	"github.com/sharedcode/sop/redis"
 )
 
 type registry struct {

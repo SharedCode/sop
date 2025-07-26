@@ -12,10 +12,10 @@ import (
 
 	log "log/slog"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/common"
-	"github.com/SharedCode/sop/encoding"
-	"github.com/SharedCode/sop/jsondb"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/common"
+	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/sop/jsondb"
 )
 
 // Manage Btree payload struct is used for communication between SOP language binding, e.g. Python,

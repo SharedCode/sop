@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 type Mock_vid_registry struct {

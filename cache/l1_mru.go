@@ -1,6 +1,6 @@
 package cache
 
-import "github.com/SharedCode/sop"
+import "github.com/sharedcode/sop"
 
 type l1_mru struct {
 	minCapacity int

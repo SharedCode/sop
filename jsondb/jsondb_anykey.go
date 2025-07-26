@@ -6,10 +6,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/encoding"
-	"github.com/SharedCode/sop/in_red_fs"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/sop/inredfs"
 )
 
 // Item contains Key & Value pair.
@@ -55,7 +55,7 @@ type PagingInfo struct {
 
 // Instantiates and creates a new B-tree that supports JSON string payloads.
 func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
-	b3, err := in_red_fs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)
+	b3, err := inredfs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOpt
 
 // Instantiates and opens a B-tree that supports JSON string payloads.
 func OpenJsonBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
-	b3, err := in_red_fs.OpenBtreeWithReplication[TK, TV](ctx, name, t, comparer)
+	b3, err := inredfs.OpenBtreeWithReplication[TK, TV](ctx, name, t, comparer)
 	if err != nil {
 		return nil, err
 	}

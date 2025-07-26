@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 type ToFilePathFunc func(basePath string, id sop.UUID) string

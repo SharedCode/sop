@@ -1,4 +1,4 @@
-module github.com/SharedCode/sop
+module github.com/sharedcode/sop
 
 go 1.24.3
 

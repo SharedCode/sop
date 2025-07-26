@@ -4,19 +4,19 @@ import (
 	"context"
 	"time"
 
-	"github.com/SharedCode/sop"
-	cas "github.com/SharedCode/sop/cassandra"
-	"github.com/SharedCode/sop/in_memory"
+	"github.com/sharedcode/sop"
+	cas "github.com/sharedcode/sop/cassandra"
+	"github.com/sharedcode/sop/inmemory"
 )
 
 type MockTransactionLog struct {
-	datesLogs in_memory.BtreeInterface[string, map[sop.UUID][]sop.KeyValuePair[int, []byte]]
+	datesLogs inmemory.BtreeInterface[string, map[sop.UUID][]sop.KeyValuePair[int, []byte]]
 	logsDates map[sop.UUID]string
 }
 
 func NewMockTransactionLog() sop.TransactionLog {
 	return &MockTransactionLog{
-		datesLogs: in_memory.NewBtree[string, map[sop.UUID][]sop.KeyValuePair[int, []byte]](true),
+		datesLogs: inmemory.NewBtree[string, map[sop.UUID][]sop.KeyValuePair[int, []byte]](true),
 		logsDates: make(map[sop.UUID]string),
 	}
 }

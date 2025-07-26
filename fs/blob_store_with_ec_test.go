@@ -8,7 +8,7 @@ import (
 	log "log/slog"
 	"testing"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 var ctx context.Context = context.Background()

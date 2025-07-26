@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/common/mocks"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/common/mocks"
 )
 
 // Global mock repositories will allow us to simulate repositories that persists state

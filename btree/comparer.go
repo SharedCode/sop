@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/SharedCode/sop"
 	"github.com/google/uuid"
+	"github.com/sharedcode/sop"
 )
 
 // Comparer interface specifies the Compare function.

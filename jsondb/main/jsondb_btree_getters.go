@@ -7,9 +7,9 @@ import (
 
 	log "log/slog"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/encoding"
-	"github.com/SharedCode/sop/jsondb"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/sop/jsondb"
 )
 
 //export navigateBtree

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 type fileIOSimulator struct {

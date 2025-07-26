@@ -1,6 +1,6 @@
 Scaleable Objects Persistence (SOP) Framework - Golang V2
 
-Code Coverage: https://app.codecov.io/github/SharedCode/sop
+Code Coverage: https://app.codecov.io/github/sharedcode/sop
 
 # Summary
 
@@ -69,8 +69,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/SharedCode/sop/fs"
-	"github.com/SharedCode/sop/in_red_fs"
+	"github.com/sharedcode/sop/fs"
+	"github.com/sharedcode/sop/inredfs"
 )
 
 func main() {
@@ -85,9 +85,9 @@ func main() {
 
 	// Specifying nil on "erasureConfig" (last) param will allow SOP to use the global Erasure Config.
 	// You can speciy a different erasure config if you don't like the global EC config.
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	to, _ := inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 
-	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
+	trans, err := inredfs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error got creating a transction, details: %v", err))
 		return
@@ -95,7 +95,7 @@ func main() {
 
 	trans.Begin()
 
-	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+	b3, _ := inredfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstoreec",
 		SlotLength:               200,
 		IsValueDataInNodeSegment: true,
@@ -131,9 +131,9 @@ Within these replication events and life cycle, 100% data protection is provided
 ## Erasure Coding (EC) based Replication
 For the B-tree nodes & large data file nodes, these files are replicated using EC based replication. SOP sports very efficient software based replication via Reed Solomon algorithm erasure coding, similar to MinIO S3's implementation. Based on a given EC configuration, e.g. - data shards & parity shards, data redundancy & thus, high data protection is achieved. Typically, 50% drive failure is tolerated and SOP will allow full read & write operations even in this degraded redundancy state. Admins are expected though to work on bringing back redundancy to the normal state of drive availability.
 
-SOP's EC has auto-repair mode for detected missing or bitrot shards if the RepairCorruptedShards flag is turned on (see in_red_fs/NewTransactionWithReplication API support on this flag). Use-case is, you can set this flag off then upon disk drive failure detection, you can replace the drive, turn on this flag then restart the application. SOP will then automatically repair the missing shard files (on the newly reinstated drive) that can get reconstructed from the available shards.
+SOP's EC has auto-repair mode for detected missing or bitrot shards if the RepairCorruptedShards flag is turned on (see inredfs/NewTransactionWithReplication API support on this flag). Use-case is, you can set this flag off then upon disk drive failure detection, you can replace the drive, turn on this flag then restart the application. SOP will then automatically repair the missing shard files (on the newly reinstated drive) that can get reconstructed from the available shards.
 
-If left untouched, SOP can operate even with drive(s) failures so long as data can be reconstructed from the available shards. The sample I made(see in_red_fs/integration_tests/basic_ec_test.go) uses 2 data shards and 1 parity shard. Yes, you can use minimal replication and it will work to your desire, if enough to support drive(s) failure.
+If left untouched, SOP can operate even with drive(s) failures so long as data can be reconstructed from the available shards. The sample I made(see inredfs/integration_tests/basic_ec_test.go) uses 2 data shards and 1 parity shard. Yes, you can use minimal replication and it will work to your desire, if enough to support drive(s) failure.
 See above "Sample Usage" section for EC configuration.
 
 # Store Caching Config Guide
@@ -144,7 +144,7 @@ Sample code for customization of store level caching:
   
   NOTE: Setting 2nd param(isCacheTTL) true of sop.NewStoreCacheConfig(..) sets the store so each operation including fetch(get) will instruct Redis to extend the caching for the target data, a.k.a. "sliding time" or TTL
   ```
-	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+	b3, _ := inredfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstoreec",
 		SlotLength:               200,
 		IsValueDataInNodeSegment: true,
@@ -155,7 +155,7 @@ Sample code for customization of store level caching:
   
   NOTE: This is the default mode and is also achieved in the sop.NewStoreCacheConfig(..) call by passing false to the 2nd param(isCacheTTL) & a > 0 duration.
   ```
-  	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+  	b3, _ := inredfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecaching",
 		SlotLength:               200,
 		IsValueDataInNodeSegment: true,
@@ -166,7 +166,7 @@ Sample code for customization of store level caching:
   
   NOTE: You can set app data to get stored in B-Tree Node & make the Node caching as "sliding window", thus, your app data also gets such caching behavior. Here is how:
   ```
-  	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+  	b3, _ := inredfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecaching",
 		SlotLength:               200,
 		IsValueDataInNodeSegment: true,		// true means application data is store in B-tree node!
@@ -182,7 +182,7 @@ Sample code for customization of store level caching:
   
   NOTE: When you would like to conserve Redis cache but still provide great level of caching of your application data, you can set the application data to do "sliding window"(TTL) and set store meta data to absolute expiration. Here is how to do it:
   ```
-  b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+  b3, _ := inredfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 	Name:                     "storecaching",
 	SlotLength:               200,
 	IsValueDataInNodeSegment: false,		// false specifies Application data to be stored in separate node than the B-tree node!
@@ -210,7 +210,7 @@ Of course, you have to do fine tuning as there are tradeoffs :), determine what 
 SOP can be used in a wide, diverse storage usability scenarios. Ranging from general purpose data storage - search & management, to highly scalable and performant version of the same, to domain specific use-cases. As SOP has many feature knobs you can turn on or off, it can be used and get customized with very little to no coding required. Some examples bundled out of the box are:
   * A. General purpose data/object storage management system
   * B. Large data storage and management, where your data is stored in its own data segment. See StoreInfo.IsValueDataInNodeSegment = false (default) flag
-  * C. Streaming Data application domain enabling very large data storage - search and management, supporting multi-GBs record or item, limited only by your storage drive/sub-system. See sop/in_red_fs/NewStreamingDataStore or OpenStreamingDataStore for code & sample usage in test
+  * C. Streaming Data application domain enabling very large data storage - search and management, supporting multi-GBs record or item, limited only by your storage drive/sub-system. See sop/inredfs/NewStreamingDataStore or OpenStreamingDataStore for code & sample usage in test
   * D. High Performance Search Engine, alternative to ElasticSearch/SOLR but also has attributes of a real database engine, with ACID/two phase commit transactions
 
 Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3 & a DBMS like Postgres for indexing). But SOP supports all four of them out of the box.
@@ -248,9 +248,9 @@ Another sample code, edited for brevity and to show the important parts.
 
 ```
 import (
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_fs"
-	"github.com/SharedCode/sop/redis"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/redis"
 )
 
 var redisConfig = redis.Options{
@@ -262,7 +262,7 @@ var redisConfig = redis.Options{
 
 // Initialize Redis.
 func init() {
-	in_red_fs.Initialize(redisConfig)
+	inredfs.Initialize(redisConfig)
 }
 
 var ctx = context.Background()
@@ -279,11 +279,11 @@ func main() {
 		fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
 	}
 
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
-	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
+	to, _ := inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	trans, err := inredfs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
 
-	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+	b3, _ := inredfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstoreec",
 		SlotLength:               200,
 	}, trans)
@@ -343,8 +343,8 @@ func main() {
 		fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
 	}
 
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
-	trans, err := in_red_fs.NewTransactionWithReplication(ctx, to)
+	to, _ := inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	trans, err := inredfs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
 
 	// Create the B-Tree (store) instance. ValueDataSize can be SmallData or MediumData in this case.
@@ -352,7 +352,7 @@ func main() {
 	// separate segment than the Btree node could be beneficial or more optimal per I/O than storing it
 	// in the node itself(as in SmallData case).
 	so := sop.ConfigureStore("persondb", false, nodeSlotLength, "", sop.MediumData, "")
-	b3, err := in_red_fs.NewBtreeWithReplication[PersonKey, Person](ctx, so, trans)
+	b3, err := inredfs.NewBtreeWithReplication[PersonKey, Person](ctx, so, trans)
 
 	// Add a person record w/ details.
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone", "mySSN123")
@@ -376,8 +376,8 @@ You can store or manage any data type in Golang. From native types like int, str
   * ```< 1``` means that the current key(x) is lesser than the other key(y) being compared
 
 You can also create or open one or many B-Trees within a transaction. And you can have/or manage one or many transactions within your application.
-Import path for SOP V2 is: "github.com/SharedCode/sop/in_red_fs". "in_red_fs" is an acronym that stands for:
-SOP in Redis & File System(in_red_fs).
+Import path for SOP V2 is: "github.com/sharedcode/sop/inredfs". "inredfs" is an acronym that stands for:
+SOP in Redis & File System(inredfs).
 
 V2 is in Release Candidate 1 (RC1) status and there is no known issue. If things go well, RC1 will be declared the Released version of V2.
 
@@ -387,8 +387,8 @@ But yeah, V2 is showing very good results. ACID, two phase commit transaction, a
 As discussed above, the third usability scenario of SOP is support for very large data. Sample code to use this ```StreamingDataStore```:
 ```
 import (
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_red_fs"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/inredfs"
 )
 
 // ...
@@ -401,11 +401,11 @@ import (
 		fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
 	}
 
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
-	trans, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
+	to, _ := inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	trans, _ := inredfs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
 	so := sop.ConfigureStore("videoStoreD", true, 100, "", sop.BigData, "")
-	sds := in_red_fs.NewStreamingDataStoreWithReplication[string](ctx, so, trans, nil)
+	sds := inredfs.NewStreamingDataStoreWithReplication[string](ctx, so, trans, nil)
 	// Add accepts a string parameter, for naming the item, e.g. - "fooVideo".
 	// It returns an "encoder" object which your code can use to upload chunks
 	// of the data.
@@ -416,9 +416,9 @@ import (
 	trans.Commit(ctx)
 
 	// Read back the data.
-	trans, _ = in_red_fs.NewTransactionWithReplication(ctx, to)
+	trans, _ = inredfs.NewTransactionWithReplication(ctx, to)
 	trans.Begin()
-	sds, _ = in_red_fs.OpenStreamingDataStoreWithReplication[string](ctx, "videoStoreD", trans, nil)
+	sds, _ = inredfs.OpenStreamingDataStoreWithReplication[string](ctx, "videoStoreD", trans, nil)
 
 	// Find the video we uploaded.
 	sds.FindOne(ctx, "fooVideo")
@@ -463,7 +463,7 @@ Streaming Data Store has these three APIs to allow direct management of chunks. 
 * RemoveChunk(ctx context.Context, key TK, chunkIndex int)
 
 Sample snippet to do direct update of a given video file's 1st chunk record:
-	sds, _ = in_red_fs.OpenStreamingDataStoreWithReplication[string](ctx, "videoStoreD", trans, nil)
+	sds, _ = inredfs.OpenStreamingDataStoreWithReplication[string](ctx, "videoStoreD", trans, nil)
 	sds.UpdateChunk(ctx, "fooVideo", 1, []byte{1,2,3})
 	trans.Commit(ctx)
 ```
@@ -506,7 +506,7 @@ Two phase commit is required so SOP can offer "seamless" integration with your A
 On successful commit on Phase 1, SOP will then commit Phase 2, which is, to tell all Btrees affected in the transaction to finalize the committed Nodes and make them available on succeeding Btree I/O.
 Phase 2 commit is a very fast, quick action as changes and Nodes are already resident on the Btree storage, it is just a matter of finalizing the Virtual ID registry with the new Nodes' physical addresses to swap the old with the new ones.
 
-See here for more details on two phase commit & how to access it for your application transaction integration: https://github.com/SharedCode/sop/blob/21f1a1b35ef71327882d3ab5bfee0b9d744345fa/transaction.go#L23a
+See here for more details on two phase commit & how to access it for your application transaction integration: https://github.com/sharedcode/sop/blob/21f1a1b35ef71327882d3ab5bfee0b9d744345fa/transaction.go#L23a
 
 ## Optimistic Orchestration Algorithm (OOA)
 SOP uses a new, proprietary & open sourced, thus MIT licensed, unique algorithm using Redis I/O for orchestration, which aids in decentralized, highly parallelized operations. It uses simple Redis I/O ```fetch-set-fetch``` (not the Redis lock API!) for conflict detection/resolution and data merging across transactions whether in same machine or across different machines.
@@ -552,10 +552,10 @@ storesFolders = []string{
 	fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
 }
 
-to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
-t1, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
+to, _ := inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+t1, _ := inredfs.NewTransactionWithReplication(ctx, to)
 t1.Begin()
-b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.ConfigureStore("twoPhase2", true, 50, "", sop.SmallData, ""), t1)
+b3, _ := inredfs.NewBtreeWithReplication[int, string](ctx, sop.ConfigureStore("twoPhase2", true, 50, "", sop.SmallData, ""), t1)
 
 t1.Commit(ctx)
 // ***
@@ -563,9 +563,9 @@ t1.Commit(ctx)
 eg, ctx2 := errgroup.WithContext(ctx)
 
 f1 := func() error {
-	t1, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
+	t1, _ := inredfs.NewTransactionWithReplication(ctx, to)
 	t1.Begin()
-	b3, _ := in_red_fs.OpenBtreeWithReplication[int, string](ctx2, "twophase2", t1)
+	b3, _ := inredfs.OpenBtreeWithReplication[int, string](ctx2, "twophase2", t1)
 	b3.Add(ctx2, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx2, 5001, "I am the value with 5001 key.")
 	b3.Add(ctx2, 5002, "I am the value with 5002 key.")
@@ -573,9 +573,9 @@ f1 := func() error {
 }
 
 f2 := func() error {
-	t2, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
+	t2, _ := inredfs.NewTransactionWithReplication(ctx, to)
 	t2.Begin()
-	b32, _ := in_red_fs.OpenBtreeWithReplication[int, string](ctx2, "twophase2", t2)
+	b32, _ := inredfs.OpenBtreeWithReplication[int, string](ctx2, "twophase2", t2)
 	b32.Add(ctx2, 5500, "I am the value with 5500 key.")
 	b32.Add(ctx2, 5501, "I am the value with 5501 key.")
 	b32.Add(ctx2, 5502, "I am the value with 5502 key.")
@@ -593,7 +593,7 @@ if err := eg.Wait(); err != nil {
 
 One thing to note, is that there is no resource locking in above code & it is able to merge just fine those records added across different transaction commits that ran concurrently.
 
-Check out the integration test that demonstrate this, here: https://github.com/SharedCode/sop/blob/493fba2d6d1ed810bfb4edc9ce568a1c98e159ff/in_red_fs/integration_tests/transaction_edge_cases_test.go#L315C6-L315C41
+Check out the integration test that demonstrate this, here: https://github.com/sharedcode/sop/blob/493fba2d6d1ed810bfb4edc9ce568a1c98e159ff/inredfs/integration_tests/transaction_edge_cases_test.go#L315C6-L315C41
 (the sample adds one record but it is not needed, empty Btree will work just fine)
 
 ## ACID Transactions vs. Big Data
@@ -605,14 +605,14 @@ Streaming Data Store was written for this. And if you are looking for Big Data p
 So, essentially, we have partial update support even for the Big Data with ACID transaction protection. :)
 Without exchanging anything or causing any weakness on any feature we have. So, all you have to do to take advantage of this feature is, to be able to design & organize your big data set into chunks that which, you can have option to update any part(s) of them.
 
-This is what the StreamingDataStore does. See code samples above, specifically, the in_red_fs.NewStreamingDataStore(..) API call for details how to use it.
+This is what the StreamingDataStore does. See code samples above, specifically, the inredfs.NewStreamingDataStore(..) API call for details how to use it.
 
 ## Another Big Data Example
 Sample Project: Upload 1TB of big data
 ```
 package big_data
 import(
-	github.com/SharedCode/sop/in_red_fs
+	github.com/sharedcode/sop/inredfs
 )
 
 type BigKey struct {
@@ -640,12 +640,12 @@ func uploader() {
 		fmt.Sprintf("//storage%cdisk2", os.PathSeparator),
 	}
 
-	to, _ := in_red_fs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
-	t1, _ := in_red_fs.NewTransactionWithReplication(ctx, to)
+	to, _ := inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	t1, _ := inredfs.NewTransactionWithReplication(ctx, to)
 	t1.Begin()
-	b3, _ := in_red_fs.NewBtreeWithReplication[int, string](ctx, sop.ConfigureStore("twoPhase2", true, 50, "", sop.SmallData, ""), 	t, _ := in_red_fs.NewTransactionWithReplication(sop.ForWriting, -1, true)
+	b3, _ := inredfs.NewBtreeWithReplication[int, string](ctx, sop.ConfigureStore("twoPhase2", true, 50, "", sop.SmallData, ""), 	t, _ := inredfs.NewTransactionWithReplication(sop.ForWriting, -1, true)
 	t.Begin()
-	b3, _ := in_red_fs.NewBtreeWithReplication[bigKey, []byte](ctx, sop.StoreOptions{
+	b3, _ := inredfs.NewBtreeWithReplication[bigKey, []byte](ctx, sop.StoreOptions{
 		Name:                     "bigstore",
 		SlotLength:               500,
 		IsUnique:                 true,
@@ -678,15 +678,15 @@ Updating any part(s) of the Big Data file is of no special case, SOP Btree.Updat
 ```
 package big_data
 import(
-	github.com/SharedCode/sop/in_red_fs
+	github.com/sharedcode/sop/inredfs
 )
 
 //...
 
 
-t, _ := in_red_fs.NewTransactionWithReplication(sop.ForWriting, -1, true)
+t, _ := inredfs.NewTransactionWithReplication(sop.ForWriting, -1, true)
 t.Begin()
-b3, _ := in_red_fs.OpenBtreeWithReplication[bigKey, []byte](ctx, "bigstore", t)
+b3, _ := inredfs.OpenBtreeWithReplication[bigKey, []byte](ctx, "bigstore", t)
 
 // Update chunk index # 100, with your new byte array of a given size.
 b3.Update(ctx, BigKey{filename: "bigfile", chunkIndex: 100}, []byte{..})
@@ -722,7 +722,7 @@ SOP in-memory was created in order to model the structural bits of SOP and allow
 SOP in-memory is a full implementation and you can use it if it fits the needs, i.e. - no persistence, map + sorted "range" queries/updates.
 
 Sample Basic Usage:
-  * Import the sop/in_memory, e.g. ```import sop "github.com/SharedCode/sop/in_memory"```
+  * Import the sop/inmemory, e.g. ```import sop "github.com/sharedcode/sop/inmemory"```
   * Instantiate the b-tree manager, e.g. - ```sop.NewBtree[int, string](false)```. The single parameter specifies whether you would want to manage unique keys.
   * Populate the b-tree, e.g. - ```b3.Add(<key>, <value>)```
   * Do a range query, e.g. ```b3.FindOne(<key>, true),... b3.Next(), b3.GetCurrentKey or b3.GetCurrentValue``` will return either the key or the value currently selected by the built-in "cursor".
@@ -737,7 +737,7 @@ import (
 	"fmt"
 	"testing"
 
-	sop "github.com/SharedCode/sop/in_memory"
+	sop "github.com/sharedcode/sop/inmemory"
 )
 
 func TestBtree_HelloWorld(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/encoding"
 	"github.com/ncw/directio"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/encoding"
 )
 
 /*

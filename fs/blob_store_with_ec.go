@@ -6,8 +6,8 @@ import (
 	log "log/slog"
 	"os"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/fs/erasure"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/fs/erasure"
 )
 
 const (

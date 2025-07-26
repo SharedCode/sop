@@ -3,7 +3,7 @@ package cache
 import (
 	"sync"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 type sync_cache[TK comparable, TV any] struct {

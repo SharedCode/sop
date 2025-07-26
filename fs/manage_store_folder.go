@@ -3,7 +3,7 @@ package fs
 import (
 	"context"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 type manageStoreFolder struct {

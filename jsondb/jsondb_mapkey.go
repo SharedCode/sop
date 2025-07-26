@@ -4,9 +4,9 @@ import (
 	"context"
 	"sort"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/encoding"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/sop/encoding"
 )
 
 // JSON DB that can take in any JSON data marshalled as map[string]any on Key & any Value pair.

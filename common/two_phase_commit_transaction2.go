@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/in_memory"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/sop/inmemory"
 )
 
 func (t *Transaction) cleanup(ctx context.Context) error {
@@ -441,7 +441,7 @@ func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tup
 	rids := extractUUIDs(removedNodes)
 	log.Debug(fmt.Sprintf("mergeNodesKeys: updated lids: %v, removed lids: %v", lids, rids))
 
-	lookupByUUID := in_memory.NewBtree[sop.UUID, *sop.LockKey](true)
+	lookupByUUID := inmemory.NewBtree[sop.UUID, *sop.LockKey](true)
 	for _, id := range lids {
 		lookupByUUID.Add(id, t.l2Cache.CreateLockKeys([]string{id.String()})[0])
 	}

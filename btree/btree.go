@@ -20,7 +20,7 @@ import (
 	"fmt"
 	log "log/slog"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 // Btree manages items using B-tree data structure and algorithm.

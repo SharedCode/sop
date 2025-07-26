@@ -1,6 +1,6 @@
 package cache
 
-import "github.com/SharedCode/sop"
+import "github.com/sharedcode/sop"
 
 // Generic Cache is useful for general MRU cache needs.
 type Cache[TK comparable, TV any] interface {

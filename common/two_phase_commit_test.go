@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/SharedCode/sop"
+	"github.com/sharedcode/sop"
 )
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {

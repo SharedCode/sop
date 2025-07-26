@@ -3,8 +3,8 @@ package common
 import (
 	"testing"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/common/mocks"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/common/mocks"
 )
 
 // Covers all of these cases:

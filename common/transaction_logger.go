@@ -6,9 +6,9 @@ import (
 	log "log/slog"
 	"time"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/encoding"
-	"github.com/SharedCode/sop/in_memory"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/sop/inmemory"
 )
 
 type commitFunction int
@@ -191,7 +191,7 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 
 func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid sop.UUID, storesHandles []sop.RegistryPayload[sop.Handle]) ([]*sop.LockKey, error) {
 	logicalIDs := sop.ExtractLogicalIDs(storesHandles)
-	lookupByUUID := in_memory.NewBtree[sop.UUID, *sop.LockKey](true)
+	lookupByUUID := inmemory.NewBtree[sop.UUID, *sop.LockKey](true)
 
 	for _, lids := range logicalIDs {
 		for _, id := range lids.IDs {

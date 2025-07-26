@@ -5,11 +5,11 @@ import (
 	"fmt"
 	log "log/slog"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/btree"
-	"github.com/SharedCode/sop/cache"
-	"github.com/SharedCode/sop/encoding"
-	"github.com/SharedCode/sop/redis"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/sop/cache"
+	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/sop/redis"
 )
 
 // Backend facing Node Repository. Part of where the magic happens.

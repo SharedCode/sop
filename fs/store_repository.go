@@ -10,9 +10,9 @@ import (
 
 	retry "github.com/sethvargo/go-retry"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/encoding"
-	"github.com/SharedCode/sop/in_memory"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/sop/inmemory"
 )
 
 // StoreRepository is a File System based implementation of store repository.
@@ -167,7 +167,7 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) ([]sop.StoreInfo, error) {
 	// Sort the stores info so we can commit them in same sort order across transactions,
 	// thus, reduced chance of deadlock.
-	b3 := in_memory.NewBtree[string, sop.StoreInfo](true)
+	b3 := inmemory.NewBtree[string, sop.StoreInfo](true)
 	for i := range stores {
 		b3.Add(stores[i].Name, stores[i])
 	}

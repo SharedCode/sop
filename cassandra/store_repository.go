@@ -10,9 +10,9 @@ import (
 	"github.com/gocql/gocql"
 	retry "github.com/sethvargo/go-retry"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/in_memory"
-	"github.com/SharedCode/sop/redis"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/inmemory"
+	"github.com/sharedcode/sop/redis"
 )
 
 type storeRepository struct {
@@ -89,7 +89,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 
 	// Sort the stores info so we can commit them in same sort order across transactions,
 	// thus, reduced chance of deadlock.
-	b3 := in_memory.NewBtree[string, sop.StoreInfo](true)
+	b3 := inmemory.NewBtree[string, sop.StoreInfo](true)
 	for i := range stores {
 		b3.Add(stores[i].Name, stores[i])
 	}

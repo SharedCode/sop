@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/SharedCode/sop"
 	retry "github.com/sethvargo/go-retry"
+	"github.com/sharedcode/sop"
 )
 
 // Functions for File I/O defaults to "os" file I/O functions.

@@ -6,8 +6,8 @@ import (
 
 	"github.com/ncw/directio"
 
-	"github.com/SharedCode/sop"
 	retry "github.com/sethvargo/go-retry"
+	"github.com/sharedcode/sop"
 )
 
 // DirectIO API.

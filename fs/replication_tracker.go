@@ -11,9 +11,9 @@ import (
 
 	log "log/slog"
 
-	"github.com/SharedCode/sop"
-	"github.com/SharedCode/sop/encoding"
-	"github.com/SharedCode/sop/redis"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/sop/redis"
 )
 
 type ReplicationTrackedDetails struct {

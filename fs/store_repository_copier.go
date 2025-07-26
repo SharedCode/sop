@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/SharedCode/sop/encoding"
+	"github.com/sharedcode/sop/encoding"
 )
 
 func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
