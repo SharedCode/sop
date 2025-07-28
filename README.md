@@ -42,8 +42,7 @@ How to create/begin & commit/rollback SOP transactions, use its B-tree API to st
 
 ## Running Integration Tests
 You can run the SOP's integration tests from "inredfs" package using the following docker commands:
-NOTE: you need docker desktop running in your host machine for this to work.
-0. Go to the sop root folder, e.g. ```cd ~/sop```, where sop is the folder where you cloned from github.
+NOTE: you need docker desktop running in your host machine for this to work. Go to the sop root folder, e.g. ```cd ~/sop```, where sop is the folder where you cloned from github.
 1. Build the docker image: ```docker build -t mydi .```
 2. Run the docker image in a container: ```docker run mydi```
 * Where "mydi" is the name of the docker image, you can use another name of your choice.
