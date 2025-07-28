@@ -21,7 +21,16 @@ var redisConfig = redis.Options{
 	DB:       0,  // use default DB
 }
 
-const dataPath string = "/Users/grecinto/sop_data"
+func getDataPath() string {
+	// Read the 'home' data folder from Env if available.
+	s := os.Getenv("datapath")
+	if s == "" {
+		s = "/Users/grecinto/sop_data"
+	}
+	return s
+}
+
+var dataPath string = getDataPath()
 
 var testDefaultCacheConfig sop.StoreCacheConfig
 

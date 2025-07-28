@@ -40,6 +40,19 @@ How to create/begin & commit/rollback SOP transactions, use its B-tree API to st
 
 7. SOP Python bindings is in PyPi: https://pypi.org/project/sop4py. When ready & your team is into Python applications development, you can download sop4py from PyPi. The SOP Python bindings package source code is in https://github.com/sharedcode/sop/tree/master/jsondb/python. The API was designed to be easy to use and fit for Python "idiomatic" usage for database management & rich search. Please checkout the unit tests under this folder (test_btree.py & test_btree_idx.py) to get idea how to use the SOP Python bindings API for managing data & rich search within transactions.
 
+## Running Integration Tests
+You can run the SOP's integration tests from "inredfs" package using the following docker commands:
+NOTE: you need docker desktop running in your host machine for this to work.
+0. Go to the sop root folder, e.g. ```cd ~/sop```, where sop is the folder where you cloned from github.
+1. Build the docker image: ```docker build -t mydi .```
+2. Run the docker image in a container: ```docker run mydi```
+* Where "mydi" is the name of the docker image, you can use another name of your choice.
+
+The docker image will be built with alpine (linux) and Redis server in it. Copy the SOP source codes to it. Setup target data folder and environment variable that tells the unit tests of the data folder path.
+On docker run, the shell script ensures that the Redis server is up & running then run the ("inredfs" package's integration) test files.
+
+You can pattern how the test sets the (datapath) env't variable so you can run the same integration tests in your host machine, if needed, and yes, you need Redis running locally for this to work.
+
 # Usability
 See details here: https://github.com/sharedcode/sop/blob/master/README2.md#usability
 
