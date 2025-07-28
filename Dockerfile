@@ -14,12 +14,6 @@ RUN go mod download
 # Copy the rest of your application code and tests
 COPY . .
 
-# Build your Go application (if it's a runnable binary)
-# This step is often needed before running tests or the main app
-# If your tests are purely unit tests that don't need a compiled binary,
-# you might skip 'go build' here, but it's good practice for a full app build.
-#RUN go build -o myapp .
-
 # Create the data path folder & the env var.
 RUN mkdir -p /var/lib/sop
 ENV datapath=/var/lib/sop
