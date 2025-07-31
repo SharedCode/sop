@@ -51,6 +51,7 @@ The docker image will be built with alpine (linux) and Redis server in it. Copy 
 On docker run, the shell script ensures that the Redis server is up & running then run the ("inredfs" package's integration) test files.
 
 You can pattern how the test sets the (datapath) env't variable so you can run the same integration tests in your host machine, if needed, and yes, you need Redis running locally for this to work.
+See https://github.com/SharedCode/sop/blob/master/Dockerfile & https://github.com/SharedCode/sop/blob/master/docker-entrypoint.sh for more details.
 
 # Usability
 See details here: https://github.com/sharedcode/sop/blob/master/README2.md#usability
