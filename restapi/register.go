@@ -6,18 +6,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// HTTPVerb enumerates supported HTTP operations.
 type HTTPVerb int
 
 const (
-	Unknown = iota
+	// Unknown represents an unspecified HTTP verb.
+	Unknown HTTPVerb = iota
+	// GET lists or retrieves resources.
 	GET
+	// GET_ONE retrieves a single resource.
 	GET_ONE
+	// DELETE removes resources.
 	DELETE
+	// POST creates resources.
 	POST
+	// PUT replaces resources.
 	PUT
+	// PATCH partially updates resources.
 	PATCH
 )
 
+// RestMethod describes a REST route handler.
 type RestMethod struct {
 	Verb    HTTPVerb
 	Path    string
@@ -26,7 +35,7 @@ type RestMethod struct {
 
 var restMethods = make(map[string]RestMethod)
 
-// RegisterMethod is a helper function for Register.
+// RegisterMethod builds a RestMethod and registers it using Register.
 func RegisterMethod(verb HTTPVerb, path string, h func(c *gin.Context)) error {
 	m := RestMethod{
 		Verb:    verb,
@@ -36,7 +45,7 @@ func RegisterMethod(verb HTTPVerb, path string, h func(c *gin.Context)) error {
 	return Register(m)
 }
 
-// Register your REST method using this function.
+// Register inserts a RestMethod into the global registry preventing duplicates.
 func Register(m RestMethod) error {
 	key := fmt.Sprintf("%d_%s", m.Verb, m.Path)
 	if _, exists := restMethods[key]; exists {
@@ -46,7 +55,7 @@ func Register(m RestMethod) error {
 	return nil
 }
 
-// Returns the registered REST Methods map.
+// RestMethods returns all registered RestMethod entries keyed by verb+path.
 func RestMethods() map[string]RestMethod {
 	return restMethods
 }

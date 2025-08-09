@@ -7,17 +7,17 @@ import (
 	"github.com/google/uuid"
 )
 
-// UUID type.
+// UUID is a thin wrapper over github.com/google/uuid.UUID to keep SOP decoupled from the external package.
 type UUID uuid.UUID
 
-// Parse a string into a UUID.
+// ParseUUID converts a string to a UUID. It returns an error if the input is not a valid UUID.
 func ParseUUID(id string) (UUID, error) {
 	u, err := uuid.Parse(id)
 	return UUID(u), err
 }
 
-// NewUUID returns a new UUID. Will retry after sleep of 1 milli if an error occurs.
-// Guaranteed no panic by sleeping/retry, and only does after exhausting 10 attempts.
+// NewUUID returns a new randomly generated UUID. It retries on error with a 1ms backoff up to 10 times
+// and panics only if all attempts fail (which should never happen under normal conditions).
 func NewUUID() UUID {
 	// In the case of generating new UUID errored, we just need to retry because
 	// generating UUID is a must.
@@ -35,19 +35,20 @@ func NewUUID() UUID {
 	panic(err)
 }
 
-// NillUUID is an empty UUID.
+// NilUUID is the zero-value UUID.
 var NilUUID UUID
 
+// IsNil reports whether the UUID equals the zero-value UUID.
 func (id UUID) IsNil() bool {
 	return bytes.Equal(id[:], NilUUID[:])
 }
 
-// String converts UUID to its string representation.
+// String returns the canonical string representation of the UUID.
 func (id UUID) String() string {
 	return uuid.UUID(id).String()
 }
 
-// Split a UUID into its high & low unsigned int64 bit parts.
+// Split returns the high and low 64-bit parts of the UUID.
 func (id UUID) Split() (uint64, uint64) {
 	// Split UUID into high & low int64 parts.
 	bytes := id[:]
@@ -64,7 +65,7 @@ func (id UUID) Split() (uint64, uint64) {
 	return high, low
 }
 
-// Compare two UUIDs. If x < y, return -1, if x > y, 1, otherwise 0.
+// Compare compares two UUIDs and returns -1 if x < y, 1 if x > y, and 0 if they are equal.
 func (x UUID) Compare(y UUID) int {
 	xHigh, xLow := x.Split()
 	yHigh, yLow := y.Split()

@@ -8,7 +8,8 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-// Returns true if lockKeys have claimed lock equivalent. And extends the lock by another 30 seconds for each call (TTL).
+// IsLockedTTL reports whether all provided lock keys are owned by this process and
+// extends their TTL by the specified duration when owned.
 func (c client) IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
 	r := true
 	var lastErr error
@@ -34,10 +35,8 @@ func (c client) IsLockedTTL(ctx context.Context, duration time.Duration, lockKey
 	return r, lastErr
 }
 
-// Lock a set of keys.
-// 1st returns true if successfully locked otherwise false.
-// 2nd returns the UUID of lock owner if applicable.
-// 3rd returns the error as reported by Redis, if there was.
+// Lock attempts to acquire locks for all provided keys using the given TTL duration.
+// If any key is already locked by another owner, it returns false and that owner's UUID.
 func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	for _, lk := range lockKeys {
 		found, readItem, err := c.Get(ctx, lk.Key)
@@ -72,7 +71,7 @@ func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*so
 	return true, sop.NilUUID, nil
 }
 
-// Returns true if lockKeys have claimed lock equivalent.
+// IsLocked reports whether all provided lock keys are currently owned by this process.
 func (c client) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	r := true
 	var lastErr error
@@ -98,7 +97,7 @@ func (c client) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, er
 	return r, lastErr
 }
 
-// Returns true if lockKeyNames are all locked.
+// IsLockedByOthers reports whether all given lock key names are currently locked by other processes.
 func (c client) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	if len(lockKeyNames) == 0 {
 		return false, nil
@@ -113,7 +112,7 @@ func (c client) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bo
 	return true, nil
 }
 
-// Unlock a set of keys.
+// Unlock releases the provided lock keys, deleting only those owned by this process.
 func (c client) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	var lastErr error
 	for _, lk := range lockKeys {
@@ -132,7 +131,7 @@ func (c client) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return lastErr
 }
 
-// Create a set of lock keys based on submited data comprised of a "key" & a "lock ID".
+// CreateLockKeysForIDs builds lock keys from (name, lockID) tuples, applying the lock namespace prefix.
 func (c client) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
 	lockKeys := make([]*sop.LockKey, len(keys))
 	for i := range keys {
@@ -145,7 +144,7 @@ func (c client) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.
 	return lockKeys
 }
 
-// Create a set of lock keys.
+// CreateLockKeys creates lock keys using newly generated lock IDs for each provided key name.
 func (c client) CreateLockKeys(keys []string) []*sop.LockKey {
 	lockKeys := make([]*sop.LockKey, len(keys))
 	for i := range keys {
@@ -158,7 +157,7 @@ func (c client) CreateLockKeys(keys []string) []*sop.LockKey {
 	return lockKeys
 }
 
-// Add prefix to the lock key so it becomes unique.
+// FormatLockKey prefixes the key with 'L' to form the namespaced Redis key used for locking.
 func (c client) FormatLockKey(k string) string {
 	return fmt.Sprintf("L%s", k)
 }

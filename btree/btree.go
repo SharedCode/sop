@@ -1,18 +1,12 @@
-// Package btree contains code implementing the M-Way Trie data structures and algorithms.
-// It also contains different interfaces necessary for btree to support different storage backends. In one
-// implementation, btree can be in-memory, in another, it can be using other backend storage systems like
-// File System, etc...
+// Package btree provides a B-tree implementation (an M-ary, multiway search tree) and related algorithms.
+// It also defines interfaces needed to support multiple storage backends (e.g., in-memory, filesystem, etc.).
 //
-// A b-tree that can distribute items added on a given "leaf" sub-branch so it will tend to fill in the
-// nodes of the sub-branch. Instead of achieving half full on average load(typical), each node can then achieve
-// higher load average, perhaps up to 62%-75% on average.
-// This logic is cut, limited within a given sub-branch so as not to affect performance. Feature can be turned
-// off too, if needed.
+// This B-tree can distribute items added on a given leaf sub-branch so it tends to fill nodes of that sub-branch.
+// Instead of ~50% average fill (typical), each node can achieve higher average utilization, commonly 62%–75%.
+// The logic operates within a given sub-branch to avoid broader performance impact and can be disabled.
 //
-// "leaf sub-branch" is the outermost node of the trie that only has 1 level children, that is, its
-// children has no children.
-//
-// "leaf" node is the edge node, it has no children.
+// "Leaf sub-branch" refers to the outermost branch whose children have no further descendants.
+// A "leaf" node is an edge node with no children.
 package btree
 
 import (
@@ -23,7 +17,7 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-// Btree manages items using B-tree data structure and algorithm.
+// Btree manages items using a B-tree data structure and algorithm.
 type Btree[TK Ordered, TV any] struct {
 	StoreInfo          *sop.StoreInfo
 	storeInterface     *StoreInterface[TK, TV]
@@ -40,7 +34,7 @@ type Btree[TK Ordered, TV any] struct {
 }
 
 // currentItemRef contains node ID & item slot index position in the node.
-// SOP B-Tree has a "cursor" like feature to allow navigation & fetch of the items
+// SOP B-tree has a "cursor" like feature to allow navigation & fetch of the items
 // for most complicated querying scenario possible, or as needed by the business.
 type currentItemRef struct {
 	nodeID        sop.UUID
@@ -54,7 +48,7 @@ func (c currentItemRef) getNodeID() sop.UUID {
 	return c.nodeID
 }
 
-// distributeAction contains details to allow B-Tree to balance item load across nodes.
+// distributeAction contains details to allow B-tree to balance item load across nodes.
 // "distribute" function will use these details in order to distribute an item of a node
 // to either the left side or right side nodes of the branch(relative to the sourceNode)
 // that is known to have a vacant slot.
@@ -66,7 +60,7 @@ type distributeAction[TK Ordered, TV any] struct {
 	distributeToLeft bool
 }
 
-// promoteAction similar to distributeAction, contains details to allow controller in B-Tree
+// promoteAction similar to distributeAction, contains details to allow controller in B-tree
 // to drive calls for Node promotion to a higher level branch without using recursion.
 // Recursion can be more "taxing"(on edge case) as it accumulates items pushed to the stack.
 type promoteAction[TK Ordered, TV any] struct {
@@ -74,7 +68,7 @@ type promoteAction[TK Ordered, TV any] struct {
 	slotIndex  int
 }
 
-// New creates a new B-Tree instance with support for explicit comparer separate than the key object.
+// New creates a new Btree instance. comparer can be provided to override default comparison for TK.
 func New[TK Ordered, TV any](storeInfo *sop.StoreInfo, si *StoreInterface[TK, TV], comparer ComparerFunc[TK]) (*Btree[TK, TV], error) {
 	// Return nil B-Tree to signify failure if there is not enough info to create an instance.
 	if si == nil {
@@ -100,21 +94,22 @@ func New[TK Ordered, TV any](storeInfo *sop.StoreInfo, si *StoreInterface[TK, TV
 	return &b3, nil
 }
 
+// Lock acquires any locks required by the underlying store for read or write access.
 func (btree *Btree[TK, TV]) Lock(ctx context.Context, forWriting bool) error {
 	return nil
 }
 
-// Returns the details about this B-Tree.
+// GetStoreInfo returns the StoreInfo describing this B-tree instance.
 func (btree *Btree[TK, TV]) GetStoreInfo() sop.StoreInfo {
 	return *btree.StoreInfo
 }
 
-// Returns the number of items in this B-Tree.
+// Count returns the number of items in the B-tree.
 func (btree *Btree[TK, TV]) Count() int64 {
 	return btree.StoreInfo.Count
 }
 
-// Add a key/value pair item to the tree.
+// Add inserts a key/value pair into the tree.
 func (btree *Btree[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {
 	var item = newItem(key, value)
 
@@ -146,7 +141,7 @@ func (btree *Btree[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, er
 	return true, nil
 }
 
-// For internal use only, when SOP is doing refetch and merge in commt.
+// AddItem is used internally during refetch/merge in commit to add an already-constructed Item.
 func (btree *Btree[TK, TV]) AddItem(ctx context.Context, item *Item[TK, TV]) (bool, error) {
 	node, err := btree.getRootNode(ctx)
 	if err != nil {
@@ -183,9 +178,9 @@ func (btree *Btree[TK, TV]) compare(a TK, b TK) int {
 	return btree.coercedComparer(a, b)
 }
 
-// FindOne will traverse the tree to find an item with such key.
+// Find searches for the key and positions the cursor to the first or exact match depending on firstItemWithKey.
 func (btree *Btree[TK, TV]) Find(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
-	// return default value & no error if B-Tree is empty.
+	// return default value & no error if B-tree is empty.
 	if btree.StoreInfo.Count == 0 {
 		return false, nil
 	}
@@ -208,7 +203,7 @@ func (btree *Btree[TK, TV]) Find(ctx context.Context, key TK, firstItemWithKey b
 	return r, err
 }
 
-// FindOneWithID is synonymous to FindOne but allows code to supply the Item's ID to identify it.
+// FindWithID searches for the key and then walks duplicates until the specified ID is matched.
 func (btree *Btree[TK, TV]) FindWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
 	if ok, err := btree.Find(ctx, key, true); ok && err == nil {
 		for {
@@ -226,7 +221,7 @@ func (btree *Btree[TK, TV]) FindWithID(ctx context.Context, key TK, id sop.UUID)
 	}
 }
 
-// GetCurrentKey returns the current item's key part.
+// GetCurrentKey returns the current item's key and ID.
 func (btree *Btree[TK, TV]) GetCurrentKey() Item[TK, TV] {
 	var item Item[TK, TV]
 	if btree.currentItem == nil {
@@ -238,7 +233,7 @@ func (btree *Btree[TK, TV]) GetCurrentKey() Item[TK, TV] {
 	}
 }
 
-// GetCurrentValue returns the current item's value part.
+// GetCurrentValue returns the current item's value, fetching it if necessary.
 func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	var zero TV
 	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
@@ -257,19 +252,7 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	}
 }
 
-// Unfetch Current Value will reset the current item's value as if it was not fetched from the backend.
-// Useful when trying to conserve memory as item's values are large data, calling this method will set it
-// to nil, "unfetch" status.
-func (btree *Btree[TK, TV]) unfetchCurrentValue() {
-	if btree.StoreInfo.IsValueDataActivelyPersisted && !btree.StoreInfo.IsValueDataGloballyCached &&
-		btree.currentItem != nil && btree.currentItem.Value != nil && btree.currentItem.valueWasFetched {
-		btree.currentItem.Value = nil
-		btree.currentItem.ValueNeedsFetch = true
-		btree.currentItem.valueWasFetched = false
-	}
-}
-
-// getCurrentItem returns the current item containing key/value pair.
+// GetCurrentItem returns the current item including key and value, fetching value if necessary.
 func (btree *Btree[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], error) {
 	var zero Item[TK, TV]
 	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
@@ -287,24 +270,7 @@ func (btree *Btree[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], e
 	}
 }
 
-// getCurrentItem returns the current item containing key/value pair.
-func (btree *Btree[TK, TV]) getCurrentItem(ctx context.Context) (*Item[TK, TV], error) {
-	if btree.currentItemRef.nodeID.IsNil() {
-		btree.currentItem = nil
-		return nil, nil
-	}
-	if btree.currentItem != nil {
-		return btree.currentItem, nil
-	}
-	n, err := btree.storeInterface.NodeRepository.Get(ctx, btree.currentItemRef.getNodeID())
-	if err != nil {
-		return nil, err
-	}
-	btree.currentItem = n.Slots[btree.currentItemRef.getNodeItemIndex()]
-	return btree.currentItem, nil
-}
-
-// AddIfNotExist will add an item if its key is not yet in the B-Tree.
+// AddIfNotExist inserts the item only when a duplicate key does not exist (temporarily enabling uniqueness).
 func (btree *Btree[TK, TV]) AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error) {
 	u := btree.StoreInfo.IsUnique
 	btree.StoreInfo.IsUnique = true
@@ -313,10 +279,9 @@ func (btree *Btree[TK, TV]) AddIfNotExist(ctx context.Context, key TK, value TV)
 	return ok, err
 }
 
-// First will traverse the tree and find the first item, first according to
-// the key ordering sequence.
+// First positions the cursor at the first item according to key ordering.
 func (btree *Btree[TK, TV]) First(ctx context.Context) (bool, error) {
-	// Return default value & no error if B-Tree is empty.
+	// Return default value & no error if B-tree is empty.
 	if btree.StoreInfo.Count == 0 {
 		return false, nil
 	}
@@ -329,8 +294,9 @@ func (btree *Btree[TK, TV]) First(ctx context.Context) (bool, error) {
 	return r, err
 }
 
+// Last positions the cursor at the last item according to key ordering.
 func (btree *Btree[TK, TV]) Last(ctx context.Context) (bool, error) {
-	// Return default value & no error if B-Tree is empty.
+	// Return default value & no error if B-tree is empty.
 	if btree.StoreInfo.Count == 0 {
 		return false, nil
 	}
@@ -343,8 +309,9 @@ func (btree *Btree[TK, TV]) Last(ctx context.Context) (bool, error) {
 	return r, err
 }
 
+// Next advances the cursor to the next item.
 func (btree *Btree[TK, TV]) Next(ctx context.Context) (bool, error) {
-	// Return default value & no error if B-Tree is empty.
+	// Return default value & no error if B-tree is empty.
 	if btree.StoreInfo.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
 	}
@@ -360,8 +327,9 @@ func (btree *Btree[TK, TV]) Next(ctx context.Context) (bool, error) {
 	return r, err
 }
 
+// Previous moves the cursor to the previous item.
 func (btree *Btree[TK, TV]) Previous(ctx context.Context) (bool, error) {
-	// Return default value & no error if B-Tree is empty.
+	// Return default value & no error if B-tree is empty.
 	if btree.StoreInfo.Count == 0 || !btree.isCurrentItemSelected() {
 		return false, nil
 	}
@@ -377,8 +345,7 @@ func (btree *Btree[TK, TV]) Previous(ctx context.Context) (bool, error) {
 	return r, err
 }
 
-// Update will find the item with matching key as the key parameter & update its value
-// with the provided value parameter.
+// Update finds the item with matching key and updates its value.
 func (btree *Btree[TK, TV]) Update(ctx context.Context, key TK, newValue TV) (bool, error) {
 	ok, err := btree.Find(ctx, key, false)
 	if err != nil {
@@ -390,6 +357,7 @@ func (btree *Btree[TK, TV]) Update(ctx context.Context, key TK, newValue TV) (bo
 	return btree.UpdateCurrentItem(ctx, newValue)
 }
 
+// UpdateCurrentItem updates the value of the current item.
 func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) (bool, error) {
 	if btree.currentItemRef.getNodeID() == sop.NilUUID {
 		return false, nil
@@ -412,7 +380,7 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) 
 	return true, nil
 }
 
-// For internal use only, when SOP is doing refetch and merge in commt.
+// UpdateCurrentNodeItem is used internally during refetch/merge in commit to replace the current item.
 func (btree *Btree[TK, TV]) UpdateCurrentNodeItem(ctx context.Context, item *Item[TK, TV]) (bool, error) {
 	if btree.currentItemRef.getNodeID() == sop.NilUUID {
 		return false, nil
@@ -433,7 +401,7 @@ func (btree *Btree[TK, TV]) UpdateCurrentNodeItem(ctx context.Context, item *Ite
 	return true, nil
 }
 
-// Add if item not exist or update if it exists.
+// Upsert adds the item if it does not exist or updates it when it does.
 func (btree *Btree[TK, TV]) Upsert(ctx context.Context, key TK, value TV) (bool, error) {
 	if ok, err := btree.AddIfNotExist(ctx, key, value); !ok || err != nil {
 		if err != nil {
@@ -445,7 +413,7 @@ func (btree *Btree[TK, TV]) Upsert(ctx context.Context, key TK, value TV) (bool,
 	return true, nil
 }
 
-// Remove will find the item with given key and delete it.
+// Remove deletes the item matching the given key.
 func (btree *Btree[TK, TV]) Remove(ctx context.Context, key TK) (bool, error) {
 	ok, err := btree.Find(ctx, key, false)
 	if err != nil {
@@ -457,7 +425,7 @@ func (btree *Btree[TK, TV]) Remove(ctx context.Context, key TK) (bool, error) {
 	return btree.RemoveCurrentItem(ctx)
 }
 
-// RemoveCurrentItem will remove the current item, i.e. - referenced by CurrentItemRef.
+// RemoveCurrentItem deletes the item at the current cursor position.
 func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error) {
 	if btree.currentItemRef.getNodeID() == sop.NilUUID {
 		return false, nil
@@ -526,39 +494,45 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 	return true, nil
 }
 
-// IsValueDataInNodeSegment is true if Item's Values are stored in the Node segment together
-// with the Items' Keys.
-// Always true in in-memory B-Tree.
+// IsValueDataInNodeSegment reports whether Values are stored in the node segment with Keys.
 func (btree *Btree[TK, TV]) IsValueDataInNodeSegment() bool {
 	return btree.StoreInfo.IsValueDataInNodeSegment
 }
 
-// IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
+// IsUnique reports whether the B-tree is configured to store unique keys.
 func (btree *Btree[TK, TV]) IsUnique() bool {
 	return btree.StoreInfo.IsUnique
 }
 
-// saveNode will prepare & persist (if needed) the Node to the backend
-// via NodeRepository call. When Transaction Manager is implemented, this
-// will just register the modified/new node in the transaction session
-// so it can get persisted on tranaction commit.
-func (btree *Btree[TK, TV]) saveNode(node *Node[TK, TV]) {
-	if node.ID.IsNil() {
-		node.ID = sop.NewUUID()
-		btree.storeInterface.NodeRepository.Add(node)
-		return
+// Internal helpers below.
+// unfetchCurrentValue resets the current item's Value to an unfetched state to conserve memory when applicable.
+func (btree *Btree[TK, TV]) unfetchCurrentValue() {
+	if btree.StoreInfo.IsValueDataActivelyPersisted && !btree.StoreInfo.IsValueDataGloballyCached &&
+		btree.currentItem != nil && btree.currentItem.Value != nil && btree.currentItem.valueWasFetched {
+		btree.currentItem.Value = nil
+		btree.currentItem.ValueNeedsFetch = true
+		btree.currentItem.valueWasFetched = false
 	}
-	btree.storeInterface.NodeRepository.Update(node)
 }
 
-// removeNode will remove the node from backend repository.
-func (btree *Btree[TK, TV]) removeNode(node *Node[TK, TV]) {
-	if node.ID.IsNil() {
-		return
+// getCurrentItem returns the current item pointer or nil when no selection is active.
+func (btree *Btree[TK, TV]) getCurrentItem(ctx context.Context) (*Item[TK, TV], error) {
+	if btree.currentItemRef.nodeID.IsNil() {
+		btree.currentItem = nil
+		return nil, nil
 	}
-	btree.storeInterface.NodeRepository.Remove(node.ID)
+	if btree.currentItem != nil {
+		return btree.currentItem, nil
+	}
+	n, err := btree.storeInterface.NodeRepository.Get(ctx, btree.currentItemRef.getNodeID())
+	if err != nil {
+		return nil, err
+	}
+	btree.currentItem = n.Slots[btree.currentItemRef.getNodeItemIndex()]
+	return btree.currentItem, nil
 }
 
+// getCurrentNode returns the Node of the current cursor selection.
 func (btree *Btree[TK, TV]) getCurrentNode(ctx context.Context) (*Node[TK, TV], error) {
 	n, err := btree.getNode(ctx, btree.currentItemRef.nodeID)
 	if n == nil {
@@ -567,6 +541,7 @@ func (btree *Btree[TK, TV]) getCurrentNode(ctx context.Context) (*Node[TK, TV], 
 	return n, nil
 }
 
+// getRootNode returns the root node creating it on demand when the store is empty.
 func (btree *Btree[TK, TV]) getRootNode(ctx context.Context) (*Node[TK, TV], error) {
 	// If Store items were all deleted(Count = 0) then just fetch the root node.
 	if !btree.StoreInfo.RootNodeID.IsNil() && btree.StoreInfo.Count == 0 {
@@ -597,6 +572,7 @@ func (btree *Btree[TK, TV]) getRootNode(ctx context.Context) (*Node[TK, TV], err
 	return root, nil
 }
 
+// getNode fetches a node by ID from the repository.
 func (btree *Btree[TK, TV]) getNode(ctx context.Context, id sop.UUID) (*Node[TK, TV], error) {
 	n, e := btree.storeInterface.NodeRepository.Get(ctx, id)
 	if e != nil {
@@ -605,6 +581,7 @@ func (btree *Btree[TK, TV]) getNode(ctx context.Context, id sop.UUID) (*Node[TK,
 	return n, nil
 }
 
+// setCurrentItemID updates the cursor to point to the specific node and slot index.
 func (btree *Btree[TK, TV]) setCurrentItemID(nodeID sop.UUID, itemIndex int) {
 	btree.unfetchCurrentValue()
 	btree.currentItem = nil
@@ -627,10 +604,7 @@ func (btree *Btree[TK, TV]) isCurrentItemSelected() bool {
 	return btree.currentItemRef.getNodeID() != sop.NilUUID
 }
 
-// distribute function allows B-Tree to avoid using recursion. I.e. - instead of the node calling
-// a recursive function that distributes or moves an item from a source node to a vacant slot somewhere
-// in the sibling nodes, distribute allows a controller(distribute)-controllee(node.DistributeLeft or XxRight)
-// pattern and avoids recursion.
+// distribute moves an item from a full node to a sibling with a vacant slot (controller pattern, avoids recursion).
 func (btree *Btree[TK, TV]) distribute(ctx context.Context) {
 	for btree.distributeAction.sourceNode != nil {
 		log.Debug(fmt.Sprintf("distribute item with key(%v) of node ID(%v) to left(%v)",
@@ -649,9 +623,7 @@ func (btree *Btree[TK, TV]) distribute(ctx context.Context) {
 	}
 }
 
-// promote function allows B-Tree to avoid using recursion. I.e. - instead of the node calling
-// a recursive function that promotes a sub-tree "parent" node for insert on a vacant slot,
-// promote allows a controller(btree.promote)-controllee(node.promote) pattern and avoid recursion.
+// promote promotes a node to a higher-level branch when necessary (controller pattern, avoids recursion).
 func (btree *Btree[TK, TV]) promote(ctx context.Context) {
 	for btree.promoteAction.targetNode != nil {
 		log.Debug(fmt.Sprintf("promote will promote a node with ID %v", btree.promoteAction.targetNode.ID))
@@ -660,7 +632,25 @@ func (btree *Btree[TK, TV]) promote(ctx context.Context) {
 		btree.promoteAction.targetNode = nil
 		btree.promoteAction.slotIndex = 0
 		// Node's promote method contains actual logic to promote a (new parent outcome of
-		// splittin a full node) node to higher up.
+		// splitting a full node) node to higher up.
 		n.promote(ctx, btree, i)
 	}
+}
+
+// saveNode persists the node via the repository, assigning a new ID if needed.
+func (btree *Btree[TK, TV]) saveNode(node *Node[TK, TV]) {
+	if node.ID.IsNil() {
+		node.ID = sop.NewUUID()
+		btree.storeInterface.NodeRepository.Add(node)
+		return
+	}
+	btree.storeInterface.NodeRepository.Update(node)
+}
+
+// removeNode removes the node from the backend repository when it has a valid ID.
+func (btree *Btree[TK, TV]) removeNode(node *Node[TK, TV]) {
+	if node.ID.IsNil() {
+		return
+	}
+	btree.storeInterface.NodeRepository.Remove(node.ID)
 }

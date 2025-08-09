@@ -16,20 +16,16 @@ type client struct {
 	isOwner bool
 }
 
-// Checks if Redis connection is open and returns the client interface if it is,
-// otherwise returns an error.
+// NewClient returns a Cache backed by the default shared Redis connection.
+// The underlying connection must have been initialized via package-level setup.
 func NewClient() sop.Cache {
 	return &client{
 		conn: connection,
 	}
 }
 
-// Opens a new Redis connection then returns a client wrapper for it.
-// Returned wrapper has "Close" method you can call when you don't need it anymore.
-//
-// This ctor was provided for the case of wanting to use another separate Redis cluster,
-// perhaps wanting to use another one dedicated for Blobs management. Watch out later
-// when this feature is supported & you can pass this (blobs) cache in the Transaction options.
+// NewConnectionClient opens a new Redis connection with the given options and returns a CloseableCache.
+// Call Close on the returned cache when no longer needed. Useful for isolating blob-related caches.
 func NewConnectionClient(options Options) sop.CloseableCache {
 	c := openConnection(options)
 	return &client{
@@ -38,7 +34,7 @@ func NewConnectionClient(options Options) sop.CloseableCache {
 	}
 }
 
-// Close this client's connection.
+// Close closes the owned Redis connection, if any.
 func (c *client) Close() error {
 	if !c.isOwner || c.conn == nil {
 		return nil
@@ -48,7 +44,7 @@ func (c *client) Close() error {
 	return err
 }
 
-// keyNotFound will detect whether error signifies key not found by Redis.
+// keyNotFound reports whether the provided error corresponds to a missing key in Redis.
 func (c client) keyNotFound(err error) bool {
 	return err == redis.Nil
 }
@@ -68,12 +64,12 @@ func (c client) Ping(ctx context.Context) error {
 	return nil
 }
 
-// Clear the cache. Be cautions calling this method as it will clear the Redis cache.
+// Clear removes all keys in the current Redis database. Use with caution.
 func (c client) Clear(ctx context.Context) error {
 	return c.conn.Client.FlushDB(ctx).Err()
 }
 
-// Set executes the redis Set command
+// Set stores a string value with the specified expiration; expiration < 0 disables caching.
 func (c client) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	if c.conn == nil {
 		return fmt.Errorf("Redis connection is not open, 'can't create new client")
@@ -85,7 +81,7 @@ func (c client) Set(ctx context.Context, key string, value string, expiration ti
 	return c.conn.Client.Set(ctx, key, value, expiration).Err()
 }
 
-// Get executes the redis Get command
+// Get retrieves a string value. Returns (found, value, error-from-backend).
 func (c client) Get(ctx context.Context, key string) (bool, string, error) {
 	if c.conn == nil {
 		return false, "", fmt.Errorf("Redis connection is not open, 'can't create new client")
@@ -99,7 +95,7 @@ func (c client) Get(ctx context.Context, key string) (bool, string, error) {
 	return r, s, err
 }
 
-// Get executes the redis GetEx command
+// GetEx retrieves a string value and sets its expiration (TTL) at the same time.
 func (c client) GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error) {
 	if c.conn == nil {
 		return false, "", fmt.Errorf("Redis connection is not open, 'can't create new client")
@@ -113,7 +109,7 @@ func (c client) GetEx(ctx context.Context, key string, expiration time.Duration)
 	return r, s, err
 }
 
-// SetStruct executes the redis Set command
+// SetStruct marshals a struct and stores it with the specified expiration; expiration < 0 disables caching.
 func (c client) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	if c.conn == nil {
 		return fmt.Errorf("Redis connection is not open, 'can't create new client")
@@ -132,7 +128,7 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 	return c.conn.Client.Set(ctx, key, ba, expiration).Err()
 }
 
-// GetStruct executes the redis Get command
+// GetStruct retrieves a struct value and unmarshals it into target.
 func (c client) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	if c.conn == nil {
 		return false, fmt.Errorf("Redis connection is not open, 'can't create new client")
@@ -153,7 +149,7 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) (
 	return r, err
 }
 
-// GetStructEx executes the redis GetEx command
+// GetStructEx retrieves a struct value with TTL behavior and unmarshals it into target.
 func (c client) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
 	if c.conn == nil {
 		return false, fmt.Errorf("Redis connection is not open, 'can't create new client")
@@ -174,7 +170,7 @@ func (c client) GetStructEx(ctx context.Context, key string, target interface{},
 	return r, err
 }
 
-// Delete executes the redis Del command
+// Delete removes keys and returns whether the operation completed without backend errors.
 func (c client) Delete(ctx context.Context, keys []string) (bool, error) {
 	if c.conn == nil {
 		return false, fmt.Errorf("Redis connection is not open, 'can't create new client")

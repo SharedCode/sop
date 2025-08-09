@@ -18,18 +18,18 @@ type registryOnDisk struct {
 	l1Cache            *cache.L1Cache
 }
 
-// Registry interface needs to have close method so registry can get closed when not needed anymore, e.g. transaction is completed.
+// Registry extends sop.Registry with io.Closer to allow releasing resources when the transaction completes.
 type Registry interface {
 	sop.Registry
 	io.Closer
 }
 
 const (
-	// Lock time out for the cache based conflict check routine in update (handles) function.
+	// updateAllOrNothingOfHandleSetLockTimeout is the cache-based conflict-check lock TTL for Update operations.
 	updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 )
 
-// NewRegistry instantiates a new Registry that manages handle records in a file using hashmap on disk.
+// NewRegistry creates a filesystem-backed Registry that manages handles on disk using a hashmap structure.
 func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, l2Cache sop.Cache) *registryOnDisk {
 	return &registryOnDisk{
 		hashmap:            newRegistryMap(readWrite, hashModValue, rt, l2Cache),
@@ -39,7 +39,7 @@ func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, l2Cac
 	}
 }
 
-// Close all opened file handles.
+// Close closes all open file handles used by the registry.
 func (r *registryOnDisk) Close() error {
 	return r.hashmap.close()
 }

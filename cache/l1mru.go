@@ -2,6 +2,7 @@ package cache
 
 import "github.com/sharedcode/sop"
 
+// l1_mru manages MRU ordering and eviction for the L1Cache.
 type l1_mru struct {
 	minCapacity int
 	maxCapacity int
@@ -18,12 +19,17 @@ func newL1Mru(l1c *L1Cache, minCapacity, maxCapacity int) *l1_mru {
 	}
 }
 
+// add inserts the id at the head of the MRU list and returns its node handle.
 func (m *l1_mru) add(id sop.UUID) *node[sop.UUID] {
 	return m.dll.addToHead(id)
 }
+
+// remove unchains the node from the MRU list.
 func (m *l1_mru) remove(n *node[sop.UUID]) {
 	m.dll.delete(n)
 }
+
+// evict removes entries from the tail while the cache exceeds its capacity, updating the L1 index.
 func (m *l1_mru) evict() {
 	for {
 		if !m.isFull() {
@@ -40,6 +46,8 @@ func (m *l1_mru) evict() {
 		}
 	}
 }
+
+// isFull reports whether the L1 cache has reached its maximum capacity.
 func (m *l1_mru) isFull() bool {
 	return m.dll.count() >= m.maxCapacity
 }

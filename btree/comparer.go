@@ -9,22 +9,24 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-// Comparer interface specifies the Compare function.
+// Comparer specifies how to compare this value against another value.
 type Comparer interface {
-	// Implement Compare to compare this object with the 'other' object.
-	// Returns -1 (this object < other), 0 (this object == other), 1 (this object > other)
+	// Compare compares this object with the other and returns -1, 0, or 1.
+	// -1 means this < other, 0 means equal, 1 means this > other.
 	Compare(other interface{}) int
 }
 
-// ComparerFunc allows code to specify explicit comparer separate than the key object.
+// ComparerFunc allows providing a comparer function separate from the key object.
 type ComparerFunc[TK Ordered] func(a TK, b TK) int
 
-// Ordered interface is used as a B-Tree store (generics) constraint for Key types.
+// Ordered constrains key types that can be stored in a Btree.
+// It permits built-in ordered types, UUIDs, Comparer implementations, and any as a fallback.
 type Ordered interface {
 	cmp.Ordered | *Comparer | any
 }
 
-// Compare can Compare an Ordered type.
+// Compare compares two values, handling common built-in types, UUIDs, time.Time,
+// Comparer implementations, and finally falling back to string comparison.
 func Compare(anyX, anyY any) int {
 	switch anyX.(type) {
 	case int:
@@ -116,7 +118,8 @@ func Compare(anyX, anyY any) int {
 	}
 }
 
-// Determine a more elaborate comparer given an object of any type.
+// CoerceComparer returns a type-appropriate comparer function for values similar to anyX.
+// It specializes for common built-in types, UUIDs, time.Time, and Comparer implementations.
 func CoerceComparer(anyX any) func(x, y any) int {
 	switch anyX.(type) {
 	case int:

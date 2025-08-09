@@ -1,7 +1,6 @@
 package sop
 
-// KeyValuePair is a tuple, 'used in Blob Store to allow caller to specify a
-// different ID(or key) for a given blob entry.
+// KeyValuePair represents a pair of key and value, commonly used for blob operations where the key may differ from the blob ID.
 type KeyValuePair[TK any, TV any | []byte] struct {
 	// Key is the key part in the pair.
 	Key TK
@@ -9,11 +8,10 @@ type KeyValuePair[TK any, TV any | []byte] struct {
 	Value TV
 }
 
-// Tuple of two items. If there is less concept of Key and Value and leaning towards more generic
-// pair of items(first and second), then please use this one instead of KeyValuePair.
+// Tuple represents an ordered pair of two generic values when Key/Value semantics are not desired.
 type Tuple[T1 any, T2 any] struct {
-	// First item in the pair.
+	// First is the first element of the pair.
 	First T1
-	// Second item in the pair.
+	// Second is the second element of the pair.
 	Second T2
 }

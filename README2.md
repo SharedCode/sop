@@ -1,16 +1,18 @@
-Scaleable Objects Persistence (SOP) Framework - Golang V2
+Scalable Objects Persistence (SOP) Framework - Golang V2
 
 Code Coverage: https://app.codecov.io/github/sharedcode/sop
 
 # Summary
 
-SOP has the low-level B-Tree storage engine in it to offer raw muscle in direct IO based data management. Adds Redis for out of process caching, "ultra fast realtime" orchestration and to provide ultra fast "data merging" surface. Combined with ACID transactions, formed a tightly woven code library that turns your applications/micro-services "cluster" into the (raw!) storage engine (cluster) itself, no across the wire sending of data (other than what Redis is for).
+SOP has the low-level B-tree storage engine in it to offer raw muscle in direct IO based data management. Adds Redis for out of process caching, "ultra fast realtime" orchestration and to provide ultra fast "data merging" surface. Combined with ACID transactions, formed a tightly woven code library that turns your applications/micro-services "cluster" into the (raw!) storage engine (cluster) itself, no across the wire sending of data (other than what Redis is for).
 
 Plus, SOP is multi-modal, not what the industry calls as multi-modal, SOP was built from the ground up & ships with its own B-tree & such. No reuse of 3rd party libraries, re-written storage engine and makes it as a base for other higher level constructs, or for direct IO, raw storage uses!
 
 Multi-modal in the sense that, it supports varying data sizes, from small to huge data, it has features to scale management and rich search capabilities. The similarity with other multi-modal databases in the market ends there. Because they do just repackage existing other specialized storage engines and surfaces an API that commands these.
 
 SOP is not, it is a newly architected raw storage engine! No delegation, pure raw storage execution! at your finger tips! In the past, only DBMS like Clipper, DBase 3+, Oracle, C++ Rtree & such, can use or has B-tree to do efficient raw storage mgmt. SOP breaks all of these, it brings to your fingertips the raw storage power of B-trees and more, a complete architecture of a new beast of raw storage management & rich search.
+
+> Terminology: In this document, “B-tree” refers to the balanced M-ary (multiway) search tree (per Bayer & McCreight). A trie (prefix tree) is a different structure; SOP uses a B-tree, not a trie.
 
 # High level features articles about SOP
 SOP's Swarm Computing Proposition: https://www.linkedin.com/pulse/geminis-analysis-sops-swarm-computing-gerardo-recinto-cqzqc
@@ -215,7 +217,7 @@ SOP can be used in a wide, diverse storage usability scenarios. Ranging from gen
 
 Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3 & a DBMS like Postgres for indexing). But SOP supports all four of them out of the box.
 
-In all of these, ACID transactions, high speed, scalable searches and management comes built-in. As SOP turned M-Way Trie data structures & algorithms a commodity available in all of its usage scenarios. Horizontally scalable in the cluster, meaning, there is no single point of failure. SOP offers a decentralized approach in searching & management of your data. It works with optimal efficiency in the cluster. It fully parallelize I/O in the cluster, not needing any communication for "orchestration"(see new "communication free" OOA algorithm section below) to detect conflict and auto-merging of changes across transactions occuring simultaneously or in time.
+In all of these, ACID transactions, high speed, scalable searches and management comes built-in. As SOP turned the B-tree (an M-ary, multiway search tree) into a commodity available in all of its usage scenarios. Horizontally scalable in the cluster, meaning, there is no single point of failure. SOP offers a decentralized approach in searching & management of your data. It works with optimal efficiency in the cluster. It fully parallelize I/O in the cluster, not needing any communication for "orchestration"(see new "communication free" OOA algorithm section below) to detect conflict and auto-merging of changes across transactions occuring simultaneously or in time.
 
 # Best Practices
 Following are the best practices using SOP outlined so you can get a good understanding of best outcome from SOP for your implementation use-cases:
@@ -233,9 +235,9 @@ For these three use-cases, there is not much competition for what SOP has to off
 Please feel free to file a request/discussion entry if you have a special domain-use in mind, as perhaps we can further optimize. Today, SOP piggy backs on the global cache(Redis) re-seeding the local cache of each transaction. It has a lot of advantages including solving data synchronization requirements among different instances running in the cluster without requiring to communicate & "orchestrate" with one another thus, maintaining a fully parallelized execution model with sustained throughput for each instance.
 
 # SOP in Redis & File System
-M-Way Trie data structures & algorithms based Objects persistence, File System as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the ```Redis Lock API```, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
+B-tree–based object persistence (balanced M-ary, multiway search tree), File System as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the `Redis Lock API`, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
 
-SOP has all the bits required to be used like a golang map but which, has the features of a b-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your application. No need to have impedance mismatch.
+SOP has all the bits required to be used like a golang map but which, has the features of a B-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your application. No need to have impedance mismatch.
 
 Requirements:
   * Redis
@@ -375,13 +377,13 @@ You can store or manage any data type in Golang. From native types like int, str
   * ```> 1``` means that the current key(x) is greater than the other key(y) being compared
   * ```< 1``` means that the current key(x) is lesser than the other key(y) being compared
 
-You can also create or open one or many B-Trees within a transaction. And you can have/or manage one or many transactions within your application.
+You can also create or open one or many B-trees within a transaction. And you can have/or manage one or many transactions within your application.
 Import path for SOP V2 is: "github.com/sharedcode/sop/inredfs". "inredfs" is an acronym that stands for:
 SOP in Redis & File System(inredfs).
 
 V2 is in Release Candidate 1 (RC1) status and there is no known issue. If things go well, RC1 will be declared the Released version of V2.
 
-But yeah, V2 is showing very good results. ACID, two phase commit transaction, and impressive performance as Redis is baked in. SOP V2 actually succeeded in turning M-Way Trie a native "resident" of the cluster. Each of the host running SOP, be it an application or a micro-service, is turned into a high performance database & rich search server. Each, a master, or shall I say, master-less. And, of course, it is objects persistence, thus, you just author your golang struct and SOP takes care of fast storage & ultra fast searches and in the order you specified. No need to worry whether you are hitting an index, because each SOP "store"(or B-Tree) is the index itself! :)
+But yeah, V2 is showing very good results. ACID, two phase commit transaction, and impressive performance as Redis is baked in. SOP V2 actually succeeded in turning the B-tree a native "resident" of the cluster. Each of the host running SOP, be it an application or a micro-service, is turned into a high performance database & rich search server. Each, a master, or shall I say, master-less. And, of course, it is objects persistence, thus, you just author your golang struct and SOP takes care of fast storage & ultra fast searches and in the order you specified. No need to worry whether you are hitting an index, because each SOP "store" (or B-tree) is the index itself! :)
 
 ## Streaming Data
 As discussed above, the third usability scenario of SOP is support for very large data. Sample code to use this ```StreamingDataStore```:
@@ -475,7 +477,7 @@ All your actions within a transaction becomes the batch that gets submitted to t
 Recommended size of a transaction is about 500 items(and should typically match the "slot length" of the node, That is, you can fetch(Read) and/or do management actions such as Create, Update, Delete for around 500 items more or less and do commit to finalize the transaction.
 
 ## Atomicity, Consistency, Isolation and Durability
-SOP transaction achieves each of these ACID transaction attributes by moving the M-Way Trie(B-Tree for short) within the SOP code library. B-Tree is the heart of database systems. It enables fast storage and searches, a.k.a. - indexing engine. But more than that, by SOP's design, the B-Tree is used as part of the "controller logic" to provide two phase commit, ACID transactions.
+SOP transaction achieves each of these ACID transaction attributes by using a B-tree (an M-ary, multiway search tree) within the SOP code library. B-tree is the heart of database systems. It enables fast storage and searches, a.k.a. - indexing engine. But more than that, by SOP's design, the B-tree is used as part of the "controller logic" to provide two phase commit, ACID transactions.
 
 It has nifty algorithms controlling/talking to Redis in order to ensure each ACID attribute is enforced by the transaction. If ACID attributes spells mission critical for your system, then look no further. SOP provides all that and a whole lot more, e.g. built-in data caching via Redis. So, your data are "cached" in Redis and since SOP transaction also caches your data within the host memory, then you get a L1/L2 caching for free, just by using SOP code library.
 
@@ -485,7 +487,7 @@ There are four primary ingredients affecting performance and I/O via SOP. They a
   * Batch Size - typically aligns with Slot Length, i.e. - set the batch size to the same amount/value as the Slot Length.
   * Cache Duration - see respective section above for details about cache duration.
 
-Base on your data structure size and the amount you intend to store using SOP, there is an opportunity to optimize for I/O and performance. Small to medium size data, will typically fit well with a bigger node size. For typical structure size scenarios, slot length anywhere from 100 to 5,000 may be ideal. You can match the batch size with the slot length. In this case, it means that you are potentially filling in a node with your entire batch. This is faster for example, as compared to your batch requiring multiple nodes, which will require more "virtual Ids" (or handles) in the registry table, thus, will (potentially) require more reads from registry & the node blob table. And more importantly, during commit, the lesser the number of nodes(thus, lesser "virtual Ids") used, the leaner & faster the "logged transaction" performs, which is the deciding step in the commit process, the one that makes your changes available to other transactions/machines, or triggers rollback due to conflict. It is best to keep that (virtual Ids) volume as minimal as possible.
+Base on your data structure size and the amount you intend to store using SOP, there is an opportunity to optimize for I/O and performance. Small to medium size data, will typically fit well with a bigger node size. For typical structure size scenarios, slot length anywhere from 100 to 5,000 may be ideal. You can match the batch size with the slot length. In this case, it means that you are potentially filling in a node with your entire batch's items. This is faster for example, as compared to your batch requiring multiple nodes, which will require more "virtual Ids" (or handles) in the registry table, thus, will (potentially) require more reads from registry & the node blob table. And more importantly, during commit, the lesser the number of nodes(thus, lesser "virtual Ids") used, the leaner & faster the "logged transaction" performs, which is the deciding step in the commit process, the one that makes your changes available to other transactions/machines, or triggers rollback due to conflict. It is best to keep that (virtual Ids) volume as minimal as possible.
 
 But of course, you have to consider memory requirements, i.e. - how many bytes of data per Key/Value pair(item) that you will store. (SmallData) If you configure for the Key & Value pair to be persisted together with the other data including meta data of the node then it is a straight up one node that will contain your entire batch's items. Not bad really, but of course, you may have to do fine tuning, try a combination of "slot length"(and batch size) and see how that affects the I/O throughput. Fetches will always be very very fast, and the bigger node size(bigger slot length!), the better for fetches(reads). BUT in trade off with memory. As one node will occupy bigger memory, thus, you will have to checkout the Redis caching and your application cluster, to see how the overall setup performs.
 You can also consider storing the Value part to a dedicated partition(MediumData), this will keep your Nodes' memory footprint small in exchange of an extra read when fetching the Value data part. And lastly, you can also consider "data streaming"(BigData), which is similar to MediumData, but with global caching turned off, and such... fitted for the "very large data, data streaming" use-case.
@@ -538,7 +540,7 @@ OOA algorithm was specially cooked by yours truly to make hot-spot free, "decent
 If you are or you know of an investor, perhaps this is the time you dial that number and get them to know SOP project. Hehe.
 
 ## Concurrent or Parallel Commits
-SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record or row level "locking". If not then it means your transaction has conflicting change with another transaction commit elsewhere in the  cluster, and thus, it will be rolled back, or the other one, depends on who got to the final commit step first. SOP uses a combination of algorithmic ingredients like "optimistic locking", intelligent "merging", etc... doing its magic with the M-Way trie and Redis.
+SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record or row level "locking". If not then it means your transaction has conflicting change with another transaction commit elsewhere in the  cluster, and thus, it will be rolled back, or the other one, depends on who got to the final commit step first. SOP uses a combination of algorithmic ingredients like "optimistic locking", intelligent "merging", etc... doing its magic with the B-tree and Redis.
 
 The magic will start to happen after you have created the Btree(s) (& transaction committed them) you will be using. Having such enables a lot of the "cool commits merging" features. Typically, you should have "initializer" code block or function somewhere in your app/microservice where you instantiate the B-Tree stores analogous to creating your tables in RDBMS. You run DDL scripts to create the tables before running your application logic that populates the tables, i.e. - DML scripts.
 
@@ -700,11 +702,11 @@ t.Commit(ctx)
 
 SOP is an object persistence based, modern database engine within a code library. Portability & integration is one of SOP's primary strengths. Code uses the Store API to store & manage key/value pairs of data.
 
-Internal Store implementation uses an enhanced, modernized M-Way Trie, implementation that virtualizes RAM & Disk storage. Few of key enhancements to this B-Tree as compared to traditional implementations are:
+Internal Store implementation uses an enhanced, modernized B-tree implementation that virtualizes RAM & Disk storage. Few key enhancements to this B-tree as compared to traditional implementations are:
 
-* node load optimization keeps it at around 62%-75+% full average load of inner & leaf nodes. Traditional B-Trees only achieve about half-full (50%) at most, average load. This translates to a more compressed or more dense data Stores saving IT shops from costly storage hardware.
+* node load optimization keeps it at around 62%-75+% full average load of inner & leaf nodes. Traditional B-trees only achieve about half-full (50%) at most, average load. This translates to a more compressed or more dense data Stores saving IT shops from costly storage hardware.
 * leaf nodes' height in a particular case is tolerated not to be perfectly balanced to favor speed of deletion at zero/minimal cost in exchange. Also, the height disparity due to deletion tends to get repaired during inserts due to the node load optimization feature discussed above.
-* virtualization of RAM and Disk due to the seamless-ness & effectivity of handling Btree Nodes and their app data. There is no context switch, thus no unnecessary latency, between handling a Node in RAM and on disk.
+* virtualization of RAM and Disk due to the seamless-ness & effectivity of handling B-tree Nodes and their app data. There is no context switch, thus no unnecessary latency, between handling a Node in RAM and on disk.
 * etc... a lot more enhancements waiting to be documented/cited as time permits.
 
 Via usage of SOP API, your application will experience low latency, very high performance scalability.
@@ -717,15 +719,15 @@ V1 written in c# dotnet was designed to be a data server. It can be used to crea
 A design where I broke apart the "server" data mgmt and introduced horizontal scale design without losing much of the scaleability and acceleration inherent for a "server" piece. It is not an outcome of luck, it is as designed from the ground up, leaving the legacy or traditional form and out with a new one! :)
 
 ## SOP in Memory
-SOP in-memory was created in order to model the structural bits of SOP and allowed us to author the same M-Way Trie algorithms that will work irrespective of backend, be it in-memory or others, such as the "in Redis & File System" implementation, as discussed above.
+SOP in-memory was created in order to model the structural bits of SOP and allowed us to author the same B-tree algorithms that will work irrespective of backend, be it in-memory or others, such as the "in Redis & File System" implementation, as discussed above.
 
 SOP in-memory is a full implementation and you can use it if it fits the needs, i.e. - no persistence, map + sorted "range" queries/updates.
 
 Sample Basic Usage:
-  * Import the sop/inmemory, e.g. ```import sop "github.com/sharedcode/sop/inmemory"```
-  * Instantiate the b-tree manager, e.g. - ```sop.NewBtree[int, string](false)```. The single parameter specifies whether you would want to manage unique keys.
-  * Populate the b-tree, e.g. - ```b3.Add(<key>, <value>)```
-  * Do a range query, e.g. ```b3.FindOne(<key>, true),... b3.Next(), b3.GetCurrentKey or b3.GetCurrentValue``` will return either the key or the value currently selected by the built-in "cursor".
+  * Import the sop/inmemory, e.g. `import sop "github.com/sharedcode/sop/inmemory"`
+  * Instantiate the b-tree manager, e.g. - `sop.NewBtree[int, string](false)`. The single parameter specifies whether you would want to manage unique keys.
+  * Populate the b-tree, e.g. - `b3.Add(<key>, <value>)`
+  * Do a range query, e.g. `b3.FindOne(<key>, true),... b3.Next(), b3.GetCurrentKey or b3.GetCurrentValue` will return either the key or the value currently selected by the built-in "cursor".
   * Let the b-tree go out of scope.
 
 Here is the complete example:

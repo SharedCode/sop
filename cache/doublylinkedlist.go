@@ -1,35 +1,35 @@
 package cache
 
-// node represents a node in the doubly linked list
+// node represents an element in the doubly linked list.
 type node[T any] struct {
 	data T
 	prev *node[T]
 	next *node[T]
 }
 
-// doublyLinkedList represents the doubly linked list
+// doublyLinkedList is a minimal, allocation-friendly doubly linked list used by MRU caches.
 type doublyLinkedList[T any] struct {
 	head *node[T]
 	tail *node[T]
 	size int
 }
 
-// newDoublyLinkedList creates a new empty doubly linked list
+// newDoublyLinkedList creates a new empty doubly linked list.
 func newDoublyLinkedList[T any]() *doublyLinkedList[T] {
 	return &doublyLinkedList[T]{nil, nil, 0}
 }
 
-// count returns the number of elements in the list
+// count returns the number of elements in the list.
 func (dll *doublyLinkedList[T]) count() int {
 	return dll.size
 }
 
-// IsEmpty checks if the list is empty
+// isEmpty reports whether the list has no elements.
 func (dll *doublyLinkedList[T]) isEmpty() bool {
 	return dll.head == nil
 }
 
-// AddToHead adds a new node with the given data to the head of the list
+// addToHead inserts a new node with data at the head of the list and returns it.
 func (dll *doublyLinkedList[T]) addToHead(data T) *node[T] {
 	newNode := &node[T]{data: data, prev: nil, next: dll.head}
 	if dll.head != nil {
@@ -42,7 +42,7 @@ func (dll *doublyLinkedList[T]) addToHead(data T) *node[T] {
 	return newNode
 }
 
-// DeleteFromTail removes the node from the tail of the list
+// deleteFromTail removes and returns the tail node's data.
 func (dll *doublyLinkedList[T]) deleteFromTail() (T, bool) {
 	var d T
 	if dll.isEmpty() {
@@ -60,7 +60,7 @@ func (dll *doublyLinkedList[T]) deleteFromTail() (T, bool) {
 	return data, true
 }
 
-// Delete & unchain the node "n" from the doubly linked list.
+// delete unchains the node n from the list.
 func (dll *doublyLinkedList[T]) delete(n *node[T]) bool {
 	if n == nil {
 		return false

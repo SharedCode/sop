@@ -8,34 +8,34 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-// MetaDataType specifies object meta data fields such as ID & Version.
+// MetaDataType specifies metadata fields such as ID and Version.
 type MetaDataType interface {
-	// Returns the object's ID.
+	// GetID returns the object's ID.
 	GetID() sop.UUID
-	// Returns the object's version.
+	// GetVersion returns the object's version.
 	GetVersion() int32
-	// Applies a version to the object.
+	// SetVersion applies a version to the object.
 	SetVersion(v int32)
 }
 
-// Item contains key & value pair, plus the version number.
+// Item contains a key/value pair and a version number.
 type Item[TK Ordered, TV any] struct {
 	// (Internal) ID is the Item's sop.UUID. ID is needed for two reasons:
-	// 1. so B-Tree can identify or differentiate item(s) with duplicated Key.
-	// 2. used as the Value "data" ID if item's value data is persisted in another
-	// data segment, separate from the Node segment(IsValueDataInNodeSegment=false).
+	// 1. so the B-tree can identify or differentiate items with duplicated keys.
+	// 2. used as the value data ID if the item's value is persisted in another
+	//    data segment, separate from the node segment (IsValueDataInNodeSegment=false).
 	ID sop.UUID
-	// Key is the key part in key/value pair.
+	// Key is the key part in the key/value pair.
 	Key TK
-	// Value is saved nil if data is to be persisted in the "data segment"(& ValueID set to a valid sop.UUID),
-	// otherwise it should point to the actual data and persisted in B-Tree Node segment together with the Key.
+	// Value is nil when data is persisted in the separate data segment (with ValueID set to a valid sop.UUID);
+	// otherwise it points to the actual data and is persisted in the B-tree node segment together with the key.
 	Value *TV
-	// Version is used for conflict resolution among (in-flight) transactions.
+	// Version is used for conflict resolution among in-flight transactions.
 	Version int32
-	// flag that tells B-Tree whether value data needs fetching or not.
-	// Applicable only for B-Tree where 'IsValueDataInNodeSegment' is false use-case.
+	// ValueNeedsFetch tells the B-tree whether the value data needs fetching.
+	// Applicable only when IsValueDataInNodeSegment is false.
 	ValueNeedsFetch bool
-	// For internal use only, 'tells whether value was just read from the backend.
+	// valueWasFetched is for internal use only; it indicates whether the value was just read from the backend.
 	valueWasFetched bool
 }
 
@@ -51,23 +51,28 @@ func newItem[TK Ordered, TV any](key TK, value TV) *Item[TK, TV] {
 type Node[TK Ordered, TV any] struct {
 	ID       sop.UUID
 	ParentID sop.UUID
-	// Slots is an array where the Items get stored in.
+	// Slots is an array where the Items get stored.
 	Slots []*Item[TK, TV]
 	// Count of items in this node.
 	Count int
 	// Version of this node.
 	Version int32
-	// Children IDs of this node.
+	// ChildrenIDs holds the IDs of this node's children.
 	ChildrenIDs []sop.UUID
 	indexOfNode int
 }
 
+// GetID returns the node's UUID.
 func (n *Node[TK, TV]) GetID() sop.UUID {
 	return n.ID
 }
+
+// GetVersion returns the node's version.
 func (n *Node[TK, TV]) GetVersion() int32 {
 	return n.Version
 }
+
+// SetVersion updates the node's version to v.
 func (n *Node[TK, TV]) SetVersion(v int32) {
 	n.Version = v
 }
@@ -80,9 +85,8 @@ func newNode[TK Ordered, TV any](slotCount int) *Node[TK, TV] {
 	}
 }
 
-// add an item to the b-tree, will traverse the tree and find the leaf node where to
-// properly add the item to, according to the sort order.
-// Actual add of items on target node is handled by addOnLeaf method.
+// add traverses the B-tree to find the leaf node where the item should be inserted
+// according to sort order. The actual insertion on the target node is handled by addOnLeaf.
 func (node *Node[TK, TV]) add(ctx context.Context, btree *Btree[TK, TV], item *Item[TK, TV]) (bool, error) {
 	var currentNode = node
 	var index int
@@ -127,23 +131,23 @@ func (node *Node[TK, TV]) add(ctx context.Context, btree *Btree[TK, TV], item *I
 	return true, nil
 }
 
-// Add item on the outermost(a.k.a. leaf) node, the end of the recursive traversing thru all inner nodes of the Btree.
-// Correct Node to add item to is reached at this point.
+// addOnLeaf inserts the item on the outermost (leaf) node. At this point, the correct
+// node to add the item to has been reached after traversing inner nodes of the B-tree.
 func (node *Node[TK, TV]) addOnLeaf(ctx context.Context, btree *Btree[TK, TV], item *Item[TK, TV], index int) error {
-	// If node is not yet full.
+	// If node is not yet full, insert and shift items to the right.
 	if node.Count < btree.getSlotLength() {
-		// Insert the Item to target position & "skud" over the items to the right.
+		// Insert the item at the target position and shift items to the right.
 		node.insertSlotItem(item, index)
-		// Save this TreeNode
+		// Save this node.
 		btree.saveNode(node)
 		return nil
 	}
 
-	// Node is full, distribute or breakup the node (use temp slots in the process).
+	// Node is full, distribute or break up the node (use temp slots in the process).
 	copy(btree.tempSlots, node.Slots)
 
-	// Index now contains the correct array element number to insert item into.
-	// Skud over then assign the item to the vacatad slot.
+	// Index now contains the correct array element number to insert the item into.
+	// Shift items to the right and assign the item to the vacated slot.
 	copy(btree.tempSlots[index+1:], btree.tempSlots[index:])
 	// Set the item to the newly vacated slot.
 	btree.tempSlots[index] = item
@@ -164,7 +168,7 @@ func (node *Node[TK, TV]) addOnLeaf(ctx context.Context, btree *Btree[TK, TV], i
 		}
 
 		if isVacantSlotInLeft || isVacantSlotInRight {
-			// Distribute to either left or right sibling the overflowed item.
+			// Distribute the overflowed item to either the left or right sibling.
 			// Copy temp buffer contents to the actual slots.
 			var b int16 = 1
 			if isVacantSlotInLeft {
@@ -179,28 +183,28 @@ func (node *Node[TK, TV]) addOnLeaf(ctx context.Context, btree *Btree[TK, TV], i
 				btree.distributeAction.item = btree.tempSlots[btree.getSlotLength()]
 				clear(btree.tempSlots)
 
-				// Vacant in left, create a distribution action request to B-Tree.
-				// Logic is: "skud over" the leftmost node's item to parent and the item
-				// on parent to left sibling node (recursively).
+				// Vacancy on the left: request a distribution action from the B-tree.
+				// Logic: shift the leftmost node's item to the parent and move the parent's
+				// item to the left sibling (recursively).
 				btree.distributeAction.distributeToLeft = true
 				return nil
 			}
 			btree.distributeAction.item = btree.tempSlots[0]
 			clear(btree.tempSlots)
-			// Vacant in right, move the rightmost node item into the vacant slot in right.
+			// Vacancy on the right: move the rightmost node item into the vacant slot on the right.
 			btree.distributeAction.distributeToLeft = false
 			return nil
 		}
 
 		if isUnBalanced {
-			// If this branch is unbalanced, break the "full" node to create new slots.
-			// Description :
-			// -copy the left half of the slots
-			// -copy the right half of the slots
-			// -zero out the current slot.
-			// -copy the middle slot
-			// -allocate memory for children node *s
-			// -assign the new children nodes.
+			// If this branch is unbalanced, break the full node to create new slots.
+			// Description:
+			// - copy the left half of the slots
+			// - copy the right half of the slots
+			// - zero out the current slot
+			// - copy the middle slot
+			// - allocate memory for children nodes
+			// - assign the new children nodes
 
 			// Initialize should throw an exception if in error.
 			rightNode := newNode[TK, TV](btree.getSlotLength())
@@ -226,9 +230,9 @@ func (node *Node[TK, TV]) addOnLeaf(ctx context.Context, btree *Btree[TK, TV], i
 			clear(btree.tempSlots)
 			return nil
 		}
-		// All slots are occupied in this and other siblings' nodes..
+		// All slots are occupied in this and sibling nodes.
 
-		// Prepare this and the right node sibling and promote the temporary parent node(pTempSlot).
+		// Prepare this node and the right sibling, then promote the temporary parent node.
 		rightNode := newNode[TK, TV](btree.getSlotLength())
 		rightNode.newID(node.ParentID)
 		// Zero out the node slots in preparation to make it the left sibling.
@@ -266,13 +270,13 @@ func (node *Node[TK, TV]) addOnLeaf(ctx context.Context, btree *Btree[TK, TV], i
 	}
 
 	// Break this node to create available slots.
-	// Description :
-	// -copy the left half of the temp slots
-	// -copy the right half of the temp slots
-	// -zero out the current slot.
-	// -copy the middle of temp slot to 1st elem of current slot
-	// -allocate memory for children node *s
-	// -assign the new children nodes.
+	// Description:
+	// - copy the left half of the temp slots
+	// - copy the right half of the temp slots
+	// - zero out the current slot
+	// - copy the middle of the temp slot to the 1st element of the current slot
+	// - allocate memory for children nodes
+	// - assign the new children nodes
 	rightNode := newNode[TK, TV](btree.getSlotLength())
 	rightNode.newID(node.ID)
 	leftNode := newNode[TK, TV](btree.getSlotLength())
@@ -446,9 +450,9 @@ func (node *Node[TK, TV]) moveToNext(ctx context.Context, btree *Btree[TK, TV]) 
 			btree.setCurrentItemID(n.ID, slotIndex)
 			return true, nil
 		}
-		// Check if this is the root node. (Root nodes don't have parent node.)
+		// Check if this is the root node. (Root nodes don't have a parent.)
 		if n.isRootNode() {
-			// this is root node. set to null the current item(End of Btree is reached)
+			// Root node: set the current item to nil (end of B-tree reached).
 			btree.setCurrentItemID(sop.NilUUID, 0)
 			return false, nil
 		}
@@ -477,7 +481,7 @@ func (node *Node[TK, TV]) moveToPrevious(ctx context.Context, btree *Btree[TK, T
 					return false, err
 				}
 				if n == nil {
-					// Set to null the current item, end of Btree is reached.
+					// Set the current item to nil; end of B-tree reached.
 					btree.setCurrentItemID(sop.NilUUID, 0)
 					return false, nil
 				}
@@ -497,7 +501,7 @@ func (node *Node[TK, TV]) moveToPrevious(ctx context.Context, btree *Btree[TK, T
 			return true, nil
 		}
 		if n.isRootNode() {
-			// Set to null the current item, end of Btree is reached.
+			// Set the current item to nil; end of B-tree reached.
 			btree.setCurrentItemID(sop.NilUUID, 0)
 			return false, nil
 		}
@@ -554,7 +558,8 @@ func (node *Node[TK, TV]) isNilChildren() bool {
 	return true
 }
 
-// Returns true if a slot is available in left side siblings of this node modified to suit possible unbalanced branch.
+// isThereVacantSlotInLeft returns true if a slot is available in left-side siblings of this node,
+// with adjustments for a possibly unbalanced branch.
 func (node *Node[TK, TV]) isThereVacantSlotInLeft(ctx context.Context, btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
 	*isUnBalanced = false
 	if !btree.StoreInfo.LeafLoadBalancing {
@@ -582,7 +587,8 @@ func (node *Node[TK, TV]) isThereVacantSlotInLeft(ctx context.Context, btree *Bt
 	return false, nil
 }
 
-// Returns true if a slot is available in right side siblings of this node modified to suit possible unbalanced branch.
+// isThereVacantSlotInRight returns true if a slot is available in right-side siblings of this node,
+// with adjustments for a possibly unbalanced branch.
 func (node *Node[TK, TV]) isThereVacantSlotInRight(ctx context.Context, btree *Btree[TK, TV], isUnBalanced *bool) (bool, error) {
 	*isUnBalanced = false
 	if !btree.StoreInfo.LeafLoadBalancing {
@@ -610,7 +616,7 @@ func (node *Node[TK, TV]) isThereVacantSlotInRight(ctx context.Context, btree *B
 	return false, nil
 }
 
-// Returns left sibling or nil if finished traversing left side nodes.
+// getLeftSibling returns the left sibling, or nil if the leftmost sibling has been reached.
 func (node *Node[TK, TV]) getLeftSibling(ctx context.Context, btree *Btree[TK, TV]) (*Node[TK, TV], error) {
 	index, err := node.getIndexOfNode(ctx, btree)
 	if err != nil {
@@ -626,11 +632,11 @@ func (node *Node[TK, TV]) getLeftSibling(ctx context.Context, btree *Btree[TK, T
 			return p.getChild(ctx, btree, index-1)
 		}
 	}
-	// Leftmost was already reached..
+	// Leftmost already reached.
 	return nil, nil
 }
 
-// Returns right sibling or nil if finished traversing right side nodes.
+// getRightSibling returns the right sibling, or nil if the rightmost sibling has been reached.
 func (node *Node[TK, TV]) getRightSibling(ctx context.Context, btree *Btree[TK, TV]) (*Node[TK, TV], error) {
 	index, err := node.getIndexOfNode(ctx, btree)
 	if err != nil {
@@ -646,28 +652,11 @@ func (node *Node[TK, TV]) getRightSibling(ctx context.Context, btree *Btree[TK, 
 			return p.getChild(ctx, btree, index+1)
 		}
 	}
-	// Rightmost was already reached..
+	// Rightmost already reached.
 	return nil, nil
 }
 
-func (node *Node[TK, TV]) getIndexOfChild(child *Node[TK, TV]) int {
-	parent := node
-	// Make sure we don't access an invalid node item.
-	if parent.ChildrenIDs != nil &&
-		(child.indexOfNode == -1 || child.ID != parent.ChildrenIDs[child.indexOfNode]) {
-		for child.indexOfNode = 0; child.indexOfNode <= len(parent.Slots); child.indexOfNode++ {
-			if parent.ChildrenIDs[child.indexOfNode].IsNil() {
-				continue
-			}
-			if parent.ChildrenIDs[child.indexOfNode] == child.ID {
-				break
-			}
-		}
-	}
-	return child.indexOfNode
-}
-
-// Returns index of this node relative to parent.
+// getIndexOfNode returns the index of this node relative to its parent.
 func (node *Node[TK, TV]) getIndexOfNode(ctx context.Context, btree *Btree[TK, TV]) (int, error) {
 	parent, err := node.getParent(ctx, btree)
 	if err != nil {
@@ -676,8 +665,7 @@ func (node *Node[TK, TV]) getIndexOfNode(ctx context.Context, btree *Btree[TK, T
 	if parent != nil {
 		return parent.getIndexOfChild(node), nil
 	}
-	// Just return 0 if called in the root node, anyway,
-	// the caller code should check if it is the root node and not call this function if it is!
+	// Return 0 if called on the root node; callers should normally avoid calling this for the root.
 	return 0, nil
 }
 
@@ -711,17 +699,17 @@ func (node *Node[TK, TV]) getIndexToInsertTo(btree *Btree[TK, TV], item *Item[TK
 		if i >= node.Count {
 			i--
 		}
-		// Returns index in slot that is available for insert to.
+		// Returns index in slot that is available for insert.
 		// Also returns true if an existing item with such key is found.
 		return index, btree.compare(node.Slots[i].Key, item.Key) == 0
 	}
-	// Returns index in slot that is available for insert to.
+	// Returns index in slot that is available for insert.
 	return index, false
 }
 
-// Transaction will resolve story of fetching Nodes via logical ID vs. physical ID. Example, in a transaction,
-// like when adding an item, newly created nodes need to be using sop.UUID that then becomes logical ID
-// during commit. When working with Children logical IDs(saved in backend!), we need to convert logical to physical ID.
+// Transaction resolves fetching nodes via logical ID vs physical ID. In a transaction,
+// newly created nodes use sop.UUIDs that later become logical IDs at commit time.
+// When working with child logical IDs (saved in the backend), convert logical to physical IDs.
 func (node *Node[TK, TV]) getChild(ctx context.Context, btree *Btree[TK, TV], childSlotIndex int) (*Node[TK, TV], error) {
 	id := node.getChildID(childSlotIndex)
 	if id == sop.NilUUID {
@@ -745,12 +733,12 @@ func (node *Node[TK, TV]) getChildren(ctx context.Context, btree *Btree[TK, TV])
 	return children, nil
 }
 
-// hasChildren returns true if node has children or not.
+// hasChildren returns true if the node has children.
 func (node *Node[TK, TV]) hasChildren() bool {
 	return len(node.ChildrenIDs) > 0
 }
 
-// isRootNode returns true if node has no parent.
+// isRootNode returns true if the node has no parent.
 func (node *Node[TK, TV]) isRootNode() bool {
 	return node.ParentID == sop.NilUUID
 }
@@ -760,11 +748,11 @@ func (node *Node[TK, TV]) distributeToLeft(ctx context.Context, btree *Btree[TK,
 		return nil
 	}
 	if node.isFull() {
-		// counter-clockwise rotation..
-		//	----
-		//	|  |
-		//	-> |
-		// NOTE: we don't check for null returns as this method is called only when there is vacant in left
+		// Counter-clockwise rotation.
+		//  ----
+		//  |  |
+		//  -> |
+		// NOTE: we don't check for nil returns as this method is called only when there is a vacancy on the left.
 		parent, err := node.getParent(ctx, btree)
 		if err != nil {
 			return err
@@ -775,7 +763,7 @@ func (node *Node[TK, TV]) distributeToLeft(ctx context.Context, btree *Btree[TK,
 			return nil
 		}
 
-		// Let controller to make another call to distribute item to left action.
+		// Let the controller make another call to distribute the item to the left.
 		btree.distributeAction.sourceNode, err = node.getLeftSibling(ctx, btree)
 		if err != nil {
 			return err
@@ -801,17 +789,17 @@ func (node *Node[TK, TV]) distributeToRight(ctx context.Context, btree *Btree[TK
 		return nil
 	}
 	if node.isFull() {
-		// clockwise rotation..
-		//	----
-		//	|  |
-		//	| <-
+		// Clockwise rotation.
+		//  ----
+		//  |  |
+		//  | <-
 		parent, err := node.getParent(ctx, btree)
 		if err != nil {
 			return nil
 		}
 		i := parent.getIndexOfChild(node)
 
-		// Let controller to make another call to distribute item to right action.
+		// Let the controller make another call to distribute the item to the right.
 		btree.distributeAction.sourceNode, err = node.getRightSibling(ctx, btree)
 		if err != nil {
 			return nil
@@ -834,7 +822,7 @@ func (node *Node[TK, TV]) promote(ctx context.Context, btree *Btree[TK, TV], ind
 	noOfOccupiedSlots := node.Count
 	index := indexPosition
 	if noOfOccupiedSlots < btree.getSlotLength() {
-		// Node is not yet full.. insert the parent.
+		// Node is not yet full; insert the parent.
 		shiftSlots(node.Slots, index, noOfOccupiedSlots)
 		if index > noOfOccupiedSlots {
 			index = noOfOccupiedSlots
@@ -851,9 +839,9 @@ func (node *Node[TK, TV]) promote(ctx context.Context, btree *Btree[TK, TV], ind
 		return nil
 	}
 
-	// Insert to temp slots.. node is full, use TempSlots
-	// NOTE: ensure node & its children being promoted will point to the correct
-	// new ParentID as recursive node breakup occurs...
+	// Insert into temp slots: node is full, use tempSlots.
+	// NOTE: ensure the node and its children being promoted point to the correct
+	// new ParentID as recursive node breakups occur...
 	copyArrayElements(btree.tempSlots, node.Slots, btree.getSlotLength())
 	shiftSlots(btree.tempSlots, index, btree.getSlotLength())
 	btree.tempSlots[index] = btree.tempParent
@@ -869,7 +857,7 @@ func (node *Node[TK, TV]) promote(ctx context.Context, btree *Btree[TK, TV], ind
 	slotsHalf := btree.getSlotLength() >> 1
 
 	if node.isRootNode() {
-		// No parent, break up this node into two children & keep node as root.
+		// No parent: break up this node into two children and keep node as root.
 		leftNode := newNode[TK, TV](btree.getSlotLength())
 		leftNode.newID(node.ID)
 
@@ -911,8 +899,8 @@ func (node *Node[TK, TV]) promote(ctx context.Context, btree *Btree[TK, TV], ind
 		btree.saveNode(rightNode)
 		return nil
 	}
-	// Prepare this and the right node sibling and promote the temporary parent node(btree.tempParent).
-	// This will be the left sibling !
+	// Prepare this node and the right sibling, then promote the temporary parent node (btree.tempParent).
+	// This will be the left sibling.
 	rightNode := newNode[TK, TV](btree.getSlotLength())
 	rightNode.newID(node.ParentID)
 	rightNode.ChildrenIDs = make([]sop.UUID, btree.getSlotLength()+1)
@@ -963,7 +951,7 @@ func (node *Node[TK, TV]) promote(ctx context.Context, btree *Btree[TK, TV], ind
 }
 
 func (node *Node[TK, TV]) newID(parentID sop.UUID) {
-	// Set the Physical IDs, transaction commit should handle resolving physical & logical IDs.
+	// Set the physical IDs; transaction commit should resolve physical vs logical IDs.
 	node.ID = sop.NewUUID()
 	node.ParentID = parentID
 }
@@ -1051,4 +1039,21 @@ func (node *Node[TK, TV]) unlink(ctx context.Context, btree *Btree[TK, TV]) erro
 	btree.saveNode(p)
 	btree.removeNode(node)
 	return nil
+}
+
+// getIndexOfChild returns the index of the given child within this node's ChildrenIDs.
+func (node *Node[TK, TV]) getIndexOfChild(child *Node[TK, TV]) int {
+	parent := node
+	// Ensure we don't access an invalid child index; recompute when unknown or mismatched.
+	if parent.ChildrenIDs != nil && (child.indexOfNode == -1 || child.ID != parent.ChildrenIDs[child.indexOfNode]) {
+		for child.indexOfNode = 0; child.indexOfNode <= len(parent.Slots); child.indexOfNode++ {
+			if parent.ChildrenIDs[child.indexOfNode].IsNil() {
+				continue
+			}
+			if parent.ChildrenIDs[child.indexOfNode] == child.ID {
+				break
+			}
+		}
+	}
+	return child.indexOfNode
 }

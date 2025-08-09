@@ -7,77 +7,70 @@ import (
 	"time"
 )
 
-// StoreInfo contains a given (B-Tree) store details.
+// StoreInfo describes a B-Tree store configuration and runtime state persisted in the backend.
 type StoreInfo struct {
-	// Short name of this (B-Tree store).
+	// Name is the short store name.
 	Name string `json:"name" minLength:"1" maxLength:"20"`
-	// Count of items that can be stored on a given node.
+	// SlotLength is the number of items per node.
 	SlotLength int `json:"slot_length" min:"2" max:"10000"`
-	// IsUnique tells whether key/value pair (items) of this tree should be unique on key.
+	// IsUnique enforces uniqueness on the key of key/value items.
 	IsUnique bool `json:"is_unique"`
-	// (optional) Description of the Store.
+	// Description optionally describes the store.
 	Description string `json:"description" maxLength:"500"`
-	// Virtual ID registry table name.
+	// RegistryTable is the registry table name.
 	RegistryTable string `json:"registry_table" minLength:"1" maxLength:"20"`
-	// Blob table name if using a table or (base) file path if storing blobs in File System.
+	// BlobTable is the blob table name or base filesystem path.
 	BlobTable string `json:"blob_table" minLength:"1" maxLength:"300"`
-	// RootNodeID is the root node's ID.
+	// RootNodeID is the root B-Tree node identifier.
 	RootNodeID UUID `json:"root_node_id"`
-	// Total count of items stored.
+	// Count is the total number of items persisted.
 	Count int64 `json:"count"`
-	// Used internally by SOP. Should be ignored when persisted in the backend.
+	// CountDelta is used internally to reconcile Count updates; it should not be persisted.
 	CountDelta int64 `json:"-"`
-	// Add or update timestamp in milliseconds.
+	// Timestamp is the add/update time in milliseconds.
 	Timestamp int64 `json:"timestamp"`
-	// IsValueDataInNodeSegment is true if "Value" data is stored in the B-Tree node's data segment.
-	// Otherwise is false.
+	// IsValueDataInNodeSegment stores the Value within the node segment when true.
 	IsValueDataInNodeSegment bool `json:"is_value_data_in_node_segment"`
-	// If true, each Btree Add(..) method call will persist the item value's data to another partition, then on commit,
-	// it will then be a very quick action as item(s) values' data were already saved on backend.
-	// This rquires 'IsValueDataInNodeSegment' field to be set to false to work.
+	// IsValueDataActivelyPersisted persists Value separately on Add/Update when true.
 	IsValueDataActivelyPersisted bool `json:"is_value_data_actively_persisted"`
-	// If true, the Value data will be cached in Redis, otherwise not. This is used when 'IsValueDataInNodeSegment'
-	// is set to false. Typically set to false if 'IsValueDataActivelyPersisted' is true, as value data is expected
-	// to be huge rendering caching it in Redis to affect Redis performance due to the drastic size of data per item.
+	// IsValueDataGloballyCached enables Redis caching of Value data when true.
 	IsValueDataGloballyCached bool `json:"is_value_data_globally_cached"`
-	// If true, node load will be balanced by pushing items to sibling nodes if there are vacant slots,
-	// otherwise will not. This feature can be turned off if backend is impacted by the "balancing" act.
+	// LeafLoadBalancing enables distribution to sibling nodes when capacity allows.
 	LeafLoadBalancing bool `json:"leaf_load_balancing"`
-	// Redis cache specification for this store's objects(registry, nodes, item value part).
-	// Defaults to the global specification and can be overriden for each store.
+	// CacheConfig overrides global cache settings per store.
 	CacheConfig StoreCacheConfig `json:"cache_config"`
 
-	// MapKey index specification or CEL expression, if/when we support CEL expression based comparer.
+	// MapKeyIndexSpecification contains a CEL or index specification used by the comparer.
 	MapKeyIndexSpecification string `json:"mapkey_index_spec"`
 
-	// Hint that tells the Python binding which JSON B-tree type to instantiate on Open method.
+	// IsPrimitiveKey hints the Python binding which JSON B-Tree to instantiate on open.
 	IsPrimitiveKey bool `json:"is_primitive_key"`
 }
 
-// Store Cache config specificaiton.
+// StoreCacheConfig declares cache durations and TTL flags for store artifacts.
 type StoreCacheConfig struct {
-	// Specifies this store's Registry Objects' Redis cache duration.
+	// RegistryCacheDuration controls caching for registry objects.
 	RegistryCacheDuration time.Duration `json:"registry_cache_duration"`
-	// Is RegistryCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	// IsRegistryCacheTTL enables sliding TTL for registry cache.
 	IsRegistryCacheTTL bool `json:"is_registry_cache_ttl"`
-	// Specifies this store's Node's Redis cache duration.
+	// NodeCacheDuration controls caching for nodes.
 	NodeCacheDuration time.Duration `json:"node_cache_duration"`
-	// Is NodeCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	// IsNodeCacheTTL enables sliding TTL for node cache.
 	IsNodeCacheTTL bool `json:"is_node_cache_ttl"`
-	// Only used if IsValueDataInNodeSegment(false) & IsValueDataGloballyCached(true).
-	// Specifies this store's Item Value part Redis cache duration.
+	// ValueDataCacheDuration controls caching for the item Value part when globally cached.
 	ValueDataCacheDuration time.Duration `json:"value_data_cache_duration"`
-	// Is ValueCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	// IsValueDataCacheTTL enables sliding TTL for value data cache.
 	IsValueDataCacheTTL bool `json:"is_value_data_cache_ttl"`
-	// Specifies this store's details(StoreInfo) Redis cache duration.
+	// StoreInfoCacheDuration controls caching for StoreInfo records.
 	StoreInfoCacheDuration time.Duration `json:"store_info_cache_duration"`
-	// Is StoreInfoCache sliding time(TTL) or not. If true, needs Redis 6.2.0+.
+	// IsStoreInfoCacheTTL enables sliding TTL for store info cache.
 	IsStoreInfoCacheTTL bool `json:"is_store_info_cache_ttl"`
 }
 
 const minCacheDuration = time.Duration(5 * time.Minute)
 
-// Create a new StoraceCacheConfig with common cache duration(& TTL setting) among its data parts.
+// NewStoreCacheConfig returns a StoreCacheConfig with uniform cache durations and TTL settings applied.
+// If cacheDuration is between 1ns and 5 minutes, it will be clamped to 5 minutes. TTL is disabled when duration is zero.
 func NewStoreCacheConfig(cacheDuration time.Duration, isCacheTTL bool) *StoreCacheConfig {
 	if cacheDuration > 0 && cacheDuration < minCacheDuration {
 		cacheDuration = minCacheDuration
@@ -97,7 +90,7 @@ func NewStoreCacheConfig(cacheDuration time.Duration, isCacheTTL bool) *StoreCac
 	}
 }
 
-// Enforce SOP minimum rule on caching period. SOP relies on caching for many things including the critically needed "orchestration".
+// enforceMinimumRule applies SOP minimum caching policy to ensure orchestrations remain effective.
 func (scc *StoreCacheConfig) enforceMinimumRule() {
 	if scc.NodeCacheDuration > 0 && scc.NodeCacheDuration < minCacheDuration {
 		scc.NodeCacheDuration = minCacheDuration
@@ -142,9 +135,7 @@ func (scc *StoreCacheConfig) enforceMinimumRule() {
 	}
 }
 
-// NewStoreInfoExt instantiates a new Store and offers more parameters configurable to your desire.
-// blobStoreBasePath can be left blank("") and SOP will generate a name for it. This parameter is geared so one can specify
-// a base path folder for the blob store using the File System. If using Cassandra table, please specify blank("").
+// NewStoreInfo creates and normalizes a StoreInfo based on StoreOptions, applying default naming and cache policy.
 func NewStoreInfo(si StoreOptions) *StoreInfo {
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if si.SlotLength%2 != 0 {
@@ -217,14 +208,13 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 	}
 }
 
-// Returns true if this StoreInfo is empty, false otherwise.
-// Empty StoreInfo signifies B-Tree does not exist yet.
+// IsEmpty reports whether the StoreInfo has zero values; an empty StoreInfo means the B-Tree does not yet exist.
 func (s StoreInfo) IsEmpty() bool {
 	var zero StoreInfo
 	return s == zero
 }
 
-// Returns true if another store is compatible with this one spec wise.
+// IsCompatible reports whether two StoreInfo configurations are compatible for merge/attach semantics.
 func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 	return s.SlotLength == b.SlotLength &&
 		s.IsUnique == b.IsUnique &&
@@ -238,7 +228,7 @@ func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 		s.MapKeyIndexSpecification == b.MapKeyIndexSpecification
 }
 
-// Format a given name into a registry table name by adding suffix.
+// FormatRegistryTable formats a store name into a registry table name by adding an _r suffix.
 func FormatRegistryTable(name string) string {
 	return fmt.Sprintf("%s_r", name)
 }

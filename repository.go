@@ -6,239 +6,208 @@ import (
 	"time"
 )
 
-// Manage or fetch Virtual ID request/response payload.
+// RegistryPayload represents a request/response payload to manage or fetch Handles/UUIDs in a registry table.
+// T can be either Handle (for writes) or UUID (for reads/deletes).
 type RegistryPayload[T Handle | UUID] struct {
-	// Registry table (name) where the Virtual IDs will be stored or fetched from.
+	// RegistryTable is the table (or namespace) where the virtual IDs are stored or fetched.
 	RegistryTable string
 
-	// During Rollback and Commit, we need to get hold of the paired BlobTable(or blob base folder path if in FS).
+	// BlobTable is the paired blob table (or base filesystem path) used during Rollback and Commit.
 	BlobTable string
-	// CacheDuration to be used for Redis caching.
+	// CacheDuration specifies Redis cache duration.
 	CacheDuration time.Duration
-	// true will use Redis' sliding time, a.k.a. TTL support.
+	// IsCacheTTL enables Redis TTL (sliding expiration) semantics when true.
 	IsCacheTTL bool
 
-	// IDs is an array containing the Virtual IDs details to be managed (CRUD).
+	// IDs contains the virtual IDs (or Handles) to manage.
 	IDs []T
 }
 
-// Virtual ID registry is essential in our support for all or nothing (sub)feature,
-// which is essential for fault tolerance.
-//
-// All methods are taking in a set of items.
+// Registry provides CRUD and replication operations for virtual ID management that back SOP's ACID workflow.
+// All methods accept and/or return batches.
 type Registry interface {
-	// Get will fetch handles(given their IDs) from registry table(s).
+	// Get fetches Handles (given logical IDs) from registry table(s).
 	Get(context.Context, []RegistryPayload[UUID]) ([]RegistryPayload[Handle], error)
-	// Add will insert handles to registry table(s).
+	// Add inserts Handles into registry table(s).
 	Add(context.Context, []RegistryPayload[Handle]) error
-	// Update will update handles potentially spanning across registry table(s). Will issue a cache lock call
-	// for each handle to be updated.
+	// Update modifies Handles across registry table(s) and acquires cache locks for each Handle.
 	Update(ctx context.Context, handles []RegistryPayload[Handle]) error
-	// Update for use in an active transaction where the registry handles for update were
-	// all pre-locked (& post call unlocked) by the transaction manager.
+	// UpdateNoLocks updates Handles in an active transaction where locks were pre-acquired by the transaction manager.
 	UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []RegistryPayload[Handle]) error
-	// Remove will delete handles(given their IDs) from registry table(s).
+	// Remove deletes Handles (given logical IDs) from registry table(s).
 	Remove(context.Context, []RegistryPayload[UUID]) error
 
-	// Implement to write to do the replication of data to passive target paths.
-	// This will be invoked after the transaction got committed to allow the registry to
-	// copy the files or portion of the files that were updated during the transaction.
+	// Replicate performs post-commit replication of blobs/data to passive targets.
 	Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
 }
 
-// ManageStore specifies the methods used to manage the Store(s) container.
+// ManageStore declares lifecycle operations for creating and removing store containers (e.g., folders).
 type ManageStore interface {
-	// Create the store(s) container, e.g. - folder if in file system.
+	// CreateStore creates the store(s) container (e.g., a filesystem folder).
 	CreateStore(context.Context, string) error
-	// Remove the store(s) container, e.g. - folder if in file system.
+	// RemoveStore removes the store(s) container (e.g., a filesystem folder).
 	RemoveStore(context.Context, string) error
 }
 
-// BlobStore specifies the backend blob store interface used for storing & managing data blobs.
-// Blobs are data that can vary in size and is big enough that they can't be stored in database
-// as it will impose performance penalties. This kind of data are typically stored in blob stores
-// like AWS S3, or file system, a Cassandra partition, etc...
+// BlobStore defines CRUD operations for binary blobs that are too large for typical databases
+// and are stored in external systems (e.g., S3, filesystem, Cassandra partitions).
 type BlobStore interface {
-	// Get or fetch a blob given an ID.
+	// GetOne fetches a blob by ID from a blob table.
 	GetOne(ctx context.Context, blobTable string, blobID UUID) ([]byte, error)
-	// Add blobs to store.
+	// Add inserts blobs.
 	Add(ctx context.Context, blobs []BlobsPayload[KeyValuePair[UUID, []byte]]) error
-	// Update blobs in store.
+	// Update modifies existing blobs.
 	Update(ctx context.Context, blobs []BlobsPayload[KeyValuePair[UUID, []byte]]) error
-	// Remove blobs in store with given IDs.
+	// Remove deletes blobs by ID.
 	Remove(ctx context.Context, blobsIDs []BlobsPayload[UUID]) error
 }
 
-// Manage or fetch node blobs request/response payload.
+// BlobsPayload is a request/response envelope for blob operations.
 type BlobsPayload[T UUID | KeyValuePair[UUID, []byte]] struct {
-	// Blob store table name.
+	// BlobTable is the blob store table name (or base filesystem path).
 	BlobTable string
-	// Blobs contains the blobs IDs and blobs data for upsert to the store or the blobs IDs to be removed.
+	// Blobs holds either IDs (for deletes) or ID+data pairs (for upserts).
 	Blobs []T
 }
 
-// Transaction Priority log.
+// TransactionPriorityLog records prioritised transaction logs used for recovery and replication workflows.
 type TransactionPriorityLog interface {
+	// IsEnabled reports whether priority logging is enabled.
 	IsEnabled() bool
-	// Add a transaction log.
+	// Add appends a priority log for a transaction.
 	Add(ctx context.Context, tid UUID, payload []byte) error
-	// Remove all logs of a given transaciton.
+	// Remove deletes all logs associated with a transaction.
 	Remove(ctx context.Context, tid UUID) error
-	// Fetch the transaction priority logs details given a transaction ID.
+	// Get retrieves priority log details for a transaction.
 	Get(ctx context.Context, tid UUID) ([]RegistryPayload[Handle], error)
 
-	// GetBatch will fetch the oldest transaction (older than 2 min) priority logs details, if there are, from the
-	// File System logs folder (i.e. - <stores home folder>/translogs).
+	// GetBatch fetches up to batchSize of the oldest (older than 2 minutes) priority logs for processing.
 	GetBatch(ctx context.Context, batchSize int) ([]KeyValuePair[UUID, []RegistryPayload[Handle]], error)
 
-	// Log commit changes to its own log file separate than the rest of transaction logs.
-	// This is a special log file only used during "reinstate" of drives back for replication.
+	// LogCommitChanges writes a special commit-change log used during drive reinstate for replication.
 	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
 
-	// Write a backup file for the priority log contents (payload).
+	// WriteBackup writes a backup copy of the priority log payload.
 	WriteBackup(ctx context.Context, tid UUID, payload []byte) error
-	// Remove a backup file.
+	// RemoveBackup deletes the backup file for the transaction.
 	RemoveBackup(ctx context.Context, tid UUID) error
 }
 
-// Transaction Log specifies the API(methods) needed to implement logging for the transaction.
+// TransactionLog persists transaction steps and provides job-distribution accessors for cleanup tasks.
 type TransactionLog interface {
-	// Returns the transaction priority logger.
+	// PriorityLog returns the priority logger implementation.
 	PriorityLog() TransactionPriorityLog
-	// Add a transaction log.
+	// Add appends a transaction log entry.
 	Add(ctx context.Context, tid UUID, commitFunction int, payload []byte) error
-	// Remove all logs of a given transaciton.
+	// Remove deletes all logs for a transaction.
 	Remove(ctx context.Context, tid UUID) error
 
-	// GetOne will fetch the oldest transaction logs from the backend, older than 1 hour ago, mark it so succeeding call
-	// will return the next hour and so on, until no more, upon reaching the current hour.
-	//
-	// GetOne behaves like a job distributor by the hour. SOP uses it to sprinkle/distribute task to cleanup
-	// left over resources by unfinished transactions in time. Be it due to crash or host reboot, any transaction
-	// temp resource will then age and reach expiration limit, then get cleaned up. This method is used to do distribution.
-	//
-	// It is capped to an hour ago older because anything newer may still be an in-flight or ongoing transaction.
+	// GetOne returns the oldest hour bucket (older than 1 hour) and its logs for cleanup distribution.
 	GetOne(ctx context.Context) (UUID, string, []KeyValuePair[int, []byte], error)
 
-	// Given a date hour, returns an available for cleanup set of transaction logs with their Transaction ID.
-	// Or nils if there is no more needing cleanup for this date hour.
+	// GetOneOfHour returns the available cleanup logs for a specific hour bucket.
 	GetOneOfHour(ctx context.Context, hour string) (UUID, []KeyValuePair[int, []byte], error)
 
-	// Implement to generate a new UUID. Cassandra transaction logging uses gocql.UUIDFromTime, SOP in file system
-	// should just use the general sop.NewUUID function which currently uses google's uuid package.
+	// NewUUID generates a UUID suitable for the logging backend (e.g., time-based in Cassandra).
 	NewUUID() UUID
 }
 
-// StoreRepository specifies CRUD methods for StoreInfo (storage &) management.
+// StoreRepository specifies CRUD and replication methods for StoreInfo records.
 type StoreRepository interface {
-	// Fetch store info with name(s).
+	// Get retrieves store info by name(s).
 	Get(context.Context, ...string) ([]StoreInfo, error)
-	// Fetch store info with name(s) & option to specify (caching) sliding time(TTL) duration.
+	// GetWithTTL retrieves store info using TTL/sliding cache semantics.
 	GetWithTTL(context.Context, bool, time.Duration, ...string) ([]StoreInfo, error)
-	// GetAll returns list of store names available in the backend.
+	// GetAll lists all store names available in the backend.
 	GetAll(context.Context) ([]string, error)
-	// Add store info & create related tables like for registry & for node blob.
+	// Add creates new store info entries and related tables (registry/blob).
 	Add(context.Context, ...StoreInfo) error
-	// Remove store info with name & drop related tables like for registry & for node blob.
+	// Remove deletes store info by name and drops related tables.
 	Remove(context.Context, ...string) error
 
-	// Update store info. Update should also merge the Count of items between the incoming store info
-	// and the target store info on the backend, as they may differ. It should use StoreInfo.CountDelta to reconcile the two.
+	// Update modifies store info and reconciles Count using CountDelta.
 	Update(context.Context, []StoreInfo) ([]StoreInfo, error)
-	// Implement to write to do the replication of data to passive target paths.
-	// This will be invoked after the transaction got committed to allow the StoreRepository to
-	// copy the files or portion of the files that were updated during the transaction.
+	// Replicate performs post-commit replication of updated data managed by the repository.
 	Replicate(context.Context, []StoreInfo) error
 }
 
-// KeyValue Store Item Action Response has the payload and the error, if in case an error occurred while doing CRUD operation.
+// KeyValueStoreItemActionResponse is the per-item response including payload and error for a CRUD action.
 type KeyValueStoreItemActionResponse[T any] struct {
 	Payload T
 	Error   error
 }
 
-// KeyValue Store Overall Response has a summary error(if there is) and the details about each item action failure if there is.
+// KeyValueStoreResponse aggregates per-item results and an optional summary error.
 type KeyValueStoreResponse[T any] struct {
-	// Each Item action(or operation) result.
+	// Details contains per-item action results.
 	Details []KeyValueStoreItemActionResponse[T]
-	// Overall error if at least one item action (or operation) failed.
+	// Error is a summary error if at least one action failed.
 	Error error
 }
 
-// KeyValueStore is a general purpose Store interface specifying methods or CRUD operations on Key & Value pair.
-// Implementations don't need to be too fancy, it can be as simple as supporting partial success.
+// KeyValueStore defines CRUD operations for a generic key-value backend with optional partial success semantics.
 type KeyValueStore[TK any, TV any] interface {
-	// Fetch entry(ies) with given key(s).
-	// Fetch term is used here because this CRUD interface is NOT part of the B-Tree system, thus, the context is
-	// to "fetch" from the remote data storage sub-system like AWS S3.
+	// Fetch retrieves entries by keys from the remote storage subsystem.
 	Fetch(context.Context, string, []TK) KeyValueStoreResponse[KeyValuePair[TK, TV]]
-	// Fetch a large entry with the given key.
+	// FetchLargeObject retrieves a single large entry by key.
 	FetchLargeObject(context.Context, string, TK) (TV, error)
-	// Add entry(ies) to the store.
+	// Add inserts entries.
 	Add(context.Context, string, []KeyValuePair[TK, TV]) KeyValueStoreResponse[KeyValuePair[TK, TV]]
-	// Update entry(ies) of the store.
+	// Update modifies existing entries.
 	Update(context.Context, string, []KeyValuePair[TK, TV]) KeyValueStoreResponse[KeyValuePair[TK, TV]]
-	// Remove entry(ies) from the store given their names.
+	// Remove deletes entries by keys.
 	Remove(context.Context, string, []TK) KeyValueStoreResponse[TK]
 }
 
-// Cache interface specifies the methods implemented for out of memory caching, e.g. - Redis based.
-// String key and interface{} value are the supported types. Also specifies methods useful for locking.
+// Cache abstracts an out-of-process cache (e.g., Redis) and its locking facilities.
 type Cache interface {
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
-	// First return bool var signifies success or false for one or these reasons: item(w/ key) was not found or an error occurred during Get.
-	// Second return is the item's value part.
-	// Third return is the error encountered calling Redis get API, if there is.
+	// Get returns: found(bool), value(string), err(error from backend).
 	Get(ctx context.Context, key string) (bool, string, error)
-	// First return bool var signifies success or false if either item was not found or an error occurred during Get.
+	// GetEx returns found(bool), value(string), err using TTL/sliding expiration semantics.
 	GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error)
 
-	// SetStruct upserts a given object with a key to it.
+	// SetStruct upserts a struct value under a key.
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
-	// GetStruct fetches a given object given a key. First return bool var signifies success or false if
-	// either item was not found or an error occurred during Get.
+	// GetStruct fetches a struct value; first return indicates success (false for not found or error).
 	GetStruct(ctx context.Context, key string, target interface{}) (bool, error)
-	// GetStruct fetches a given object given a key in a TTL manner, that is, sliding time.
-	// First return bool var signifies success or false if either item was not found or an error occurred during Get.
+	// GetStructEx fetches a struct value with TTL/sliding expiration semantics.
 	GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error)
-	// Delete removes the object given a key.
+	// Delete removes objects by keys; returns whether all keys were deleted.
 	Delete(ctx context.Context, keys []string) (bool, error)
-	// Ping is a utility function to check if connection is good.
+	// Ping checks connectivity to the cache backend.
 	Ping(ctx context.Context) error
 
-	// Formats a given string as a lock key.
+	// FormatLockKey creates a lock key name from an arbitrary string.
 	FormatLockKey(k string) string
-	// Create lock keys.
+	// CreateLockKeys builds LockKey objects from a set of key names.
 	CreateLockKeys(keys []string) []*LockKey
-	// Create lock keys for a given set of IDs, e.g. Transaction ID.
+	// CreateLockKeysForIDs builds LockKey objects for ID tuples (e.g., Transaction ID scoped locks).
 	CreateLockKeysForIDs(keys []Tuple[string, UUID]) []*LockKey
 
-	// Returns whether a set of keys are all locked & with TTL.
+	// IsLockedTTL reports whether all keys are locked and refreshes TTL with the provided duration.
 	IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
 
-	// Lock a set of keys. Returns (1st) true if succeeded, (2nd) UUID of lock owner, e.g. Transaction ID, (3rd) the error encountered.
-	// If error is returned, expect 1st to be false.
+	// Lock attempts to lock all keys; returns success, lock owner UUID, and any error encountered.
 	Lock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, UUID, error)
-	// Returns whether a set of keys are all locked.
+	// IsLocked reports whether all keys are currently locked.
 	IsLocked(ctx context.Context, lockKeys []*LockKey) (bool, error)
-	// Returns true if a set of keys are all locked, most likely by other processes (or threads).
-	// Use-case is for checking if a certain set of keys are locked by other processes.
+	// IsLockedByOthers reports whether the keys are locked by other processes.
 	IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error)
-	// Unlock a given set of keys.
+	// Unlock releases a set of keys.
 	Unlock(ctx context.Context, lockKeys []*LockKey) error
 
-	// Clear out the backend Cache database of all items.
+	// Clear purges the entire cache database.
 	Clear(ctx context.Context) error
 }
 
-// Closeable Cache is a cache that which, you can explicitly call its "Close" method
-// after you are done with it.
+// CloseableCache is a Cache that also implements io.Closer for explicit lifecycle control.
 type CloseableCache interface {
 	Cache
 	io.Closer
 }
 
-// LockKey contain fields to allow locking and unlocking of a set of cache keys.
+// LockKey represents a lockable cache key along with ownership metadata.
 type LockKey struct {
 	Key         string
 	LockID      UUID

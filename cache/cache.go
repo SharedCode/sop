@@ -2,16 +2,22 @@ package cache
 
 import "github.com/sharedcode/sop"
 
-// Generic Cache is useful for general MRU cache needs.
+// Cache is a generic MRU cache interface used for in-memory caching scenarios.
+// Implementations should maintain recency and support bulk operations.
 type Cache[TK comparable, TV any] interface {
+	// Clear removes all entries from the cache.
 	Clear()
+	// Set inserts or updates the given key/value pairs.
 	Set(items []sop.KeyValuePair[TK, TV])
+	// Get looks up the values for the given keys; missing keys yield zero values.
 	Get(keys []TK) []TV
+	// Delete removes the given keys from the cache, if present.
 	Delete(keys []TK)
+	// Count returns the number of items currently stored in the cache.
 	Count() int
-	// Returns yes if cache is at max capacity.
+	// IsFull reports whether the cache has reached its maximum capacity.
 	IsFull() bool
-	// Evict the Least Recently Used (LRU) items, if cache is at max capacity.
+	// Evict removes least-recently-used entries until capacity constraints are satisfied.
 	Evict()
 }
 
@@ -25,7 +31,7 @@ type cache[TK comparable, TV any] struct {
 	mru    *mru[TK, TV]
 }
 
-// Instantiate a new instance of this Cache w/ MRU management logic.
+// NewCache creates a new generic cache with MRU-based eviction.
 func NewCache[TK comparable, TV any](minCapacity, maxCapacity int) Cache[TK, TV] {
 	c := cache[TK, TV]{
 		lookup: make(map[TK]*cacheEntry[TK, TV], maxCapacity),
@@ -78,7 +84,7 @@ func (c *cache[TK, TV]) Delete(keys []TK) {
 	}
 }
 
-// Returns the count of items store in this L1 Cache.
+// Count returns the number of items currently stored in this cache.
 func (c *cache[TK, TV]) Count() int {
 	return len(c.lookup)
 }
@@ -86,6 +92,8 @@ func (c *cache[TK, TV]) Count() int {
 func (c *cache[TK, TV]) IsFull() bool {
 	return c.mru.isFull()
 }
+
+// Evict removes least-recently-used entries until the cache size is within capacity.
 func (c *cache[TK, TV]) Evict() {
 	c.mru.evict()
 }

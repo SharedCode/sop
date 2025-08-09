@@ -6,14 +6,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Task Runner struct is a very simple wrapper of errgroup. Not much here, 'just use errgroup hehe.
-// Most likely to drop this file and switch to errgroup soon. It is a little nice to tuck in the context.
+// TaskRunner is a thin wrapper around errgroup.Group that carries a context for convenience.
+// Consider using errgroup directly in new code.
 type TaskRunner struct {
 	eg      *errgroup.Group
 	context context.Context
 }
 
-// Create a new task runner. maxThreadCount specifies threads limit, -1 or 0 means no limit.
+// NewTaskRunner creates a new TaskRunner. maxThreadCount > 0 limits the number of concurrent goroutines.
 func NewTaskRunner(ctx context.Context, maxThreadCount int) *TaskRunner {
 	eg, ctx2 := errgroup.WithContext(ctx)
 	if maxThreadCount > 0 {
@@ -25,17 +25,17 @@ func NewTaskRunner(ctx context.Context, maxThreadCount int) *TaskRunner {
 	}
 }
 
-// Returns the contexr.
+// GetContext returns the TaskRunner's context.
 func (tr *TaskRunner) GetContext() context.Context {
 	return tr.context
 }
 
-// Spin up a new go thread to run a task function.
+// Go runs the provided task function in a new goroutine managed by the underlying errgroup.
 func (tr *TaskRunner) Go(task func() error) {
 	tr.eg.Go(task)
 }
 
-// Wrapper to errgroup.Wait.
+// Wait waits for all launched tasks to complete and returns the first encountered error, if any.
 func (tr *TaskRunner) Wait() error {
 	return tr.eg.Wait()
 }

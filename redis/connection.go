@@ -7,25 +7,25 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Redis configurable options.
+// Options holds configuration for connecting to a Redis server or cluster.
 type Options struct {
-	// Redis server(cluster) address.
+	// Address is the host:port of the Redis server/cluster.
 	Address string
-	// Password required when connecting to the Redis server.
+	// Password is the password used to authenticate.
 	Password string
-	// DB to connect to.
+	// DB is the database index to select.
 	DB int
-	// TLS config.
+	// TLSConfig contains TLS configuration for secure connections.
 	TLSConfig *tls.Config
 }
 
-// Connection contains Redis client connection object and the Options used to connect.
+// Connection wraps a redis.Client and the Options used to create it.
 type Connection struct {
 	Client  *redis.Client
 	Options Options
 }
 
-// DefaultOptions.
+// DefaultOptions returns an Options with localhost defaults (no password, DB 0).
 func DefaultOptions() Options {
 	return Options{
 		Address:  "localhost:6379",
@@ -37,12 +37,13 @@ func DefaultOptions() Options {
 var connection *Connection
 var mux sync.Mutex
 
-// Returns true if connection instance is valid.
+// IsConnectionInstantiated reports whether the package-level singleton connection exists.
 func IsConnectionInstantiated() bool {
 	return connection != nil
 }
 
-// Creates a singleton connection and returns it for every call.
+// OpenConnection initializes and returns the package-level singleton connection.
+// Subsequent calls return the same connection.
 func OpenConnection(options Options) (*Connection, error) {
 	if connection != nil {
 		return connection, nil
@@ -58,7 +59,7 @@ func OpenConnection(options Options) (*Connection, error) {
 	return connection, nil
 }
 
-// Close the singleton connection if open.
+// CloseConnection closes the package-level singleton connection, if present.
 func CloseConnection() error {
 	if connection == nil {
 		return nil
@@ -73,7 +74,7 @@ func CloseConnection() error {
 	return err
 }
 
-// Creates a singleton connection and returns it for every call.
+// openConnection creates a new redis client connection from options.
 func openConnection(options Options) *Connection {
 	client := redis.NewClient(&redis.Options{
 		TLSConfig: options.TLSConfig,
@@ -88,7 +89,7 @@ func openConnection(options Options) *Connection {
 	return &c
 }
 
-// Close the singleton connection if open.
+// closeConnection closes the given connection, if not already closed.
 func closeConnection(c *Connection) error {
 	if c == nil || c.Client == nil {
 		return nil

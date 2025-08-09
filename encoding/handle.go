@@ -9,14 +9,15 @@ import (
 	"github.com/sharedcode/sop"
 )
 
+// HandleEncoder encodes and decodes sop.Handle values to and from compact byte representations.
 type HandleEncoder struct{}
 
-// Instantiates a Handler Marshaler.
+// NewHandleMarshaler returns a new HandleEncoder instance.
 func NewHandleMarshaler() *HandleEncoder {
 	return &HandleEncoder{}
 }
 
-// Encodes handler to byte array.
+// Marshal encodes a Handle into the provided buffer and returns the resulting bytes.
 func (he HandleEncoder) Marshal(v sop.Handle, buffer []byte) ([]byte, error) {
 	w := bytes.NewBuffer(buffer)
 	pv := v
@@ -24,13 +25,14 @@ func (he HandleEncoder) Marshal(v sop.Handle, buffer []byte) ([]byte, error) {
 	return w.Bytes(), nil
 }
 
-// Decodes byte array back to a handler type.
+// Unmarshal decodes data into the target Handle.
 func (he HandleEncoder) Unmarshal(data []byte, target *sop.Handle) error {
 	r := bytes.NewBuffer(data)
 	err := decode(r, target)
 	return err
 }
 
+// UnmarshalLogicalID decodes only the logical UUID from an encoded Handle buffer.
 func (he HandleEncoder) UnmarshalLogicalID(data []byte) (sop.UUID, error) {
 	r := bytes.NewBuffer(data)
 	h, err := uuid.FromBytes(r.Next(16))

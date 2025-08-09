@@ -6,88 +6,86 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-// BtreeInterface defines publicly callable methods of Btree.
+// BtreeInterface defines the public API of the Btree.
 type BtreeInterface[TK Ordered, TV any] interface {
-	// Add adds an item to the b-tree and does not check for duplicates.
+	// Add adds an item to the B-tree and does not check for duplicates.
 	Add(ctx context.Context, key TK, value TV) (bool, error)
 
 	// AddIfNotExist adds an item if there is no item matching the key yet.
-	// Otherwise, it will do nothing and return false, for not adding the item.
-	// This is useful for cases one wants to add an item without creating a duplicate entry.
+	// Otherwise it does nothing and returns false.
+	// This is useful when adding an item without creating a duplicate entry.
 	AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error)
 
-	// Update finds the item with key and update its value to the incoming value argument.
+	// Update finds the item with key and updates its value to the incoming value argument.
 	Update(ctx context.Context, key TK, value TV) (bool, error)
-	// UpdateCurrentItem will update the Value of the current item.
-	// Key is read-only, thus, no argument for the key.
+	// UpdateCurrentItem updates the Value of the current item.
+	// Key is read-only.
 	UpdateCurrentItem(ctx context.Context, newValue TV) (bool, error)
 
-	// Add if not exist or update item if it exists.
+	// Upsert adds the item if it does not exist or updates it if it does.
 	Upsert(ctx context.Context, key TK, value TV) (bool, error)
 
-	// Remove will find the item with a given key then remove that item.
+	// Remove finds the item with a given key then removes that item.
 	Remove(ctx context.Context, key TK) (bool, error)
-	// RemoveCurrentItem will remove the current key/value pair from the store.
+	// RemoveCurrentItem removes the current key/value pair from the store.
 	RemoveCurrentItem(ctx context.Context) (bool, error)
 
-	// Find will search Btree for an item with a given key. Return true if found,
-	// otherwise false. firstItemWithKey is useful when there are items with same key.
-	// true will position pointer to the first item with the given key,
-	// according to key ordering sequence.
-	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
+	// Find searches the B-tree for an item with a given key. Returns true if found,
+	// otherwise false. firstItemWithKey is useful when there are items with the same key:
+	// true positions the cursor to the first item with the given key according to ordering.
+	// Use GetCurrentKey/GetCurrentValue to retrieve the current item's details.
 	Find(ctx context.Context, key TK, firstItemWithKey bool) (bool, error)
 	// FindWithID is synonymous to Find but allows code to supply the Item's ID to identify it.
-	// This is useful for B-Tree that allows duplicate keys(IsUnique = false) as it provides a way to
-	// differentiate duplicated keys via the unique ID(sop.UUID).
+	// This is useful for B-tree configurations that allow duplicate keys (IsUnique = false),
+	// as it provides a way to differentiate duplicates via the unique ID (sop.UUID).
 	FindWithID(ctx context.Context, key TK, id sop.UUID) (bool, error)
-	// GetCurrentKey returns the current item's key (& Item ID). If B-tree allows duplicates,
-	// having the Item ID available allows finding that item conveniently (see FindOneWithID).
+	// GetCurrentKey returns the current item's key (and Item ID). If the B-tree allows duplicates,
+	// having the Item ID available allows finding that item conveniently (see FindWithID).
 	GetCurrentKey() Item[TK, TV]
 	// GetCurrentValue returns the current item's value.
 	GetCurrentValue(ctx context.Context) (TV, error)
 	// GetCurrentItem returns the current item.
 	GetCurrentItem(ctx context.Context) (Item[TK, TV], error)
 
-	// First positions the "cursor" to the first item as per key ordering.
-	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
+	// First positions the cursor to the first item as per key ordering.
+	// Use GetCurrentKey/GetCurrentValue to retrieve the current item.
 	First(ctx context.Context) (bool, error)
-	// Last positionts the "cursor" to the last item as per key ordering.
-	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
+	// Last positions the cursor to the last item as per key ordering.
+	// Use GetCurrentKey/GetCurrentValue to retrieve the current item.
 	Last(ctx context.Context) (bool, error)
-	// Next positions the "cursor" to the next item as per key ordering.
-	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
+	// Next positions the cursor to the next item as per key ordering.
+	// Use GetCurrentKey/GetCurrentValue to retrieve the current item.
 	Next(ctx context.Context) (bool, error)
-	// Previous positions the "cursor" to the previous item as per key ordering.
-	// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or value).
+	// Previous positions the cursor to the previous item as per key ordering.
+	// Use GetCurrentKey/GetCurrentValue to retrieve the current item.
 	Previous(ctx context.Context) (bool, error)
 
-	// IsUnique returns true if B-Tree is specified to store items with Unique keys, otherwise false.
-	// Specifying uniqueness base on key makes the B-Tree permanently set. If you want just a temporary
-	// unique check during Add of an item, then you can use AddIfNotExist method for that.
+	// IsUnique returns true if the B-tree is configured to store items with unique keys.
+	// If you only need a uniqueness check when adding an item, use AddIfNotExist instead.
 	IsUnique() bool
 
-	// Returns the number of items in this B-Tree.
+	// Count returns the number of items in this B-tree.
 	Count() int64
 
-	// Returns StoreInfo which contains the details about this B-Tree.
+	// GetStoreInfo returns StoreInfo which contains the details about this B-tree.
 	GetStoreInfo() sop.StoreInfo
 
-	// // Lock the B-Tree for writing (if param is true) or for reading (if param is false).
-	// // Upon transaction commit, lock on any B-Trees are automatically released, why there is no "Unlock" function.
+	// // Lock the B-tree for writing (if param is true) or for reading (if param is false).
+	// // Upon transaction commit, lock on any B-trees are automatically released, why there is no "Unlock" function.
 	// Lock(ctx context.Context, forWriting bool) error
 }
 
-// NodeRepository interface specifies the node repository.
+// NodeRepository specifies the node repository used by the B-tree.
 type NodeRepository[TK Ordered, TV any] interface {
-	// Add will just cache the item, "add" action for submit on transaction commit as appropriate.
+	// Add caches the add action for submit on transaction commit.
 	Add(node *Node[TK, TV])
-	// Get fetches from backend(or from cache if exists) & returns the Node with a given nodeID.
+	// Get fetches from backend (or cache if present) and returns the Node with the given nodeID.
 	Get(ctx context.Context, nodeID sop.UUID) (*Node[TK, TV], error)
-	// Mark Node with nodeID as fetched, so, it will get checked for version conflict during commit.
+	// Fetched marks the Node with nodeID as fetched so it will be checked for version conflict during commit.
 	Fetched(nodeID sop.UUID)
-	// Update will just cache the item, "update" action for resolve on transaction commit as appropriate.
+	// Update caches the update action for resolution on transaction commit.
 	Update(node *Node[TK, TV])
-	// Remove will just cache the item, "remove" action for resolve on transaction commit as appropriate.
+	// Remove caches the remove action for resolution on transaction commit.
 	Remove(nodeID sop.UUID)
 }
 
@@ -95,23 +93,22 @@ type NodeRepository[TK Ordered, TV any] interface {
 // These action methods can be implemented to allow the backend to resolve and submit
 // these changes to the backend storage during transaction commit.
 type ItemActionTracker[TK Ordered, TV any] interface {
-	// Add will just cache the item, "add" action for submit on transaction commit as appropriate.
+	// Add caches the add action for submit on transaction commit.
 	Add(ctx context.Context, item *Item[TK, TV]) error
-	// Get will just cache the item, "get" action then resolve on transaction commit, compare version
-	// with backend copy, error out if version shows another transaction modified/deleted this item on the back.
+	// Get caches the get action to be resolved on transaction commit, comparing version
+	// with the backend copy and erroring if another transaction modified/deleted the item.
 	Get(ctx context.Context, item *Item[TK, TV]) error
-	// Update will just cache the item, "update" action for submit on transaction commit as appropriate.
+	// Update caches the update action for submit on transaction commit.
 	Update(ctx context.Context, item *Item[TK, TV]) error
-	// Remove will just cache the item, "remove" action for submit on transaction commit as appropriate.
+	// Remove caches the remove action for submit on transaction commit.
 	Remove(ctx context.Context, item *Item[TK, TV]) error
 }
 
-// StoreInterface contains different repositories needed/used by B-Tree to manage/access its
-// data/objects from a backend.
+// StoreInterface bundles the repositories the B-tree uses to manage/access its data/objects from a backend.
 type StoreInterface[TK Ordered, TV any] struct {
-	// NodeRepository is used to manage/access B-Tree nodes.
+	// NodeRepository is used to manage/access B-tree nodes.
 	NodeRepository NodeRepository[TK, TV]
-	// ItemActionTracker is used to track management actions to Items which
-	// are geared for resolution & submit on the backend during transaction commit.
+	// ItemActionTracker tracks management actions to Items which are resolved and submitted
+	// to the backend during transaction commit.
 	ItemActionTracker ItemActionTracker[TK, TV]
 }

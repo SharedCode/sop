@@ -4,35 +4,34 @@ import (
 	"time"
 )
 
-// Now lambda to allow unit test to inject replayable time.Now.
+// Now returns the current time. It is a var to allow tests to override time.Now for determinism.
 var Now = time.Now
 
-// Handle is a structure that holds Logical ID and the underlying Physical ID it maps to.
-// It is used by SOP to provide ability to support ACID transactions and swiftly replace
-// Node(s) of the trie.
+// Handle holds a logical ID and its two physical IDs (A and B) used to implement ACID-safe swaps.
+// SOP uses Handle to quickly switch between node versions and to support logical deletes.
 type Handle struct {
-	// LogicalID is the "functional" ID of the entity.
+	// LogicalID is the stable identifier of the entity.
 	LogicalID UUID
 	// PhysicalIDA is one of the two physical IDs supported.
 	PhysicalIDA UUID
-	// PhysicalIDB is the "other" physical ID supported.
+	// PhysicalIDB is the second physical ID supported.
 	PhysicalIDB UUID
-	// true if active ID is physicalIDB, otherwise false.
+	// IsActiveIDB indicates whether PhysicalIDB is currently the active ID.
 	IsActiveIDB bool
-	// Current state(active ID, final deleted state) version.
+	// Version is the current state version (active ID, final deleted state).
 	Version int32
-	// Work in progress(inactive ID, non final deleted state) timestamp in milliseconds.
+	// WorkInProgressTimestamp stores the millisecond timestamp of the inactive ID (or non-final deleted state).
 	WorkInProgressTimestamp int64
-	// IsDeleted is used for "logical" deletes.
+	// IsDeleted marks a logical delete.
 	IsDeleted bool
 }
 
 const (
-	// Size of a Handle struct, in bytes.
+	// HandleSizeInBytes is the size, in bytes, of a Handle structure when encoded.
 	HandleSizeInBytes = 62
 )
 
-// NewHandle creates a new Handle given a logical ID.
+// NewHandle creates a new Handle with the provided logical ID. PhysicalIDA is initialized to the same value.
 func NewHandle(id UUID) Handle {
 	return Handle{
 		LogicalID:   id,
@@ -40,7 +39,7 @@ func NewHandle(id UUID) Handle {
 	}
 }
 
-// GetActiveID returns the currently active (if there is) UUID of a given Handle.
+// GetActiveID returns the currently active UUID (either PhysicalIDA or PhysicalIDB).
 func (h Handle) GetActiveID() UUID {
 	if h.IsActiveIDB {
 		return h.PhysicalIDB
@@ -48,7 +47,7 @@ func (h Handle) GetActiveID() UUID {
 	return h.PhysicalIDA
 }
 
-// Returns the inactive phys. ID.
+// GetInActiveID returns the currently inactive physical UUID.
 func (h Handle) GetInActiveID() UUID {
 	if h.IsActiveIDB {
 		return h.PhysicalIDA
@@ -56,13 +55,13 @@ func (h Handle) GetInActiveID() UUID {
 	return h.PhysicalIDB
 }
 
-// Returns true if physical A and B are both in use across transactions, false otherwise.
+// IsAandBinUse reports whether both physical IDs A and B are populated.
 func (h Handle) IsAandBinUse() bool {
 	return !h.PhysicalIDA.IsNil() && !h.PhysicalIDB.IsNil()
 }
 
-// AllocateID will create a new UUID and auto-assign it to the available phys. A or B slot.
-// Will return nil UUID if there is no slot left.
+// AllocateID generates a new UUID and assigns it to the available physical slot.
+// If both A and B are already in use, NilUUID is returned.
 func (h *Handle) AllocateID() UUID {
 	if h.IsAandBinUse() {
 		return NilUUID
@@ -77,7 +76,7 @@ func (h *Handle) AllocateID() UUID {
 	return id
 }
 
-// Returns true if inactive ID is expired, false otherwise.
+// IsExpiredInactive reports whether the inactive ID has expired based on a fixed window.
 func (h *Handle) IsExpiredInactive() bool {
 	// Transaction commit is encouraged to be 15 mins max, thus, 1 hr expiration of failed
 	// node update ID(inactive or marked deleted ID) seems good.
@@ -86,17 +85,17 @@ func (h *Handle) IsExpiredInactive() bool {
 	return h.WorkInProgressTimestamp > 0 && h.WorkInProgressTimestamp < expiryTime
 }
 
-// Returns true if id is either physical ID A or B, false otherwise.
+// HasID reports whether the provided UUID matches either physical ID A or B.
 func (h *Handle) HasID(id UUID) bool {
 	return h.PhysicalIDA == id || h.PhysicalIDB == id
 }
 
-// Make inactive physical ID as active.
+// FlipActiveID switches the active physical ID from A to B or B to A.
 func (h *Handle) FlipActiveID() {
 	h.IsActiveIDB = !h.IsActiveIDB
 }
 
-// Reset to nil the inactive phys. ID.
+// ClearInactiveID resets the inactive physical ID to NilUUID and clears the WIP timestamp.
 func (h *Handle) ClearInactiveID() {
 	if h.IsActiveIDB {
 		h.PhysicalIDA = NilUUID
@@ -106,7 +105,7 @@ func (h *Handle) ClearInactiveID() {
 	h.WorkInProgressTimestamp = 0
 }
 
-// Return if this Handle is empty, i.e. - all fields nil.
+// IsEmpty reports whether all Handle fields are zero values (no IDs, not deleted, zero version and timestamps).
 func (x *Handle) IsEmpty() bool {
 	return x.LogicalID == NilUUID &&
 		!x.IsDeleted &&
@@ -116,7 +115,7 @@ func (x *Handle) IsEmpty() bool {
 		x.WorkInProgressTimestamp == 0
 }
 
-// Checks if this Handle instance has the same attributes' values as another Handle, except version #.
+// IsEqual reports whether two Handle instances are equal ignoring the Version field.
 func (x *Handle) IsEqual(y *Handle) bool {
 	return x.LogicalID == y.LogicalID &&
 		x.IsDeleted == y.IsDeleted &&
@@ -124,7 +123,7 @@ func (x *Handle) IsEqual(y *Handle) bool {
 		x.PhysicalIDB == y.PhysicalIDB
 }
 
-// Extract logical UUIDs of a given set of handles.
+// ExtractLogicalIDs converts a slice of RegistryPayload[Handle] to RegistryPayload[UUID] by mapping LogicalID.
 func ExtractLogicalIDs(storeHandles []RegistryPayload[Handle]) []RegistryPayload[UUID] {
 	r := make([]RegistryPayload[UUID], len(storeHandles))
 	for i := range storeHandles {

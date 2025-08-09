@@ -1,4 +1,4 @@
-// Package contains SOP in Redis, Cassandra & Kafka(in_red_c) integration code.
+// Package sop contains SOP integration code for Redis, Cassandra & Kafka (in_red_c).
 package sop
 
 import (
@@ -8,91 +8,79 @@ import (
 	"time"
 )
 
-// Transaction modes enumeration.
+// TransactionMode enumerates the supported transaction behaviors.
 type TransactionMode int
 
 const (
-	// No check does not allow any change to the Btree stores and does not check
-	// read items' versions (for consistency) during commit.
-	NoCheck = iota
-	// For writing mode allows changes to be done to the Btree stores.
+	// NoCheck disallows any changes and skips read-version checks during commit.
+	NoCheck TransactionMode = iota
+	// ForWriting allows modifications to B-Tree stores within the transaction.
 	ForWriting
-	// For reading mode does not allow any change to the Btree stores.
+	// ForReading disallows modifications; read-only.
 	ForReading
 )
 
-// Transaction interface defines the "enduser facing" transaction methods.
+// Transaction defines end-user-facing transactional operations.
 type Transaction interface {
-	// Begin the transaction.
+	// Begin starts the transaction.
 	Begin() error
-	// Commit the transaction.
+	// Commit finalizes the transaction.
 	Commit(ctx context.Context) error
-	// Rollback the transaction.
+	// Rollback aborts the transaction.
 	Rollback(ctx context.Context) error
-	// Returns true if transaction has begun, false otherwise.
+	// HasBegun reports whether the transaction has started.
 	HasBegun() bool
 
-	// Returns the two phased commit transaction object. Useful for integration with your application
-	// "other" database transactions. Returned transaction object will allow your code to call the
-	// two phases commit of SOP.
+	// GetPhasedTransaction returns the underlying two-phase commit transaction for orchestration with other systems.
 	GetPhasedTransaction() TwoPhaseCommitTransaction
-	// Add your two phases commit implementation for managing your/3rd party database transaction.
+	// AddPhasedTransaction registers external two-phase commit participants.
 	AddPhasedTransaction(otherTransaction ...TwoPhaseCommitTransaction)
 
-	// Returns list of all Btree stores available in the backend.
+	// GetStores lists all available B-Tree stores from the backend.
 	GetStores(ctx context.Context) ([]string, error)
 
-	// Call Close to allow cleanup/freeing of resources, if there are.
+	// Close releases any resources associated with the transaction.
 	Close() error
 
-	// Implement to return the transaction ID.
+	// GetID returns the transaction ID.
 	GetID() UUID
 }
 
-// TwoPhaseCommitTransaction interface defines the "infrastructure facing" transaction methods.
+// TwoPhaseCommitTransaction defines infrastructure-facing two-phase commit operations.
 type TwoPhaseCommitTransaction interface {
-	// Begin the transaction.
+	// Begin starts the transaction.
 	Begin() error
-	// Phase1Commit of the transaction.
+	// Phase1Commit performs the first phase (prepare) of the commit.
 	Phase1Commit(ctx context.Context) error
-	// Phase2Commit of the transaction.
+	// Phase2Commit performs the second phase (finalize) of the commit.
 	Phase2Commit(ctx context.Context) error
-	// Rollback the transaction.
-	// Gives option to flow the error (if there is) that caused rollback to be invoked.
+	// Rollback aborts the transaction and may be provided an error cause.
 	Rollback(ctx context.Context, err error) error
-	// Returns true if transaction has begun, false otherwise.
+	// HasBegun reports whether the transaction has started.
 	HasBegun() bool
-	// Returns the Transaction mode, it can be for reading or for writing.
+	// GetMode returns the configured TransactionMode.
 	GetMode() TransactionMode
 
-	// Returns all Btree stores available in the backend.
+	// GetStores lists all available B-Tree stores from the backend.
 	GetStores(ctx context.Context) ([]string, error)
 
-	// Implement close to handle resource cleanup, if there is a need.
+	// Close releases any resources associated with the transaction implementation.
 	Close() error
 
-	// Implement to return the transaction ID.
+	// GetID returns the transaction ID.
 	GetID() UUID
 }
 
-// Enduser facing Transaction (wrapper) implementation.
-
+// SinglePhaseTransaction wraps a TwoPhaseCommitTransaction providing an end-user friendly API
+// and optional participation of other two-phase commit transactions.
 type SinglePhaseTransaction struct {
 	SopPhaseCommitTransaction TwoPhaseCommitTransaction
 	otherTransactions         []TwoPhaseCommitTransaction
 }
 
-// NewTransaction creates an enduser facing transaction object by putting a wrapper to a two phase commit transaction object.
-// mode - if ForWriting will create a transaction that allows create, update, delete operations on B-Tree(s)
-// created or opened in the transaction. Otherwise it will be for ForReading(or NoCheck) mode.
-// twoPhaseCommitTrans - two phase commit implementation to be wrapped in this transaction.
-// maxTime - specify the maximum "commit" time of the transaction. That is, upon call to commit, it is given
-// this amount of time to conclude, otherwise, it will time out and rollback.
-// If -1 is specified, 15 minute max commit time will be assigned.
-// logging - true will turn on transaction logging, otherwise will not. If turned on, SOP will log each step
-// of the commit and these logs will help SOP to cleanup any uncommitted resources in case there are
-// some build up, e.g. crash or host reboot left ongoing commits' temp changes. In time these will expire and
-// SOP to clean them up.
+// NewTransaction constructs a Transaction wrapper around a TwoPhaseCommitTransaction.
+// mode controls permissions; maxTime caps the allowed commit duration (-1 uses 15m). When logging is true
+// SOP records commit steps to aid recovery and cleanup of expired resources.
 func NewTransaction(mode TransactionMode,
 	twoPhaseCommitTrans TwoPhaseCommitTransaction,
 	maxTime time.Duration, logging bool) (Transaction, error) {
@@ -102,7 +90,7 @@ func NewTransaction(mode TransactionMode,
 	}, nil
 }
 
-// Begin the transaction.
+// Begin starts the wrapped transaction and any registered participants.
 func (t *SinglePhaseTransaction) Begin() error {
 	if err := t.SopPhaseCommitTransaction.Begin(); err != nil {
 		return err
@@ -116,14 +104,12 @@ func (t *SinglePhaseTransaction) Begin() error {
 	return nil
 }
 
-// Close will call the inner transaction object's Close function.
+// Close calls Close on the wrapped transaction implementation.
 func (t *SinglePhaseTransaction) Close() error {
 	return t.SopPhaseCommitTransaction.Close()
 }
 
-// Commit the transaction. If multiple phase 1 commit erors are returned,
-// this will return the sop phase 1 commit error or
-// your other transactions phase 1 commits' last error.
+// Commit executes phase 1 on all participants and then phase 2; on error, Rollback is invoked.
 func (t *SinglePhaseTransaction) Commit(ctx context.Context) error {
 	// Phase 1 commit.
 	if err := t.SopPhaseCommitTransaction.Phase1Commit(ctx); err != nil {
@@ -152,8 +138,7 @@ func (t *SinglePhaseTransaction) Commit(ctx context.Context) error {
 	return nil
 }
 
-// Rollback the transaction. If multiple transaction rollbacks errored,
-// this will return the last error.
+// Rollback aborts the transaction and attempts to rollback all participants, returning the last error if any.
 func (t *SinglePhaseTransaction) Rollback(ctx context.Context) error {
 	t.SopPhaseCommitTransaction.Rollback(ctx, nil)
 	var lastErr error
@@ -165,32 +150,32 @@ func (t *SinglePhaseTransaction) Rollback(ctx context.Context) error {
 	return lastErr
 }
 
-// Returns the transaction's mode.
+// GetMode returns the transaction mode.
 func (t *SinglePhaseTransaction) GetMode() TransactionMode {
 	return t.SopPhaseCommitTransaction.GetMode()
 }
 
-// Returns true if transaction has begun, false otherwise.
+// HasBegun reports whether the transaction has started.
 func (t *SinglePhaseTransaction) HasBegun() bool {
 	return t.SopPhaseCommitTransaction.HasBegun()
 }
 
-// Returns the two phased commit transaction object. Useful for integration with your application
-// "other" database transactions. Returned transaction object will allow your code to call the
-// two phases commit of SOP.
+// GetPhasedTransaction returns the wrapped two-phase commit transaction.
 func (t *SinglePhaseTransaction) GetPhasedTransaction() TwoPhaseCommitTransaction {
 	return t.SopPhaseCommitTransaction
 }
 
-// Add your two phases commit implementation for managing your/3rd party database transaction.
+// AddPhasedTransaction registers additional two-phase commit participants.
 func (t *SinglePhaseTransaction) AddPhasedTransaction(otherTransaction ...TwoPhaseCommitTransaction) {
 	t.otherTransactions = append(t.otherTransactions, otherTransaction...)
 }
 
+// GetStores delegates to the wrapped transaction to list available stores.
 func (t *SinglePhaseTransaction) GetStores(ctx context.Context) ([]string, error) {
 	return t.SopPhaseCommitTransaction.GetStores(ctx)
 }
 
+// GetID returns the transaction ID.
 func (t *SinglePhaseTransaction) GetID() UUID {
 	return t.SopPhaseCommitTransaction.GetID()
 }

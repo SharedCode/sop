@@ -4,46 +4,39 @@ import (
 	"encoding/json"
 )
 
-// Marshaler interface specifies encoding to byte array and back to the object.
+// Marshaler defines methods to marshal/unmarshal values to/from byte slices.
 type Marshaler interface {
-	// Encodes any object to byte array.
+	// Marshal encodes any object to a byte slice.
 	Marshal(v any) ([]byte, error)
-	// Decodes byte array back to its Object type.
+	// Unmarshal decodes data back into the provided object pointer.
 	Unmarshal(data []byte, v any) error
 }
 
-// Global Default marshaller.
+// DefaultMarshaler is the package-wide default marshaler using JSON encoding.
 var DefaultMarshaler = NewMarshaler()
 
-// Global BlobMarshaler takes care of packing and unpacking to/from blob object & byte array.
-// You can replace with your desired Marshaler implementation if needed. Defaults to use JSON Marshal.
+// BlobMarshaler handles encoding for blobs. It defaults to DefaultMarshaler but can be replaced.
 var BlobMarshaler = DefaultMarshaler
 
 type defaultMarshaler struct{}
 
-// Returns the default marshaller which uses the golang's json package.
-// Json encoding was chosen as default because it supports "streaming" feature,
-// which will be an enabler on future releases, for example when the B-Tree
-// supports persistence of an item value's data to a separate segment(than the node's)
-// and it is huge, B-Tree may support "streaming" access to this data and it may use
-// Json's streaming feature.
-//
-// Streaming use-case: 2GB movie or a huge(2GB) data graph.
+// NewMarshaler returns a Marshaler implemented with the standard library JSON package.
+// JSON is chosen as default for its streaming capabilities useful for large value payloads.
 func NewMarshaler() Marshaler {
 	return &defaultMarshaler{}
 }
 
-// Encodes any object to a byte array.
+// Marshal encodes any object to a byte slice.
 func (m defaultMarshaler) Marshal(v any) ([]byte, error) {
 	return json.Marshal(v)
 }
 
-// Decodes a byte array back to its Object type.
+// Unmarshal decodes a byte slice back to its object type.
 func (m defaultMarshaler) Unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
 }
 
-// Marshal that can do byte array pass-through.
+// Marshal is a generic helper that marshals values and passes through byte slices without copying.
 func Marshal[T any](v T) ([]byte, error) {
 	switch any(v).(type) {
 	case *[]byte:
@@ -61,7 +54,7 @@ func Marshal[T any](v T) ([]byte, error) {
 	}
 }
 
-// Unmarshal that can do byte array pass-through.
+// Unmarshal is a generic helper that unmarshals values and passes through byte slices without copying.
 func Unmarshal[T any](ba []byte, v *T) error {
 	switch any(v).(type) {
 	case *[]byte:

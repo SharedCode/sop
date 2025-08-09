@@ -6,13 +6,14 @@ import (
 	"github.com/sharedcode/sop"
 )
 
+// sync_cache wraps a Cache with a mutex to provide thread-safe operations.
 type sync_cache[TK comparable, TV any] struct {
 	// Inherit from Cache.
 	Cache[TK, TV]
 	locker *sync.Mutex
 }
 
-// NewSynchronizedCache returns a Cache instance that is thread safe.
+// NewSynchronizedCache returns a thread-safe Cache instance backed by an MRU cache.
 func NewSynchronizedCache[TK comparable, TV any](minCapacity, maxCapacity int) Cache[TK, TV] {
 	return &sync_cache[TK, TV]{
 		locker: &sync.Mutex{},
