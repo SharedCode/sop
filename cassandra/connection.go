@@ -8,30 +8,26 @@ import (
 	"github.com/gocql/gocql"
 )
 
-// Config contains the this Cassandra package configuration or configurable variables.
+// Config contains configuration for connecting to a Cassandra cluster and SOP keyspace.
 type Config struct {
-	// Cassandra hosts cluster.
+	// ClusterHosts lists contact points for the Cassandra cluster.
 	ClusterHosts []string
-	// Keyspace to be used when doing I/O to cassandra.
+	// Keyspace is the keyspace used for SOP tables.
 	Keyspace string
-	// Default Consistency level.
+	// Consistency is the default consistency level for queries.
 	Consistency gocql.Consistency
-	// Connection Timeout.
+	// ConnectionTimeout is the session connection timeout.
 	ConnectionTimeout time.Duration
-	// Authenticator.
+	// Authenticator is used when the cluster requires authentication.
 	Authenticator gocql.Authenticator
-	// Defaults to "simple strategy & replication factor of 1".
+	// ReplicationClause defines the keyspace replication (e.g., SimpleStrategy).
 	ReplicationClause string
 
-	// ConsistencyBook should be used to specify consistency level to use for a given
-	// API, e.g. one for RegistryAdd, another for StoreAdd, etc... if you so choose to.
-	//
-	// You can leave it default and the API will use the default Consistency level
-	// for the cluster (defaults to local quorum).
+	// ConsistencyBook allows overriding per-API consistency levels.
 	ConsistencyBook ConsistencyBook
 }
 
-// Lists all the available API's consistency level that are settable in this package.
+// ConsistencyBook enumerates per-API consistency levels used by this package.
 type ConsistencyBook struct {
 	RegistryAdd    gocql.Consistency
 	RegistryUpdate gocql.Consistency
@@ -42,15 +38,14 @@ type ConsistencyBook struct {
 	StoreGet       gocql.Consistency
 	StoreRemove    gocql.Consistency
 
-	// Blob Store Consistency configs are only used if Blob Store backend is Cassandra,
-	// not used in others like File System.
+	// Blob store consistency levels are only used when the blob backend is Cassandra.
 	BlobStoreAdd    gocql.Consistency
 	BlobStoreGet    gocql.Consistency
 	BlobStoreUpdate gocql.Consistency
 	BlobStoreRemove gocql.Consistency
 }
 
-// Connection has the Session and the config used to open/create a session.
+// Connection wraps a Cassandra session and its configuration.
 type Connection struct {
 	Session *gocql.Session
 	Config
@@ -59,13 +54,12 @@ type Connection struct {
 var connection *Connection
 var mux sync.Mutex
 
-// Returns true if connection instance is valid.
+// IsConnectionInstantiated reports whether a global Connection has been created.
 func IsConnectionInstantiated() bool {
 	return connection != nil
 }
 
-// OpenConnection will create(& return) a new Connection to Cassandra if there is not one yet,
-// otherwise, will just return existing singleton connection.
+// OpenConnection returns the existing global Connection or opens a new one using the provided config.
 func OpenConnection(config Config) (*Connection, error) {
 	if connection != nil {
 		return connection, nil
@@ -122,7 +116,7 @@ func OpenConnection(config Config) (*Connection, error) {
 	return connection, nil
 }
 
-// Close the singleton connection if open.
+// CloseConnection closes and clears the global connection, if it exists.
 func CloseConnection() {
 	if connection != nil {
 		mux.Lock()

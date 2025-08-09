@@ -23,7 +23,7 @@ func NewTransaction(ctx context.Context, to TransationOptions) (sop.Transaction,
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
 func NewTwoPhaseCommitTransaction(ctx context.Context, to TransationOptions) (sop.TwoPhaseCommitTransaction, error) {
 	if !IsInitialized() {
-		return nil, fmt.Errorf("Redis was not initialized")
+		return nil, fmt.Errorf("redis was not initialized")
 	}
 	if to.Cache == nil {
 		to.Cache = redis.NewClient()
@@ -56,7 +56,8 @@ func NewTwoPhaseCommitTransaction(ctx context.Context, to TransationOptions) (so
 	return t, err
 }
 
-// Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
+// NewTransactionWithReplication creates a transaction that supports replication via SOP's replication on StoreRepository & Registry,
+// and Erasure Coding on the Blob Store.
 func NewTransactionWithReplication(ctx context.Context, towr TransationOptionsWithReplication) (sop.Transaction, error) {
 	twoPT, err := NewTwoPhaseCommitTransactionWithReplication(ctx, towr)
 	if err != nil {
@@ -65,8 +66,8 @@ func NewTransactionWithReplication(ctx context.Context, towr TransationOptionsWi
 	return sop.NewTransaction(towr.Mode, twoPT, towr.MaxTime, true)
 }
 
-// Create a transaction that supports replication, via custom SOP replicaiton on StoreRepository & Registry and then Erasure Coding on Blob Store.
-// Returns sop.TwoPhaseCommitTransaction type useful for integration with your custom application transaction where code would like to get access to SOP's two phase commit transaction API.
+// NewTwoPhaseCommitTransactionWithReplication creates a two-phase commit transaction with replication enabled.
+// Returns sop.TwoPhaseCommitTransaction to allow integration with custom application transactions requiring direct access to SOP's API.
 func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr TransationOptionsWithReplication) (sop.TwoPhaseCommitTransaction, error) {
 	if towr.IsEmpty() {
 		return nil, fmt.Errorf("towr can't be empty")
@@ -92,14 +93,13 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr Trans
 	}
 
 	if !IsInitialized() {
-		return nil, fmt.Errorf("Redis was not initialized")
+		return nil, fmt.Errorf("redis was not initialized")
 	}
 	sr, err := fs.NewStoreRepository(ctx, replicationTracker, mbsf, towr.Cache, towr.RegistryHashModValue)
 	if err != nil {
 		return nil, err
 	}
 
-	// Override with the read registry hash mod value (if there is).
 	// Override with the read registry hash mod value (if there is).
 	if i, err := sr.GetRegistryHashModValue(ctx); err != nil {
 		return nil, err

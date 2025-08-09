@@ -20,10 +20,10 @@ type registry struct {
 	l1Cache *cache.L1Cache
 }
 
-// Lock time out for the cache based conflict check routine in update (handles) function.
+// updateAllOrNothingOfHandleSetLockTimeout is the TTL used for cache-based conflict checks during updates.
 const updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 
-// NewRegistry manages the Handle in the store's Cassandra registry table.
+// NewRegistry returns a Cassandra-backed implementation of sop.Registry.
 func NewRegistry() sop.Registry {
 	return &registry{
 		l2Cache: redis.NewClient(),
@@ -60,7 +60,7 @@ func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[
 	return nil
 }
 
-// Update does an all or nothing update of the batch of handles, mapping them to respective registry table(s).
+// Update performs per-handle updates, acquiring per-key locks, and syncs caches on success.
 func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
@@ -110,6 +110,7 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 	return nil
 }
 
+// UpdateNoLocks updates records without locks, optionally as a logged batch, and refreshes caches.
 func (v *registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
@@ -175,6 +176,7 @@ func (v *registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesH
 	return nil
 }
 
+// Get fetches handles by ID, consulting the cache first and falling back to Cassandra.
 func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if connection == nil {
 		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
@@ -251,6 +253,7 @@ func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop
 	return storesHandles, nil
 }
 
+// Remove deletes handles from Cassandra and clears cached entries.
 func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
 	if connection == nil {
 		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
@@ -290,7 +293,7 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 	return nil
 }
 
-// Cassandra already provides replication for the registry tables, no need to do anything here.
+// Replicate is a no-op because Cassandra provides its own replication.
 func (v *registry) Replicate(ctx context.Context, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }

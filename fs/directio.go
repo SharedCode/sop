@@ -10,12 +10,16 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-// DirectIO API.
+// DirectIO exposes unbuffered file operations using O_DIRECT semantics where
+// supported. It is intended for large, block-aligned I/O on segment files.
 type DirectIO interface {
-	// Open the file with a given filename.
+	// Open opens a file with the given name and flags using direct I/O when possible.
 	Open(ctx context.Context, filename string, flag int, permission os.FileMode) (*os.File, error)
+	// WriteAt writes a block at the given offset.
 	WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error)
+	// ReadAt reads a block at the given offset.
 	ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error)
+	// Close closes the provided file handle.
 	Close(file *os.File) error
 }
 
@@ -25,7 +29,7 @@ const (
 
 type directIO struct{}
 
-// NewDirectIO creates the DirectIO instance that implements the "direct IO" calls.
+// NewDirectIO returns a DirectIO implementation backed by github.com/ncw/directio.
 func NewDirectIO() DirectIO {
 	return &directIO{}
 }

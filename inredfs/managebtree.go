@@ -1,4 +1,4 @@
-// Package in_red_ck contains SOP implementations that uses Redis for caching & Cassandra for backend data storage.
+// Package inredfs contains SOP implementations that use Redis for caching and the filesystem for backend data storage.
 package inredfs
 
 import (
@@ -15,10 +15,9 @@ import (
 	sd "github.com/sharedcode/sop/streamingdata"
 )
 
-// NewBtree will create a new B-Tree instance with data persisted to backend storage upon commit.
-// If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
-// and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
-// the OpenBtree function.
+// NewBtree creates a new B-tree instance with data persisted to the backend storage upon commit.
+// If the B-tree (by name) is not found, a new one is created; otherwise, the existing one is opened and parameters validated.
+// If you know it exists, prefer OpenBtree for clarity.
 func NewBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
 		if ct.HandleReplicationRelatedError != nil {
@@ -32,7 +31,7 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions
 	return common.NewBtree[TK, TV](ctx, so, t, comparer)
 }
 
-// OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
+// OpenBtree opens an existing B-tree instance and prepares it for use in a transaction.
 func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
 		if ct.HandleReplicationRelatedError != nil {
@@ -42,7 +41,7 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 	return common.OpenBtree[TK, TV](ctx, name, t, comparer)
 }
 
-// NewBtreeWithReplication will (create! &) instantiate a B-tree that has SOP's file system based replication feature.
+// NewBtreeWithReplication creates a B-tree that uses SOP's filesystem-based replication feature.
 func NewBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
 		if ct.HandleReplicationRelatedError == nil {
@@ -54,7 +53,7 @@ func NewBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, so s
 	return common.NewBtree[TK, TV](ctx, so, t, comparer)
 }
 
-// OpenBtreeWithReplication will (open &) instantiate a B-tree that has SOP's file system based replication feature.
+// OpenBtreeWithReplication opens a B-tree that uses SOP's filesystem-based replication feature.
 func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
 		if ct.HandleReplicationRelatedError == nil {
@@ -64,13 +63,8 @@ func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, nam
 	return common.OpenBtree[TK, TV](ctx, name, t, comparer)
 }
 
-// Removes B-Tree with a given name from the backend storage. This involves dropping tables
-// (registry & node blob) that are permanent action and thus, 'can't get rolled back.
-//
-// Use with care and only when you are sure to delete the tables. This does not flush the cache,
-// you will have to call cache.Clear to do that, WHEN safe.
-//
-// This API & cache.Clear are both destructive, please use with care.
+// RemoveBtree removes the B-tree with the given name from backend storage.
+// This is destructive: it drops registry and node-blob data and cannot be rolled back.
 func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) error {
 	log.Info(fmt.Sprintf("Btree %s%c%s is about to be deleted", storesBaseFolder, os.PathSeparator, name))
 
@@ -87,12 +81,8 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 	return storeRepository.Remove(ctx, name)
 }
 
-// Reinstate replication of the failed passive targets by delegating call to the Replication Tracker.
-//
-// storesFolders parameter serve the same purpose as how they got used/
-// values passed in in the call to NewTransactionOptionsWithReplication(..).
-//
-// storesFolders should contain the active & passive stores' base folder paths.
+// ReinstateFailedDrives asks the replication tracker to reinstate failed passive targets.
+// storesFolders must contain the active and passive stores' base folder paths.
 func ReinstateFailedDrives(ctx context.Context, storesFolders []string) error {
 	if len(storesFolders) != 2 {
 		return fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths)")
@@ -114,11 +104,7 @@ func ReinstateFailedDrives(ctx context.Context, storesFolders []string) error {
 
 // Streaming Data Store related.
 
-// NewStreamingDataStore implements data chunking on top of a B-tree, thus, it can support very large data sets. limited by your hardware only.
-// It returns JSON constructs like "encoder" (for writing) & "decoder" (for reading) which is backed by the B-tree and thus, gives your code
-// the convenience to "chunkitize" a huge huge object (blob) and still, be able to easily stream it, without impacting the network, because
-// B-tree stores this object in chunks and even allows you to manage its part(s). As they are stored in a B-tree in chunks, thus, you can easily
-// replace or update any part of the huge huge object (blob).
+// NewStreamingDataStore creates a streaming data store backed by a B-tree for chunked large-object storage.
 func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, so sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	if so.SlotLength < sd.MinimumStreamingStoreSlotLength {
 		return nil, fmt.Errorf("streaming data store requires minimum of %d SlotLength", sd.MinimumStreamingStoreSlotLength)
@@ -138,7 +124,7 @@ func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, so sop.StoreOp
 	}, nil
 }
 
-// OpenStreamingDataStore opens an existing data store for use in "streaming data".
+// OpenStreamingDataStore opens an existing streaming data store.
 func OpenStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	btree, err := OpenBtree[sd.StreamingDataKey[TK], []byte](ctx, name, trans, comparer)
 	if err != nil {
@@ -149,7 +135,7 @@ func OpenStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, 
 	}, nil
 }
 
-// Creates a new Streaming Data Store with replication feature.
+// NewStreamingDataStoreWithReplication creates a streaming data store with filesystem replication enabled.
 func NewStreamingDataStoreWithReplication[TK btree.Ordered](ctx context.Context, so sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	if so.SlotLength < sd.MinimumStreamingStoreSlotLength {
 		return nil, fmt.Errorf("streaming data store requires minimum of %d SlotLength", sd.MinimumStreamingStoreSlotLength)
@@ -169,7 +155,7 @@ func NewStreamingDataStoreWithReplication[TK btree.Ordered](ctx context.Context,
 	}, nil
 }
 
-// Opens a Streaming Data Store with replication feature. The store (with specified name) should already be existent for this to work.
+// OpenStreamingDataStoreWithReplication opens an existing streaming data store with filesystem replication enabled.
 func OpenStreamingDataStoreWithReplication[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[sd.StreamingDataKey[TK]]) (*sd.StreamingDataStore[TK], error) {
 	btree, err := OpenBtreeWithReplication[sd.StreamingDataKey[TK], []byte](ctx, name, trans, comparer)
 	if err != nil {

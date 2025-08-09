@@ -26,7 +26,7 @@ const (
 	PATCH
 )
 
-// RestMethod describes a REST route handler.
+// RestMethod describes a REST route handler with HTTP verb, path and handler function.
 type RestMethod struct {
 	Verb    HTTPVerb
 	Path    string
@@ -35,7 +35,7 @@ type RestMethod struct {
 
 var restMethods = make(map[string]RestMethod)
 
-// RegisterMethod builds a RestMethod and registers it using Register.
+// RegisterMethod builds a RestMethod and registers it in the package registry.
 func RegisterMethod(verb HTTPVerb, path string, h func(c *gin.Context)) error {
 	m := RestMethod{
 		Verb:    verb,
@@ -45,7 +45,7 @@ func RegisterMethod(verb HTTPVerb, path string, h func(c *gin.Context)) error {
 	return Register(m)
 }
 
-// Register inserts a RestMethod into the global registry preventing duplicates.
+// Register inserts a RestMethod into the global registry preventing duplicates of verb+path.
 func Register(m RestMethod) error {
 	key := fmt.Sprintf("%d_%s", m.Verb, m.Path)
 	if _, exists := restMethods[key]; exists {
@@ -55,7 +55,7 @@ func Register(m RestMethod) error {
 	return nil
 }
 
-// RestMethods returns all registered RestMethod entries keyed by verb+path.
+// RestMethods returns a copy-like view of registered REST methods.
 func RestMethods() map[string]RestMethod {
 	return restMethods
 }

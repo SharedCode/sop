@@ -44,6 +44,7 @@ func (r *registryOnDisk) Close() error {
 	return r.hashmap.close()
 }
 
+// Add persists the provided handles into their corresponding registry files and updates L1/L2 caches.
 func (r *registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if err := r.hashmap.add(ctx, storesHandles); err != nil {
 		return err
@@ -59,6 +60,7 @@ func (r *registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPa
 	return nil
 }
 
+// Update writes the provided handles to disk (with per-key locks) and refreshes L1/L2 caches.
 func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
@@ -92,6 +94,7 @@ func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registr
 	return nil
 }
 
+// UpdateNoLocks writes the provided handles to disk without acquiring per-key locks and updates caches.
 func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if err := r.hashmap.set(ctx, storesHandles); err != nil {
 		return err
@@ -109,6 +112,7 @@ func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, allOrNothing bool, s
 	return nil
 }
 
+// Get loads handles by logical IDs. It first checks L2 cache (with optional TTL) and then falls back to disk.
 func (r *registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	storesHandles := make([]sop.RegistryPayload[sop.Handle], 0, len(storesLids))
 	for _, storeLids := range storesLids {
@@ -166,6 +170,8 @@ func (r *registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPaylo
 	}
 	return storesHandles, nil
 }
+
+// Remove deletes handles from disk and evicts them from L1/L2 caches.
 func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
 	// Flush out the failing records from cache.
 	deleteFromCache := func(storesLids []sop.RegistryPayload[sop.UUID]) {
@@ -198,7 +204,7 @@ func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPa
    We need to also detect manual intervention to cause "recover" (the opposite of failover).
 */
 
-// Write the nodes handles to the target passive destinations.
+// Replicate writes registry updates to the passive destination, if replication is enabled.
 func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles,
 	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 

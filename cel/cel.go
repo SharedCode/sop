@@ -7,15 +7,14 @@ import (
 	"github.com/google/cel-go/cel"
 )
 
-// Evaluator struct contains the CEL expression & the cel program used to evaluate expression vs. input variables.
+// Evaluator holds a CEL expression and compiled program used to compare map-based keys.
 type Evaluator struct {
 	Expression string
 	program    cel.Program
 }
 
-// Instantiate a new CEL evaluator for use in SOP B-tree construction of the nodes' slots key & value pairs.
-// expression param is expected to be an expression that can compare mapX(key X) vs mapY(key Y) of the entries
-// to be managed by the B-tree.
+// NewEvaluator compiles a CEL expression that can compare mapX and mapY values and returns an Evaluator.
+// Both mapX and mapY are expected to be map[string]any variables in the program context.
 func NewEvaluator(name string, expression string) (*Evaluator, error) {
 	if name == "" {
 		return nil, fmt.Errorf("name can't be emptry string")
@@ -47,7 +46,7 @@ func NewEvaluator(name string, expression string) (*Evaluator, error) {
 	}, nil
 }
 
-// Evaluates the CEL expression passed in on initialization vs a provided data (key X & key Y) context.
+// Evaluate executes the compiled CEL expression against the provided mapX and mapY and returns an int result.
 func (e *Evaluator) Evaluate(mapX map[string]any, mapY map[string]any) (int, error) {
 	out, _, err := e.program.Eval(map[string]any{
 		"mapX": mapX,

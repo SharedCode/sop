@@ -15,7 +15,8 @@ import (
 	"github.com/sharedcode/sop/inmemory"
 )
 
-// StoreRepository is a File System based implementation of store repository.
+// StoreRepository is a filesystem-backed implementation of sop.StoreRepository.
+// It manages store metadata and coordinates replication via a replicationTracker.
 type StoreRepository struct {
 	cache                sop.Cache
 	manageStore          sop.ManageStore
@@ -29,11 +30,11 @@ const (
 	storeListFilename            = "storelist.txt"
 	storeInfoFilename            = "storeinfo.txt"
 	registryHashModValueFilename = "reghashmod.txt"
-	// Lock time out for the cache based locking of update store set function.
+	// updateStoresLockDuration is the TTL for cache-based locking during updates.
 	updateStoresLockDuration = time.Duration(15 * time.Minute)
 )
 
-// NewStoreRepository manages the StoreInfo in a File System.
+// NewStoreRepository creates a StoreRepository that persists store info to disk.
 func NewStoreRepository(ctx context.Context, rt *replicationTracker, manageStore sop.ManageStore, cache sop.Cache, registryHashModVal int) (*StoreRepository, error) {
 	if rt.replicate && len(rt.storesBaseFolders) != 2 {
 		return nil, fmt.Errorf("'storesBaseFolders' needs to be exactly two elements if 'replicate' parameter is true")
@@ -61,7 +62,7 @@ func NewStoreRepository(ctx context.Context, rt *replicationTracker, manageStore
 	}, nil
 }
 
-// Returns the Registry Hash Mod Value.
+// GetRegistryHashModValue returns the configured registry hash modulus value, reading from disk if needed.
 func (sr *StoreRepository) GetRegistryHashModValue(ctx context.Context) (int, error) {
 	if sr.registryHashModValue == 0 {
 		fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
@@ -80,10 +81,7 @@ func (sr *StoreRepository) GetRegistryHashModValue(ctx context.Context) (int, er
 	return sr.registryHashModValue, nil
 }
 
-// In the File System implementation, Add function manages the store list in its own file in the base folder
-// each store is allocated a sub-folder where store info file is persisted.
-//
-// Store list is not cached since adding/removing store(s) are rare events.
+// Add appends new stores to the repository, updating the store list, creating folders, and caching metadata.
 func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
 	// 1. Lock Store List.
 	lk := sr.cache.CreateLockKeys([]string{lockStoreListKey})
@@ -164,6 +162,7 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	// 8. Unlock Store List. The defer statement will unlock store list.
 }
 
+// Update merges the provided deltas into store metadata, using per-store locks to avoid conflicts.
 func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) ([]sop.StoreInfo, error) {
 	// Sort the stores info so we can commit them in same sort order across transactions,
 	// thus, reduced chance of deadlock.
@@ -273,10 +272,12 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 	return stores, nil
 }
 
+// Get returns store info for the named stores, consulting the cache first.
 func (sr *StoreRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
 	return sr.GetWithTTL(ctx, false, 0, names...)
 }
 
+// GetAll returns the list of all store names known to the repository.
 func (sr *StoreRepository) GetAll(ctx context.Context) ([]string, error) {
 	fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
 
@@ -294,6 +295,7 @@ func (sr *StoreRepository) GetAll(ctx context.Context) ([]string, error) {
 	return storeList, err
 }
 
+// GetWithTTL returns store info, using TTL-aware cache lookups when requested.
 func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
 	stores := make([]sop.StoreInfo, 0, len(names))
 	storesNotInCache := make([]string, 0)
@@ -362,9 +364,8 @@ func (sr *StoreRepository) getFromCache(ctx context.Context, names ...string) ([
 	return stores, nil
 }
 
-// Remove is destructive and shold only be done in an exclusive (admin only) operation.
-// Any deleted tables can't be rolled back. This is equivalent to DDL SQL script, which we
-// don't do part of a transaction.
+// Remove deletes the specified stores and their metadata from disk and evicts them from cache.
+// This is a destructive operation intended for administrative use and is not transactional.
 func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) error {
 	lk := sr.cache.CreateLockKeys([]string{lockStoreListKey})
 	defer sr.cache.Unlock(ctx, lk)

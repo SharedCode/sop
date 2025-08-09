@@ -12,7 +12,7 @@ import (
 // HandleEncoder encodes and decodes sop.Handle values to and from compact byte representations.
 type HandleEncoder struct{}
 
-// NewHandleMarshaler returns a new HandleEncoder instance.
+// NewHandleMarshaler returns a new HandleEncoder.
 func NewHandleMarshaler() *HandleEncoder {
 	return &HandleEncoder{}
 }

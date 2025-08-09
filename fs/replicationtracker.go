@@ -16,6 +16,8 @@ import (
 	"github.com/sharedcode/sop/redis"
 )
 
+// ReplicationTrackedDetails captures the replication state shared across processes,
+// including the active/passive folder selection and whether replication has failed.
 type ReplicationTrackedDetails struct {
 	FailedToReplicate bool
 	// If true, folder as specified in storesBaseFolders[0] will be the active folder,
@@ -50,7 +52,7 @@ const (
 var GlobalReplicationDetails *ReplicationTrackedDetails
 var globalReplicationDetailsLocker sync.Mutex = sync.Mutex{}
 
-// Instantiates a replication tracker.
+// NewReplicationTracker instantiates a tracker for active/passive folders and replication status.
 func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, replicate bool, l2Cache sop.Cache) (*replicationTracker, error) {
 	if l2Cache == nil {
 		l2Cache = redis.NewClient()
@@ -89,12 +91,13 @@ func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, repl
 	return &rt, nil
 }
 
+// SetTransactionID sets the transaction id for associating replication-related logs.
 func (r *replicationTracker) SetTransactionID(tid sop.UUID) {
 	r.tid = tid
 }
 
-// Handle replication related error is invoked from a transaction when an IO error is encountered.
-// This function should handle the act of failing over to the passive destinations making them as active and the active to be passive.
+// HandleReplicationRelatedError evaluates an I/O error and triggers failover when appropriate.
+// It is called by transactions when file I/O fails.
 func (r *replicationTracker) HandleReplicationRelatedError(ctx context.Context, ioError error, rollbackError error, rollbackSucceeded bool) {
 	if !r.replicate {
 		return
@@ -318,7 +321,7 @@ func (r *replicationTracker) readReplicationStatus(ctx context.Context, filename
 	return nil
 }
 
-// Sync global and this replication trackers with the L2 cache record.
+// syncWithL2Cache synchronizes replication state with L2 cache, pushing or pulling based on pushValue.
 func (r *replicationTracker) syncWithL2Cache(ctx context.Context, pushValue bool) error {
 
 	var rtd ReplicationTrackedDetails

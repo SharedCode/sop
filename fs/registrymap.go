@@ -18,7 +18,7 @@ func newRegistryMap(readWrite bool, hashModValue int, replicationTracker *replic
 	}
 }
 
-// Add a given set of Handle(s) record(s) on file(s) where they are supposed to get stored in.
+// add writes the given handle records to their on-disk locations based on hash mapping.
 func (rm registryMap) add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	// Individually write to the file area occupied by the handle so we don't create "lock pressure".
 	for _, item := range storesHandles {
@@ -45,7 +45,7 @@ func (rm registryMap) add(ctx context.Context, storesHandles []sop.RegistryPaylo
 	return nil
 }
 
-// Update a given set of Handle(s) record(s) on file(s) where they are stored in.
+// set updates existing handle records at their hashed locations.
 func (rm registryMap) set(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	for _, item := range storesHandles {
 		frds, err := rm.hashmap.findFileRegion(ctx, item.RegistryTable, getIDs(item.IDs))
@@ -74,7 +74,7 @@ func (rm registryMap) set(ctx context.Context, storesHandles []sop.RegistryPaylo
 	return nil
 }
 
-// Fetch the Handle record(s) from a given set of file(s) & their UUID(s).
+// fetch retrieves handle records by logical ID from on-disk files.
 func (rm registryMap) fetch(ctx context.Context, keys []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	result := make([]sop.RegistryPayload[sop.Handle], 0, len(keys))
 	for _, k := range keys {
@@ -90,7 +90,7 @@ func (rm registryMap) fetch(ctx context.Context, keys []sop.RegistryPayload[sop.
 	return result, nil
 }
 
-// Mark the Handle record(s) on file to be deleted & reuse ready.
+// remove marks the specified handle records as deleted, making their slots reusable.
 func (rm registryMap) remove(ctx context.Context, keys []sop.RegistryPayload[sop.UUID]) error {
 	// Individually delete the file area occupied by the handle so we don't create "lock pressure".
 	for _, key := range keys {
@@ -120,7 +120,7 @@ func (rm registryMap) remove(ctx context.Context, keys []sop.RegistryPayload[sop
 	return nil
 }
 
-// Close all files opened by this hashmap on disk.
+// close releases all open file handles associated with this registry map.
 func (rm registryMap) close() error {
 	return rm.hashmap.close()
 }

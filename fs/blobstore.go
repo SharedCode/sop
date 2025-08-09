@@ -31,6 +31,7 @@ func NewBlobStore(toFilePath ToFilePathFunc, fileIO FileIO) sop.BlobStore {
 	}
 }
 
+// GetOne reads and returns the blob data for the given blobID from the provided blobFilePath.
 func (b blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
 	fp := b.toFilePath(blobFilePath, blobID)
 	fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.String())
@@ -41,6 +42,7 @@ func (b blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.U
 	return ba, nil
 }
 
+// Add writes the provided blobs to disk under their computed file paths, creating directories as needed.
 func (b blobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {
@@ -60,10 +62,12 @@ func (b blobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.K
 	return nil
 }
 
+// Update replaces existing blobs with the provided data. It is functionally identical to Add.
 func (b blobStore) Update(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	return b.Add(ctx, storesblobs)
 }
 
+// Remove deletes the blobs identified by the given IDs. Non-existent files are ignored.
 func (b blobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	for _, storeBlobIDs := range storesBlobsIDs {
 		for _, blobID := range storeBlobIDs.Blobs {

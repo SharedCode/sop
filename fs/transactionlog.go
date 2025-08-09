@@ -16,12 +16,14 @@ import (
 )
 
 const (
-	// DateHourLayout format mask string.
+	// DateHourLayout is the time layout used for hour-bucketed log folders and files.
 	DateHourLayout   = "2006-01-02T15"
 	logFileExtension = ".log"
 	logFolder        = "translogs"
 )
 
+// TransactionLog writes per-transaction logs to disk and supports scanning and cleanup
+// of aged records. It also coordinates with a priority log for replication scenarios.
 type TransactionLog struct {
 	priorityLog
 	hourLockKey *sop.LockKey
@@ -33,7 +35,7 @@ type TransactionLog struct {
 
 var ageLimit float64 = 70
 
-// NewTransactionLog instantiates a new TransactionLog instance.
+// NewTransactionLog constructs a TransactionLog bound to the provided cache and replication tracker.
 func NewTransactionLog(cache sop.Cache, rt *replicationTracker) *TransactionLog {
 	return &TransactionLog{
 		cache:       cache,
@@ -44,12 +46,12 @@ func NewTransactionLog(cache sop.Cache, rt *replicationTracker) *TransactionLog 
 	}
 }
 
-// Returns the priority log logger.
+// PriorityLog returns the underlying priority log for commit-change logging.
 func (tl *TransactionLog) PriorityLog() sop.TransactionPriorityLog {
 	return tl.priorityLog
 }
 
-// Add transaction log w/ payload blob to the transaction log file.
+// Add appends a commit record with payload to this transaction's log file, creating the file if needed.
 func (tl *TransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
 	if tl.file == nil {
 		tl.tid = tid
@@ -86,7 +88,7 @@ func (tl *TransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction 
 	return nil
 }
 
-// Remove will delete transaction log(t_log) records given a transaction ID(tid).
+// Remove deletes the log file for the specified transaction ID.
 func (tl *TransactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 
 	if tl.tid == tid && tl.file != nil {
@@ -96,12 +98,12 @@ func (tl *TransactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 	return os.Remove(tl.format(tid))
 }
 
-// NewUUID generates a new sop UUID, currently a pass-through to google's uuid package.
+// NewUUID returns a new unique identifier for correlating log files.
 func (tl *TransactionLog) NewUUID() sop.UUID {
 	return sop.NewUUID()
 }
 
-// GetOne fetches an expired Transaction ID(TID), the hour it was created in and transaction logs for this TID.
+// GetOne claims one expired transaction hour bucket and returns a tid and its records for cleanup processing.
 func (tl *TransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
 	duration := time.Duration(7 * time.Hour)
 
@@ -135,6 +137,7 @@ func (tl *TransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 	return sop.UUID(tid), hour, r, nil
 }
 
+// GetOneOfHour returns a tid and records for the specified hour if the bucket is within the TTL window.
 func (tl *TransactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
 	if hour == "" {
 		return sop.NilUUID, nil, nil
@@ -237,13 +240,13 @@ func (tl *TransactionLog) format(tid sop.UUID) string {
 
 // Directory files' reader.
 
-// FileInfoWithModTime struct to hold FileInfo and modified time for sorting
+// FileInfoWithModTime associates a DirEntry with its modification timestamp for sorting purposes.
 type FileInfoWithModTime struct {
 	os.DirEntry
 	ModTime time.Time
 }
 
-// ByModTime implements sort.Interface for []FileInfoWithModTime based on ModTime
+// ByModTime sorts FileInfoWithModTime by modification time.
 type ByModTime []FileInfoWithModTime
 
 func (fis ByModTime) Len() int {
@@ -258,7 +261,8 @@ func (fis ByModTime) Less(i, j int) bool {
 	return fis[i].ModTime.Before(fis[j].ModTime)
 }
 
-// Reads a directory then returns the filenames sorted in descending order as driven by the files' modified time.
+// getFilesSortedDescByModifiedTime lists files in descending order by modification time,
+// filtered by extension and an optional predicate.
 func getFilesSortedDescByModifiedTime(ctx context.Context, directoryPath string, fileSuffix string, filter func(os.DirEntry) bool) ([]FileInfoWithModTime, error) {
 	fio := NewFileIO()
 

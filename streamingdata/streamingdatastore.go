@@ -12,25 +12,24 @@ import (
 )
 
 const (
+	// MinimumStreamingStoreSlotLength is the smallest node slot length allowed for streaming stores.
 	MinimumStreamingStoreSlotLength = 50
 )
 
-// StreamingDataStore contains methods useful for storage & management of entries that allow
-// encoding and decoding to/from data streams.
+// StreamingDataStore stores entries split into ordered chunks and provides stream-like read/write operations.
 type StreamingDataStore[TK btree.Ordered] struct {
 	// Inherit or reuse an Object implementing BtreeInterface. Golang's inheritance is actually better,
 	// it alows to inherit or reuse any object implementing a given interface. "loosely" & nicely done.
 	btree.BtreeInterface[StreamingDataKey[TK], []byte]
 }
 
-// StreamingDataKey is the Key struct for our Streaming Data Store. Take note, it has to be "public"(starts with capital letter)
-// and member fields "public" as well so it can get persisted by JSON encoder/decoder properly.
+// StreamingDataKey is the B-Tree key for streaming chunks: (Key, ChunkIndex).
 type StreamingDataKey[TK btree.Ordered] struct {
 	Key        TK
 	ChunkIndex int
 }
 
-// Compare is our Streaming Data Store comparer of keys.
+// Compare implements ordering by Key then ChunkIndex to preserve chunk order.
 func (x StreamingDataKey[TK]) Compare(other interface{}) int {
 	y := other.(StreamingDataKey[TK])
 
@@ -62,7 +61,7 @@ func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, so sop.StoreOp
 	}, nil
 }
 
-// OpenStreamingDataStore opens an existing data store for use in "streaming data".
+// OpenStreamingDataStore opens an existing streaming data store.
 func OpenStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[StreamingDataKey[TK]]) (*StreamingDataStore[TK], error) {
 	btree, err := inredck.OpenBtree[StreamingDataKey[TK], []byte](ctx, name, trans, comparer)
 	if err != nil {
@@ -73,7 +72,7 @@ func OpenStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, 
 	}, nil
 }
 
-// Add insert an item to the b-tree and returns an encoder you can use to write the streaming data on.
+// Add inserts a new streaming item and returns an Encoder for writing chunks.
 func (s *StreamingDataStore[TK]) Add(ctx context.Context, key TK) (*Encoder[TK], error) {
 	w := newWriter(ctx, true, key, s.BtreeInterface)
 	return newEncoder(w), nil
@@ -98,7 +97,7 @@ func (s *StreamingDataStore[TK]) Upsert(ctx context.Context, key TK) (*Encoder[T
 	return s.Add(ctx, key)
 }
 
-// Remove will delete the item's data chunks given its key.
+// Remove deletes all chunks for the item with the given key.
 func (s *StreamingDataStore[TK]) Remove(ctx context.Context, key TK) (bool, error) {
 	if found, err := s.FindOne(ctx, key); err != nil || !found {
 		return false, err
@@ -106,7 +105,7 @@ func (s *StreamingDataStore[TK]) Remove(ctx context.Context, key TK) (bool, erro
 	return s.RemoveCurrentItem(ctx)
 }
 
-// RemoveCurrentItem will delete the current item's data chunks.
+// RemoveCurrentItem deletes all chunks for the current item.
 func (s *StreamingDataStore[TK]) RemoveCurrentItem(ctx context.Context) (bool, error) {
 	if s.BtreeInterface.Count() == 0 {
 		return false, fmt.Errorf("failed to remove current item, store is empty")
@@ -137,7 +136,7 @@ func (s *StreamingDataStore[TK]) RemoveCurrentItem(ctx context.Context) (bool, e
 	return succeeded, lastErr
 }
 
-// Update finds the item with key and returns an encoder you can use to upload and update the item's data chunks.
+// Update prepares an Encoder for updating chunks of the item with the given key.
 func (s *StreamingDataStore[TK]) Update(ctx context.Context, key TK) (*Encoder[TK], error) {
 	if found, err := s.FindOne(ctx, key); err != nil || !found {
 		return nil, err
@@ -145,7 +144,7 @@ func (s *StreamingDataStore[TK]) Update(ctx context.Context, key TK) (*Encoder[T
 	return s.UpdateCurrentItem(ctx)
 }
 
-// UpdateCurrentItem will return an encoder that will allow you to update the current item's data chunks.
+// UpdateCurrentItem returns an Encoder for updating chunks of the current item.
 func (s *StreamingDataStore[TK]) UpdateCurrentItem(ctx context.Context) (*Encoder[TK], error) {
 	if s.BtreeInterface.Count() == 0 {
 		return nil, fmt.Errorf("failed to update current item, store is empty")
@@ -154,8 +153,7 @@ func (s *StreamingDataStore[TK]) UpdateCurrentItem(ctx context.Context) (*Encode
 	return newEncoder(w), nil
 }
 
-// Add a chunk to a given entry with specified key & chunk index. Key & chunk index should reference a new chunk record.
-// The function call will fail if there is already a given chunk w/ such key & chunk index in the database (B-tree).
+// AddChunk inserts a new chunk for the specified key and chunk index.
 func (s *StreamingDataStore[TK]) AddChunk(ctx context.Context, key TK, chunkIndex int, chunkValue []byte) (bool, error) {
 	return s.BtreeInterface.AddIfNotExist(ctx, StreamingDataKey[TK]{
 		Key:        key,
@@ -163,7 +161,7 @@ func (s *StreamingDataStore[TK]) AddChunk(ctx context.Context, key TK, chunkInde
 	}, chunkValue)
 }
 
-// Update an existing chunk (byte array) of a given entry with specified key & chunk index.
+// UpdateChunk updates an existing chunk for the specified key and chunk index.
 func (s *StreamingDataStore[TK]) UpdateChunk(ctx context.Context, key TK, chunkIndex int, newChunkValue []byte) (bool, error) {
 	return s.BtreeInterface.Update(ctx, StreamingDataKey[TK]{
 		Key:        key,
@@ -171,7 +169,7 @@ func (s *StreamingDataStore[TK]) UpdateChunk(ctx context.Context, key TK, chunkI
 	}, newChunkValue)
 }
 
-// Remove an existing chunk record of a given entry with specified key & chunk index.
+// RemoveChunk deletes the chunk for the specified key and chunk index.
 func (s *StreamingDataStore[TK]) RemoveChunk(ctx context.Context, key TK, chunkIndex int) (bool, error) {
 	return s.BtreeInterface.Remove(ctx, StreamingDataKey[TK]{
 		Key:        key,
@@ -179,7 +177,7 @@ func (s *StreamingDataStore[TK]) RemoveChunk(ctx context.Context, key TK, chunkI
 	})
 }
 
-// GetCurrentKey returns the current item's key.
+// GetCurrentKey returns the logical key of the current item cursor.
 func (s *StreamingDataStore[TK]) GetCurrentKey(ctx context.Context) TK {
 	if s.BtreeInterface.Count() == 0 {
 		var d TK
@@ -189,7 +187,7 @@ func (s *StreamingDataStore[TK]) GetCurrentKey(ctx context.Context) TK {
 	return k.Key
 }
 
-// GetCurrentItem returns the current item key & decoder you can use to download the data chunks (or stream it down).
+// GetCurrentItem returns the current key and a JSON decoder that streams its value.
 func (s *StreamingDataStore[TK]) GetCurrentItem(ctx context.Context) (btree.Item[TK, json.Decoder], error) {
 	if s.BtreeInterface.Count() == 0 {
 		return btree.Item[TK, json.Decoder]{}, fmt.Errorf("failed to get current item, store is empty")
@@ -202,7 +200,7 @@ func (s *StreamingDataStore[TK]) GetCurrentItem(ctx context.Context) (btree.Item
 	}, nil
 }
 
-// GetCurrentValue returns the current item's decoder you can use to download the data chunks (or stream it down).
+// GetCurrentValue returns a JSON decoder that streams the current item's value.
 func (s *StreamingDataStore[TK]) GetCurrentValue(ctx context.Context) (*json.Decoder, error) {
 	if s.BtreeInterface.Count() == 0 {
 		return nil, fmt.Errorf("failed to get current value, store is empty")
@@ -212,23 +210,18 @@ func (s *StreamingDataStore[TK]) GetCurrentValue(ctx context.Context) (*json.Dec
 	return json.NewDecoder(r), nil
 }
 
-// FindOne will search Btree for an item with a given key. Return true if found,
-// otherwise false.
-// Use the CurrentKey/CurrentValue to retrieve the "current item" details(key &/or decoder).
+// FindOne finds the first chunk for a key and positions the cursor there.
 func (s *StreamingDataStore[TK]) FindOne(ctx context.Context, key TK) (bool, error) {
 	k := StreamingDataKey[TK]{Key: key}
 	return s.BtreeInterface.Find(ctx, k, false)
 }
 
-// Synonymous to FindChunk.
+// FindOneWithID finds a specific chunk index for a key (alias of FindChunk).
 func (s *StreamingDataStore[TK]) FindOneWithID(ctx context.Context, key TK, chunkIndex int) (bool, error) {
 	return s.FindChunk(ctx, key, chunkIndex)
 }
 
-// FindChunk will search Btree for an item with a given key and chunkIndex.
-// If you passed in a chunkIndex that is beyond the number of chunks of the item then it will return false.
-//
-// You can use FindChunk or FindOne & Next to navigate to the fragment or chunk # you are targeting to download.
+// FindChunk finds a specific chunk for a key and positions the cursor there.
 func (s *StreamingDataStore[TK]) FindChunk(ctx context.Context, key TK, chunkIndex int) (bool, error) {
 	k := StreamingDataKey[TK]{Key: key, ChunkIndex: chunkIndex}
 	return s.BtreeInterface.Find(ctx, k, false)

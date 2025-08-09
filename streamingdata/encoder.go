@@ -7,7 +7,7 @@ import (
 	"github.com/sharedcode/sop/btree"
 )
 
-// An Encoder writes JSON values to an output stream by delegating to JSON Encoder.
+// Encoder writes JSON values to chunked storage by delegating to json.Encoder over a custom writer.
 type Encoder[TK btree.Ordered] struct {
 	jsonEncoder *json.Encoder
 	w           *writer[TK]
@@ -20,12 +20,8 @@ func newEncoder[TK btree.Ordered](w *writer[TK]) *Encoder[TK] {
 	}
 }
 
-// Close is only useful for Update/UpdateCurrentItem. It allows StreamingDataStore
-// to do any house cleanup if needed. Not necessary for Add/AddIfNotExists methods
-// of StreamingDataStore.
-//
-// Example, on Update/UpdateCurrentItem, store will ensure to cleanup or delete
-// any chunks that were not replaced by the encoder/writer.
+// Close finalizes Update/UpdateCurrentItem by deleting any remaining old chunks.
+// It is a no-op for Add/AddIfNotExist.
 func (e *Encoder[TK]) Close() error {
 	// Don't do anything if in add mode.
 	if e.w.addOrUpdate {
@@ -52,29 +48,17 @@ func (e *Encoder[TK]) Close() error {
 	return nil
 }
 
-// Encode writes the JSON encoding of v to the stream,
-// followed by a newline character.
-//
-// See the documentation for Marshal for details about the
-// conversion of Go values to JSON.
+// Encode writes v as JSON to the underlying chunked writer followed by a newline.
 func (e *Encoder[TK]) Encode(v any) error {
 	return e.jsonEncoder.Encode(v)
 }
 
-// SetIndent instructs the encoder to format each subsequent encoded
-// value as if indented by the package-level function Indent(dst, src, prefix, indent).
-// Calling SetIndent("", "") disables indentation.
+// SetIndent controls indentation for subsequent encodes. SetIndent("", "") disables pretty printing.
 func (e *Encoder[TK]) SetIndent(prefix, indent string) {
 	e.jsonEncoder.SetIndent(prefix, indent)
 }
 
-// SetEscapeHTML specifies whether problematic HTML characters
-// should be escaped inside JSON quoted strings.
-// The default behavior is to escape &, <, and > to \u0026, \u003c, and \u003e
-// to avoid certain safety problems that can arise when embedding JSON in HTML.
-//
-// In non-HTML settings where the escaping interferes with the readability
-// of the output, SetEscapeHTML(false) disables this behavior.
+// SetEscapeHTML toggles escaping of HTML characters in JSON strings.
 func (e *Encoder[TK]) SetEscapeHTML(on bool) {
 	e.jsonEncoder.SetEscapeHTML(on)
 }

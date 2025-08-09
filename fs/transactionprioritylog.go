@@ -22,11 +22,12 @@ type priorityLog struct {
 	tid                sop.UUID
 }
 
+// IsEnabled reports whether priority logging is enabled.
 func (l priorityLog) IsEnabled() bool {
 	return true
 }
 
-// Add transaction log w/ payload blob to the transaction log file.
+// Add writes the priority log payload for a transaction.
 func (l priorityLog) Add(ctx context.Context, tid sop.UUID, payload []byte) error {
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogFileExtension))
 	fio := NewFileIO()
@@ -34,13 +35,12 @@ func (l priorityLog) Add(ctx context.Context, tid sop.UUID, payload []byte) erro
 	return nil
 }
 
-// Log commit changes to its own log file separate than the rest of transaction logs.
-// This is a special log file only used during "reinstate" of drives back for replication.
+// LogCommitChanges persists commit-change metadata used when reinstating failed drives.
 func (l priorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 	return l.replicationTracker.logCommitChanges(ctx, l.tid, stores, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles)
 }
 
-// Fetch the transaction priority logs details given a tranasction ID.
+// Get loads the priority log payload for a transaction, if present.
 func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogFileExtension))
 	fio := NewFileIO()
@@ -56,6 +56,7 @@ func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPaylo
 	}
 }
 
+// GetBatch returns up to batchSize oldest priority log entries ready for processing.
 func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 	cappedHour := mh.Add(-time.Duration(priorityLogMinAgeInMin * time.Minute))
@@ -115,7 +116,7 @@ func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 	return res, nil
 }
 
-// Remove will delete transaction log(t_log) records given a transaction ID(tid).
+// Remove deletes the priority log for a transaction, if present.
 func (l priorityLog) Remove(ctx context.Context, tid sop.UUID) error {
 	fio := NewFileIO()
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogFileExtension))
@@ -125,6 +126,7 @@ func (l priorityLog) Remove(ctx context.Context, tid sop.UUID) error {
 	return nil
 }
 
+// WriteBackup writes a backup copy of the priority log payload.
 func (l priorityLog) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogBackupFileExtension))
 	fio := NewFileIO()
@@ -132,6 +134,7 @@ func (l priorityLog) WriteBackup(ctx context.Context, tid sop.UUID, payload []by
 	return nil
 }
 
+// RemoveBackup deletes the backup copy of the priority log payload.
 func (l priorityLog) RemoveBackup(ctx context.Context, tid sop.UUID) error {
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogBackupFileExtension))
 	fio := NewFileIO()

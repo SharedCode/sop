@@ -8,7 +8,7 @@ import (
 	"github.com/sharedcode/sop/fs"
 )
 
-// Transaction Options contains the Transaction parameters.
+// TransationOptions contains the transaction parameters.
 type TransationOptions struct {
 	// Base folder where the Stores (registry, blob & store repository) subdirectories & files
 	// will be created in.
@@ -23,6 +23,7 @@ type TransationOptions struct {
 	Cache sop.Cache
 }
 
+// TransationOptionsWithReplication contains transaction parameters for replication-enabled setups.
 type TransationOptionsWithReplication struct {
 	// Base folder where the Stores (registry, blob & store repository) subdirectories & files
 	// will be created in. This is expected to be two element array, the 2nd element specifies
@@ -40,12 +41,12 @@ type TransationOptionsWithReplication struct {
 	ErasureConfig map[string]fs.ErasureCodingConfig `json:"erasure_config"`
 }
 
-// Returns true if this TransactionOptionsWithReplication is empty.
+// IsEmpty returns true if this TransationOptionsWithReplication has no configured values.
 func (towr *TransationOptionsWithReplication) IsEmpty() bool {
 	return len(towr.StoresBaseFolders) == 0 && towr.Cache == nil && towr.ErasureConfig == nil && towr.RegistryHashModValue == 0
 }
 
-// Create a new TransactionOptions using defaults for cache related.
+// NewTransactionOptions creates a new TransationOptions with validated defaults for cache-related settings.
 func NewTransactionOptions(storeFolder string, mode sop.TransactionMode, maxTime time.Duration,
 	registryHashMod int) (TransationOptions, error) {
 
@@ -68,8 +69,7 @@ func NewTransactionOptions(storeFolder string, mode sop.TransactionMode, maxTime
 	}, nil
 }
 
-// Instantiates a new TransactionOptionsWithReplication options struct populated with values from parameters
-// and some fields using recommended default values or seeded with values based on the parameters received.
+// NewTransactionOptionsWithReplication instantiates TransationOptionsWithReplication, applying defaults and validations.
 //
 // storesFolders & erasureConfig parameters serve the same purpose as how they got used/
 // values passed in in the call to NewTransactionOptionsWithReplication(..).

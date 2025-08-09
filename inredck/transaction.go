@@ -19,14 +19,12 @@ func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging boo
 	return sop.NewTransaction(mode, twoPT, maxTime, logging)
 }
 
-// NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
-// or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
-// If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
-// However, without logging, the transaction commit can execute faster because there is no data getting logged.
+// NewTwoPhaseCommitTransaction instantiates a transaction for writing (forWriting=true) or reading (forWriting=false).
+// Pass -1 for maxTime to default to 15 minutes. If logging is on, changes are logged for recovery at the cost of performance.
 func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool,
 	blobStore sop.BlobStore, storeRepository sop.StoreRepository) (sop.TwoPhaseCommitTransaction, error) {
 	if !IsInitialized() {
-		return nil, fmt.Errorf("Redis and/or Cassandra bits were not initialized")
+		return nil, fmt.Errorf("redis and/or cassandra bits were not initialized")
 	}
 	return common.NewTwoPhaseCommitTransaction(mode, maxTime, logging, blobStore, storeRepository, cas.NewRegistry(), redis.NewClient(), cas.NewTransactionLog())
 }

@@ -9,7 +9,9 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-// Functions for File I/O defaults to "os" file I/O functions.
+// FileIO defines filesystem operations used by this package. The default
+// implementation delegates to the standard library's os package with retry
+// semantics for transient errors.
 type FileIO interface {
 	WriteFile(ctx context.Context, name string, data []byte, perm os.FileMode) error
 	ReadFile(ctx context.Context, name string) ([]byte, error)
@@ -25,6 +27,8 @@ type FileIO interface {
 type defaultFileIO struct {
 }
 
+// NewFileIO returns a FileIO that performs I/O via the os package with basic
+// retry handling for transient errors.
 func NewFileIO() FileIO {
 	return &defaultFileIO{}
 }

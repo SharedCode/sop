@@ -15,7 +15,7 @@ type Marshaler interface {
 // DefaultMarshaler is the package-wide default marshaler using JSON encoding.
 var DefaultMarshaler = NewMarshaler()
 
-// BlobMarshaler handles encoding for blobs. It defaults to DefaultMarshaler but can be replaced.
+// BlobMarshaler is used for blob payloads. It defaults to DefaultMarshaler but can be overridden.
 var BlobMarshaler = DefaultMarshaler
 
 type defaultMarshaler struct{}

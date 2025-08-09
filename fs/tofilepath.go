@@ -7,17 +7,14 @@ import (
 	"github.com/sharedcode/sop"
 )
 
+// ToFilePathFunc formats a base path and UUID into a filesystem path optimized for I/O locality.
 type ToFilePathFunc func(basePath string, id sop.UUID) string
 
-// ToFilePath is used for formatting a base folder path & a GUID into a file path & file name
-// optimized for efficient I/O. It can be a simple logic as the default function shown below
-// or you can implement as fancy as partitioning across many storage devices, e.g. - using
-// the 1st hex digit, apply modulo to distribute to your different storage devices.
-//
-// Or using the basePath to specify different storage path, this perhaps is the typical case(default).
+// ToFilePath holds the global path formatting function used by the blob stores.
+// Applications may override this to control file placement and partitioning.
 var ToFilePath ToFilePathFunc = DefaultToFilePath
 
-// Default file path formatter, given a base path & a GUID.
+// DefaultToFilePath formats a path by appending a 4-level folder hierarchy derived from the UUID.
 func DefaultToFilePath(basePath string, id sop.UUID) string {
 	if len(basePath) > 0 && basePath[len(basePath)-1] == os.PathSeparator {
 		return fmt.Sprintf("%s%s", basePath, Apply4LevelHierarchy(id))
@@ -25,7 +22,7 @@ func DefaultToFilePath(basePath string, id sop.UUID) string {
 	return fmt.Sprintf("%s%c%s", basePath, os.PathSeparator, Apply4LevelHierarchy(id))
 }
 
-// Support 4 level folders file distribution algorithm, a.k.a. tree like folder hierarchy.
+// Apply4LevelHierarchy maps a UUID to a 4-level directory structure using its first four hex digits.
 func Apply4LevelHierarchy(id sop.UUID) string {
 	s := id.String()
 	ps := os.PathSeparator
