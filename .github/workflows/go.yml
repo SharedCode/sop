@@ -19,15 +19,28 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21.6'
+        go-version: '1.24.3'
 
     - name: Build
       run: go build -v ./inmemory ./inredfs
 
-    - name: Test
-      run: go test -timeout 600s -race -covermode=atomic -coverprofile=coverage.out -coverpkg ./btree/... ./inmemory/... ./inredfs
+    - name: Unit tests with coverage
+      run: |
+        mkdir -p coverage
+        go test -timeout 600s -race -covermode=atomic -coverprofile=coverage/unit_coverage.out -coverpkg ./btree/... ./inmemory/... ./inredfs
+
+    - name: Build Docker image for integration tests
+      run: docker build -t sop-integration:ci .
+
+    - name: Run integration tests in Docker (produces coverage)
+      run: |
+        mkdir -p coverage
+        docker run --rm -v "${{ github.workspace }}/coverage":/coverage sop-integration:ci
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      with:
+        files: |
+          coverage/unit_coverage.out
+          coverage/integration_coverage.out
+        token: ${{ secrets.CODECOV_TOKEN }}

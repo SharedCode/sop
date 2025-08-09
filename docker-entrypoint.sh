@@ -18,14 +18,20 @@ until redis-cli -h 127.0.0.1 -p 6379 ping >/dev/null 2>&1; do
 done
 echo "Redis is up and running!"
 
+# Optional data path used by some tests
 echo "$datapath"
 
-# Now, run your Go tests
-echo "Running Go tests..."
-go test -v ./inredfs/integrationtests/
+# Configure coverage output location (default to /coverage mounted from host)
+COVER_DIR=${COVER_DIR:-/coverage}
+mkdir -p "$COVER_DIR"
+COVERPROFILE=${COVERPROFILE:-$COVER_DIR/integration_coverage.out}
+
+# Now, run integration tests with coverage (omit -race to avoid toolchain deps in Alpine)
+echo "Running Go integration tests with coverage..."
+go test -timeout 600s -covermode=atomic -coverpkg ./... -coverprofile="$COVERPROFILE" -v ./inredfs/integrationtests/
 TEST_STATUS=$?
 
-echo "Tests finished."
+echo "Tests finished with status: $TEST_STATUS"
 
 # Exit with the status of the test command
 exit $TEST_STATUS
