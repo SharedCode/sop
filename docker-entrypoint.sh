@@ -28,7 +28,9 @@ COVERPROFILE=${COVERPROFILE:-$COVER_DIR/integration_coverage.out}
 
 # Now, run integration tests with coverage (omit -race to avoid toolchain deps in Alpine)
 echo "Running Go integration tests with coverage..."
-go test -timeout 600s -covermode=atomic -coverpkg ./... -coverprofile="$COVERPROFILE" -v ./inredfs/integrationtests/
+# Instrument only the requested packages for coverage aggregation
+COVERPKG="./btree/...,./fs/...,./common/..."
+go test -timeout 600s -covermode=atomic -coverpkg="$COVERPKG" -coverprofile="$COVERPROFILE" -v ./inredfs/integrationtests/
 TEST_STATUS=$?
 
 echo "Tests finished with status: $TEST_STATUS"
