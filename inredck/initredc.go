@@ -1,3 +1,7 @@
+// Package inredck provides SOP implementations that use Redis for caching
+// and Cassandra for backend data storage. It offers package-level initialization
+// helpers (Initialize, IsInitialized, Shutdown), transaction constructors, and
+// B-tree convenience wrappers for Cassandra-backed persistence.
 package inredck
 
 import (

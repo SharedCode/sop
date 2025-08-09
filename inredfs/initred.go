@@ -1,3 +1,9 @@
+// Package inredfs provides SOP implementations that use Redis for caching
+// and the local filesystem for backend data storage. It includes package-level
+// initialization helpers (Initialize, IsInitialized, Shutdown), transaction
+// constructors (with and without replication), B-tree convenience wrappers,
+// and a streaming data store built on top of B-trees for chunked large-object
+// storage.
 package inredfs
 
 import (
