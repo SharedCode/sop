@@ -1,3 +1,5 @@
+// Package cassandra provides Cassandra-backed implementations of SOP repositories and logs,
+// including connection/session management and per-API consistency customization.
 package cassandra
 
 import (

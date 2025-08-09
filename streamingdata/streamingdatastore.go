@@ -1,3 +1,5 @@
+// Package streamingdata implements chunked, stream-like storage on top of a B-Tree.
+// It splits large values into ordered chunks and provides Encoder/Reader helpers for IO-like access.
 package streamingdata
 
 import (
@@ -41,7 +43,7 @@ func (x StreamingDataKey[TK]) Compare(other interface{}) int {
 	return cmp.Compare(x.ChunkIndex, y.ChunkIndex)
 }
 
-// Synonymous to NewStreamingDataStore but expects StoreOptions parameter.
+// NewStreamingDataStore creates a new store using StoreOptions, enforcing streaming constraints.
 func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, so sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[StreamingDataKey[TK]]) (*StreamingDataStore[TK], error) {
 	if so.SlotLength < MinimumStreamingStoreSlotLength {
 		return nil, fmt.Errorf("streaming data store requires minimum of %d SlotLength", MinimumStreamingStoreSlotLength)
@@ -78,7 +80,7 @@ func (s *StreamingDataStore[TK]) Add(ctx context.Context, key TK) (*Encoder[TK],
 	return newEncoder(w), nil
 }
 
-// Add insert an item to the b-tree and returns an encoder you can use to write the streaming data on.
+// AddIfNotExist inserts an item only when it does not exist and returns an Encoder to write the value.
 func (s *StreamingDataStore[TK]) AddIfNotExist(ctx context.Context, key TK) (*Encoder[TK], error) {
 	// Return nil if key already found in B-tree.
 	if found, err := s.FindOne(ctx, key); err != nil || found {
@@ -87,6 +89,7 @@ func (s *StreamingDataStore[TK]) AddIfNotExist(ctx context.Context, key TK) (*En
 	return s.Add(ctx, key)
 }
 
+// Upsert updates the item if it exists; otherwise it adds a new one and returns an Encoder.
 func (s *StreamingDataStore[TK]) Upsert(ctx context.Context, key TK) (*Encoder[TK], error) {
 	if found, err := s.FindOne(ctx, key); err != nil {
 		return nil, err

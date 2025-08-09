@@ -8,16 +8,24 @@ import (
 	"github.com/sharedcode/sop"
 )
 
+// btreeWithTransaction wraps a B-tree with a TwoPhaseCommitTransaction and enforces:
+//   - A transaction must have begun before any operation.
+//   - Write operations require a writer-mode transaction; otherwise the tx is rolled back.
+//   - On any delegated operation error, the wrapper triggers Rollback to keep state consistent.
+//
+// It does not implement locking yet (see Lock). All methods simply delegate after precondition checks.
 type btreeWithTransaction[TK Ordered, TV any] struct {
 	// Inherit from B
 	BtreeInterface[TK, TV]
 	transaction sop.TwoPhaseCommitTransaction
 }
 
+// errTransHasNotBegunMsg is returned when an operation is attempted without a begun transaction.
+// For read operations below, we proactively call Rollback to ensure no partial state lingers.
 var errTransHasNotBegunMsg = errors.New("can't do operation on b-tree if transaction has not begun")
 
 // NewBtreeWithTransaction wraps a B-tree with a transaction session, enforcing that
-// each operation occurs within a begun transaction and in the correct mode.
+// operations are run only when a transaction has begun and in the correct mode.
 func NewBtreeWithTransaction[TK Ordered, TV any](t sop.TwoPhaseCommitTransaction, btree BtreeInterface[TK, TV]) *btreeWithTransaction[TK, TV] {
 	return &btreeWithTransaction[TK, TV]{
 		transaction:    t,
@@ -31,12 +39,19 @@ func NewBtreeWithTransaction[TK Ordered, TV any](t sop.TwoPhaseCommitTransaction
 	- Implement MRU caching.
 */
 
+// Lock is reserved for coordinating store-level locking; currently a no-op.
 func (b3 *btreeWithTransaction[TK, TV]) Lock(ctx context.Context, forWriting bool) error {
 	// TODO
 	return nil
 }
 
-// Add adds an item to the B-tree without checking for duplicates.
+// Write operations: the following methods require a writer-mode transaction.
+// They all follow the same pattern:
+//   1) Ensure transaction HasBegun and mode == ForWriting, else Rollback and return error
+//   2) Delegate to the underlying BtreeInterface
+//   3) If the delegate returns error, Rollback with that error
+
+// Add adds a key/value; requires a begun writer transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		return false, errTransHasNotBegunMsg
@@ -52,8 +67,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value T
 	return r, err
 }
 
-// AddIfNotExist adds an item if there is no item matching the key; otherwise it
-// returns false and leaves the B-tree unchanged.
+// AddIfNotExist adds only when no duplicate key exists; requires writer transaction.
 func (b3 *btreeWithTransaction[TK, TV]) AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		return false, errTransHasNotBegunMsg
@@ -69,7 +83,7 @@ func (b3 *btreeWithTransaction[TK, TV]) AddIfNotExist(ctx context.Context, key T
 	return r, err
 }
 
-// Upsert adds the item if it does not exist or updates it if it does.
+// Upsert inserts or updates depending on existence; requires writer transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Upsert(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		return false, errTransHasNotBegunMsg
@@ -85,7 +99,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Upsert(ctx context.Context, key TK, valu
 	return r, err
 }
 
-// Update finds the item with key and updates its value to the provided value.
+// Update finds by key and updates value; requires writer transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Update(ctx context.Context, key TK, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		return false, errTransHasNotBegunMsg
@@ -101,7 +115,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Update(ctx context.Context, key TK, valu
 	return r, err
 }
 
-// UpdateCurrentItem updates the Value of the current item. Key is read-only.
+// UpdateCurrentItem updates the current item; requires writer transaction.
 func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, value TV) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		return false, errTransHasNotBegunMsg
@@ -117,7 +131,7 @@ func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, v
 	return r, err
 }
 
-// Remove finds the item with the given key and removes it.
+// Remove finds by key and deletes; requires writer transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Remove(ctx context.Context, key TK) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		return false, errTransHasNotBegunMsg
@@ -133,7 +147,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Remove(ctx context.Context, key TK) (boo
 	return r, err
 }
 
-// RemoveCurrentItem removes the current key/value pair from the store.
+// RemoveCurrentItem deletes the current item; requires writer transaction.
 func (b3 *btreeWithTransaction[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		return false, errTransHasNotBegunMsg
@@ -149,9 +163,10 @@ func (b3 *btreeWithTransaction[TK, TV]) RemoveCurrentItem(ctx context.Context) (
 	return r, err
 }
 
-// Find searches the B-tree for an item with the given key. It returns true if found.
-// When firstItemWithKey is true and duplicates exist, it positions the cursor to the first match.
-// Use GetCurrentKey/GetCurrentValue to retrieve the current item.
+// Read-only operations: the following methods only require a begun transaction (any mode).
+// On failure or when a transaction has not begun, we call Rollback to terminate the session.
+
+// Find positions the cursor on an exact/first match; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Find(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx, nil)
@@ -164,7 +179,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Find(ctx context.Context, key TK, firstI
 	return r, err
 }
 
-// FindWithID searches the B-tree for an item with the given key and ID.
+// FindWithID positions the cursor on a match with specific ID; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) FindWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx, nil)
@@ -177,7 +192,7 @@ func (b3 *btreeWithTransaction[TK, TV]) FindWithID(ctx context.Context, key TK, 
 	return r, err
 }
 
-// GetCurrentKey returns the current item's key and ID.
+// GetCurrentKey returns the current key/ID; returns zero value if no transaction.
 func (b3 *btreeWithTransaction[TK, TV]) GetCurrentKey() Item[TK, TV] {
 	var item Item[TK, TV]
 	if !b3.transaction.HasBegun() {
@@ -186,7 +201,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentKey() Item[TK, TV] {
 	return b3.BtreeInterface.GetCurrentKey()
 }
 
-// GetCurrentValue returns the current item's value.
+// GetCurrentValue returns the current value; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	var zero TV
 	if !b3.transaction.HasBegun() {
@@ -200,7 +215,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValue(ctx context.Context) (TV
 	return v, err
 }
 
-// GetCurrentItem returns the current item.
+// GetCurrentItem returns the current item; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], error) {
 	var zero Item[TK, TV]
 	if !b3.transaction.HasBegun() {
@@ -214,8 +229,7 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (Ite
 	return r, err
 }
 
-// First positions the cursor to the first item as per key ordering.
-// Use GetCurrentKey/GetCurrentValue to retrieve the current item.
+// First positions the cursor at the smallest key; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) First(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx, nil)
@@ -228,8 +242,7 @@ func (b3 *btreeWithTransaction[TK, TV]) First(ctx context.Context) (bool, error)
 	return r, err
 }
 
-// Last positions the cursor to the last item as per key ordering.
-// Use GetCurrentKey/GetCurrentValue to retrieve the current item.
+// Last positions the cursor at the largest key; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Last(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx, nil)
@@ -242,8 +255,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Last(ctx context.Context) (bool, error) 
 	return r, err
 }
 
-// Next positions the cursor to the next item as per key ordering.
-// Use GetCurrentKey/GetCurrentValue to retrieve the current item.
+// Next advances the cursor forward; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Next(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx, nil)
@@ -256,8 +268,7 @@ func (b3 *btreeWithTransaction[TK, TV]) Next(ctx context.Context) (bool, error) 
 	return r, err
 }
 
-// Previous positions the cursor to the previous item as per key ordering.
-// Use GetCurrentKey/GetCurrentValue to retrieve the current item.
+// Previous moves the cursor backward; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Previous(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		b3.transaction.Rollback(ctx, nil)

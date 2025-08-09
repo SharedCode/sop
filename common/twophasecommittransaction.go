@@ -70,10 +70,8 @@ type Transaction struct {
 	nodesKeys []*sop.LockKey
 }
 
-// NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
-// or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
-// If logging is on, 'will log changes so it can get rolledback if transaction got left unfinished, e.g. crash or power reboot.
-// However, without logging, the transaction commit can execute faster because there is no data getting logged.
+// NewTwoPhaseCommitTransaction creates a new two-phase commit controller.
+// maxTime limits commit duration; logging enables crash-safe recovery via a transaction log.
 func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool,
 	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, l2Cache sop.Cache, transactionLog sop.TransactionLog) (*Transaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
@@ -109,7 +107,7 @@ func (t *Transaction) Begin() error {
 	return nil
 }
 
-// Close will do cleanup.
+// Close releases resources held by the transaction (e.g., registry file handles).
 func (t *Transaction) Close() error {
 	// Do registry cleanup, e.g. - close all opened files.
 	if closeable, ok := t.registry.(io.Closer); ok {
@@ -118,6 +116,9 @@ func (t *Transaction) Close() error {
 	return nil
 }
 
+// Phase1Commit performs the first phase of 2PC for writer transactions:
+// - validates state, takes locks, refetches/merges on contention,
+// - persists value blobs and prepares node mutations without finalizing registry updates.
 func (t *Transaction) Phase1Commit(ctx context.Context) error {
 	// Service the cleanup of left hanging transactions.
 	t.onIdle(ctx)
@@ -153,6 +154,10 @@ func (t *Transaction) Phase1Commit(ctx context.Context) error {
 	return nil
 }
 
+// Phase2Commit completes the commit:
+// - applies registry updates (root changes, added/updated nodes),
+// - populates caches, removes logs, and unlocks resources;
+// on failure attempts priority rollback and surfaces the error.
 func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	if !t.HasBegun() {
 		return fmt.Errorf("no transaction to commit, call Begin to start a transaction")
@@ -201,8 +206,8 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	return nil
 }
 
-// Rollback the transaction. err param allows code to flow the error that caused rollback.
-// An IO error as originally detected by this transaction can cause failover to the passive targets.
+// Rollback aborts the transaction and attempts to undo work recorded in the log.
+// It also invokes replication error handlers to enable failover.
 func (t *Transaction) Rollback(ctx context.Context, err error) error {
 	if t.phaseDone == 2 {
 		return fmt.Errorf("transaction is done, 'create a new one")
@@ -232,7 +237,7 @@ func (t *Transaction) Rollback(ctx context.Context, err error) error {
 	return nil
 }
 
-// Returns the transaction's mode.
+// GetMode returns the transaction's mode (read-only, write, or no-check).
 func (t *Transaction) GetMode() sop.TransactionMode {
 	return t.mode
 }
@@ -255,7 +260,8 @@ func (t *Transaction) GetID() sop.UUID {
 	return t.id
 }
 
-// phase1Commit does the phase 1 commit steps.
+// phase1Commit coordinates locking, conflict checks, value writes, and
+// classifies node mutations, retrying when needed until success or timeout.
 func (t *Transaction) phase1Commit(ctx context.Context) error {
 	if !t.hasTrackedItems() {
 		return nil

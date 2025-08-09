@@ -12,15 +12,15 @@ import (
 
 type blobStore struct{}
 
-// NewBlobStore instantiates a new BlobStore instance.
+// NewBlobStore instantiates a Cassandra-backed implementation of sop.BlobStore.
 func NewBlobStore() sop.BlobStore {
 	return &blobStore{}
 }
 
-// GetOne fetches a blob from blob table.
+// GetOne fetches a blob from the Cassandra blob table for the given ID.
 func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobID sop.UUID) ([]byte, error) {
 	if connection == nil {
-		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 	selectStatement := fmt.Sprintf("SELECT node FROM %s.%s WHERE id in (?);", connection.Config.Keyspace, blobTable)
 	qry := connection.Session.Query(selectStatement, gocql.UUID(blobID)).WithContext(ctx)
@@ -37,10 +37,10 @@ func (b *blobStore) GetOne(ctx context.Context, blobTable string, blobID sop.UUI
 	return ba, nil
 }
 
-// Add blob(s) to the Blob store.
+// Add inserts blob records into Cassandra per target blob table.
 func (b *blobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 	for i := range storesblobs {
 		for ii := range storesblobs[i].Blobs {
@@ -59,10 +59,10 @@ func (b *blobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.
 	return nil
 }
 
-// Update blob(s) in the Blob store.
+// Update updates blob records in Cassandra per target blob table.
 func (b *blobStore) Update(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 	for i := range storesblobs {
 		for ii := range storesblobs[i].Blobs {
@@ -80,10 +80,10 @@ func (b *blobStore) Update(ctx context.Context, storesblobs []sop.BlobsPayload[s
 	return nil
 }
 
-// Remove will delete(non-logged) node records from different Blob stores(node tables).
+// Remove deletes node blobs from Cassandra for each blob table and list of IDs provided.
 func (b *blobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 	// Delete per blob table the Node "blobs".
 	for _, storeBlobIDs := range storesBlobsIDs {

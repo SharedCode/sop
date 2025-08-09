@@ -35,6 +35,8 @@ const (
 )
 
 // NewStoreRepository creates a StoreRepository that persists store info to disk.
+// When replication is enabled, it validates base-folder configuration and writes
+// the global registry-hash-mod value once, replicating it to the passive drive.
 func NewStoreRepository(ctx context.Context, rt *replicationTracker, manageStore sop.ManageStore, cache sop.Cache, registryHashModVal int) (*StoreRepository, error) {
 	if rt.replicate && len(rt.storesBaseFolders) != 2 {
 		return nil, fmt.Errorf("'storesBaseFolders' needs to be exactly two elements if 'replicate' parameter is true")
@@ -63,6 +65,7 @@ func NewStoreRepository(ctx context.Context, rt *replicationTracker, manageStore
 }
 
 // GetRegistryHashModValue returns the configured registry hash modulus value, reading from disk if needed.
+// Uses the replication-aware file IO wrapper to read the value written during initialization.
 func (sr *StoreRepository) GetRegistryHashModValue(ctx context.Context) (int, error) {
 	if sr.registryHashModValue == 0 {
 		fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
@@ -81,7 +84,9 @@ func (sr *StoreRepository) GetRegistryHashModValue(ctx context.Context) (int, er
 	return sr.registryHashModValue, nil
 }
 
-// Add appends new stores to the repository, updating the store list, creating folders, and caching metadata.
+// Add appends new stores to the repository, updating the store list, creating folders,
+// writing per-store metadata, and replicating the changes when configured. A cache entry is
+// written for each added store. The store list is guarded by a cache-based lock.
 func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
 	// 1. Lock Store List.
 	lk := sr.cache.CreateLockKeys([]string{lockStoreListKey})
@@ -162,7 +167,9 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	// 8. Unlock Store List. The defer statement will unlock store list.
 }
 
-// Update merges the provided deltas into store metadata, using per-store locks to avoid conflicts.
+// Update merges the provided deltas into store metadata. To reduce deadlock chances it
+// sorts store names and locks them in order using TTL-based cache locks with retry.
+// On any failure mid-flight, an undo routine best-effort restores the affected entries.
 func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) ([]sop.StoreInfo, error) {
 	// Sort the stores info so we can commit them in same sort order across transactions,
 	// thus, reduced chance of deadlock.
@@ -277,7 +284,8 @@ func (sr *StoreRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 	return sr.GetWithTTL(ctx, false, 0, names...)
 }
 
-// GetAll returns the list of all store names known to the repository.
+// GetAll returns the list of all store names. If the store list file is absent it returns nil
+// to indicate an empty repository. The list itself is not cached by design.
 func (sr *StoreRepository) GetAll(ctx context.Context) ([]string, error) {
 	fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
 
@@ -295,7 +303,8 @@ func (sr *StoreRepository) GetAll(ctx context.Context) ([]string, error) {
 	return storeList, err
 }
 
-// GetWithTTL returns store info, using TTL-aware cache lookups when requested.
+// GetWithTTL returns store info, optionally using TTL-aware cache lookups. Any misses are
+// loaded from disk and then cached with the store's configured cache duration.
 func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
 	stores := make([]sop.StoreInfo, 0, len(names))
 	storesNotInCache := make([]string, 0)
@@ -364,8 +373,8 @@ func (sr *StoreRepository) getFromCache(ctx context.Context, names ...string) ([
 	return stores, nil
 }
 
-// Remove deletes the specified stores and their metadata from disk and evicts them from cache.
-// This is a destructive operation intended for administrative use and is not transactional.
+// Remove deletes the specified stores and their metadata, updates the store list, and replicates
+// the removal when configured. Missing stores are tolerated with a warning.
 func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) error {
 	lk := sr.cache.CreateLockKeys([]string{lockStoreListKey})
 	defer sr.cache.Unlock(ctx, lk)
@@ -425,7 +434,8 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 	return nil
 }
 
-// Replicate the updates on stores to the passive target paths.
+// Replicate writes the updated per-store metadata to the passive target. Any write error disables
+// the current operation, signaling the caller to handle replication failures upstream.
 func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo) error {
 
 	if !sr.replicationTracker.replicate || sr.replicationTracker.FailedToReplicate {
@@ -455,7 +465,7 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 	return nil
 }
 
-// Returns the stores' base folder path.
+// GetStoresBaseFolder returns the currently active base folder path used for store files.
 func (sr *StoreRepository) GetStoresBaseFolder() string {
 	return sr.replicationTracker.getActiveBaseFolder()
 }

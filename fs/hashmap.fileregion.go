@@ -17,6 +17,7 @@ const (
 
 var zeroSector = bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)
 
+// updateFileRegion marshals each handle and writes it into the correct position within its block.
 func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails []fileRegionDetails) error {
 	m := encoding.NewHandleMarshaler()
 	buffer := make([]byte, 0, sop.HandleSizeInBytes)
@@ -29,6 +30,8 @@ func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails []fil
 	return nil
 }
 
+// markDeleteFileRegion zeroes out the handle-sized region inside a block to mark deletion.
+// This results in visually clean zeroed sectors and keeps logic simple.
 func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails []fileRegionDetails) error {
 	// Study whether we want to zero out only the "Logical ID" part. For now, zero out entire Handle block
 	// which could aid in cleaner deleted blocks(as marked w/ all zeroes). Negligible difference in IO.
@@ -42,6 +45,9 @@ func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails [
 	return nil
 }
 
+// updateFileBlockRegion acquires a cache-backed lock for the target block region, reads the block,
+// merges the handle data, writes back, and finally releases the lock. Retries acquiring the lock
+// until timeout to avoid deadlocks across writers.
 func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO, blockOffset int64, handleInBlockOffset int, handleData []byte) error {
 	// Lock the block file region.
 	var lk *sop.LockKey
@@ -109,10 +115,12 @@ func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *fileDirectIO, o
 		tid = sop.NewUUID()
 	}
 	s := hm.formatLockKey(dio.filename, offset)
-	lk := hm.cache.CreateLockKeysForIDs([]sop.Tuple[string, sop.UUID]{{
-		First:  s,
-		Second: tid,
-	}})
+	lk := hm.cache.CreateLockKeysForIDs([]sop.Tuple[string, sop.UUID]{
+		{
+			First:  s,
+			Second: tid,
+		},
+	})
 	ok, uuid, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
 	return ok, uuid, lk[0], err
 }

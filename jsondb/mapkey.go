@@ -9,7 +9,7 @@ import (
 	"github.com/sharedcode/sop/encoding"
 )
 
-// JSON DB that can take in any JSON data marshalled as map[string]any on Key & any Value pair.
+// JsonDBMapKey wraps JsonDBAnyKey to support map[string]any keys with configurable index specifications.
 type JsonDBMapKey struct {
 	*JsonDBAnyKey[map[string]any, any]
 	indexSpecification            *IndexSpecification
@@ -17,8 +17,7 @@ type JsonDBMapKey struct {
 	defaultCoercedFieldsComparers []func(a, b any) int
 }
 
-// Proxy comparer is used for delayed construction of the comparer, as details about the store is only
-// available after the tree is created and able to read store details from the backend.
+// proxyComparer is used for delayed construction of the comparer until store metadata is available.
 func (j *JsonDBMapKey) proxyComparer(mapX map[string]any, mapY map[string]any) int {
 	if j.indexSpecification != nil {
 		return j.indexSpecification.Comparer(mapX, mapY)
@@ -26,7 +25,7 @@ func (j *JsonDBMapKey) proxyComparer(mapX map[string]any, mapY map[string]any) i
 	return j.defaultComparer(mapX, mapY)
 }
 
-// Default Comparer of Items can compare two maps with no nested map(for now).
+// defaultComparer compares two flat maps by sorted field names using type-coerced field comparers.
 func (j *JsonDBMapKey) defaultComparer(mapX map[string]any, mapY map[string]any) int {
 	if j.defaultComparerSortedFields == nil {
 		arr := make([]string, len(mapX))
@@ -52,8 +51,7 @@ func (j *JsonDBMapKey) defaultComparer(mapX map[string]any, mapY map[string]any)
 	return 0
 }
 
-// Instantiates a Btree for schema-less usage. I.e. - JSONy type of data marshaled by Go as map[string]any
-// data type for key & any value pairs.
+// NewJsonBtreeMapKey creates a schema-less JSON B-Tree using map[string]any keys and optional index spec.
 func NewJsonBtreeMapKey(ctx context.Context, so sop.StoreOptions, t sop.Transaction, indexSpecification string) (*JsonDBMapKey, error) {
 	var comparer btree.ComparerFunc[map[string]any]
 	j := JsonDBMapKey{}
@@ -78,8 +76,7 @@ func NewJsonBtreeMapKey(ctx context.Context, so sop.StoreOptions, t sop.Transact
 	return &j, nil
 }
 
-// Open an existing B-tree & recreate the Index specification object containing the index fields' details
-// used for sorting records of the tree.
+// OpenJsonBtreeMapKey opens an existing schema-less JSON B-Tree and reconstructs its index specification.
 func OpenJsonBtreeMapKey(ctx context.Context, name string, t sop.Transaction) (*JsonDBMapKey, error) {
 	j := JsonDBMapKey{}
 

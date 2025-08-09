@@ -1,3 +1,5 @@
+// Package cel provides a small wrapper around CEL expression compilation and evaluation
+// used to compare map-based keys within SOP components.
 package cel
 
 import (
@@ -17,10 +19,10 @@ type Evaluator struct {
 // Both mapX and mapY are expected to be map[string]any variables in the program context.
 func NewEvaluator(name string, expression string) (*Evaluator, error) {
 	if name == "" {
-		return nil, fmt.Errorf("name can't be emptry string")
+		return nil, fmt.Errorf("name can't be empty string")
 	}
 	if expression == "" {
-		return nil, fmt.Errorf("expression can't be emptry string")
+		return nil, fmt.Errorf("expression can't be empty string")
 	}
 
 	env, err := cel.NewEnv(
@@ -29,16 +31,16 @@ func NewEvaluator(name string, expression string) (*Evaluator, error) {
 		cel.Variable("mapY", cel.MapType(cel.StringType, cel.AnyType)),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error creating CEL environment: %v", err)
+		return nil, fmt.Errorf("error creating cel environment: %v", err)
 	}
 
 	ast, issues := env.Compile(expression)
 	if issues != nil && issues.Err() != nil {
-		return nil, fmt.Errorf("error compiling CEL expression: %v", issues.Err())
+		return nil, fmt.Errorf("error compiling cel expression: %v", issues.Err())
 	}
 	p, err := env.Program(ast)
 	if err != nil {
-		return nil, fmt.Errorf("error creating Program: %v", err)
+		return nil, fmt.Errorf("error creating program: %v", err)
 	}
 	return &Evaluator{
 		Expression: expression,
@@ -53,11 +55,11 @@ func (e *Evaluator) Evaluate(mapX map[string]any, mapY map[string]any) (int, err
 		"mapY": mapY,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("error evaluating CEL expression: %v", err)
+		return 0, fmt.Errorf("error evaluating cel expression: %v", err)
 	}
 	nv, err := out.ConvertToNative(reflect.TypeOf(int(0)))
 	if err != nil {
-		return 0, fmt.Errorf("error ConvertToNative, got err: %v", err)
+		return 0, fmt.Errorf("error converting to native int: %v", err)
 	}
 
 	if v, ok := nv.(int); !ok {

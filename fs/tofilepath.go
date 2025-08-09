@@ -15,6 +15,7 @@ type ToFilePathFunc func(basePath string, id sop.UUID) string
 var ToFilePath ToFilePathFunc = DefaultToFilePath
 
 // DefaultToFilePath formats a path by appending a 4-level folder hierarchy derived from the UUID.
+// This reduces per-directory file counts and improves filesystem performance on large datasets.
 func DefaultToFilePath(basePath string, id sop.UUID) string {
 	if len(basePath) > 0 && basePath[len(basePath)-1] == os.PathSeparator {
 		return fmt.Sprintf("%s%s", basePath, Apply4LevelHierarchy(id))
@@ -23,6 +24,7 @@ func DefaultToFilePath(basePath string, id sop.UUID) string {
 }
 
 // Apply4LevelHierarchy maps a UUID to a 4-level directory structure using its first four hex digits.
+// Example: abcd-... -> a/b/c/d, enabling broad distribution across subfolders.
 func Apply4LevelHierarchy(id sop.UUID) string {
 	s := id.String()
 	ps := os.PathSeparator

@@ -12,6 +12,7 @@ import (
 
 // DirectIO exposes unbuffered file operations using O_DIRECT semantics where
 // supported. It is intended for large, block-aligned I/O on segment files.
+// Implementations should be used with directio.AlignedBlock buffers and block-aligned offsets.
 type DirectIO interface {
 	// Open opens a file with the given name and flags using direct I/O when possible.
 	Open(ctx context.Context, filename string, flag int, permission os.FileMode) (*os.File, error)
@@ -24,6 +25,7 @@ type DirectIO interface {
 }
 
 const (
+	// blockSize is the alignment size required by the direct I/O implementation.
 	blockSize = directio.BlockSize
 )
 
@@ -34,6 +36,8 @@ func NewDirectIO() DirectIO {
 	return &directIO{}
 }
 
+// Open wraps directio.OpenFile with SOP retry semantics. Transient errors are wrapped
+// as retryable to allow the caller's policy to reattempt.
 func (dio directIO) Open(ctx context.Context, filename string, flag int, permission os.FileMode) (*os.File, error) {
 	var f *os.File
 	err := sop.Retry(ctx, func(context.Context) error {
@@ -50,6 +54,9 @@ func (dio directIO) Open(ctx context.Context, filename string, flag int, permiss
 	}, nil)
 	return f, err
 }
+
+// WriteAt writes a block at an aligned offset, retrying transient errors via SOP's retry helper.
+// The caller is responsible for providing an aligned buffer (e.g., via directio.AlignedBlock).
 func (dio directIO) WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
 	var i int
 	err := sop.Retry(ctx, func(context.Context) error {
@@ -66,6 +73,9 @@ func (dio directIO) WriteAt(ctx context.Context, file *os.File, block []byte, of
 	}, nil)
 	return i, err
 }
+
+// ReadAt reads a block at an aligned offset, retrying transient errors via SOP's retry helper.
+// The caller is responsible for providing an aligned buffer (e.g., via directio.AlignedBlock).
 func (dio directIO) ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
 	var i int
 	err := sop.Retry(ctx, func(context.Context) error {

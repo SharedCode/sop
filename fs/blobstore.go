@@ -9,6 +9,7 @@ import (
 )
 
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
+// This implementation maps blob IDs to files under a 4-level UUID hierarchy using ToFilePath.
 type blobStore struct {
 	fileIO     FileIO
 	toFilePath ToFilePathFunc
@@ -18,6 +19,7 @@ type blobStore struct {
 const permission os.FileMode = os.ModeSticky | os.ModePerm
 
 // NewBlobStore instantiates a new blobstore for File System storage.
+// If fileIO or toFilePath are nil, sensible defaults are used.
 func NewBlobStore(toFilePath ToFilePathFunc, fileIO FileIO) sop.BlobStore {
 	if fileIO == nil {
 		fileIO = NewFileIO()
@@ -32,6 +34,7 @@ func NewBlobStore(toFilePath ToFilePathFunc, fileIO FileIO) sop.BlobStore {
 }
 
 // GetOne reads and returns the blob data for the given blobID from the provided blobFilePath.
+// The file path is computed via toFilePath and then the blob ID is used as filename.
 func (b blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
 	fp := b.toFilePath(blobFilePath, blobID)
 	fn := fmt.Sprintf("%s%c%s", fp, os.PathSeparator, blobID.String())
@@ -43,6 +46,7 @@ func (b blobStore) GetOne(ctx context.Context, blobFilePath string, blobID sop.U
 }
 
 // Add writes the provided blobs to disk under their computed file paths, creating directories as needed.
+// Existing files are overwritten.
 func (b blobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	for _, storeBlobs := range storesblobs {
 		for _, blob := range storeBlobs.Blobs {

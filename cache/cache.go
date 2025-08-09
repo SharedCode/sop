@@ -1,3 +1,5 @@
+// Package cache contains in-process MRU/L1 cache implementations and utilities used by SOP.
+// It offers a generic Cache interface and concrete MRU- and L1-based caches.
 package cache
 
 import "github.com/sharedcode/sop"

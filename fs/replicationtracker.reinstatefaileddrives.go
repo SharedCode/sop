@@ -12,14 +12,12 @@ import (
 // ReinstateFailedDrives can be invoked after replacing the failed drives so they can be synchronized with
 // the current Active targets' Stores' contents.
 //
-// Details:
-//   - Tell transactions to start logging commit changes
-//   - Copy the registries & storeRepositories files to the new drives
-//   - Using all the transactions' commit logs' generated while doing the 2nd step above,
-//     fast forward registries & storeRepositories files
-//   - Update the L2 cache copy of global replication status to turn back on, the replication
-//     to the passive targets
-//   - Run Fast Forward one more time to ensure there are no "remnants" commit log file(s), race condition case
+// High-level flow:
+//  1. Enable commit-change logging and persist replication status
+//  2. Copy store repositories and registry segment files to passive targets
+//  3. Fast-forward by reading commit logs and applying to passive stores/registries until none remain
+//  4. Turn replication back on and sync replication status to L2 cache
+//  5. Run fast-forward again to catch any late logs
 func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context) error {
 	if !r.replicate {
 		return fmt.Errorf("replicationTracker.replicate flag is off, ReinstateFailedDrives is valid only if this is on")
@@ -56,6 +54,8 @@ func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context) error {
 	}
 }
 
+// startLoggingCommitChanges enables logging of commit changes and persists the replication status
+// both on disk and in the L2 cache.
 func (r *replicationTracker) startLoggingCommitChanges(ctx context.Context) error {
 	GlobalReplicationDetails.LogCommitChanges = true
 	r.LogCommitChanges = true
@@ -67,6 +67,7 @@ func (r *replicationTracker) startLoggingCommitChanges(ctx context.Context) erro
 	return r.syncWithL2Cache(ctx, true)
 }
 
+// copyStores copies the active store repository and registry files to the passive folders.
 func (r *replicationTracker) copyStores(ctx context.Context) error {
 	if sr, err := NewStoreRepository(ctx, r, nil, r.l2Cache, 0); err != nil {
 		return err
@@ -76,6 +77,8 @@ func (r *replicationTracker) copyStores(ctx context.Context) error {
 	}
 }
 
+// fastForward reads commit logs, applies changes to passive targets, and deletes each processed log.
+// Returns true if any logs were found and processed.
 func (r *replicationTracker) fastForward(ctx context.Context) (bool, error) {
 	// Read the transaction commit logs then sync the passive stores/registries w/ the values from active stores/regs.
 	//   - In case StoreRepository exists in target, use the StoreRepository timestamp to determine if target needs to get updated.
@@ -153,6 +156,7 @@ func (r *replicationTracker) fastForward(ctx context.Context) (bool, error) {
 	return foundAndProcessed, nil
 }
 
+// turnOnReplication finalizes reinstatement: clears failure flags, updates status on disk and in L2 cache.
 func (r *replicationTracker) turnOnReplication(ctx context.Context) error {
 	GlobalReplicationDetails.FailedToReplicate = false
 	GlobalReplicationDetails.LogCommitChanges = false

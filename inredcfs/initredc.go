@@ -1,3 +1,6 @@
+// Package inredcfs provides SOP implementations that use Redis for caching and the filesystem
+// for backend storage. It exposes package-level initialization helpers and B-Tree wrappers that
+// enable filesystem replication.
 package inredcfs
 
 import (

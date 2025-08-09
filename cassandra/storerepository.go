@@ -38,10 +38,11 @@ func NewStoreRepository(manageBlobStore sop.ManageStore) sop.StoreRepository {
 	return r
 }
 
-// Add a new store record, create a new Virtual ID registry and node blob tables.
+// Add inserts store metadata and creates corresponding registry and blob tables.
+// It also writes the store info into Redis for faster subsequent reads (best-effort cache update).
 func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb, rcd, rc_ttl, ncd, nc_ttl, vdcd, vdc_ttl, scd, sc_ttl) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
 	for _, s := range stores {
@@ -81,10 +82,11 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 	return nil
 }
 
-// Update enforces so only the Store's Count & timestamp can get updated.
+// Update applies CountDelta and timestamp changes with distributed locks to reduce contention.
+// It keeps a copy of the previous state to attempt an undo on partial failures.
 func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) ([]sop.StoreInfo, error) {
 	if connection == nil {
-		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
 	// Sort the stores info so we can commit them in same sort order across transactions,
@@ -189,14 +191,15 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 	return stores, nil
 }
 
+// Get returns store infos, preferring Redis but falling back to Cassandra for cache misses.
 func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
 	return sr.GetWithTTL(ctx, false, 0, names...)
 }
 
-// Returns all stores' names available in the backend (in Cassandra store table).
+// GetAll returns all store names from Cassandra.
 func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
 	if connection == nil {
-		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 	selectStatement := fmt.Sprintf("SELECT name FROM %s.store;", connection.Config.Keyspace)
 
@@ -218,9 +221,11 @@ func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
 	return storeNames, nil
 }
 
+// GetWithTTL returns store infos, optionally extending TTL in Redis when isCacheTTL is true.
+// Any records fetched from Cassandra are written back to Redis (best-effort).
 func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
 	if connection == nil {
-		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 	stores := make([]sop.StoreInfo, 0, len(names))
 	// Format some variadic ? and convert to interface the names param.
@@ -279,9 +284,10 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 	return stores, nil
 }
 
+// Remove deletes store records and drops their associated Cassandra tables, also evicting from Redis.
 func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
 	sis, err := sr.Get(ctx, names...)
@@ -332,6 +338,7 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 	return nil
 }
 
+// CreateStore creates a Cassandra blob table for storing node blobs.
 func (sr *storeRepository) CreateStore(ctx context.Context, blobStoreName string) error {
 	// Create a new Blob table.
 	createNewBlobTable := fmt.Sprintf("CREATE TABLE %s.%s(id UUID PRIMARY KEY, node blob);", connection.Config.Keyspace, blobStoreName)
@@ -345,6 +352,7 @@ func (sr *storeRepository) CreateStore(ctx context.Context, blobStoreName string
 	return nil
 }
 
+// RemoveStore drops a Cassandra blob table used by a store.
 func (sr *storeRepository) RemoveStore(ctx context.Context, blobStoreName string) error {
 	// Drop Blob table.
 	dropBlobTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, blobStoreName)
@@ -359,7 +367,7 @@ func (sr *storeRepository) RemoveStore(ctx context.Context, blobStoreName string
 	return nil
 }
 
-// Cassandra StoreRepository table already benefits from Cassandra replication feature, do nothing here.
+// Replicate is a no-op for Cassandra because replication is handled by Cassandra itself.
 func (sr *storeRepository) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) error {
 	return nil
 }

@@ -7,10 +7,9 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-// removeItemOnNodeWithNilChild will manage these remove item cases.
-// - remove item on a node slot with nil left child
-// - remove item on a node slot with nil right child
-// - remove item on the right edge node slot with nil right child
+// removeItemOnNodeWithNilChild handles deletions where one of the children around
+// the target slot is nil. It shifts items/children to fill the gap, and when a node
+// becomes empty it either collapses the root or promotes a single child upward.
 func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], index int) (bool, error) {
 	if !node.hasChildren() || (node.ChildrenIDs[index] != sop.NilUUID && node.ChildrenIDs[index+1] != sop.NilUUID) {
 		return false, nil
@@ -77,6 +76,8 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(ctx context.Context, btre
 	return true, nil
 }
 
+// unlinkNodeWithNilChild unlinks a node that has at least one non-nil child by
+// promoting that single child in place of the node.
 func (node *Node[TK, TV]) unlinkNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV]) (bool, error) {
 	if node.isNilChildren() {
 		return false, nil
@@ -84,6 +85,8 @@ func (node *Node[TK, TV]) unlinkNodeWithNilChild(ctx context.Context, btree *Btr
 	return node.promoteSingleChildAsParentChild(ctx, btree)
 }
 
+// promoteSingleChildAsParentChild rewires the parent to adopt this node's sole child,
+// saving both and deleting the now-empty intermediate node.
 func (node *Node[TK, TV]) promoteSingleChildAsParentChild(ctx context.Context, btree *Btree[TK, TV]) (bool, error) {
 	// Promote the single child as parent's new child instead of this node.
 	p, err := node.getParent(ctx, btree)
@@ -108,7 +111,8 @@ func (node *Node[TK, TV]) promoteSingleChildAsParentChild(ctx context.Context, b
 	return true, nil
 }
 
-// addItemOnNodeWithNilChild handles insert/distribute item on a full node with a nil child, 'should occupy nil child.
+// addItemOnNodeWithNilChild creates a new child at the first nil-child position and
+// inserts the item there. Used during add/distribute when a leaf slot is missing.
 func (node *Node[TK, TV]) addItemOnNodeWithNilChild(btree *Btree[TK, TV], item *Item[TK, TV], index int) (bool, error) {
 	if node.ChildrenIDs[index] != sop.NilUUID {
 		return false, nil
@@ -124,8 +128,8 @@ func (node *Node[TK, TV]) addItemOnNodeWithNilChild(btree *Btree[TK, TV], item *
 	return true, nil
 }
 
-// goRightUpItemOnNodeWithNilChild will point the current item ref to the item to the right or up a parent.
-// Applicable when child at index position is nil.
+// goRightUpItemOnNodeWithNilChild moves the cursor to the next item to the right,
+// walking up to parents as needed when the target child is nil.
 func (node *Node[TK, TV]) goRightUpItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], index int) (bool, error) {
 	if node.ChildrenIDs[index] != sop.NilUUID {
 		return false, nil
@@ -157,8 +161,8 @@ func (node *Node[TK, TV]) goRightUpItemOnNodeWithNilChild(ctx context.Context, b
 	}
 }
 
-// goLeftUpItemOnNodeWithNilChild will point the current item ref to the item to the left or up a parent.
-// Applicable when child at index position is nil.
+// goLeftUpItemOnNodeWithNilChild moves the cursor to the previous item to the left,
+// walking up to parents as needed when the target child is nil.
 func (node *Node[TK, TV]) goLeftUpItemOnNodeWithNilChild(ctx context.Context, btree *Btree[TK, TV], index int) (bool, error) {
 	if node.ChildrenIDs[index] != sop.NilUUID {
 		return false, nil
@@ -185,7 +189,7 @@ func (node *Node[TK, TV]) goLeftUpItemOnNodeWithNilChild(ctx context.Context, bt
 	}
 }
 
-// nodeHasNilChild returns true if a node has nil child.
+// nodeHasNilChild reports whether any child pointer is nil.
 func (node *Node[TK, TV]) nodeHasNilChild() bool {
 	if !node.hasChildren() {
 		return false
@@ -198,7 +202,8 @@ func (node *Node[TK, TV]) nodeHasNilChild() bool {
 	return false
 }
 
-// distributeItemOnNodeWithNilChild is used to balance load among nodes of a given branch.
+// distributeItemOnNodeWithNilChild attaches a new child under the first nil-child
+// position to accommodate an overflow item during load balancing.
 func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(btree *Btree[TK, TV], item *Item[TK, TV]) bool {
 	if !node.hasChildren() {
 		return false

@@ -15,6 +15,7 @@ const (
 )
 
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
+// blobStoreWithEC adds Erasure Coding (EC) for replication/tolerance across multiple drives.
 type blobStoreWithEC struct {
 	fileIO                      FileIO
 	toFilePath                  ToFilePathFunc
@@ -38,6 +39,8 @@ func GetGlobalErasureConfig() map[string]ErasureCodingConfig {
 }
 
 // Instantiate a blob store with replication (via Erasure Coding (EC)) capabilities.
+// If a per-table EC config is not supplied, the global configuration is used.
+// Validates that the number of base paths equals data+parity shard count.
 func NewBlobStoreWithEC(toFilePath ToFilePathFunc, fileIO FileIO, erasureConfig map[string]ErasureCodingConfig) (sop.BlobStore, error) {
 	if erasureConfig == nil {
 		erasureConfig = globalErasureConfig
@@ -78,6 +81,9 @@ func NewBlobStoreWithEC(toFilePath ToFilePathFunc, fileIO FileIO, erasureConfig 
 	}, nil
 }
 
+// GetOne reads shards across drives, extracts per-shard metadata, and decodes via EC.
+// If some shards are missing but enough remain (>= data shards), decoding still succeeds.
+// Optionally repairs corrupted/bitrotted shards by recomputing and rewriting them.
 func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)
@@ -170,6 +176,8 @@ func (b *blobStoreWithEC) Update(ctx context.Context, storesblobs []sop.BlobsPay
 	return b.Add(ctx, storesblobs)
 }
 
+// Add splits blob content into shards, writes each shard with per-shard metadata prefix, and
+// tolerates up to ParityShardsCount write failures per blob. Errors beyond tolerance trigger rollback.
 func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	if len(storesblobs) == 0 {
 		return nil
@@ -276,6 +284,8 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayloa
 	return trBlobs.Wait()
 }
 
+// Remove deletes shard files across all configured drives. Errors are tolerated and logged when
+// replication is expected to handle eventual consistency.
 func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)

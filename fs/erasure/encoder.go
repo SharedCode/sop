@@ -1,3 +1,6 @@
+// Package erasure implements Reed-Solomon erasure coding helpers used by the filesystem
+// backend to add resiliency for stored blobs.
+
 // The encoder encodes a simple file into a number of shards.
 // To reverse the process see "decoder.go"
 package erasure

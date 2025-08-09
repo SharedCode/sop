@@ -1,4 +1,4 @@
-// Package in_red_ck contains SOP implementations that uses Redis for caching & Cassandra for backend data storage.
+// Package common contains shared transaction and B-tree management helpers used by SOP.
 package common
 
 import (
@@ -11,6 +11,7 @@ import (
 )
 
 // OpenBtree will open an existing B-Tree instance & prepare it for use in a transaction.
+// Requires an active transaction. Returns an error if the store does not exist.
 func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("transaction 't' parameter can't be nil")
@@ -19,7 +20,7 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 		return nil, fmt.Errorf("transaction 't' parameter has not started")
 	}
 	if name == "" {
-		return nil, fmt.Errorf("B-tree name can't be empty string")
+		return nil, fmt.Errorf("b-tree name can't be empty string")
 	}
 
 	var t2 interface{} = t.GetPhasedTransaction()
@@ -28,7 +29,7 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 	if len(stores) == 0 || stores[0].IsEmpty() || err != nil {
 		if err == nil {
 			trans.Rollback(ctx, nil)
-			return nil, fmt.Errorf("B-Tree '%s' does not exist, please use NewBtree to create an instance of it", name)
+			return nil, fmt.Errorf("b-tree '%s' does not exist, please use NewBtree to create an instance of it", name)
 		}
 		trans.Rollback(ctx, err)
 		return nil, err
@@ -37,9 +38,8 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 }
 
 // NewBtree will create a new B-Tree instance with data persisted to backend storage upon commit.
-// If B-Tree(name) is not found in the backend, a new one will be created. Otherwise, the existing one will be opened
-// and the parameters checked if matching. If you know that it exists, then it is more convenient and more readable to call
-// the OpenBtree function.
+// If the store exists, it opens it and validates compatibility with the provided options.
+// When creating a new store, a root node ID is preassigned for commit-time merging.
 func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
 		return nil, fmt.Errorf("transaction 't' parameter can't be nil")
@@ -48,7 +48,7 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 		return nil, fmt.Errorf("transaction 't' parameter has not started")
 	}
 	if si.Name == "" {
-		return nil, fmt.Errorf("B-tree name can't be empty string")
+		return nil, fmt.Errorf("b-tree name can't be empty string")
 	}
 
 	var t2 any = t.GetPhasedTransaction()
@@ -85,7 +85,7 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 	if !ns.IsCompatible(stores[0]) {
 		trans.Rollback(ctx, nil)
 		// Recommend to use the OpenBtree function to open it.
-		return nil, fmt.Errorf("B-Tree '%s' exists & has different configuration, please use OpenBtree to open & create an instance of it", si.Name)
+		return nil, fmt.Errorf("b-tree '%s' exists & has different configuration, please use OpenBtree to open & create an instance of it", si.Name)
 	}
 	ns = &stores[0]
 	return newBtree[TK, TV](ctx, ns, trans, comparer)
@@ -95,7 +95,7 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 	// Fail if b-tree with a given name is already in the transaction's list.
 	for i := range trans.btreesBackend {
 		if s.Name == trans.btreesBackend[i].getStoreInfo().Name {
-			err := fmt.Errorf("B-tree '%s' is already in the transaction's b-tree instances list", s.Name)
+			err := fmt.Errorf("b-tree '%s' is already in the transaction's b-tree instances list", s.Name)
 			trans.Rollback(ctx, err)
 			return nil, err
 		}
@@ -144,6 +144,8 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 }
 
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.
+// This closure resets caches, reloads store info, and replays actions recorded by the item tracker,
+// validating versions to prevent lost updates.
 func refetchAndMergeClosure[TK btree.Ordered, TV any](si *StoreInterface[TK, TV], b3 *btree.Btree[TK, TV], sr sop.StoreRepository) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		b3ModifiedItems := si.ItemActionTracker.(*itemActionTracker[TK, TV]).items

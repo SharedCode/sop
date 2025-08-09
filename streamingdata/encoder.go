@@ -35,13 +35,13 @@ func (e *Encoder[TK]) Close() error {
 		if !found {
 			break
 		}
-		// Delete if found because it means the chunk is of the previous record that got updated.
+		// Delete if found because the chunk belongs to the previous record that was updated.
 		ok, err := e.w.btree.RemoveCurrentItem(e.w.ctx)
 		if err != nil {
 			return err
 		}
 		if !ok {
-			return fmt.Errorf("Update's Close failed, key: %v, chunk: #%d did not remove in the backend Btree", e.w.key, e.w.chunkIndex)
+			return fmt.Errorf("update close failed, key: %v, chunk: #%d did not remove in the backend Btree", e.w.key, e.w.chunkIndex)
 		}
 		e.w.chunkIndex++
 	}

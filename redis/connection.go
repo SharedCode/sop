@@ -1,3 +1,4 @@
+// Package redis provides a Cache implementation and simple distributed locking built on Redis.
 package redis
 
 import (

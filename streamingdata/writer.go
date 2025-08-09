@@ -31,7 +31,7 @@ func (w *writer[TK]) Write(p []byte) (int, error) {
 			if err != nil {
 				return 0, err
 			}
-			return 0, fmt.Errorf("Write failed, key: %v, chunk: #%d did not insert to the backend Btree", w.key, w.chunkIndex)
+			return 0, fmt.Errorf("write failed, key: %v, chunk: #%d did not insert to the backend Btree", w.key, w.chunkIndex)
 		}
 		// Increment the chunk index in prep for next (chunk) Write call.
 		w.chunkIndex++
@@ -62,7 +62,7 @@ func (w *writer[TK]) Write(p []byte) (int, error) {
 			if err != nil {
 				return 0, err
 			}
-			return 0, fmt.Errorf("Write failed, key: %v, chunk: #%d did not update to the backend Btree", w.key, w.chunkIndex)
+			return 0, fmt.Errorf("write failed, key: %v, chunk: #%d did not update to the backend Btree", w.key, w.chunkIndex)
 		}
 		// Increment the chunk index in prep for next (chunk) Write call.
 		w.chunkIndex++
@@ -73,7 +73,7 @@ func (w *writer[TK]) Write(p []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		return 0, fmt.Errorf("Write failed, key: %v, chunk: #%d did not insert to the backend Btree", w.key, w.chunkIndex)
+		return 0, fmt.Errorf("write failed, key: %v, chunk: #%d did not insert to the backend Btree", w.key, w.chunkIndex)
 	}
 	// Increment the chunk index in prep for next (chunk) Write call.
 	w.chunkIndex++

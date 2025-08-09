@@ -8,6 +8,8 @@ import (
 )
 
 // Frontend facing Node Repository. Implements the NodeRepository interface CRUD methods.
+// The frontend adapts generic btree.Node types to backend interfaces and stages fetched
+// nodes into the transaction-local cache when Fetched is called.
 
 type nodeRepositoryFrontEnd[TK btree.Ordered, TV any] struct {
 	*nodeRepositoryBackend
@@ -33,6 +35,7 @@ func (nr *nodeRepositoryFrontEnd[TK, TV]) Get(ctx context.Context, nodeID sop.UU
 	return n.(*btree.Node[TK, TV]), err
 }
 
+// Fetched marks a node as fetched so it becomes tracked by the transaction (moved from MRU to local cache).
 func (nr *nodeRepositoryFrontEnd[TK, TV]) Fetched(nodeID sop.UUID) {
 	n := nr.readNodesCache.Get([]sop.UUID{nodeID})
 	if n[0] != nil {

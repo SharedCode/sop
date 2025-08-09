@@ -17,6 +17,8 @@ const (
 	priorityLogMinAgeInMin         = 5
 )
 
+// priorityLog persists per-transaction payloads that guide prioritized replication/work.
+// Files are stored under the active folder with a .plg extension and are aged before batching.
 type priorityLog struct {
 	replicationTracker *replicationTracker
 	tid                sop.UUID
@@ -28,6 +30,8 @@ func (l priorityLog) IsEnabled() bool {
 }
 
 // Add writes the priority log payload for a transaction.
+// Note: errors from WriteFile are currently ignored (fire-and-forget), as the system can
+// proceed without strict durability here; callers rely on batching and backups instead.
 func (l priorityLog) Add(ctx context.Context, tid sop.UUID, payload []byte) error {
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogFileExtension))
 	fio := NewFileIO()
@@ -57,6 +61,8 @@ func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPaylo
 }
 
 // GetBatch returns up to batchSize oldest priority log entries ready for processing.
+// Entries are considered ready when their last-modified time is older than
+// priorityLogMinAgeInMin from the current hour (capped to the hour).
 func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 	cappedHour := mh.Add(-time.Duration(priorityLogMinAgeInMin * time.Minute))
@@ -87,7 +93,7 @@ func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 		return nil, err
 	}
 
-	// 25 is defaut batch size.
+	// 25 is default batch size.
 	if batchSize <= 0 {
 		batchSize = 25
 	}
@@ -127,6 +133,7 @@ func (l priorityLog) Remove(ctx context.Context, tid sop.UUID) error {
 }
 
 // WriteBackup writes a backup copy of the priority log payload.
+// Similar to Add, this ignores errors (best-effort) and returns nil.
 func (l priorityLog) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogBackupFileExtension))
 	fio := NewFileIO()

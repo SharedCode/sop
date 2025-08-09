@@ -7,6 +7,8 @@ import (
 	"github.com/sharedcode/sop"
 )
 
+// fileIO wraps a FileIO to record operations that should be replicated to passive targets.
+// Actions are collected during a transaction and later replayed by replicate().
 type fileIO struct {
 	manageStore        sop.ManageStore
 	replicationTracker *replicationTracker
@@ -92,6 +94,8 @@ func (fio *fileIO) removeStore(ctx context.Context, folderName string) error {
 	return err
 }
 
+// replicate replays recorded actions against the passive folder when replication is enabled.
+// Any failure aborts and returns the error for the caller to handle.
 func (fio *fileIO) replicate(ctx context.Context) error {
 	if !fio.replicationTracker.replicate {
 		return nil

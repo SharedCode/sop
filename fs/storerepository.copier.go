@@ -11,6 +11,9 @@ import (
 	"github.com/sharedcode/sop/encoding"
 )
 
+// CopyToPassiveFolders copies store metadata (store list and per-store info) and registry
+// segment files from the active folder to passive targets. It temporarily flips the active
+// folder toggler to write into the passive side via the fileIO replication wrapper.
 func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 	// Copy StoreRepositories to passive targets.
 	// Copy Registries to passive targets.
@@ -69,6 +72,7 @@ func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 	return nil
 }
 
+// copyFilesByExtension copies files with the given extension from sourceDir to targetDir.
 func copyFilesByExtension(ctx context.Context, sourceDir, targetDir, extension string) error {
 	fio := NewFileIO()
 	files, err := fio.ReadDir(ctx, sourceDir)
@@ -94,6 +98,7 @@ func copyFilesByExtension(ctx context.Context, sourceDir, targetDir, extension s
 	return nil
 }
 
+// copyFile streams bytes from sourcePath to targetPath using io.Copy.
 func copyFile(sourcePath, targetPath string) error {
 	sourceFile, err := os.Open(sourcePath)
 	if err != nil {

@@ -88,27 +88,31 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 	var dio *fileDirectIO
 	var result fileRegionDetails
 
+	// Allocate a block-aligned buffer for direct I/O reads of a single block.
 	alignedBuffer := directio.AlignedBlock(blockSize)
 	i := 0
 	for {
-		// Not found or there is no space left in the block, try (or create if writing) other file segments.
+		// Iterate segment files (buckets) until the record is found or space is located.
 		i++
 
-		// Stop the loop of we've just created a new file segment or reaching ridiculous file check.
+		// Guardrail: avoid unbounded growth or accidental infinite loops.
 		if i > 1000 {
 			return result, fmt.Errorf("reached the maximum numer of segment files (1000), can't create another one")
 		}
 
+		// Compute the target segment filename for this iteration.
 		segmentFilename := fmt.Sprintf("%s-%d%s", filename, i, registryFileExtension)
 
 		if i > 1 {
 			log.Debug(fmt.Sprintf("checking segment file %s", segmentFilename))
 		}
 
+		// Resolve the active path for the segment file and reuse an open handle if available.
 		fn := hm.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename))
 		if f, ok := hm.fileHandles[fn]; ok {
 			dio = f
 		} else {
+			// Open existing file or create a new one (when writing). Also ensure it’s the expected size.
 			dio = newFileDirectIO()
 			fileExists := dio.fileExists(fn)
 			var fs int64
@@ -119,6 +123,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				if !forWriting {
 					return result, fmt.Errorf("%s '%v'", idNotFoundErr, id)
 				}
+				// Initialize a new segment file and return the location for the first write.
 				frd, err := hm.setupNewFile(ctx, forWriting, fn, id, dio)
 				if dio.file != nil {
 					dio.filename = segmentFilename
@@ -126,6 +131,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				}
 				return frd, err
 			} else {
+				// Open the existing segment file for read/write (or read-only in RO mode).
 				flag := os.O_RDWR
 				if !hm.readWrite {
 					flag = os.O_RDONLY
@@ -138,12 +144,13 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 			hm.fileHandles[fn] = dio
 		}
 
-		// Read entire block for the ID hash mod, deserialize each Handle and check if anyone matches the one we are trying to find.
-		// For add use-case with "collision", when there is no more slot on the block, we need to automatically create a new segment file.
+		// Calculate the block offset and the ideal slot (handleInBlockOffset) for this UUID.
 		blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
 
+		// Read one block containing the target slot.
 		n, err := dio.readAt(ctx, alignedBuffer, blockOffset)
 		if err != nil {
+			// If we reached EOF on a short file, either return a write location or continue to next segment.
 			if dio.isEOF(err) {
 				if forWriting {
 					result.blockOffset = blockOffset
@@ -151,23 +158,23 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 					result.dio = dio
 					return result, nil
 				}
-				// If for read, check the next file or break the loop if this is the last file segment.
+				// Not found here; check next file segment.
 				continue
 			} else {
 				return result, err
 			}
 		}
 		if n != len(alignedBuffer) {
+			// A full block is expected; partial reads indicate an unexpected short read.
 			return result, fmt.Errorf("only able to read partially (%d bytes) the block record at offset %v", n, blockOffset)
 		}
 
-		// Unmarshal and check if this is the Handler record we are looking for.
+		// Unmarshal and check the ideal slot first.
 		m := encoding.NewHandleMarshaler()
 		var h sop.Handle
-
-		// Special process for the ideal id location (handle in block offset).
 		hbuf := alignedBuffer[handleInBlockOffset : handleInBlockOffset+sop.HandleSizeInBytes]
 		if isZeroData(hbuf) {
+			// Ideal slot is empty; use it if writing, otherwise fall through to scan the block.
 			if forWriting {
 				result.blockOffset = blockOffset
 				result.handleInBlockOffset = handleInBlockOffset
@@ -175,10 +182,10 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				return result, nil
 			}
 		} else {
+			// Ideal slot is occupied; check if it matches the requested logical ID.
 			if lid, err := m.UnmarshalLogicalID(hbuf); err != nil {
 				return result, err
 			} else if lid == id {
-				// Found the handle block, read, deserialize, lock if for writing and return it.
 				if err := m.Unmarshal(hbuf, &h); err != nil {
 					return result, err
 				}
@@ -190,13 +197,12 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 			}
 		}
 
-		// Falling through here means the ideal block is not it.
+		// Scan the rest of the block for either a free slot (write) or a matching ID (read).
 		var bao int64
 		result.dio = dio
 		result.blockOffset = blockOffset
 		for range handlesPerBlock {
-
-			// handleInBlockOffset had already been processed above and it's not it, skip it.
+			// Skip the ideal slot since it was already processed above.
 			if bao == handleInBlockOffset {
 				bao += sop.HandleSizeInBytes
 				continue
@@ -214,7 +220,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 				if lid, err := m.UnmarshalLogicalID(hbuf); err != nil {
 					return result, err
 				} else if lid == id {
-					// Found the handle block, read, deserialize, lock if for writing and return it.
+					// Found the handle; deserialize and return its location.
 					if err := m.Unmarshal(hbuf, &h); err != nil {
 						return result, err
 					}
@@ -235,16 +241,11 @@ func (hm *hashmap) fetch(ctx context.Context, filename string, ids []sop.UUID) (
 	for _, id := range ids {
 		frd, err := hm.findOneFileRegion(ctx, false, filename, id)
 		if err != nil {
-			if strings.Contains(err.Error(), idNotFoundErr) {
-				continue
-			}
+			// Missing IDs are normal in a sparse registry; skip them.
 			if strings.Contains(err.Error(), idNotFoundErr) {
 				continue
 			}
 			return nil, err
-		}
-		if frd.handle.IsEmpty() {
-			continue
 		}
 		if frd.handle.IsEmpty() {
 			continue
@@ -259,6 +260,7 @@ func (hm *hashmap) fetch(ctx context.Context, filename string, ids []sop.UUID) (
 func (hm *hashmap) findFileRegion(ctx context.Context, filename string, ids []sop.UUID) ([]fileRegionDetails, error) {
 	foundItems := make([]fileRegionDetails, 0, len(ids))
 	for _, id := range ids {
+		// Pre-resolve each UUID to its target file region (block + slot) for batch callers.
 		frd, err := hm.findOneFileRegion(ctx, true, filename, id)
 		if err != nil {
 			return nil, err
@@ -295,6 +297,7 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 		flag = os.O_RDONLY
 	}
 
+	// Coordinate file preallocation across processes using a distributed lock.
 	lk := hm.cache.CreateLockKeys([]string{preallocateFileLockKey})
 	if ok, _, err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk); !ok || err != nil {
 		if err == nil {
@@ -308,16 +311,14 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 		return result, err
 	}
 
-	// Handle properly a newly created file.
-	// Pre-allocate entire segment if new file. Should we Redis lock to allow only one process to win Truncate?
-	// NFS should be able to allow one and others to fail, error out.
+	// Pre-allocate the full segment file to ensure subsequent direct I/O works with fixed offsets.
 	if err := dio.file.Truncate(hm.getSegmentFileSize()); err != nil {
 		hm.cache.Unlock(ctx, lk)
 		return result, err
 	}
 	hm.cache.Unlock(ctx, lk)
 
-	// New file, 'prepare to let caller write the new handle to this block's first slot.
+	// Return the computed location for the caller to write the first record.
 	blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
 	result.blockOffset = blockOffset
 	result.handleInBlockOffset = handleInBlockOffset

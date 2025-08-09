@@ -1,3 +1,5 @@
+// Package jsondb provides thin wrappers for storing JSON-serializable values in a SOP B-Tree
+// with helpers for paging and convenience CRUD operations.
 package jsondb
 
 import (
@@ -12,7 +14,7 @@ import (
 	"github.com/sharedcode/sop/inredfs"
 )
 
-// Item contains Key & Value pair.
+// Item contains a Key and Value pair, with a generated UUID for reference.
 type Item[TK btree.Ordered, TV any] struct {
 	Key   TK        `json:"key"`
 	Value *TV       `json:"value"`
@@ -25,8 +27,7 @@ func (itm *Item[TK, TV]) extract(source *btree.Item[TK, TV]) {
 	itm.ID = uuid.UUID(source.ID)
 }
 
-// B-tree that can operate on JSON String "wrapper". Has no logic except to take in and return
-// JSON string payload.
+// JsonDBAnyKey wraps a B-Tree for storing arbitrary JSON-serializable values under an ordered key.
 type JsonDBAnyKey[TK btree.Ordered, TV any] struct {
 	btree.BtreeInterface[TK, TV]
 }
@@ -34,26 +35,25 @@ type JsonDBAnyKey[TK btree.Ordered, TV any] struct {
 type PagingDirection int
 
 const (
+	// Forward iterates from low to high.
 	Forward = iota
+	// Backward iterates from high to low.
 	Backward
 )
 
-// Paging Info specifies fetching details.
+// PagingInfo specifies pagination when reading keys or items.
 type PagingInfo struct {
-	// -1 or 0 means to fetch data starting from the current "cursor" location.
-	// > 0 means to traverse to that page offset and fetch data from that "cursor" location.
+	// PageOffset is the page index to move to before fetching (0 to start from current).
 	PageOffset int `json:"page_offset"`
-	// Number of data elements(Keys or Items) per page.
+	// PageSize is the number of elements per page.
 	PageSize int `json:"page_size"`
-	// Count of elements to fetch starting with the page offset. If left 0, 'will fetch PageSize number of elements
-	// after traversing the B-tree, bringing the cursor to the requested page offset.
-	// Otherwise, will fetch FetchCount number of data elements starting from the page offset.
+	// FetchCount overrides PageSize when > 0 to fetch an exact number of elements.
 	FetchCount int `json:"fetch_count"`
-	// Direction of fetch is either forward(0) or backwards(1).
+	// Direction selects forward or backward iteration.
 	Direction PagingDirection `json:"direction"`
 }
 
-// Instantiates and creates a new B-tree that supports JSON string payloads.
+// NewJsonBtree creates a new JSON-capable B-Tree. Values are marshaled by the caller as needed.
 func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
 	b3, err := inredfs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)
 	if err != nil {
@@ -64,7 +64,7 @@ func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOpt
 	}, nil
 }
 
-// Instantiates and opens a B-tree that supports JSON string payloads.
+// OpenJsonBtree opens an existing JSON-capable B-Tree.
 func OpenJsonBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
 	b3, err := inredfs.OpenBtreeWithReplication[TK, TV](ctx, name, t, comparer)
 	if err != nil {
@@ -75,7 +75,7 @@ func OpenJsonBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t
 	}, nil
 }
 
-// Add adds an array of item to the b-tree and does not check for duplicates.
+// Add inserts items without duplicate checks; returns true only if all inserts succeed.
 func (j *JsonDBAnyKey[TK, TV]) Add(ctx context.Context, items []Item[TK, TV]) (bool, error) {
 	allSucceeded := true
 	for i := range items {
@@ -88,9 +88,7 @@ func (j *JsonDBAnyKey[TK, TV]) Add(ctx context.Context, items []Item[TK, TV]) (b
 	return allSucceeded, nil
 }
 
-// AddIfNotExist adds an item if there is no item matching the key yet.
-// Otherwise, it will do nothing and return false, for not adding the item.
-// This is useful for cases one wants to add an item without creating a duplicate entry.
+// AddIfNotExist inserts items only when the key does not already exist.
 func (j *JsonDBAnyKey[TK, TV]) AddIfNotExist(ctx context.Context, items []Item[TK, TV]) (bool, error) {
 	allSucceeded := true
 	for i := range items {
@@ -103,7 +101,7 @@ func (j *JsonDBAnyKey[TK, TV]) AddIfNotExist(ctx context.Context, items []Item[T
 	return allSucceeded, nil
 }
 
-// Update finds the item with key and update its value to the incoming value argument.
+// Update replaces existing values for the provided keys.
 func (j *JsonDBAnyKey[TK, TV]) Update(ctx context.Context, items []Item[TK, TV]) (bool, error) {
 	allSucceeded := true
 	for i := range items {
@@ -116,7 +114,7 @@ func (j *JsonDBAnyKey[TK, TV]) Update(ctx context.Context, items []Item[TK, TV])
 	return allSucceeded, nil
 }
 
-// Add if not exist or update item if it exists.
+// Upsert adds new items or updates existing ones based on key existence.
 func (j *JsonDBAnyKey[TK, TV]) Upsert(ctx context.Context, items []Item[TK, TV]) (bool, error) {
 	allSucceeded := true
 	for i := range items {
@@ -129,7 +127,7 @@ func (j *JsonDBAnyKey[TK, TV]) Upsert(ctx context.Context, items []Item[TK, TV])
 	return allSucceeded, nil
 }
 
-// Remove will find the item with a given key then remove that item.
+// Remove deletes items by key; returns true only if all deletions succeed.
 func (j *JsonDBAnyKey[TK, TV]) Remove(ctx context.Context, keys []TK) (bool, error) {
 	allSucceeded := true
 	for i := range keys {
@@ -142,6 +140,7 @@ func (j *JsonDBAnyKey[TK, TV]) Remove(ctx context.Context, keys []TK) (bool, err
 	return allSucceeded, nil
 }
 
+// GetKeys returns a JSON string of keys starting from the current cursor and paginated per PagingInfo.
 func (j *JsonDBAnyKey[TK, TV]) GetKeys(ctx context.Context, pagingInfo PagingInfo) (string, error) {
 	if j.BtreeInterface.GetCurrentKey().ID == sop.NilUUID {
 		if pagingInfo.PageOffset != 0 {
@@ -211,6 +210,7 @@ func (j *JsonDBAnyKey[TK, TV]) GetKeys(ctx context.Context, pagingInfo PagingInf
 	return toJsonString(keys)
 }
 
+// GetItems returns a JSON string of items starting from the current cursor and paginated per PagingInfo.
 func (j *JsonDBAnyKey[TK, TV]) GetItems(ctx context.Context, pagingInfo PagingInfo) (string, error) {
 	if j.BtreeInterface.GetCurrentKey().ID == sop.NilUUID {
 		if pagingInfo.PageOffset != 0 {
@@ -281,7 +281,7 @@ func (j *JsonDBAnyKey[TK, TV]) GetItems(ctx context.Context, pagingInfo PagingIn
 	return toJsonString(items)
 }
 
-// GetCurrentValue returns the current item's value.
+// GetValues finds items by key (or id) and returns their values as a JSON string.
 func (j *JsonDBAnyKey[TK, TV]) GetValues(ctx context.Context, keys []Item[TK, TV]) (string, error) {
 	values := make([]Item[TK, TV], len(keys))
 	for i := range keys {
@@ -312,7 +312,7 @@ func (j *JsonDBAnyKey[TK, TV]) GetValues(ctx context.Context, keys []Item[TK, TV
 	return toJsonString(values)
 }
 
-// Encode to JSON string the items.
+// toJsonString encodes objects to a JSON string or returns an empty string for empty input.
 func toJsonString[T any](objects []T) (string, error) {
 	if len(objects) == 0 {
 		return "", nil

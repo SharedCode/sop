@@ -1,5 +1,5 @@
-// Package Cassandra contains code for integration or inter-operation with SOP's Cassandra DB.
-// This package manage contents on tables like Registry, StoreRepository, Transaction Log.
+// Package cassandra contains code for integration or inter-operation with SOP's Cassandra DB.
+// This package manages contents in tables like Registry, StoreRepository, and Transaction Log.
 package cassandra
 
 import (
@@ -15,6 +15,8 @@ import (
 	"github.com/sharedcode/sop/redis"
 )
 
+// registry implements sop.Registry using Cassandra as the source of truth and
+// coordinates an in-process L1 cache with an external L2 cache (Redis).
 type registry struct {
 	l2Cache sop.Cache
 	l1Cache *cache.L1Cache
@@ -31,9 +33,10 @@ func NewRegistry() sop.Registry {
 	}
 }
 
+// Add inserts new handle records into Cassandra and updates L1/L2 caches best-effort.
 func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 	for _, sh := range storesHandles {
 		insertStatement := fmt.Sprintf("INSERT INTO %s.%s (lid, is_idb, p_ida, p_idb, ver, wip_ts, is_del) VALUES(?,?,?,?,?,?,?);",
@@ -50,6 +53,7 @@ func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[
 			if err := qry.Exec(); err != nil {
 				return err
 			}
+			// Update in-process cache.
 			v.l1Cache.Handles.Set(convertToKvp([]sop.Handle{h}))
 			// Tolerate Redis cache failure.
 			if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
@@ -60,10 +64,10 @@ func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[
 	return nil
 }
 
-// Update performs per-handle updates, acquiring per-key locks, and syncs caches on success.
+// Update updates per-handle records with per-key logical locks to reduce conflicts. On success, caches are synced.
 func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
 	for _, sh := range storesHandles {
@@ -110,10 +114,11 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 	return nil
 }
 
-// UpdateNoLocks updates records without locks, optionally as a logged batch, and refreshes caches.
+// UpdateNoLocks updates records without acquiring per-key locks. When allOrNothing is true, a logged batch is used.
+// In all cases, L1/L2 caches are refreshed on success, but Redis errors are tolerated.
 func (v *registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
 	if allOrNothing {
@@ -176,10 +181,10 @@ func (v *registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesH
 	return nil
 }
 
-// Get fetches handles by ID, consulting the cache first and falling back to Cassandra.
+// Get fetches handles by ID, checking Redis first (optionally extending TTL) and falling back to Cassandra on misses.
 func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if connection == nil {
-		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
 	storesHandles := make([]sop.RegistryPayload[sop.Handle], 0, len(storesLids))
@@ -253,10 +258,10 @@ func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop
 	return storesHandles, nil
 }
 
-// Remove deletes handles from Cassandra and clears cached entries.
+// Remove deletes handle records from Cassandra and evicts affected entries from caches.
 func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
 	for _, storeLids := range storesLids {
@@ -298,6 +303,7 @@ func (v *registry) Replicate(ctx context.Context, newRootNodeHandles, addedNodeH
 	return nil
 }
 
+// convertToKvp converts handles to KVP slices for cache writes.
 func convertToKvp(handles []sop.Handle) []sop.KeyValuePair[sop.UUID, sop.Handle] {
 	items := make([]sop.KeyValuePair[sop.UUID, sop.Handle], len(handles))
 	for i := range handles {

@@ -4,30 +4,31 @@ import (
 	"github.com/sharedcode/sop/btree"
 )
 
+// IndexFieldSpecification declares a field and its sort order in the composite index.
 type IndexFieldSpecification struct {
 	FieldName string `json:"field_name"`
-	// Sort order can be ascending (true) or descending (false).
+	// AscendingSortOrder chooses ascending (true) or descending (false) order.
 	AscendingSortOrder bool `json:"ascending_sort_order"`
 	coercedComparer    func(a, b any) int
 }
 
-// B-Tree Index specification.
+// IndexSpecification defines the B-Tree key index configuration.
 type IndexSpecification struct {
-	// Index Fields specification.
+	// IndexFields contains the ordered list of fields participating in the index.
 	IndexFields []IndexFieldSpecification `json:"index_fields"`
 }
 
-// Create a new IndexSpecification instance.
+// NewIndexSpecification constructs an IndexSpecification with the provided fields.
 func NewIndexSpecification(indexFields []IndexFieldSpecification) *IndexSpecification {
 	return &IndexSpecification{
 		IndexFields: indexFields,
 	}
 }
 
-// Comparer that consumes the IndexSpecification supplied by enduser.
+// Comparer compares two map keys using the configured field list and sort order.
 func (idx *IndexSpecification) Comparer(x map[string]any, y map[string]any) int {
 	for i := range idx.IndexFields {
-		// Coerce the comparer to allow runtime to be able to optimize & even if not, coerced one is still better by a step.
+		// Coerce the comparer once per field for efficiency.
 		if idx.IndexFields[i].coercedComparer == nil {
 			idx.IndexFields[i].coercedComparer = btree.CoerceComparer(x[idx.IndexFields[i].FieldName])
 		}

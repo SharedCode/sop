@@ -53,6 +53,7 @@ var GlobalReplicationDetails *ReplicationTrackedDetails
 var globalReplicationDetailsLocker sync.Mutex = sync.Mutex{}
 
 // NewReplicationTracker instantiates a tracker for active/passive folders and replication status.
+// It reads persisted status, initializes global in-memory state, and optionally synchronizes with L2 cache.
 func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, replicate bool, l2Cache sop.Cache) (*replicationTracker, error) {
 	if l2Cache == nil {
 		l2Cache = redis.NewClient()
@@ -97,7 +98,7 @@ func (r *replicationTracker) SetTransactionID(tid sop.UUID) {
 }
 
 // HandleReplicationRelatedError evaluates an I/O error and triggers failover when appropriate.
-// It is called by transactions when file I/O fails.
+// Called by transaction code paths that detect storage I/O errors during commit/rollback.
 func (r *replicationTracker) HandleReplicationRelatedError(ctx context.Context, ioError error, rollbackError error, rollbackSucceeded bool) {
 	if !r.replicate {
 		return
@@ -321,7 +322,8 @@ func (r *replicationTracker) readReplicationStatus(ctx context.Context, filename
 	return nil
 }
 
-// syncWithL2Cache synchronizes replication state with L2 cache, pushing or pulling based on pushValue.
+// syncWithL2Cache synchronizes replication state with L2 cache.
+// When pushValue is true, it pushes the current global state; otherwise it pulls the cached state.
 func (r *replicationTracker) syncWithL2Cache(ctx context.Context, pushValue bool) error {
 
 	var rtd ReplicationTrackedDetails

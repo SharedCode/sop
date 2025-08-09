@@ -22,7 +22,7 @@ const (
 	logFolder        = "translogs"
 )
 
-// TransactionLog writes per-transaction logs to disk and supports scanning and cleanup
+// TransactionLog writes per-transaction logs to local storage and supports scanning and cleanup
 // of aged records. It also coordinates with a priority log for replication scenarios.
 type TransactionLog struct {
 	priorityLog
@@ -46,7 +46,7 @@ func NewTransactionLog(cache sop.Cache, rt *replicationTracker) *TransactionLog 
 	}
 }
 
-// PriorityLog returns the underlying priority log for commit-change logging.
+// PriorityLog returns the FS-backed priority log for commit-change logging.
 func (tl *TransactionLog) PriorityLog() sop.TransactionPriorityLog {
 	return tl.priorityLog
 }
@@ -262,7 +262,7 @@ func (fis ByModTime) Less(i, j int) bool {
 }
 
 // getFilesSortedDescByModifiedTime lists files in descending order by modification time,
-// filtered by extension and an optional predicate.
+// filtered by extension and an optional predicate. Directory will be created if missing.
 func getFilesSortedDescByModifiedTime(ctx context.Context, directoryPath string, fileSuffix string, filter func(os.DirEntry) bool) ([]FileInfoWithModTime, error) {
 	fio := NewFileIO()
 

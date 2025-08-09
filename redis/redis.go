@@ -49,10 +49,10 @@ func (c client) keyNotFound(err error) bool {
 	return err == redis.Nil
 }
 
-// Ping tests connectivity for redis (PONG should be returned)
+// Ping tests connectivity to Redis.
 func (c client) Ping(ctx context.Context) error {
 	if c.conn == nil {
-		return fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return fmt.Errorf("redis connection is not open; can't create new client")
 	}
 	pong, err := c.conn.Client.Ping(ctx).Result()
 	if err != nil {
@@ -72,7 +72,7 @@ func (c client) Clear(ctx context.Context) error {
 // Set stores a string value with the specified expiration; expiration < 0 disables caching.
 func (c client) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	if c.conn == nil {
-		return fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return fmt.Errorf("redis connection is not open; can't create new client")
 	}
 	// No caching if expiration < 0.
 	if expiration < 0 {
@@ -84,7 +84,7 @@ func (c client) Set(ctx context.Context, key string, value string, expiration ti
 // Get retrieves a string value. Returns (found, value, error-from-backend).
 func (c client) Get(ctx context.Context, key string) (bool, string, error) {
 	if c.conn == nil {
-		return false, "", fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return false, "", fmt.Errorf("redis connection is not open; can't create new client")
 	}
 	s, err := c.conn.Client.Get(ctx, key).Result()
 	// Convert key not found into returning false and nil err.
@@ -98,7 +98,7 @@ func (c client) Get(ctx context.Context, key string) (bool, string, error) {
 // GetEx retrieves a string value and sets its expiration (TTL) at the same time.
 func (c client) GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error) {
 	if c.conn == nil {
-		return false, "", fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return false, "", fmt.Errorf("redis connection is not open; can't create new client")
 	}
 	s, err := c.conn.Client.GetEx(ctx, key, expiration).Result()
 	// Convert key not found into returning false and nil err.
@@ -112,7 +112,7 @@ func (c client) GetEx(ctx context.Context, key string, expiration time.Duration)
 // SetStruct marshals a struct and stores it with the specified expiration; expiration < 0 disables caching.
 func (c client) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	if c.conn == nil {
-		return fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return fmt.Errorf("redis connection is not open; can't create new client")
 	}
 
 	// No caching if expiration < 0.
@@ -131,7 +131,7 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 // GetStruct retrieves a struct value and unmarshals it into target.
 func (c client) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	if c.conn == nil {
-		return false, fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return false, fmt.Errorf("redis connection is not open; can't create new client")
 	}
 	if target == nil {
 		return false, fmt.Errorf("target can't be nil")
@@ -152,7 +152,7 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) (
 // GetStructEx retrieves a struct value with TTL behavior and unmarshals it into target.
 func (c client) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
 	if c.conn == nil {
-		return false, fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return false, fmt.Errorf("redis connection is not open; can't create new client")
 	}
 	if target == nil {
 		return false, fmt.Errorf("target can't be nil")
@@ -173,7 +173,7 @@ func (c client) GetStructEx(ctx context.Context, key string, target interface{},
 // Delete removes keys and returns whether the operation completed without backend errors.
 func (c client) Delete(ctx context.Context, keys []string) (bool, error) {
 	if c.conn == nil {
-		return false, fmt.Errorf("Redis connection is not open, 'can't create new client")
+		return false, fmt.Errorf("redis connection is not open; can't create new client")
 	}
 	var rs = c.conn.Client.Del(ctx, keys...)
 

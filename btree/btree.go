@@ -1,5 +1,5 @@
-// Package btree provides a B-tree implementation (an M-ary, multiway search tree) and related algorithms.
-// It also defines interfaces needed to support multiple storage backends (e.g., in-memory, filesystem, etc.).
+// Package btree provides the core B-Tree data structure and algorithms used by SOP.
+// It defines generic node/item types and storage interfaces to support multiple backends.
 //
 // This B-tree can distribute items added on a given leaf sub-branch so it tends to fill nodes of that sub-branch.
 // Instead of ~50% average fill (typical), each node can achieve higher average utilization, commonly 62%–75%.

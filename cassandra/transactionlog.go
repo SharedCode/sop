@@ -39,7 +39,7 @@ type transactionLog struct {
 	cache       sop.Cache
 }
 
-// NewBlobStore instantiates a new BlobStore instance.
+// NewTransactionLog returns a Cassandra-backed implementation of sop.TransactionLog.
 func NewTransactionLog() sop.TransactionLog {
 	c := redis.NewClient()
 	return &transactionLog{
@@ -49,10 +49,10 @@ func NewTransactionLog() sop.TransactionLog {
 	}
 }
 
-// Add blob(s) to the Blob store.
+// Add writes a log entry (commit function and payload) for the specified transaction ID into Cassandra (t_log table).
 func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
 	insertStatement := fmt.Sprintf("INSERT INTO %s.t_log (id, c_f, c_f_p) VALUES(?,?,?);", connection.Config.Keyspace)
@@ -63,10 +63,10 @@ func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction 
 	return nil
 }
 
-// Remove will delete transaction log(t_log) records given a transaction ID(tid).
+// Remove deletes transaction log records in the t_log table for the given transaction ID.
 func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 	if connection == nil {
-		return fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
 	deleteStatement := fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
@@ -78,12 +78,13 @@ func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 	return nil
 }
 
-// Generates a new UUID based on time, pass-through to gocql.UUID function.
+// NewUUID generates a new time-based UUID for use as a transaction ID.
 func (tl *transactionLog) NewUUID() sop.UUID {
 	return sop.UUID(gocql.UUIDFromTime(Now().UTC()))
 }
 
-// GetOne fetches an expired Transaction ID(TID), the hour it was created in and transaction logs for this TID.
+// GetOne attempts to claim an old transaction-hour bucket and returns one TID and its log records for cleanup.
+// If no work is available or the hour-level lock cannot be acquired, a NilUUID is returned.
 func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
 	duration := time.Duration(7 * time.Hour)
 
@@ -116,12 +117,13 @@ func (tl *transactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 	return sop.UUID(tid), hour, r, nil
 }
 
+// GetOneOfHour claims work for a specific hour bucket if within the allowable window and returns one TID and its records.
 func (tl *transactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
 	if hour == "" {
 		return sop.NilUUID, nil, nil
 	}
 	if connection == nil {
-		return sop.NilUUID, nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return sop.NilUUID, nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
 	t, err := time.Parse(DateHourLayout, hour)
@@ -161,6 +163,7 @@ func (tl *transactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UU
 	return sop.UUID(tid), r, err
 }
 
+// getOne returns the hour string and a candidate transaction ID older than the capped window for cleanup.
 func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error) {
 	mh, _ := time.Parse(DateHourLayout, Now().Format(DateHourLayout))
 	// 70 minute capped hour as transaction has a max of 60min "commit time". 10 min
@@ -169,7 +172,7 @@ func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error
 	cappedHourTID := gocql.UUIDFromTime(cappedHour)
 
 	if connection == nil {
-		return "", NilUUID, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return "", NilUUID, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
 	selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
@@ -185,9 +188,10 @@ func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error
 	return cappedHour.Format(DateHourLayout), tid, nil
 }
 
+// getLogsDetails reads all commit records for the specified transaction ID from Cassandra.
 func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([]sop.KeyValuePair[int, []byte], error) {
 	if connection == nil {
-		return nil, fmt.Errorf("Cassandra connection is closed, 'call OpenConnection(config) to open it")
+		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
 	selectStatement := fmt.Sprintf("SELECT c_f, c_f_p FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
@@ -209,6 +213,7 @@ func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([
 	return r, nil
 }
 
+// PriorityLog returns a no-op priority log implementation for Cassandra (priority logs are FS-specific).
 func (tl *transactionLog) PriorityLog() sop.TransactionPriorityLog {
 	return tl.dummy
 }

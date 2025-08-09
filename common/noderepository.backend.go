@@ -13,7 +13,26 @@ import (
 )
 
 // Backend facing Node Repository. Part of where the magic happens.
+// nodeRepositoryBackend coordinates node lifecycle across:
+//   - Local transaction cache (tracked changes)
+//   - L1 MRU cache (host-wide MRU, includes Redis-backed metadata)
+//   - L2 cache (Redis) for cross-transaction visibility and merging
+//   - Blob store for persisted node bodies
+// It also interfaces with the registry (virtual IDs) to guard updates and flips active/inactive IDs on commit.
 
+// NodeRepository is the interface that wraps the basic Get, Add, Update, Remove methods.
+type NodeRepository interface {
+	// Get retrieves a node by its logical ID.
+	Get(ctx context.Context, logicalID sop.UUID, target interface{}) (interface{}, error)
+	// Add marks a node as new in the repository.
+	Add(nodeID sop.UUID, node interface{})
+	// Update modifies an existing node in the repository.
+	Update(nodeID sop.UUID, node interface{})
+	// Remove marks a node as removed in the repository.
+	Remove(nodeID sop.UUID)
+}
+
+// cachedNode represents a node in the cache with its action type.
 type cachedNode struct {
 	// node is a pointer to btree.Node.
 	node   interface{}
@@ -43,7 +62,7 @@ const (
 	readNodesMruMaxCapacity = 12
 )
 
-// NewNodeRepository instantiates a NodeRepository.
+// NewNodeRepository initializes caches and wiring for a store's node repository.
 func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.StoreInfo) *nodeRepositoryFrontEnd[TK, TV] {
 	nr := &nodeRepositoryBackend{
 		transaction:    t,
@@ -73,7 +92,13 @@ func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.
 // - If data is new(found in local cache only), then just remove from local cache.
 // - Otherwise, mark data as removed, for actual remove from blobStore(& redis) on transaction commit.
 
-// Get will retrieve a node with nodeID from the map.
+// get returns a node by logical ID. It checks:
+//  1. transaction-local cache (with remove-marker handling)
+//  2. read MRU
+//  3. L1 MRU by handle if before commit
+//  4. registry -> active ID, then L1 node cache, else blob store
+//
+// Retrieved nodes are versioned using registry version and cached locally/MRU.
 func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, target interface{}) (interface{}, error) {
 	if v, ok := nr.localCache[logicalID]; ok {
 		if v.action == removeAction {
@@ -144,6 +169,7 @@ func (nr *nodeRepositoryBackend) get(ctx context.Context, logicalID sop.UUID, ta
 	return target, nil
 }
 
+// add marks a node as newly added in the local cache.
 func (nr *nodeRepositoryBackend) add(nodeID sop.UUID, node interface{}) {
 	nr.localCache[nodeID] = cachedNode{
 		action: addAction,
@@ -151,6 +177,7 @@ func (nr *nodeRepositoryBackend) add(nodeID sop.UUID, node interface{}) {
 	}
 }
 
+// update stages a node change in local cache, preserving addAction when applicable.
 func (nr *nodeRepositoryBackend) update(nodeID sop.UUID, node interface{}) {
 	if n := nr.readNodesCache.Get([]sop.UUID{nodeID}); n[0] != nil {
 		nr.localCache[nodeID] = cachedNode{
@@ -175,6 +202,7 @@ func (nr *nodeRepositoryBackend) update(nodeID sop.UUID, node interface{}) {
 	}
 }
 
+// remove marks a node as removed, or drops it entirely if it was only locally added.
 func (nr *nodeRepositoryBackend) remove(nodeID sop.UUID) {
 	if n := nr.readNodesCache.Get([]sop.UUID{nodeID}); n[0] != nil {
 		nr.localCache[nodeID] = cachedNode{
@@ -194,6 +222,8 @@ func (nr *nodeRepositoryBackend) remove(nodeID sop.UUID) {
 	// Code should not reach this point, as B-tree will not issue a remove if node is not cached locally.
 }
 
+// commitNewRootNodes persists brand new root nodes and registers their virtual IDs.
+// Fails fast if a non-empty root exists to force refetch/merge path.
 func (nr *nodeRepositoryBackend) commitNewRootNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
@@ -244,7 +274,8 @@ func (nr *nodeRepositoryBackend) commitNewRootNodes(ctx context.Context, nodes [
 	return true, handles, nil
 }
 
-// Save to blob store, save node ID to the alternate(inactive) physical ID(see virtual ID).
+// commitUpdatedNodes allocates inactive physical IDs, guards via registry versions, writes blobs,
+// and stages Redis cache updates. Returns false to trigger refetch/merge when conflicts are detected.
 func (nr *nodeRepositoryBackend) commitUpdatedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
@@ -295,6 +326,7 @@ func (nr *nodeRepositoryBackend) commitUpdatedNodes(ctx context.Context, nodes [
 	}
 	log.Debug("outside commitUpdatedNodes forloop trying to AllocateID")
 
+	// Reserve/record the new inactive IDs back in the registry as part of the update pre-commit.
 	if err := nr.transaction.registry.UpdateNoLocks(ctx, false, handles); err != nil {
 		log.Debug(fmt.Sprintf("commitUpdatedNodes failed registry.Update, details: %v", err))
 		return false, nil, err
@@ -315,8 +347,7 @@ func (nr *nodeRepositoryBackend) commitUpdatedNodes(ctx context.Context, nodes [
 	return true, handles, nil
 }
 
-// Add the removed Node(s) and their Item(s) Data(if not in node segment) to the recycler
-// so they can get serviced for physical delete on schedule in the future.
+// commitRemovedNodes marks IDs deleted with a work-in-progress timestamp, deferring physical cleanup.
 func (nr *nodeRepositoryBackend) commitRemovedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, []sop.RegistryPayload[sop.Handle], error) {
 	if len(nodes) == 0 {
 		return true, nil, nil
@@ -346,6 +377,7 @@ func (nr *nodeRepositoryBackend) commitRemovedNodes(ctx context.Context, nodes [
 	return true, handles, nil
 }
 
+// commitAddedNodes registers virtual IDs for new nodes, writes blobs, and updates Redis cache.
 func (nr *nodeRepositoryBackend) commitAddedNodes(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) ([]sop.RegistryPayload[sop.Handle], error) {
 	/* UUID to Virtual ID story:
 	   - (on commit) New(added) nodes will have their IDs converted to virtual ID with empty
@@ -395,6 +427,7 @@ func (nr *nodeRepositoryBackend) commitAddedNodes(ctx context.Context, nodes []s
 	return handles, nil
 }
 
+// areFetchedItemsIntact revalidates registry versions for nodes read earlier to detect concurrent changes.
 func (nr *nodeRepositoryBackend) areFetchedItemsIntact(ctx context.Context, nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, error) {
 	if len(nodes) == 0 {
 		return true, nil
@@ -416,6 +449,7 @@ func (nr *nodeRepositoryBackend) areFetchedItemsIntact(ctx context.Context, node
 	return true, nil
 }
 
+// rollbackNewRootNodes deletes newly created roots from blob store and cache and unregisters IDs if needed.
 func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollbackData sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]) error {
 	if len(rollbackData.First) == 0 {
 		return nil
@@ -453,6 +487,7 @@ func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollb
 	return lastErr
 }
 
+// rollbackAddedNodes removes blobs, unregisters IDs, and evicts from Redis.
 func (nr *nodeRepositoryBackend) rollbackAddedNodes(ctx context.Context, rollbackData sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]) error {
 	vids := rollbackData.First
 	bibs := rollbackData.Second
@@ -484,7 +519,11 @@ func (nr *nodeRepositoryBackend) rollbackAddedNodes(ctx context.Context, rollbac
 	return lastErr
 }
 
-// rollback updated Nodes.
+// rollbackUpdatedNodes reverts a partial update:
+// - deletes any staged inactive blobs that were written
+// - clears inactive IDs from the corresponding handles
+// - restores registry state using UpdateNoLocks when nodes are already locked by us
+// - removes staged entries from Redis
 func (nr *nodeRepositoryBackend) rollbackUpdatedNodes(ctx context.Context, nodesAreLocked bool, vids []sop.RegistryPayload[sop.UUID]) error {
 	if len(vids) == 0 {
 		return nil
@@ -565,6 +604,7 @@ func (nr *nodeRepositoryBackend) removeNodes(ctx context.Context, blobsIDs []sop
 	return lastErr
 }
 
+// rollbackRemovedNodes clears deleted/timestamp flags in registry to undo a removal mark.
 func (nr *nodeRepositoryBackend) rollbackRemovedNodes(ctx context.Context, nodesAreLocked bool, vids []sop.RegistryPayload[sop.UUID]) error {
 	if len(vids) == 0 {
 		return nil
@@ -608,7 +648,7 @@ func (nr *nodeRepositoryBackend) rollbackRemovedNodes(ctx context.Context, nodes
 	return nil
 }
 
-// Set to active the inactive nodes.
+// activateInactiveNodes flips inactive IDs to active and bumps versions; marks WIP timestamp for later cleanup.
 func (nr *nodeRepositoryBackend) activateInactiveNodes(handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
 	for i := range handles {
 		for ii := range handles[i].IDs {
@@ -626,7 +666,7 @@ func (nr *nodeRepositoryBackend) activateInactiveNodes(handles []sop.RegistryPay
 	return handles, nil
 }
 
-// Update upsert time of a given set of nodes.
+// touchNodes bumps versions and clears WIP timestamps to finalize updates without flipping IDs.
 func (nr *nodeRepositoryBackend) touchNodes(handles []sop.RegistryPayload[sop.Handle]) ([]sop.RegistryPayload[sop.Handle], error) {
 	if len(handles) == 0 {
 		return nil, nil
@@ -642,6 +682,8 @@ func (nr *nodeRepositoryBackend) touchNodes(handles []sop.RegistryPayload[sop.Ha
 	return handles, nil
 }
 
+// Helper mappers for converting between store tuples and registry/blob payloads.
+// extractInactiveBlobsIDs returns the blob IDs for any inactive (staged) IDs referenced by the handles.
 func extractInactiveBlobsIDs(nodesHandles []sop.RegistryPayload[sop.Handle]) []sop.BlobsPayload[sop.UUID] {
 	bibs := make([]sop.BlobsPayload[sop.UUID], len(nodesHandles))
 	for i := range nodesHandles {
@@ -659,6 +701,7 @@ func extractInactiveBlobsIDs(nodesHandles []sop.RegistryPayload[sop.Handle]) []s
 	return bibs
 }
 
+// convertToBlobRequestPayload converts "node + store" tuples into a list of blob-table requests keyed by node IDs.
 func convertToBlobRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) []sop.BlobsPayload[sop.UUID] {
 	bibs := make([]sop.BlobsPayload[sop.UUID], len(nodes))
 	for i := range nodes {
@@ -673,6 +716,7 @@ func convertToBlobRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interface{}
 	return bibs
 }
 
+// convertToRegistryRequestPayload converts nodes into registry lookups keyed by logical (virtual) IDs.
 func convertToRegistryRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) []sop.RegistryPayload[sop.UUID] {
 	vids := make([]sop.RegistryPayload[sop.UUID], len(nodes))
 	for i := range nodes {
@@ -690,6 +734,7 @@ func convertToRegistryRequestPayload(nodes []sop.Tuple[*sop.StoreInfo, []interfa
 	return vids
 }
 
+// extractUUIDs extracts the logical IDs from a list of nodes for convenience in diagnostics/logging.
 func extractUUIDs(nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) []sop.UUID {
 	uuids := make([]sop.UUID, 0, len(nodes))
 	for i := range nodes {
@@ -700,6 +745,7 @@ func extractUUIDs(nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) []sop.UUID {
 	return uuids
 }
 
+// formatKey builds a namespaced cache key for nodes in Redis/L1.
 func (nr *nodeRepositoryBackend) formatKey(k string) string {
 	return fmt.Sprintf("N%s", k)
 }

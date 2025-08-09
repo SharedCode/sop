@@ -1,3 +1,5 @@
+// Package inmemory provides in-memory implementations of selected SOP backends,
+// primarily for tests and lightweight scenarios.
 package inmemory
 
 import (

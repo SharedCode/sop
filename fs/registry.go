@@ -1,3 +1,5 @@
+// Package fs provides filesystem-backed implementations of SOP storage primitives:
+// registries, blob store, transaction logs and a replication tracker.
 package fs
 
 import (
@@ -11,6 +13,11 @@ import (
 	"github.com/sharedcode/sop/cache"
 )
 
+// registryOnDisk is a filesystem-backed implementation of sop.Registry.
+// It stores Handles in hash-partitioned files (via registryMap) and keeps caches in sync:
+// - L1 cache (in-process MRU) for rapid handle lookups
+// - L2 cache (Redis) for cross-process sharing and TTL semantics
+// Replication (active/passive folders) is coordinated through replicationTracker.
 type registryOnDisk struct {
 	hashmap            *registryMap
 	replicationTracker *replicationTracker
@@ -26,10 +33,14 @@ type Registry interface {
 
 const (
 	// updateAllOrNothingOfHandleSetLockTimeout is the cache-based conflict-check lock TTL for Update operations.
+	// Each logical ID is locked individually in Redis to minimize contention between concurrent transactions
+	// updating disjoint keys in the same registry table.
 	updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 )
 
 // NewRegistry creates a filesystem-backed Registry that manages handles on disk using a hashmap structure.
+// readWrite toggles direct write access to files; hashModValue controls file partitioning (fan-out) for the registry table.
+// rt provides active/passive routing for replication; l2Cache supplies cross-process caching and locking.
 func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, l2Cache sop.Cache) *registryOnDisk {
 	return &registryOnDisk{
 		hashmap:            newRegistryMap(readWrite, hashModValue, rt, l2Cache),
@@ -45,14 +56,17 @@ func (r *registryOnDisk) Close() error {
 }
 
 // Add persists the provided handles into their corresponding registry files and updates L1/L2 caches.
+// This is typically used for new virtual IDs (e.g., new roots or added nodes) before any flips occur.
 func (r *registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if err := r.hashmap.add(ctx, storesHandles); err != nil {
 		return err
 	}
+	// Refresh caches after disk writes. L1 is updated in-bulk; L2 uses LogicalID string keys.
 	for _, sh := range storesHandles {
 		r.l1Cache.Handles.Set(convertToKvp(sh.IDs))
 		for _, h := range sh.IDs {
 			if err := r.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
+				// Cache is best-effort; tolerate Redis failures.
 				log.Warn(fmt.Sprintf("Registry UpdateNoLocks (redis setstruct) failed, details: %v", err))
 			}
 		}
@@ -61,11 +75,14 @@ func (r *registryOnDisk) Add(ctx context.Context, storesHandles []sop.RegistryPa
 }
 
 // Update writes the provided handles to disk (with per-key locks) and refreshes L1/L2 caches.
+// Locking: acquires a short-lived Redis lock per logical ID to serialize conflicting writers across processes.
+// On disk write failure, evicts L1/L2 cache entries to force refetch on subsequent reads.
 func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	for _, sh := range storesHandles {
 		// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 		for _, h := range sh.IDs {
 			// Update registry record.
+			// Acquire a short-lived lock per logical ID to avoid concurrent writers updating the same slot.
 			lk := r.l2Cache.CreateLockKeys([]string{h.LogicalID.String()})
 			if ok, _, err := r.l2Cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
 				if err == nil {
@@ -74,6 +91,7 @@ func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registr
 				return err
 			}
 			if err := r.hashmap.set(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: sh.RegistryTable, IDs: []sop.Handle{h}}}); err != nil {
+				// On write failure, evict stale cache entries so future reads refetch from disk.
 				r.l1Cache.Handles.Delete([]sop.UUID{h.LogicalID})
 				r.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				// Unlock the object Keys before return.
@@ -89,12 +107,14 @@ func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registr
 				return err
 			}
 		}
+		// After successful writes, refresh L1 cache for this registry table.
 		r.l1Cache.Handles.Set(convertToKvp(sh.IDs))
 	}
 	return nil
 }
 
 // UpdateNoLocks writes the provided handles to disk without acquiring per-key locks and updates caches.
+// Used when the transaction manager has already acquired locks for the scope (e.g., batch updates in commit).
 func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if err := r.hashmap.set(ctx, storesHandles); err != nil {
 		return err
@@ -113,6 +133,7 @@ func (r *registryOnDisk) UpdateNoLocks(ctx context.Context, allOrNothing bool, s
 }
 
 // Get loads handles by logical IDs. It first checks L2 cache (with optional TTL) and then falls back to disk.
+// Any misses from L2 are fetched from the hashed files, and both L1 and L2 caches are refreshed for those.
 func (r *registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
 	storesHandles := make([]sop.RegistryPayload[sop.Handle], 0, len(storesLids))
 	for _, storeLids := range storesLids {
@@ -172,8 +193,12 @@ func (r *registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPaylo
 }
 
 // Remove deletes handles from disk and evicts them from L1/L2 caches.
+// The cache eviction is deferred to always run, ensuring cache coherence even if disk removal fails
+// and will be retried later by the caller.
 func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
 	// Flush out the failing records from cache.
+	// deleteFromCache evicts entries from both L1 and L2 to keep caches consistent
+	// even when the disk removal fails and will be retried later by callers.
 	deleteFromCache := func(storesLids []sop.RegistryPayload[sop.UUID]) {
 		for _, storeLids := range storesLids {
 			r.l1Cache.Handles.Delete(storeLids.IDs)
@@ -205,6 +230,8 @@ func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPa
 */
 
 // Replicate writes registry updates to the passive destination, if replication is enabled.
+// It opens a registry map pointing at the passive folder, applies add/set/remove operations,
+// and marks the replication tracker as failed on any I/O error so future operations can fail over.
 func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles,
 	updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 
@@ -255,6 +282,7 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 	return lastErr
 }
 
+// convertToKvp maps a slice of Handles to L1 cache entries keyed by LogicalID.
 func convertToKvp(handles []sop.Handle) []sop.KeyValuePair[sop.UUID, sop.Handle] {
 	items := make([]sop.KeyValuePair[sop.UUID, sop.Handle], len(handles))
 	for i := range handles {

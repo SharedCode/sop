@@ -1,3 +1,5 @@
+// Package encoding provides pluggable marshal/unmarshal helpers used by SOP.
+// JSON is the default, and helpers can pass through []byte values without copying.
 package encoding
 
 import (

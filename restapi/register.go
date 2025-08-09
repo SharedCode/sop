@@ -1,3 +1,5 @@
+// Package restapi exposes a minimal registry for REST handlers. It lets callers
+// register verb/path handlers and retrieve the registry to wire a router.
 package restapi
 
 import (

@@ -34,6 +34,9 @@ const (
 	updateActivelyPersistedItem = addActivelyPersistedItem
 )
 
+// transactionLog wraps a TransactionLog backend with state to support phased commit logging
+// and rollback. It records which phase has been committed and can reconstruct partial state
+// for recovery using GetOne/GetOneOfHour.
 type transactionLog struct {
 	sop.TransactionLog
 	committedState commitFunction
@@ -75,9 +78,9 @@ func (tl *transactionLog) removeLogs(ctx context.Context) error {
 
 var hourBeingProcessed string
 
-// Consume all Transaction IDs(TIDs) and clean their obsolete, leftover resources that fall within a given hour.
-// Using a package level variable(hourBeingProcessed) to keep the "hour" being worked on and the processor function below
-// to consume all TIDs of the hour before issuing another GetOne call to fetch the next hour.
+// processExpiredTransactionLogs iterates through transactions grouped by hour and
+// triggers rollback for those with leftover logs. It keeps processing a specific hour
+// to exhaustion before moving to the next to reduce churn.
 func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *Transaction) error {
 	var tid sop.UUID
 	var hr string
@@ -189,6 +192,9 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 	return false, nil
 }
 
+// acquireLocks creates per-ID lock keys, sorts by UUID to avoid deadlocks, and attempts to
+// acquire locks with TTL. If a dead transaction owns the locks, it attempts to take over by
+// verifying lock owner IDs and setting LockID accordingly.
 func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid sop.UUID, storesHandles []sop.RegistryPayload[sop.Handle]) ([]*sop.LockKey, error) {
 	logicalIDs := sop.ExtractLogicalIDs(storesHandles)
 	lookupByUUID := inmemory.NewBtree[sop.UUID, *sop.LockKey](true)
@@ -269,6 +275,7 @@ func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid 
 	}
 }
 
+// priorityRollback replays a single transaction's priority log into the registry and removes it.
 func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, tid sop.UUID) error {
 	if uhAndrh, err := tl.PriorityLog().Get(ctx, tid); err != nil {
 		return err
@@ -285,6 +292,8 @@ func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, 
 	}
 }
 
+// rollback walks committed function logs in reverse order and invokes targeted recovery actions
+// for each phase, stopping early when finalizeCommit marks completion, and finally removing logs.
 func (tl *transactionLog) rollback(ctx context.Context, t *Transaction, tid sop.UUID, committedFunctionLogs []sop.KeyValuePair[int, []byte]) error {
 	if len(committedFunctionLogs) == 0 {
 		if !tid.IsNil() {
