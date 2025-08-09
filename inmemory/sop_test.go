@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func Test_HelloWorld(t *testing.T) {
+func TestHelloWorld(t *testing.T) {
 	fmt.Printf("Btree hello world.\n")
 	b3 := NewBtree[int, string](false)
 
@@ -34,7 +34,7 @@ func Test_HelloWorld(t *testing.T) {
 	fmt.Printf("Btree hello world ended.\n\n")
 }
 
-func Test_FunctionalityTests(t *testing.T) {
+func TestFunctionalityTests(t *testing.T) {
 	fmt.Printf("Btree functionality tests.\n")
 	b3 := NewBtree[int, string](false)
 
@@ -137,7 +137,7 @@ func Test_FunctionalityTests(t *testing.T) {
 	fmt.Printf("Btree functionality tests ended.\n\n")
 }
 
-func Test_EdgeCases(t *testing.T) {
+func TestEdgeCases(t *testing.T) {
 	b3 := NewBtree[int, string](false)
 
 	k := b3.GetCurrentKey()
@@ -151,7 +151,7 @@ func Test_EdgeCases(t *testing.T) {
 	// Add other edge cases unit test(s) here.
 }
 
-func Test_ComplexDataMgmtCases(t *testing.T) {
+func TestComplexDataMgmtCases(t *testing.T) {
 	max := 100000
 	fmt.Printf("Btree complex data mgmt tests started(%d items).\n", max)
 	b3 := NewBtree[int, string](true)
@@ -333,7 +333,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 	fmt.Printf("Btree complex data mgmt tests ended.\n\n")
 }
 
-func Test_SimpleDataMgmtCases(t *testing.T) {
+func TestSimpleDataMgmtCases(t *testing.T) {
 	max := 100000
 	fmt.Printf("Btree simple data mgmt tests started(%d items).\n", max)
 	b3 := NewBtree[string, string](false)
