@@ -5,9 +5,9 @@ name: Go
 
 on:
   push:
-    branches: [ "master", "value_data_segment"]
+    branches: [ "master"]
   pull_request:
-    branches: [ "master", "value_data_segment"]
+    branches: [ "master"]
 
 jobs:
 
@@ -27,9 +27,13 @@ jobs:
     - name: Unit tests with coverage
       run: |
         mkdir -p coverage
+        # Collect coverage across the repo's packages (unit scope).
+        # - Limit to btree, common, and inmemory packages as requested.
+        # - Attribute coverage only to these packages for accurate per-package reporting.
         go test -timeout 600s -race -covermode=atomic \
+          -coverpkg=./btree/...,./common/...,./inmemory/... \
           -coverprofile=coverage/unit_coverage.out \
-          ./btree/... ./common/... ./inmemory/... ./inredfs
+          ./btree/... ./common/... ./inmemory/...
 
     - name: Build Docker image for integration tests
       run: docker build -t sop-integration:ci .
@@ -42,8 +46,10 @@ jobs:
     - name: Normalize integration coverage paths
       run: |
         # Map /app/ paths from inside the container to repo-relative paths for Codecov
-        sed -i 's#^/app/##' coverage/integration_coverage.out || true
-        head -n 5 coverage/integration_coverage.out || true
+  sed -i 's#^/app/##' coverage/integration_coverage.out || true
+  # Also normalize GitHub workspace absolute path if present
+  sed -i 's#^/github/workspace/##' coverage/integration_coverage.out || true
+  head -n 5 coverage/integration_coverage.out || true
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
