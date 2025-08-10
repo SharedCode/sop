@@ -241,6 +241,40 @@ func TestWithTransaction_PreconditionsAndErrors(t *testing.T) {
 	}
 }
 
+// Cover UpdateCurrentItem path in withtransaction wrapper (was 0%).
+func TestWithTransaction_UpdateCurrentItem(t *testing.T) {
+	b, _ := newTestBtree[string]()
+	tx := &mockTx{mode: sop.ForWriting}
+	w := NewBtreeWithTransaction[int, string](tx, b)
+
+	// Begin transaction and add one item to select it.
+	_ = tx.Begin()
+	if ok, err := w.Add(nil, 9, "v"); !ok || err != nil {
+		t.Fatalf("add err=%v", err)
+	}
+	if ok, err := w.Find(nil, 9, false); !ok || err != nil {
+		t.Fatalf("find err=%v", err)
+	}
+	if ok, err := w.UpdateCurrentItem(nil, "vv"); !ok || err != nil {
+		t.Fatalf("UpdateCurrentItem err=%v", err)
+	}
+	if it, _ := w.GetCurrentItem(nil); *it.Value != "vv" {
+		t.Fatalf("value not updated")
+	}
+}
+
+// Cover FindWithID not-found branch in Btree (loop exits via Next returning false).
+func TestFindWithID_NotFound(t *testing.T) {
+	b, _ := newTestBtree[string]()
+	// Add two items with same key; search for a random ID that doesn't exist.
+	_, _ = b.Add(nil, 1, "a")
+	_, _ = b.Add(nil, 1, "b")
+	missing := sop.NewUUID() // guaranteed not to match
+	if ok, err := b.FindWithID(nil, 1, missing); ok || err != nil {
+		t.Fatalf("expected not found, err=%v", err)
+	}
+}
+
 // Exercise wrapper FindWithID and Lock to cover remaining withtransaction paths.
 func TestWithTransaction_FindWithID_And_Lock(t *testing.T) {
 	// Underlying tree allowing duplicates
@@ -280,5 +314,72 @@ func TestWithTransaction_FindWithID_And_Lock(t *testing.T) {
 	got := w.GetCurrentKey()
 	if got.ID != second.ID || got.ID == first.ID {
 		t.Fatalf("FindWithID positioned wrong duplicate")
+	}
+}
+
+// Cover the rest of withtransaction read/write delegates to increase coverage.
+func TestWithTransaction_CoverAllDelegates(t *testing.T) {
+	b, _ := newTestBtree[string]()
+	// Seed some values
+	for _, kv := range []struct{ k int; v string }{{1, "a"}, {2, "b"}, {3, "c"}} {
+		if ok, _ := b.Add(nil, kv.k, kv.v); !ok {
+			t.Fatalf("seed add")
+		}
+	}
+
+	// Writer-mode tx
+	tx := &mockTx{begun: true, mode: sop.ForWriting}
+	w := NewBtreeWithTransaction(tx, b)
+
+	// AddIfNotExist (existing -> false) and Upsert, Update, Remove, RemoveCurrentItem
+	if ok, err := w.AddIfNotExist(nil, 1, "aa"); err != nil || ok {
+		t.Fatalf("AddIfNotExist existing should be false")
+	}
+	if ok, err := w.Upsert(nil, 4, "d"); err != nil || !ok {
+		t.Fatalf("Upsert add failed: %v", err)
+	}
+	if ok, err := w.Update(nil, 2, "bb"); err != nil || !ok {
+		t.Fatalf("Update failed: %v", err)
+	}
+	if ok, err := w.Remove(nil, 3); err != nil || !ok {
+		t.Fatalf("Remove by key failed: %v", err)
+	}
+
+	// Position and RemoveCurrentItem
+	if ok, err := w.Find(nil, 1, false); err != nil || !ok {
+		t.Fatalf("Find 1: %v", err)
+	}
+	if ok, err := w.RemoveCurrentItem(nil); err != nil || !ok {
+		t.Fatalf("RemoveCurrentItem: %v", err)
+	}
+
+	// Read-only delegates: First/Last/Next/Previous/GetCurrentValue/Item
+	txRead := &mockTx{begun: true, mode: sop.ForReading}
+	rw := NewBtreeWithTransaction(txRead, b)
+	if ok, err := rw.First(nil); err != nil || !ok {
+		t.Fatalf("First: %v", err)
+	}
+	if ok, err := rw.Last(nil); err != nil || !ok {
+		t.Fatalf("Last: %v", err)
+	}
+	// Ensure there is at least one item
+	if ok, err := rw.Find(nil, 4, false); err != nil || !ok {
+		t.Fatalf("Find 4: %v", err)
+	}
+	if _, err := rw.GetCurrentItem(nil); err != nil {
+		t.Fatalf("GetCurrentItem: %v", err)
+	}
+	if _, err := rw.GetCurrentValue(nil); err != nil {
+		t.Fatalf("GetCurrentValue: %v", err)
+	}
+	if ok, err := rw.Next(nil); err != nil {
+		t.Fatalf("Next: %v", err)
+	} else {
+		_ = ok
+	}
+	if ok, err := rw.Previous(nil); err != nil {
+		t.Fatalf("Previous: %v", err)
+	} else {
+		_ = ok
 	}
 }

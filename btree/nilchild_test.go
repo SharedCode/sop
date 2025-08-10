@@ -253,6 +253,45 @@ func TestGoLeftUpItemOnNodeWithNilChild(t *testing.T) {
 	}
 }
 
+// Climb to parent and select parent's left item when child has nil at index 0.
+func TestGoLeftUpItemOnNodeWithNilChild_ClimbParent(t *testing.T) {
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
+	fnr := &fakeNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}
+	si := StoreInterface[int, string]{NodeRepository: fnr, ItemActionTracker: fakeIAT[int, string]{}}
+	b, _ := New[int, string](store, &si, nil)
+
+	// Parent with one item and two children; we target the right child
+	p := newNode[int, string](b.getSlotLength())
+	p.newID(sop.NilUUID)
+	v := "p"
+	p.Slots[0] = &Item[int, string]{Key: 100, Value: &v, ID: sop.NewUUID()}
+	p.Count = 1
+	p.ChildrenIDs = make([]sop.UUID, 2)
+
+	left := newNode[int, string](b.getSlotLength())
+	left.newID(p.ID)
+	right := newNode[int, string](b.getSlotLength())
+	right.newID(p.ID)
+	right.ParentID = p.ID
+	// right child has nil at index 0
+	right.ChildrenIDs = make([]sop.UUID, 1)
+	right.ChildrenIDs[0] = sop.NilUUID
+	p.ChildrenIDs[0] = left.ID
+	p.ChildrenIDs[1] = right.ID
+
+	fnr.Add(p)
+	fnr.Add(left)
+	fnr.Add(right)
+	b.StoreInfo.RootNodeID = p.ID
+
+	if ok, err := right.goLeftUpItemOnNodeWithNilChild(nil, b, 0); !ok || err != nil {
+		t.Fatalf("goLeftUp climb failed: %v", err)
+	}
+	if it, _ := b.GetCurrentItem(nil); it.Key != 100 {
+		t.Fatalf("expected parent left item 100, got %d", it.Key)
+	}
+}
+
 // Cover goRightUpItemOnNodeWithNilChild for three paths: immediate right-select, root-EOF, and climb-to-parent.
 func TestGoRightUpItemOnNodeWithNilChild_Paths(t *testing.T) {
 	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
