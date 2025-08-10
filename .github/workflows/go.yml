@@ -46,10 +46,10 @@ jobs:
     - name: Normalize integration coverage paths
       run: |
         # Map /app/ paths from inside the container to repo-relative paths for Codecov
-  sed -i 's#^/app/##' coverage/integration_coverage.out || true
-  # Also normalize GitHub workspace absolute path if present
-  sed -i 's#^/github/workspace/##' coverage/integration_coverage.out || true
-  head -n 5 coverage/integration_coverage.out || true
+        sed -i 's#^/app/##' coverage/integration_coverage.out || true
+        # Also normalize GitHub workspace absolute path if present
+        sed -i 's#^/github/workspace/##' coverage/integration_coverage.out || true
+        head -n 5 coverage/integration_coverage.out || true
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
