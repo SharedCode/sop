@@ -132,7 +132,9 @@ func (btree *Btree[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, er
 	}
 
 	// Service the node's requested action(s).
-	btree.distribute(ctx)
+	if err := btree.distribute(ctx); err != nil {
+		return false, err
+	}
 	btree.promote(ctx)
 
 	// Increment store's item count.
@@ -157,7 +159,9 @@ func (btree *Btree[TK, TV]) AddItem(ctx context.Context, item *Item[TK, TV]) (bo
 	}
 
 	// Service the node's requested action(s).
-	btree.distribute(ctx)
+	if err := btree.distribute(ctx); err != nil {
+		return false, err
+	}
 	btree.promote(ctx)
 
 	// Increment store's item count.
@@ -605,7 +609,7 @@ func (btree *Btree[TK, TV]) isCurrentItemSelected() bool {
 }
 
 // distribute moves an item from a full node to a sibling with a vacant slot (controller pattern, avoids recursion).
-func (btree *Btree[TK, TV]) distribute(ctx context.Context) {
+func (btree *Btree[TK, TV]) distribute(ctx context.Context) error {
 	for btree.distributeAction.sourceNode != nil {
 		log.Debug(fmt.Sprintf("distribute item with key(%v) of node ID(%v) to left(%v)",
 			btree.distributeAction.item.Key, btree.distributeAction.sourceNode.ID, btree.distributeAction.distributeToLeft))
@@ -616,11 +620,16 @@ func (btree *Btree[TK, TV]) distribute(ctx context.Context) {
 
 		// Node DistributeLeft or XxRight contains actual logic of "item distribution".
 		if btree.distributeAction.distributeToLeft {
-			n.distributeToLeft(ctx, btree, item)
+			if err := n.distributeToLeft(ctx, btree, item); err != nil {
+				return err
+			}
 		} else {
-			n.distributeToRight(ctx, btree, item)
+			if err := n.distributeToRight(ctx, btree, item); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 // promote promotes a node to a higher-level branch when necessary (controller pattern, avoids recursion).

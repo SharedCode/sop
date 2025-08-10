@@ -55,7 +55,9 @@ func TestDistributeToLeft_RotationAndAppend(t *testing.T) {
 	}
 
 	// Complete the controller’s follow-up call (append to left)
-	b.distribute(nil)
+	if err := b.distribute(nil); err != nil {
+		t.Fatalf("controller distribute err: %v", err)
+	}
 
 	// Left should have grown to 4
 	if left.Count != 4 {

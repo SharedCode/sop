@@ -689,14 +689,14 @@ func (node *Node[TK, TV]) distributeToRight(ctx context.Context, btree *Btree[TK
 		//  | <-
 		parent, err := node.getParent(ctx, btree)
 		if err != nil {
-			return nil
+			return err
 		}
 		i := parent.getIndexOfChild(node)
 
 		// Let the controller make another call to distribute the item to the right.
 		btree.distributeAction.sourceNode, err = node.getRightSibling(ctx, btree)
 		if err != nil {
-			return nil
+			return err
 		}
 		btree.distributeAction.item = parent.Slots[i]
 		btree.distributeAction.distributeToLeft = false
