@@ -30,7 +30,7 @@ COVERPROFILE=${COVERPROFILE:-$COVER_DIR/integration_coverage.out}
 echo "Running Go integration tests with coverage (tags=integration)..."
 # Instrument only the requested packages for coverage aggregation
 COVERPKG="./btree/...,./fs/...,./common/...,./inredfs/..."
-go test -tags=integration -timeout 600s -covermode=atomic -coverpkg="$COVERPKG" -coverprofile="$COVERPROFILE" -v ./inredfs/integrationtests/...
+go test -tags=integration -timeout 600s -covermode=atomic -coverpkg="$COVERPKG" -coverprofile="$COVERPROFILE" -v ./inredfs/integrationtests
 TEST_STATUS=$?
 
 echo "Tests finished with status: $TEST_STATUS"
