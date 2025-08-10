@@ -38,6 +38,14 @@ func (v *Mock_vid_registry) Update(ctx context.Context, storesHandles []sop.Regi
 	return nil
 }
 func (v *Mock_vid_registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+	if v.InducedErrorOnUpdateAllOrNothing && allOrNothing {
+		return fmt.Errorf("induced error on UpdateNoLocks w/ allOrNothing true")
+	}
+	for _, storeHandles := range storesHandles {
+		for _, h := range storeHandles.IDs {
+			v.Lookup[h.LogicalID] = h
+		}
+	}
 	return nil
 }
 

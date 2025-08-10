@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/common/mocks"
 )
 
@@ -18,6 +19,8 @@ var mockNodeBlobStore = mocks.NewMockBlobStore()
 // newMockTransaction instantiates a mocked transaction, i.e. - it uses in-memory Repositories as backend, not Cassandra.
 func newMockTransaction(t *testing.T, mode sop.TransactionMode, maxTime time.Duration) (sop.Transaction, error) {
 	t.Helper()
+	// Ensure global L1 cache uses the mock Redis client to avoid real Redis dependency in tests.
+	cache.NewGlobalCache(mockRedisCache, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, mode, maxTime, false)
 	return sop.NewTransaction(mode, twoPhase, maxTime, false)
 }
@@ -25,6 +28,8 @@ func newMockTransaction(t *testing.T, mode sop.TransactionMode, maxTime time.Dur
 // NewMockTransaction with logging turned on.
 func newMockTransactionWithLogging(t *testing.T, mode sop.TransactionMode, maxTime time.Duration) (sop.Transaction, error) {
 	t.Helper()
+	// Ensure global L1 cache uses the mock Redis client to avoid real Redis dependency in tests.
+	cache.NewGlobalCache(mockRedisCache, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, mode, maxTime, true)
 	return sop.NewTransaction(mode, twoPhase, maxTime, true)
 }
@@ -41,6 +46,8 @@ func newMockTwoPhaseCommitTransaction(t *testing.T, mode sop.TransactionMode, ma
 		StoreRepository: mockStoreRepository,
 		registry:        mockRegistry,
 		l2Cache:         mockRedisCache,
+		// Use the global L1 cache which has been initialized with the mock redis client above.
+		l1Cache:         cache.GetGlobalCache(),
 		blobStore:       mockNodeBlobStore,
 		logger:          newTransactionLogger(mocks.NewMockTransactionLog(), logging),
 		phaseDone:       -1,

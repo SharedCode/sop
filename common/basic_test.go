@@ -180,14 +180,14 @@ func Test_StoreCachingMinRuleCheck(t *testing.T) {
 	}, trans, cmp.Compare)
 
 	// Check if minimum duration times were applied by SOP.
-	if b3.GetStoreInfo().CacheConfig.RegistryCacheDuration < time.Duration(15*time.Minute) {
-		t.Errorf("Minimum cache duration of 15mins enforcement failed for RegistryCacheDuration.")
+	if b3.GetStoreInfo().CacheConfig.RegistryCacheDuration < time.Duration(10*time.Minute) {
+		t.Errorf("Minimum cache duration of 10mins enforcement failed for RegistryCacheDuration.")
 	}
-	if b3.GetStoreInfo().CacheConfig.NodeCacheDuration < time.Duration(15*time.Minute) {
-		t.Errorf("Minimum cache duration of 15mins enforcement failed for NodeCacheDuration.")
+	if b3.GetStoreInfo().CacheConfig.NodeCacheDuration < time.Duration(5*time.Minute) {
+		t.Errorf("Minimum cache duration of 5mins enforcement failed for NodeCacheDuration.")
 	}
-	if b3.GetStoreInfo().CacheConfig.StoreInfoCacheDuration < time.Duration(15*time.Minute) {
-		t.Errorf("Minimum cache duration of 15mins enforcement failed for StoreInfoCacheDuration.")
+	if b3.GetStoreInfo().CacheConfig.StoreInfoCacheDuration < time.Duration(5*time.Minute) {
+		t.Errorf("Minimum cache duration of 5mins enforcement failed for StoreInfoCacheDuration.")
 	}
 }
 

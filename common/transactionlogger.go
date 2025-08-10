@@ -280,6 +280,14 @@ func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, 
 	if uhAndrh, err := tl.PriorityLog().Get(ctx, tid); err != nil {
 		return err
 	} else {
+		// Nothing to restore; treat as no-op if no logs are present.
+		if uhAndrh == nil {
+			return tl.PriorityLog().Remove(ctx, tid)
+		}
+		// If registry is not available, avoid panic and treat as no-op for safety.
+		if t == nil || t.registry == nil {
+			return nil
+		}
 		if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
 			// When Registry is known to be corrupted, we can raise a failover event.
 			return sop.Error{

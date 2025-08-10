@@ -132,8 +132,26 @@ func (tl *MockTransactionLog) NewUUID() sop.UUID {
 }
 
 func (tl *MockTransactionLog) PriorityLog() sop.TransactionPriorityLog {
+	return dummyPriorityLog{}
+}
+
+// Provide a no-op priority log for tests to avoid nil dereferences in onIdle/commit paths.
+type dummyPriorityLog struct{}
+
+func (d dummyPriorityLog) IsEnabled() bool { return false }
+func (d dummyPriorityLog) Add(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
+func (d dummyPriorityLog) Remove(ctx context.Context, tid sop.UUID) error { return nil }
+func (d dummyPriorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
+	return nil, nil
+}
+func (d dummyPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
+	return nil, nil
+}
+func (d dummyPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (d dummyPriorityLog) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
+func (d dummyPriorityLog) RemoveBackup(ctx context.Context, tid sop.UUID) error { return nil }
 
 // Fetch the transaction logs details given a tranasction ID.
 func (tl *MockTransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
@@ -145,8 +163,4 @@ func (tl *MockTransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.Regi
 // File System active home folder.
 func (tl *MockTransactionLog) GetLog(ctx context.Context) (sop.UUID, []sop.RegistryPayload[sop.Handle], error) {
 	return sop.NilUUID, nil, nil
-}
-
-func (tl *MockTransactionLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
-	return nil
 }
