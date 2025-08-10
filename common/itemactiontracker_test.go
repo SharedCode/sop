@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
@@ -171,5 +172,151 @@ func Test_ItemActionTracker_GetForRollback_And_Obsolete_NilWhenInNodeSegment(t *
 	}
 	if got := iat.getObsoleteTrackedItemsValues(); got != nil {
 		t.Fatalf("expected nil getObsoleteTrackedItemsValues when in node segment")
+	}
+}
+
+func Test_ItemActionTracker_Remove_ActivelyPersisted_QueuesForDeletion(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                         "iat_remove_active",
+		SlotLength:                   8,
+		IsValueDataInNodeSegment:     false,
+		IsValueDataActivelyPersisted: true,
+	}
+	si := sop.NewStoreInfo(so)
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+	tr := newItemActionTracker[PersonKey, Person](si, mockRedisCache, mockNodeBlobStore, tl)
+
+	pk, p := newPerson("rm", "a", "m", "e", "ph")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &p}
+	if err := tr.Remove(ctx, it); err != nil {
+		t.Fatalf("Remove err: %v", err)
+	}
+	if len(tr.forDeletionItems) != 1 || tr.forDeletionItems[0] != it.ID {
+		t.Fatalf("expected item queued for deletion, got %#v", tr.forDeletionItems)
+	}
+	if it.ValueNeedsFetch {
+		t.Fatalf("expected ValueNeedsFetch=false")
+	}
+}
+
+func Test_ItemActionTracker_Remove_AfterAdd_DropsFromTracked(t *testing.T) {
+	ctx := context.Background()
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_remove_after_add", SlotLength: 8})
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+	tr := newItemActionTracker[PersonKey, Person](si, mockRedisCache, mockNodeBlobStore, tl)
+
+	pk, p := newPerson("rm2", "b", "m", "e", "ph")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &p}
+	if err := tr.Add(ctx, it); err != nil {
+		t.Fatalf("Add err: %v", err)
+	}
+	if _, ok := tr.items[it.ID]; !ok {
+		t.Fatalf("expected item tracked after Add")
+	}
+	if err := tr.Remove(ctx, it); err != nil {
+		t.Fatalf("Remove err: %v", err)
+	}
+	if _, ok := tr.items[it.ID]; ok {
+		t.Fatalf("expected item removed from tracking after remove of new item")
+	}
+}
+
+// Ensure unlock is a no-op for items where we are not the lock owner.
+func Test_ItemActionTracker_Unlock_NonOwner_NoOp(t *testing.T) {
+	ctx := context.Background()
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_unlock_noop", SlotLength: 8})
+	redis := mocks.NewMockClient()
+	blobs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+	tracker := newItemActionTracker[PersonKey, Person](si, redis, blobs, tl)
+
+	// Track one item
+	pk, p := newPerson("u", "n", "k", "e", "p")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &p}
+	if err := tracker.Update(ctx, it); err != nil {
+		t.Fatal(err)
+	}
+
+	// Manually set a different lock owner in cache, and do not set isLockOwner
+	other := lockRecord{LockID: sop.NewUUID(), Action: updateAction}
+	if err := redis.SetStruct(ctx, redis.FormatLockKey(it.ID.String()), &other, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	// unlock should not delete the key since we are not owners; no error expected
+	if err := tracker.unlock(ctx); err != nil {
+		t.Fatalf("unexpected error on unlock: %v", err)
+	}
+	var lr lockRecord
+	found, err := redis.GetStruct(ctx, redis.FormatLockKey(it.ID.String()), &lr)
+	if err != nil {
+		t.Fatalf("redis get err: %v", err)
+	}
+	if !found {
+		t.Fatalf("lock key should remain when not owner")
+	}
+}
+
+func Test_ItemActionTracker_LockUnlock_SetsOwnershipAndDeletes(t *testing.T) {
+	ctx := context.Background()
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock", SlotLength: 8})
+	redis := mocks.NewMockClient()
+	blobs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+	tracker := newItemActionTracker[PersonKey, Person](si, redis, blobs, tl)
+
+	// Two tracked items marked for update
+	pk1, p1 := newPerson("a", "a", "m", "e", "ph")
+	it1 := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk1, Value: &p1}
+	pk2, p2 := newPerson("b", "b", "m", "e", "ph")
+	it2 := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk2, Value: &p2}
+	if err := tracker.Update(ctx, it1); err != nil { t.Fatal(err) }
+	if err := tracker.Update(ctx, it2); err != nil { t.Fatal(err) }
+
+	if err := tracker.lock(ctx, time.Minute); err != nil {
+		t.Fatalf("lock returned error: %v", err)
+	}
+	// Verify ownership flags set and then unlock removes keys
+	for id := range tracker.items {
+		var lr lockRecord
+		// Found in cache before unlock
+		found, err := redis.GetStruct(ctx, redis.FormatLockKey(id.String()), &lr)
+		if err != nil || !found { t.Fatalf("expected lock in cache for %s", id.String()) }
+	}
+	if err := tracker.unlock(ctx); err != nil {
+		t.Fatalf("unlock returned error: %v", err)
+	}
+	for id := range tracker.items {
+		var lr lockRecord
+		found, err := redis.GetStruct(ctx, redis.FormatLockKey(id.String()), &lr)
+		if err != nil { t.Fatalf("redis get err: %v", err) }
+		if found { t.Fatalf("expected lock key deleted for %s", id.String()) }
+	}
+}
+
+func Test_ItemActionTracker_Lock_ConflictDetected(t *testing.T) {
+	ctx := context.Background()
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_conflict", SlotLength: 8})
+	redis := mocks.NewMockClient()
+	blobs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+	tracker := newItemActionTracker[PersonKey, Person](si, redis, blobs, tl)
+
+	pk, p := newPerson("c", "c", "m", "e", "ph")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &p}
+	if err := tracker.Update(ctx, it); err != nil { t.Fatal(err) }
+	// Pre-populate a different lock owner in cache to force conflict
+	var other lockRecord
+	other.LockID = sop.NewUUID()
+	other.Action = updateAction
+	if err := redis.SetStruct(ctx, redis.FormatLockKey(it.ID.String()), &other, time.Minute); err != nil {
+		t.Fatalf("pre-set lock err: %v", err)
+	}
+	if err := tracker.lock(ctx, time.Minute); err == nil {
+		t.Fatalf("expected lock conflict error, got nil")
+	}
+	if err := tracker.checkTrackedItems(ctx); err == nil {
+		t.Fatalf("expected checkTrackedItems to report conflict")
 	}
 }
