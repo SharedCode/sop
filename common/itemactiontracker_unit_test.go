@@ -36,9 +36,9 @@ func Test_ItemActionTracker_CommitTrackedItemsValues_Add_PersistsAndCaches(t *te
 	ctx := context.Background()
 	// Store where value data is in separate segment and globally cached.
 	so := sop.StoreOptions{
-		Name:                     "iat_add",
-		SlotLength:               8,
-		IsValueDataInNodeSegment: false,
+		Name:                      "iat_add",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
 		IsValueDataGloballyCached: true,
 	}
 	si := sop.NewStoreInfo(so)
@@ -106,5 +106,70 @@ func Test_ItemActionTracker_Update_ActivelyPersisted_LogsAndCaches(t *testing.T)
 		if berr != nil || len(ba) == 0 {
 			t.Fatalf("neither cache nor blob exist for updated item %s: cacheErr=%v blobErr=%v", item.ID.String(), err, berr)
 		}
+	}
+}
+
+func Test_ItemActionTracker_CommitTrackedItemsValues_Update_MarksObsolete(t *testing.T) {
+	ctx := context.Background()
+	// Value data in separate segment and globally cached
+	so := sop.StoreOptions{
+		Name:                      "iat_update_mark_obsolete",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: true,
+	}
+	si := sop.NewStoreInfo(so)
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+	iat := newItemActionTracker[PersonKey, Person](si, mockRedisCache, mockNodeBlobStore, tl)
+
+	// Manually seed a tracked item in "update" state with existing externalized value (ValueNeedsFetch)
+	pk, p := newPerson("seed", "s", "z", "s@z", "9")
+	originalID := sop.NewUUID()
+	item := &btree.Item[PersonKey, Person]{ID: originalID, Key: pk, Value: &p, ValueNeedsFetch: true}
+	iat.items[originalID] = cacheItem[PersonKey, Person]{
+		lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
+		item:        item,
+		versionInDB: item.Version,
+	}
+
+	// Commit tracked values; this should mark originalID obsolete and externalize a new blob under a new ID
+	if err := iat.commitTrackedItemsValues(ctx); err != nil {
+		t.Fatalf("commitTrackedItemsValues update failed: %v", err)
+	}
+
+	// Obsolete list should include originalID
+	obs := iat.getObsoleteTrackedItemsValues()
+	if obs == nil || len(obs.Blobs) != 1 || obs.Blobs[0] != originalID {
+		t.Fatalf("expected obsolete to include originalID, got: %+v", obs)
+	}
+	// Item should be re-externalized with a new ID and cached
+	if item.Value != nil || !item.ValueNeedsFetch {
+		t.Fatalf("expected externalized value after update")
+	}
+	if item.ID == originalID {
+		t.Fatalf("expected new ID to be assigned on update")
+	}
+	// Blob for new ID should exist
+	if ba, _ := mockNodeBlobStore.GetOne(ctx, si.BlobTable, item.ID); len(ba) == 0 {
+		t.Fatalf("expected blob for new ID after update")
+	}
+}
+
+func Test_ItemActionTracker_GetForRollback_And_Obsolete_NilWhenInNodeSegment(t *testing.T) {
+	// When value data is co-located in node segment, both getters should return nil.
+	so := sop.StoreOptions{
+		Name:                     "iat_nil_segment",
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+	}
+	si := sop.NewStoreInfo(so)
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+	iat := newItemActionTracker[PersonKey, Person](si, mockRedisCache, mockNodeBlobStore, tl)
+
+	if got := iat.getForRollbackTrackedItemsValues(); got != nil {
+		t.Fatalf("expected nil getForRollbackTrackedItemsValues when in node segment")
+	}
+	if got := iat.getObsoleteTrackedItemsValues(); got != nil {
+		t.Fatalf("expected nil getObsoleteTrackedItemsValues when in node segment")
 	}
 }

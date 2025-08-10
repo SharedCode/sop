@@ -141,3 +141,113 @@ func Test_NodeRepository_CommitNewRootNodes_FailsWhenExisting(t *testing.T) {
 		t.Fatalf("expected commitNewRootNodes to return ok=false without error when root exists; got ok=%v err=%v", ok, err)
 	}
 }
+
+func Test_NodeRepository_CommitUpdatedNodes_VersionMismatch_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	reg := mocks.NewMockRegistry(false)
+	redis := mocks.NewMockClient()
+	blobs := mocks.NewMockBlobStore()
+	tx := &Transaction{registry: reg, l2Cache: redis, blobStore: blobs}
+	nr := &nodeRepositoryBackend{transaction: tx}
+
+	so := sop.StoreOptions{Name: "st_upd_conflict", SlotLength: 2}
+	si := sop.NewStoreInfo(so)
+	lid := sop.NewUUID()
+	// Node has version 3, but registry will have a different version to force mismatch
+	n := &btree.Node[PersonKey, Person]{ID: lid, Version: 3}
+	// Seed registry with mismatched version (e.g., 2)
+	h := sop.NewHandle(lid)
+	h.Version = 2
+	reg.(*mocks.Mock_vid_registry).Lookup[lid] = h
+	nodes := []sop.Tuple[*sop.StoreInfo, []any]{{First: si, Second: []any{n}}}
+
+	ok, handles, err := nr.commitUpdatedNodes(ctx, nodes)
+	if err != nil {
+		t.Fatalf("commitUpdatedNodes returned unexpected error: %v", err)
+	}
+	if ok {
+		t.Fatalf("expected ok=false due to version mismatch, got ok=true")
+	}
+	if handles != nil {
+		t.Fatalf("expected no handles on conflict, got: %+v", handles)
+	}
+	// Ensure no inactive blob was written
+	if ba, _ := blobs.GetOne(ctx, si.BlobTable, lid); len(ba) != 0 {
+		t.Fatalf("unexpected blob write on conflict")
+	}
+}
+
+func Test_NodeRepository_CommitRemovedNodes_VersionMismatch_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	reg := mocks.NewMockRegistry(false)
+	tx := &Transaction{registry: reg}
+	nr := &nodeRepositoryBackend{transaction: tx}
+
+	so := sop.StoreOptions{Name: "st_rem_conflict", SlotLength: 2}
+	si := sop.NewStoreInfo(so)
+	lid := sop.NewUUID()
+	// Node has version 5, but registry shows version 4 to force mismatch
+	n := &btree.Node[PersonKey, Person]{ID: lid, Version: 5}
+	h := sop.NewHandle(lid)
+	h.Version = 4
+	reg.(*mocks.Mock_vid_registry).Lookup[lid] = h
+	nodes := []sop.Tuple[*sop.StoreInfo, []any]{{First: si, Second: []any{n}}}
+
+	ok, handles, err := nr.commitRemovedNodes(ctx, nodes)
+	if err != nil {
+		t.Fatalf("commitRemovedNodes returned unexpected error: %v", err)
+	}
+	if ok {
+		t.Fatalf("expected ok=false due to version mismatch, got ok=true")
+	}
+	if handles != nil {
+		t.Fatalf("expected nil handles on conflict, got: %+v", handles)
+	}
+	// Verify registry entry remains unchanged (not marked deleted)
+	got := reg.(*mocks.Mock_vid_registry).Lookup[lid]
+	if got.IsDeleted || got.WorkInProgressTimestamp != 0 {
+		t.Fatalf("registry should be unchanged on conflict: %+v", got)
+	}
+}
+
+func Test_NodeRepository_CommitUpdatedNodes_OngoingUpdate_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	reg := mocks.NewMockRegistry(false)
+	redis := mocks.NewMockClient()
+	blobs := mocks.NewMockBlobStore()
+	tx := &Transaction{registry: reg, l2Cache: redis, blobStore: blobs}
+	nr := &nodeRepositoryBackend{transaction: tx}
+
+	so := sop.StoreOptions{Name: "st_upd_busy", SlotLength: 2}
+	si := sop.NewStoreInfo(so)
+	lid := sop.NewUUID()
+	// Node version matches registry handle version so we progress to AllocateID
+	n := &btree.Node[PersonKey, Person]{ID: lid, Version: 7}
+	// Seed a handle with both physical IDs in use to force AllocateID to return NilUUID
+	h := sop.NewHandle(lid)
+	h.Version = 7
+	h.PhysicalIDB = sop.NewUUID()
+	h.IsActiveIDB = true
+	// Put A in use as well
+	h.PhysicalIDA = sop.NewUUID()
+	// Ensure not expired, so AllocateID won't be retried after ClearInactiveID branch
+	h.WorkInProgressTimestamp = sop.Now().UnixMilli()
+	reg.(*mocks.Mock_vid_registry).Lookup[lid] = h
+
+	nodes := []sop.Tuple[*sop.StoreInfo, []any]{{First: si, Second: []any{n}}}
+	ok, handles, err := nr.commitUpdatedNodes(ctx, nodes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok {
+		t.Fatalf("expected ok=false due to ongoing update (AllocateID fail), got ok=true")
+	}
+	if handles != nil {
+		t.Fatalf("expected nil handles on ongoing update, got: %+v", handles)
+	}
+	// Ensure redis and blob store were not written for an inactive ID
+	// Since AllocateID failed, there should be no new ID; check that no blob for any ID other than lid exists
+	if ba, _ := blobs.GetOne(ctx, si.BlobTable, lid); len(ba) != 0 {
+		t.Fatalf("unexpected blob write for logical id on conflict")
+	}
+}
