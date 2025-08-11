@@ -95,7 +95,7 @@ func TestECerrorOnAdd(t *testing.T) {
 
 	id2 := sop.NewUUID()
 	eba2 := []byte{1, 2, 3}
-	fileIO.errorOnSuffixNumber = 1
+	fileIO.setErrorOnSuffixNumber(1)
 	err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		{
 			BlobTable: "b1",
@@ -129,7 +129,7 @@ func TestECerrorOnRemove(t *testing.T) {
 
 	id2 := sop.NewUUID()
 	eba2 := []byte{1, 2, 3}
-	//fileIO.errorOnSuffixNumber = 1
+	//fileIO.setErrorOnSuffixNumber(1)
 	err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
 		{
 			BlobTable: "b1",
@@ -144,7 +144,7 @@ func TestECerrorOnRemove(t *testing.T) {
 		t.Error(err)
 	}
 
-	fileIO.errorOnSuffixNumber = 1
+	fileIO.setErrorOnSuffixNumber(1)
 	err = bs.Remove(ctx, []sop.BlobsPayload[sop.UUID]{
 		{
 			BlobTable: "b1",
@@ -187,7 +187,7 @@ func TestECerrorOnReadButReconstructed(t *testing.T) {
 		t.Error(err)
 	}
 
-	fileIO.errorOnSuffixNumber = 1
+	fileIO.setErrorOnSuffixNumber(1)
 	ba, _ := bs.GetOne(ctx, "b1", id)
 	if !bytes.Equal(ba, eba) {
 		t.Errorf("got %v, expected %v", ba, eba)
@@ -226,8 +226,8 @@ func TestECerrorOnReadNotReconstructed(t *testing.T) {
 		t.Error(err)
 	}
 
-	fileIO.errorOnSuffixNumber = 1
-	fileIO.errorOnSuffixNumber2 = 0
+	fileIO.setErrorOnSuffixNumber(1)
+	fileIO.setErrorOnSuffixNumber2(0)
 	_, err = bs.GetOne(ctx, "b1", id)
 	if err == nil {
 		t.Error("got nil, expected error")
@@ -266,7 +266,7 @@ func TestECerrorOnRepair(t *testing.T) {
 		t.Error(err)
 	}
 
-	fileIO.errorOnSuffixNumber = 1
+	fileIO.setErrorOnSuffixNumber(1)
 	ba, err := bs.GetOne(ctx, "b1", id)
 	// GetOne will still succeed, but warning should be logged.
 	if err != nil {
@@ -286,8 +286,8 @@ func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
 	const iterations = 500
 
 	task := func() error {
-		fileIO.errorOnSuffixNumber = -1
-		fileIO.errorOnSuffixNumber2 = -1
+		fileIO.setErrorOnSuffixNumber(-1)
+		fileIO.setErrorOnSuffixNumber2(-1)
 		id := sop.NewUUID()
 		eba := []byte{1, 2, 3}
 		bs.Add(tr.GetContext(), []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{
@@ -314,7 +314,7 @@ func TestThreadedECerrorOnReadButReconstructed(t *testing.T) {
 				},
 			}})
 
-		fileIO.errorOnSuffixNumber = 1
+		fileIO.setErrorOnSuffixNumber(1)
 		ba, _ := bs.GetOne(tr.GetContext(), "b1", id)
 		if !bytes.Equal(ba, eba) {
 			err := fmt.Errorf("got %v, expected %v", ba, eba)

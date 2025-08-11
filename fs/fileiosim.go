@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/sharedcode/sop"
 )
@@ -13,17 +14,18 @@ import (
 type fileIOSimulator struct {
 	lookup               map[string][]byte
 	locker               sync.Mutex
-	errorOnSuffixNumber  int
-	errorOnSuffixNumber2 int
-	reset                bool
+	// The error flags are manipulated by tests concurrently; use atomics to avoid races.
+	errorOnSuffixNumber  int32
+	errorOnSuffixNumber2 int32
+	resetFlag            uint32 // 1=true, 0=false
 }
 
 func newFileIOSim() *fileIOSimulator {
 	return &fileIOSimulator{
 		lookup:               make(map[string][]byte),
 		locker:               sync.Mutex{},
-		errorOnSuffixNumber:  -1,
-		errorOnSuffixNumber2: -1,
+	errorOnSuffixNumber:  -1,
+	errorOnSuffixNumber2: -1,
 	}
 }
 
@@ -34,8 +36,9 @@ func (sim *fileIOSimulator) ToFilePath(basePath string, id sop.UUID) string {
 }
 
 func (sim *fileIOSimulator) WriteFile(ctx context.Context, name string, data []byte, perm os.FileMode) error {
-	if sim.errorOnSuffixNumber >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", sim.errorOnSuffixNumber)) {
-		return fmt.Errorf("induced error on file suffix %d", sim.errorOnSuffixNumber)
+	n := atomic.LoadInt32(&sim.errorOnSuffixNumber)
+	if n >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", n)) {
+		return fmt.Errorf("induced error on file suffix %d", n)
 	}
 	sim.locker.Lock()
 	sim.lookup[name] = data
@@ -43,15 +46,17 @@ func (sim *fileIOSimulator) WriteFile(ctx context.Context, name string, data []b
 	return nil
 }
 func (sim *fileIOSimulator) ReadFile(ctx context.Context, name string) ([]byte, error) {
-	if sim.errorOnSuffixNumber >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", sim.errorOnSuffixNumber)) {
-		return nil, fmt.Errorf("induced error on file suffix %d", sim.errorOnSuffixNumber)
+	n := atomic.LoadInt32(&sim.errorOnSuffixNumber)
+	if n >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", n)) {
+		return nil, fmt.Errorf("induced error on file suffix %d", n)
 	}
-	if sim.errorOnSuffixNumber2 >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", sim.errorOnSuffixNumber2)) {
-		if sim.reset {
-			sim.errorOnSuffixNumber = -1
-			sim.errorOnSuffixNumber2 = -1
+	n2 := atomic.LoadInt32(&sim.errorOnSuffixNumber2)
+	if n2 >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", n2)) {
+		if atomic.LoadUint32(&sim.resetFlag) == 1 {
+			atomic.StoreInt32(&sim.errorOnSuffixNumber, -1)
+			atomic.StoreInt32(&sim.errorOnSuffixNumber2, -1)
 		}
-		return nil, fmt.Errorf("induced error on file suffix %d", sim.errorOnSuffixNumber2)
+		return nil, fmt.Errorf("induced error on file suffix %d", n2)
 	}
 	sim.locker.Lock()
 	defer sim.locker.Unlock()
@@ -63,8 +68,9 @@ func (sim *fileIOSimulator) ReadFile(ctx context.Context, name string) ([]byte, 
 	return ba, nil
 }
 func (sim *fileIOSimulator) Remove(ctx context.Context, name string) error {
-	if sim.errorOnSuffixNumber >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", sim.errorOnSuffixNumber)) {
-		return fmt.Errorf("induced error on file suffix %d", sim.errorOnSuffixNumber)
+	n := atomic.LoadInt32(&sim.errorOnSuffixNumber)
+	if n >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", n)) {
+		return fmt.Errorf("induced error on file suffix %d", n)
 	}
 	sim.locker.Lock()
 	delete(sim.lookup, name)
@@ -85,4 +91,21 @@ func (sim *fileIOSimulator) MkdirAll(ctx context.Context, path string, perm os.F
 
 func (sim *fileIOSimulator) ReadDir(ctx context.Context, sourceDir string) ([]os.DirEntry, error) {
 	return nil, nil
+}
+
+// Test helpers for atomically setting error flags to avoid data races in tests.
+func (sim *fileIOSimulator) setErrorOnSuffixNumber(v int) {
+	atomic.StoreInt32(&sim.errorOnSuffixNumber, int32(v))
+}
+
+func (sim *fileIOSimulator) setErrorOnSuffixNumber2(v int) {
+	atomic.StoreInt32(&sim.errorOnSuffixNumber2, int32(v))
+}
+
+func (sim *fileIOSimulator) setResetFlag(v bool) {
+	if v {
+		atomic.StoreUint32(&sim.resetFlag, 1)
+	} else {
+		atomic.StoreUint32(&sim.resetFlag, 0)
+	}
 }

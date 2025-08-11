@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"os"
+	"sync/atomic"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/fs/erasure"
@@ -23,6 +24,9 @@ type blobStoreWithEC struct {
 	baseFolderPathsAcrossDrives map[string][]string
 	repairCorruptedShards       bool
 }
+
+// errBox is used with atomic.Pointer to capture any error from worker goroutines without locks.
+type errBox struct{ err error }
 
 // Allows app to specify a global Erasure Coding Config once and allow code to simply don't bother
 // specifying it again.
@@ -99,7 +103,8 @@ func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobI
 	shards := make([][]byte, len(baseFolderPathsAcrossDrives))
 	shardsWithMetadata := make([][]byte, len(baseFolderPathsAcrossDrives))
 	shardsMetaData := make([][]byte, len(baseFolderPathsAcrossDrives))
-	var lastErr error
+	// Capture any error across shard reads without locks/channels.
+	var readErrPtr atomic.Pointer[errBox]
 
 	for i := range baseFolderPathsAcrossDrives {
 		baseFolderPath := fmt.Sprintf("%s%c%s", baseFolderPathsAcrossDrives[i], os.PathSeparator, blobFilePath)
@@ -114,7 +119,8 @@ func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobI
 
 			ba, err := b.fileIO.ReadFile(ctx, fn)
 			if err != nil {
-				lastErr = err
+				// Store any error (winner doesn't matter).
+				readErrPtr.Store(&errBox{err: err})
 				log.Error("failed reading from file %s, error: %v", fn, err)
 				log.Info("if there are enough shards to reconstruct data, 'reader' may still work")
 				return nil
@@ -130,8 +136,11 @@ func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobI
 	}
 
 	// Just return the (last) error if shards is empty.
-	if isShardsEmpty(shards) && lastErr != nil {
-		return nil, lastErr
+	if isShardsEmpty(shards) {
+		if eb := readErrPtr.Load(); eb != nil && eb.err != nil {
+			return nil, eb.err
+		}
+		return nil, fmt.Errorf("failed to read shards; no data and no error captured")
 	}
 	dr := ec.Decode(shards, shardsMetaData)
 	if dr.Error != nil {
@@ -289,8 +298,8 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayloa
 func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)
-
-	var lastErr error
+	// Capture any error across file removals without locks/channels.
+	var removeErrPtr atomic.Pointer[errBox]
 	for _, storeBlobIDs := range storesBlobsIDs {
 		// Get the blob table specific erasure configuration.
 		baseFolderPathsAcrossDrives, _ := b.getBaseFolderPathsAndErasureConfig(storeBlobIDs.BlobTable)
@@ -316,7 +325,7 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.Blobs
 
 				tr.Go(func() error {
 					if err := b.fileIO.Remove(ctx, fn); err != nil {
-						lastErr = err
+						removeErrPtr.Store(&errBox{err: err})
 					}
 					return nil
 				})
@@ -327,11 +336,11 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.Blobs
 	if err := tr.Wait(); err != nil {
 		return err
 	}
-	if lastErr != nil {
-		log.Error(fmt.Sprintf("error deleting from drive but ignoring it to tolerate, part of EC feature, details: %v", lastErr))
-		lastErr = nil
+	// Log one error if any occurred, but return nil to tolerate EC deletions.
+	if eb := removeErrPtr.Load(); eb != nil && eb.err != nil {
+		log.Error(fmt.Sprintf("error deleting from drive but ignoring it to tolerate, part of EC feature, details: %v", eb.err))
 	}
-	return lastErr
+	return nil
 }
 
 func isShardsEmpty(shards [][]byte) bool {
