@@ -1,0 +1,30 @@
+FROM golang:1.24.3-alpine AS build-and-test
+
+# Install Redis server for Alpine
+# Note: 'redis' package on Alpine provides both redis-server and redis-cli
+RUN apk add --no-cache redis
+
+# Set up your Go application and test environment
+WORKDIR /app
+
+# Copy go.mod and go.sum first to leverage Docker cache
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the rest of your application code and tests
+COPY . .
+
+# Create the data path folder & the env var.
+RUN mkdir -p /var/lib/sop
+ENV datapath=/var/lib/sop
+
+# Copy the entrypoint script that runs tests with NO coverage
+COPY docker-entrypoint-nocov.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint-nocov.sh
+
+CMD ["docker-entrypoint-nocov.sh"]
+
+# Sample commands to build then run docker image:
+# docker build -f Dockerfile.nocov -t mydi-nocov .
+# docker run mydi-nocov
+#   This will run the integration tests in inredfs package that requires Redis which is provided in docker image.
