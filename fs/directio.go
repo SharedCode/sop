@@ -40,6 +40,7 @@ func NewDirectIO() DirectIO {
 // as retryable to allow the caller's policy to reattempt.
 func (dio directIO) Open(ctx context.Context, filename string, flag int, permission os.FileMode) (*os.File, error) {
 	var f *os.File
+	var nonRetryableError error
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
 		f, err = directio.OpenFile(filename, flag, permission)
@@ -50,15 +51,20 @@ func (dio directIO) Open(ctx context.Context, filename string, flag int, permiss
 					Err:  err,
 				})
 		}
+		nonRetryableError = err
 		return nil
 	}, nil)
-	return f, err
+	if err != nil {
+		return f, err
+	}
+	return f, nonRetryableError
 }
 
 // WriteAt writes a block at an aligned offset, retrying transient errors via SOP's retry helper.
 // The caller is responsible for providing an aligned buffer (e.g., via directio.AlignedBlock).
 func (dio directIO) WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
 	var i int
+	var nonRetryableError error
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
 		i, err = file.WriteAt(block, offset)
@@ -69,15 +75,20 @@ func (dio directIO) WriteAt(ctx context.Context, file *os.File, block []byte, of
 					Err:  err,
 				})
 		}
+		nonRetryableError = err
 		return nil
 	}, nil)
-	return i, err
+	if err != nil {
+		return i, err
+	}
+	return i, nonRetryableError
 }
 
 // ReadAt reads a block at an aligned offset, retrying transient errors via SOP's retry helper.
 // The caller is responsible for providing an aligned buffer (e.g., via directio.AlignedBlock).
 func (dio directIO) ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
 	var i int
+	var nonRetryableError error
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
 		i, err = file.ReadAt(block, offset)
@@ -88,9 +99,13 @@ func (dio directIO) ReadAt(ctx context.Context, file *os.File, block []byte, off
 					Err:  err,
 				})
 		}
+		nonRetryableError = err
 		return nil
 	}, nil)
-	return i, err
+	if err != nil {
+		return i, err
+	}
+	return i, nonRetryableError
 }
 
 func (dio directIO) Close(file *os.File) error {

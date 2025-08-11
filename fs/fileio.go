@@ -44,12 +44,10 @@ func (dio defaultFileIO) WriteFile(ctx context.Context, name string, data []byte
 		dirPath := filepath.Dir(name)
 		// Ensure parent directories exist with sensible directory permissions.
 		if derr := dio.MkdirAll(ctx, dirPath, 0o755); derr == nil {
+			var nonRetryableError error
 			// Parent created (or already existed): retry the write to tolerate transient errors.
-			return sop.Retry(ctx, func(context.Context) error {
+			derr = sop.Retry(ctx, func(context.Context) error {
 				err := os.WriteFile(name, data, perm)
-				if err == nil {
-					return nil
-				}
 				if sop.ShouldRetry(err) {
 					return retry.RetryableError(
 						sop.Error{
@@ -57,8 +55,14 @@ func (dio defaultFileIO) WriteFile(ctx context.Context, name string, data []byte
 							Err:  err,
 						})
 				}
-				return err
+				nonRetryableError = err
+				// Tell Retry not to retry on non-retryable errors.
+				return nil
 			}, nil)
+			if derr != nil {
+				return derr
+			}
+			return nonRetryableError
 		}
 		// Parent creation failed: surface the original write error to the caller.
 		return err
@@ -69,12 +73,10 @@ func (dio defaultFileIO) WriteFile(ctx context.Context, name string, data []byte
 // ReadFile reads an entire file into memory with retry on transient errors.
 func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, error) {
 	var ba []byte
+	var nonRetryableError error
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
 		ba, err = os.ReadFile(name)
-		if err == nil {
-			return nil
-		}
 		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
@@ -82,18 +84,20 @@ func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, err
 					Err:  err,
 				})
 		}
-		return err
+		nonRetryableError = err
+		return nil
 	}, nil)
-	return ba, err
+	if err != nil {
+		return ba, err
+	}
+	return ba, nonRetryableError
 }
 
 // Remove deletes a file with retry on transient errors.
 func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
-	return sop.Retry(ctx, func(context.Context) error {
+	var nonRetryableError error
+	err := sop.Retry(ctx, func(context.Context) error {
 		err := os.Remove(name)
-		if err == nil {
-			return nil
-		}
 		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
@@ -101,17 +105,20 @@ func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
 					Err:  err,
 				})
 		}
-		return err
+		nonRetryableError = err
+		return nil
 	}, nil)
+	if err != nil {
+		return err
+	}
+	return nonRetryableError
 }
 
 // MkdirAll creates a directory tree with retry on transient errors.
 func (dio defaultFileIO) MkdirAll(ctx context.Context, path string, perm os.FileMode) error {
-	return sop.Retry(ctx, func(context.Context) error {
+	var nonRetryableError error
+	err := sop.Retry(ctx, func(context.Context) error {
 		err := os.MkdirAll(path, perm)
-		if err == nil {
-			return nil
-		}
 		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
@@ -119,17 +126,20 @@ func (dio defaultFileIO) MkdirAll(ctx context.Context, path string, perm os.File
 					Err:  err,
 				})
 		}
-		return err
+		nonRetryableError = err
+		return nil
 	}, nil)
+	if err != nil {
+		return err
+	}
+	return nonRetryableError
 }
 
 // RemoveAll removes a directory tree with retry on transient errors.
 func (dio defaultFileIO) RemoveAll(ctx context.Context, path string) error {
-	return sop.Retry(ctx, func(context.Context) error {
+	var nonRetryableError error
+	err := sop.Retry(ctx, func(context.Context) error {
 		err := os.RemoveAll(path)
-		if err == nil {
-			return nil
-		}
 		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
@@ -137,8 +147,13 @@ func (dio defaultFileIO) RemoveAll(ctx context.Context, path string) error {
 					Err:  err,
 				})
 		}
-		return err
+		nonRetryableError = err
+		return nil
 	}, nil)
+	if err != nil {
+		return err
+	}
+	return nonRetryableError
 }
 
 // Exists returns true if the given path exists (file or directory).
@@ -154,13 +169,11 @@ func (dio defaultFileIO) Exists(ctx context.Context, path string) bool {
 // ReadDir reads directory entries with retry on transient errors.
 func (dio defaultFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os.DirEntry, error) {
 	var r []os.DirEntry
+	var nonRetryableError error
 	// Use SOP retry policy to soften intermittent filesystem/NFS glitches during listings.
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
 		r, err = os.ReadDir(sourceDir)
-		if err == nil {
-			return nil
-		}
 		if sop.ShouldRetry(err) {
 			// Signal retry with a wrapped error that preserves the root cause and policy code.
 			return retry.RetryableError(sop.Error{
@@ -168,8 +181,13 @@ func (dio defaultFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os.Di
 				Err:  err,
 			})
 		}
-		return err
+		nonRetryableError = err
+		return nil
 	}, nil)
-	// r will contain the last successful result; err is non-nil if retries exhausted.
-	return r, err
+
+	// return the last error.
+	if err != nil {
+		return r, err
+	}
+	return r, nonRetryableError
 }
