@@ -5,9 +5,6 @@ import (
 	"os"
 
 	"github.com/ncw/directio"
-
-	retry "github.com/sethvargo/go-retry"
-	"github.com/sharedcode/sop"
 )
 
 // DirectIO exposes unbuffered file operations using O_DIRECT semantics where
@@ -40,72 +37,36 @@ func NewDirectIO() DirectIO {
 // as retryable to allow the caller's policy to reattempt.
 func (dio directIO) Open(ctx context.Context, filename string, flag int, permission os.FileMode) (*os.File, error) {
 	var f *os.File
-	var nonRetryableError error
-	err := sop.Retry(ctx, func(context.Context) error {
-		var err error
-		f, err = directio.OpenFile(filename, flag, permission)
-		if sop.ShouldRetry(err) {
-			return retry.RetryableError(
-				sop.Error{
-					Code: sop.FileIOError,
-					Err:  err,
-				})
-		}
-		nonRetryableError = err
-		return nil
-	}, nil)
-	if err != nil {
-		return f, err
-	}
-	return f, nonRetryableError
+	err := retryIO(ctx, func(context.Context) error {
+		var e error
+		f, e = directio.OpenFile(filename, flag, permission)
+		return e
+	})
+	return f, err
 }
 
 // WriteAt writes a block at an aligned offset, retrying transient errors via SOP's retry helper.
 // The caller is responsible for providing an aligned buffer (e.g., via directio.AlignedBlock).
 func (dio directIO) WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
 	var i int
-	var nonRetryableError error
-	err := sop.Retry(ctx, func(context.Context) error {
-		var err error
-		i, err = file.WriteAt(block, offset)
-		if sop.ShouldRetry(err) {
-			return retry.RetryableError(
-				sop.Error{
-					Code: sop.FileIOError,
-					Err:  err,
-				})
-		}
-		nonRetryableError = err
-		return nil
-	}, nil)
-	if err != nil {
-		return i, err
-	}
-	return i, nonRetryableError
+	err := retryIO(ctx, func(context.Context) error {
+		var e error
+		i, e = file.WriteAt(block, offset)
+		return e
+	})
+	return i, err
 }
 
 // ReadAt reads a block at an aligned offset, retrying transient errors via SOP's retry helper.
 // The caller is responsible for providing an aligned buffer (e.g., via directio.AlignedBlock).
 func (dio directIO) ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
 	var i int
-	var nonRetryableError error
-	err := sop.Retry(ctx, func(context.Context) error {
-		var err error
-		i, err = file.ReadAt(block, offset)
-		if sop.ShouldRetry(err) {
-			return retry.RetryableError(
-				sop.Error{
-					Code: sop.FileIOError,
-					Err:  err,
-				})
-		}
-		nonRetryableError = err
-		return nil
-	}, nil)
-	if err != nil {
-		return i, err
-	}
-	return i, nonRetryableError
+	err := retryIO(ctx, func(context.Context) error {
+		var e error
+		i, e = file.ReadAt(block, offset)
+		return e
+	})
+	return i, err
 }
 
 func (dio directIO) Close(file *os.File) error {
