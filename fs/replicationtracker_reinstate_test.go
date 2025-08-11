@@ -4,18 +4,17 @@ import (
     "context"
     "path/filepath"
     "testing"
-    
+
     "github.com/sharedcode/sop"
     "github.com/sharedcode/sop/common/mocks"
     "github.com/sharedcode/sop/encoding"
 )
 
-// Orchestrator: covers startLoggingCommitChanges -> copyStores -> fastForward loops -> turnOnReplication.
+// Focused tests for ReinstateFailedDrives flow and helpers, kept in a separate file to keep per-file length <350 lines.
 func TestReinstateFailedDrivesFlow(t *testing.T) {
     ctx := context.Background()
     l2 := mocks.NewMockClient()
 
-    // Fresh global state for isolation
     GlobalReplicationDetails = nil
 
     active := t.TempDir()
@@ -46,12 +45,10 @@ func TestReinstateFailedDrivesFlow(t *testing.T) {
     }
     if err := reg.Close(); err != nil { t.Fatalf("registry close: %v", err) }
 
-    // Run the orchestrator.
     if err := rt.ReinstateFailedDrives(ctx); err != nil {
         t.Fatalf("ReinstateFailedDrives: %v", err)
     }
 
-    // After successful reinstatement, failure flags should be cleared and logging disabled.
     if GlobalReplicationDetails == nil || GlobalReplicationDetails.FailedToReplicate || GlobalReplicationDetails.LogCommitChanges {
         t.Fatalf("expected replication flags cleared; got %+v", GlobalReplicationDetails)
     }
@@ -65,7 +62,6 @@ func TestReinstateFailedDrivesFlow(t *testing.T) {
     }
 }
 
-// fastForward processes commit logs and deletes them; verify it returns true then false on subsequent call.
 func TestFastForwardProcessesLogs(t *testing.T) {
     ctx := context.Background()
     l2 := mocks.NewMockClient()
@@ -91,7 +87,7 @@ func TestFastForwardProcessesLogs(t *testing.T) {
     tid := sop.NewUUID()
     payload := sop.Tuple[[]sop.StoreInfo, [][]sop.RegistryPayload[sop.Handle]]{
         First:  []sop.StoreInfo{*s},
-        Second: [][]sop.RegistryPayload[sop.Handle]{ {}, {}, {}, {} },
+        Second: [][]sop.RegistryPayload[sop.Handle]{{}, {}, {}, {}},
     }
     ba, _ := encoding.DefaultMarshaler.Marshal(payload)
     fn := rt.formatActiveFolderEntity(filepath.Join(commitChangesLogFolder, tid.String()+logFileExtension))
@@ -110,7 +106,6 @@ func TestFastForwardProcessesLogs(t *testing.T) {
     if found { t.Fatalf("expected no more logs to process") }
 }
 
-// turnOnReplication clears failure flags and writes status; verify file existence and flags.
 func TestTurnOnReplicationUpdatesStatus(t *testing.T) {
     ctx := context.Background()
     l2 := mocks.NewMockClient()
