@@ -4,24 +4,18 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/redis"
+	"github.com/sharedcode/sop/common/mocks"
 )
 
-func init() {
-	var redisConfig = redis.Options{
-		Address:  "localhost:6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	}
-	redis.OpenConnection(redisConfig)
-}
+// No external Redis needed; tests use an in-memory mock client.
 
 var uuid, _ = sop.ParseUUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 var hashMod = MinimumModValue
 
 func TestRegistryAddThenRead(t *testing.T) {
-	l2cache := redis.NewClient()
-	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	l2cache := mocks.NewMockClient()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2cache)
 	r := NewRegistry(true, hashMod, rt, l2cache)
 
 	h := sop.NewHandle(uuid)

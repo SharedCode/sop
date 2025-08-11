@@ -83,7 +83,10 @@ func (fio *fileDirectIO) fileExists(filePath string) bool {
 // getFileSize returns the current size of the file at filePath.
 func (fio *fileDirectIO) getFileSize(filePath string) (int64, error) {
 	s, err := os.Stat(filePath)
-	return s.Size(), err
+	if err != nil {
+		return 0, err
+	}
+	return s.Size(), nil
 }
 
 // isEOF reports whether the error indicates end-of-file.

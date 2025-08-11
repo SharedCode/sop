@@ -51,12 +51,18 @@ jobs:
           sed -i 's#^/github/workspace/##' coverage/integration_coverage.out || true
           head -n 5 coverage/integration_coverage.out || true
 
+      - name: Show coverage files (debug)
+        run: |
+          echo "Listing coverage directory..."
+          ls -al coverage || true
+          echo "Showing first lines of any .out files..."
+          for f in coverage/*.out; do
+            [ -f "$f" ] && echo "==> $f" && head -n 5 "$f"; done || true
+
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+        if: ${{ always() && hashFiles('coverage/*.out') != '' }}
+        uses: codecov/codecov-action@v4
         with:
-          files: |
-            coverage/unit_coverage.out
-            coverage/integration_coverage.out
+          files: coverage/*.out
+          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

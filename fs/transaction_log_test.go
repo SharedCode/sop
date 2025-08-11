@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/redis"
+	"github.com/sharedcode/sop/common/mocks"
 )
 
 type payload struct {
@@ -20,8 +20,9 @@ type payload struct {
 var uuid2, _ = sop.ParseUUID("6ba7b810-9dad-11d1-80b4-00c04fd430c9")
 
 func TestTransactionLogAdd(t *testing.T) {
-	l2cache := redis.NewClient()
-	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	l2cache := mocks.NewMockClient()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2cache)
 	tl := NewTransactionLog(l2cache, rt)
 	ba, _ := json.Marshal(payload{
 		Abc: "abc", Xyc: 123,
@@ -33,10 +34,17 @@ func TestTransactionLogAdd(t *testing.T) {
 }
 
 func TestTransactionLogGetOne(t *testing.T) {
-	l2cache := redis.NewClient()
-	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	l2cache := mocks.NewMockClient()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2cache)
 	tl := NewTransactionLog(l2cache, rt)
-	// ageLimit = 0
+	// Make freshly-written files eligible for selection.
+	ageLimit = 0
+	// Seed a record so GetOne has something to return.
+	baSeed, _ := json.Marshal(payload{Abc: "abc", Xyc: 123})
+	if err := tl.Add(ctx, uuid, 1, baSeed); err != nil {
+		t.Fatalf("seed Add failed: %v", err)
+	}
 	uid, hour, tlogdata, err := tl.GetOne(ctx)
 	if uid.IsNil() {
 		return
@@ -76,8 +84,9 @@ func TestTransactionLogGetOne(t *testing.T) {
 }
 
 func TestTransactionLogAdd2(t *testing.T) {
-	l2cache := redis.NewClient()
-	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	l2cache := mocks.NewMockClient()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2cache)
 	tl := NewTransactionLog(l2cache, rt)
 	ba, _ := json.Marshal(payload{
 		Abc: "abc", Xyc: 123,
@@ -96,10 +105,21 @@ func TestTransactionLogAdd2(t *testing.T) {
 }
 
 func TestTransactionLogGetOne2(t *testing.T) {
-	l2cache := redis.NewClient()
-	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	l2cache := mocks.NewMockClient()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2cache)
 	tl := NewTransactionLog(l2cache, rt)
-	// ageLimit = 0
+	// Make freshly-written files eligible for selection.
+	ageLimit = 0
+	// Seed two records in order.
+	ba1, _ := json.Marshal(payload{Abc: "abc", Xyc: 123})
+	ba2, _ := json.Marshal(payload{Abc: "xyz", Xyc: 456})
+	if err := tl.Add(ctx, uuid2, 1, ba1); err != nil {
+		t.Fatalf("seed Add failed: %v", err)
+	}
+	if err := tl.Add(ctx, uuid2, 2, ba2); err != nil {
+		t.Fatalf("seed Add failed: %v", err)
+	}
 	uid, _, tlogdata, err := tl.GetOne(ctx)
 	if uid.IsNil() {
 		return
@@ -132,9 +152,15 @@ func TestTransactionLogGetOne2(t *testing.T) {
 }
 
 func TestTransactionLogRemove2(t *testing.T) {
-	l2cache := redis.NewClient()
-	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	l2cache := mocks.NewMockClient()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2cache)
 	tl := NewTransactionLog(l2cache, rt)
+	// Seed a log entry to ensure a file exists before removal.
+	payloadBytes, _ := json.Marshal(payload{Abc: "seed", Xyc: 1})
+	if err := tl.Add(ctx, uuid2, 99, payloadBytes); err != nil {
+		t.Fatalf("seed Add failed: %v", err)
+	}
 	err := tl.Remove(ctx, uuid2)
 	if err != nil {
 		t.Errorf("Remove err: %v", err)
@@ -142,8 +168,9 @@ func TestTransactionLogRemove2(t *testing.T) {
 }
 
 func TestTransactionLogAddRemove(t *testing.T) {
-	l2cache := redis.NewClient()
-	rt, _ := NewReplicationTracker(ctx, []string{"/Users/grecinto/sop_data/"}, false, l2cache)
+	l2cache := mocks.NewMockClient()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2cache)
 	tl := NewTransactionLog(l2cache, rt)
 	ba, _ := json.Marshal(payload{
 		Abc: "abc", Xyc: 123,

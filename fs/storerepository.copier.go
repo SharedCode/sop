@@ -40,7 +40,7 @@ func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 			return err
 		}
 
-		for _, storeName := range storeList {
+	for _, storeName := range storeList {
 
 			// Create the Store folder.
 			if err := storeWriter.createStore(ctx, storeName); err != nil {
@@ -61,9 +61,22 @@ func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 			}
 
 			// Copy this store's registry segment file(s).
-			sf := sr.replicationTracker.formatPassiveFolderEntity(storeName)
-			tf := sr.replicationTracker.formatActiveFolderEntity(storeName)
-			if err := copyFilesByExtension(ctx, sf, tf, registryFileExtension); err != nil {
+			// Important: we temporarily flipped ActiveFolderToggler above to write store list/info
+			// into the passive side. For copying registry segments we must use the ORIGINAL
+			// active/passive mapping captured in 'oaf' so we copy from original active -> original passive.
+			var srcDir, dstDir string
+			// Registry segments live under the registry table folder (e.g., "c1_r"), not under the store name.
+			tableName := store[0].RegistryTable
+			if oaf {
+				// Original active is storesBaseFolders[0], passive is [1]
+				srcDir = filepath.Join(sr.replicationTracker.storesBaseFolders[0], tableName)
+				dstDir = filepath.Join(sr.replicationTracker.storesBaseFolders[1], tableName)
+			} else {
+				// Original active is storesBaseFolders[1], passive is [0]
+				srcDir = filepath.Join(sr.replicationTracker.storesBaseFolders[1], tableName)
+				dstDir = filepath.Join(sr.replicationTracker.storesBaseFolders[0], tableName)
+			}
+			if err := copyFilesByExtension(ctx, srcDir, dstDir, registryFileExtension); err != nil {
 				return err
 			}
 		}
@@ -78,6 +91,11 @@ func copyFilesByExtension(ctx context.Context, sourceDir, targetDir, extension s
 	files, err := fio.ReadDir(ctx, sourceDir)
 	if err != nil {
 		return fmt.Errorf("error reading source directory: %w", err)
+	}
+
+	// Ensure destination directory exists to avoid create errors.
+	if err := fio.MkdirAll(ctx, targetDir, 0o755); err != nil {
+		return fmt.Errorf("error creating target directory: %w", err)
 	}
 
 	for _, file := range files {

@@ -42,10 +42,14 @@ func NewFileIO() FileIO {
 func (dio defaultFileIO) WriteFile(ctx context.Context, name string, data []byte, perm os.FileMode) error {
 	if err := os.WriteFile(name, data, perm); err != nil {
 		dirPath := filepath.Dir(name)
-		if derr := dio.MkdirAll(ctx, dirPath, perm); derr == nil {
+		// Ensure parent directories exist with sensible directory permissions.
+		if derr := dio.MkdirAll(ctx, dirPath, 0o755); derr == nil {
 			// Parent created (or already existed): retry the write to tolerate transient errors.
 			return sop.Retry(ctx, func(context.Context) error {
 				err := os.WriteFile(name, data, perm)
+				if err == nil {
+					return nil
+				}
 				if sop.ShouldRetry(err) {
 					return retry.RetryableError(
 						sop.Error{
@@ -53,7 +57,7 @@ func (dio defaultFileIO) WriteFile(ctx context.Context, name string, data []byte
 							Err:  err,
 						})
 				}
-				return nil
+				return err
 			}, nil)
 		}
 		// Parent creation failed: surface the original write error to the caller.
@@ -68,6 +72,9 @@ func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, err
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
 		ba, err = os.ReadFile(name)
+		if err == nil {
+			return nil
+		}
 		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
@@ -75,7 +82,7 @@ func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, err
 					Err:  err,
 				})
 		}
-		return nil
+		return err
 	}, nil)
 	return ba, err
 }
@@ -84,6 +91,9 @@ func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, err
 func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
 	return sop.Retry(ctx, func(context.Context) error {
 		err := os.Remove(name)
+		if err == nil {
+			return nil
+		}
 		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
@@ -91,7 +101,7 @@ func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
 					Err:  err,
 				})
 		}
-		return nil
+		return err
 	}, nil)
 }
 
@@ -99,6 +109,9 @@ func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
 func (dio defaultFileIO) MkdirAll(ctx context.Context, path string, perm os.FileMode) error {
 	return sop.Retry(ctx, func(context.Context) error {
 		err := os.MkdirAll(path, perm)
+		if err == nil {
+			return nil
+		}
 		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
@@ -106,7 +119,7 @@ func (dio defaultFileIO) MkdirAll(ctx context.Context, path string, perm os.File
 					Err:  err,
 				})
 		}
-		return nil
+		return err
 	}, nil)
 }
 
@@ -114,6 +127,9 @@ func (dio defaultFileIO) MkdirAll(ctx context.Context, path string, perm os.File
 func (dio defaultFileIO) RemoveAll(ctx context.Context, path string) error {
 	return sop.Retry(ctx, func(context.Context) error {
 		err := os.RemoveAll(path)
+		if err == nil {
+			return nil
+		}
 		if sop.ShouldRetry(err) {
 			return retry.RetryableError(
 				sop.Error{
@@ -121,7 +137,7 @@ func (dio defaultFileIO) RemoveAll(ctx context.Context, path string) error {
 					Err:  err,
 				})
 		}
-		return nil
+		return err
 	}, nil)
 }
 
@@ -142,6 +158,9 @@ func (dio defaultFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os.Di
 	err := sop.Retry(ctx, func(context.Context) error {
 		var err error
 		r, err = os.ReadDir(sourceDir)
+		if err == nil {
+			return nil
+		}
 		if sop.ShouldRetry(err) {
 			// Signal retry with a wrapped error that preserves the root cause and policy code.
 			return retry.RetryableError(sop.Error{
@@ -149,7 +168,7 @@ func (dio defaultFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os.Di
 				Err:  err,
 			})
 		}
-		return nil
+		return err
 	}, nil)
 	// r will contain the last successful result; err is non-nil if retries exhausted.
 	return r, err
