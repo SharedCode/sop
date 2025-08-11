@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"os"
 )
 
 type user struct {
@@ -15,6 +16,10 @@ type user struct {
 }
 
 func TestBasicUse(t *testing.T) {
+	if os.Getenv("SOP_REDIS_TEST") != "1" {
+		t.Skip("skipping Redis integration test; set SOP_REDIS_TEST=1 to run")
+	}
+
 	option := DefaultOptions()
 	OpenConnection(option)
 	defer CloseConnection()
@@ -22,6 +27,9 @@ func TestBasicUse(t *testing.T) {
 	c := NewClient()
 
 	ctx := context.Background()
+	if err := c.Ping(ctx); err != nil {
+		t.Skipf("skipping Redis integration test; Redis not reachable: %v", err)
+	}
 	_, item, _ := c.Get(ctx, "key")
 
 	fmt.Println(item)
@@ -43,9 +51,8 @@ func TestBasicUse(t *testing.T) {
 	fmt.Println(user)
 
 	_, err = c.Delete(ctx, []string{"fooBar"})
-
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%v", err)
 	}
 
 	_, err = c.GetStruct(ctx, "fooBar", &user)
