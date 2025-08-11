@@ -12,7 +12,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/inredfs"
-	sd "github.com/sharedcode/sop/streamingdata"
+	sd "github.com/sharedcode/sop/internal/streamingdata"
 )
 
 func Test_StreamingDataStoreInvalidCases(t *testing.T) {

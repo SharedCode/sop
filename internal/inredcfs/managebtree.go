@@ -10,8 +10,8 @@ import (
 	"github.com/sharedcode/sop/btree"
 	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/inredck"
-	sd "github.com/sharedcode/sop/streamingdata"
+	"github.com/sharedcode/sop/internal/inredck"
+	sd "github.com/sharedcode/sop/internal/streamingdata"
 )
 
 // NewBtree will create a new B-Tree instance with data persisted to backend storage upon commit.

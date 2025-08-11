@@ -14,7 +14,7 @@ import (
 	"github.com/sharedcode/sop"
 	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/inredcfs"
+	"github.com/sharedcode/sop/internal/inredcfs"
 	"github.com/sharedcode/sop/redis"
 )
 

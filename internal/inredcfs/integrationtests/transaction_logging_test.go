@@ -10,7 +10,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	cas "github.com/sharedcode/sop/cassandra"
-	"github.com/sharedcode/sop/inredcfs"
+	"github.com/sharedcode/sop/internal/inredcfs"
 )
 
 func MultipleExpiredTransCleanup(t *testing.T) {

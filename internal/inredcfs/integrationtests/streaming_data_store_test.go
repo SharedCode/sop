@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/inredcfs"
-	sd "github.com/sharedcode/sop/streamingdata"
+	"github.com/sharedcode/sop/internal/inredcfs"
+	sd "github.com/sharedcode/sop/internal/streamingdata"
 )
 
 func Test_StreamingDataStoreInvalidCases(t *testing.T) {

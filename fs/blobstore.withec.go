@@ -299,7 +299,6 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.Blobs
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)
 	// Capture any error across file removals without locks/channels.
-	var removeErrPtr atomic.Pointer[errBox]
 	for _, storeBlobIDs := range storesBlobsIDs {
 		// Get the blob table specific erasure configuration.
 		baseFolderPathsAcrossDrives, _ := b.getBaseFolderPathsAndErasureConfig(storeBlobIDs.BlobTable)
@@ -325,7 +324,7 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.Blobs
 
 				tr.Go(func() error {
 					if err := b.fileIO.Remove(ctx, fn); err != nil {
-						removeErrPtr.Store(&errBox{err: err})
+						log.Error(fmt.Sprintf("error deleting from drive but ignoring it to tolerate, part of EC feature, details: %v", err))
 					}
 					return nil
 				})
@@ -333,14 +332,7 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.Blobs
 
 		}
 	}
-	if err := tr.Wait(); err != nil {
-		return err
-	}
-	// Log one error if any occurred, but return nil to tolerate EC deletions.
-	if eb := removeErrPtr.Load(); eb != nil && eb.err != nil {
-		log.Error(fmt.Sprintf("error deleting from drive but ignoring it to tolerate, part of EC feature, details: %v", eb.err))
-	}
-	return nil
+	return tr.Wait()
 }
 
 func isShardsEmpty(shards [][]byte) bool {

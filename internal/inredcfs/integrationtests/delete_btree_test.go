@@ -6,7 +6,7 @@ package integrationtests
 import (
 	"testing"
 
-	"github.com/sharedcode/sop/inredcfs"
+	"github.com/sharedcode/sop/internal/inredcfs"
 )
 
 // Add Test_ prefix if you want to run this test.

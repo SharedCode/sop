@@ -9,7 +9,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/inredcfs"
+	"github.com/sharedcode/sop/internal/inredcfs"
 )
 
 // Covers all of these cases:

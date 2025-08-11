@@ -11,8 +11,8 @@ import (
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/fs"
+	sd "github.com/sharedcode/sop/internal/streamingdata"
 	"github.com/sharedcode/sop/redis"
-	sd "github.com/sharedcode/sop/streamingdata"
 )
 
 // NewBtree creates a new B-tree instance with data persisted to the backend storage upon commit.

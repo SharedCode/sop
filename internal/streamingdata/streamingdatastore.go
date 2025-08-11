@@ -10,7 +10,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/inredck"
+	"github.com/sharedcode/sop/internal/inredck"
 )
 
 const (

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/inredcfs"
+	"github.com/sharedcode/sop/internal/inredcfs"
 )
 
 type PersonKey struct {

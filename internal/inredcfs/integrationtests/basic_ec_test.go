@@ -11,7 +11,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/inredcfs"
+	"github.com/sharedcode/sop/internal/inredcfs"
 )
 
 func initErasureCoding() {
