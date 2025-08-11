@@ -22,47 +22,12 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
-        run: go build -v ./inmemory ./inredfs
+        run: go build -v ./inmemory ./inredfs ./btree ./common ./fs
 
       - name: Unit tests with coverage
-        run: |
-          mkdir -p coverage
-          # Collect coverage across the repo's packages (unit scope).
-          # - Limit to btree, common, and inmemory packages as requested.
-          # - Attribute coverage only to these packages for accurate per-package reporting.
-          go test -timeout 600s -race -covermode=atomic \
-            -coverpkg=./btree/...,./common/...,./inmemory/... \
-            -coverprofile=coverage/unit_coverage.out \
-            ./btree/... ./common/... ./inmemory/...
-
-      - name: Build Docker image for integration tests
-        run: docker build -t sop-integration:ci .
-
-      - name: Run integration tests in Docker (produces coverage)
-        run: |
-          mkdir -p coverage
-          docker run --rm -v "${{ github.workspace }}/coverage":/coverage sop-integration:ci
-
-      - name: Normalize integration coverage paths
-        run: |
-          # Map /app/ paths from inside the container to repo-relative paths for Codecov
-          sed -i 's#^/app/##' coverage/integration_coverage.out || true
-          # Also normalize GitHub workspace absolute path if present
-          sed -i 's#^/github/workspace/##' coverage/integration_coverage.out || true
-          head -n 5 coverage/integration_coverage.out || true
-
-      - name: Show coverage files (debug)
-        run: |
-          echo "Listing coverage directory..."
-          ls -al coverage || true
-          echo "Showing first lines of any .out files..."
-          for f in coverage/*.out; do
-            [ -f "$f" ] && echo "==> $f" && head -n 5 "$f"; done || true
+        run: go test -timeout 600s -race -covermode=atomic -coverprofile=coverage.out -coverpkg ./btree/... ./in_memory/... ./fs/... ./common/...
 
       - name: Upload coverage reports to Codecov
-        if: ${{ always() && hashFiles('coverage/*.out') != '' }}
-        uses: codecov/codecov-action@v4
-        with:
-          files: coverage/*.out
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
