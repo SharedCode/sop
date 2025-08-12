@@ -1,4 +1,4 @@
 package fs
 
-// Test-only override of lockSectorRetryTimeoutInSecs (original 30s) to accelerate timeout coverage.
-const lockSectorRetryTimeoutInSecs = 1
+// Test-only shorter timeout; name differs to avoid clashing with production constant.
+const testLockSectorRetryTimeoutInSecs = 1
