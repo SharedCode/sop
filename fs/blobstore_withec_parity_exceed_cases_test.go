@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -16,6 +17,7 @@ type fileIOWithShardFail struct {
 	FileIO
 	blobID       sop.UUID
 	errorIndices map[int]struct{}
+	mu           sync.Mutex // guards errorIndices
 }
 
 func (f *fileIOWithShardFail) WriteFile(ctx context.Context, name string, data []byte, perm os.FileMode) error {
@@ -27,11 +29,14 @@ func (f *fileIOWithShardFail) WriteFile(ctx context.Context, name string, data [
 			var idx int
 			// We expect the format <uuid>_<index>; ignore parse errors (delegate to real write)
 			if _, err := fmt.Sscanf(name[underscore+1:], "%d", &idx); err == nil {
-				if _, shouldFail := f.errorIndices[idx]; shouldFail {
-					// Remove index so we fail only once per shard index
-					delete(f.errorIndices, idx)
+				f.mu.Lock()
+				_, shouldFail := f.errorIndices[idx]
+				if shouldFail {
+					delete(f.errorIndices, idx) // fail only once per shard index
+					f.mu.Unlock()
 					return fmt.Errorf("injected shard write failure index %d", idx)
 				}
+				f.mu.Unlock()
 			}
 		}
 	}

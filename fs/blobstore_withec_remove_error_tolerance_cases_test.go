@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -14,13 +15,17 @@ import (
 type failingRemoveFileIO struct {
 	FileIO
 	fail bool
+	mu   sync.Mutex
 }
 
 func (f *failingRemoveFileIO) Remove(ctx context.Context, name string) error {
+	f.mu.Lock()
 	if f.fail {
 		f.fail = false
+		f.mu.Unlock()
 		return errors.New("remove shard fail")
 	}
+	f.mu.Unlock()
 	return f.FileIO.Remove(ctx, name)
 }
 
