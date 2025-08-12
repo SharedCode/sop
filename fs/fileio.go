@@ -17,15 +17,20 @@ import (
 // so upstream failover logic can classify them.
 func retryIO(ctx context.Context, task func(ctx context.Context) error) error {
 	b := retry.NewFibonacci(1 * time.Second)
-	return retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
+	var lastErr error
+	err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
 		if err := task(ctx); err != nil {
 			if sop.ShouldRetry(err) {
 				return retry.RetryableError(sop.Error{Code: sop.FileIOError, Err: err})
 			}
-			return err
+			lastErr = err
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	return lastErr
 }
 
 // FileIO defines filesystem operations used by this package. The default
