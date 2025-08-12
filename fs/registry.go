@@ -23,6 +23,9 @@ type registryOnDisk struct {
 	replicationTracker *replicationTracker
 	l2Cache            sop.Cache
 	l1Cache            *cache.L1Cache
+	// rmCloseOverride, when set (tests), is invoked instead of rm.close() inside Replicate to
+	// simulate close errors without altering production behavior.
+	rmCloseOverride func() error
 }
 
 // Registry extends sop.Registry with io.Closer to allow releasing resources when the transaction completes.
@@ -275,8 +278,14 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 		lastErr = err
 	}
 
-	if err := rm.close(); err != nil && lastErr == nil {
-		lastErr = err
+	if r.rmCloseOverride != nil {
+		if err := r.rmCloseOverride(); err != nil && lastErr == nil {
+			lastErr = err
+		}
+	} else {
+		if err := rm.close(); err != nil && lastErr == nil {
+			lastErr = err
+		}
 	}
 
 	return lastErr
