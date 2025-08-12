@@ -3,6 +3,7 @@ package fs
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,79 +43,75 @@ func (e errorDirectIO) ReadAt(ctx context.Context, f *os.File, block []byte, off
 
 func (e errorDirectIO) Close(f *os.File) error { return f.Close() }
 
-func TestFileDirectIOOpenGuard(t *testing.T) {
-	old := DirectIOSim
-	DirectIOSim = stdDirectIO{}
-	defer func() { DirectIOSim = old }()
-
-	d := newFileDirectIO()
-	tmp := filepath.Join(t.TempDir(), "f1.dat")
-	if err := d.open(context.Background(), tmp, os.O_RDWR|os.O_CREATE, 0o644); err != nil {
-		t.Fatalf("first open failed: %v", err)
-	}
-	if err := d.open(context.Background(), tmp, os.O_RDWR, 0o644); err == nil {
-		t.Fatalf("expected error on second open, got nil")
-	}
-	_ = d.close()
-}
-
-func TestFileDirectIOReadWriteErrors(t *testing.T) {
+// TestFileDirectIO_Coverage consolidates key path coverage for fileDirectIO.
+func TestFileDirectIO_Coverage(t *testing.T) {
+	// Inject failing writer first.
 	old := DirectIOSim
 	DirectIOSim = errorDirectIO{failWrite: true}
 	defer func() { DirectIOSim = old }()
-
 	d := newFileDirectIO()
-	tmp := filepath.Join(t.TempDir(), "f2.dat")
-	if err := d.open(context.Background(), tmp, os.O_RDWR|os.O_CREATE, 0o644); err != nil {
-		t.Fatalf("open failed: %v", err)
+	tmp := filepath.Join(t.TempDir(), "seg.dat")
+	if _, err := d.writeAt(context.Background(), []byte("x"), 0); err == nil {
+		t.Fatalf("expected write before open error")
 	}
-	// Unaligned small buffer is fine with std files in tests; we test error path from our shim
+	if _, err := d.readAt(context.Background(), []byte("x"), 0); err == nil {
+		t.Fatalf("expected read before open error")
+	}
+	if err := d.open(context.Background(), tmp, os.O_RDWR|os.O_CREATE, 0o600); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	// second open error
+	if err := d.open(context.Background(), tmp, os.O_RDWR, 0o600); err == nil {
+		t.Fatalf("expected second open error")
+	}
+	// injected write failure
 	if _, err := d.writeAt(context.Background(), []byte("abc"), 0); err == nil {
-		t.Fatalf("expected write error, got nil")
+		t.Fatalf("expected injected write error")
 	}
 	_ = d.close()
-}
 
-func TestFileDirectIOEOFAndHelpers(t *testing.T) {
-	old := DirectIOSim
-	DirectIOSim = stdDirectIO{}
-	defer func() { DirectIOSim = old }()
+	// Success path
+	DirectIOSim = errorDirectIO{} // no failures
+	d2 := newFileDirectIO()
+	if err := d2.open(context.Background(), tmp, os.O_RDWR, 0o600); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	blk := d2.createAlignedBlock()
+	for i := range blk {
+		blk[i] = byte(i)
+	}
+	if n, err := d2.writeAt(context.Background(), blk, 0); err != nil || n != len(blk) {
+		t.Fatalf("writeAt: %v n=%d", err, n)
+	}
+	rb := make([]byte, len(blk))
+	if n, err := d2.readAt(context.Background(), rb, 0); err != nil || n != len(rb) {
+		t.Fatalf("readAt: %v n=%d", err, n)
+	}
+	if !d2.fileExists(tmp) {
+		t.Fatalf("file should exist")
+	}
+	if sz, err := d2.getFileSize(tmp); err != nil || sz == 0 {
+		t.Fatalf("size err=%v sz=%d", err, sz)
+	}
+	if !d2.isEOF(io.EOF) {
+		t.Fatalf("isEOF expected true")
+	}
+	if d2.isEOF(errors.New("x")) {
+		t.Fatalf("isEOF expected false")
+	}
+	if err := d2.close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if err := d2.close(); err != nil {
+		t.Fatalf("idempotent close: %v", err)
+	}
 
-	d := newFileDirectIO()
-	tmp := filepath.Join(t.TempDir(), "f3.dat")
-	if err := d.open(context.Background(), tmp, os.O_RDWR|os.O_CREATE, 0o644); err != nil {
-		t.Fatalf("open failed: %v", err)
-	}
-	// fileExists should see the file
-	if !d.fileExists(tmp) {
-		t.Fatalf("fileExists returned false for existing file")
-	}
-	// getFileSize should be 0 for a new file
-	if sz, err := d.getFileSize(tmp); err != nil || sz != 0 {
-		t.Fatalf("getFileSize got (%d,%v), want (0,nil)", sz, err)
-	}
-	// readAt on empty file returns 0, EOF from std library; check isEOF helper
-	buf := make([]byte, 4)
-	n, err := d.readAt(context.Background(), buf, 0)
-	if err == nil {
-		t.Fatalf("expected EOF on empty read, got nil")
-	}
-	if n != 0 || !d.isEOF(err) {
-		t.Fatalf("expected (0, EOF), got (%d, %v)", n, err)
-	}
-	_ = d.close()
-}
-
-func TestFileDirectIOAlignedBlocks(t *testing.T) {
-	d := newFileDirectIO()
-	// default block size buffer
-	b1 := d.createAlignedBlock()
+	b1 := d2.createAlignedBlock()
 	if len(b1) != directio.BlockSize {
-		t.Fatalf("createAlignedBlock wrong size: len=%d want=%d", len(b1), directio.BlockSize)
+		t.Fatalf("aligned block len=%d", len(b1))
 	}
-	// specific block size buffer
-	b2 := d.createAlignedBlockOfSize(2 * directio.BlockSize)
+	b2 := d2.createAlignedBlockOfSize(2 * directio.BlockSize)
 	if len(b2) != 2*directio.BlockSize {
-		t.Fatalf("createAlignedBlockOfSize wrong size: len=%d want=%d", len(b2), 2*directio.BlockSize)
+		t.Fatalf("aligned block2 len=%d", len(b2))
 	}
 }

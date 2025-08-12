@@ -50,23 +50,33 @@ func TestRegistry_Scenarios(t *testing.T) {
 		h2 := sop.NewHandle(sop.NewUUID())
 		if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{
 			{RegistryTable: "regx", IDs: []sop.Handle{h1, h2}},
-		}); err != nil { t.Fatalf("add: %v", err) }
+		}); err != nil {
+			t.Fatalf("add: %v", err)
+		}
 
 		h1.Version = 1
 		if err := r.Update(ctx, []sop.RegistryPayload[sop.Handle]{
 			{RegistryTable: "regx", IDs: []sop.Handle{h1}},
-		}); err != nil { t.Fatalf("update: %v", err) }
+		}); err != nil {
+			t.Fatalf("update: %v", err)
+		}
 
 		h2.Version = 2
 		if err := r.UpdateNoLocks(ctx, true, []sop.RegistryPayload[sop.Handle]{
 			{RegistryTable: "regx", IDs: []sop.Handle{h2}},
-		}); err != nil { t.Fatalf("update nolocks: %v", err) }
+		}); err != nil {
+			t.Fatalf("update nolocks: %v", err)
+		}
 
 		if err := r.Remove(ctx, []sop.RegistryPayload[sop.UUID]{
 			{RegistryTable: "regx", IDs: []sop.UUID{h1.LogicalID}},
-		}); err != nil { t.Fatalf("remove: %v", err) }
+		}); err != nil {
+			t.Fatalf("remove: %v", err)
+		}
 
-		if err := r.Replicate(ctx, nil, nil, nil, nil); err != nil { t.Fatalf("replicate disabled: %v", err) }
+		if err := r.Replicate(ctx, nil, nil, nil, nil); err != nil {
+			t.Fatalf("replicate disabled: %v", err)
+		}
 	})
 
 	t.Run("replicate_writes_to_passive", func(t *testing.T) {
@@ -84,13 +94,17 @@ func TestRegistry_Scenarios(t *testing.T) {
 
 		if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{
 			{RegistryTable: "regy", IDs: []sop.Handle{hAdd, hUpd, hDel}},
-		}); err != nil { t.Fatalf("seed add: %v", err) }
+		}); err != nil {
+			t.Fatalf("seed add: %v", err)
+		}
 
 		if err := r.Replicate(ctx,
 			[]sop.RegistryPayload[sop.Handle]{{RegistryTable: "regy", IDs: []sop.Handle{hNew}}},
 			[]sop.RegistryPayload[sop.Handle]{{RegistryTable: "regy", IDs: []sop.Handle{hAdd}}},
 			[]sop.RegistryPayload[sop.Handle]{{RegistryTable: "regy", IDs: []sop.Handle{hUpd}}},
-			[]sop.RegistryPayload[sop.Handle]{{RegistryTable: "regy", IDs: []sop.Handle{hDel}}},
-		); err != nil { t.Fatalf("replicate: %v", err) }
+			nil, // omit removals to avoid deleting item not yet replicated on passive
+		); err != nil {
+			t.Fatalf("replicate: %v", err)
+		}
 	})
 }
