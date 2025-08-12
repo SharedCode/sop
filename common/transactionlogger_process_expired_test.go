@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
-	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/common/mocks"
+	cas "github.com/sharedcode/sop/internal/cassandra"
 )
 
 func Test_ProcessExpiredTransactionLogs_ConsumesHourAndClears(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
-	cas "github.com/sharedcode/sop/cassandra"
+	cas "github.com/sharedcode/sop/internal/cassandra"
 	"github.com/sharedcode/sop/internal/inredcfs"
 )
 

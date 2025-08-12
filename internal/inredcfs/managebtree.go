@@ -8,8 +8,8 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
-	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/fs"
+	cas "github.com/sharedcode/sop/internal/cassandra"
 	"github.com/sharedcode/sop/internal/inredck"
 	sd "github.com/sharedcode/sop/internal/streamingdata"
 )

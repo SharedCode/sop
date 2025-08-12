@@ -28,5 +28,6 @@ func DefaultToFilePath(basePath string, id sop.UUID) string {
 func Apply4LevelHierarchy(id sop.UUID) string {
 	s := id.String()
 	ps := os.PathSeparator
-	return fmt.Sprintf("%x%c%x%c%x%c%x", s[0], ps, s[1], ps, s[2], ps, s[3])
+	// Use the first four hex characters directly (e.g., abcd -> a/b/c/d).
+	return fmt.Sprintf("%c%c%c%c%c%c%c", s[0], ps, s[1], ps, s[2], ps, s[3])
 }

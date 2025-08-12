@@ -4,7 +4,7 @@
 package inredcfs
 
 import (
-	cas "github.com/sharedcode/sop/cassandra"
+	cas "github.com/sharedcode/sop/internal/cassandra"
 	"github.com/sharedcode/sop/internal/inredck"
 	"github.com/sharedcode/sop/redis"
 )

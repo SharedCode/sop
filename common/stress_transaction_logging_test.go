@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
-	cas "github.com/sharedcode/sop/cassandra"
+	cas "github.com/sharedcode/sop/internal/cassandra"
 )
 
 // Transaction logging heavy paths extracted for opt-in stress runs.

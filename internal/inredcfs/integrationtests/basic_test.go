@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
-	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/fs"
+	cas "github.com/sharedcode/sop/internal/cassandra"
 	"github.com/sharedcode/sop/internal/inredcfs"
 	"github.com/sharedcode/sop/redis"
 )

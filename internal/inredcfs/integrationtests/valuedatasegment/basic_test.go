@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/cassandra"
+	"github.com/sharedcode/sop/internal/cassandra"
 	"github.com/sharedcode/sop/internal/inredcfs"
 	"github.com/sharedcode/sop/redis"
 )
