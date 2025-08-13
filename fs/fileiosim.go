@@ -12,8 +12,8 @@ import (
 )
 
 type fileIOSimulator struct {
-	lookup               map[string][]byte
-	locker               sync.Mutex
+	lookup map[string][]byte
+	locker sync.Mutex
 	// The error flags are manipulated by tests concurrently; use atomics to avoid races.
 	errorOnSuffixNumber  int32
 	errorOnSuffixNumber2 int32
@@ -24,8 +24,8 @@ func newFileIOSim() *fileIOSimulator {
 	return &fileIOSimulator{
 		lookup:               make(map[string][]byte),
 		locker:               sync.Mutex{},
-	errorOnSuffixNumber:  -1,
-	errorOnSuffixNumber2: -1,
+		errorOnSuffixNumber:  -1,
+		errorOnSuffixNumber2: -1,
 	}
 }
 

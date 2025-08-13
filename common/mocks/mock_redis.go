@@ -9,8 +9,8 @@ import (
 )
 
 type mockRedis struct {
-	lookup      map[string][]byte   // for SetStruct/GetStruct
-	stringStore map[string]string   // for Set/Get and locking values
+	lookup      map[string][]byte // for SetStruct/GetStruct
+	stringStore map[string]string // for Set/Get and locking values
 }
 
 // Returns a new Redis mock client.

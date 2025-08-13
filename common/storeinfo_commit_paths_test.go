@@ -27,7 +27,7 @@ func Test_GetCommitAndRollbackStoresInfo(t *testing.T) {
 	tx := &Transaction{StoreRepository: sr}
 	nr := &nodeRepositoryBackend{count: 90}
 	tx.btreesBackend = []btreeBackend{{
-		getStoreInfo: func() *sop.StoreInfo { return &si },
+		getStoreInfo:   func() *sop.StoreInfo { return &si },
 		nodeRepository: nr,
 	}}
 

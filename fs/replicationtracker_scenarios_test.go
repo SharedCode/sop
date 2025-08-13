@@ -130,49 +130,103 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			}
 		}},
 		{name: "ReinstateFailedDrives_Preconditions", run: func(t *testing.T) {
-			ctx := context.Background(); cache := mocks.NewMockClient(); base := t.TempDir()
-			rtNoRep, _ := NewReplicationTracker(ctx, []string{base}, false, cache); rtNoRep.FailedToReplicate = true
-			if err := rtNoRep.ReinstateFailedDrives(ctx); err == nil { t.Fatalf("expected replicate flag error") }
-			base2 := t.TempDir(); base3 := t.TempDir(); GlobalReplicationDetails = nil
+			ctx := context.Background()
+			cache := mocks.NewMockClient()
+			base := t.TempDir()
+			rtNoRep, _ := NewReplicationTracker(ctx, []string{base}, false, cache)
+			rtNoRep.FailedToReplicate = true
+			if err := rtNoRep.ReinstateFailedDrives(ctx); err == nil {
+				t.Fatalf("expected replicate flag error")
+			}
+			base2 := t.TempDir()
+			base3 := t.TempDir()
+			GlobalReplicationDetails = nil
 			rtHealthy, _ := NewReplicationTracker(ctx, []string{base2, base3}, true, cache)
-			if err := rtHealthy.ReinstateFailedDrives(ctx); err == nil { t.Fatalf("expected FailedToReplicate precondition error") }
+			if err := rtHealthy.ReinstateFailedDrives(ctx); err == nil {
+				t.Fatalf("expected FailedToReplicate precondition error")
+			}
 		}},
 		{name: "ReinstateFailedDrives_HappyFlow", run: func(t *testing.T) {
-			ctx := context.Background(); cache := mocks.NewMockClient(); active := t.TempDir(); passive := t.TempDir(); GlobalReplicationDetails = nil
-			rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, cache); rt.FailedToReplicate = true; GlobalReplicationDetails.FailedToReplicate = true
-			storeRepo, _ := NewStoreRepository(ctx, rt, nil, cache, 64); store := sop.StoreInfo{Name: "s1", RegistryTable: "c1_r"}; _ = storeRepo.Add(ctx, store)
-			regSegDir := filepath.Join(active, store.RegistryTable); os.MkdirAll(regSegDir, 0o755)
+			ctx := context.Background()
+			cache := mocks.NewMockClient()
+			active := t.TempDir()
+			passive := t.TempDir()
+			GlobalReplicationDetails = nil
+			rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
+			rt.FailedToReplicate = true
+			GlobalReplicationDetails.FailedToReplicate = true
+			storeRepo, _ := NewStoreRepository(ctx, rt, nil, cache, 64)
+			store := sop.StoreInfo{Name: "s1", RegistryTable: "c1_r"}
+			_ = storeRepo.Add(ctx, store)
+			regSegDir := filepath.Join(active, store.RegistryTable)
+			os.MkdirAll(regSegDir, 0o755)
 			os.WriteFile(filepath.Join(regSegDir, store.RegistryTable+"-1"+registryFileExtension), []byte("segment"), 0o644)
-			reg := NewRegistry(true, 64, rt, cache); _ = reg
-			logDir := filepath.Join(active, commitChangesLogFolder); os.MkdirAll(logDir, 0o755)
-			payload, _ := encoding.DefaultMarshaler.Marshal(sop.Tuple[[]sop.StoreInfo, [][]sop.RegistryPayload[sop.Handle]]{First: []sop.StoreInfo{store}, Second: [][]sop.RegistryPayload[sop.Handle]{nil,nil,nil,nil}})
+			reg := NewRegistry(true, 64, rt, cache)
+			_ = reg
+			logDir := filepath.Join(active, commitChangesLogFolder)
+			os.MkdirAll(logDir, 0o755)
+			payload, _ := encoding.DefaultMarshaler.Marshal(sop.Tuple[[]sop.StoreInfo, [][]sop.RegistryPayload[sop.Handle]]{First: []sop.StoreInfo{store}, Second: [][]sop.RegistryPayload[sop.Handle]{nil, nil, nil, nil}})
 			os.WriteFile(filepath.Join(logDir, "0001"+logFileExtension), payload, 0o644)
-			if err := rt.ReinstateFailedDrives(ctx); err != nil { t.Fatalf("ReinstateFailedDrives: %v", err) }
-			if rt.FailedToReplicate { t.Fatalf("expected flag cleared") }
+			if err := rt.ReinstateFailedDrives(ctx); err != nil {
+				t.Fatalf("ReinstateFailedDrives: %v", err)
+			}
+			if rt.FailedToReplicate {
+				t.Fatalf("expected flag cleared")
+			}
 		}},
 		{name: "ReinstateFailedDrives_FastForwardError", run: func(t *testing.T) {
-			ctx := context.Background(); cache := mocks.NewMockClient(); active := t.TempDir(); passive := t.TempDir(); GlobalReplicationDetails = nil
-			rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, cache); rt.FailedToReplicate = true; GlobalReplicationDetails.FailedToReplicate = true
-			logDir := filepath.Join(active, commitChangesLogFolder); os.MkdirAll(logDir, 0o755)
+			ctx := context.Background()
+			cache := mocks.NewMockClient()
+			active := t.TempDir()
+			passive := t.TempDir()
+			GlobalReplicationDetails = nil
+			rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
+			rt.FailedToReplicate = true
+			GlobalReplicationDetails.FailedToReplicate = true
+			logDir := filepath.Join(active, commitChangesLogFolder)
+			os.MkdirAll(logDir, 0o755)
 			os.WriteFile(filepath.Join(logDir, "0002"+logFileExtension), []byte("bad"), 0o644)
-			if err := rt.ReinstateFailedDrives(ctx); err == nil { t.Fatalf("expected error due to malformed log") }
+			if err := rt.ReinstateFailedDrives(ctx); err == nil {
+				t.Fatalf("expected error due to malformed log")
+			}
 		}},
 		{name: "CopyFilesByExtension_SuccessAndErrors", run: func(t *testing.T) {
 			ctx := context.Background()
 			// success copy
-			src := t.TempDir(); dst := t.TempDir(); os.WriteFile(filepath.Join(src, "a.reg"), []byte("x"), 0o644); os.WriteFile(filepath.Join(src, "b.txt"), []byte("y"), 0o644)
-			if err := copyFilesByExtension(ctx, src, dst, ".reg"); err != nil { t.Fatalf("copy success: %v", err) }
-			if _, err := os.Stat(filepath.Join(dst, "a.reg")); err != nil { t.Fatalf("expected a.reg") }
-			if _, err := os.Stat(filepath.Join(dst, "b.txt")); err == nil { t.Fatalf("unexpected b.txt copy") }
+			src := t.TempDir()
+			dst := t.TempDir()
+			os.WriteFile(filepath.Join(src, "a.reg"), []byte("x"), 0o644)
+			os.WriteFile(filepath.Join(src, "b.txt"), []byte("y"), 0o644)
+			if err := copyFilesByExtension(ctx, src, dst, ".reg"); err != nil {
+				t.Fatalf("copy success: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(dst, "a.reg")); err != nil {
+				t.Fatalf("expected a.reg")
+			}
+			if _, err := os.Stat(filepath.Join(dst, "b.txt")); err == nil {
+				t.Fatalf("unexpected b.txt copy")
+			}
 			// source read error
-			if err := copyFilesByExtension(ctx, filepath.Join(t.TempDir(), "missing"), t.TempDir(), ".x"); err == nil { t.Fatalf("expected missing source error") }
+			if err := copyFilesByExtension(ctx, filepath.Join(t.TempDir(), "missing"), t.TempDir(), ".x"); err == nil {
+				t.Fatalf("expected missing source error")
+			}
 			// mkdir failure
-			src2 := t.TempDir(); os.WriteFile(filepath.Join(src2, "z.reg"), []byte("d"), 0o644)
-			parent := t.TempDir(); target := filepath.Join(parent, "subdir"); os.WriteFile(target, []byte("file"), 0o644)
-			if err := copyFilesByExtension(ctx, src2, target, ".reg"); err == nil { t.Fatalf("expected mkdir fail") }
+			src2 := t.TempDir()
+			os.WriteFile(filepath.Join(src2, "z.reg"), []byte("d"), 0o644)
+			parent := t.TempDir()
+			target := filepath.Join(parent, "subdir")
+			os.WriteFile(target, []byte("file"), 0o644)
+			if err := copyFilesByExtension(ctx, src2, target, ".reg"); err == nil {
+				t.Fatalf("expected mkdir fail")
+			}
 			// copy create error (perm)
-			src3 := t.TempDir(); os.WriteFile(filepath.Join(src3, "k.reg"), []byte("data"), 0o644); dst3 := t.TempDir(); os.Chmod(dst3, 0o500)
-			if err := copyFilesByExtension(ctx, src3, dst3, ".reg"); err == nil { t.Fatalf("expected create fail") }
+			src3 := t.TempDir()
+			os.WriteFile(filepath.Join(src3, "k.reg"), []byte("data"), 0o644)
+			dst3 := t.TempDir()
+			os.Chmod(dst3, 0o500)
+			if err := copyFilesByExtension(ctx, src3, dst3, ".reg"); err == nil {
+				t.Fatalf("expected create fail")
+			}
 		}},
 		{name: "ReadStatus_PassiveOnly", run: func(t *testing.T) {
 			ctx := context.Background()

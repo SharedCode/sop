@@ -8,8 +8,8 @@ import (
 	"math/rand"
 	"os"
 	"strings"
-	"time"
 	"syscall"
+	"time"
 
 	"github.com/sethvargo/go-retry"
 )

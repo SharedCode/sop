@@ -321,7 +321,10 @@ func TestWithTransaction_FindWithID_And_Lock(t *testing.T) {
 func TestWithTransaction_CoverAllDelegates(t *testing.T) {
 	b, _ := newTestBtree[string]()
 	// Seed some values
-	for _, kv := range []struct{ k int; v string }{{1, "a"}, {2, "b"}, {3, "c"}} {
+	for _, kv := range []struct {
+		k int
+		v string
+	}{{1, "a"}, {2, "b"}, {3, "c"}} {
 		if ok, _ := b.Add(nil, kv.k, kv.v); !ok {
 			t.Fatalf("seed add")
 		}

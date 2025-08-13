@@ -3,8 +3,8 @@ package redis
 import (
 	"context"
 	"fmt"
-	"testing"
 	"os"
+	"testing"
 )
 
 type user struct {

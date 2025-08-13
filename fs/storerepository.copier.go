@@ -40,7 +40,7 @@ func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 			return err
 		}
 
-	for _, storeName := range storeList {
+		for _, storeName := range storeList {
 
 			// Create the Store folder.
 			if err := storeWriter.createStore(ctx, storeName); err != nil {
