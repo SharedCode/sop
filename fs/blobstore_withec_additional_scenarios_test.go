@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -13,15 +14,21 @@ import (
 type stubECFileIO struct {
 	failAll    bool
 	failFirst  bool
+	mu         sync.Mutex // guards writeCalls for race-free -race execution
 	writeCalls int
 }
 
 func (s *stubECFileIO) WriteFile(ctx context.Context, name string, data []byte, perm os.FileMode) error {
+	s.mu.Lock()
 	s.writeCalls++
-	if s.failAll {
+	callNum := s.writeCalls
+	failAll := s.failAll
+	failFirst := s.failFirst
+	s.mu.Unlock()
+	if failAll {
 		return errors.New("induced write error all")
 	}
-	if s.failFirst && s.writeCalls == 1 {
+	if failFirst && callNum == 1 {
 		return errors.New("induced write error first")
 	}
 	return nil
