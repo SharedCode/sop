@@ -1,5 +1,5 @@
-//go:build stresstests
-// +build stresstests
+//go:build stress
+// +build stress
 
 package common
 
@@ -10,7 +10,7 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-// Heavy/flaky transaction scenarios extracted to run under the 'stresstests' build tag.
+// Heavy/flaky transaction scenarios extracted to run under the 'stress' build tag.
 
 func TestStress_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)

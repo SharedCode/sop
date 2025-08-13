@@ -1,5 +1,5 @@
-//go:build stresstests
-// +build stresstests
+//go:build stress
+// +build stress
 
 package common
 
