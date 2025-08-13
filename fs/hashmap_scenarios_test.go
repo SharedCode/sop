@@ -76,6 +76,20 @@ func TestHashmap_AllScenarios(t *testing.T) {
     fd.partialRead = false; fd.partialWrite = true
     if err := hmPart.updateFileRegion(ctx, []fileRegionDetails{{dio: frd3.dio, blockOffset: frd3.blockOffset, handleInBlockOffset: frd3.handleInBlockOffset, handle: sop.NewHandle(id3)}}); err == nil { t.Fatalf("expected partial write err") }
 
+    // --- Scenario: write error in updateFileBlockRegion (err != nil branch) ---
+    // Covered separately from partial write above which exercises (err == nil && n != blockSize).
+    dioWriteErr := newFileDirectIO()
+    segFileWE := filepath.Join(base, "writeerr-seg.reg")
+    if err := dioWriteErr.open(ctx, segFileWE, os.O_CREATE|os.O_RDWR, permission); err != nil { t.Fatalf("open seg: %v", err) }
+    // Seed a full block so read succeeds (avoids partial read branch).
+    seed := make([]byte, blockSize)
+    if n, err := dioWriteErr.file.WriteAt(seed, 0); err != nil || n != blockSize { t.Fatalf("seed full block: n=%d err=%v", n, err) }
+    dioWriteErr.file.Close()
+    dioRO := newFileDirectIO()
+    if err := dioRO.open(ctx, segFileWE, os.O_RDONLY, permission); err != nil { t.Fatalf("ro open: %v", err) }
+    handleData := make([]byte, sop.HandleSizeInBytes)
+    if err := hm.updateFileBlockRegion(ctx, dioRO, 0, 0, handleData); err == nil { t.Fatalf("expected write error branch") }
+
     // --- Scenario: open failure path ---
     fd2 := &failingDirectIO{openErr: os.ErrPermission}
     DirectIOSim = fd2
