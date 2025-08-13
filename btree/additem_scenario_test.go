@@ -1,11 +1,42 @@
 package btree
 
+// Scenario file merged from: additem_duplicate_test.go, additem_error_test.go, additem_more_test.go
+// NOTE: Pure content merge; no refactors. Original files removed.
+
 import (
 	"testing"
 
 	"github.com/sharedcode/sop"
 )
 
+// (from additem_duplicate_test.go)
+// Ensure AddItem returns false on duplicate when IsUnique=true.
+func TestAddItem_DuplicateUnique_ReturnsFalse(t *testing.T) {
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true, IsValueDataInNodeSegment: true})
+	fnr := &fakeNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}
+	si := StoreInterface[int, string]{NodeRepository: fnr, ItemActionTracker: fakeIAT[int, string]{}}
+	b, _ := New[int, string](store, &si, nil)
+
+	root := newNode[int, string](b.getSlotLength())
+	root.newID(sop.NilUUID)
+	b.StoreInfo.RootNodeID = root.ID
+	fnr.Add(root)
+
+	// Seed an item with key=7
+	if ok, err := b.Add(nil, 7, "a"); err != nil || !ok {
+		t.Fatalf("seed add err=%v ok=%v", err, ok)
+	}
+	// Attempt AddItem with same key, distinct ID; should be rejected when unique
+	vv := "b"
+	dup := &Item[int, string]{Key: 7, Value: &vv, ID: sop.NewUUID()}
+	if ok, err := b.AddItem(nil, dup); err != nil {
+		t.Fatalf("AddItem duplicate err: %v", err)
+	} else if ok {
+		t.Fatalf("expected AddItem duplicate to return false")
+	}
+}
+
+// (from additem_error_test.go)
 // Ensure AddItem returns an error when fetching the root node fails.
 func TestAddItem_RootFetchError(t *testing.T) {
 	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
@@ -28,6 +59,7 @@ func TestAddItem_RootFetchError(t *testing.T) {
 	}
 }
 
+// (from additem_error_test.go)
 // Cover the path where AddItem triggers distribute and an error occurs during distribution.
 func TestAddItem_DistributeError_Propagates(t *testing.T) {
 	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true, LeafLoadBalancing: true})
@@ -76,5 +108,39 @@ func TestAddItem_DistributeError_Propagates(t *testing.T) {
 	// Choose a key that will insert at the beginning (forcing tempSlots[0] path)
 	if ok, err := b.AddItem(nil, &Item[int, string]{Key: 5, Value: &vv, ID: sop.NewUUID()}); err == nil || ok {
 		t.Fatalf("expected AddItem to propagate distribute error, got ok=%v err=%v", ok, err)
+	}
+}
+
+// (from additem_more_test.go)
+// Covers AddItem path including distribute() and promote() controller loops.
+func TestAddItem_CoversDistributeAndPromote(t *testing.T) {
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true, IsValueDataInNodeSegment: true, LeafLoadBalancing: true})
+	fnr := &fakeNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}
+	si := StoreInterface[int, string]{NodeRepository: fnr, ItemActionTracker: fakeIAT[int, string]{}}
+	b, _ := New[int, string](store, &si, nil)
+
+	// Create root
+	root := newNode[int, string](b.getSlotLength())
+	root.newID(sop.NilUUID)
+	b.StoreInfo.RootNodeID = root.ID
+	fnr.Add(root)
+
+	// Insert enough items via AddItem to trigger split and possible distribution
+	vals := []int{10, 20, 30, 40, 50, 60}
+	for _, k := range vals {
+		v := "v"
+		vv := v
+		ok, err := b.AddItem(nil, &Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()})
+		if err != nil || !ok {
+			t.Fatalf("AddItem %d err=%v ok=%v", k, err, ok)
+		}
+	}
+	if got := b.Count(); got != int64(len(vals)) {
+		t.Fatalf("count=%d", got)
+	}
+	// Ensure tree has grown to have children at root (promote happened)
+	rn, _ := b.getNode(nil, b.StoreInfo.RootNodeID)
+	if !rn.hasChildren() {
+		t.Fatalf("expected root to have children after AddItem operations")
 	}
 }
