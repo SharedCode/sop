@@ -152,3 +152,19 @@ func TestHashmap_AllScenarios(t *testing.T) {
 		t.Fatalf("close err: %v", err)
 	}
 }
+
+// Additional: fetch returns only existing IDs when mixed (existing + missing)
+func TestHashmap_Fetch_MixedIDs_Scenario(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+	hm := newHashmap(true, 32, rt, mocks.NewMockClient())
+	idExisting := sop.NewUUID()
+	frd, err := hm.findOneFileRegion(ctx, true, "tblmix", idExisting)
+	if err != nil { t.Fatalf("prep frd: %v", err) }
+	frd.handle = sop.NewHandle(idExisting)
+	if err := hm.updateFileRegion(ctx, []fileRegionDetails{frd}); err != nil { t.Fatalf("seed write: %v", err) }
+	missing := sop.NewUUID()
+	r, err := hm.fetch(ctx, "tblmix", []sop.UUID{idExisting, missing})
+	if err != nil || len(r) != 1 || r[0].LogicalID != idExisting { t.Fatalf("unexpected fetch result: %v %+v", err, r) }
+}

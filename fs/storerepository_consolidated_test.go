@@ -216,6 +216,51 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 				t.Fatalf("expected dir create error, got %v", err)
 			}
 		}},
+		{"CopyToPassiveFolders toggler false path with segments", func(t *testing.T) {
+			ctx := context.Background()
+			f1 := t.TempDir() // passive when toggler=false (active becomes index 1)
+			f2 := t.TempDir()
+			cache := mocks.NewMockClient()
+			rt, err := NewReplicationTracker(ctx, []string{f1, f2}, true, cache)
+			if err != nil { t.Fatalf("tracker: %v", err) }
+			rt.ActiveFolderToggler = false
+			sr, err := NewStoreRepository(ctx, rt, nil, cache, 4)
+			if err != nil { t.Fatalf("repo: %v", err) }
+			stores := []*sop.StoreInfo{
+				sop.NewStoreInfo(sop.StoreOptions{Name: "sa", SlotLength: 4}),
+				sop.NewStoreInfo(sop.StoreOptions{Name: "sb", SlotLength: 4}),
+			}
+			if err := sr.Add(ctx, *stores[0], *stores[1]); err != nil { t.Fatalf("sr.Add: %v", err) }
+			for _, si := range stores {
+				regDir := filepath.Join(f2, si.RegistryTable)
+				if err := os.MkdirAll(regDir, 0o755); err != nil { t.Fatalf("mkdir regdir: %v", err) }
+				if err := os.WriteFile(filepath.Join(regDir, si.RegistryTable+"-1"+registryFileExtension), []byte("seg"), 0o644); err != nil {
+					t.Fatalf("segment: %v", err)
+				}
+			}
+			if err := sr.CopyToPassiveFolders(ctx); err != nil { t.Fatalf("CopyToPassiveFolders: %v", err) }
+			if _, err := os.Stat(filepath.Join(f1, storeListFilename)); err != nil { t.Fatalf("expected storelist in f1: %v", err) }
+			for _, si := range stores {
+				if _, err := os.Stat(filepath.Join(f1, si.Name, storeInfoFilename)); err != nil { t.Fatalf("missing storeinfo in f1: %v", err) }
+				if _, err := os.Stat(filepath.Join(f1, si.RegistryTable, si.RegistryTable+"-1"+registryFileExtension)); err != nil { t.Fatalf("missing segment in f1: %v", err) }
+			}
+		}},
+		{"GetRegistryHashModValue invalid content error", func(t *testing.T) {
+			ctx := context.Background()
+			active := t.TempDir()
+			passive := t.TempDir()
+			cache := mocks.NewMockClient()
+			rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
+			if err != nil { t.Fatalf("tracker: %v", err) }
+			sr, err := NewStoreRepository(ctx, rt, nil, cache, 0)
+			if err != nil { t.Fatalf("repo: %v", err) }
+			if err := os.WriteFile(filepath.Join(active, registryHashModValueFilename), []byte("not-an-int"), 0o644); err != nil {
+				t.Fatalf("seed invalid: %v", err)
+			}
+			if _, err := sr.GetRegistryHashModValue(ctx); err == nil {
+				t.Fatalf("expected Atoi error for invalid content")
+			}
+		}},
 		{"Replicate writes passive storeinfo", func(t *testing.T) {
 			a, p := t.TempDir(), t.TempDir()
 			l2 := mocks.NewMockClient()

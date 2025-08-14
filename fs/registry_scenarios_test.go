@@ -2,6 +2,7 @@ package fs
 
 import (
 	"context"
+	"fmt"
 	"errors"
 	"os"
 	"path/filepath"
@@ -39,6 +40,62 @@ type setFail struct{ registryMap }
 
 func (sf *setFail) set(ctx context.Context, p []sop.RegistryPayload[sop.Handle]) error {
 	return errors.New("induced set error")
+}
+
+// cacheGetError induces an error on first GetStruct/GetStructEx to exercise registry.Get cache error path.
+type cacheGetError struct {
+	base    sop.Cache
+	tripped bool
+}
+
+func newCacheGetError() *cacheGetError { return &cacheGetError{base: mocks.NewMockClient()} }
+func (c *cacheGetError) Set(ctx context.Context, k, v string, d time.Duration) error { return c.base.Set(ctx, k, v, d) }
+func (c *cacheGetError) Get(ctx context.Context, k string) (bool, string, error)     { return c.base.Get(ctx, k) }
+func (c *cacheGetError) GetEx(ctx context.Context, k string, d time.Duration) (bool, string, error) {
+	return c.base.GetEx(ctx, k, d)
+}
+func (c *cacheGetError) Ping(ctx context.Context) error { return nil }
+func (c *cacheGetError) SetStruct(ctx context.Context, k string, v interface{}, d time.Duration) error {
+	return c.base.SetStruct(ctx, k, v, d)
+}
+func (c *cacheGetError) GetStruct(ctx context.Context, k string, v interface{}) (bool, error) {
+	if !c.tripped {
+		c.tripped = true
+		return false, fmt.Errorf("induced getstruct error")
+	}
+	return c.base.GetStruct(ctx, k, v)
+}
+func (c *cacheGetError) GetStructEx(ctx context.Context, k string, v interface{}, d time.Duration) (bool, error) {
+	if !c.tripped {
+		c.tripped = true
+		return false, fmt.Errorf("induced getstructex error")
+	}
+	return c.base.GetStructEx(ctx, k, v, d)
+}
+func (c *cacheGetError) Delete(ctx context.Context, ks []string) (bool, error) { return c.base.Delete(ctx, ks) }
+func (c *cacheGetError) FormatLockKey(k string) string                         { return c.base.FormatLockKey(k) }
+func (c *cacheGetError) CreateLockKeys(keys []string) []*sop.LockKey           { return c.base.CreateLockKeys(keys) }
+func (c *cacheGetError) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
+	return c.base.CreateLockKeysForIDs(keys)
+}
+func (c *cacheGetError) IsLockedTTL(ctx context.Context, d time.Duration, lks []*sop.LockKey) (bool, error) {
+	return c.base.IsLockedTTL(ctx, d, lks)
+}
+func (c *cacheGetError) Lock(ctx context.Context, d time.Duration, lks []*sop.LockKey) (bool, sop.UUID, error) {
+	return c.base.Lock(ctx, d, lks)
+}
+func (c *cacheGetError) IsLocked(ctx context.Context, lks []*sop.LockKey) (bool, error) { return c.base.IsLocked(ctx, lks) }
+func (c *cacheGetError) IsLockedByOthers(ctx context.Context, ks []string) (bool, error) {
+	return c.base.IsLockedByOthers(ctx, ks)
+}
+func (c *cacheGetError) Unlock(ctx context.Context, lks []*sop.LockKey) error { return c.base.Unlock(ctx, lks) }
+func (c *cacheGetError) Clear(ctx context.Context) error                      { return c.base.Clear(ctx) }
+
+// mockCacheImmediateLockFail forces Lock to fail to trigger UpdateNoLocks set error path.
+type mockCacheImmediateLockFail struct{ sop.Cache }
+
+func (m *mockCacheImmediateLockFail) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
+	return false, sop.NilUUID, errors.New("induced lock fail")
 }
 
 func TestRegistry_AllScenarios(t *testing.T) {
@@ -172,6 +229,111 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			}
 			if err := r.Replicate(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "pr", IDs: []sop.Handle{h2}}}, nil, nil, nil); err != nil {
 				t.Fatalf("early return replicate: %v", err)
+			}
+		}},
+		{name: "Get_AllFound_NoFetch", run: func(t *testing.T) {
+			ctx := context.Background()
+			l2 := mocks.NewMockClient()
+			base := t.TempDir()
+			rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2)
+			r := NewRegistry(true, MinimumModValue, rt, l2)
+			defer r.Close()
+			h1 := sop.NewHandle(sop.NewUUID())
+			h2 := sop.NewHandle(sop.NewUUID())
+			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "geta", IDs: []sop.Handle{h1, h2}}}); err != nil {
+				t.Fatalf("add: %v", err)
+			}
+			res, err := r.Get(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: "geta", IDs: []sop.UUID{h1.LogicalID, h2.LogicalID}}})
+			if err != nil || len(res) != 1 || len(res[0].IDs) != 2 {
+				t.Fatalf("unexpected get result: %v %+v", err, res)
+			}
+		}},
+		{name: "Get_ErrorOnCacheGet", run: func(t *testing.T) {
+			ctx := context.Background()
+			cg := newCacheGetError()
+			base := t.TempDir()
+			rt, _ := NewReplicationTracker(ctx, []string{base}, false, cg)
+			r := NewRegistry(true, MinimumModValue, rt, cg)
+			defer r.Close()
+			h := sop.NewHandle(sop.NewUUID())
+			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "geterr", IDs: []sop.Handle{h}}}); err != nil {
+				t.Fatalf("add: %v", err)
+			}
+			res, err := r.Get(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: "geterr", IDs: []sop.UUID{h.LogicalID}}})
+			if err != nil || len(res) != 1 || len(res[0].IDs) != 1 {
+				t.Fatalf("unexpected get result after induced cache error: %v %+v", err, res)
+			}
+		}},
+		{name: "Replicate_CloseOverrideErrors", run: func(t *testing.T) {
+			ctx := context.Background()
+			l2 := mocks.NewMockClient()
+			a := t.TempDir()
+			b := t.TempDir()
+			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true}
+			rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, l2)
+			r := NewRegistry(true, MinimumModValue, rt, l2)
+			defer r.Close()
+			h1 := sop.NewHandle(sop.NewUUID())
+			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "replc", IDs: []sop.Handle{h1}}}); err != nil {
+				t.Fatalf("seed: %v", err)
+			}
+			r.rmCloseOverride = func() error { return fmt.Errorf("close override error") }
+			if err := r.Replicate(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "replc", IDs: []sop.Handle{h1}}}, nil, nil, nil); err == nil || err.Error() != "close override error" {
+				t.Fatalf("expected close override error, got %v", err)
+			}
+			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true}
+			a2 := t.TempDir()
+			passiveFile := filepath.Join(t.TempDir(), "pas-file")
+			if err := os.WriteFile(passiveFile, []byte("x"), 0o600); err != nil { t.Fatal(err) }
+			rt2, _ := NewReplicationTracker(ctx, []string{a2, passiveFile}, true, l2)
+			r2 := NewRegistry(true, MinimumModValue, rt2, l2)
+			defer r2.Close()
+			h2 := sop.NewHandle(sop.NewUUID())
+			if err := r2.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "replcerr", IDs: []sop.Handle{h2}}}); err != nil {
+				t.Fatalf("seed2: %v", err)
+			}
+			r2.rmCloseOverride = func() error { return fmt.Errorf("ignored close error") }
+			if err := r2.Replicate(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "replcerr", IDs: []sop.Handle{h2}}}, nil, nil, nil); err == nil || err.Error() == "ignored close error" {
+				t.Fatalf("expected earlier replication add error, got %v", err)
+			}
+		}},
+		{name: "Replicate_LayeredErrors_FirstErrorWins", run: func(t *testing.T) {
+			ctx := context.Background()
+			cache := mocks.NewMockClient()
+			active := t.TempDir()
+			passiveDir := t.TempDir()
+			passiveFile := filepath.Join(passiveDir, "pasfile")
+			if err := os.WriteFile(passiveFile, []byte("x"), 0o600); err != nil { t.Fatalf("seed passive file: %v", err) }
+			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true}
+			rt, _ := NewReplicationTracker(ctx, []string{active, passiveFile}, true, cache)
+			r := NewRegistry(true, MinimumModValue, rt, cache)
+			defer r.Close()
+			hSeed := sop.NewHandle(sop.NewUUID())
+			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rlay", IDs: []sop.Handle{hSeed}}}); err != nil { t.Fatalf("seed add: %v", err) }
+			newRoot := sop.NewHandle(sop.NewUUID())
+			updated := hSeed; updated.Version = 2
+			remove := sop.NewHandle(sop.NewUUID())
+			r.rmCloseOverride = func() error { return errors.New("close override error") }
+			if err := r.Replicate(ctx,
+				[]sop.RegistryPayload[sop.Handle]{{RegistryTable: "rlay", IDs: []sop.Handle{newRoot}}},
+				[]sop.RegistryPayload[sop.Handle]{{RegistryTable: "rlay", IDs: []sop.Handle{hSeed}}},
+				[]sop.RegistryPayload[sop.Handle]{{RegistryTable: "rlay", IDs: []sop.Handle{updated}}},
+				[]sop.RegistryPayload[sop.Handle]{{RegistryTable: "rlay", IDs: []sop.Handle{remove}}},
+			); err == nil {
+				t.Fatalf("expected primary replication error")
+			}
+			if !rt.FailedToReplicate { t.Fatalf("expected FailedToReplicate set") }
+		}},
+		{name: "UpdateNoLocks_SetError", run: func(t *testing.T) {
+			ctx := context.Background()
+			base := t.TempDir()
+			lockFailCache := &mockCacheImmediateLockFail{Cache: mocks.NewMockClient()}
+			rt, _ := NewReplicationTracker(ctx, []string{base}, false, lockFailCache)
+			r := NewRegistry(true, MinimumModValue, rt, lockFailCache)
+			defer r.Close()
+			h := sop.NewHandle(sop.NewUUID())
+			if err := r.UpdateNoLocks(ctx, false, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "tbl", IDs: []sop.Handle{h}}}); err == nil {
+				t.Fatalf("expected UpdateNoLocks error due to lock failure")
 			}
 		}},
 		{name: "UpdateLockFailureEvict", run: func(t *testing.T) {

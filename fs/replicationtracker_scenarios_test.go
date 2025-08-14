@@ -23,6 +23,24 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 		run  func(t *testing.T)
 	}
 	scenarios := []scenario{
+		{name: "HandleReplicationRelatedError_NoOp_RollbackSucceeded", run: func(t *testing.T) {
+			ctx := context.Background()
+			l2 := mocks.NewMockClient()
+			a := t.TempDir()
+			b := t.TempDir()
+			GlobalReplicationDetails = nil
+			rt, err := NewReplicationTracker(ctx, []string{a, b}, true, l2)
+			if err != nil {
+				t.Fatalf("tracker: %v", err)
+			}
+			beforeToggle := rt.ActiveFolderToggler
+			// Use a non-failover-qualified error code and indicate rollback succeeded.
+			ioErr := sop.Error{Code: sop.FileIOError, Err: errors.New("temporary io")}
+			rt.HandleReplicationRelatedError(ctx, ioErr, nil, true)
+			if rt.ActiveFolderToggler != beforeToggle || rt.FailedToReplicate {
+				t.Fatalf("expected no-op: toggler %v->%v failed=%v", beforeToggle, rt.ActiveFolderToggler, rt.FailedToReplicate)
+			}
+		}},
 		{name: "HandleReplicationRelatedErrorFailover", run: func(t *testing.T) {
 			ctx := context.Background()
 			l2 := mocks.NewMockClient()
