@@ -410,6 +410,37 @@ func Test_NodeRepository_RollbackRemovedNodes(t *testing.T) { // from nodereposi
 	}
 }
 
+// Additional branch coverage consolidated from locks_and_registry_test.go
+func Test_NodeRepository_RollbackRemovedNodes_Unlocked_Branch(t *testing.T) {
+	ctx := context.Background()
+	reg := mocks.NewMockRegistry(false)
+	nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg}}
+	// Seed two handles with flags set
+	lid1 := sop.NewUUID()
+	lid2 := sop.NewUUID()
+	h1 := sop.NewHandle(lid1)
+	h1.IsDeleted = true
+	h2 := sop.NewHandle(lid2)
+	h2.WorkInProgressTimestamp = 123
+	_ = reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{h1, h2}}})
+
+	// nodesAreLocked=false uses Update (not UpdateNoLocks)
+	vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: "rt", IDs: []sop.UUID{lid1, lid2}}}
+	if err := nr.rollbackRemovedNodes(ctx, false, vids); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	got, _ := reg.Get(ctx, vids)
+	if len(got) > 0 {
+		for _, gh := range got[0].IDs {
+			if gh.LogicalID.Compare(lid1) == 0 || gh.LogicalID.Compare(lid2) == 0 {
+				if gh.IsDeleted || gh.WorkInProgressTimestamp != 0 {
+					t.Fatalf("flags not cleared: %+v", gh)
+				}
+			}
+		}
+	}
+}
+
 func Test_NodeRepository_RemoveNodes(t *testing.T) { // from noderepository_rollback_test.go
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
