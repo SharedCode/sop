@@ -20,14 +20,14 @@ typedef struct { const char *p; ptrdiff_t n; } _GoString_;
 
 
 
-#line 3 "jsondb_main.go"
+#line 3 "jsondb.main.go"
 
 #include <stdio.h> // C.longlong
 #include <stdlib.h> // For free
 
 #line 1 "cgo-generated-wrapper"
 
-#line 3 "jsondb_manage_btree.go"
+#line 3 "jsondb.managebtree.go"
 
 #include <stdlib.h> // For free
 
