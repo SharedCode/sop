@@ -108,3 +108,30 @@ func TestBlobStoreWithEC_GetOne_AllReadsFail(t *testing.T) {
 		t.Fatalf("expected read failure error")
 	}
 }
+
+// Consolidated: early missing-config error branches for GetOne/Add/Remove
+func TestBlobStoreWithEC_MissingConfigBranches(t *testing.T) {
+	ctx := context.Background()
+	// Only table "present" has a configuration.
+	cfg := map[string]ErasureCodingConfig{
+		"present": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"d1", "d2"}},
+	}
+	bs, err := NewBlobStoreWithEC(nil, nil, cfg)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// GetOne missing table -> error
+	if _, e := bs.(*blobStoreWithEC).GetOne(ctx, "absent", sop.NewUUID()); e == nil {
+		t.Fatalf("expected missing config error for GetOne")
+	}
+	// Add missing table -> error
+	id := sop.NewUUID()
+	if e := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: "abs", Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: []byte("x")}}}}); e == nil {
+		t.Fatalf("expected missing config error for Add")
+	}
+	// Remove missing table -> error
+	if e := bs.Remove(ctx, []sop.BlobsPayload[sop.UUID]{{BlobTable: "zzz", Blobs: []sop.UUID{sop.NewUUID()}}}); e == nil {
+		t.Fatalf("expected missing config error for Remove")
+	}
+}

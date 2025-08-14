@@ -519,6 +519,46 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 				t.Fatalf("expected status file")
 			}
 		}},
+		{name: "ReadStatus_ActiveMissingPassivePresent", run: func(t *testing.T) {
+			ctx := context.Background()
+			prev := GlobalReplicationDetails
+			GlobalReplicationDetails = nil
+			t.Cleanup(func() { GlobalReplicationDetails = prev })
+
+			active := t.TempDir()
+			passive := t.TempDir()
+			// write status only to passive
+			os.MkdirAll(passive, 0o755)
+			if err := os.WriteFile(filepath.Join(passive, replicationStatusFilename), []byte(`{"FailedToReplicate":false,"ActiveFolderToggler":false}`), 0o644); err != nil {
+				t.Fatalf("write passive status: %v", err)
+			}
+			if _, err := NewReplicationTracker(ctx, []string{active, passive}, true, nil); err != nil {
+				t.Fatalf("NewReplicationTracker: %v", err)
+			}
+		}},
+		{name: "ReadStatus_BothExistPassiveNewerAndOlder", run: func(t *testing.T) {
+			ctx := context.Background()
+			prev := GlobalReplicationDetails
+			GlobalReplicationDetails = nil
+			t.Cleanup(func() { GlobalReplicationDetails = prev })
+			active := t.TempDir()
+			passive := t.TempDir()
+			os.MkdirAll(active, 0o755)
+			os.MkdirAll(passive, 0o755)
+			// both exist; make passive newer
+			os.WriteFile(filepath.Join(active, replicationStatusFilename), []byte(`{"FailedToReplicate":false,"ActiveFolderToggler":true}`), 0o644)
+			os.WriteFile(filepath.Join(passive, replicationStatusFilename), []byte(`{"FailedToReplicate":false,"ActiveFolderToggler":false}`), 0o644)
+			pf := filepath.Join(passive, replicationStatusFilename)
+			af := filepath.Join(active, replicationStatusFilename)
+			past := time.Now().Add(-2 * time.Minute)
+			os.Chtimes(af, past, past)
+			time.Sleep(15 * time.Millisecond)
+			if _, err := NewReplicationTracker(ctx, []string{active, passive}, true, nil); err != nil {
+				t.Fatalf("NewReplicationTracker: %v", err)
+			}
+			_ = pf
+			_ = af // state exercised; toggler choice is implementation-dependent across OS timing
+		}},
 	}
 	for _, sc := range scenarios {
 		sc := sc

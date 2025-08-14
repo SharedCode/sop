@@ -315,3 +315,296 @@ func (f failingCloseDirectIO) WriteAt(ctx context.Context, file *os.File, block 
 func (f failingCloseDirectIO) ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
 	return file.ReadAt(block, offset)
 }
+
+// --- Additional consolidated micro-tests previously in separate small files ---
+
+// alwaysLockFailCache simulates a cache where Lock never succeeds.
+type alwaysLockFailCache struct{ mocksCache sop.Cache }
+
+func newAlwaysLockFailCache() *alwaysLockFailCache {
+	return &alwaysLockFailCache{mocks.NewMockClient()}
+}
+
+func (c *alwaysLockFailCache) Set(ctx context.Context, k, v string, d time.Duration) error {
+	return c.mocksCache.Set(ctx, k, v, d)
+}
+func (c *alwaysLockFailCache) Get(ctx context.Context, k string) (bool, string, error) {
+	return c.mocksCache.Get(ctx, k)
+}
+func (c *alwaysLockFailCache) GetEx(ctx context.Context, k string, d time.Duration) (bool, string, error) {
+	return c.mocksCache.GetEx(ctx, k, d)
+}
+func (c *alwaysLockFailCache) Ping(ctx context.Context) error { return nil }
+func (c *alwaysLockFailCache) SetStruct(ctx context.Context, k string, v interface{}, d time.Duration) error {
+	return c.mocksCache.SetStruct(ctx, k, v, d)
+}
+func (c *alwaysLockFailCache) GetStruct(ctx context.Context, k string, v interface{}) (bool, error) {
+	return c.mocksCache.GetStruct(ctx, k, v)
+}
+func (c *alwaysLockFailCache) GetStructEx(ctx context.Context, k string, v interface{}, d time.Duration) (bool, error) {
+	return c.mocksCache.GetStructEx(ctx, k, v, d)
+}
+func (c *alwaysLockFailCache) Delete(ctx context.Context, ks []string) (bool, error) {
+	return c.mocksCache.Delete(ctx, ks)
+}
+func (c *alwaysLockFailCache) FormatLockKey(k string) string { return c.mocksCache.FormatLockKey(k) }
+func (c *alwaysLockFailCache) CreateLockKeys(keys []string) []*sop.LockKey {
+	return c.mocksCache.CreateLockKeys(keys)
+}
+func (c *alwaysLockFailCache) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
+	return c.mocksCache.CreateLockKeysForIDs(keys)
+}
+func (c *alwaysLockFailCache) IsLockedTTL(ctx context.Context, d time.Duration, lks []*sop.LockKey) (bool, error) {
+	return c.mocksCache.IsLockedTTL(ctx, d, lks)
+}
+func (c *alwaysLockFailCache) Lock(ctx context.Context, d time.Duration, lks []*sop.LockKey) (bool, sop.UUID, error) {
+	return false, sop.NilUUID, nil
+}
+func (c *alwaysLockFailCache) IsLocked(ctx context.Context, lks []*sop.LockKey) (bool, error) {
+	return false, nil
+}
+func (c *alwaysLockFailCache) IsLockedByOthers(ctx context.Context, ks []string) (bool, error) {
+	return c.mocksCache.IsLockedByOthers(ctx, ks)
+}
+func (c *alwaysLockFailCache) Unlock(ctx context.Context, lks []*sop.LockKey) error { return nil }
+func (c *alwaysLockFailCache) Clear(ctx context.Context) error                      { return c.mocksCache.Clear(ctx) }
+
+// lostLockCache acquires locks but reports them lost on IsLocked check.
+type lostLockCache struct{ *alwaysLockFailCache }
+
+func newLostLockCache() *lostLockCache { return &lostLockCache{newAlwaysLockFailCache()} }
+func (c *lostLockCache) Lock(ctx context.Context, d time.Duration, lks []*sop.LockKey) (bool, sop.UUID, error) {
+	return true, sop.NilUUID, nil
+}
+func (c *lostLockCache) IsLocked(ctx context.Context, lks []*sop.LockKey) (bool, error) {
+	return false, nil
+}
+
+// Covers the successful GetOneOfHour path (eligible file within TTL window returning records).
+func TestTransactionLog_GetOneOfHour_Success(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+
+	tid := sop.NewUUID()
+	for i := 0; i < 3; i++ {
+		if err := tl.Add(ctx, tid, i, []byte{byte('a' + i)}); err != nil {
+			t.Fatalf("Add: %v", err)
+		}
+	}
+	fn := rt.formatActiveFolderEntity(filepath.Join(logFolder, tid.String()+logFileExtension))
+	past := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(fn, past, past); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	hour := time.Now().Format(DateHourLayout)
+	gotTid, recs, err := tl.GetOneOfHour(ctx, hour)
+	if err != nil {
+		t.Fatalf("GetOneOfHour err: %v", err)
+	}
+	if gotTid.IsNil() || gotTid != tid {
+		t.Fatalf("expected tid %s got %s", tid, gotTid)
+	}
+	if len(recs) == 0 {
+		t.Fatalf("expected records, got 0")
+	}
+}
+
+func TestTransactionLog_GetOneOfHour_TooOldUnlock(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+
+	oldHour := time.Now().Add(-5 * time.Hour).Format(DateHourLayout)
+	tid, recs, err := tl.GetOneOfHour(ctx, oldHour)
+	if err != nil {
+		t.Fatalf("GetOneOfHour err: %v", err)
+	}
+	if !tid.IsNil() || recs != nil {
+		t.Fatalf("expected nil result for too-old hour, got %v %v", tid, recs)
+	}
+}
+
+func TestTransactionLog_getLogsDetails_UnmarshalSkip(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+
+	tid := sop.NewUUID()
+	filename := tl.format(tid)
+	if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	validKV := sop.KeyValuePair[int, []byte]{Key: 1, Value: []byte("x")}
+	vb, _ := encoding.DefaultMarshaler.Marshal(validKV)
+	content := []byte("not-json\n" + string(vb) + "\n")
+	if err := os.WriteFile(filename, content, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	recs, err := tl.getLogsDetails(tid)
+	if err != nil {
+		t.Fatalf("getLogsDetails err: %v", err)
+	}
+	if len(recs) != 1 || recs[0].Key != 1 {
+		t.Fatalf("expected 1 valid record, got %+v", recs)
+	}
+}
+
+func TestPriorityLog_GetBatch_WithCorruptFileError(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	dir := rt.formatActiveFolderEntity(logFolder)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	tidValid := sop.NewUUID()
+	vf := filepath.Join(dir, tidValid.String()+priorityLogFileExtension)
+	if err := os.WriteFile(vf, []byte("[]"), 0o644); err != nil {
+		t.Fatalf("write valid: %v", err)
+	}
+	past := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(vf, past, past); err != nil {
+		t.Fatalf("chtimes valid: %v", err)
+	}
+	tidBad := sop.NewUUID()
+	bf := filepath.Join(dir, tidBad.String()+priorityLogFileExtension)
+	if err := os.WriteFile(bf, []byte("not-json"), 0o644); err != nil {
+		t.Fatalf("write bad: %v", err)
+	}
+	if err := os.Chtimes(bf, past.Add(1*time.Minute), past.Add(1*time.Minute)); err != nil {
+		t.Fatalf("chtimes bad: %v", err)
+	}
+	batch, err := pl.GetBatch(ctx, 10)
+	if err == nil {
+		t.Fatalf("expected error due to corrupt file, got nil")
+	}
+	if len(batch) == 0 {
+		t.Fatalf("expected at least one valid batch entry, got 0")
+	}
+}
+
+func TestPriorityLog_BasicGetRemovePaths_Merged(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	pl := tl.PriorityLog()
+	if !pl.IsEnabled() {
+		t.Fatalf("expected enabled")
+	}
+	tid := sop.NewUUID()
+	if recs, err := pl.Get(ctx, tid); err != nil || recs != nil {
+		t.Fatalf("expected nil,nil get absent, got %v %v", recs, err)
+	}
+	if err := pl.Remove(ctx, tid); err != nil {
+		t.Fatalf("remove absent: %v", err)
+	}
+	payload := []byte(`[{}]`)
+	if err := pl.WriteBackup(ctx, tid, payload); err != nil {
+		t.Fatalf("write backup: %v", err)
+	}
+	backupFile := rt.formatActiveFolderEntity(filepath.Join(logFolder, tid.String()+priorityLogBackupFileExtension))
+	if _, err := os.Stat(backupFile); err != nil {
+		t.Fatalf("expected backup file: %v", err)
+	}
+	if err := pl.RemoveBackup(ctx, tid); err != nil {
+		t.Fatalf("remove backup: %v", err)
+	}
+}
+
+func TestTransactionLog_RemoveClosesFile_Merged(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	tid := sop.NewUUID()
+	if err := tl.Add(ctx, tid, 1, []byte("x")); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if tl.file == nil {
+		t.Fatalf("expected file opened")
+	}
+	if err := tl.Remove(ctx, tid); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if _, err := os.Stat(tl.format(tid)); !os.IsNotExist(err) {
+		t.Fatalf("expected file removed, stat err=%v", err)
+	}
+}
+
+func TestTransactionLog_getOne_IgnoresInvalidFiles_Merged(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	base := rt.formatActiveFolderEntity(logFolder)
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	past := time.Now().Add(-2 * time.Hour)
+	invalid := filepath.Join(base, "not-a-uuid"+logFileExtension)
+	os.WriteFile(invalid, []byte("{}"), 0o644)
+	os.Chtimes(invalid, past, past)
+	tid := sop.NewUUID()
+	valid := filepath.Join(base, tid.String()+logFileExtension)
+	os.WriteFile(valid, []byte("{}"), 0o644)
+	os.Chtimes(valid, past.Add(-1*time.Minute), past.Add(-1*time.Minute))
+	hour, gotTid, err := tl.getOne(ctx)
+	if err != nil {
+		t.Fatalf("getOne err: %v", err)
+	}
+	if gotTid != tid {
+		t.Fatalf("expected tid %s got %s", tid, gotTid)
+	}
+	if hour == "" {
+		t.Fatalf("expected hour string")
+	}
+}
+
+func TestTransactionLog_GetOne_LockFailure(t *testing.T) {
+	ctx := context.Background()
+	rt, _ := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, false, mocks.NewMockClient())
+	tl := NewTransactionLog(newAlwaysLockFailCache(), rt)
+	tid, hour, recs, err := tl.GetOne(ctx)
+	if err != nil || !tid.IsNil() || hour != "" || recs != nil {
+		t.Fatalf("expected empty result on lock failure")
+	}
+}
+
+func TestTransactionLog_GetOne_LostLockAfterRead(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base, t.TempDir()}, false, mocks.NewMockClient())
+	cache := newLostLockCache()
+	tl := NewTransactionLog(cache, rt)
+	tid := sop.NewUUID()
+	if err := tl.Add(ctx, tid, 1, []byte("x")); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	fn := tl.format(tid)
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(fn, past, past)
+	gotTid, hour, recs, err := tl.GetOne(ctx)
+	if err != nil || !gotTid.IsNil() || hour != "" || recs != nil {
+		t.Fatalf("expected nil results lost-lock path, got %v %v %v %v", gotTid, hour, recs, err)
+	}
+}
