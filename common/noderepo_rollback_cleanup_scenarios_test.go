@@ -1,7 +1,4 @@
 package common
-
-// Consolidated scenarios for node repository rollback helpers and cleanup error paths.
-
 import (
 	"context"
 	"fmt"
@@ -14,7 +11,6 @@ import (
 	"github.com/sharedcode/sop/common/mocks"
 	"github.com/sharedcode/sop/encoding"
 )
-
 // failingBlobStore returns an error on Remove to exercise error path in removeNodes.
 type failingBlobStore struct{}
 
@@ -30,7 +26,6 @@ func (f failingBlobStore) Update(ctx context.Context, storesblobs []sop.BlobsPay
 func (f failingBlobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	return fmt.Errorf("forced remove error")
 }
-
 // errRepo implements sop.StoreRepository and returns an error from GetWithTTL.
 type errRepo struct{ e error }
 
@@ -45,7 +40,6 @@ func (e *errRepo) GetWithTTL(ctx context.Context, isTTL bool, d time.Duration, n
 }
 func (e *errRepo) Remove(ctx context.Context, names ...string) error               { return nil }
 func (e *errRepo) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) error { return nil }
-
 func Test_NodeRepository_RemoveNodes_Error_Propagates(t *testing.T) {
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
@@ -61,7 +55,6 @@ func Test_NodeRepository_RemoveNodes_Error_Propagates(t *testing.T) {
 		t.Fatalf("expected error from failingBlobStore.Remove, got nil")
 	}
 }
-
 func Test_NodeRepository_RollbackUpdatedNodes_Both_Locked_And_Unlocked(t *testing.T) {
 	ctx := context.Background()
 	// Prepare registry with handles for two logical IDs
@@ -95,7 +88,6 @@ func Test_NodeRepository_RollbackUpdatedNodes_Both_Locked_And_Unlocked(t *testin
 		t.Fatalf("expected error on unlocked rollbackUpdatedNodes with induced registry error")
 	}
 }
-
 func Test_NodeRepository_RollbackRemovedNodes_Both_Locked_And_Unlocked(t *testing.T) {
 	ctx := context.Background()
 	regOK := mocks.NewMockRegistry(false)
@@ -124,7 +116,6 @@ func Test_NodeRepository_RollbackRemovedNodes_Both_Locked_And_Unlocked(t *testin
 		t.Fatalf("expected error on unlocked rollbackRemovedNodes with induced registry error")
 	}
 }
-
 // Sanity: ensure refetchAndMergeClosure error path is covered when StoreRepository.GetWithTTL fails.
 func Test_RefetchAndMerge_Closure_Error_From_StoreRepo(t *testing.T) {
 	ctx := context.Background()
@@ -151,7 +142,6 @@ func Test_RefetchAndMerge_Closure_Error_From_StoreRepo(t *testing.T) {
 		t.Fatalf("expected error from failing GetWithTTL, got nil")
 	}
 }
-
 // Cover rollbackAddedNodes and rollbackNewRootNodes happy paths
 func Test_NodeRepository_RollbackAdded_And_NewRoot_Success(t *testing.T) {
 	ctx := context.Background()
@@ -271,7 +261,6 @@ func Test_NodeRepository_CommitRemovedNodes_AlreadyDeleted_ReturnsFalse(t *testi
 	}
 }
 
-// deleteObsoleteEntries should propagate blob store remove error as lastErr.
 func Test_Transaction_DeleteObsoleteEntries_PropagatesBlobError(t *testing.T) {
 	ctx := context.Background()
 	// Use failing blobstore and ensure MRU cache is initialized
@@ -285,7 +274,6 @@ func Test_Transaction_DeleteObsoleteEntries_PropagatesBlobError(t *testing.T) {
 	}
 }
 
-// Exercise Transaction.deleteObsoleteEntries branches including Redis delete warnings and registry removal
 func Test_Transaction_DeleteObsoleteEntries_Branches(t *testing.T) {
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
@@ -462,5 +450,53 @@ func Test_ItemActionTracker_CommitTrackedValues_AddsToBlobAndCache(t *testing.T)
 	var pv Person
 	if found, err := redis.GetStruct(ctx, formatItemKey(persistedID.String()), &pv); !found || err != nil {
 		t.Fatalf("expected value in redis for ID %s, found=%v err=%v", persistedID.String(), found, err)
+	}
+}
+
+// unlockNodesKeys should release held locks and nil out nodesKeys safely.
+func Test_UnlockNodesKeys_Releases_And_Nils(t *testing.T) {
+	ctx := context.Background()
+	lc := mocks.NewMockClient()
+	tx := &Transaction{l2Cache: lc}
+	// Seed two lock keys and mark as owned so Unlock will clear them.
+	ks := lc.CreateLockKeys([]string{sop.NewUUID().String(), sop.NewUUID().String()})
+	for _, k := range ks {
+		_ = lc.Set(ctx, k.Key, k.LockID.String(), time.Minute)
+		k.IsLockOwner = true
+	}
+	tx.nodesKeys = ks
+	if err := tx.unlockNodesKeys(ctx); err != nil {
+		t.Fatalf("unlockNodesKeys err: %v", err)
+	}
+	if tx.nodesKeys != nil {
+		t.Fatalf("expected nodesKeys to be nil after unlock")
+	}
+}
+
+// unlockNodesKeys should be a no-op when nodesKeys is nil.
+func Test_UnlockNodesKeys_NoNodes_NoError(t *testing.T) {
+	ctx := context.Background()
+	tx := &Transaction{l2Cache: mocks.NewMockClient()}
+	if err := tx.unlockNodesKeys(ctx); err != nil {
+		t.Fatalf("expected no error when unlocking with nil nodesKeys, got %v", err)
+	}
+}
+
+// unlockTrackedItems aggregates last error across backends.
+func Test_UnlockTrackedItems_AggregatesError(t *testing.T) {
+	tx := &Transaction{btreesBackend: []btreeBackend{{unlockTrackedItems: func(context.Context) error { return nil }}, {unlockTrackedItems: func(context.Context) error { return fmt.Errorf("agg") }}}}
+	if err := tx.unlockTrackedItems(context.Background()); err == nil {
+		t.Fatalf("expected aggregated error")
+	}
+}
+
+// rollback should return an error if the transaction is already committed (state > finalizeCommit).
+func Test_Transaction_Rollback_CommittedState_Error(t *testing.T) {
+	ctx := context.Background()
+	tx := &Transaction{l2Cache: mocks.NewMockClient(), blobStore: mocks.NewMockBlobStore(), registry: mocks.NewMockRegistry(false)}
+	tx.logger = newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	tx.logger.committedState = finalizeCommit + 1
+	if err := tx.rollback(ctx, true); err == nil {
+		t.Fatalf("expected error when rolling back an already committed transaction")
 	}
 }
