@@ -18,6 +18,13 @@ import (
 	cas "github.com/sharedcode/sop/internal/cassandra"
 )
 
+// updErrRegistry wraps the mock registry and forces UpdateNoLocks to return an error.
+type updErrRegistry struct{ *mocks.Mock_vid_registry }
+
+func (u updErrRegistry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+	return fmt.Errorf("forced updatelocks error")
+}
+
 // ---- Helper types from helpers test ----
 // tlRecorder is a minimal TransactionLog test double capturing Add/Remove calls.
 type tlRecorder struct {
@@ -742,6 +749,27 @@ func Test_TransactionLogger_DoPriorityRollbacks_Cases(t *testing.T) {
 		consumed, err := tl.doPriorityRollbacks(ctx, tx)
 		if consumed {
 			t.Fatalf("expected consumed=false on version failover")
+		}
+		if se, ok := err.(sop.Error); !ok || se.Code != sop.RestoreRegistryFileSectorFailure {
+			t.Fatalf("expected failover error, got %v", err)
+		}
+	})
+
+	// Custom registry that errors on UpdateNoLocks but supports Get with seeded values.
+	t.Run("update_no_locks_error_returns_failover", func(t *testing.T) {
+		redis := mocks.NewMockClient()
+		base := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+		r := updErrRegistry{Mock_vid_registry: base}
+		tx := &Transaction{l2Cache: redis, registry: r}
+		tid := sop.NewUUID()
+		lid := sop.NewUUID()
+		// Seed registry with same version to satisfy version check
+		_ = r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{mkHandle(lid, 1)}}})
+		pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: tid, Value: makePayload("rt", "bt", []sop.Handle{mkHandle(lid, 1)})}}}
+		tl := newTransactionLogger(stubTLog{pl: pl}, true)
+		consumed, err := tl.doPriorityRollbacks(ctx, tx)
+		if consumed {
+			t.Fatalf("expected consumed=false on update error")
 		}
 		if se, ok := err.(sop.Error); !ok || se.Code != sop.RestoreRegistryFileSectorFailure {
 			t.Fatalf("expected failover error, got %v", err)
