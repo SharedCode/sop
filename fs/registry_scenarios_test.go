@@ -495,3 +495,48 @@ func TestRegistry_ReplicateErrorBranches_Scenario(t *testing.T) {
 		t.Fatalf("expected nil on second replicate, got %v", err)
 	}
 }
+
+
+// Exercise error branches in registryMap.remove and Replicate close override.
+func Test_registryMap_remove_Errors_And_Replicate_CloseOverride(t *testing.T) {
+	ctx := context.Background()
+
+	baseA := filepath.Join(t.TempDir(), "a")
+	baseB := filepath.Join(t.TempDir(), "b")
+	rt, err := NewReplicationTracker(ctx, []string{baseA, baseB}, true, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+
+	// Setup a registry and add one handle, then try to remove mismatching logical id to hit error branches.
+	reg := NewRegistry(true, 4, rt, mocks.NewMockClient())
+	defer reg.Close()
+
+	table := "c1_r"
+	h := sop.Handle{LogicalID: sop.NewUUID()}
+	if err := reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: table, IDs: []sop.Handle{h}}}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	// Attempt remove with the same id twice: second call should error (already deleted), hitting not-found branch.
+	rm := newRegistryMap(true, reg.hashmap.hashmap.hashModValue, rt, mocks.NewMockClient())
+	lids := []sop.UUID{h.LogicalID}
+	if err := rm.remove(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: table, IDs: lids}}); err != nil {
+		t.Fatalf("remove first: %v", err)
+	}
+	if err := rm.remove(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: table, IDs: lids}}); err == nil {
+		t.Fatalf("expected error on removing already-deleted record")
+	}
+
+	// Replicate close override path: force an error from rmCloseOverride().
+	// Ensure replication is enabled and not marked failed, and isolate from global state.
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = &ReplicationTrackedDetails{}
+	defer func() { GlobalReplicationDetails = prev }()
+	rt.FailedToReplicate = false
+	reg2 := NewRegistry(true, 4, rt, mocks.NewMockClient())
+	reg2.rmCloseOverride = func() error { return fmt.Errorf("close fail") }
+	if err := reg2.Replicate(ctx, nil, nil, nil, nil); err == nil {
+		t.Fatalf("expected close override error")
+	}
+}
