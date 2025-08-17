@@ -2,6 +2,8 @@ package common
 
 import (
     "context"
+    "fmt"
+    "time"
     "testing"
 
     "github.com/sharedcode/sop"
@@ -111,5 +113,46 @@ func Test_CommitTrackedItemsValues_ActivelyPersisted_NoOp(t *testing.T) {
     ci, ok := trk.items[id]
     if !ok || ci.item == nil || ci.item.ID != id || ci.item.Value == nil {
         t.Fatalf("expected tracked item unchanged; ok=%v idOk=%v valNil=%v", ok, ci.item != nil && ci.item.ID == id, ci.item == nil || ci.item.Value == nil)
+    }
+}
+
+
+// flipLockRefetchCache fails first lock attempt to force needsRefetchAndMerge, then succeeds.
+type flipLockRefetchCache struct{ sop.Cache; first bool }
+
+func (f *flipLockRefetchCache) Lock(ctx context.Context, d time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
+    if !f.first {
+        f.first = true
+        return false, sop.NilUUID, nil
+    }
+    return f.Cache.Lock(ctx, d, keys)
+}
+
+// Ensures that if refetchAndMergeModifications returns error, phase1Commit propagates it.
+func Test_Phase1Commit_RefetchError_Propagates(t *testing.T) {
+    ctx := context.Background()
+    base := mocks.NewMockClient()
+    l2 := &flipLockRefetchCache{Cache: base}
+    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+
+    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+    tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: 0}
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_refetch_err", SlotLength: 4, IsValueDataInNodeSegment: true})
+    nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}}
+    tx.btreesBackend = []btreeBackend{{
+        nodeRepository:                   nr,
+        getStoreInfo:                     func() *sop.StoreInfo { return si },
+        hasTrackedItems:                  func() bool { return true },
+        checkTrackedItems:                func(context.Context) error { return nil },
+        lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+        unlockTrackedItems:               func(context.Context) error { return nil },
+        commitTrackedItemsValues:         func(context.Context) error { return nil },
+        getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+        getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+        refetchAndMerge:                  func(context.Context) error { return fmt.Errorf("refetch fail") },
+    }}
+
+    if err := tx.phase1Commit(ctx); err == nil || err.Error() != "refetch fail" {
+        t.Fatalf("expected refetch error to propagate, got: %v", err)
     }
 }

@@ -81,3 +81,85 @@ func Test_ItemActionTracker_Get_FetchesFromBlob_AndCaches(t *testing.T) {
         t.Fatalf("expected value loaded and ValueNeedsFetch=false")
     }
 }
+
+
+// Covers addAction path when values are in separate segment (IsValueDataInNodeSegment=false): uses AddItem.
+func Test_RefetchAndMerge_AddAction_SeparateSegment_Succeeds(t *testing.T) {
+    ctx := context.Background()
+    l2 := mocks.NewMockClient()
+    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+    bs := mocks.NewMockBlobStore()
+    rg := mocks.NewMockRegistry(false)
+    sr := mocks.NewMockStoreRepository()
+    tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+
+    // Use separate segment for values to exercise AddItem branch.
+    so := sop.StoreOptions{Name: "rfm_add_sep", SlotLength: 4, IsValueDataInNodeSegment: false}
+    ns := sop.NewStoreInfo(so)
+    _ = sr.Add(ctx, *ns)
+
+    si := StoreInterface[PersonKey, Person]{}
+    si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tx.l2Cache, tx.blobStore, tx.logger)
+    nrw := newNodeRepository[PersonKey, Person](tx, ns)
+    si.NodeRepository = nrw
+    si.backendNodeRepository = nrw.nodeRepositoryBackend
+    b3, err := btree.New(ns, &si.StoreInterface, Compare)
+    if err != nil { t.Fatal(err) }
+
+    // Prepare a new item to be added during refetch
+    id := sop.NewUUID()
+    pk, pv := newPerson("ka", "va", "m", "e@x", "p")
+    it := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: &pv, Version: 0}
+    si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items[id] = cacheItem[PersonKey, Person]{
+        lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: addAction},
+        item:        it,
+        versionInDB: it.Version,
+    }
+
+    closure := refetchAndMergeClosure(&si, b3, sr)
+    if err := closure(ctx); err != nil {
+        t.Fatalf("refetch add separate segment err: %v", err)
+    }
+    // The item should be present in the B-tree after merge.
+    if ok, _ := b3.Find(ctx, pk, false); !ok {
+        t.Fatalf("expected item added and found")
+    }
+}
+
+// Covers removeAction path error when item cannot be found after refetch.
+func Test_RefetchAndMerge_RemoveAction_FailFind_ReturnsError(t *testing.T) {
+    ctx := context.Background()
+    l2 := mocks.NewMockClient()
+    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+    bs := mocks.NewMockBlobStore()
+    rg := mocks.NewMockRegistry(false)
+    sr := mocks.NewMockStoreRepository()
+    tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+
+    so := sop.StoreOptions{Name: "rfm_remove_fail", SlotLength: 4, IsValueDataInNodeSegment: true}
+    ns := sop.NewStoreInfo(so)
+    _ = sr.Add(ctx, *ns)
+
+    si := StoreInterface[PersonKey, Person]{}
+    si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tx.l2Cache, tx.blobStore, tx.logger)
+    nrw := newNodeRepository[PersonKey, Person](tx, ns)
+    si.NodeRepository = nrw
+    si.backendNodeRepository = nrw.nodeRepositoryBackend
+    b3, err := btree.New(ns, &si.StoreInterface, Compare)
+    if err != nil { t.Fatal(err) }
+
+    // Seed a removal for a non-existent item; FindWithID will fail and return error.
+    id := sop.NewUUID()
+    pk, _ := newPerson("kr", "vr", "m", "e@x", "p")
+    it := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: nil, Version: 1}
+    si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items[id] = cacheItem[PersonKey, Person]{
+        lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: removeAction},
+        item:        it,
+        versionInDB: it.Version,
+    }
+
+    closure := refetchAndMergeClosure(&si, b3, sr)
+    if err := closure(ctx); err == nil {
+        t.Fatalf("expected error from remove path when item not found")
+    }
+}

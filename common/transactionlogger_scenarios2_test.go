@@ -374,3 +374,28 @@ func Test_TransactionLogger_PriorityRollback_ErrorBranch(t *testing.T) {
 		t.Fatalf("expected sop.RestoreRegistryFileSectorFailure, got %v", err)
 	}
 }
+
+
+// Ensures rollback processes pre-commit logs for actively persisted items by deleting value blobs.
+func Test_TransactionLogger_Rollback_PreCommit_ActivelyPersisted_CleansValues(t *testing.T) {
+    ctx := context.Background()
+    blobs := mocks.NewMockBlobStore()
+    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+    tx := &Transaction{blobStore: blobs}
+
+    // Prepare a pre-commit payload with one value blob ID.
+    valID := sop.NewUUID()
+    table := "it_values"
+    _ = blobs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: table, Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: valID, Value: []byte("v")}}}})
+    pre := sop.BlobsPayload[sop.UUID]{BlobTable: table, Blobs: []sop.UUID{valID}}
+
+    logs := []sop.KeyValuePair[int, []byte]{
+        {Key: int(addActivelyPersistedItem), Value: toByteArray(pre)},
+    }
+    if err := tl.rollback(ctx, tx, sop.NewUUID(), logs); err != nil {
+        t.Fatalf("rollback pre-commit cleanup error: %v", err)
+    }
+    if ba, _ := blobs.GetOne(ctx, table, valID); len(ba) != 0 {
+        t.Fatalf("pre-commit value blob not removed")
+    }
+}
