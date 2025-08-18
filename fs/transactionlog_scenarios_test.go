@@ -1,7 +1,6 @@
 package fs
 
 import (
-
 	"bufio"
 	"context"
 	"encoding/json"
@@ -10,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 	"testing"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/common/mocks"
@@ -215,7 +214,6 @@ func Test_TransactionLog_GetOne_Success(t *testing.T) {
 	_ = tl.Remove(ctx, tid)
 }
 
-
 // cacheIsLockedFalse wraps a base cache and forces IsLocked to return false while delegating others.
 type cacheIsLockedFalse struct{ base sop.Cache }
 
@@ -390,7 +388,6 @@ func Test_TransactionLog_GetOneOfHour_InvalidHour_ReturnsError(t *testing.T) {
 	_, _, _ = tl.GetOneOfHour(ctx, hour)
 	_ = tl.Remove(ctx, tid)
 }
-
 
 type errWriter struct{}
 

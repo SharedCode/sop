@@ -1,70 +1,73 @@
 package common
 
 import (
-    "context"
+	"context"
 	"fmt"
+	"testing"
 	"time"
-    "testing"
 
-    "github.com/sharedcode/sop"
-    "github.com/sharedcode/sop/common/mocks"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/common/mocks"
 
 	"github.com/sharedcode/sop/cache"
 	cas "github.com/sharedcode/sop/internal/cassandra"
 )
 
 // stubTLRemoveErr allows observing Remove calls and returning a configured error.
-type stubTLRemove struct{ mocks.MockTransactionLog; removed []sop.UUID }
+type stubTLRemove struct {
+	mocks.MockTransactionLog
+	removed []sop.UUID
+}
 
 func (s *stubTLRemove) Remove(ctx context.Context, tid sop.UUID) error {
-    s.removed = append(s.removed, tid)
-    return nil
+	s.removed = append(s.removed, tid)
+	return nil
 }
 
 // Covers rollback branch when committedFunctionLogs is empty and tid is non-nil: Remove is called.
 func Test_TransactionLogger_Rollback_EmptyLogs_WithTid_Removes(t *testing.T) {
-    ctx := context.Background()
-    tl := &stubTLRemove{}
-    logger := newTransactionLogger(tl, true)
-    tx := &Transaction{logger: logger}
+	ctx := context.Background()
+	tl := &stubTLRemove{}
+	logger := newTransactionLogger(tl, true)
+	tx := &Transaction{logger: logger}
 
-    tid := sop.NewUUID()
-    if err := logger.rollback(ctx, tx, tid, nil); err != nil {
-        t.Fatalf("rollback empty logs returned error: %v", err)
-    }
-    if len(tl.removed) != 1 || tl.removed[0].Compare(tid) != 0 {
-        t.Fatalf("expected Remove called with tid, got %v", tl.removed)
-    }
+	tid := sop.NewUUID()
+	if err := logger.rollback(ctx, tx, tid, nil); err != nil {
+		t.Fatalf("rollback empty logs returned error: %v", err)
+	}
+	if len(tl.removed) != 1 || tl.removed[0].Compare(tid) != 0 {
+		t.Fatalf("expected Remove called with tid, got %v", tl.removed)
+	}
 }
 
 // Covers rollback branch when committedFunctionLogs is empty and tid is nil: returns nil without Remove.
 func Test_TransactionLogger_Rollback_EmptyLogs_NilTid_NoRemove(t *testing.T) {
-    ctx := context.Background()
-    tl := &stubTLRemove{}
-    logger := newTransactionLogger(tl, true)
-    tx := &Transaction{logger: logger}
+	ctx := context.Background()
+	tl := &stubTLRemove{}
+	logger := newTransactionLogger(tl, true)
+	tx := &Transaction{logger: logger}
 
-    if err := logger.rollback(ctx, tx, sop.NilUUID, nil); err != nil {
-        t.Fatalf("rollback empty logs (nil tid) returned error: %v", err)
-    }
-    if len(tl.removed) != 0 {
-        t.Fatalf("expected no Remove calls, got %d", len(tl.removed))
-    }
+	if err := logger.rollback(ctx, tx, sop.NilUUID, nil); err != nil {
+		t.Fatalf("rollback empty logs (nil tid) returned error: %v", err)
+	}
+	if len(tl.removed) != 0 {
+		t.Fatalf("expected no Remove calls, got %d", len(tl.removed))
+	}
 }
 
 // Covers processExpiredTransactionLogs path where hourBeingProcessed is set and no entries found; it should reset.
 func Test_TransactionLogger_ProcessExpired_NoEntries_ResetsHour(t *testing.T) {
-    ctx := context.Background()
-    // Ensure non-empty hourBeingProcessed.
-    hourBeingProcessed = "2024010112"
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-    tx := &Transaction{logger: tl}
-    if err := tl.processExpiredTransactionLogs(ctx, tx); err != nil {
-        t.Fatalf("processExpiredTransactionLogs error: %v", err)
-    }
-    if hourBeingProcessed != "" {
-        t.Fatalf("expected hourBeingProcessed reset to empty, got %q", hourBeingProcessed)
-    }
+	ctx := context.Background()
+	// Ensure non-empty hourBeingProcessed.
+	hourBeingProcessed = "2024010112"
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	tx := &Transaction{logger: tl}
+	if err := tl.processExpiredTransactionLogs(ctx, tx); err != nil {
+		t.Fatalf("processExpiredTransactionLogs error: %v", err)
+	}
+	if hourBeingProcessed != "" {
+		t.Fatalf("expected hourBeingProcessed reset to empty, got %q", hourBeingProcessed)
+	}
 }
 
 // Covers deleteTrackedItemsValues for both cache-deletion and skip-cache branches.
@@ -375,27 +378,26 @@ func Test_TransactionLogger_PriorityRollback_ErrorBranch(t *testing.T) {
 	}
 }
 
-
 // Ensures rollback processes pre-commit logs for actively persisted items by deleting value blobs.
 func Test_TransactionLogger_Rollback_PreCommit_ActivelyPersisted_CleansValues(t *testing.T) {
-    ctx := context.Background()
-    blobs := mocks.NewMockBlobStore()
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-    tx := &Transaction{blobStore: blobs}
+	ctx := context.Background()
+	blobs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	tx := &Transaction{blobStore: blobs}
 
-    // Prepare a pre-commit payload with one value blob ID.
-    valID := sop.NewUUID()
-    table := "it_values"
-    _ = blobs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: table, Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: valID, Value: []byte("v")}}}})
-    pre := sop.BlobsPayload[sop.UUID]{BlobTable: table, Blobs: []sop.UUID{valID}}
+	// Prepare a pre-commit payload with one value blob ID.
+	valID := sop.NewUUID()
+	table := "it_values"
+	_ = blobs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: table, Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: valID, Value: []byte("v")}}}})
+	pre := sop.BlobsPayload[sop.UUID]{BlobTable: table, Blobs: []sop.UUID{valID}}
 
-    logs := []sop.KeyValuePair[int, []byte]{
-        {Key: int(addActivelyPersistedItem), Value: toByteArray(pre)},
-    }
-    if err := tl.rollback(ctx, tx, sop.NewUUID(), logs); err != nil {
-        t.Fatalf("rollback pre-commit cleanup error: %v", err)
-    }
-    if ba, _ := blobs.GetOne(ctx, table, valID); len(ba) != 0 {
-        t.Fatalf("pre-commit value blob not removed")
-    }
+	logs := []sop.KeyValuePair[int, []byte]{
+		{Key: int(addActivelyPersistedItem), Value: toByteArray(pre)},
+	}
+	if err := tl.rollback(ctx, tx, sop.NewUUID(), logs); err != nil {
+		t.Fatalf("rollback pre-commit cleanup error: %v", err)
+	}
+	if ba, _ := blobs.GetOne(ctx, table, valID); len(ba) != 0 {
+		t.Fatalf("pre-commit value blob not removed")
+	}
 }

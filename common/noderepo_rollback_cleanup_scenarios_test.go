@@ -1,4 +1,5 @@
 package common
+
 import (
 	"context"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/sharedcode/sop/common/mocks"
 	"github.com/sharedcode/sop/encoding"
 )
+
 // failingBlobStore returns an error on Remove to exercise error path in removeNodes.
 type failingBlobStore struct{}
 
@@ -26,6 +28,7 @@ func (f failingBlobStore) Update(ctx context.Context, storesblobs []sop.BlobsPay
 func (f failingBlobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	return fmt.Errorf("forced remove error")
 }
+
 // errRepo implements sop.StoreRepository and returns an error from GetWithTTL.
 type errRepo struct{ e error }
 
@@ -116,6 +119,7 @@ func Test_NodeRepository_RollbackRemovedNodes_Both_Locked_And_Unlocked(t *testin
 		t.Fatalf("expected error on unlocked rollbackRemovedNodes with induced registry error")
 	}
 }
+
 // Sanity: ensure refetchAndMergeClosure error path is covered when StoreRepository.GetWithTTL fails.
 func Test_RefetchAndMerge_Closure_Error_From_StoreRepo(t *testing.T) {
 	ctx := context.Background()
@@ -142,6 +146,7 @@ func Test_RefetchAndMerge_Closure_Error_From_StoreRepo(t *testing.T) {
 		t.Fatalf("expected error from failing GetWithTTL, got nil")
 	}
 }
+
 // Cover rollbackAddedNodes and rollbackNewRootNodes happy paths
 func Test_NodeRepository_RollbackAdded_And_NewRoot_Success(t *testing.T) {
 	ctx := context.Background()

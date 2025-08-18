@@ -2,12 +2,12 @@ package fs
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"errors"
 	"io"
-	"time"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/common/mocks"
@@ -134,7 +134,6 @@ func indexOf(s, sub string) int {
 }
 
 var _ = errors.New
-
 
 // Consolidated hashmap scenarios covering: find/update/delete, scan branch, error branches
 // (lock fail, partial read/write, open fail), helper functions (offset calc, getIDs), fetch flow,
@@ -286,14 +285,19 @@ func TestHashmap_Fetch_MixedIDs_Scenario(t *testing.T) {
 	hm := newHashmap(true, 32, rt, mocks.NewMockClient())
 	idExisting := sop.NewUUID()
 	frd, err := hm.findOneFileRegion(ctx, true, "tblmix", idExisting)
-	if err != nil { t.Fatalf("prep frd: %v", err) }
+	if err != nil {
+		t.Fatalf("prep frd: %v", err)
+	}
 	frd.handle = sop.NewHandle(idExisting)
-	if err := hm.updateFileRegion(ctx, []fileRegionDetails{frd}); err != nil { t.Fatalf("seed write: %v", err) }
+	if err := hm.updateFileRegion(ctx, []fileRegionDetails{frd}); err != nil {
+		t.Fatalf("seed write: %v", err)
+	}
 	missing := sop.NewUUID()
 	r, err := hm.fetch(ctx, "tblmix", []sop.UUID{idExisting, missing})
-	if err != nil || len(r) != 1 || r[0].LogicalID != idExisting { t.Fatalf("unexpected fetch result: %v %+v", err, r) }
+	if err != nil || len(r) != 1 || r[0].LogicalID != idExisting {
+		t.Fatalf("unexpected fetch result: %v %+v", err, r)
+	}
 }
-
 
 // directIOReadEOF simulates a DirectIO that returns io.EOF on ReadAt for the first read,
 // allowing findOneFileRegion(forWriting=false) to hit the EOF branch and continue/return not found.
@@ -458,7 +462,6 @@ func (directIOError) ReadAt(ctx context.Context, file *os.File, block []byte, of
 	return 0, errors.New("boom")
 }
 func (directIOError) Close(file *os.File) error { return file.Close() }
-
 
 func Test_findOneFileRegion_AdditionalBranches_Table(t *testing.T) {
 	ctx := context.Background()

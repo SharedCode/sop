@@ -325,287 +325,303 @@ func Test_TransactionLogger_Rollback_Covers_Other_Branches(t *testing.T) {
 	}
 }
 
-
 // Covers addAction path in refetchAndMergeClosure when values are stored in-node (b3.Add).
 func Test_RefetchAndMerge_AddItem_InNodeSegment_Succeeds(t *testing.T) {
-    ctx := context.Background()
-    so := sop.StoreOptions{Name: "rfm_add_innode", SlotLength: 4, IsValueDataInNodeSegment: true}
-    ns := sop.NewStoreInfo(so)
-    sr := mocks.NewMockStoreRepository()
-    _ = sr.Add(ctx, *ns)
+	ctx := context.Background()
+	so := sop.StoreOptions{Name: "rfm_add_innode", SlotLength: 4, IsValueDataInNodeSegment: true}
+	ns := sop.NewStoreInfo(so)
+	sr := mocks.NewMockStoreRepository()
+	_ = sr.Add(ctx, *ns)
 
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
-    si := StoreInterface[PersonKey, Person]{}
-    si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
-    nrw := newNodeRepository[PersonKey, Person](tr, ns)
-    si.NodeRepository = nrw
-    si.backendNodeRepository = nrw.nodeRepositoryBackend
-    b3, err := btree.New(ns, &si.StoreInterface, Compare)
-    if err != nil { t.Fatal(err) }
+	si := StoreInterface[PersonKey, Person]{}
+	si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
+	nrw := newNodeRepository[PersonKey, Person](tr, ns)
+	si.NodeRepository = nrw
+	si.backendNodeRepository = nrw.nodeRepositoryBackend
+	b3, err := btree.New(ns, &si.StoreInterface, Compare)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-    // Seed a new item in tracker as addAction for in-node Add path
-    pk, pv := newPerson("ain", "va", "m", "a@b", "p")
-    it := btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &pv}
-    si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items[it.ID] = cacheItem[PersonKey, Person]{
-        lockRecord: lockRecord{LockID: sop.NewUUID(), Action: addAction},
-        item:       &it,
-        persisted:  false,
-    }
+	// Seed a new item in tracker as addAction for in-node Add path
+	pk, pv := newPerson("ain", "va", "m", "a@b", "p")
+	it := btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &pv}
+	si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items[it.ID] = cacheItem[PersonKey, Person]{
+		lockRecord: lockRecord{LockID: sop.NewUUID(), Action: addAction},
+		item:       &it,
+		persisted:  false,
+	}
 
-    // Ensure StoreRepository returns the store on refresh
-    _ = sr.Add(ctx, *ns)
+	// Ensure StoreRepository returns the store on refresh
+	_ = sr.Add(ctx, *ns)
 
-    closure := refetchAndMergeClosure(&si, b3, sr)
-    if err := closure(ctx); err != nil {
-        t.Fatalf("unexpected error: %v", err)
-    }
-    // Verify the item is now present in btree (by key)
-    if ok, _ := b3.Find(ctx, pk, false); !ok {
-        t.Fatalf("expected item to be added to btree")
-    }
+	closure := refetchAndMergeClosure(&si, b3, sr)
+	if err := closure(ctx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Verify the item is now present in btree (by key)
+	if ok, _ := b3.Find(ctx, pk, false); !ok {
+		t.Fatalf("expected item to be added to btree")
+	}
 }
 
 // Covers updateAction path in refetchAndMergeClosure when values are in a separate segment (UpdateCurrentNodeItem).
 func Test_RefetchAndMerge_Update_SeparateSegment_Succeeds(t *testing.T) {
-    ctx := context.Background()
-    so := sop.StoreOptions{Name: "rfm_upd_sep", SlotLength: 4, IsValueDataInNodeSegment: false}
-    ns := sop.NewStoreInfo(so)
-    sr := mocks.NewMockStoreRepository()
-    _ = sr.Add(ctx, *ns)
+	ctx := context.Background()
+	so := sop.StoreOptions{Name: "rfm_upd_sep", SlotLength: 4, IsValueDataInNodeSegment: false}
+	ns := sop.NewStoreInfo(so)
+	sr := mocks.NewMockStoreRepository()
+	_ = sr.Add(ctx, *ns)
 
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
-    si := StoreInterface[PersonKey, Person]{}
-    si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
-    nrw := newNodeRepository[PersonKey, Person](tr, ns)
-    si.NodeRepository = nrw
-    si.backendNodeRepository = nrw.nodeRepositoryBackend
-    b3, err := btree.New(ns, &si.StoreInterface, Compare)
-    if err != nil { t.Fatal(err) }
+	si := StoreInterface[PersonKey, Person]{}
+	si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
+	nrw := newNodeRepository[PersonKey, Person](tr, ns)
+	si.NodeRepository = nrw
+	si.backendNodeRepository = nrw.nodeRepositoryBackend
+	b3, err := btree.New(ns, &si.StoreInterface, Compare)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-    // Seed an item in the tree
-    pk, pv := newPerson("us1", "v1", "m", "u@x", "p")
-    if ok, err := b3.Add(ctx, pk, pv); !ok || err != nil { t.Fatalf("seed add err: %v", err) }
-    if ok, _ := b3.Find(ctx, pk, false); !ok { t.Fatal("seed find err") }
-    cur, _ := b3.GetCurrentItem(ctx)
+	// Seed an item in the tree
+	pk, pv := newPerson("us1", "v1", "m", "u@x", "p")
+	if ok, err := b3.Add(ctx, pk, pv); !ok || err != nil {
+		t.Fatalf("seed add err: %v", err)
+	}
+	if ok, _ := b3.Find(ctx, pk, false); !ok {
+		t.Fatal("seed find err")
+	}
+	cur, _ := b3.GetCurrentItem(ctx)
 
-    // Prepare tracker with updateAction for separate segment path:
-    // - Map key is current(item) ID (uuid) so FindWithID succeeds
-    // - Item is a new inflight item (new ID) with updated value
-    newV := pv; newV.Phone = "upd-sep"
-    inflight := btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &newV}
-    si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items[cur.ID] = cacheItem[PersonKey, Person]{
-        lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
-        item:        &inflight,
-        versionInDB: cur.Version,
-        persisted:   false,
-    }
+	// Prepare tracker with updateAction for separate segment path:
+	// - Map key is current(item) ID (uuid) so FindWithID succeeds
+	// - Item is a new inflight item (new ID) with updated value
+	newV := pv
+	newV.Phone = "upd-sep"
+	inflight := btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &newV}
+	si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items[cur.ID] = cacheItem[PersonKey, Person]{
+		lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
+		item:        &inflight,
+		versionInDB: cur.Version,
+		persisted:   false,
+	}
 
-    // Seed MRU and handle for root so repo.get can refetch after reset
-    rootID := b3.StoreInfo.RootNodeID
-    if cn, ok := nrw.nodeRepositoryBackend.localCache[rootID]; ok && cn.node != nil {
-        cache.GetGlobalCache().SetNodeToMRU(ctx, rootID, cn.node, ns.CacheConfig.NodeCacheDuration)
-        cache.GetGlobalCache().Handles.Set([]sop.KeyValuePair[sop.UUID, sop.Handle]{{Key: rootID, Value: sop.NewHandle(rootID)}})
-    } else {
-        t.Fatalf("expected root node in local cache for MRU seed")
-    }
-    // Sync StoreRepository to current state
-    upd := *ns
-    upd.RootNodeID = b3.StoreInfo.RootNodeID
-    upd.Count = b3.StoreInfo.Count
-    _ = sr.Add(ctx, upd)
+	// Seed MRU and handle for root so repo.get can refetch after reset
+	rootID := b3.StoreInfo.RootNodeID
+	if cn, ok := nrw.nodeRepositoryBackend.localCache[rootID]; ok && cn.node != nil {
+		cache.GetGlobalCache().SetNodeToMRU(ctx, rootID, cn.node, ns.CacheConfig.NodeCacheDuration)
+		cache.GetGlobalCache().Handles.Set([]sop.KeyValuePair[sop.UUID, sop.Handle]{{Key: rootID, Value: sop.NewHandle(rootID)}})
+	} else {
+		t.Fatalf("expected root node in local cache for MRU seed")
+	}
+	// Sync StoreRepository to current state
+	upd := *ns
+	upd.RootNodeID = b3.StoreInfo.RootNodeID
+	upd.Count = b3.StoreInfo.Count
+	_ = sr.Add(ctx, upd)
 
-    // Execute closure
-    closure := refetchAndMergeClosure(&si, b3, sr)
-    if err := closure(ctx); err != nil {
-        t.Fatalf("unexpected error: %v", err)
-    }
+	// Execute closure
+	closure := refetchAndMergeClosure(&si, b3, sr)
+	if err := closure(ctx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-    // Validate updated value applied
-    if ok, _ := b3.Find(ctx, pk, false); !ok { t.Fatal("item missing after update") }
-    got, _ := b3.GetCurrentItem(ctx)
-    if got.Value == nil || got.Value.Phone != "upd-sep" {
-        t.Fatalf("expected updated value 'upd-sep', got %+v", got.Value)
-    }
-    // Validate tracker bookkeeping: persisted true for inflight item and forDeletion contains old id
-    iat := si.ItemActionTracker.(*itemActionTracker[PersonKey, Person])
-    ci, ok := iat.items[inflight.ID]
-    if !ok || !ci.persisted {
-        t.Fatalf("expected inflight item persisted in tracker, ok=%v persisted=%v", ok, ci.persisted)
-    }
-    if len(iat.forDeletionItems) == 0 || iat.forDeletionItems[0] != cur.ID {
-        t.Fatalf("expected old item ID queued for deletion, got %#v", iat.forDeletionItems)
-    }
+	// Validate updated value applied
+	if ok, _ := b3.Find(ctx, pk, false); !ok {
+		t.Fatal("item missing after update")
+	}
+	got, _ := b3.GetCurrentItem(ctx)
+	if got.Value == nil || got.Value.Phone != "upd-sep" {
+		t.Fatalf("expected updated value 'upd-sep', got %+v", got.Value)
+	}
+	// Validate tracker bookkeeping: persisted true for inflight item and forDeletion contains old id
+	iat := si.ItemActionTracker.(*itemActionTracker[PersonKey, Person])
+	ci, ok := iat.items[inflight.ID]
+	if !ok || !ci.persisted {
+		t.Fatalf("expected inflight item persisted in tracker, ok=%v persisted=%v", ok, ci.persisted)
+	}
+	if len(iat.forDeletionItems) == 0 || iat.forDeletionItems[0] != cur.ID {
+		t.Fatalf("expected old item ID queued for deletion, got %#v", iat.forDeletionItems)
+	}
 }
 
 // Covers error path when FindWithID fails in refetchAndMergeClosure (non-add action with missing uuid).
 func Test_RefetchAndMerge_FindWithID_Fails_ReturnsError(t *testing.T) {
-    ctx := context.Background()
-    so := sop.StoreOptions{Name: "rfm_find_fail", SlotLength: 4, IsValueDataInNodeSegment: true}
-    ns := sop.NewStoreInfo(so)
-    sr := mocks.NewMockStoreRepository()
-    _ = sr.Add(ctx, *ns)
+	ctx := context.Background()
+	so := sop.StoreOptions{Name: "rfm_find_fail", SlotLength: 4, IsValueDataInNodeSegment: true}
+	ns := sop.NewStoreInfo(so)
+	sr := mocks.NewMockStoreRepository()
+	_ = sr.Add(ctx, *ns)
 
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
-    si := StoreInterface[PersonKey, Person]{}
-    si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
-    nrw := newNodeRepository[PersonKey, Person](tr, ns)
-    si.NodeRepository = nrw
-    si.backendNodeRepository = nrw.nodeRepositoryBackend
-    b3, err := btree.New(ns, &si.StoreInterface, Compare)
-    if err != nil { t.Fatal(err) }
+	si := StoreInterface[PersonKey, Person]{}
+	si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
+	nrw := newNodeRepository[PersonKey, Person](tr, ns)
+	si.NodeRepository = nrw
+	si.backendNodeRepository = nrw.nodeRepositoryBackend
+	b3, err := btree.New(ns, &si.StoreInterface, Compare)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-    // Seed an item in the tree
-    pk, pv := newPerson("ff1", "fv1", "m", "f@x", "p")
-    if ok, err := b3.Add(ctx, pk, pv); !ok || err != nil { t.Fatalf("seed add err: %v", err) }
-    if ok, _ := b3.Find(ctx, pk, false); !ok { t.Fatal("seed find err") }
-    cur, _ := b3.GetCurrentItem(ctx)
+	// Seed an item in the tree
+	pk, pv := newPerson("ff1", "fv1", "m", "f@x", "p")
+	if ok, err := b3.Add(ctx, pk, pv); !ok || err != nil {
+		t.Fatalf("seed add err: %v", err)
+	}
+	if ok, _ := b3.Find(ctx, pk, false); !ok {
+		t.Fatal("seed find err")
+	}
+	cur, _ := b3.GetCurrentItem(ctx)
 
-    // Create a bogus uuid to fail FindWithID; action must not be addAction
-    bogus := sop.NewUUID()
-    // Reuse current value and mark versionInDB to match, but mismatch uuid
-    ci := cacheItem[PersonKey, Person]{
-        lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
-        item:        &cur,
-        versionInDB: cur.Version,
-    }
-    si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items = map[sop.UUID]cacheItem[PersonKey, Person]{bogus: ci}
+	// Create a bogus uuid to fail FindWithID; action must not be addAction
+	bogus := sop.NewUUID()
+	// Reuse current value and mark versionInDB to match, but mismatch uuid
+	ci := cacheItem[PersonKey, Person]{
+		lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
+		item:        &cur,
+		versionInDB: cur.Version,
+	}
+	si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items = map[sop.UUID]cacheItem[PersonKey, Person]{bogus: ci}
 
-    // Seed MRU and handle for root so repo.get can refetch after reset
-    rootID := b3.StoreInfo.RootNodeID
-    if cn, ok := nrw.nodeRepositoryBackend.localCache[rootID]; ok && cn.node != nil {
-        cache.GetGlobalCache().SetNodeToMRU(ctx, rootID, cn.node, ns.CacheConfig.NodeCacheDuration)
-        cache.GetGlobalCache().Handles.Set([]sop.KeyValuePair[sop.UUID, sop.Handle]{{Key: rootID, Value: sop.NewHandle(rootID)}})
-    } else {
-        t.Fatalf("expected root node in local cache for MRU seed")
-    }
-    // Sync StoreRepository
-    upd := *ns
-    upd.RootNodeID = b3.StoreInfo.RootNodeID
-    upd.Count = b3.StoreInfo.Count
-    _ = sr.Add(ctx, upd)
+	// Seed MRU and handle for root so repo.get can refetch after reset
+	rootID := b3.StoreInfo.RootNodeID
+	if cn, ok := nrw.nodeRepositoryBackend.localCache[rootID]; ok && cn.node != nil {
+		cache.GetGlobalCache().SetNodeToMRU(ctx, rootID, cn.node, ns.CacheConfig.NodeCacheDuration)
+		cache.GetGlobalCache().Handles.Set([]sop.KeyValuePair[sop.UUID, sop.Handle]{{Key: rootID, Value: sop.NewHandle(rootID)}})
+	} else {
+		t.Fatalf("expected root node in local cache for MRU seed")
+	}
+	// Sync StoreRepository
+	upd := *ns
+	upd.RootNodeID = b3.StoreInfo.RootNodeID
+	upd.Count = b3.StoreInfo.Count
+	_ = sr.Add(ctx, upd)
 
-    closure := refetchAndMergeClosure(&si, b3, sr)
-    if err := closure(ctx); err == nil {
-        t.Fatalf("expected error when FindWithID fails with bogus uuid")
-    }
+	closure := refetchAndMergeClosure(&si, b3, sr)
+	if err := closure(ctx); err == nil {
+		t.Fatalf("expected error when FindWithID fails with bogus uuid")
+	}
 }
 
 // Covers the version-mismatch error branch in refetchAndMergeClosure (after FindWithID + GetCurrentItem).
 func Test_RefetchAndMerge_Update_VersionMismatch_ReturnsError(t *testing.T) {
-    ctx := context.Background()
-    // In-node value storage to keep things simple
-    so := sop.StoreOptions{Name: "rfm_ver_mismatch", SlotLength: 4, IsValueDataInNodeSegment: true}
-    ns := sop.NewStoreInfo(so)
+	ctx := context.Background()
+	// In-node value storage to keep things simple
+	so := sop.StoreOptions{Name: "rfm_ver_mismatch", SlotLength: 4, IsValueDataInNodeSegment: true}
+	ns := sop.NewStoreInfo(so)
 
-    // Store repo must return the store during refresh
-    sr := mocks.NewMockStoreRepository()
-    _ = sr.Add(ctx, *ns)
+	// Store repo must return the store during refresh
+	sr := mocks.NewMockStoreRepository()
+	_ = sr.Add(ctx, *ns)
 
-    // Minimal transaction wiring
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	// Minimal transaction wiring
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
-    // Store interface and btree
-    si := StoreInterface[PersonKey, Person]{}
-    si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
-    nrw := newNodeRepository[PersonKey, Person](tr, ns)
-    si.NodeRepository = nrw
-    si.backendNodeRepository = nrw.nodeRepositoryBackend
-    b3, err := btree.New(ns, &si.StoreInterface, Compare)
-    if err != nil {
-        t.Fatalf("btree.New error: %v", err)
-    }
+	// Store interface and btree
+	si := StoreInterface[PersonKey, Person]{}
+	si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
+	nrw := newNodeRepository[PersonKey, Person](tr, ns)
+	si.NodeRepository = nrw
+	si.backendNodeRepository = nrw.nodeRepositoryBackend
+	b3, err := btree.New(ns, &si.StoreInterface, Compare)
+	if err != nil {
+		t.Fatalf("btree.New error: %v", err)
+	}
 
-    // Seed one item into the B-tree so FindWithID succeeds later
-    pk, pv := newPerson("vm", "x", "m", "a@b", "p")
-    if ok, err := b3.Add(ctx, pk, pv); !ok || err != nil {
-        t.Fatalf("seed Add error: ok=%v err=%v", ok, err)
-    }
-    // Persist refreshed StoreInfo so refetch uses the correct RootNodeID/Count
-    ns.RootNodeID = b3.StoreInfo.RootNodeID
-    ns.Count = 1
-    _ = sr.Add(ctx, *ns)
-    // Get current item to capture its ID and version
-    cur, err := b3.GetCurrentItem(ctx)
-    if err != nil {
-        t.Fatalf("GetCurrentItem error: %v", err)
-    }
+	// Seed one item into the B-tree so FindWithID succeeds later
+	pk, pv := newPerson("vm", "x", "m", "a@b", "p")
+	if ok, err := b3.Add(ctx, pk, pv); !ok || err != nil {
+		t.Fatalf("seed Add error: ok=%v err=%v", ok, err)
+	}
+	// Persist refreshed StoreInfo so refetch uses the correct RootNodeID/Count
+	ns.RootNodeID = b3.StoreInfo.RootNodeID
+	ns.Count = 1
+	_ = sr.Add(ctx, *ns)
+	// Get current item to capture its ID and version
+	cur, err := b3.GetCurrentItem(ctx)
+	if err != nil {
+		t.Fatalf("GetCurrentItem error: %v", err)
+	}
 
-    // Clear any Add action recorded by the tracker from the seed Add
-    si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items = make(map[sop.UUID]cacheItem[PersonKey, Person])
+	// Clear any Add action recorded by the tracker from the seed Add
+	si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items = make(map[sop.UUID]cacheItem[PersonKey, Person])
 
-    // Prepare an updateAction with mismatching versionInDB to trigger the error path
-    stale := cur // use same ID/key/value
-    // Make versionInDB intentionally different from the current item.Version
-    mismatchedVersion := cur.Version + 1
-    si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items[cur.ID] = cacheItem[PersonKey, Person]{
-        lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
-        item:        &stale,
-        versionInDB: mismatchedVersion,
-    }
+	// Prepare an updateAction with mismatching versionInDB to trigger the error path
+	stale := cur // use same ID/key/value
+	// Make versionInDB intentionally different from the current item.Version
+	mismatchedVersion := cur.Version + 1
+	si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items[cur.ID] = cacheItem[PersonKey, Person]{
+		lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
+		item:        &stale,
+		versionInDB: mismatchedVersion,
+	}
 
-    closure := refetchAndMergeClosure(&si, b3, sr)
-    if err := closure(ctx); err == nil {
-        t.Fatalf("expected version-mismatch error, got nil")
-    }
+	closure := refetchAndMergeClosure(&si, b3, sr)
+	if err := closure(ctx); err == nil {
+		t.Fatalf("expected version-mismatch error, got nil")
+	}
 }
 
 // Covers the addAction error branch in refetchAndMergeClosure when B-tree is unique and key already exists (b3.Add returns false).
 func Test_RefetchAndMerge_Add_InNode_DuplicateKey_ReturnsError(t *testing.T) {
-    ctx := context.Background()
-    // Unique keys and in-node values
-    so := sop.StoreOptions{Name: "rfm_add_dup", SlotLength: 4, IsUnique: true, IsValueDataInNodeSegment: true}
-    ns := sop.NewStoreInfo(so)
+	ctx := context.Background()
+	// Unique keys and in-node values
+	so := sop.StoreOptions{Name: "rfm_add_dup", SlotLength: 4, IsUnique: true, IsValueDataInNodeSegment: true}
+	ns := sop.NewStoreInfo(so)
 
-    sr := mocks.NewMockStoreRepository()
-    _ = sr.Add(ctx, *ns)
+	sr := mocks.NewMockStoreRepository()
+	_ = sr.Add(ctx, *ns)
 
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
-    si := StoreInterface[PersonKey, Person]{}
-    si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
-    nrw := newNodeRepository[PersonKey, Person](tr, ns)
-    si.NodeRepository = nrw
-    si.backendNodeRepository = nrw.nodeRepositoryBackend
-    b3, err := btree.New(ns, &si.StoreInterface, Compare)
-    if err != nil {
-        t.Fatalf("btree.New error: %v", err)
-    }
+	si := StoreInterface[PersonKey, Person]{}
+	si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
+	nrw := newNodeRepository[PersonKey, Person](tr, ns)
+	si.NodeRepository = nrw
+	si.backendNodeRepository = nrw.nodeRepositoryBackend
+	b3, err := btree.New(ns, &si.StoreInterface, Compare)
+	if err != nil {
+		t.Fatalf("btree.New error: %v", err)
+	}
 
-    // Seed an item with key K so a subsequent addAction with the same key fails on unique tree
-    pk, pv := newPerson("du", "k", "f", "a@b", "p")
-    if ok, err := b3.Add(ctx, pk, pv); !ok || err != nil {
-        t.Fatalf("seed Add error: ok=%v err=%v", ok, err)
-    }
-    // Persist refreshed StoreInfo so refetch sees existing key at the new root
-    ns.RootNodeID = b3.StoreInfo.RootNodeID
-    ns.Count = 1
-    _ = sr.Add(ctx, *ns)
-    // Clear tracker items recorded by the seed Add
-    si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items = make(map[sop.UUID]cacheItem[PersonKey, Person])
+	// Seed an item with key K so a subsequent addAction with the same key fails on unique tree
+	pk, pv := newPerson("du", "k", "f", "a@b", "p")
+	if ok, err := b3.Add(ctx, pk, pv); !ok || err != nil {
+		t.Fatalf("seed Add error: ok=%v err=%v", ok, err)
+	}
+	// Persist refreshed StoreInfo so refetch sees existing key at the new root
+	ns.RootNodeID = b3.StoreInfo.RootNodeID
+	ns.Count = 1
+	_ = sr.Add(ctx, *ns)
+	// Clear tracker items recorded by the seed Add
+	si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items = make(map[sop.UUID]cacheItem[PersonKey, Person])
 
-    // Prepare a different item ID but same key to trigger duplicate detection during Add
-    dup := btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &pv}
-    si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items[dup.ID] = cacheItem[PersonKey, Person]{
-        lockRecord: lockRecord{LockID: sop.NewUUID(), Action: addAction},
-        item:       &dup,
-        persisted:  false,
-    }
+	// Prepare a different item ID but same key to trigger duplicate detection during Add
+	dup := btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &pv}
+	si.ItemActionTracker.(*itemActionTracker[PersonKey, Person]).items[dup.ID] = cacheItem[PersonKey, Person]{
+		lockRecord: lockRecord{LockID: sop.NewUUID(), Action: addAction},
+		item:       &dup,
+		persisted:  false,
+	}
 
-    closure := refetchAndMergeClosure(&si, b3, sr)
-    if err := closure(ctx); err == nil {
-        t.Fatalf("expected error from duplicate-key add, got nil")
-    }
+	closure := refetchAndMergeClosure(&si, b3, sr)
+	if err := closure(ctx); err == nil {
+		t.Fatalf("expected error from duplicate-key add, got nil")
+	}
 }

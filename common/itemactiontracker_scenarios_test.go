@@ -4,8 +4,8 @@ package common
 import (
 	"context"
 	"errors"
-	"time"
 	"testing"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
@@ -145,8 +145,6 @@ func Test_ItemActionTracker_Get_CacheHit_TTL(t *testing.T) {
 		t.Fatalf("expected hydrated value from cache")
 	}
 }
-
-
 
 // Consolidated extra scenarios for itemactiontracker:
 // - lock compatibility vs conflict

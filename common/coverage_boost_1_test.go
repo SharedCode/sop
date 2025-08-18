@@ -3,8 +3,8 @@ package common
 import (
 	"context"
 	"errors"
-	"time"
 	"testing"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
