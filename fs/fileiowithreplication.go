@@ -18,15 +18,14 @@ type fileIO struct {
 	actionsDone []sop.Tuple[int, any]
 }
 
-// Allows unit test to inject a simulated or fake FileIO for its test related peek/poke.
-var FileIOSim FileIO
-
 func newFileIOWithReplication(replicationTracker *replicationTracker, manageStore sop.ManageStore, trackActions bool) *fileIO {
-	fio := NewFileIO()
+	return newFileIOWithReplicationInjected(replicationTracker, manageStore, trackActions, nil)
+}
 
-	// Allow unit test to inject unit test "fake" for File IO.
-	if FileIOSim != nil {
-		fio = FileIOSim
+func newFileIOWithReplicationInjected(replicationTracker *replicationTracker, manageStore sop.ManageStore, trackActions bool, injected FileIO) *fileIO {
+	fio := injected
+	if fio == nil {
+		fio = NewFileIO()
 	}
 
 	return &fileIO{

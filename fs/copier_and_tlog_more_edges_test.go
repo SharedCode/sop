@@ -12,16 +12,21 @@ import (
 
 // Ensures CopyToPassiveFolders returns an error when registry source directory cannot be read.
 func Test_CopyToPassiveFolders_MissingRegistrySourceDir(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	active := filepath.Join(t.TempDir(), "a")
 	passive := filepath.Join(t.TempDir(), "b")
 	cache := mocks.NewMockClient()
 
 	// Isolate global to keep toggler deterministic
+	globalReplicationDetailsLocker.Lock()
 	prev := GlobalReplicationDetails
 	GlobalReplicationDetails = nil
-	defer func() { GlobalReplicationDetails = prev }()
+	globalReplicationDetailsLocker.Unlock()
+	defer func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	}()
 
 	rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
 	if err != nil {
@@ -45,7 +50,6 @@ func Test_CopyToPassiveFolders_MissingRegistrySourceDir(t *testing.T) {
 
 // Ensures TransactionLog.GetOne returns nil when lock isn't acquired (another process holds it).
 func Test_TransactionLog_GetOne_LockMissReturnsNil(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	cache := mocks.NewMockClient()
 	rt, _ := NewReplicationTracker(ctx, []string{filepath.Join(t.TempDir(), "a"), filepath.Join(t.TempDir(), "b")}, true, cache)

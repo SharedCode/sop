@@ -2,12 +2,12 @@ package fs
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
-	"fmt"
-	"encoding/json"
-	"time"
 	"testing"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/common/mocks"
@@ -21,9 +21,15 @@ func Test_StoreRepository_CopyToPassiveFolders_CopiesSegments(t *testing.T) {
 	passive := t.TempDir()
 	cache := mocks.NewMockClient()
 
+	globalReplicationDetailsLocker.Lock()
 	prev := GlobalReplicationDetails
 	GlobalReplicationDetails = nil
-	defer func() { GlobalReplicationDetails = prev }()
+	globalReplicationDetailsLocker.Unlock()
+	defer func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	}()
 
 	rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
 	if err != nil {
@@ -73,9 +79,7 @@ func Test_StoreRepository_CopyToPassiveFolders_CopiesSegments(t *testing.T) {
 	}
 }
 
-
 func Test_StoreRepository_GetAll_NoListFileAndError(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	baseA := filepath.Join(t.TempDir(), "a")
 	baseB := filepath.Join(t.TempDir(), "b")
@@ -108,7 +112,6 @@ func Test_StoreRepository_GetAll_NoListFileAndError(t *testing.T) {
 }
 
 func Test_copyFile_Success(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src.txt")
 	dst := filepath.Join(dir, "dst.txt")
@@ -124,7 +127,6 @@ func Test_copyFile_Success(t *testing.T) {
 }
 
 func Test_copyFile_Errors(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 	// Non-existent source -> error
 	if err := copyFile(filepath.Join(dir, "missing.txt"), filepath.Join(dir, "out.txt")); err == nil {
@@ -146,14 +148,19 @@ func Test_copyFile_Errors(t *testing.T) {
 }
 
 func Test_StoreRepository_Add_Duplicate_And_CopyToPassive(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	baseA := filepath.Join(t.TempDir(), "a")
 	baseB := filepath.Join(t.TempDir(), "b")
 	// Isolate from global replication state so active folder is deterministic in this test.
+	globalReplicationDetailsLocker.Lock()
 	prev := GlobalReplicationDetails
 	GlobalReplicationDetails = nil
-	defer func() { GlobalReplicationDetails = prev }()
+	globalReplicationDetailsLocker.Unlock()
+	defer func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	}()
 
 	rt, err := NewReplicationTracker(ctx, []string{baseA, baseB}, true, mocks.NewMockClient())
 	if err != nil {
@@ -195,7 +202,6 @@ func Test_StoreRepository_Add_Duplicate_And_CopyToPassive(t *testing.T) {
 }
 
 func Test_StoreRepository_Remove_ReplicateError(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	baseA := filepath.Join(t.TempDir(), "a")
 	baseB := filepath.Join(t.TempDir(), "b")
@@ -225,7 +231,6 @@ func Test_StoreRepository_Remove_ReplicateError(t *testing.T) {
 }
 
 func Test_StoreRepository_Add_Remove_LockFailures(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	cache := mocks.NewMockClient()
 	// Pre-hold the store list lock
@@ -246,7 +251,6 @@ func Test_StoreRepository_Add_Remove_LockFailures(t *testing.T) {
 	}
 	_ = cache.Unlock(ctx, lk)
 }
-
 
 func Test_StoreRepository_Update_UndoOnWriteError(t *testing.T) {
 	ctx := context.Background()
@@ -298,5 +302,44 @@ func Test_StoreRepository_Update_UndoOnWriteError(t *testing.T) {
 	}
 	if gotA.Count != 0 {
 		t.Fatalf("expected A.Count undone to 0, got %d", gotA.Count)
+	}
+}
+
+// Happy-path Update on two stores covering straight-line write + cache set.
+func Test_StoreRepository_Update_Success_Multi(t *testing.T) {
+	// t.Parallel() removed to avoid racing with other tracker-using tests
+	ctx := context.Background()
+	base := filepath.Join(t.TempDir(), "a")
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+	sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), 0)
+
+	a := *sop.NewStoreInfo(sop.StoreOptions{Name: "sA", SlotLength: 5})
+	b := *sop.NewStoreInfo(sop.StoreOptions{Name: "sB", SlotLength: 5})
+	if err := sr.Add(ctx, a, b); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	// Apply deltas and verify persisted counts.
+	a.CountDelta, b.CountDelta = 2, 3
+	got, err := sr.Update(ctx, []sop.StoreInfo{a, b})
+	if err != nil || len(got) != 2 {
+		t.Fatalf("update err=%v got=%v", err, got)
+	}
+
+	// Read back
+	stores, err := sr.Get(ctx, "sA", "sB")
+	if err != nil || len(stores) != 2 {
+		t.Fatalf("get err=%v stores=%v", err, stores)
+	}
+	var ca, cb int64
+	for _, s := range stores {
+		if s.Name == "sA" {
+			ca = s.Count
+		} else if s.Name == "sB" {
+			cb = s.Count
+		}
+	}
+	if ca != 2 || cb != 3 {
+		t.Fatalf("unexpected counts a=%d b=%d", ca, cb)
 	}
 }

@@ -216,10 +216,7 @@ func TestFileIOWithReplication_Replicate_PassiveWriteError(t *testing.T) {
 	passive := t.TempDir()
 	rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, nil)
 	ms := NewManageStoreFolder(NewFileIO())
-	oldSim := FileIOSim
-	t.Cleanup(func() { FileIOSim = oldSim })
-	FileIOSim = replicateFailFileIO{FileIO: NewFileIO(), passiveRoot: passive}
-	fio := newFileIOWithReplication(rt, ms, true)
+	fio := newFileIOWithReplicationInjected(rt, ms, true, replicateFailFileIO{FileIO: NewFileIO(), passiveRoot: passive})
 	// Record a write action to a .txt file so replicate attempts a passive write which fails.
 	if err := fio.write(ctx, "fail.txt", []byte("x")); err != nil {
 		t.Fatalf("seed write (active) failed: %v", err)
@@ -302,8 +299,14 @@ func TestBlobStoreWithEC_GlobalFallbackAdd(t *testing.T) {
 func TestPriorityLog_FullLifecycle(t *testing.T) {
 	ctx := context.Background()
 	// Preserve and restore global replication details to avoid cross-test interference.
+	globalReplicationDetailsLocker.Lock()
 	oldGlobal := GlobalReplicationDetails
-	t.Cleanup(func() { GlobalReplicationDetails = oldGlobal })
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = oldGlobal
+		globalReplicationDetailsLocker.Unlock()
+	})
 	base1 := t.TempDir()
 	base2 := t.TempDir()
 	rt, _ := NewReplicationTracker(ctx, []string{base1, base2}, true, mocks.NewMockClient())
@@ -350,8 +353,14 @@ func TestPriorityLog_FullLifecycle(t *testing.T) {
 // Covers replicationTracker.HandleReplicationRelatedError triggering failover and status file writes.
 func TestReplicationTracker_HandleReplicationRelatedError_Failover(t *testing.T) {
 	ctx := context.Background()
+	globalReplicationDetailsLocker.Lock()
 	oldGlobal := GlobalReplicationDetails
-	t.Cleanup(func() { GlobalReplicationDetails = oldGlobal })
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = oldGlobal
+		globalReplicationDetailsLocker.Unlock()
+	})
 	a := t.TempDir()
 	b := t.TempDir()
 	rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, mocks.NewMockClient())

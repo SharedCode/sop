@@ -12,7 +12,6 @@ import (
 )
 
 func Test_TransactionLog_GetOneOfHour_TTL_Window(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	baseA := filepath.Join(t.TempDir(), "a")
 	rt, err := NewReplicationTracker(ctx, []string{baseA, filepath.Join(t.TempDir(), "b")}, true, mocks.NewMockClient())
@@ -51,7 +50,6 @@ func Test_TransactionLog_GetOneOfHour_TTL_Window(t *testing.T) {
 }
 
 func Test_getFilesSortedDescByModifiedTime_EnsureDirCreation(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	temp := t.TempDir()
 	// Directory not existing initially; function should create it and return empty list without error.
@@ -172,10 +170,8 @@ func Test_TransactionLog_getLogsDetails_ReadsRecords(t *testing.T) {
 	}
 }
 
-
 // Deterministic success path for TransactionLog.GetOne: produce a log older than the capped hour and assert it is returned.
 func Test_TransactionLog_GetOne_Success(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	active := filepath.Join(t.TempDir(), "a")
 	passive := filepath.Join(t.TempDir(), "b")
@@ -211,4 +207,85 @@ func Test_TransactionLog_GetOne_Success(t *testing.T) {
 
 	// Cleanup
 	_ = tl.Remove(ctx, tid)
+}
+
+
+// cacheIsLockedFalse wraps a base cache and forces IsLocked to return false while delegating others.
+type cacheIsLockedFalse struct{ base sop.Cache }
+
+func (c *cacheIsLockedFalse) Set(ctx context.Context, key, value string, exp time.Duration) error {
+	return c.base.Set(ctx, key, value, exp)
+}
+func (c *cacheIsLockedFalse) Get(ctx context.Context, key string) (bool, string, error) {
+	return c.base.Get(ctx, key)
+}
+func (c *cacheIsLockedFalse) GetEx(ctx context.Context, key string, exp time.Duration) (bool, string, error) {
+	return c.base.GetEx(ctx, key, exp)
+}
+func (c *cacheIsLockedFalse) Ping(ctx context.Context) error { return c.base.Ping(ctx) }
+func (c *cacheIsLockedFalse) SetStruct(ctx context.Context, key string, v interface{}, exp time.Duration) error {
+	return c.base.SetStruct(ctx, key, v, exp)
+}
+func (c *cacheIsLockedFalse) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
+	return c.base.GetStruct(ctx, key, target)
+}
+func (c *cacheIsLockedFalse) GetStructEx(ctx context.Context, key string, target interface{}, exp time.Duration) (bool, error) {
+	return c.base.GetStructEx(ctx, key, target, exp)
+}
+func (c *cacheIsLockedFalse) Delete(ctx context.Context, keys []string) (bool, error) {
+	return c.base.Delete(ctx, keys)
+}
+func (c *cacheIsLockedFalse) FormatLockKey(k string) string { return c.base.FormatLockKey(k) }
+func (c *cacheIsLockedFalse) CreateLockKeys(keys []string) []*sop.LockKey {
+	return c.base.CreateLockKeys(keys)
+}
+func (c *cacheIsLockedFalse) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
+	return c.base.CreateLockKeysForIDs(keys)
+}
+func (c *cacheIsLockedFalse) IsLockedTTL(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, error) {
+	return c.base.IsLockedTTL(ctx, d, lk)
+}
+func (c *cacheIsLockedFalse) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
+	return c.base.Lock(ctx, d, lk)
+}
+func (c *cacheIsLockedFalse) IsLocked(ctx context.Context, lk []*sop.LockKey) (bool, error) {
+	return false, nil
+}
+func (c *cacheIsLockedFalse) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
+	return c.base.IsLockedByOthers(ctx, names)
+}
+func (c *cacheIsLockedFalse) Unlock(ctx context.Context, lk []*sop.LockKey) error {
+	return c.base.Unlock(ctx, lk)
+}
+func (c *cacheIsLockedFalse) Clear(ctx context.Context) error { return c.base.Clear(ctx) }
+
+// Exercises the final IsLocked check inside GetOne returning nils.
+func Test_TransactionLog_GetOne_FinalIsLockedFalse(t *testing.T) {
+	ctx := context.Background()
+	active := filepath.Join(t.TempDir(), "a")
+	passive := filepath.Join(t.TempDir(), "b")
+	base := mocks.NewMockClient()
+	cache := &cacheIsLockedFalse{base: base}
+	rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(cache, rt)
+
+	// Seed a qualified log file for an older hour.
+	tid := tl.NewUUID()
+	if err := tl.Add(ctx, tid, 1, []byte("x")); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	// Age file beyond capped hour
+	past := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(tl.format(tid), past, past); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	// Now call GetOne; IsLocked will be forced false and it should return nils.
+	tid2, hour2, recs, err := tl.GetOne(ctx)
+	if err != nil || !tid2.IsNil() || hour2 != "" || recs != nil {
+		t.Fatalf("expected nils when final IsLocked check fails: tid=%v hour=%q recs=%v err=%v", tid2, hour2, recs, err)
+	}
 }

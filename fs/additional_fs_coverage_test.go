@@ -15,7 +15,6 @@ import (
 // --- retryIO coverage -------------------------------------------------------
 
 func Test_retryIO_Table(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 
 	tests := []struct {
@@ -94,7 +93,6 @@ func (f *fakeFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os.DirEnt
 }
 
 func Test_fileIO_removeStore_and_replicate_Table(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 
 	baseA := filepath.Join(t.TempDir(), "a")
@@ -104,11 +102,8 @@ func Test_fileIO_removeStore_and_replicate_Table(t *testing.T) {
 		t.Fatalf("NewReplicationTracker: %v", err)
 	}
 
-	// Inject our fake FileIO
-	old := FileIOSim
+	// Prepare a per-test fake FileIO (no global mutation)
 	ff := &fakeFileIO{}
-	FileIOSim = ff
-	t.Cleanup(func() { FileIOSim = old })
 
 	tests := []struct {
 		name         string
@@ -122,8 +117,8 @@ func Test_fileIO_removeStore_and_replicate_Table(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			// Fresh instance each subtest to avoid shared actionsDone.
-			fio := newFileIOWithReplication(rt, NewManageStoreFolder(NewFileIO()), tt.trackActions)
+			// Fresh instance each subtest with injected fake to avoid shared state.
+			fio := newFileIOWithReplicationInjected(rt, NewManageStoreFolder(NewFileIO()), tt.trackActions, ff)
 			folder := "store-x"
 			// Ensure active folder exists so RemoveAll runs against a real path (ok if missing).
 			_ = os.MkdirAll(rt.formatActiveFolderEntity(folder), 0o755)
@@ -200,7 +195,6 @@ func (m *lockFailingCache) IsLockedByOthers(ctx context.Context, ks []string) (b
 func (m *lockFailingCache) Unlock(ctx context.Context, lks []*sop.LockKey) error { return nil }
 func (m *lockFailingCache) Clear(ctx context.Context) error                      { return m.base.Clear(ctx) }
 func Test_updateFileBlockRegion_LockTimeout(t *testing.T) {
-	t.Parallel()
 	// Short-deadline context forces the timeout branch on lock acquisition loop.
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
 	defer cancel()
@@ -229,7 +223,6 @@ func Test_updateFileBlockRegion_LockTimeout(t *testing.T) {
 // --- getFilesSortedDescByModifiedTime error path ----------------------------
 
 func Test_getFilesSortedDescByModifiedTime_ErrorOnFilePath(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	// Create a regular file where a directory is expected; ReadDir should fail
 	temp := t.TempDir()

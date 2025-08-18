@@ -188,9 +188,15 @@ func Test_replicationTracker_FailPathsAndStatus_Reads_Table(t *testing.T) {
 	// Deterministic error path: failover should return error when passive status path is a directory
 	t.Run("failover_write_status_error_returns_error", func(t *testing.T) {
 		// Isolate global
+		globalReplicationDetailsLocker.Lock()
 		prev := GlobalReplicationDetails
 		GlobalReplicationDetails = nil
-		defer func() { GlobalReplicationDetails = prev }()
+		globalReplicationDetailsLocker.Unlock()
+		defer func() {
+			globalReplicationDetailsLocker.Lock()
+			GlobalReplicationDetails = prev
+			globalReplicationDetailsLocker.Unlock()
+		}()
 
 		freshA := filepath.Join(t.TempDir(), "fae")
 		freshB := filepath.Join(t.TempDir(), "fbe")
@@ -375,7 +381,6 @@ func Test_logCommitChanges_WritesFile(t *testing.T) {
 	}
 }
 
-
 // Covers syncWithL2Cache push and pull branches with the mock cache.
 func Test_replicationTracker_syncWithL2Cache_PushAndPull(t *testing.T) {
 	ctx := context.Background()
@@ -454,7 +459,6 @@ func Test_replicationTracker_syncWithL2Cache_PushAndPull(t *testing.T) {
 }
 
 func Test_replicationTracker_FormatFolderEntities_Table(t *testing.T) {
-	t.Parallel()
 	ctx := context.Background()
 	base := t.TempDir()
 	a := filepath.Join(base, "a")

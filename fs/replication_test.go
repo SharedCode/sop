@@ -158,7 +158,7 @@ func TestFileIOWithReplication_Scenarios(t *testing.T) {
 					t.Fatalf("expected 2 recorded actions, got %d", len(fio.actionsDone))
 				}
 				// Enable passive write failure only for the replicate step.
-				if tf, ok := FileIOSim.(*testFileIO); ok {
+				if tf, ok := fio.fio.(*testFileIO); ok {
 					tf.failWritePassive = true
 				}
 				if err := fio.replicate(ctx); err == nil {
@@ -182,11 +182,8 @@ func TestFileIOWithReplication_Scenarios(t *testing.T) {
 			}
 			rt.ActiveFolderToggler = true
 
-			old := FileIOSim
-			FileIOSim = tc.fake
-			defer func() { FileIOSim = old }()
-
-			fio := newFileIOWithReplication(rt, NewManageStoreFolder(nil), tc.track)
+			// Inject the fake FileIO into this instance only (no globals, no locks)
+			fio := newFileIOWithReplicationInjected(rt, NewManageStoreFolder(nil), tc.track, tc.fake)
 			tc.scenario(t, ctx, rt, fio, tc.fake)
 		})
 	}

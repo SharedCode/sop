@@ -2,8 +2,8 @@ package fs
 
 import (
 	"context"
-	"fmt"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -49,8 +49,12 @@ type cacheGetError struct {
 }
 
 func newCacheGetError() *cacheGetError { return &cacheGetError{base: mocks.NewMockClient()} }
-func (c *cacheGetError) Set(ctx context.Context, k, v string, d time.Duration) error { return c.base.Set(ctx, k, v, d) }
-func (c *cacheGetError) Get(ctx context.Context, k string) (bool, string, error)     { return c.base.Get(ctx, k) }
+func (c *cacheGetError) Set(ctx context.Context, k, v string, d time.Duration) error {
+	return c.base.Set(ctx, k, v, d)
+}
+func (c *cacheGetError) Get(ctx context.Context, k string) (bool, string, error) {
+	return c.base.Get(ctx, k)
+}
 func (c *cacheGetError) GetEx(ctx context.Context, k string, d time.Duration) (bool, string, error) {
 	return c.base.GetEx(ctx, k, d)
 }
@@ -72,9 +76,13 @@ func (c *cacheGetError) GetStructEx(ctx context.Context, k string, v interface{}
 	}
 	return c.base.GetStructEx(ctx, k, v, d)
 }
-func (c *cacheGetError) Delete(ctx context.Context, ks []string) (bool, error) { return c.base.Delete(ctx, ks) }
-func (c *cacheGetError) FormatLockKey(k string) string                         { return c.base.FormatLockKey(k) }
-func (c *cacheGetError) CreateLockKeys(keys []string) []*sop.LockKey           { return c.base.CreateLockKeys(keys) }
+func (c *cacheGetError) Delete(ctx context.Context, ks []string) (bool, error) {
+	return c.base.Delete(ctx, ks)
+}
+func (c *cacheGetError) FormatLockKey(k string) string { return c.base.FormatLockKey(k) }
+func (c *cacheGetError) CreateLockKeys(keys []string) []*sop.LockKey {
+	return c.base.CreateLockKeys(keys)
+}
 func (c *cacheGetError) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
 	return c.base.CreateLockKeysForIDs(keys)
 }
@@ -84,12 +92,16 @@ func (c *cacheGetError) IsLockedTTL(ctx context.Context, d time.Duration, lks []
 func (c *cacheGetError) Lock(ctx context.Context, d time.Duration, lks []*sop.LockKey) (bool, sop.UUID, error) {
 	return c.base.Lock(ctx, d, lks)
 }
-func (c *cacheGetError) IsLocked(ctx context.Context, lks []*sop.LockKey) (bool, error) { return c.base.IsLocked(ctx, lks) }
+func (c *cacheGetError) IsLocked(ctx context.Context, lks []*sop.LockKey) (bool, error) {
+	return c.base.IsLocked(ctx, lks)
+}
 func (c *cacheGetError) IsLockedByOthers(ctx context.Context, ks []string) (bool, error) {
 	return c.base.IsLockedByOthers(ctx, ks)
 }
-func (c *cacheGetError) Unlock(ctx context.Context, lks []*sop.LockKey) error { return c.base.Unlock(ctx, lks) }
-func (c *cacheGetError) Clear(ctx context.Context) error                      { return c.base.Clear(ctx) }
+func (c *cacheGetError) Unlock(ctx context.Context, lks []*sop.LockKey) error {
+	return c.base.Unlock(ctx, lks)
+}
+func (c *cacheGetError) Clear(ctx context.Context) error { return c.base.Clear(ctx) }
 
 // mockCacheImmediateLockFail forces Lock to fail to trigger UpdateNoLocks set error path.
 type mockCacheImmediateLockFail struct{ sop.Cache }
@@ -150,7 +162,9 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			l2 := mocks.NewMockClient()
 			a := t.TempDir()
 			b := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true}
+			globalReplicationDetailsLocker.Unlock()
 			rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
@@ -177,7 +191,9 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			}
 			a2 := t.TempDir()
 			b2 := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: true}
+			globalReplicationDetailsLocker.Unlock()
 			rtFail, _ := NewReplicationTracker(ctx, []string{a2, b2}, true, l2)
 			rtFail.FailedToReplicate = true
 			r2 := NewRegistry(true, MinimumModValue, rtFail, l2)
@@ -189,7 +205,9 @@ func TestRegistry_AllScenarios(t *testing.T) {
 		{name: "ReplicationErrorInvalidPassiveRoot", run: func(t *testing.T) {
 			l2 := mocks.NewMockClient()
 			active := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true}
+			globalReplicationDetailsLocker.Unlock()
 			passiveFile := filepath.Join(active, "passive-file")
 			os.WriteFile(passiveFile, []byte("x"), 0o600)
 			rt, _ := NewReplicationTracker(ctx, []string{active, passiveFile}, true, l2)
@@ -210,7 +228,9 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			l2 := mocks.NewMockClient()
 			a := t.TempDir()
 			b := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = nil
+			globalReplicationDetailsLocker.Unlock()
 			rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
@@ -269,7 +289,9 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			l2 := mocks.NewMockClient()
 			a := t.TempDir()
 			b := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true}
+			globalReplicationDetailsLocker.Unlock()
 			rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
@@ -281,10 +303,14 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			if err := r.Replicate(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "replc", IDs: []sop.Handle{h1}}}, nil, nil, nil); err == nil || err.Error() != "close override error" {
 				t.Fatalf("expected close override error, got %v", err)
 			}
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true}
+			globalReplicationDetailsLocker.Unlock()
 			a2 := t.TempDir()
 			passiveFile := filepath.Join(t.TempDir(), "pas-file")
-			if err := os.WriteFile(passiveFile, []byte("x"), 0o600); err != nil { t.Fatal(err) }
+			if err := os.WriteFile(passiveFile, []byte("x"), 0o600); err != nil {
+				t.Fatal(err)
+			}
 			rt2, _ := NewReplicationTracker(ctx, []string{a2, passiveFile}, true, l2)
 			r2 := NewRegistry(true, MinimumModValue, rt2, l2)
 			defer r2.Close()
@@ -303,15 +329,22 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			active := t.TempDir()
 			passiveDir := t.TempDir()
 			passiveFile := filepath.Join(passiveDir, "pasfile")
-			if err := os.WriteFile(passiveFile, []byte("x"), 0o600); err != nil { t.Fatalf("seed passive file: %v", err) }
+			if err := os.WriteFile(passiveFile, []byte("x"), 0o600); err != nil {
+				t.Fatalf("seed passive file: %v", err)
+			}
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true}
+			globalReplicationDetailsLocker.Unlock()
 			rt, _ := NewReplicationTracker(ctx, []string{active, passiveFile}, true, cache)
 			r := NewRegistry(true, MinimumModValue, rt, cache)
 			defer r.Close()
 			hSeed := sop.NewHandle(sop.NewUUID())
-			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rlay", IDs: []sop.Handle{hSeed}}}); err != nil { t.Fatalf("seed add: %v", err) }
+			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rlay", IDs: []sop.Handle{hSeed}}}); err != nil {
+				t.Fatalf("seed add: %v", err)
+			}
 			newRoot := sop.NewHandle(sop.NewUUID())
-			updated := hSeed; updated.Version = 2
+			updated := hSeed
+			updated.Version = 2
 			remove := sop.NewHandle(sop.NewUUID())
 			r.rmCloseOverride = func() error { return errors.New("close override error") }
 			if err := r.Replicate(ctx,
@@ -322,7 +355,9 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			); err == nil {
 				t.Fatalf("expected primary replication error")
 			}
-			if !rt.FailedToReplicate { t.Fatalf("expected FailedToReplicate set") }
+			if !rt.FailedToReplicate {
+				t.Fatalf("expected FailedToReplicate set")
+			}
 		}},
 		{name: "UpdateNoLocks_SetError", run: func(t *testing.T) {
 			ctx := context.Background()
@@ -438,7 +473,11 @@ func TestRegistry_AllScenarios(t *testing.T) {
 		sc := sc
 		t.Run(sc.name, func(t *testing.T) {
 			prev := GlobalReplicationDetails
-			defer func() { GlobalReplicationDetails = prev }()
+			defer func() {
+				globalReplicationDetailsLocker.Lock()
+				GlobalReplicationDetails = prev
+				globalReplicationDetailsLocker.Unlock()
+			}()
 			sc.run(t)
 		})
 	}
@@ -496,9 +535,8 @@ func TestRegistry_ReplicateErrorBranches_Scenario(t *testing.T) {
 	}
 }
 
-
 // Exercise error branches in registryMap.remove and Replicate close override.
-func Test_registryMap_remove_Errors_And_Replicate_CloseOverride(t *testing.T) {
+func Test_registryMap_remove_Errors_And_Replicate_CloseOverride_2(t *testing.T) {
 	ctx := context.Background()
 
 	baseA := filepath.Join(t.TempDir(), "a")
@@ -531,8 +569,14 @@ func Test_registryMap_remove_Errors_And_Replicate_CloseOverride(t *testing.T) {
 	// Replicate close override path: force an error from rmCloseOverride().
 	// Ensure replication is enabled and not marked failed, and isolate from global state.
 	prev := GlobalReplicationDetails
+	globalReplicationDetailsLocker.Lock()
 	GlobalReplicationDetails = &ReplicationTrackedDetails{}
-	defer func() { GlobalReplicationDetails = prev }()
+	globalReplicationDetailsLocker.Unlock()
+	defer func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	}()
 	rt.FailedToReplicate = false
 	reg2 := NewRegistry(true, 4, rt, mocks.NewMockClient())
 	reg2.rmCloseOverride = func() error { return fmt.Errorf("close fail") }

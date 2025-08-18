@@ -28,7 +28,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			l2 := mocks.NewMockClient()
 			a := t.TempDir()
 			b := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = nil
+			globalReplicationDetailsLocker.Unlock()
 			rt, err := NewReplicationTracker(ctx, []string{a, b}, true, l2)
 			if err != nil {
 				t.Fatalf("tracker: %v", err)
@@ -46,7 +48,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			l2 := mocks.NewMockClient()
 			b1 := t.TempDir()
 			b2 := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = nil
+			globalReplicationDetailsLocker.Unlock()
 			rt, err := NewReplicationTracker(ctx, []string{b1, b2}, true, l2)
 			if err != nil {
 				t.Fatalf("tracker: %v", err)
@@ -68,7 +72,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			l2 := mocks.NewMockClient()
 			b1 := t.TempDir()
 			b2 := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = nil
+			globalReplicationDetailsLocker.Unlock()
 			rt, err := NewReplicationTracker(ctx, []string{b1, b2}, true, l2)
 			if err != nil {
 				t.Fatalf("tracker: %v", err)
@@ -87,7 +93,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			cache := mocks.NewMockClient()
 			active := filepath.Join(t.TempDir(), "a")
 			os.MkdirAll(active, 0o755)
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true, FailedToReplicate: true}
+			globalReplicationDetailsLocker.Unlock()
 			rt, _ := NewReplicationTracker(ctx, []string{active}, true, cache)
 			rt.handleFailedToReplicate(ctx)
 			if !rt.FailedToReplicate {
@@ -101,13 +109,17 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			b := filepath.Join(t.TempDir(), "b")
 			os.MkdirAll(a, 0o755)
 			os.MkdirAll(b, 0o755)
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: false, FailedToReplicate: false}
+			globalReplicationDetailsLocker.Unlock()
 			rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, cache)
 			rt.ActiveFolderToggler = true
 			if err := rt.failover(ctx); err != nil {
 				t.Fatalf("guard failover: %v", err)
 			}
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true, FailedToReplicate: false}
+			globalReplicationDetailsLocker.Unlock()
 			rt2, _ := NewReplicationTracker(ctx, []string{a, b}, true, cache)
 			GlobalReplicationDetails.ActiveFolderToggler = !rt2.ActiveFolderToggler
 			if err := rt2.failover(ctx); err != nil {
@@ -119,7 +131,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			l2 := mocks.NewMockClient()
 			active := t.TempDir()
 			passive := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: true}
+			globalReplicationDetailsLocker.Unlock()
 			rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, l2)
 			if err != nil {
 				t.Fatalf("tracker: %v", err)
@@ -158,7 +172,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			}
 			base2 := t.TempDir()
 			base3 := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = nil
+			globalReplicationDetailsLocker.Unlock()
 			rtHealthy, _ := NewReplicationTracker(ctx, []string{base2, base3}, true, cache)
 			if err := rtHealthy.ReinstateFailedDrives(ctx); err == nil {
 				t.Fatalf("expected FailedToReplicate precondition error")
@@ -169,7 +185,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			cache := mocks.NewMockClient()
 			active := t.TempDir()
 			passive := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = nil
+			globalReplicationDetailsLocker.Unlock()
 			rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
 			rt.FailedToReplicate = true
 			GlobalReplicationDetails.FailedToReplicate = true
@@ -197,7 +215,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			cache := mocks.NewMockClient()
 			active := t.TempDir()
 			passive := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = nil
+			globalReplicationDetailsLocker.Unlock()
 			rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
 			rt.FailedToReplicate = true
 			GlobalReplicationDetails.FailedToReplicate = true
@@ -253,7 +273,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			p := filepath.Join(t.TempDir(), "b")
 			os.MkdirAll(a, 0o755)
 			os.MkdirAll(p, 0o755)
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: false, FailedToReplicate: true}
+			globalReplicationDetailsLocker.Unlock()
 			rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, cache)
 			rt.ActiveFolderToggler = true
 			fnPassive := filepath.Join(p, replicationStatusFilename)
@@ -276,12 +298,18 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			p := filepath.Join(t.TempDir(), "b")
 			os.MkdirAll(a, 0o755)
 			os.MkdirAll(p, 0o755)
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true, FailedToReplicate: false}
+			globalReplicationDetailsLocker.Unlock()
 			rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, cache)
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: false, FailedToReplicate: true}
+			globalReplicationDetailsLocker.Unlock()
 			rt.writeReplicationStatus(ctx, filepath.Join(p, replicationStatusFilename))
 			time.Sleep(10 * time.Millisecond)
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true, FailedToReplicate: false}
+			globalReplicationDetailsLocker.Unlock()
 			rt.writeReplicationStatus(ctx, filepath.Join(a, replicationStatusFilename))
 			if err := rt.readStatusFromHomeFolder(ctx); err != nil {
 				t.Fatalf("read1: %v", err)
@@ -315,7 +343,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			l2 := mocks.NewMockClient()
 			active := t.TempDir()
 			passive := t.TempDir()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: true}
+			globalReplicationDetailsLocker.Unlock()
 			rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, l2)
 			if err != nil {
 				t.Fatalf("tracker: %v", err)
@@ -345,7 +375,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 				t.Fatalf("log not removed")
 			}
 			// single log
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: true}
+			globalReplicationDetailsLocker.Unlock()
 			rt2, _ := NewReplicationTracker(ctx, []string{active, passive}, true, l2)
 			rt2.FailedToReplicate = true
 			store2 := sop.StoreInfo{Name: "s2", Count: 1}
@@ -393,18 +425,24 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			rtNoRep, _ := NewReplicationTracker(ctx, []string{a}, false, cache)
 			rtNoRep.handleFailedToReplicate(ctx)
 			rtFail, _ := NewReplicationTracker(ctx, []string{a, b}, true, cache)
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: true}
+			globalReplicationDetailsLocker.Unlock()
 			rtFail.handleFailedToReplicate(ctx)
 			if !rtFail.FailedToReplicate {
 				t.Fatalf("expected failure copied")
 			}
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: false, FailedToReplicate: false}
+			globalReplicationDetailsLocker.Unlock()
 			rtGuard, _ := NewReplicationTracker(ctx, []string{a, b}, true, cache)
 			rtGuard.ActiveFolderToggler = true
 			if err := rtGuard.failover(ctx); err != nil {
 				t.Fatalf("failover guard: %v", err)
 			}
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true, FailedToReplicate: false}
+			globalReplicationDetailsLocker.Unlock()
 			rtDo, _ := NewReplicationTracker(ctx, []string{a, b}, true, cache)
 			rtDo.ActiveFolderToggler = true
 			os.MkdirAll(a, 0o755)
@@ -414,7 +452,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			if !rtDo.FailedToReplicate {
 				t.Fatalf("expected failover failure")
 			}
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = nil
+			globalReplicationDetailsLocker.Unlock()
 			rtPull, _ := NewReplicationTracker(ctx, []string{a, b}, true, cache)
 			if err := rtPull.syncWithL2Cache(ctx, false); err != nil {
 				t.Fatalf("pull miss: %v", err)
@@ -422,7 +462,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			if err := rtPull.logCommitChanges(ctx, sop.NewUUID(), nil, nil, nil, nil, nil); err != nil {
 				t.Fatalf("logCommitChanges disabled: %v", err)
 			}
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true, FailedToReplicate: false}
+			globalReplicationDetailsLocker.Unlock()
 			if err := rtPull.syncWithL2Cache(ctx, true); err != nil {
 				t.Fatalf("initial push: %v", err)
 			}
@@ -582,8 +624,14 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 		sc := sc
 		t.Run(sc.name, func(t *testing.T) {
 			prev := GlobalReplicationDetails
-			defer func() { GlobalReplicationDetails = prev }()
+			defer func() {
+				globalReplicationDetailsLocker.Lock()
+				GlobalReplicationDetails = prev
+				globalReplicationDetailsLocker.Unlock()
+			}()
+			globalReplicationDetailsLocker.Lock()
 			GlobalReplicationDetails = nil
+			globalReplicationDetailsLocker.Unlock()
 			sc.run(t)
 		})
 	}
