@@ -4,8 +4,11 @@ package btree
 // NOTE: Pure content merge; originals removed.
 
 import (
-	"github.com/sharedcode/sop"
+	"context"
+	"fmt"
 	"testing"
+
+	"github.com/sharedcode/sop"
 )
 
 // (from findwithid_success_test.go)
@@ -170,5 +173,111 @@ func TestFindWithID_TableMore(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// fakeNRNextErr returns the node on first Get(id) and errors on subsequent Get(id) calls.
+type fakeNRNextErr[TK Ordered, TV any] struct {
+	n      map[sop.UUID]*Node[TK, TV]
+	seen   map[sop.UUID]int
+	errIDs map[sop.UUID]bool
+}
+
+func (f *fakeNRNextErr[TK, TV]) Add(node *Node[TK, TV])    { f.n[node.ID] = node }
+func (f *fakeNRNextErr[TK, TV]) Update(node *Node[TK, TV]) { f.n[node.ID] = node }
+func (f *fakeNRNextErr[TK, TV]) Remove(id sop.UUID)        { delete(f.n, id) }
+func (f *fakeNRNextErr[TK, TV]) Fetched(id sop.UUID)       {}
+func (f *fakeNRNextErr[TK, TV]) Get(_ context.Context, id sop.UUID) (*Node[TK, TV], error) {
+	if f.seen == nil {
+		f.seen = map[sop.UUID]int{}
+	}
+	f.seen[id]++
+	if f.errIDs[id] && f.seen[id] > 1 { // error on second and subsequent access
+		return nil, fmt.Errorf("forced next error for %v", id)
+	}
+	return f.n[id], nil
+}
+
+func TestFindWithID_PropagatesNextError(t *testing.T) {
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: false})
+	fnr := &fakeNRNextErr[int, string]{n: map[sop.UUID]*Node[int, string]{}, errIDs: map[sop.UUID]bool{}}
+	si := StoreInterface[int, string]{NodeRepository: fnr, ItemActionTracker: fakeIAT[int, string]{}}
+	b, _ := New[int, string](store, &si, nil)
+
+	// Build a root leaf with two duplicates so that FindWithID enters the loop and then calls Next
+	root := newNode[int, string](b.getSlotLength())
+	root.newID(sop.NilUUID)
+	v := "v"
+	vv := v
+	root.Slots[0] = &Item[int, string]{Key: 9, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[1] = &Item[int, string]{Key: 9, Value: &vv, ID: sop.NewUUID()}
+	root.Count = 2
+	b.StoreInfo.RootNodeID = root.ID
+	b.StoreInfo.Count = 2
+	fnr.Add(root)
+	// Cause an error when Next tries to read the current node again
+	fnr.errIDs[root.ID] = true
+
+	// Ask for a missing ID so loop will attempt Next and hit the error
+	if ok, err := b.FindWithID(nil, 9, sop.NewUUID()); err == nil || ok {
+		t.Fatalf("expected error propagated from Next, got ok=%v err=%v", ok, err)
+	}
+}
+
+// helper to construct a non-unique btree for duplicate key scenarios
+func newNonUniqueBtree[T any]() (*Btree[int, T], *fakeNR[int, T]) {
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: false, IsValueDataInNodeSegment: true})
+	fnr := &fakeNR[int, T]{n: map[sop.UUID]*Node[int, T]{}}
+	si := StoreInterface[int, T]{NodeRepository: fnr, ItemActionTracker: fakeIAT[int, T]{}}
+	b, err := New[int, T](store, &si, nil)
+	if err != nil {
+		panic(err)
+	}
+	return b, fnr
+}
+
+func TestFindWithID_SuccessAcrossDuplicates(t *testing.T) {
+	b, _ := newNonUniqueBtree[string]()
+	// Insert three items with the same key
+	if ok, _ := b.Add(nil, 5, "a"); !ok {
+		t.Fatal("add1")
+	}
+	if ok, _ := b.Add(nil, 5, "b"); !ok {
+		t.Fatal("add2")
+	}
+	if ok, _ := b.Add(nil, 5, "c"); !ok {
+		t.Fatal("add3")
+	}
+
+	// Position to first duplicate, then capture the ID of the second duplicate
+	if ok, err := b.Find(nil, 5, true); err != nil || !ok {
+		t.Fatalf("find: %v ok=%v", err, ok)
+	}
+	// Move to second duplicate
+	if ok, err := b.Next(nil); err != nil || !ok {
+		t.Fatalf("next: %v ok=%v", err, ok)
+	}
+	it2, _ := b.GetCurrentItem(nil)
+
+	// Now use FindWithID to locate the specific duplicate by ID
+	if ok, err := b.FindWithID(nil, 5, it2.ID); err != nil || !ok {
+		t.Fatalf("FindWithID should succeed for existing duplicate: err=%v ok=%v", err, ok)
+	}
+}
+
+func TestFindWithID_NotFoundAfterDuplicatesExhausted(t *testing.T) {
+	b, _ := newNonUniqueBtree[string]()
+	// Insert two items with the same key
+	if ok, _ := b.Add(nil, 5, "a"); !ok {
+		t.Fatal("add1")
+	}
+	if ok, _ := b.Add(nil, 5, "b"); !ok {
+		t.Fatal("add2")
+	}
+
+	// Ask for a random ID that doesn't exist
+	missing := sop.NewUUID()
+	if ok, err := b.FindWithID(nil, 5, missing); err != nil || ok {
+		t.Fatalf("FindWithID should return (false,nil) when ID not found among duplicates: err=%v ok=%v", err, ok)
 	}
 }

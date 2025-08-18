@@ -362,3 +362,64 @@ func TestGoRightUpItemOnNodeWithNilChild_Paths(t *testing.T) {
 		t.Fatalf("expected current=100 from parent")
 	}
 }
+
+// Cover early-return branches of goRightUpItemOnNodeWithNilChild/goLeftUpItemOnNodeWithNilChild
+// when the target child is non-nil: they should return (false, nil) without changing selection.
+func TestGoRightLeftUp_WithNonNilChild_ReturnsFalse(t *testing.T) {
+	b, fnr := newTestBtree[string]()
+	root := newNode[int, string](b.getSlotLength())
+	root.newID(sop.NilUUID)
+	// One slot and two children positions
+	root.Slots[0] = &Item[int, string]{Key: 10, ID: sop.NewUUID()}
+	root.Count = 1
+	// Prepare non-nil child at index 0 for left-up path and at index 1 for right-up path
+	c0 := newNode[int, string](b.getSlotLength())
+	c0.newID(root.ID)
+	c1 := newNode[int, string](b.getSlotLength())
+	c1.newID(root.ID)
+	root.ChildrenIDs = []sop.UUID{c0.ID, c1.ID}
+	fnr.Add(root)
+	fnr.Add(c0)
+	fnr.Add(c1)
+	b.StoreInfo.RootNodeID = root.ID
+
+	// Set a current selection distinct from any branch outcome to detect changes
+	b.setCurrentItemID(root.ID, 0)
+
+	if ok, err := root.goRightUpItemOnNodeWithNilChild(nil, b, 1); err != nil || ok {
+		t.Fatalf("goRightUp with non-nil child should return false,nil, got ok=%v err=%v", ok, err)
+	}
+	// left-up with non-nil child at index 0
+	if ok, err := root.goLeftUpItemOnNodeWithNilChild(nil, b, 0); err != nil || ok {
+		t.Fatalf("goLeftUp with non-nil child should return false,nil, got ok=%v err=%v", ok, err)
+	}
+}
+
+// Verify goRightUp/LeftUp propagate error from getParent when child is nil and node is not root.
+func TestGoRightLeftUp_NilChild_ParentGetError(t *testing.T) {
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
+	repo := &repoErrOnIDs[int, string]{fakeNR: fakeNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}, errs: map[sop.UUID]bool{}}
+	si := StoreInterface[int, string]{NodeRepository: repo, ItemActionTracker: fakeIAT[int, string]{}}
+	b, _ := New[int, string](store, &si, nil)
+
+	parentID := sop.NewUUID()
+	repo.errs[parentID] = true
+
+	n := newNode[int, string](b.getSlotLength())
+	n.ID = sop.NewUUID()
+	n.ParentID = parentID
+	// one slot, but ensure no right slot at index, forcing parent lookup
+	n.Count = 1
+	n.ChildrenIDs = make([]sop.UUID, 2)
+	// make child nil at both positions to trigger the helpers
+	n.ChildrenIDs[0] = sop.NilUUID
+	n.ChildrenIDs[1] = sop.NilUUID
+	repo.Add(n)
+
+	if ok, err := n.goRightUpItemOnNodeWithNilChild(nil, b, 1); err == nil || ok {
+		t.Fatalf("expected error from goRightUpItemOnNodeWithNilChild via parent.Get, ok=%v err=%v", ok, err)
+	}
+	if ok, err := n.goLeftUpItemOnNodeWithNilChild(nil, b, 0); err == nil || ok {
+		t.Fatalf("expected error from goLeftUpItemOnNodeWithNilChild via parent.Get, ok=%v err=%v", ok, err)
+	}
+}

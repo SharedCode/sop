@@ -273,3 +273,133 @@ func TestRemoveCurrentItem_MoveToNext_Error(t *testing.T) {
 		t.Fatalf("expected RemoveCurrentItem to return error via moveToNext, got ok=%v err=%v", ok, err)
 	}
 }
+
+// Cover RemoveCurrentItem when node has children and removal occurs on leaf path with IAT error
+func TestRemoveCurrentItem_LeafPath_IATError(t *testing.T) {
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
+	fnr := &fakeNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}
+	si := StoreInterface[int, string]{NodeRepository: fnr, ItemActionTracker: iatRemoveErr2[int, string]{}}
+	b, _ := New[int, string](store, &si, nil)
+
+	// Build a small tree with root and a left child so that root has children
+	root := newNode[int, string](b.getSlotLength())
+	root.newID(sop.NilUUID)
+	v := "v"
+	vv := v
+	root.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	root.Count = 1
+
+	leaf := newNode[int, string](b.getSlotLength())
+	leaf.newID(root.ID)
+	// place a greater key in leaf so moveToNext() will step into leaf when deleting root item
+	leaf.Slots[0] = &Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
+	leaf.Count = 1
+	root.ChildrenIDs = make([]sop.UUID, 2)
+	root.ChildrenIDs[0] = sop.NilUUID
+	root.ChildrenIDs[1] = leaf.ID
+
+	fnr.Add(root)
+	fnr.Add(leaf)
+	b.StoreInfo.RootNodeID = root.ID
+	b.StoreInfo.Count = 2
+
+	// Select the root item and remove current; this triggers the move-to-leaf replacement path
+	b.setCurrentItemID(root.ID, 0)
+	if ok, err := b.RemoveCurrentItem(nil); err == nil || ok {
+		t.Fatalf("expected error from IAT.Remove during leaf delete path, got ok=%v err=%v", ok, err)
+	}
+}
+
+// Cover RemoveCurrentItem when node has children and removeItemOnNodeWithNilChild returns ok=true (unlink path),
+// ensuring ItemActionTracker.Remove is called and count decremented.
+func TestRemoveCurrentItem_NodeWithChildren_ImmediateUnlink_Success(t *testing.T) {
+	b, fnr := newTestBtree[string]()
+	// Parent root
+	parent := newNode[int, string](b.getSlotLength())
+	parent.newID(sop.NilUUID)
+	b.StoreInfo.RootNodeID = parent.ID
+
+	// Child node to be unlinked after deletion
+	child := newNode[int, string](b.getSlotLength())
+	child.newID(parent.ID)
+	v := "v"
+	vv := v
+	child.Slots[0] = &Item[int, string]{Key: 5, Value: &vv, ID: sop.NewUUID()}
+	child.Count = 1
+	// Children slice exists but all nil -> hasChildren true, triggers unlink path when Count becomes 0
+	child.ChildrenIDs = make([]sop.UUID, 2)
+
+	parent.ChildrenIDs = make([]sop.UUID, 1)
+	parent.ChildrenIDs[0] = child.ID
+
+	fnr.Add(parent)
+	fnr.Add(child)
+	b.StoreInfo.Count = 1
+
+	// Select child's item and remove
+	b.setCurrentItemID(child.ID, 0)
+	if ok, err := b.RemoveCurrentItem(nil); err != nil || !ok {
+		t.Fatalf("expected successful removal with unlink, got ok=%v err=%v", ok, err)
+	}
+	if b.isCurrentItemSelected() {
+		t.Fatalf("current selection should be cleared after removal")
+	}
+	if b.Count() != 0 {
+		t.Fatalf("store count should decrement to 0, got %d", b.Count())
+	}
+}
+
+// Covers RemoveCurrentItem path where starting at an internal node with children,
+// removeItemOnNodeWithNilChild returns false, so the code replaces the target with
+// the next leaf item and then deletes on the leaf via unlink path (ok=true).
+func TestRemoveCurrentItem_InternalReplaceThenLeafUnlink_Success(t *testing.T) {
+	b, fnr := newTestBtree[string]()
+
+	// Internal node (root) with one separator
+	root := newNode[int, string](b.getSlotLength())
+	root.newID(sop.NilUUID)
+	v := "v"
+	vv := v
+	// Separator key 10
+	sep := &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[0] = sep
+	root.Count = 1
+
+	// Left child: single item < 10
+	left := newNode[int, string](b.getSlotLength())
+	left.newID(root.ID)
+	leftVal := &Item[int, string]{Key: 5, Value: &vv, ID: sop.NewUUID()}
+	left.Slots[0] = leftVal
+	left.Count = 1
+
+	// Right child (leaf): single item > 10; give it children slice to allow unlink path
+	right := newNode[int, string](b.getSlotLength())
+	right.newID(root.ID)
+	rightVal := &Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
+	right.Slots[0] = rightVal
+	right.Count = 1
+	right.ChildrenIDs = make([]sop.UUID, 2) // both nil -> hasChildren true to exercise unlink path
+
+	// Wire root children (both non-nil, so initial removeItemOnNodeWithNilChild on root returns false)
+	root.ChildrenIDs = make([]sop.UUID, 2)
+	root.ChildrenIDs[0] = left.ID
+	root.ChildrenIDs[1] = right.ID
+
+	fnr.Add(root)
+	fnr.Add(left)
+	fnr.Add(right)
+
+	b.StoreInfo.RootNodeID = root.ID
+	b.StoreInfo.Count = 3 // sep is not counted separately in store; simulate 2 items
+	b.StoreInfo.Count = 2
+
+	// Select the separator at root and remove current; should replace with right leaf item and
+	// then unlink-remove the right leaf's item (ok=true path), decrementing count.
+	b.setCurrentItemID(root.ID, 0)
+	if ok, err := b.RemoveCurrentItem(nil); err != nil || !ok {
+		t.Fatalf("expected successful removal via leaf unlink, ok=%v err=%v", ok, err)
+	}
+	if b.Count() != 1 {
+		t.Fatalf("after removal, count should be 1, got %d", b.Count())
+	}
+}

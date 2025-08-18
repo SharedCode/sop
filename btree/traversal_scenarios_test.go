@@ -257,3 +257,64 @@ func TestUnlinkNodeWithNilChild_EarlyReturn(t *testing.T) {
 		t.Fatalf("expected false,nil early return; got ok=%v err=%v", ok, err)
 	}
 }
+
+// Covers moveToPrevious branch where goLeftUpItemOnNodeWithNilChild selects left slot in same node and returns immediately.
+func TestMoveToPrevious_GoLeftUpImmediateSelect(t *testing.T) {
+	b, fnr := newTestBtree[string]()
+	root := newNode[int, string](b.getSlotLength())
+	root.newID(sop.NilUUID)
+	// Two items
+	root.Slots[0] = &Item[int, string]{Key: 10, ID: sop.NewUUID()}
+	root.Slots[1] = &Item[int, string]{Key: 20, ID: sop.NewUUID()}
+	root.Count = 2
+	// Children present with nil at index 1 to trigger goLeftUp immediate selection of slot 0
+	root.ChildrenIDs = make([]sop.UUID, 3)
+	root.ChildrenIDs[0] = sop.NewUUID() // non-nil child (exists)
+	root.ChildrenIDs[1] = sop.NilUUID   // nil to trigger goLeftUp
+	root.ChildrenIDs[2] = sop.NewUUID() // non-nil
+	fnr.Add(root)
+	b.StoreInfo.RootNodeID = root.ID
+
+	// Current selection at index 1 so previous should select index 0 via goLeftUp
+	b.setCurrentItemID(root.ID, 1)
+	if ok, err := root.moveToPrevious(nil, b); err != nil || !ok {
+		t.Fatalf("moveToPrevious immediate-select err=%v ok=%v", err, ok)
+	}
+	it, err := b.GetCurrentItem(nil)
+	if err != nil {
+		t.Fatalf("GetCurrentItem: %v", err)
+	}
+	if it.Key != 10 {
+		t.Fatalf("expected to land on key 10, got %v", it.Key)
+	}
+}
+
+// Covers moveToNext branch where goRightUpItemOnNodeWithNilChild selects right slot in same node and returns immediately.
+func TestMoveToNext_GoRightUpImmediateSelect(t *testing.T) {
+	b, fnr := newTestBtree[string]()
+	root := newNode[int, string](b.getSlotLength())
+	root.newID(sop.NilUUID)
+	root.Slots[0] = &Item[int, string]{Key: 10, ID: sop.NewUUID()}
+	root.Slots[1] = &Item[int, string]{Key: 20, ID: sop.NewUUID()}
+	root.Count = 2
+	// Children present with nil at index 1 to trigger goRightUp immediate selection
+	root.ChildrenIDs = make([]sop.UUID, 3)
+	root.ChildrenIDs[0] = sop.NewUUID()
+	root.ChildrenIDs[1] = sop.NilUUID // nil child at i=1
+	root.ChildrenIDs[2] = sop.NewUUID()
+	fnr.Add(root)
+	b.StoreInfo.RootNodeID = root.ID
+
+	// Current selection at index 0 so slotIndex+1 == 1 triggers immediate select of index 1
+	b.setCurrentItemID(root.ID, 0)
+	if ok, err := root.moveToNext(nil, b); err != nil || !ok {
+		t.Fatalf("moveToNext immediate-select err=%v ok=%v", err, ok)
+	}
+	it, err := b.GetCurrentItem(nil)
+	if err != nil {
+		t.Fatalf("GetCurrentItem: %v", err)
+	}
+	if it.Key != 20 {
+		t.Fatalf("expected to land on key 20, got %v", it.Key)
+	}
+}

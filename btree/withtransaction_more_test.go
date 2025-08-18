@@ -116,6 +116,7 @@ func TestWithTransaction_NonWriterRollbackAndDelegatedErrors(t *testing.T) {
 	w := NewBtreeWithTransaction[int, string](tx, b)
 	calls := []func() error{
 		func() error { tx.begun = true; _, err := w.Add(context.Background(), 1, "a"); return err },
+		func() error { tx.begun = true; _, err := w.AddIfNotExist(context.Background(), 2, "a"); return err },
 		func() error { tx.begun = true; _, err := w.Update(context.Background(), 1, "b"); return err },
 		func() error { tx.begun = true; _, err := w.Upsert(context.Background(), 1, "c"); return err },
 		func() error { tx.begun = true; _, err := w.Remove(context.Background(), 1); return err },
@@ -307,5 +308,64 @@ func TestWithTransaction_UpdateCurrentItem_ModesAndError(t *testing.T) {
 	}
 	if tx3.rollbackCount != 1 {
 		t.Fatalf("expected rollback on delegated UpdateCurrentItem error")
+	}
+}
+
+func TestWithTransaction_Success_Paths(t *testing.T) {
+	// Underlying btree with couple of items
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
+	fnr := &fakeNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}
+	si := StoreInterface[int, string]{NodeRepository: fnr, ItemActionTracker: fakeIAT[int, string]{}}
+	b, _ := New[int, string](store, &si, nil)
+	// Seed items
+	if ok, err := b.Add(context.Background(), 1, "a"); !ok || err != nil {
+		t.Fatalf("seed add1: %v", err)
+	}
+	if ok, err := b.Add(context.Background(), 2, "b"); !ok || err != nil {
+		t.Fatalf("seed add2: %v", err)
+	}
+
+	// Writer tx for AddIfNotExist and Upsert
+	txW := &mockTx{begun: true, mode: sop.ForWriting}
+	w := NewBtreeWithTransaction[int, string](txW, b)
+
+	if ok, err := w.AddIfNotExist(context.Background(), 3, "c"); err != nil || !ok {
+		t.Fatalf("AddIfNotExist success expected, ok=%v err=%v", ok, err)
+	}
+	if ok, err := w.Upsert(context.Background(), 4, "d"); err != nil || !ok {
+		t.Fatalf("Upsert success expected, ok=%v err=%v", ok, err)
+	}
+
+	// Read tx for read-only operations
+	txR := &mockTx{begun: true, mode: sop.ForReading}
+	r := NewBtreeWithTransaction[int, string](txR, b)
+	if ok, err := r.First(context.Background()); err != nil || !ok {
+		t.Fatalf("First: %v", err)
+	}
+	if ok, err := r.Next(context.Background()); err != nil || !ok {
+		t.Fatalf("Next: %v", err)
+	}
+	if ok, err := r.Previous(context.Background()); err != nil || !ok {
+		t.Fatalf("Previous: %v", err)
+	}
+	if ok, err := r.Last(context.Background()); err != nil || !ok {
+		t.Fatalf("Last: %v", err)
+	}
+
+	// Position on a known key and test FindWithID success
+	if ok, err := r.Find(context.Background(), 2, true); err != nil || !ok {
+		t.Fatalf("Find: %v", err)
+	}
+	it, err := r.GetCurrentItem(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentItem after Find: %v", err)
+	}
+	if ok, err := r.FindWithID(context.Background(), 2, it.ID); err != nil || !ok {
+		t.Fatalf("FindWithID success path failed, ok=%v err=%v", ok, err)
+	}
+
+	// Exercise GetCurrentValue success path through wrapper
+	if _, err := r.GetCurrentValue(context.Background()); err != nil {
+		t.Fatalf("GetCurrentValue success path error: %v", err)
 	}
 }

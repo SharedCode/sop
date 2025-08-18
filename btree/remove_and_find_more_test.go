@@ -75,3 +75,49 @@ func TestCurrent_Fetch_NoSelection(t *testing.T) {
 		t.Fatalf("GetCurrentItem unexpected err: %v", err)
 	}
 }
+
+// Exercise removeItemOnNodeWithNilChild path where right child is nil (index+1) and node is non-root
+// so it promotes its single child to parent, rewiring references.
+func TestRemoveItemOnNodeWithNilChild_RightBranch_PromoteChild(t *testing.T) {
+	b, fnr := newTestBtree[string]()
+	// Parent with one slot -> two children
+	parent := newNode[int, string](b.getSlotLength())
+	parent.newID(sop.NilUUID)
+	parent.Slots[0] = &Item[int, string]{Key: 100, ID: sop.NewUUID()}
+	parent.Count = 1
+
+	// Target node as left child; it has one slot and exactly one non-nil child on the left,
+	// and a nil right child to activate the right-branch in removeItemOnNodeWithNilChild.
+	n := newNode[int, string](b.getSlotLength())
+	n.newID(parent.ID)
+	n.Slots[0] = &Item[int, string]{Key: 10, ID: sop.NewUUID()}
+	n.Count = 1
+	n.ChildrenIDs = make([]sop.UUID, 2)
+	// left child exists
+	lc := newNode[int, string](b.getSlotLength())
+	lc.newID(n.ID)
+	n.ChildrenIDs[0] = lc.ID
+	// right child nil
+	n.ChildrenIDs[1] = sop.NilUUID
+
+	// Wire parent children (n is left child, right child arbitrary leaf)
+	rc := newNode[int, string](b.getSlotLength())
+	rc.newID(parent.ID)
+	parent.ChildrenIDs = []sop.UUID{n.ID, rc.ID}
+
+	// Persist
+	fnr.Add(parent)
+	fnr.Add(n)
+	fnr.Add(lc)
+	fnr.Add(rc)
+
+	// Remove at index 0 on n; it should shift via right-branch and then promote single child
+	ok, err := n.removeItemOnNodeWithNilChild(nil, b, 0)
+	if err != nil || !ok {
+		t.Fatalf("removeItemOnNodeWithNilChild expected ok, err=%v ok=%v", err, ok)
+	}
+	// After promotion, parent's left child should be lc
+	if parent.ChildrenIDs[0] != lc.ID {
+		t.Fatalf("expected parent left child to be promoted child")
+	}
+}

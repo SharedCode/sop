@@ -174,3 +174,74 @@ func TestUnlinkNodeWithNilChild(t *testing.T) {
 		t.Fatalf("intermediate node should be removed from repo")
 	}
 }
+
+// Covers getIndexOfNode on a middle child to ensure branch where parent != nil is taken and correct index returned.
+func TestGetIndexOfNode_MiddleChild(t *testing.T) {
+	b, fnr := newTestBtree[string]()
+
+	p := newNode[int, string](b.getSlotLength())
+	p.newID(sop.NilUUID)
+	p.Count = 2
+
+	l := newNode[int, string](b.getSlotLength())
+	l.newID(p.ID)
+	m := newNode[int, string](b.getSlotLength())
+	m.newID(p.ID)
+	r := newNode[int, string](b.getSlotLength())
+	r.newID(p.ID)
+
+	p.ChildrenIDs = make([]sop.UUID, 3)
+	p.ChildrenIDs[0] = l.ID
+	p.ChildrenIDs[1] = m.ID
+	p.ChildrenIDs[2] = r.ID
+
+	fnr.Add(p)
+	fnr.Add(l)
+	fnr.Add(m)
+	fnr.Add(r)
+
+	if idx, err := m.getIndexOfNode(nil, b); err != nil || idx != 1 {
+		t.Fatalf("expected middle child index 1, got %d err=%v", idx, err)
+	}
+}
+
+// Exercise goRightUpItemOnNodeWithNilChild path where child is nil, no right slot in node,
+// ascend to parent and select a right slot there.
+func TestGoRightUp_NilChildAscendParentSelect(t *testing.T) {
+	b, fnr := newTestBtree[string]()
+
+	// Parent with two items (keys 10, 20)
+	parent := newNode[int, string](b.getSlotLength())
+	parent.newID(sop.NilUUID)
+	v := "v"
+	vv := v
+	parent.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	parent.Slots[1] = &Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
+	parent.Count = 2
+
+	// Child node positioned so that index==parent slot index on ascent
+	child := newNode[int, string](b.getSlotLength())
+	child.newID(parent.ID)
+	// Make it have a nil child at position 1 to trigger goRightUp
+	child.ChildrenIDs = make([]sop.UUID, 2)
+	child.Count = 1 // so i==1 is > Count, will force ascend
+
+	// Wire parent so that child is first child; we will call with index=1 -> ascend and select parent.Slots[1]
+	parent.ChildrenIDs = make([]sop.UUID, 3)
+	parent.ChildrenIDs[0] = child.ID
+
+	fnr.Add(parent)
+	fnr.Add(child)
+	b.StoreInfo.RootNodeID = parent.ID
+
+	// Invoke on child with index 1; within child there is no right slot (i==1 == Count), then ascend to parent
+	ok, err := child.goRightUpItemOnNodeWithNilChild(nil, b, 1)
+	if err != nil || !ok {
+		t.Fatalf("goRightUp ascend select err=%v ok=%v", err, ok)
+	}
+	it, _ := b.GetCurrentItem(nil)
+	if it.Key != 10 {
+		// On ascend, we land on the parent's slot to the right of the child; for child at position 0 this is slot 0
+		t.Fatalf("expected to select parent key 10, got %v", it.Key)
+	}
+}
