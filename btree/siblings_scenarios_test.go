@@ -185,4 +185,3 @@ func TestSiblings_OnRoot_ReturnNil(t *testing.T) {
 		t.Fatalf("root getRightSibling should be nil, err=%v rs=%v", err, rs)
 	}
 }
-

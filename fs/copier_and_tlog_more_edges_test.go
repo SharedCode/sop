@@ -69,7 +69,6 @@ func Test_TransactionLog_GetOne_LockMissReturnsNil(t *testing.T) {
 	}
 }
 
-
 // Validates CopyToPassiveFolders successfully copies store list, store info, and registry segment files.
 func Test_CopyToPassiveFolders_Success(t *testing.T) {
 	ctx := context.Background()
