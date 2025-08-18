@@ -596,6 +596,40 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 				t.Fatalf("NewReplicationTracker: %v", err)
 			}
 		}},
+		{name: "ReadStatus_ActiveStatErrorTriggersFlip", run: func(t *testing.T) {
+			ctx := context.Background()
+			active := t.TempDir()
+			passive := t.TempDir()
+			// seed passive with status; make active path exist then remove to force Stat error branch
+			if err := os.WriteFile(filepath.Join(passive, replicationStatusFilename), []byte(`{"FailedToReplicate":false,"ActiveFolderToggler":false}`), 0o644); err != nil {
+				t.Fatalf("seed passive: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(active, replicationStatusFilename), []byte(`{"FailedToReplicate":false,"ActiveFolderToggler":true}`), 0o644); err != nil {
+				t.Fatalf("seed active: %v", err)
+			}
+			// Remove active file so os.Stat(active) errors and path through fallback to passive triggers flip
+			os.Remove(filepath.Join(active, replicationStatusFilename))
+			prev := GlobalReplicationDetails
+			GlobalReplicationDetails = nil
+			t.Cleanup(func() { GlobalReplicationDetails = prev })
+			if _, err := NewReplicationTracker(ctx, []string{active, passive}, true, nil); err != nil {
+				t.Fatalf("NewReplicationTracker: %v", err)
+			}
+		}},
+		{name: "StartLoggingCommitChanges_WriteStatusError", run: func(t *testing.T) {
+			ctx := context.Background()
+			active := t.TempDir()
+			passive := t.TempDir()
+			rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, mocks.NewMockClient())
+			if err != nil {
+				t.Fatalf("tracker: %v", err)
+			}
+			// Create a directory where the status file should be written to trigger write error
+			os.MkdirAll(filepath.Join(active, replicationStatusFilename), 0o755)
+			if err := rt.startLoggingCommitChanges(ctx); err == nil {
+				t.Fatalf("expected writeReplicationStatus error")
+			}
+		}},
 		{name: "ReadStatus_BothExistPassiveNewerAndOlder", run: func(t *testing.T) {
 			ctx := context.Background()
 			prev := GlobalReplicationDetails

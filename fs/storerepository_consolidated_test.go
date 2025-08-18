@@ -76,6 +76,14 @@ func (m mockCacheSetStructWarn) SetStruct(context.Context, string, interface{}, 
 	return errors.New("fail setstruct")
 }
 
+// mockCacheAlwaysLocked forces Lock to report the key(s) are already locked, so Update's
+// retry path is exercised and ultimately returns an error.
+type mockCacheAlwaysLocked struct{ sop.Cache }
+
+func (m mockCacheAlwaysLocked) Lock(ctx context.Context, d time.Duration, ks []*sop.LockKey) (bool, sop.UUID, error) {
+	return false, sop.NewUUID(), nil
+}
+
 // failingRemoveAll triggers RemoveAll failure for passive replicated path ending with /x1.
 type failingRemoveAll struct {
 	FileIO
@@ -97,6 +105,20 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 		name string
 		run  func(t *testing.T)
 	}{
+		{"Update lock failure retries then errors", func(t *testing.T) {
+			base := t.TempDir()
+			rt, _ := NewReplicationTracker(context.Background(), []string{base}, false, mocks.NewMockClient())
+			cache := mockCacheAlwaysLocked{Cache: mocks.NewMockClient()}
+			sr, _ := NewStoreRepository(context.Background(), rt, nil, cache, 0)
+			// any update attempt should fail due to inability to acquire locks; use short timeout to avoid long backoff
+			s := *sop.NewStoreInfo(sop.StoreOptions{Name: "x", SlotLength: 4})
+			ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+			defer cancel()
+			_, err := sr.Update(ctx, []sop.StoreInfo{s})
+			if err == nil {
+				t.Fatalf("expected Update to error when locks cannot be acquired")
+			}
+		}},
 		{"Basic Flow Add/Get/Update/Remove (replication disabled)", func(t *testing.T) {
 			l2 := mocks.NewMockClient()
 			base := t.TempDir()

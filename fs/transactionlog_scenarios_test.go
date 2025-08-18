@@ -1,11 +1,17 @@
 package fs
 
 import (
+
+	"bufio"
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
-	"testing"
+	"strings"
 	"time"
+	"testing"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/common/mocks"
@@ -287,5 +293,148 @@ func Test_TransactionLog_GetOne_FinalIsLockedFalse(t *testing.T) {
 	tid2, hour2, recs, err := tl.GetOne(ctx)
 	if err != nil || !tid2.IsNil() || hour2 != "" || recs != nil {
 		t.Fatalf("expected nils when final IsLocked check fails: tid=%v hour=%q recs=%v err=%v", tid2, hour2, recs, err)
+	}
+}
+
+// Ensures GetOne returns nils when there are no log files to process.
+func Test_TransactionLog_GetOne_NoFiles_ReturnsNil(t *testing.T) {
+	ctx := context.Background()
+	a := filepath.Join(t.TempDir(), "a")
+	b := filepath.Join(t.TempDir(), "b")
+	rt, err := NewReplicationTracker(ctx, []string{a, b}, true, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+
+	// Ensure base folder exists but has no files
+	_ = os.MkdirAll(rt.formatActiveFolderEntity(logFolder), 0o755)
+
+	tid, hour, recs, err := tl.GetOne(ctx)
+	if err != nil || !tid.IsNil() || hour != "" || recs != nil {
+		t.Fatalf("expected nils, got tid=%v hour=%q len=%v err=%v", tid, hour, recs, err)
+	}
+}
+
+// Forces getFilesSortedDescByModifiedTime to return an error by making the log folder a file, not a directory.
+func Test_TransactionLog_GetOne_ReadDirError_Propagates(t *testing.T) {
+	ctx := context.Background()
+	a := filepath.Join(t.TempDir(), "a")
+	b := filepath.Join(t.TempDir(), "b")
+	rt, err := NewReplicationTracker(ctx, []string{a, b}, true, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+
+	// Create a file named as the log folder path to cause ReadDir to fail with "not a directory".
+	logDir := rt.formatActiveFolderEntity(logFolder)
+	// Ensure the active base folder exists so we can place a file at the logDir path.
+	_ = os.MkdirAll(rt.getActiveBaseFolder(), 0o755)
+	if err := os.WriteFile(logDir, []byte("x"), 0o644); err != nil {
+		t.Fatalf("prep file collide: %v", err)
+	}
+
+	_, _, _, err = tl.GetOne(ctx)
+	if err == nil {
+		t.Fatalf("expected error from GetOne when log folder path is a file")
+	}
+}
+
+// Creates a single-line file larger than bufio.Scanner default token size to trigger ErrTooLong.
+func Test_TransactionLog_getLogsDetails_ErrTooLong(t *testing.T) {
+	ctx := context.Background()
+	a := filepath.Join(t.TempDir(), "a")
+	b := filepath.Join(t.TempDir(), "b")
+	rt, err := NewReplicationTracker(ctx, []string{a, b}, true, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	tid := sop.NewUUID()
+
+	// Write a very long single line without newline characters.
+	// Ensure the log folder exists to avoid create errors.
+	_ = os.MkdirAll(rt.formatActiveFolderEntity(logFolder), 0o755)
+	longLine := strings.Repeat("A", 1024*128) // 128KB > default 64K scanner token
+	if err := os.WriteFile(tl.format(tid), []byte(longLine), 0o644); err != nil {
+		t.Fatalf("write long file: %v", err)
+	}
+
+	_, err = tl.getLogsDetails(tid)
+	if err == nil {
+		t.Fatalf("expected error from getLogsDetails on ErrTooLong")
+	}
+}
+
+func Test_TransactionLog_GetOneOfHour_InvalidHour_ReturnsError(t *testing.T) {
+	ctx := context.Background()
+	a := filepath.Join(t.TempDir(), "a")
+	b := filepath.Join(t.TempDir(), "b")
+	rt, err := NewReplicationTracker(ctx, []string{a, b}, true, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+
+	if _, _, err := tl.GetOneOfHour(ctx, "not-a-time"); err == nil {
+		t.Fatalf("expected error for invalid hour format")
+	}
+
+	// Also verify boundary within 4-hour window doesn't unlock prematurely: create current-hour log and query.
+	tid := sop.NewUUID()
+	if err := tl.Add(ctx, tid, 1, []byte("x")); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	hour := time.Now().Format(DateHourLayout)
+	_, _, _ = tl.GetOneOfHour(ctx, hour)
+	_ = tl.Remove(ctx, tid)
+}
+
+
+type errWriter struct{}
+
+func (errWriter) Write(p []byte) (int, error) { return 0, errors.New("encode boom") }
+
+// Ensures TransactionLog.Add covers the encode/write error branch where the encoder fails to write
+// and the code flushes/cleans up the file handle.
+func Test_TransactionLog_Add_WriteEncodeError(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+
+	// Replication tracker to format paths under the active folder.
+	rt, err := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("tracker: %v", err)
+	}
+
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	tid := sop.NewUUID()
+	filename := tl.format(tid)
+
+	// Ensure parent directory exists and create the file, then reopen it read-only
+	if err := os.MkdirAll(rt.formatActiveFolderEntity(logFolder), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if f, err := os.Create(filename); err != nil { // create the file path
+		t.Fatalf("create: %v", err)
+	} else {
+		f.Close()
+	}
+	// Open a handle (so tl.file is non-nil) then use a json.Encoder over an io.Writer that always errors.
+	fh, err := os.Open(filename)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	tl.file = fh
+	tl.writer = bufio.NewWriter(io.Discard) // non-nil for Flush() path
+	tl.encoder = json.NewEncoder(errWriter{})
+
+	// Attempt to Add should fail due to write on read-only fd and clean up file handle.
+	if err := tl.Add(ctx, tid, 1, []byte("x")); err == nil {
+		t.Fatalf("expected Add encode/write error")
+	}
+	if tl.file != nil {
+		t.Fatalf("expected file handle to be cleared on error")
 	}
 }

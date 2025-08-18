@@ -496,7 +496,8 @@ func (t *Transaction) onIdle(ctx context.Context) {
 	}
 
 	// Allow only one priority rollback processor.
-	interval := 40
+	// Check every 2.5 minutes if there are any pending rollbacks that "aged" (5min or older).
+	interval := 150
 	if priorityLogFound {
 		interval = 5
 	}

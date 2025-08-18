@@ -230,6 +230,179 @@ func Test_StoreRepository_Remove_ReplicateError(t *testing.T) {
 	}
 }
 
+// Covers CopyToPassiveFolders error when writing passive store list fails due to path collision with a directory.
+func Test_StoreRepository_CopyToPassiveFolders_WriteStoreListError(t *testing.T) {
+	ctx := context.Background()
+	active := filepath.Join(t.TempDir(), "a")
+	passive := filepath.Join(t.TempDir(), "b")
+	cache := mocks.NewMockClient()
+
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = nil
+	globalReplicationDetailsLocker.Unlock()
+	defer func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	}()
+
+	rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	sr, err := NewStoreRepository(ctx, rt, nil, cache, 0)
+	if err != nil {
+		t.Fatalf("sr: %v", err)
+	}
+
+	// Seed one store so GetAll returns list.
+	if err := sr.Add(ctx, sop.StoreInfo{Name: "x", RegistryTable: sop.FormatRegistryTable("x")}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	// Create a directory where the passive storelist file will be written after toggling.
+	_ = os.MkdirAll(filepath.Join(passive, storeListFilename), 0o755)
+
+	if err := sr.CopyToPassiveFolders(ctx); err == nil {
+		t.Fatalf("expected error writing passive store list due to directory collision")
+	}
+}
+
+// Covers CopyToPassiveFolders error when writing per-store info fails due to path collision.
+func Test_StoreRepository_CopyToPassiveFolders_WriteStoreInfoError(t *testing.T) {
+	ctx := context.Background()
+	active := filepath.Join(t.TempDir(), "a")
+	passive := filepath.Join(t.TempDir(), "b")
+	cache := mocks.NewMockClient()
+
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = nil
+	globalReplicationDetailsLocker.Unlock()
+	defer func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	}()
+
+	rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	sr, err := NewStoreRepository(ctx, rt, nil, cache, 0)
+	if err != nil {
+		t.Fatalf("sr: %v", err)
+	}
+
+	// Seed one store.
+	si := sop.StoreInfo{Name: "y", RegistryTable: sop.FormatRegistryTable("y")}
+	if err := sr.Add(ctx, si); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	// Create a directory at passive/y/storeinfo.txt so write fails after toggling.
+	_ = os.MkdirAll(filepath.Join(passive, "y", storeInfoFilename), 0o755)
+
+	if err := sr.CopyToPassiveFolders(ctx); err == nil {
+		t.Fatalf("expected error writing passive storeinfo due to directory collision")
+	}
+}
+
+// Covers CopyToPassiveFolders error when the source registry directory does not exist,
+// causing copyFilesByExtension to fail on ReadDir.
+func Test_StoreRepository_CopyToPassiveFolders_MissingSourceRegistryDir(t *testing.T) {
+	ctx := context.Background()
+	active := filepath.Join(t.TempDir(), "a")
+	passive := filepath.Join(t.TempDir(), "b")
+	cache := mocks.NewMockClient()
+
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = nil
+	globalReplicationDetailsLocker.Unlock()
+	defer func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	}()
+
+	rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	sr, err := NewStoreRepository(ctx, rt, nil, cache, 0)
+	if err != nil {
+		t.Fatalf("sr: %v", err)
+	}
+
+	// Seed store but do NOT create any registry directory under active.
+	si := sop.StoreInfo{Name: "z", RegistryTable: sop.FormatRegistryTable("z")}
+	if err := sr.Add(ctx, si); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	// Expect error because source registry folder is missing.
+	if err := sr.CopyToPassiveFolders(ctx); err == nil {
+		t.Fatalf("expected error due to missing source registry dir")
+	}
+}
+
+// Covers CopyToPassiveFolders error when fetching store info fails (invalid JSON in active storeinfo file).
+func Test_StoreRepository_CopyToPassiveFolders_GetStoreError(t *testing.T) {
+	ctx := context.Background()
+	active := filepath.Join(t.TempDir(), "a")
+	passive := filepath.Join(t.TempDir(), "b")
+	cache := mocks.NewMockClient()
+
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = nil
+	globalReplicationDetailsLocker.Unlock()
+	defer func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	}()
+
+	rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	sr, err := NewStoreRepository(ctx, rt, nil, cache, 0)
+	if err != nil {
+		t.Fatalf("sr: %v", err)
+	}
+
+	// Seed one store and then corrupt its storeinfo file with invalid JSON.
+	si := sop.StoreInfo{Name: "e1", RegistryTable: sop.FormatRegistryTable("e1")}
+	if err := sr.Add(ctx, si); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	// Overwrite active storeinfo with invalid content to make Get(ctx) fail to Unmarshal.
+	if err := os.WriteFile(filepath.Join(active, "e1", storeInfoFilename), []byte("not-json"), 0o644); err != nil {
+		t.Fatalf("write invalid json: %v", err)
+	}
+
+	if err := sr.CopyToPassiveFolders(ctx); err == nil {
+		t.Fatalf("expected error due to Get(ctx) failing on invalid JSON")
+	}
+}
+
+// Covers Update early return when a store is missing (GetWithTTL returns empty slice); ensures no panic and nils returned.
+func Test_StoreRepository_Update_MissingStoreEarlyReturn(t *testing.T) {
+	ctx := context.Background()
+	base := filepath.Join(t.TempDir(), "base")
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+	sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), 0)
+
+	// Call update with a store that doesn't exist on disk or cache.
+	updated, err := sr.Update(ctx, []sop.StoreInfo{{Name: "nope", CountDelta: 1}})
+	if updated != nil || err != nil {
+		t.Fatalf("expected nil,nil on missing store early return, got %v, %v", updated, err)
+	}
+}
+
 func Test_StoreRepository_Add_Remove_LockFailures(t *testing.T) {
 	ctx := context.Background()
 	cache := mocks.NewMockClient()
@@ -341,5 +514,22 @@ func Test_StoreRepository_Update_Success_Multi(t *testing.T) {
 	}
 	if ca != 2 || cb != 3 {
 		t.Fatalf("unexpected counts a=%d b=%d", ca, cb)
+	}
+}
+
+// Covers StoreRepository.GetRegistryHashModValue invalid number parsing path.
+func TestStoreRepository_GetRegistryHashModValue_InvalidNumber(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+	sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), 0)
+
+	// Write an invalid integer into the registry hash mod file.
+	if err := os.WriteFile(filepath.Join(base, registryHashModValueFilename), []byte("not-a-number"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if _, err := sr.GetRegistryHashModValue(ctx); err == nil {
+		t.Fatalf("expected Atoi parse error for invalid content")
 	}
 }
