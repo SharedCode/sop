@@ -401,3 +401,80 @@ func Test_readStatusFromHomeFolder_Table(t *testing.T) {
 		t.Fatalf("case3: expected toggler flipped to passive (false)")
 	}
 }
+
+// Ensures readStatusFromHomeFolder does not flip when only passive status file exists but is invalid JSON.
+func TestReplicationTracker_ReadStatus_PassiveOnly_InvalidJSON_NoFlip(t *testing.T) {
+	ctx := context.Background()
+	cache := mocks.NewMockClient()
+	a := filepath.Join(t.TempDir(), "a")
+	p := filepath.Join(t.TempDir(), "b")
+	os.MkdirAll(a, 0o755)
+	os.MkdirAll(p, 0o755)
+
+	// Isolate global
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = nil
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, cache)
+	// Force initial state: active=true
+	rt.ActiveFolderToggler = true
+
+	// Write malformed status only on passive
+	os.WriteFile(filepath.Join(p, replicationStatusFilename), []byte("{"), 0o644)
+	os.Remove(filepath.Join(a, replicationStatusFilename))
+
+	if err := rt.readStatusFromHomeFolder(ctx); err != nil {
+		t.Fatalf("unexpected error reading status: %v", err)
+	}
+	if rt.ActiveFolderToggler != true {
+		t.Fatalf("expected no flip when passive-only is invalid JSON")
+	}
+}
+
+// Ensures handleFailedToReplicate returns early when GlobalReplicationDetails already indicates failure
+// (coming from L2 or prior process), and does not write a replication status file.
+func TestReplicationTracker_HandleFailedToReplicate_GlobalAlreadyFailed_NoWrite(t *testing.T) {
+	ctx := context.Background()
+	a := t.TempDir()
+	b := t.TempDir()
+	cache := mocks.NewMockClient()
+
+	// Isolate and preset global to FailedToReplicate=true
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true, FailedToReplicate: true}
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	rt, err := NewReplicationTracker(ctx, []string{a, b}, true, cache)
+	if err != nil {
+		t.Fatalf("NewReplicationTracker: %v", err)
+	}
+
+	// Precondition: no status file yet
+	actPath := filepath.Join(a, replicationStatusFilename)
+	if _, err := os.Stat(actPath); err == nil {
+		t.Fatalf("unexpected pre-existing status file")
+	}
+
+	// Invoke; should mark r.FailedToReplicate and return without writing a file.
+	rt.handleFailedToReplicate(ctx)
+
+	if !rt.FailedToReplicate {
+		t.Fatalf("expected r.FailedToReplicate true")
+	}
+	if _, err := os.Stat(actPath); err == nil {
+		t.Fatalf("expected no status file write on early return")
+	}
+}

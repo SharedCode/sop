@@ -2,6 +2,7 @@ package fs
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -65,5 +66,62 @@ func Test_TransactionLog_GetOne_LockMissReturnsNil(t *testing.T) {
 	tid, hour, recs, err := tl.GetOne(ctx)
 	if err != nil || !tid.IsNil() || hour != "" || recs != nil {
 		t.Fatalf("expected nil result on lock miss; got tid=%v hour=%q recs=%v err=%v", tid, hour, recs, err)
+	}
+}
+
+
+// Validates CopyToPassiveFolders successfully copies store list, store info, and registry segment files.
+func Test_CopyToPassiveFolders_Success(t *testing.T) {
+	ctx := context.Background()
+	active := filepath.Join(t.TempDir(), "a")
+	passive := filepath.Join(t.TempDir(), "b")
+	cache := mocks.NewMockClient()
+
+	// Isolate global toggler
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = nil
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	// Initialize tracker and a store repo with a known registry table
+	rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	sr, err := NewStoreRepository(ctx, rt, nil, cache, MinimumModValue)
+	if err != nil {
+		t.Fatalf("sr: %v", err)
+	}
+
+	// Seed one store and its registry segment file in active
+	store := sop.NewStoreInfo(sop.StoreOptions{Name: "s1", SlotLength: 8})
+	if err := sr.Add(ctx, *store); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	// Create registry segment file in active registry table folder
+	regDir := filepath.Join(active, store.RegistryTable)
+	os.MkdirAll(regDir, 0o755)
+	segPath := filepath.Join(regDir, store.RegistryTable+"-1"+registryFileExtension)
+	os.WriteFile(segPath, []byte("data"), 0o644)
+
+	// Run copy
+	if err := sr.CopyToPassiveFolders(ctx); err != nil {
+		t.Fatalf("CopyToPassiveFolders: %v", err)
+	}
+
+	// Validate passive now has store list, store info, and the registry segment file
+	if _, err := os.Stat(filepath.Join(passive, storeListFilename)); err != nil {
+		t.Fatalf("passive missing store list: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(passive, store.Name, storeInfoFilename)); err != nil {
+		t.Fatalf("passive missing store info: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(passive, store.RegistryTable, store.RegistryTable+"-1"+registryFileExtension)); err != nil {
+		t.Fatalf("passive missing registry segment: %v", err)
 	}
 }
