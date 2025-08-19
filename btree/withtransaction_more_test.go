@@ -257,6 +257,82 @@ func TestWithTransaction_ReadDelegatedErrorsAndGetCurrentKey(t *testing.T) {
 	}
 }
 
+func TestWithTransaction_FindWithID_DelegatedError(t *testing.T) {
+	// Underlying btree that will error on Get root during FindWithID
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
+	fnr := &fakeNRWithErr[int, string]{fakeNR: fakeNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}, errOnGet: true}
+	si := StoreInterface[int, string]{NodeRepository: fnr, ItemActionTracker: fakeIAT[int, string]{}}
+	b, _ := New[int, string](store, &si, nil)
+	b.StoreInfo.Count = 1
+	b.StoreInfo.RootNodeID = sop.NewUUID()
+
+	tx := &mockTx{begun: true, mode: sop.ForReading}
+	w := NewBtreeWithTransaction[int, string](tx, b)
+	if _, err := w.FindWithID(context.Background(), 5, sop.NewUUID()); err == nil {
+		t.Fatalf("expected delegated FindWithID error")
+	}
+	if tx.rollbackCount != 1 {
+		t.Fatalf("expected rollback on FindWithID error")
+	}
+}
+
+func TestWithTransaction_GetCurrentValue_DelegatedError(t *testing.T) {
+	// Underlying btree errors on Get for selected node
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
+	fnr := &fakeNRWithErr[int, string]{fakeNR: fakeNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}, errOnGet: true}
+	si := StoreInterface[int, string]{NodeRepository: fnr, ItemActionTracker: fakeIAT[int, string]{}}
+	b, _ := New[int, string](store, &si, nil)
+	b.currentItemRef = currentItemRef{nodeID: sop.NewUUID(), nodeItemIndex: 0}
+
+	tx := &mockTx{begun: true, mode: sop.ForReading}
+	w := NewBtreeWithTransaction[int, string](tx, b)
+	if _, err := w.GetCurrentValue(context.Background()); err == nil {
+		t.Fatalf("expected delegated GetCurrentValue error")
+	}
+	if tx.rollbackCount != 1 {
+		t.Fatalf("expected rollback on GetCurrentValue error")
+	}
+}
+
+func TestWithTransaction_FirstLastNextPrevious_DelegatedErrors(t *testing.T) {
+	// Repo errors on Get so underlying btree methods fail
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
+	fnr := &fakeNRWithErr[int, string]{fakeNR: fakeNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}, errOnGet: true}
+	si := StoreInterface[int, string]{NodeRepository: fnr, ItemActionTracker: fakeIAT[int, string]{}}
+	b, _ := New[int, string](store, &si, nil)
+	b.StoreInfo.Count = 1
+	b.StoreInfo.RootNodeID = sop.NewUUID()
+	// Also fabricate a selection for Next/Previous that will error
+	b.currentItemRef = currentItemRef{nodeID: sop.NewUUID(), nodeItemIndex: 0}
+
+	tx := &mockTx{begun: true, mode: sop.ForReading}
+	w := NewBtreeWithTransaction[int, string](tx, b)
+
+	// First
+	if _, err := w.First(context.Background()); err == nil {
+		t.Fatalf("expected First error")
+	}
+	// Last
+	tx.begun = true
+	if _, err := w.Last(context.Background()); err == nil {
+		t.Fatalf("expected Last error")
+	}
+	// Next
+	tx.begun = true
+	if _, err := w.Next(context.Background()); err == nil {
+		t.Fatalf("expected Next error")
+	}
+	// Previous
+	tx.begun = true
+	if _, err := w.Previous(context.Background()); err == nil {
+		t.Fatalf("expected Previous error")
+	}
+
+	if tx.rollbackCount != 4 {
+		t.Fatalf("expected 4 rollbacks for First/Last/Next/Previous errors, got %d", tx.rollbackCount)
+	}
+}
+
 func TestWithTransaction_UpdateCurrentItem_ModesAndError(t *testing.T) {
 	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
 	// Base tree to select an item
@@ -308,6 +384,26 @@ func TestWithTransaction_UpdateCurrentItem_ModesAndError(t *testing.T) {
 	}
 	if tx3.rollbackCount != 1 {
 		t.Fatalf("expected rollback on delegated UpdateCurrentItem error")
+	}
+}
+
+func TestWithTransaction_Upsert_DelegatedError(t *testing.T) {
+	// Underlying Upsert will hit Update path and ItemActionTracker.Update will error
+	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
+	fnr := &fakeNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}
+	si := StoreInterface[int, string]{NodeRepository: fnr, ItemActionTracker: iatUpdateErr[int, string]{}}
+	b, _ := New[int, string](store, &si, nil)
+	// Seed an existing item so AddIfNotExist returns false and Upsert goes to Update path
+	if ok, err := b.Add(context.Background(), 10, "v"); !ok || err != nil {
+		t.Fatalf("seed add: %v", err)
+	}
+	tx := &mockTx{begun: true, mode: sop.ForWriting}
+	w := NewBtreeWithTransaction[int, string](tx, b)
+	if _, err := w.Upsert(context.Background(), 10, "v2"); err == nil {
+		t.Fatalf("expected delegated Upsert error via Update")
+	}
+	if tx.rollbackCount != 1 {
+		t.Fatalf("expected rollback on delegated Upsert error")
 	}
 }
 
