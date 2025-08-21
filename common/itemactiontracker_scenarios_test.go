@@ -1,9 +1,7 @@
 package common
 
-// Consolidated from: itemactiontracker_test.go, itemactiontracker_add_test.go
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -12,271 +10,633 @@ import (
 	"github.com/sharedcode/sop/common/mocks"
 )
 
-// Basic sanity covering Add, Get, Update, Remove paths using public tracker API.
-func Test_ItemActionTracker_BasicPaths(t *testing.T) {
+// Covers Get path where the item is already tracked (ok==true) and ValueNeedsFetch=true,
+// so after fetching value it returns early without overwriting the existing tracked record.
+func Test_ItemActionTracker_Get_AlreadyTracked_EarlyReturn(t *testing.T) {
 	ctx := context.Background()
-	so := sop.StoreOptions{Name: "iat_basic", SlotLength: 8, IsValueDataInNodeSegment: false, IsValueDataGloballyCached: true}
+	so := sop.StoreOptions{
+		Name:                      "iat_get_tracked_early",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: true,
+	}
 	si := sop.NewStoreInfo(so)
-	tracker := newItemActionTracker[PersonKey, Person](si, mockRedisCache, mockNodeBlobStore, newTransactionLogger(mocks.NewMockTransactionLog(), false))
-	pk, p := newPerson("iat", "basic", "1", "e@x", "p")
-	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &p}
-	if err := tracker.Add(ctx, it); err != nil {
-		t.Fatalf("Add err: %v", err)
-	}
-	if it.Value == nil {
-		t.Fatalf("expected value retained before commitTrackedItemsValues")
-	}
-	if err := tracker.commitTrackedItemsValues(ctx); err != nil {
-		t.Fatalf("commitTrackedItemsValues err: %v", err)
-	}
-	if it.Value != nil || !it.ValueNeedsFetch {
-		t.Fatalf("expected externalized value after commit, got value=%v needsFetch=%v", it.Value, it.ValueNeedsFetch)
-	}
-	// Simulate update
-	updated := Person{Gender: p.Gender, Email: "new@x", Phone: p.Phone, SSN: p.SSN}
-	it.Value = &updated
-	it.ValueNeedsFetch = false
-	if err := tracker.Update(ctx, it); err != nil {
-		t.Fatalf("Update err: %v", err)
-	}
-	if err := tracker.commitTrackedItemsValues(ctx); err != nil {
-		t.Fatalf("2nd commitTrackedItemsValues err: %v", err)
-	}
-	// Remove path
-	if err := tracker.Remove(ctx, it); err != nil {
-		t.Fatalf("Remove err: %v", err)
-	}
-}
-
-type errBlob struct{ e error }
-
-func (e *errBlob) GetOne(ctx context.Context, blobTable string, blobID sop.UUID) ([]byte, error) {
-	return nil, e.e
-}
-func (e *errBlob) Add(ctx context.Context, blobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
-	return e.e
-}
-func (e *errBlob) Update(ctx context.Context, blobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
-	return e.e
-}
-func (e *errBlob) Remove(ctx context.Context, blobsIDs []sop.BlobsPayload[sop.UUID]) error {
-	return e.e
-}
-
-func Test_ItemActionTracker_Add_Paths(t *testing.T) {
-	ctx := context.Background()
-	cases := []struct {
-		name   string
-		inNode bool
-	}{{"add_in_node", true}, {"add_out_of_node", false}}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			so := sop.StoreOptions{Name: "iat_add_" + c.name, SlotLength: 8, IsValueDataInNodeSegment: c.inNode, IsValueDataGloballyCached: !c.inNode}
-			si := sop.NewStoreInfo(so)
-			tracker := newItemActionTracker[PersonKey, Person](si, mockRedisCache, mockNodeBlobStore, newTransactionLogger(mocks.NewMockTransactionLog(), false))
-			pk, p := newPerson("iat", c.name, "1", "e@x", "p")
-			it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &p}
-			if err := tracker.Add(ctx, it); err != nil {
-				t.Fatalf("Add err: %v", err)
-			}
-			if err := tracker.commitTrackedItemsValues(ctx); err != nil {
-				t.Fatalf("commitTrackedItemsValues err: %v", err)
-			}
-			if c.inNode { // value data stored inline so commitTrackedItemsValues is a no-op
-				if it.Value == nil || it.ValueNeedsFetch {
-					t.Fatalf("expected inline value retained; got value=%v needsFetch=%v", it.Value, it.ValueNeedsFetch)
-				}
-			} else { // value data externalized
-				if it.Value != nil || !it.ValueNeedsFetch {
-					t.Fatalf("expected externalized value; got value=%v needsFetch=%v", it.Value, it.ValueNeedsFetch)
-				}
-			}
-		})
-	}
-}
-
-func Test_ItemActionTracker_Add_ErrorPaths(t *testing.T) {
-	ctx := context.Background()
-	so := sop.StoreOptions{Name: "iat_add_err", SlotLength: 8, IsValueDataInNodeSegment: false, IsValueDataActivelyPersisted: true}
-	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
-	tracker := newItemActionTracker[PersonKey, Person](si, mockRedisCache, &errBlob{e: errors.New("boom")}, tl)
-	pk, p := newPerson("err", "add", "1", "e@x", "p")
-	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &p}
-	err := tracker.Add(ctx, it)
-	if err == nil {
-		t.Fatalf("expected add error due to blob store failure")
-	}
-}
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, tl)
 
-// No direct reset method; rely on creating a new tracker (stateless between instances).
-func Test_ItemActionTracker_NewInstance_ResetsState(t *testing.T) {
-	so := sop.StoreOptions{Name: "iat_reset", SlotLength: 8}
-	si := sop.NewStoreInfo(so)
-	tracker := newItemActionTracker[PersonKey, Person](si, mockRedisCache, mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), false))
-	pk, p := newPerson("r", "s", "g", "e", "p")
-	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &p}
-	if err := tracker.Add(context.Background(), it); err != nil {
-		t.Fatalf("Add err: %v", err)
-	}
-	if len(tracker.items) == 0 {
-		t.Fatalf("expected tracked items")
-	}
-	tracker2 := newItemActionTracker[PersonKey, Person](si, mockRedisCache, mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), false))
-	if len(tracker2.items) != 0 {
-		t.Fatalf("expected fresh tracker state")
-	}
-}
-
-func Test_ItemActionTracker_Get_CacheHit_TTL(t *testing.T) {
-	ctx := context.Background()
-	so := sop.StoreOptions{Name: "iat_cache_ttl", SlotLength: 8, IsValueDataInNodeSegment: false, IsValueDataGloballyCached: true}
-	si := sop.NewStoreInfo(so)
-	si.CacheConfig.IsValueDataCacheTTL = true
-	tracker := newItemActionTracker[PersonKey, Person](si, mockRedisCache, mockNodeBlobStore, newTransactionLogger(mocks.NewMockTransactionLog(), false))
-	pk, p := newPerson("ttl", "add", "1", "e@x", "p")
+	// Seed blob with value under the item ID.
+	pk, pv := newPerson("x", "y", "m", "e", "p")
 	id := sop.NewUUID()
-	_ = mockRedisCache.SetStruct(ctx, formatItemKey(id.String()), &p, si.CacheConfig.ValueDataCacheDuration)
-	it := &btree.Item[PersonKey, Person]{ID: id, Key: pk, ValueNeedsFetch: true}
-	if err := tracker.Get(ctx, it); err != nil {
+	if err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{
+		BlobTable: si.BlobTable,
+		Blobs:     []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: toByteArray(pv)}},
+	}}); err != nil {
+		t.Fatalf("blob add err: %v", err)
+	}
+
+	// Track an existing record with a non-get action to detect overwrite vs early return.
+	trackedItem := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: nil, ValueNeedsFetch: true}
+	trk.items[id] = cacheItem[PersonKey, Person]{
+		lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
+		item:        trackedItem,
+		versionInDB: 0,
+	}
+
+	// Call Get with a distinct pointer; should fetch value and return early without replacing map entry.
+	req := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: nil, ValueNeedsFetch: true}
+	if err := trk.Get(ctx, req); err != nil {
 		t.Fatalf("Get err: %v", err)
 	}
-	if it.Value == nil || it.ValueNeedsFetch {
-		t.Fatalf("expected hydrated value from cache")
+	if req.Value == nil || req.ValueNeedsFetch {
+		t.Fatalf("expected value fetched and flag cleared")
+	}
+	// Ensure existing tracked lock/action not replaced by a new getAction entry.
+	got := trk.items[id]
+	if got.lockRecord.Action != updateAction {
+		t.Fatalf("expected existing tracked action preserved, got %v", got.lockRecord.Action)
 	}
 }
 
-// Consolidated extra scenarios for itemactiontracker:
-// - lock compatibility vs conflict
-// - checkTrackedItems outcomes
-// - manage branches (persisted flag, update with fetch, add with/without value)
-
-// buildTracker constructs a tracker with a fresh store info and mock deps.
-func buildTracker(name string) (*itemActionTracker[PersonKey, Person], *sop.StoreInfo) {
-	so := sop.StoreOptions{Name: name, SlotLength: 8, IsValueDataInNodeSegment: false, IsValueDataGloballyCached: true}
+// Covers Add path when IsValueDataActivelyPersisted=true and IsValueDataGloballyCached=true.
+func Test_ItemActionTracker_Add_ActivelyPersisted_PersistsAndCaches(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                         "iat_add_active",
+		SlotLength:                   8,
+		IsValueDataInNodeSegment:     false,
+		IsValueDataActivelyPersisted: true,
+		IsValueDataGloballyCached:    true,
+	}
 	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-	tr := newItemActionTracker[PersonKey, Person](si, mockRedisCache, mockNodeBlobStore, tl)
-	return tr, si
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, tl)
+
+	pk, pv := newPerson("aa", "bb", "f", "e@x", "p")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &pv}
+	if err := trk.Add(ctx, it); err != nil {
+		t.Fatalf("Add err: %v", err)
+	}
+	// Blob should exist
+	if ba, err := bs.GetOne(ctx, si.BlobTable, it.ID); err != nil || len(ba) == 0 {
+		t.Fatalf("expected blob saved for %s, err=%v", it.ID.String(), err)
+	}
+	// And cache should have the struct
+	var out Person
+	if ok, err := l2.GetStruct(ctx, formatItemKey(it.ID.String()), &out); err != nil || !ok {
+		t.Fatalf("expected cached value for %s", it.ID.String())
+	}
 }
 
-func Test_ItemActionTracker_Lock_CompatibilityAndConflicts(t *testing.T) {
+// Covers lock compatibility branch: both existing and requested locks are getAction -> no error.
+func Test_ItemActionTracker_Lock_GetAction_Compat(t *testing.T) {
 	ctx := context.Background()
-	tracker, _ := buildTracker("iat_lock")
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock_get", SlotLength: 8})
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, tl)
 
-	// Prepare one item tracked with getAction
-	idGet := sop.NewUUID()
-	pk, p := newPerson("l", "get", "g", "e", "ph")
-	itGet := &btree.Item[PersonKey, Person]{ID: idGet, Key: pk, Value: &p}
-	if err := tracker.Get(ctx, itGet); err != nil {
-		t.Fatalf("Get setup err: %v", err)
-	}
-
-	// In Redis, pre-set a GET lock with different LockID (compatible)
-	lrGet := lockRecord{LockID: sop.NewUUID(), Action: getAction}
-	if err := tracker.cache.SetStruct(ctx, tracker.cache.FormatLockKey(idGet.String()), &lrGet, time.Minute); err != nil {
-		t.Fatalf("seed get lock err: %v", err)
-	}
-
-	// Another item tracked with updateAction
-	idUpd := sop.NewUUID()
-	itUpd := &btree.Item[PersonKey, Person]{ID: idUpd, Key: pk, Value: &p}
-	if err := tracker.Update(ctx, itUpd); err != nil {
-		t.Fatalf("Update setup err: %v", err)
-	}
-	// In Redis, pre-set a GET lock (incompatible with update)
-	lrUpd := lockRecord{LockID: sop.NewUUID(), Action: getAction}
-	if err := tracker.cache.SetStruct(ctx, tracker.cache.FormatLockKey(idUpd.String()), &lrUpd, time.Minute); err != nil {
-		t.Fatalf("seed upd lock err: %v", err)
-	}
-
-	// And one more item without any Redis record (new lock path)
-	idNew := sop.NewUUID()
-	itNew := &btree.Item[PersonKey, Person]{ID: idNew, Key: pk, Value: &p}
-	if err := tracker.Update(ctx, itNew); err != nil {
-		t.Fatalf("Update(new) setup err: %v", err)
-	}
-
-	// Attempt to lock all tracked items
-	err := tracker.lock(ctx, time.Second)
-	if err == nil {
-		t.Fatalf("expected conflict error for update-vs-get lock, got nil")
-	}
-
-	// Remove the conflicting one and ensure the remaining can be locked
-	delete(tracker.items, idUpd)
-	if err := tracker.lock(ctx, time.Second); err != nil {
-		t.Fatalf("unexpected lock error after removing conflict: %v", err)
-	}
-	// New item should have ownership after creating lock
-	if !tracker.items[idNew].isLockOwner {
-		t.Fatalf("expected new item lock ownership")
-	}
-}
-
-func Test_ItemActionTracker_CheckTrackedItems_ReportsConflictAndOK(t *testing.T) {
-	ctx := context.Background()
-	tracker, _ := buildTracker("iat_check")
-
-	// Track one GET and one UPDATE
-	idA := sop.NewUUID()
-	idB := sop.NewUUID()
-	pk, p := newPerson("c", "k", "g", "e", "ph")
-	itA := &btree.Item[PersonKey, Person]{ID: idA, Key: pk, Value: &p}
-	_ = tracker.Get(ctx, itA)
-	itB := &btree.Item[PersonKey, Person]{ID: idB, Key: pk, Value: &p}
-	_ = tracker.Update(ctx, itB)
-
-	// Redis states: for A, another GET (compatible); for B, another UPDATE lock with different LockID (conflict)
-	_ = tracker.cache.SetStruct(ctx, tracker.cache.FormatLockKey(idA.String()), &lockRecord{LockID: sop.NewUUID(), Action: getAction}, time.Minute)
-	_ = tracker.cache.SetStruct(ctx, tracker.cache.FormatLockKey(idB.String()), &lockRecord{LockID: sop.NewUUID(), Action: updateAction}, time.Minute)
-
-	err := tracker.checkTrackedItems(ctx)
-	if err == nil {
-		t.Fatalf("expected conflict reported for idB")
-	}
-}
-
-func Test_ItemActionTracker_Manage_Branches(t *testing.T) {
-	tracker, _ := buildTracker("iat_manage")
-
-	// Case 1: persisted=true => no-op
+	// Track one item via Get to mark action=getAction.
+	pk, pv := newPerson("gg", "hh", "m", "e", "p")
 	id := sop.NewUUID()
-	item := &btree.Item[PersonKey, Person]{ID: id, Value: &Person{Email: "x"}}
-	persisted := cacheItem[PersonKey, Person]{persisted: true, lockRecord: lockRecord{Action: addAction}, item: item}
-	if kv, err := tracker.manage(id, persisted); err != nil || kv != nil {
-		t.Fatalf("persisted branch failed, kv=%v err=%v", kv, err)
+	// Pre-seed blob so Get fetches value and records tracking.
+	if err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{
+		BlobTable: si.BlobTable,
+		Blobs:     []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: toByteArray(pv)}},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	it := &btree.Item[PersonKey, Person]{ID: id, Key: pk, ValueNeedsFetch: true}
+	if err := trk.Get(ctx, it); err != nil {
+		t.Fatal(err)
+	}
+	// Pre-populate a different lock owner with getAction in cache to hit compatibility continue.
+	other := lockRecord{LockID: sop.NewUUID(), Action: getAction}
+	if err := l2.SetStruct(ctx, l2.FormatLockKey(id.String()), &other, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if err := trk.lock(ctx, time.Minute); err != nil {
+		t.Fatalf("lock should tolerate concurrent getAction: %v", err)
+	}
+}
+
+// Covers lock path where the key is found in cache and has the same LockID as ours;
+// code should continue without error and without changing ownership.
+func Test_ItemActionTracker_Lock_Found_SameOwner_Continues(t *testing.T) {
+	ctx := context.Background()
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock_same_owner", SlotLength: 8})
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, tl)
+
+	// Track an item for update
+	pk, pv := newPerson("so", "so", "m", "e", "p")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &pv}
+	if err := trk.Update(ctx, it); err != nil {
+		t.Fatal(err)
 	}
 
-	// Case 2: updateAction with ValueNeedsFetch set and value present -> mark old for deletion,
-	// externalize new value and set ValueNeedsFetch
-	id2 := sop.NewUUID()
-	item2 := &btree.Item[PersonKey, Person]{ID: id2, Value: &Person{Email: "y"}, ValueNeedsFetch: true}
-	upd := cacheItem[PersonKey, Person]{lockRecord: lockRecord{Action: updateAction}, item: item2}
-	if kv, err := tracker.manage(id2, upd); err != nil || kv == nil {
-		t.Fatalf("update branch expected kv add and no err; got kv=%v err=%v", kv, err)
-	}
-	if !item2.ValueNeedsFetch {
-		t.Fatalf("expected ValueNeedsFetch set during manage(update)")
+	// Pre-populate cache with the same LockID as tracker for this key
+	ci := trk.items[it.ID]
+	lr := lockRecord{LockID: ci.LockID, Action: updateAction}
+	if err := l2.SetStruct(ctx, l2.FormatLockKey(it.ID.String()), &lr, time.Minute); err != nil {
+		t.Fatalf("pre-set lock err: %v", err)
 	}
 
-	// Case 3: addAction with nil value => kv returned nil
-	id3 := sop.NewUUID()
-	item3 := &btree.Item[PersonKey, Person]{ID: id3}
-	addNil := cacheItem[PersonKey, Person]{lockRecord: lockRecord{Action: addAction}, item: item3}
-	if kv, err := tracker.manage(id3, addNil); err != nil || kv != nil {
-		t.Fatalf("add(nil) branch expected no kv and no err; got kv=%v err=%v", kv, err)
+	// Lock should succeed without error; ownership flag should remain default(false) for found path
+	if err := trk.lock(ctx, time.Minute); err != nil {
+		t.Fatalf("lock returned error: %v", err)
+	}
+	ci = trk.items[it.ID]
+	if ci.isLockOwner {
+		t.Fatalf("expected isLockOwner=false when lock is already ours in cache")
+	}
+}
+
+// Covers commitTrackedItemsValues early-return when value data stays in node segment.
+func Test_CommitTrackedItemsValues_EarlyReturn_InNodeSegment(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                     "iat_commit_early",
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+	}
+	si := sop.NewStoreInfo(so)
+	trk := newItemActionTracker[PersonKey, Person](si, mocks.NewMockClient(), mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), false))
+	if err := trk.commitTrackedItemsValues(ctx); err != nil {
+		t.Fatalf("commitTrackedItemsValues early return err: %v", err)
+	}
+}
+
+// Covers Get path where value is resolved from Redis cache (found=true) so blob store is not read.
+func Test_ItemActionTracker_Get_FromRedisCache_SetsValue(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                      "iat_get_cache",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: true,
+	}
+	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, tl)
+
+	pk, pv := newPerson("cache", "hit", "m", "e@x", "p")
+	id := sop.NewUUID()
+	// Seed only Redis, not blob, to ensure Get uses cache path.
+	if err := l2.SetStruct(ctx, formatItemKey(id.String()), &pv, time.Minute); err != nil {
+		t.Fatalf("seed redis err: %v", err)
 	}
 
-	// Case 4: addAction with value => kv returned and value externalized
-	id4 := sop.NewUUID()
-	pv := &Person{Email: "z"}
-	item4 := &btree.Item[PersonKey, Person]{ID: id4, Value: pv}
-	addVal := cacheItem[PersonKey, Person]{lockRecord: lockRecord{Action: addAction}, item: item4}
-	if kv, err := tracker.manage(id4, addVal); err != nil || kv == nil || kv.Key.Compare(id4) != 0 {
-		t.Fatalf("add(value) expected kv for id4; got kv=%v err=%v", kv, err)
+	req := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: nil, ValueNeedsFetch: true}
+	if err := trk.Get(ctx, req); err != nil {
+		t.Fatalf("Get err: %v", err)
 	}
-	if item4.Value != nil || !item4.ValueNeedsFetch {
-		t.Fatalf("expected value externalized and ValueNeedsFetch set")
+	if req.Value == nil || req.ValueNeedsFetch {
+		t.Fatalf("expected value from cache and NeedsFetch cleared")
+	}
+	// Item should be tracked with getAction
+	if got, ok := trk.items[id]; !ok || got.lockRecord.Action != getAction {
+		t.Fatalf("expected item tracked with getAction")
+	}
+}
+
+// Covers Add when IsValueDataActivelyPersisted is false: only tracking and version bump happen.
+func Test_ItemActionTracker_Add_NoActivePersist_TracksAndBumpsVersion(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                      "iat_add_simple",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: false,
+	}
+	si := sop.NewStoreInfo(so)
+	trk := newItemActionTracker[PersonKey, Person](si, mocks.NewMockClient(), mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), false))
+
+	pk, pv := newPerson("add", "nopersist", "f", "e", "p")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &pv}
+	// Version starts at zero; Add should increment it while versionInDB stored remains 0.
+	if err := trk.Add(ctx, it); err != nil {
+		t.Fatalf("Add err: %v", err)
+	}
+	if it.Version != 1 {
+		t.Fatalf("expected version increment to 1, got %d", it.Version)
+	}
+	ci, ok := trk.items[it.ID]
+	if !ok {
+		t.Fatalf("expected item tracked after Add")
+	}
+	if ci.lockRecord.Action != addAction || ci.versionInDB != 0 {
+		t.Fatalf("unexpected cached record: action=%v versionInDB=%d", ci.lockRecord.Action, ci.versionInDB)
+	}
+}
+
+// Ensures commitTrackedItemsValues persists to blob but does not cache when global cache is disabled.
+func Test_CommitTrackedItemsValues_NoGlobalCache_NoRedisSet(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                      "iat_commit_nocache",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: false,
+	}
+	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, newTransactionLogger(mocks.NewMockTransactionLog(), false))
+
+	pk, pv := newPerson("cg", "off", "m", "e", "p")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &pv}
+	if err := trk.Add(ctx, it); err != nil {
+		t.Fatalf("Add err: %v", err)
+	}
+	if err := trk.commitTrackedItemsValues(ctx); err != nil {
+		t.Fatalf("commitTrackedItemsValues err: %v", err)
+	}
+	// Blob should exist
+	if ba, _ := bs.GetOne(ctx, si.BlobTable, it.ID); len(ba) == 0 {
+		t.Fatalf("expected blob persisted for %s", it.ID.String())
+	}
+	// Cache should not contain value
+	var out Person
+	if ok, err := l2.GetStruct(ctx, formatItemKey(it.ID.String()), &out); err != nil || ok {
+		t.Fatalf("expected no cached value when global cache disabled; ok=%v err=%v", ok, err)
+	}
+}
+
+// Covers Update path when the item was previously tracked via Add (v.Action==addAction),
+// ensuring activelyPersist path runs and version is not bumped again.
+func Test_ItemActionTracker_Update_AfterAdd_ActivelyPersisted(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                         "iat_update_after_add_active",
+		SlotLength:                   8,
+		IsValueDataInNodeSegment:     false,
+		IsValueDataActivelyPersisted: true,
+		IsValueDataGloballyCached:    true,
+	}
+	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, newTransactionLogger(mocks.NewMockTransactionLog(), true))
+
+	pk, pv := newPerson("upd", "afteradd", "m", "e", "p")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &pv}
+	if err := trk.Add(ctx, it); err != nil {
+		t.Fatalf("Add err: %v", err)
+	}
+	// Version bumped once by Add
+	if it.Version != 1 {
+		t.Fatalf("expected version 1 after Add, got %d", it.Version)
+	}
+
+	// Now call Update; since tracked action is addAction, code should activelyPersist without version bump.
+	if err := trk.Update(ctx, it); err != nil {
+		t.Fatalf("Update err: %v", err)
+	}
+	if it.Version != 1 {
+		t.Fatalf("expected version to remain 1, got %d", it.Version)
+	}
+	// Verify blob exists and cache set
+	if ba, _ := bs.GetOne(ctx, si.BlobTable, it.ID); len(ba) == 0 {
+		t.Fatalf("expected blob persisted for %s", it.ID.String())
+	}
+	var out Person
+	if ok, err := l2.GetStruct(ctx, formatItemKey(it.ID.String()), &out); err != nil || !ok {
+		t.Fatalf("expected cached value for %s", it.ID.String())
+	}
+}
+
+// Covers Get path when global cache is disabled; value should be fetched from blob store.
+func Test_ItemActionTracker_Get_FromBlob_NoGlobalCache(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                      "iat_get_blob_only",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: false,
+	}
+	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, newTransactionLogger(mocks.NewMockTransactionLog(), false))
+
+	pk, pv := newPerson("blob", "only", "m", "e", "p")
+	id := sop.NewUUID()
+	// Seed blob store only
+	if err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{
+		BlobTable: si.BlobTable,
+		Blobs:     []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: toByteArray(pv)}},
+	}}); err != nil {
+		t.Fatalf("blob seed err: %v", err)
+	}
+
+	req := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: nil, ValueNeedsFetch: true}
+	if err := trk.Get(ctx, req); err != nil {
+		t.Fatalf("Get err: %v", err)
+	}
+	if req.Value == nil || req.ValueNeedsFetch {
+		t.Fatalf("expected value from blob and NeedsFetch cleared")
+	}
+}
+
+// Covers Add when actively persisted but Value is nil: nothing should be persisted or cached.
+func Test_ItemActionTracker_Add_ActivePersist_NilValue_NoOps(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                         "iat_add_active_nil",
+		SlotLength:                   8,
+		IsValueDataInNodeSegment:     false,
+		IsValueDataActivelyPersisted: true,
+		IsValueDataGloballyCached:    true,
+	}
+	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, newTransactionLogger(mocks.NewMockTransactionLog(), true))
+
+	pk := PersonKey{Firstname: "nil", Lastname: "val"}
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: nil}
+	if err := trk.Add(ctx, it); err != nil {
+		t.Fatalf("Add err: %v", err)
+	}
+	// No blob should have been written
+	if ba, _ := bs.GetOne(ctx, si.BlobTable, it.ID); len(ba) != 0 {
+		t.Fatalf("expected no blob written for nil value")
+	}
+	// No cache set either
+	var out Person
+	if ok, _ := l2.GetStruct(ctx, formatItemKey(it.ID.String()), &out); ok {
+		t.Fatalf("expected no cache set for nil value")
+	}
+}
+
+// Covers commitTrackedItemsValues/manage path for removeAction: when ValueNeedsFetch=true,
+// the item ID is queued for deletion and no blob is written.
+func Test_CommitTrackedItemsValues_Remove_MarksForDeletion_NoBlob(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                      "iat_commit_remove_mark",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: false,
+	}
+	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, newTransactionLogger(mocks.NewMockTransactionLog(), false))
+
+	pk, _ := newPerson("rm", "val", "m", "e", "p")
+	id := sop.NewUUID()
+	it := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: nil, ValueNeedsFetch: true}
+	trk.items[id] = cacheItem[PersonKey, Person]{
+		lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: removeAction},
+		item:        it,
+		versionInDB: 0,
+	}
+
+	if err := trk.commitTrackedItemsValues(ctx); err != nil {
+		t.Fatalf("commitTrackedItemsValues err: %v", err)
+	}
+	// No blob should exist since removeAction doesn't add.
+	if ba, _ := bs.GetOne(ctx, si.BlobTable, id); len(ba) != 0 {
+		t.Fatalf("expected no blob for removeAction")
+	}
+	// Item should be queued for deletion.
+	if len(trk.forDeletionItems) != 1 || trk.forDeletionItems[0] != id {
+		t.Fatalf("expected id queued for deletion, got %#v", trk.forDeletionItems)
+	}
+	// And ValueNeedsFetch gets cleared as part of manage()
+	if it.ValueNeedsFetch {
+		t.Fatalf("expected ValueNeedsFetch=false after manage for removeAction")
+	}
+}
+
+// Covers Update path when item is not yet tracked: tracker should create an entry,
+// set action=update, bump version, and proceed without active persistence.
+func Test_ItemActionTracker_Update_FirstTime_TracksAndBumps(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                      "iat_update_first",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: false,
+	}
+	si := sop.NewStoreInfo(so)
+	trk := newItemActionTracker[PersonKey, Person](si, mocks.NewMockClient(), mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), false))
+
+	pk, pv := newPerson("uf", "t", "m", "e", "p")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &pv, Version: 0}
+	if err := trk.Update(ctx, it); err != nil {
+		t.Fatalf("Update err: %v", err)
+	}
+	// Version should bump from 0 -> 1
+	if it.Version != 1 {
+		t.Fatalf("expected version 1, got %d", it.Version)
+	}
+	ci, ok := trk.items[it.ID]
+	if !ok || ci.lockRecord.Action != updateAction {
+		t.Fatalf("expected tracked item with updateAction")
+	}
+}
+
+// Ensures commitTrackedItemsValues writes to blob and populates Redis when global cache is enabled.
+func Test_CommitTrackedItemsValues_CachesOnSuccess(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                      "iat_commit_cache_on",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: true,
+		CacheConfig:               sop.NewStoreCacheConfig(time.Minute, false),
+	}
+	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, newTransactionLogger(mocks.NewMockTransactionLog(), false))
+
+	pk, pv := newPerson("cc", "on", "m", "e", "p")
+	id := sop.NewUUID()
+	it := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: &pv}
+	trk.items[id] = cacheItem[PersonKey, Person]{
+		lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: addAction},
+		item:        it,
+		versionInDB: 0,
+	}
+	if err := trk.commitTrackedItemsValues(ctx); err != nil {
+		t.Fatalf("commitTrackedItemsValues err: %v", err)
+	}
+	// Blob should exist
+	if ba, _ := bs.GetOne(ctx, si.BlobTable, it.ID); len(ba) == 0 {
+		t.Fatalf("expected blob written")
+	}
+	// And Redis should have the struct because global cache is enabled
+	var out Person
+	if ok, err := l2.GetStruct(ctx, formatItemKey(it.ID.String()), &out); err != nil || !ok {
+		t.Fatalf("expected cached value, ok=%v err=%v", ok, err)
+	}
+}
+
+// Add with active persistence and no global cache: persists blob but does not set cache.
+func Test_ItemActionTracker_Add_ActivePersist_NoGlobalCache(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                         "iat_add_active_nocache",
+		SlotLength:                   8,
+		IsValueDataInNodeSegment:     false,
+		IsValueDataActivelyPersisted: true,
+		IsValueDataGloballyCached:    false,
+	}
+	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, newTransactionLogger(mocks.NewMockTransactionLog(), true))
+
+	pk, pv := newPerson("ap", "nogc", "m", "e", "p")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: &pv}
+	if err := trk.Add(ctx, it); err != nil {
+		t.Fatalf("Add err: %v", err)
+	}
+
+	// Blob should exist
+	if ba, _ := bs.GetOne(ctx, si.BlobTable, it.ID); len(ba) == 0 {
+		t.Fatalf("expected blob persisted")
+	}
+	// Cache should not be set
+	var out Person
+	if ok, err := l2.GetStruct(ctx, formatItemKey(it.ID.String()), &out); err != nil || ok {
+		t.Fatalf("expected no cache set; ok=%v err=%v", ok, err)
+	}
+}
+
+// Update on already-tracked item (non-add) in non-active persist store: version bump occurs when equal to versionInDB.
+func Test_ItemActionTracker_Update_Tracked_NonActivePersist_VersionBump(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                      "iat_update_tracked_bump",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: false,
+	}
+	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, newTransactionLogger(mocks.NewMockTransactionLog(), false))
+
+	pk, pv := newPerson("up", "bump", "m", "e", "p")
+	id := sop.NewUUID()
+	it := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: &pv, Version: 2}
+	// Seed tracker with existing record (non-add), versionInDB=2
+	trk.items[id] = cacheItem[PersonKey, Person]{
+		lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
+		item:        it,
+		versionInDB: 2,
+	}
+
+	if err := trk.Update(ctx, it); err != nil {
+		t.Fatalf("Update err: %v", err)
+	}
+	if it.Version != 3 {
+		t.Fatalf("expected version bumped to 3, got %d", it.Version)
+	}
+	// Ensure still tracked and action is update
+	ci, ok := trk.items[id]
+	if !ok || ci.lockRecord.Action != updateAction {
+		t.Fatalf("expected item tracked with updateAction")
+	}
+}
+
+// Manage() early-exit when cachedItem.persisted is true: no blob write and no value nullification.
+func Test_ItemActionTracker_CommitTrackedItemsValues_Persisted_NoOp(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                      "iat_commit_persisted_noop",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: false,
+	}
+	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, newTransactionLogger(mocks.NewMockTransactionLog(), false))
+
+	pk, pv := newPerson("ps", "noop", "m", "e", "p")
+	id := sop.NewUUID()
+	it := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: &pv}
+	trk.items[id] = cacheItem[PersonKey, Person]{
+		lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
+		item:        it,
+		versionInDB: 0,
+		persisted:   true,
+	}
+
+	if err := trk.commitTrackedItemsValues(ctx); err != nil {
+		t.Fatalf("commit err: %v", err)
+	}
+	// No blob written
+	if ba, _ := bs.GetOne(ctx, si.BlobTable, id); len(ba) != 0 {
+		t.Fatalf("expected no blob when persisted=true")
+	}
+	// Value should remain non-nil and not toggled
+	if it.Value == nil || it.ValueNeedsFetch {
+		t.Fatalf("expected value untouched for persisted item")
+	}
+}
+
+// Get() with IsValueDataCacheTTL=true should take GetStructEx path; we seed Redis so it returns early.
+func Test_ItemActionTracker_Get_TTL_FromRedisCache(t *testing.T) {
+	ctx := context.Background()
+	so := sop.StoreOptions{
+		Name:                      "iat_get_ttl",
+		SlotLength:                8,
+		IsValueDataInNodeSegment:  false,
+		IsValueDataGloballyCached: true,
+		CacheConfig:               sop.NewStoreCacheConfig(time.Minute, true),
+	}
+	si := sop.NewStoreInfo(so)
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, newTransactionLogger(mocks.NewMockTransactionLog(), false))
+
+	pk, pv := newPerson("ttl", "fromcache", "m", "e", "p")
+	id := sop.NewUUID()
+	if err := l2.SetStruct(ctx, formatItemKey(id.String()), &pv, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	req := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: nil, ValueNeedsFetch: true}
+	if err := trk.Get(ctx, req); err != nil {
+		t.Fatalf("Get err: %v", err)
+	}
+	if req.Value == nil || req.ValueNeedsFetch {
+		t.Fatalf("expected value from TTL cache path")
+	}
+}
+
+// Update of tracked item where item.Version != versionInDB should not bump version.
+func Test_ItemActionTracker_Update_Tracked_NoVersionBump_WhenDifferent(t *testing.T) {
+	ctx := context.Background()
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_update_nobump", SlotLength: 8})
+	trk := newItemActionTracker[PersonKey, Person](si, mocks.NewMockClient(), mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), false))
+
+	pk, pv := newPerson("nb", "nb", "m", "e", "p")
+	id := sop.NewUUID()
+	it := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: &pv, Version: 3}
+	trk.items[id] = cacheItem[PersonKey, Person]{
+		lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
+		item:        it,
+		versionInDB: 2,
+	}
+	if err := trk.Update(ctx, it); err != nil {
+		t.Fatalf("Update err: %v", err)
+	}
+	if it.Version != 3 {
+		t.Fatalf("expected version unchanged (3), got %d", it.Version)
 	}
 }

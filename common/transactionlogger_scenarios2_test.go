@@ -2,14 +2,14 @@ package common
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/common/mocks"
-
 	"github.com/sharedcode/sop/cache"
+	"github.com/sharedcode/sop/common/mocks"
 	cas "github.com/sharedcode/sop/internal/cassandra"
 )
 
@@ -400,4 +400,49 @@ func Test_TransactionLogger_Rollback_PreCommit_ActivelyPersisted_CleansValues(t 
 	if ba, _ := blobs.GetOne(ctx, table, valID); len(ba) != 0 {
 		t.Fatalf("pre-commit value blob not removed")
 	}
+}
+
+// Ensures processExpiredTransactionLogs handles no logs for current hour and resets hourBeingProcessed.
+func Test_TransactionLogger_ProcessExpired_NoLogs(t *testing.T) {
+	ctx := context.Background()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	// Force hourBeingProcessed to a stale hour and ensure it resets when no TID returned.
+	hourBeingProcessed = cas.Now().Add(-2 * time.Hour).Format(cas.DateHourLayout)
+	if err := tl.processExpiredTransactionLogs(ctx, &Transaction{blobStore: mocks.NewMockBlobStore(), l2Cache: mocks.NewMockClient(), registry: mocks.NewMockRegistry(false), logger: tl}); err != nil {
+		t.Fatalf("processExpiredTransactionLogs err: %v", err)
+	}
+	if hourBeingProcessed != "" {
+		t.Fatalf("expected hourBeingProcessed reset, got %q", hourBeingProcessed)
+	}
+}
+
+// Covers doPriorityRollbacks error-to-failover path when UpdateNoLocks fails in priority rollback.
+func Test_TransactionLogger_DoPriorityRollbacks_Failover(t *testing.T) {
+	ctx := context.Background()
+	// Prepare a priority log batch with a single transaction and one handle.
+	tid := sop.NewUUID()
+	lid := sop.NewUUID()
+	pl := &stubPriorityLog{
+		batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{
+			Key:   tid,
+			Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid)}}},
+		}},
+	}
+	tl := transactionLog{TransactionLog: stubTLog{pl: pl}}
+
+	// Use a registry that returns matching Get results but errors on UpdateNoLocks to trigger failover path.
+	base := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	// Seed registry with the same version so version check passes.
+	_ = base.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid)}}})
+	tx := &Transaction{registry: updErrRegistry{Mock_vid_registry: base}, l2Cache: mocks.NewMockClient()}
+
+	busy, err := tl.doPriorityRollbacks(ctx, tx)
+	if err == nil {
+		t.Fatalf("expected failover error")
+	}
+	var se sop.Error
+	if !errors.As(err, &se) || se.Code != sop.RestoreRegistryFileSectorFailure {
+		t.Fatalf("expected sop.RestoreRegistryFileSectorFailure, got %v", err)
+	}
+	_ = busy // busy may be true/false depending on timeouts
 }
