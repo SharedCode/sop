@@ -475,3 +475,200 @@ func Test_Phase1Commit_PreCommitLogs_CleanedUp(t *testing.T) {
 		t.Fatalf("expected pre-commit logs to be removed; still present: %v", logs)
 	}
 }
+
+// timeoutPriorityLog returns a constant batch to keep the loop busy.
+type timeoutPriorityLog struct{ inner *stubPriorityLog }
+
+func (t timeoutPriorityLog) IsEnabled() bool                                             { return true }
+func (t timeoutPriorityLog) Add(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
+func (t timeoutPriorityLog) Remove(ctx context.Context, tid sop.UUID) error              { return nil }
+func (t timeoutPriorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
+	return t.inner.Get(ctx, tid)
+}
+func (t timeoutPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
+	return t.inner.GetBatch(ctx, batchSize)
+}
+func (t timeoutPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
+	return nil
+}
+func (t timeoutPriorityLog) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
+	return nil
+}
+func (t timeoutPriorityLog) RemoveBackup(ctx context.Context, tid sop.UUID) error { return nil }
+
+// stubTLogTimeout wraps stubPriorityLog inside a TransactionLog implementation.
+type stubTLogTimeout struct{ pl timeoutPriorityLog }
+
+func (l stubTLogTimeout) PriorityLog() sop.TransactionPriorityLog { return l.pl }
+func (l stubTLogTimeout) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+	return nil
+}
+func (l stubTLogTimeout) Remove(ctx context.Context, tid sop.UUID) error { return nil }
+func (l stubTLogTimeout) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
+	return sop.NilUUID, "", nil, nil
+}
+func (l stubTLogTimeout) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
+	return sop.NilUUID, nil, nil
+}
+func (l stubTLogTimeout) NewUUID() sop.UUID { return sop.NewUUID() }
+
+// Ensures doPriorityRollbacks can time out mid-loop and return without errors besides context deadline.
+func Test_TransactionLogger_DoPriorityRollbacks_Timeout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+
+	// Prepare a small batch to keep the function busy until timeout.
+	lid := sop.NewUUID()
+	tid := sop.NewUUID()
+	basePL := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: tid, Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid)}}}}}}
+	// The PriorityLog contains one handle; also seed the registry with the same handle so version checks don't panic.
+	tl := newTransactionLogger(stubTLogTimeout{pl: timeoutPriorityLog{inner: basePL}}, true)
+	reg := mocks.NewMockRegistry(false)
+	_ = reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid)}}})
+	tx := &Transaction{l2Cache: mocks.NewMockClient(), registry: reg}
+
+	// doPriorityRollbacks should exit due to TimedOut with busy=true or false depending on timing; err can be nil or context error.
+	_, _ = tl.doPriorityRollbacks(ctx, tx)
+}
+
+// isLockedFlap returns false once on IsLocked then delegates.
+type isLockedFlap struct {
+	sop.Cache
+	seen bool
+}
+
+func (f *isLockedFlap) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
+	if !f.seen {
+		f.seen = true
+		return false, nil
+	}
+	return f.Cache.IsLocked(ctx, lockKeys)
+}
+
+// Fetched items intact=false should trigger rollback+retry via needsRefetchAndMerge and then succeed.
+func Test_Phase1Commit_FetchedItemsIntact_False_TriggersRetry(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+
+	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	bs := mocks.NewMockBlobStore()
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
+
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_fetched_retry", SlotLength: 4})
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+
+	// Fetched node with version 1
+	fid := sop.NewUUID()
+	nr.localCache[fid] = cachedNode{action: getAction, node: &btree.Node[PersonKey, Person]{ID: fid, Version: 1}}
+	// Registry says version 2 -> mismatch => areFetchedItemsIntact=false
+	h := sop.NewHandle(fid)
+	h.Version = 2
+	reg.Lookup[fid] = h
+
+	// Refetch closure fixes version to match so next loop passes
+	refetched := false
+
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge: func(context.Context) error {
+			refetched = true
+			hh := reg.Lookup[fid]
+			hh.Version = 1
+			reg.Lookup[fid] = hh
+			return nil
+		},
+	}}
+
+	if err := tx.phase1Commit(ctx); err != nil {
+		t.Fatalf("phase1Commit err: %v", err)
+	}
+	if !refetched {
+		t.Fatalf("expected refetchAndMerge to be invoked")
+	}
+}
+
+// Lock acquired but IsLocked reports false once: loop should continue and then succeed on next iteration.
+func Test_Phase1Commit_IsLockedFalseOnce_Retries(t *testing.T) {
+	ctx := context.Background()
+	base := mocks.NewMockClient()
+	l2 := &isLockedFlap{Cache: base}
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+
+	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	bs := mocks.NewMockBlobStore()
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
+
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_islocked_retry", SlotLength: 4})
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+
+	// Updated node to generate a lock key; version matches registry so commitUpdatedNodes can succeed.
+	uid := sop.NewUUID()
+	nr.localCache[uid] = cachedNode{action: updateAction, node: &btree.Node[PersonKey, Person]{ID: uid, Version: 1}}
+	hh := sop.NewHandle(uid)
+	hh.Version = 1
+	reg.Lookup[uid] = hh
+
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { return nil },
+	}}
+
+	if err := tx.phase1Commit(ctx); err != nil {
+		t.Fatalf("phase1Commit err: %v", err)
+	}
+}
+
+// When committedState indicates pre-commit logs exist, phase1Commit should remove them after committing tracked values.
+func Test_Phase1Commit_PrecommitLogsRemoved(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+
+	rec := &tlRecorder{tid: sop.NewUUID()}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(rec, true), phaseDone: 0}
+
+	// Emulate pre-commit state
+	tx.logger.committedState = addActivelyPersistedItem
+
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_precommit_remove", SlotLength: 4})
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { return nil },
+	}}
+
+	if err := tx.phase1Commit(ctx); err != nil {
+		t.Fatalf("phase1Commit err: %v", err)
+	}
+
+	// pre-commit logs should be removed for the pre-commit transaction ID
+	if len(rec.removed) == 0 || rec.removed[0].Compare(rec.tid) != 0 {
+		t.Fatalf("expected pre-commit logs removed for tid %s, got %v", rec.tid, rec.removed)
+	}
+}

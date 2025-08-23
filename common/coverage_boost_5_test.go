@@ -401,3 +401,260 @@ func Test_RefetchAndMerge_GetAction_PassThrough(t *testing.T) {
 		t.Fatalf("refetchAndMerge getAction err: %v", err)
 	}
 }
+
+// Ensures acquireLocks returns failover when taking over a dead owner's locks but GetEx
+// reveals a mismatched owner on one of the keys.
+func Test_AcquireLocks_Takeover_GetExMismatch_Fails(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	tx := &Transaction{l2Cache: l2}
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+
+	tid := sop.NewUUID()
+	id1 := sop.NewUUID()
+	id2 := sop.NewUUID()
+
+	// Pre-seed lock keys: simulate dead owner = tid on first key, different owner on second.
+	k1 := tx.l2Cache.CreateLockKeys([]string{id1.String()})[0].Key
+	k2 := tx.l2Cache.CreateLockKeys([]string{id2.String()})[0].Key
+	_ = tx.l2Cache.Set(ctx, k1, tid.String(), time.Minute)
+	_ = tx.l2Cache.Set(ctx, k2, sop.NewUUID().String(), time.Minute)
+
+	stores := []sop.RegistryPayload[sop.Handle]{{IDs: []sop.Handle{sop.NewHandle(id1), sop.NewHandle(id2)}}}
+	_, err := tl.acquireLocks(ctx, tx, tid, stores)
+	if err == nil {
+		t.Fatalf("expected failover error")
+	}
+	if se, ok := err.(sop.Error); !ok || se.Code != sop.RestoreRegistryFileSectorFailure {
+		t.Fatalf("expected sop.RestoreRegistryFileSectorFailure, got %v", err)
+	}
+}
+
+// Ensures handleRegistrySectorLockTimeout returns the original error when priorityRollback fails.
+func Test_HandleRegistrySectorLockTimeout_PriorityRollbackError_ReturnsOriginal(t *testing.T) {
+	ctx := context.Background()
+	// Registry that forces UpdateNoLocks error to make priorityRollback fail.
+	reg := errRegistry{}
+	tx := &Transaction{l2Cache: mocks.NewMockClient(), registry: reg}
+	// Priority log returns any non-nil payload for the tid embedded in LockKey.
+	tid := sop.NewUUID()
+	pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: tid, Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(sop.NewUUID())}}}}}}
+	tx.logger = newTransactionLogger(stubTLog{pl: pl}, true)
+
+	// Build original error carrying *sop.LockKey in UserData as required by handler.
+	ud := &sop.LockKey{Key: tx.l2Cache.FormatLockKey("X"), LockID: tid}
+	orig := sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("orig"), UserData: ud}
+
+	if out := tx.handleRegistrySectorLockTimeout(ctx, orig); out == nil || out.Error() != orig.Error() {
+		t.Fatalf("expected original error to be returned, got %v", out)
+	}
+}
+
+// Covers doPriorityRollbacks iterating over a multi-entry batch where the first succeeds
+// and the second hits WriteBackup error and is skipped. Ensures per-entry handling, not
+// just single-element behavior.
+func Test_TransactionLogger_DoPriorityRollbacks_MultiEntry_MixedOutcomes(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	reg := mocks.NewMockRegistry(false)
+	tx := &Transaction{l2Cache: l2, registry: reg}
+
+	// Two tids and lids
+	tid1 := sop.NewUUID()
+	lid1 := sop.NewUUID()
+	tid2 := sop.NewUUID()
+	lid2 := sop.NewUUID()
+
+	// Seed registry so version checks pass for both
+	_ = reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid1)}}})
+	_ = reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid2)}}})
+
+	// Batch: first will succeed; second will fail at WriteBackup
+	pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{
+		{Key: tid1, Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", BlobTable: "bt", IDs: []sop.Handle{sop.NewHandle(lid1)}}}},
+		{Key: tid2, Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", BlobTable: "bt", IDs: []sop.Handle{sop.NewHandle(lid2)}}}},
+	}, writeBackupErr: map[string]error{tid2.String(): context.DeadlineExceeded}}
+
+	tl := newTransactionLogger(stubTLog{pl: pl}, true)
+
+	// Let locks be acquirable and stable
+	_ = l2.Set(ctx, l2.FormatLockKey("Prbs"), sop.NewUUID().String(), time.Minute)
+	// Clear to allow our lock to be acquired by doPriorityRollbacks
+	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey("Prbs")})
+
+	consumed, err := tl.doPriorityRollbacks(ctx, tx)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !consumed {
+		t.Fatalf("expected consumed=true with non-empty batch")
+	}
+
+	// RemoveBackup should be called for tid1 (success path), not for tid2 (write backup error)
+	if pl.removeBackupHit[tid1.String()] == 0 {
+		t.Fatalf("expected RemoveBackup called for tid1")
+	}
+	if pl.removeBackupHit[tid2.String()] != 0 {
+		t.Fatalf("expected no RemoveBackup for tid2 with write-backup error")
+	}
+}
+
+// addOnceLockErrReg wraps the mock registry and forces Add to return a sop.Error with *LockKey once.
+type addOnceLockErrReg struct {
+	*mocks.Mock_vid_registry
+	fired bool
+	lk    sop.LockKey
+}
+
+func (r *addOnceLockErrReg) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+	if !r.fired {
+		r.fired = true
+		return sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("sector timeout"), UserData: &r.lk}
+	}
+	return r.Mock_vid_registry.Add(ctx, storesHandles)
+}
+
+// errReg wraps the mock registry to force UpdateNoLocks to return a non-sop error.
+type errReg struct{ *mocks.Mock_vid_registry }
+
+func (e errReg) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+	return fmt.Errorf("boom")
+}
+
+// commitAddedNodes error path exercising handleRegistrySectorLockTimeout within phase1Commit loop.
+func Test_Phase1Commit_CommitAddedNodes_SectorTimeout_ThenRetry(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
+
+	// Build a backend that has an added node and forces registry.Add to return a sop.Error carrying a *sop.LockKey
+	// on first attempt, so handleRegistrySectorLockTimeout is exercised; then succeed on retry.
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_added_err", SlotLength: 4})
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+
+	// Add an added node so commitAddedNodes path is taken.
+	aid := sop.NewUUID()
+	nr.localCache[aid] = cachedNode{action: addAction, node: &btree.Node[PersonKey, Person]{ID: aid}}
+	tx.registry = &addOnceLockErrReg{Mock_vid_registry: tx.registry.(*mocks.Mock_vid_registry), lk: sop.LockKey{Key: l2.FormatLockKey("X"), LockID: sop.NewUUID()}}
+
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { return nil },
+	}}
+
+	if err := tx.phase1Commit(ctx); err != nil {
+		t.Fatalf("phase1Commit err on retry path: %v", err)
+	}
+}
+
+// Non-sop error from commitRemovedNodes should propagate directly.
+func Test_Phase1Commit_CommitRemovedNodes_NonSopError_Propagates(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_removed_err", SlotLength: 4})
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+
+	// Stage a removed node so commitRemovedNodes is invoked.
+	rid := sop.NewUUID()
+	nr.localCache[rid] = cachedNode{action: removeAction, node: &btree.Node[PersonKey, Person]{ID: rid, Version: 1}}
+	// Seed registry with same version so it reaches UpdateNoLocks call that we will force to error.
+	hh := sop.NewHandle(rid)
+	hh.Version = 1
+	tx.registry.(*mocks.Mock_vid_registry).Lookup[rid] = hh
+
+	tx.registry = errReg{Mock_vid_registry: tx.registry.(*mocks.Mock_vid_registry)}
+
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { return nil },
+	}}
+
+	if err := tx.phase1Commit(ctx); err == nil {
+		t.Fatalf("expected non-sop error to propagate from commitRemovedNodes")
+	}
+}
+
+// deleteErrCache2 wraps a Cache and forces Delete to return an error.
+type deleteErrCache2 struct{ sop.Cache }
+
+func (d deleteErrCache2) Delete(ctx context.Context, keys []string) (bool, error) {
+	return false, fmt.Errorf("delete failed")
+}
+
+func Test_ItemActionTracker_Lock_GetVsGet_Compatible_NoError(t *testing.T) {
+	ctx := context.Background()
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock_get_get", SlotLength: 2})
+	c := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+
+	trk := newItemActionTracker[PersonKey, Person](si, c, bs, tl)
+
+	// Prepare an item tracked as getAction
+	pk, _ := newPerson("a", "b", "c", "d@e", "p")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: nil, Version: 1}
+	it.ValueNeedsFetch = false
+	// Insert into tracker with getAction and a specific lock ID
+	lr := lockRecord{LockID: sop.NewUUID(), Action: getAction}
+	trk.items[it.ID] = cacheItem[PersonKey, Person]{
+		lockRecord:  lr,
+		item:        it,
+		versionInDB: it.Version,
+	}
+
+	// Pre-populate cache with a different lock record but also getAction (compatible)
+	other := lockRecord{LockID: sop.NewUUID(), Action: getAction}
+	if err := c.SetStruct(ctx, c.FormatLockKey(it.ID.String()), &other, time.Minute); err != nil {
+		t.Fatalf("setup cache SetStruct failed: %v", err)
+	}
+
+	// Should not error as get vs get is compatible
+	if err := trk.lock(ctx, time.Minute); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func Test_ItemActionTracker_Unlock_Collects_Delete_Error(t *testing.T) {
+	ctx := context.Background()
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_unlock_err", SlotLength: 2})
+	base := mocks.NewMockClient()
+	c := deleteErrCache2{Cache: base}
+	bs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
+
+	trk := newItemActionTracker[PersonKey, Person](si, c, bs, tl)
+
+	// Prepare an item that we "own" the lock of and is not addAction
+	pk, _ := newPerson("q", "w", "e", "f@g", "h")
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: pk, Value: nil, Version: 1}
+	trk.items[it.ID] = cacheItem[PersonKey, Person]{
+		lockRecord:  lockRecord{LockID: sop.NewUUID(), Action: updateAction},
+		item:        it,
+		versionInDB: it.Version,
+		isLockOwner: true,
+	}
+
+	if err := trk.unlock(ctx); err == nil {
+		t.Fatalf("expected delete error collected, got nil")
+	}
+}

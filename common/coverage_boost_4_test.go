@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -528,5 +529,165 @@ func Test_RefetchAndMerge_Get_InNodeSegment_ReturnsError_NoBackend(t *testing.T)
 	closure := refetchAndMergeClosure(&si, b3, sr)
 	if err := closure(ctx); err == nil {
 		t.Fatalf("expected error due to missing backend nodes after reset")
+	}
+}
+
+// updOnceLockErrReg forces UpdateNoLocks to return a sop.Error with *LockKey once.
+type updOnceLockErrReg struct {
+	*mocks.Mock_vid_registry
+	fired bool
+	lk    sop.LockKey
+}
+
+func (r *updOnceLockErrReg) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+	if !r.fired {
+		r.fired = true
+		return sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: errors.New("sector timeout"), UserData: &r.lk}
+	}
+	return r.Mock_vid_registry.UpdateNoLocks(ctx, allOrNothing, storesHandles)
+}
+
+// commitUpdatedNodes: sector-timeout occurs and DTrollbk lock cannot be taken over -> handleRegistrySectorLockTimeout returns error.
+func Test_Phase1Commit_CommitUpdatedNodes_SectorTimeout_NoTakeover_Propagates(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+
+	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	bs := mocks.NewMockBlobStore()
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
+
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_updated_sector_timeout", SlotLength: 4})
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+
+	// Stage one updated node with matching version so commitUpdatedNodes reaches UpdateNoLocks.
+	uid := sop.NewUUID()
+	nr.localCache[uid] = cachedNode{action: updateAction, node: &btree.Node[PersonKey, Person]{ID: uid, Version: 1}}
+	h := sop.NewHandle(uid)
+	h.Version = 1
+	reg.Lookup[uid] = h
+
+	// Prepare registry to return sop.Error with LockKey pointing to DTrollbk.
+	lk := sop.LockKey{Key: l2.FormatLockKey("DTrollbk"), LockID: sop.NewUUID()}
+	tx.registry = &updOnceLockErrReg{Mock_vid_registry: reg, lk: lk}
+	// Ensure DTrollbk is already locked by somebody else so lock acquisition fails.
+	_ = l2.Set(ctx, lk.Key, sop.NewUUID().String(), time.Minute)
+
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { return nil },
+	}}
+
+	if err := tx.phase1Commit(ctx); err == nil {
+		t.Fatalf("expected sector-timeout error to propagate when DTrollbk lock can't be taken over")
+	} else {
+		var se sop.Error
+		if !errors.As(err, &se) || se.Code != sop.RestoreRegistryFileSectorFailure {
+			t.Fatalf("expected sop.Error with RestoreRegistryFileSectorFailure, got %v", err)
+		}
+	}
+}
+
+// commitRemovedNodes returns successful=false (version mismatch) -> rollback, refetch, retry -> succeed.
+func Test_Phase1Commit_CommitRemovedNodes_Conflict_Retry_Succeeds(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+
+	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	bs := mocks.NewMockBlobStore()
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
+
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_removed_conflict_retry", SlotLength: 4})
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+
+	rid := sop.NewUUID()
+	// Remove node with version 1 but registry says version 2 -> commitRemovedNodes returns false.
+	nr.localCache[rid] = cachedNode{action: removeAction, node: &btree.Node[PersonKey, Person]{ID: rid, Version: 1}}
+	h := sop.NewHandle(rid)
+	h.Version = 2
+	reg.Lookup[rid] = h
+
+	refetched := false
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge: func(context.Context) error {
+			refetched = true
+			// Align versions so retry will succeed.
+			hh := reg.Lookup[rid]
+			hh.Version = 1
+			reg.Lookup[rid] = hh
+			return nil
+		},
+	}}
+
+	if err := tx.phase1Commit(ctx); err != nil {
+		t.Fatalf("phase1Commit err: %v", err)
+	}
+	if !refetched {
+		t.Fatalf("expected refetch to happen on removed-nodes conflict")
+	}
+}
+
+// commitNewRootNodes returns false (non-empty root exists) then refetch removes it and retry succeeds.
+func Test_Phase1Commit_CommitNewRootNodes_Conflict_Retry_Succeeds(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+
+	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	bs := mocks.NewMockBlobStore()
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
+
+	// Store with a designated root; ensure local add of that root while count==0 so it is treated as rootNodes.
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_root_conflict_retry", SlotLength: 4})
+	rootID := sop.NewUUID()
+	si.RootNodeID = rootID
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: 0}
+
+	nr.localCache[rootID] = cachedNode{action: addAction, node: &btree.Node[PersonKey, Person]{ID: rootID, Version: 1}}
+	// Registry already contains a non-empty handle for root -> commitNewRootNodes returns false.
+	reg.Lookup[rootID] = sop.NewHandle(rootID)
+
+	refetched := false
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge: func(context.Context) error {
+			refetched = true
+			// Simulate that competing root was cleared.
+			delete(reg.Lookup, rootID)
+			return nil
+		},
+	}}
+
+	if err := tx.phase1Commit(ctx); err != nil {
+		t.Fatalf("phase1Commit err: %v", err)
+	}
+	if !refetched {
+		t.Fatalf("expected refetch to happen on new-root conflict")
 	}
 }

@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -623,5 +624,99 @@ func Test_RefetchAndMerge_Add_InNode_DuplicateKey_ReturnsError(t *testing.T) {
 	closure := refetchAndMergeClosure(&si, b3, sr)
 	if err := closure(ctx); err == nil {
 		t.Fatalf("expected error from duplicate-key add, got nil")
+	}
+}
+
+// unlockErrCache wraps a cache to force Unlock errors.
+type unlockErrCache struct{ sop.Cache }
+
+func (c unlockErrCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
+	return fmt.Errorf("unlock error")
+}
+
+// Ensures doPriorityRollbacks executes the unlock-warning branch when Unlock returns an error.
+func Test_TransactionLogger_DoPriorityRollbacks_UnlockWarning_Path(t *testing.T) {
+	ctx := context.Background()
+
+	// Setup registry with matching versions so UpdateNoLocks succeeds.
+	reg := mocks.NewMockRegistry(false)
+	// Create one TID with one handle to restore.
+	tid := sop.NewUUID()
+	lid := sop.NewUUID()
+	_ = reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{
+		{RegistryTable: "rt", IDs: []sop.Handle{{LogicalID: lid, Version: 1}}},
+	})
+
+	// Priority log returns a single batch entry.
+	pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{
+		Key:   tid,
+		Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", BlobTable: "bt", IDs: []sop.Handle{{LogicalID: lid, Version: 1}}}},
+	}}}
+
+	// Wrap mock cache to force Unlock error, to hit the log.Warn branch.
+	l2 := unlockErrCache{Cache: mocks.NewMockClient()}
+	tx := &Transaction{l2Cache: l2, registry: reg}
+	tl := newTransactionLogger(stubTLog{pl: pl}, true)
+
+	consumed, err := tl.doPriorityRollbacks(ctx, tx)
+	if err != nil {
+		t.Fatalf("unexpected error from doPriorityRollbacks: %v", err)
+	}
+	if !consumed {
+		t.Fatalf("expected consumed=true after processing batch")
+	}
+}
+
+// Validates the timeout path in doPriorityRollbacks returns consumed=true without error.
+func Test_TransactionLogger_DoPriorityRollbacks_TimedOut_ReturnsTrue(t *testing.T) {
+	ctx := context.Background()
+
+	// Seed a minimal batch so loop runs at least once.
+	tid := sop.NewUUID()
+	lid := sop.NewUUID()
+	pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{
+		Key:   tid,
+		Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", BlobTable: "bt", IDs: []sop.Handle{{LogicalID: lid, Version: 1}}}},
+	}}}
+
+	// Registry aligned to make UpdateNoLocks a no-op success.
+	reg := mocks.NewMockRegistry(false)
+	_ = reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{{LogicalID: lid, Version: 1}}}})
+
+	// Override sop.Now to simulate elapsed time beyond maxDuration.
+	origNow := sop.Now
+	fixed := time.Now()
+	sop.Now = func() time.Time { return fixed.Add(10 * time.Minute) }
+	defer func() { sop.Now = origNow }()
+
+	tx := &Transaction{l2Cache: mocks.NewMockClient(), registry: reg}
+	tl := newTransactionLogger(stubTLog{pl: pl}, true)
+
+	consumed, err := tl.doPriorityRollbacks(ctx, tx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !consumed {
+		t.Fatalf("expected consumed=true due to timeout")
+	}
+}
+
+// Ensures doPriorityRollbacks returns consumed=false when the coordinator lock (Prbs) is already held.
+func Test_TransactionLogger_DoPriorityRollbacks_PrbsLockHeld_ReturnsFalse(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	// Pre-lock the exact key used internally: FormatLockKey applied twice (matching implementation).
+	prbsKey := l2.FormatLockKey(l2.FormatLockKey("Prbs"))
+	_ = l2.Set(ctx, prbsKey, sop.NewUUID().String(), time.Minute)
+
+	tl := newTransactionLogger(stubTLog{pl: &stubPriorityLog{}}, true)
+	tx := &Transaction{l2Cache: l2, registry: mocks.NewMockRegistry(false)}
+
+	consumed, err := tl.doPriorityRollbacks(ctx, tx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if consumed {
+		t.Fatalf("expected consumed=false when Prbs lock is held")
 	}
 }

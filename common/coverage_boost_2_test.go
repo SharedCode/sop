@@ -557,3 +557,98 @@ func Test_ItemActionTracker_Lock_SetThenGet_MismatchConflict(t *testing.T) {
 		t.Fatalf("expected conflict error due to SetStruct storing a different LockID")
 	}
 }
+
+// Finalize payload covers deleteTrackedItemsValues branch without deleteObsoleteEntries and ensures no Remove call there.
+func Test_TransactionLogger_Rollback_FinalizeWithTrackedValuesOnly(t *testing.T) {
+	ctx := context.Background()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	tx := &Transaction{blobStore: mocks.NewMockBlobStore(), l2Cache: mocks.NewMockClient()}
+
+	// Build payload: no obsolete entries (First empty), only tracked values in Second.
+	valID := sop.NewUUID()
+	tracked := []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]{{First: true, Second: sop.BlobsPayload[sop.UUID]{BlobTable: "it", Blobs: []sop.UUID{valID}}}}
+
+	// Seed a value blob so deleteTrackedItemsValues has work to do.
+	_ = tx.blobStore.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: "it", Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: valID, Value: []byte("v")}}}})
+
+	pl := sop.Tuple[sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]], []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]]{
+		First:  sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{},
+		Second: tracked,
+	}
+	logs := []sop.KeyValuePair[int, []byte]{
+		{Key: finalizeCommit, Value: toByteArray(pl)},
+		{Key: commitUpdatedNodes, Value: nil},
+	}
+	if err := tl.rollback(ctx, tx, sop.NewUUID(), logs); err != nil {
+		t.Fatalf("rollback err: %v", err)
+	}
+}
+
+// Covers doPriorityRollbacks path when Remove returns error: it should call RemoveBackup and continue.
+func Test_TransactionLogger_DoPriorityRollbacks_RemoveError_CallsRemoveBackup(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	reg := mocks.NewMockRegistry(false)
+	tx := &Transaction{l2Cache: l2, registry: reg}
+
+	// Seed lock ownership for the batch processing loop to enter.
+	_ = l2.Set(ctx, l2.FormatLockKey("Prbs"), sop.NewUUID().String(), time.Minute)
+	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey("Prbs")})
+
+	tid := sop.NewUUID()
+	lid := sop.NewUUID()
+	// Seed registry handle so version checks pass.
+	_ = reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid)}}})
+
+	pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{
+		{Key: tid, Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", BlobTable: "bt", IDs: []sop.Handle{sop.NewHandle(lid)}}}},
+	}, removeErr: map[string]error{tid.String(): context.DeadlineExceeded}}
+
+	tl := newTransactionLogger(stubTLog{pl: pl}, true)
+
+	consumed, err := tl.doPriorityRollbacks(ctx, tx)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !consumed {
+		t.Fatalf("expected consumed=true")
+	}
+	if pl.removeBackupHit[tid.String()] == 0 {
+		t.Fatalf("expected RemoveBackup to be called when Remove errors")
+	}
+}
+
+// Covers doPriorityRollbacks version-check failover where registry version advanced beyond repairable (not equal or +1).
+func Test_TransactionLogger_DoPriorityRollbacks_VersionAdvance_TriggersFailover(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	tx := &Transaction{l2Cache: l2, registry: reg}
+
+	// Unlockable processing lock.
+	_ = l2.Set(ctx, l2.FormatLockKey("Prbs"), sop.NewUUID().String(), time.Minute)
+	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey("Prbs")})
+
+	tid := sop.NewUUID()
+	lid := sop.NewUUID()
+	// Prepare priority log with version 1, but seed registry with version 3 to force failover.
+	h := sop.NewHandle(lid)
+	h.Version = 3
+	reg.Lookup[lid] = h
+
+	pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{
+		{Key: tid, Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", BlobTable: "bt", IDs: []sop.Handle{{LogicalID: lid, Version: 1}}}}},
+	}}
+	tl := newTransactionLogger(stubTLog{pl: pl}, true)
+
+	consumed, err := tl.doPriorityRollbacks(ctx, tx)
+	if err == nil {
+		t.Fatalf("expected failover error due to version advance")
+	}
+	if se, ok := err.(sop.Error); !ok || se.Code != sop.RestoreRegistryFileSectorFailure {
+		t.Fatalf("expected sop.RestoreRegistryFileSectorFailure, got %v", err)
+	}
+	if consumed {
+		t.Fatalf("expected consumed=false on early failover")
+	}
+}

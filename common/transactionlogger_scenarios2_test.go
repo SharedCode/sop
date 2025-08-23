@@ -416,6 +416,27 @@ func Test_TransactionLogger_ProcessExpired_NoLogs(t *testing.T) {
 	}
 }
 
+// Covers rollback branch where finalizeCommit has nil payload and the last committed
+// function is deleteObsoleteEntries, which should trigger immediate Remove and return.
+func Test_TransactionLogger_Rollback_FinalizeNil_WithDeleteObsolete_Removes(t *testing.T) {
+	ctx := context.Background()
+	tl := &stubTLRemove{}
+	logger := newTransactionLogger(tl, true)
+	tx := &Transaction{logger: logger}
+
+	tid := sop.NewUUID()
+	logs := []sop.KeyValuePair[int, []byte]{
+		{Key: int(finalizeCommit), Value: nil},
+		{Key: int(deleteObsoleteEntries), Value: nil},
+	}
+	if err := logger.rollback(ctx, tx, tid, logs); err != nil {
+		t.Fatalf("rollback returned error: %v", err)
+	}
+	if len(tl.removed) != 1 || tl.removed[0].Compare(tid) != 0 {
+		t.Fatalf("expected Remove called for tid, got %v", tl.removed)
+	}
+}
+
 // Covers doPriorityRollbacks error-to-failover path when UpdateNoLocks fails in priority rollback.
 func Test_TransactionLogger_DoPriorityRollbacks_Failover(t *testing.T) {
 	ctx := context.Background()

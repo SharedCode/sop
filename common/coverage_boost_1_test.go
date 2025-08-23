@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"fmt"
 	"errors"
 	"testing"
 	"time"
@@ -331,5 +332,395 @@ func Test_ItemActionTracker_Get_TTL_And_BlobError(t *testing.T) {
 	item := &btree.Item[int, int]{ID: sop.NewUUID(), Key: 1, Value: nil, ValueNeedsFetch: true}
 	if err := tr.Get(ctx, item); err == nil {
 		t.Fatalf("expected error when blob store GetOne fails")
+	}
+}
+
+// flapLockCache fails the first Lock call, then delegates to the inner cache.
+type flapLockCache struct {
+	sop.Cache
+	calls int
+}
+
+func (f *flapLockCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	f.calls++
+	if f.calls == 1 {
+		return false, sop.NilUUID, nil
+	}
+	return f.Cache.Lock(ctx, duration, lockKeys)
+}
+
+// Ensures phase1Commit takes the needsRefetchAndMerge path when lock first fails, then succeeds.
+func Test_Phase1Commit_LockFailsOnce_TriggersRefetchAndMerge(t *testing.T) {
+	ctx := context.Background()
+	base := mocks.NewMockClient()
+	l2 := &flapLockCache{Cache: base}
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+
+	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	blobs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: blobs, logger: tl, phaseDone: 0}
+
+	// One updated node in local cache to produce a lock key.
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_lock_refetch", SlotLength: 4})
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	uid := sop.NewUUID()
+	n := &btree.Node[PersonKey, Person]{ID: uid, Version: 1}
+	nr.localCache[uid] = cachedNode{action: updateAction, node: n}
+	// Seed registry with same version to allow commitUpdatedNodes to succeed after refetch.
+	h := sop.NewHandle(uid)
+	h.Version = 1
+	reg.Lookup[uid] = h
+
+	refetched := false
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { refetched = true; return nil },
+	}}
+
+	if err := tx.phase1Commit(ctx); err != nil {
+		t.Fatalf("phase1Commit err: %v", err)
+	}
+	if !refetched {
+		t.Fatalf("expected refetchAndMerge path to be taken after initial lock failure")
+	}
+}
+
+// tlAddErr makes TransactionLog.Add return an error to force Phase2Commit error path before any locks are held.
+type tlAddErr struct{}
+
+func (tlAddErr) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+	return fmt.Errorf("add err")
+}
+func (tlAddErr) Remove(ctx context.Context, tid sop.UUID) error { return nil }
+func (tlAddErr) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
+	return sop.NilUUID, "", nil, nil
+}
+func (tlAddErr) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
+	return sop.NilUUID, nil, nil
+}
+func (tlAddErr) NewUUID() sop.UUID { return sop.NewUUID() }
+
+// Return a priority log whose Remove errors to exercise warn path in Phase2Commit else branch.
+type prioRemoveWarn struct{}
+
+func (prioRemoveWarn) IsEnabled() bool                                             { return true }
+func (prioRemoveWarn) Add(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
+func (prioRemoveWarn) Remove(ctx context.Context, tid sop.UUID) error              { return fmt.Errorf("rm warn") }
+func (prioRemoveWarn) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
+	return nil, nil
+}
+func (prioRemoveWarn) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
+	return nil, nil
+}
+func (prioRemoveWarn) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
+	return nil
+}
+func (prioRemoveWarn) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
+	return nil
+}
+func (prioRemoveWarn) RemoveBackup(ctx context.Context, tid sop.UUID) error { return nil }
+
+// wrapTLAddErr implements sop.TransactionLog with Add error and PriorityLog warn-on-remove.
+type wrapTLAddErr struct{ tlAddErr }
+
+func (wrapTLAddErr) PriorityLog() sop.TransactionPriorityLog { return prioRemoveWarn{} }
+
+// Ensure Phase2Commit handles log(Add) error by removing priority log when no locks are held, then rolling back and surfacing error.
+func Test_Phase2Commit_LogAddError_RemovesPriorityWithoutLocks(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	tx := &Transaction{mode: sop.ForWriting, phaseDone: 1, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(wrapTLAddErr{}, true)}
+
+	// Minimal backend; no tracked items, so rollback is cheap.
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p2_log_err", SlotLength: 2})
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache()},
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return false },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { return nil },
+	}}
+
+	if err := tx.Phase2Commit(ctx); err == nil {
+		t.Fatalf("expected Phase2Commit to return error due to log add failure")
+	}
+}
+
+// isLockedFlapCache returns false on first IsLocked call then delegates to inner cache.
+type isLockedFlapCache struct {
+	sop.Cache
+	calls int
+}
+
+func (f *isLockedFlapCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
+	f.calls++
+	if f.calls == 1 {
+		return false, nil
+	}
+	return f.Cache.IsLocked(ctx, lockKeys)
+}
+
+// Exercises the branch where Lock succeeds but IsLocked reports false once; the loop should continue and eventually succeed.
+func Test_Phase1Commit_IsLockedFlaps_ContinuesThenSucceeds(t *testing.T) {
+	ctx := context.Background()
+	base := mocks.NewMockClient()
+	l2 := &isLockedFlapCache{Cache: base}
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+
+	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	blobs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: blobs, logger: tl, phaseDone: 0}
+
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_islocked_flap", SlotLength: 4})
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	uid := sop.NewUUID()
+	n := &btree.Node[PersonKey, Person]{ID: uid, Version: 1}
+	nr.localCache[uid] = cachedNode{action: updateAction, node: n}
+	// Seed registry with same version to allow commitUpdatedNodes.
+	h := sop.NewHandle(uid)
+	h.Version = 1
+	reg.Lookup[uid] = h
+
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { return nil },
+	}}
+
+	if err := tx.phase1Commit(ctx); err != nil {
+		t.Fatalf("phase1Commit err: %v", err)
+	}
+}
+
+// Build a pair of dummy handles for acquireLocks tests.
+func buildHandles(ids ...sop.UUID) []sop.RegistryPayload[sop.Handle] {
+	hs := make([]sop.Handle, len(ids))
+	for i := range ids {
+		hs[i] = sop.NewHandle(ids[i])
+	}
+	return []sop.RegistryPayload[sop.Handle]{{IDs: hs}}
+}
+
+// When keys are owned by a dead transaction with same tid, acquireLocks should take over successfully.
+func Test_AcquireLocks_TakeoverFromSameTransaction_Succeeds(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	tx := &Transaction{l2Cache: l2, registry: mocks.NewMockRegistry(false), blobStore: mocks.NewMockBlobStore(), StoreRepository: mocks.NewMockStoreRepository()}
+	tid := tl.TransactionLog.NewUUID()
+	id1, id2 := sop.NewUUID(), sop.NewUUID()
+	// Pre-own the keys with the same tid to simulate dead owner we can take over from.
+	_ = l2.Set(ctx, l2.FormatLockKey(id1.String()), tid.String(), 0)
+	_ = l2.Set(ctx, l2.FormatLockKey(id2.String()), tid.String(), 0)
+
+	keys, err := tl.acquireLocks(ctx, tx, tid, buildHandles(id1, id2))
+	if err != nil {
+		t.Fatalf("acquireLocks err: %v", err)
+	}
+	if len(keys) != 2 || !keys[0].IsLockOwner || !keys[1].IsLockOwner {
+		t.Fatalf("expected takeover with ownership on both keys")
+	}
+}
+
+// When keys are owned by a different owner, acquireLocks should return a failover error.
+func Test_AcquireLocks_LockedByDifferentTransaction_ReturnsFailoverError(t *testing.T) {
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	tx := &Transaction{l2Cache: l2}
+	owner := sop.NewUUID()
+	tid := sop.NewUUID()
+	id := sop.NewUUID()
+	_ = l2.Set(ctx, l2.FormatLockKey(id.String()), owner.String(), 0)
+
+	_, err := tl.acquireLocks(ctx, tx, tid, buildHandles(id))
+	if err == nil {
+		t.Fatalf("expected error when key is locked by different transaction")
+	}
+	if se, ok := err.(sop.Error); !ok || se.Code != sop.RestoreRegistryFileSectorFailure {
+		t.Fatalf("expected sop.RestoreRegistryFileSectorFailure, got %v", err)
+	}
+}
+
+// Rollback should remove logs when finalizeCommit has nil payload and the last committed step is deleteObsoleteEntries.
+func Test_Rollback_FinalizeWithoutPayload_RemovesLogs(t *testing.T) {
+	ctx := context.Background()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	tx := &Transaction{blobStore: mocks.NewMockBlobStore(), StoreRepository: mocks.NewMockStoreRepository(), l2Cache: mocks.NewMockClient(), registry: mocks.NewMockRegistry(false)}
+	tid := sop.NewUUID()
+	logs := []sop.KeyValuePair[int, []byte]{
+		{Key: int(finalizeCommit), Value: nil},
+		{Key: int(deleteObsoleteEntries), Value: nil},
+	}
+	if err := tl.rollback(ctx, tx, tid, logs); err != nil {
+		t.Fatalf("rollback err: %v", err)
+	}
+}
+
+// priorityRollback should be a no-op when transaction or registry are nil.
+func Test_PriorityRollback_NoTransactionOrRegistry_NoOp(t *testing.T) {
+	ctx := context.Background()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	if err := tl.priorityRollback(ctx, nil, sop.NewUUID()); err != nil {
+		t.Fatalf("priorityRollback unexpected err: %v", err)
+	}
+}
+
+// lockThenIsLockedFalseCache wraps a cache and forces IsLocked to return false even after Lock succeeds.
+type lockThenIsLockedFalseCache struct{ inner sop.Cache }
+
+func (c lockThenIsLockedFalseCache) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
+	return c.inner.Set(ctx, key, value, expiration)
+}
+func (c lockThenIsLockedFalseCache) Get(ctx context.Context, key string) (bool, string, error) {
+	return c.inner.Get(ctx, key)
+}
+func (c lockThenIsLockedFalseCache) GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error) {
+	return c.inner.GetEx(ctx, key, expiration)
+}
+func (c lockThenIsLockedFalseCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+	return c.inner.SetStruct(ctx, key, value, expiration)
+}
+func (c lockThenIsLockedFalseCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
+	return c.inner.GetStruct(ctx, key, target)
+}
+func (c lockThenIsLockedFalseCache) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
+	return c.inner.GetStructEx(ctx, key, target, expiration)
+}
+func (c lockThenIsLockedFalseCache) Delete(ctx context.Context, keys []string) (bool, error) {
+	return c.inner.Delete(ctx, keys)
+}
+func (c lockThenIsLockedFalseCache) Ping(ctx context.Context) error { return c.inner.Ping(ctx) }
+func (c lockThenIsLockedFalseCache) FormatLockKey(k string) string  { return c.inner.FormatLockKey(k) }
+func (c lockThenIsLockedFalseCache) CreateLockKeys(keys []string) []*sop.LockKey {
+	return c.inner.CreateLockKeys(keys)
+}
+func (c lockThenIsLockedFalseCache) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
+	return c.inner.CreateLockKeysForIDs(keys)
+}
+func (c lockThenIsLockedFalseCache) IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
+	return c.inner.IsLockedTTL(ctx, duration, lockKeys)
+}
+func (c lockThenIsLockedFalseCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	return c.inner.Lock(ctx, duration, lockKeys)
+}
+func (c lockThenIsLockedFalseCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
+	return false, nil
+}
+func (c lockThenIsLockedFalseCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
+	return c.inner.IsLockedByOthers(ctx, lockKeyNames)
+}
+func (c lockThenIsLockedFalseCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
+	return c.inner.Unlock(ctx, lockKeys)
+}
+func (c lockThenIsLockedFalseCache) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
+
+// lockErrorCache forces Lock to return an error to trigger error propagation path in acquireLocks.
+type lockErrorCache struct{ inner sop.Cache }
+
+func (c lockErrorCache) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
+	return c.inner.Set(ctx, key, value, expiration)
+}
+func (c lockErrorCache) Get(ctx context.Context, key string) (bool, string, error) {
+	return c.inner.Get(ctx, key)
+}
+func (c lockErrorCache) GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error) {
+	return c.inner.GetEx(ctx, key, expiration)
+}
+func (c lockErrorCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+	return c.inner.SetStruct(ctx, key, value, expiration)
+}
+func (c lockErrorCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
+	return c.inner.GetStruct(ctx, key, target)
+}
+func (c lockErrorCache) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
+	return c.inner.GetStructEx(ctx, key, target, expiration)
+}
+func (c lockErrorCache) Delete(ctx context.Context, keys []string) (bool, error) {
+	return c.inner.Delete(ctx, keys)
+}
+func (c lockErrorCache) Ping(ctx context.Context) error { return c.inner.Ping(ctx) }
+func (c lockErrorCache) FormatLockKey(k string) string  { return c.inner.FormatLockKey(k) }
+func (c lockErrorCache) CreateLockKeys(keys []string) []*sop.LockKey {
+	return c.inner.CreateLockKeys(keys)
+}
+func (c lockErrorCache) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
+	return c.inner.CreateLockKeysForIDs(keys)
+}
+func (c lockErrorCache) IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
+	return c.inner.IsLockedTTL(ctx, duration, lockKeys)
+}
+func (c lockErrorCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	return false, sop.NilUUID, fmt.Errorf("forced lock error")
+}
+func (c lockErrorCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
+	return false, nil
+}
+func (c lockErrorCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
+	return c.inner.IsLockedByOthers(ctx, lockKeyNames)
+}
+func (c lockErrorCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
+	return c.inner.Unlock(ctx, lockKeys)
+}
+func (c lockErrorCache) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
+
+func Test_AcquireLocks_PartialAfterOk_ReturnsFailover(t *testing.T) {
+	ctx := context.Background()
+	base := mocks.NewMockClient()
+	l2 := lockThenIsLockedFalseCache{inner: base}
+	tx := &Transaction{l2Cache: l2}
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+
+	lid := sop.NewUUID()
+	stores := []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{{LogicalID: lid}}}}
+
+	_, err := tl.acquireLocks(ctx, tx, sop.NewUUID(), stores)
+	if err == nil {
+		t.Fatalf("expected failover error, got nil")
+	}
+	if se, ok := err.(sop.Error); !ok || se.Code != sop.RestoreRegistryFileSectorFailure {
+		t.Fatalf("expected sop.RestoreRegistryFileSectorFailure, got %v", err)
+	}
+}
+
+func Test_AcquireLocks_LockError_Propagates(t *testing.T) {
+	ctx := context.Background()
+	base := mocks.NewMockClient()
+	l2 := lockErrorCache{inner: base}
+	tx := &Transaction{l2Cache: l2}
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+
+	lid := sop.NewUUID()
+	stores := []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{{LogicalID: lid}}}}
+	_, err := tl.acquireLocks(ctx, tx, sop.NewUUID(), stores)
+	if err == nil || err.Error() != "forced lock error" {
+		t.Fatalf("expected forced lock error, got %v", err)
 	}
 }
