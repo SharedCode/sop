@@ -115,6 +115,12 @@ func TestMain(m *testing.M) {
     // Initialize erasure coding for replication tests.
     initErasureCoding()
 
+    // Ensure base folders exist for both replication (disk1, disk2), EC defaults (disk4..disk7),
+    // and an isolated set for specialized integration tests (disk8..disk13).
+    for i := 1; i <= 13; i++ {
+        _ = os.MkdirAll(fmt.Sprintf("%s%cdisk%d", dataPath, os.PathSeparator, i), 0o755)
+    }
+
     // Clear Redis cache between runs to avoid cross-test contamination.
     cache := redis.NewClient()
     _ = cache.Clear(context.Background())

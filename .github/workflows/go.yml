@@ -49,3 +49,18 @@ jobs:
       - name: Run stress test suite
         run: |
           go test -timeout 2h -tags=stress ./inredfs/stresstests/...
+
+  stress-replication-only:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: go.mod
+
+      - name: Run replication stress only
+        run: |
+          go test -timeout 2h -tags=stress ./inredfs/stresstests/replication -run Reinstate_MultiTable_Concurrency_SecondFailover -count=1
