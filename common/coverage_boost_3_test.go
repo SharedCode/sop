@@ -2,7 +2,7 @@ package common
 
 import (
 	"context"
-    "errors"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -677,88 +677,93 @@ func Test_Phase1Commit_PrecommitLogsRemoved(t *testing.T) {
 // errOnAddRegistry wraps a registry and fails on Add to exercise commitAddedNodes error path.
 type errOnAddRegistry struct{ inner sop.Registry }
 
-func (e errOnAddRegistry) Add(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error { return errors.New("add fail") }
-func (e errOnAddRegistry) Update(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error { return e.inner.Update(ctx, s) }
+func (e errOnAddRegistry) Add(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error {
+	return errors.New("add fail")
+}
+func (e errOnAddRegistry) Update(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error {
+	return e.inner.Update(ctx, s)
+}
 func (e errOnAddRegistry) UpdateNoLocks(ctx context.Context, a bool, s []sop.RegistryPayload[sop.Handle]) error {
-    return e.inner.UpdateNoLocks(ctx, a, s)
+	return e.inner.UpdateNoLocks(ctx, a, s)
 }
 func (e errOnAddRegistry) Get(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
-    return e.inner.Get(ctx, lids)
+	return e.inner.Get(ctx, lids)
 }
-func (e errOnAddRegistry) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error { return e.inner.Remove(ctx, lids) }
+func (e errOnAddRegistry) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error {
+	return e.inner.Remove(ctx, lids)
+}
 func (e errOnAddRegistry) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
-    return e.inner.Replicate(ctx, a, b, c, d)
+	return e.inner.Replicate(ctx, a, b, c, d)
 }
-
 
 func Test_NodeRepository_CommitAddedNodes_RegistryAddError(t *testing.T) {
-    ctx := context.Background()
-    reg := errOnAddRegistry{inner: mocks.NewMockRegistry(false)}
-    l2 := mocks.NewMockClient()
-    tx := &Transaction{registry: reg, blobStore: mocks.NewMockBlobStore(), l2Cache: l2}
-    nr := &nodeRepositoryBackend{transaction: tx, l2Cache: l2}
+	ctx := context.Background()
+	reg := errOnAddRegistry{inner: mocks.NewMockRegistry(false)}
+	l2 := mocks.NewMockClient()
+	tx := &Transaction{registry: reg, blobStore: mocks.NewMockBlobStore(), l2Cache: l2}
+	nr := &nodeRepositoryBackend{transaction: tx, l2Cache: l2}
 
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "add_reg_err", SlotLength: 2})
-    id := sop.NewUUID()
-    nodes := []sop.Tuple[*sop.StoreInfo, []interface{}]{{First: si, Second: []interface{}{&btree.Node[PersonKey, Person]{ID: id}}}}
-    if _, err := nr.commitAddedNodes(ctx, nodes); err == nil {
-        t.Fatalf("expected registry.Add error")
-    }
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "add_reg_err", SlotLength: 2})
+	id := sop.NewUUID()
+	nodes := []sop.Tuple[*sop.StoreInfo, []interface{}]{{First: si, Second: []interface{}{&btree.Node[PersonKey, Person]{ID: id}}}}
+	if _, err := nr.commitAddedNodes(ctx, nodes); err == nil {
+		t.Fatalf("expected registry.Add error")
+	}
 }
 
 func Test_NodeRepository_RollbackUpdatedNodes_DeletesCacheError_ReturnsLastErr(t *testing.T) {
-    ctx := context.Background()
-    reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
-    base := mocks.NewMockClient()
-    // Use existing errDeleteCache type from coverage_boost_10_test.go which embeds sop.Cache and overrides Delete
-    ecc := errDeleteCache{Cache: base}
-    bs := mocks.NewMockBlobStore()
-    nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: ecc, blobStore: bs}, l2Cache: ecc}
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_upd_cache_err", SlotLength: 2})
+	ctx := context.Background()
+	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	base := mocks.NewMockClient()
+	// Use existing errDeleteCache type from coverage_boost_10_test.go which embeds sop.Cache and overrides Delete
+	ecc := errDeleteCache{Cache: base}
+	bs := mocks.NewMockBlobStore()
+	nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: ecc, blobStore: bs}, l2Cache: ecc}
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_upd_cache_err", SlotLength: 2})
 
-    id := sop.NewUUID()
-    h := sop.NewHandle(id)
-    _ = h.AllocateID()
-    reg.Lookup[id] = h
-    vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{id}}}
-    if err := nr.rollbackUpdatedNodes(ctx, true, vids); err == nil {
-        t.Fatalf("expected lastErr from cache.Delete in rollbackUpdatedNodes")
-    }
+	id := sop.NewUUID()
+	h := sop.NewHandle(id)
+	_ = h.AllocateID()
+	reg.Lookup[id] = h
+	vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{id}}}
+	if err := nr.rollbackUpdatedNodes(ctx, true, vids); err == nil {
+		t.Fatalf("expected lastErr from cache.Delete in rollbackUpdatedNodes")
+	}
 }
 
 func Test_ItemActionTracker_CommitTrackedItemsValues_AddsAndCaches_2(t *testing.T) {
-    ctx := context.Background()
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_commit_values", SlotLength: 4, IsValueDataInNodeSegment: false})
-    si.IsValueDataActivelyPersisted = false
-    si.IsValueDataGloballyCached = true
-    si.CacheConfig.ValueDataCacheDuration = time.Minute
-    l2 := mocks.NewMockClient()
-    bs := mocks.NewMockBlobStore()
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-    trk := newItemActionTracker[PersonKey, Person](si, l2, bs, tl)
+	ctx := context.Background()
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_commit_values", SlotLength: 4, IsValueDataInNodeSegment: false})
+	si.IsValueDataActivelyPersisted = false
+	si.IsValueDataGloballyCached = true
+	si.CacheConfig.ValueDataCacheDuration = time.Minute
+	l2 := mocks.NewMockClient()
+	bs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, tl)
 
-    id := sop.NewUUID()
-    _, p := newPerson("z", "9", "m", "z@x", "p")
-    it := &btree.Item[PersonKey, Person]{ID: id, Value: &p}
-    if err := trk.Add(ctx, it); err != nil {
-        t.Fatalf("Add err: %v", err)
-    }
-    if err := trk.commitTrackedItemsValues(ctx); err != nil {
-        t.Fatalf("commitTrackedItemsValues err: %v", err)
-    }
-    if _, err := bs.GetOne(ctx, si.BlobTable, it.ID); err != nil {
-        t.Fatalf("blob not written: %v", err)
-    }
+	id := sop.NewUUID()
+	_, p := newPerson("z", "9", "m", "z@x", "p")
+	it := &btree.Item[PersonKey, Person]{ID: id, Value: &p}
+	if err := trk.Add(ctx, it); err != nil {
+		t.Fatalf("Add err: %v", err)
+	}
+	if err := trk.commitTrackedItemsValues(ctx); err != nil {
+		t.Fatalf("commitTrackedItemsValues err: %v", err)
+	}
+	if _, err := bs.GetOne(ctx, si.BlobTable, it.ID); err != nil {
+		t.Fatalf("blob not written: %v", err)
+	}
 }
 
 func Test_Transaction_Rollback_WhenCommitted_ReturnsError(t *testing.T) {
-    ctx := context.Background()
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-    tl.committedState = deleteObsoleteEntries // > finalizeCommit
-    tx := &Transaction{logger: tl}
-    if err := tx.rollback(ctx, false); err == nil {
-        t.Fatalf("expected error when rolling back a committed transaction")
-    }
+	ctx := context.Background()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	tl.committedState = deleteObsoleteEntries // > finalizeCommit
+	tx := &Transaction{logger: tl}
+	if err := tx.rollback(ctx, false); err == nil {
+		t.Fatalf("expected error when rolling back a committed transaction")
+	}
 }
 
 // tlogAddErr implements TransactionLog and forces Add to return an error to hit Add() logging error path.
@@ -766,154 +771,155 @@ type tlogAddErr struct{}
 
 func (t tlogAddErr) PriorityLog() sop.TransactionPriorityLog { return prioNoop{} }
 func (t tlogAddErr) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
-    return errors.New("tlog add err")
+	return errors.New("tlog add err")
 }
 func (t tlogAddErr) Remove(ctx context.Context, tid sop.UUID) error { return nil }
 func (t tlogAddErr) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
-    return sop.NilUUID, "", nil, nil
+	return sop.NilUUID, "", nil, nil
 }
 func (t tlogAddErr) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
-    return sop.NilUUID, nil, nil
+	return sop.NilUUID, nil, nil
 }
 func (t tlogAddErr) NewUUID() sop.UUID { return sop.NewUUID() }
 
 type prioNoop struct{}
 
-func (p prioNoop) IsEnabled() bool { return false }
+func (p prioNoop) IsEnabled() bool                                             { return false }
 func (p prioNoop) Add(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
-func (p prioNoop) Remove(ctx context.Context, tid sop.UUID) error { return nil }
+func (p prioNoop) Remove(ctx context.Context, tid sop.UUID) error              { return nil }
 func (p prioNoop) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
-    return nil, nil
+	return nil, nil
 }
 func (p prioNoop) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
-    return nil, nil
+	return nil, nil
 }
 func (p prioNoop) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
-    return nil
+	return nil
 }
 func (p prioNoop) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
-func (p prioNoop) RemoveBackup(ctx context.Context, tid sop.UUID) error { return nil }
+func (p prioNoop) RemoveBackup(ctx context.Context, tid sop.UUID) error                { return nil }
 
 func Test_ItemActionTracker_Add_ActivelyPersisted_LogError_Propagates(t *testing.T) {
-    ctx := context.Background()
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_add_log_err", SlotLength: 4, IsValueDataInNodeSegment: false})
-    si.IsValueDataActivelyPersisted = true
-    l2 := mocks.NewMockClient()
-    tl := newTransactionLogger(tlogAddErr{}, true)
-    trk := newItemActionTracker[PersonKey, Person](si, l2, mocks.NewMockBlobStore(), tl)
+	ctx := context.Background()
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_add_log_err", SlotLength: 4, IsValueDataInNodeSegment: false})
+	si.IsValueDataActivelyPersisted = true
+	l2 := mocks.NewMockClient()
+	tl := newTransactionLogger(tlogAddErr{}, true)
+	trk := newItemActionTracker[PersonKey, Person](si, l2, mocks.NewMockBlobStore(), tl)
 
-    id := sop.NewUUID()
-    _, p := newPerson("q", "3", "m", "q@x", "p")
-    it := &btree.Item[PersonKey, Person]{ID: id, Value: &p}
-    if err := trk.Add(ctx, it); err == nil {
-        t.Fatalf("expected log error to propagate from Add")
-    }
+	id := sop.NewUUID()
+	_, p := newPerson("q", "3", "m", "q@x", "p")
+	it := &btree.Item[PersonKey, Person]{ID: id, Value: &p}
+	if err := trk.Add(ctx, it); err == nil {
+		t.Fatalf("expected log error to propagate from Add")
+	}
 }
 
 func Test_NodeRepository_RollbackRemovedNodes_Locked_UndoesFlags(t *testing.T) {
-    ctx := context.Background()
-    reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
-    l2 := mocks.NewMockClient()
-    nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: l2}, l2Cache: l2}
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_removed_locked", SlotLength: 2})
+	ctx := context.Background()
+	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	l2 := mocks.NewMockClient()
+	nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: l2}, l2Cache: l2}
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_removed_locked", SlotLength: 2})
 
-    id := sop.NewUUID()
-    h := sop.NewHandle(id)
-    h.IsDeleted = true
-    h.WorkInProgressTimestamp = 555
-    reg.Lookup[id] = h
+	id := sop.NewUUID()
+	h := sop.NewHandle(id)
+	h.IsDeleted = true
+	h.WorkInProgressTimestamp = 555
+	reg.Lookup[id] = h
 
-    vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{id}}}
-    if err := nr.rollbackRemovedNodes(ctx, true, vids); err != nil {
-        t.Fatalf("rollbackRemovedNodes err: %v", err)
-    }
-    if got := reg.Lookup[id]; got.IsDeleted || got.WorkInProgressTimestamp != 0 {
-        t.Fatalf("expected flags cleared, got IsDeleted=%v wip=%d", got.IsDeleted, got.WorkInProgressTimestamp)
-    }
+	vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{id}}}
+	if err := nr.rollbackRemovedNodes(ctx, true, vids); err != nil {
+		t.Fatalf("rollbackRemovedNodes err: %v", err)
+	}
+	if got := reg.Lookup[id]; got.IsDeleted || got.WorkInProgressTimestamp != 0 {
+		t.Fatalf("expected flags cleared, got IsDeleted=%v wip=%d", got.IsDeleted, got.WorkInProgressTimestamp)
+	}
 }
 
 // commitTrackedItemsValuesErr backend hook to induce an error from phase1Commit before any node commits.
 func Test_Phase1Commit_CommitTrackedItemsValues_Error_Propagates(t *testing.T) {
-    ctx := context.Background()
-    l2 := mocks.NewMockClient()
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_ctiv_err", SlotLength: 2})
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: 0}
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_ctiv_err", SlotLength: 2})
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: 0}
 
-    nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
-    tx.btreesBackend = []btreeBackend{{
-        nodeRepository:                   nr,
-        getStoreInfo:                     func() *sop.StoreInfo { return si },
-        hasTrackedItems:                  func() bool { return true },
-        checkTrackedItems:                func(context.Context) error { return nil },
-        lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-        unlockTrackedItems:               func(context.Context) error { return nil },
-        commitTrackedItemsValues:         func(context.Context) error { return errors.New("ctiv err") },
-        getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-        getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-        refetchAndMerge:                  func(context.Context) error { return nil },
-    }}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return errors.New("ctiv err") },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { return nil },
+	}}
 
-    if err := tx.phase1Commit(ctx); err == nil || err.Error() != "ctiv err" {
-        t.Fatalf("expected ctiv err, got %v", err)
-    }
+	if err := tx.phase1Commit(ctx); err == nil || err.Error() != "ctiv err" {
+		t.Fatalf("expected ctiv err, got %v", err)
+	}
 }
 
 // isLockedFalseOnceCache wraps a Cache and forces IsLocked to return false on first call
 // to exercise the phase1Commit loop's IsLocked-false branch.
-type isLockedFalseOnceCache struct{
-    sop.Cache
-    flipped bool
+type isLockedFalseOnceCache struct {
+	sop.Cache
+	flipped bool
 }
 
 func (c *isLockedFalseOnceCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
-    if !c.flipped {
-        c.flipped = true
-        return false, nil
-    }
-    return c.Cache.IsLocked(ctx, lockKeys)
+	if !c.flipped {
+		c.flipped = true
+		return false, nil
+	}
+	return c.Cache.IsLocked(ctx, lockKeys)
 }
 
 func Test_Phase1Commit_IsLockedFalse_ThenSucceeds(t *testing.T) {
-    ctx := context.Background()
-    base := mocks.NewMockClient()
-    l2 := &isLockedFalseOnceCache{Cache: base}
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	ctx := context.Background()
+	base := mocks.NewMockClient()
+	l2 := &isLockedFalseOnceCache{Cache: base}
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-    reg := mocks.NewMockRegistry(false)
-    si := sop.NewStoreInfo(sop.StoreOptions{
-        Name:       "p1_islocked_false",
-        SlotLength: 2,
-    })
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	reg := mocks.NewMockRegistry(false)
+	si := sop.NewStoreInfo(sop.StoreOptions{
+		Name:       "p1_islocked_false",
+		SlotLength: 2,
+	})
 
-    // Initialize as not-begun so Begin() can transition it properly.
-    tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: -1}
+	// Initialize as not-begun so Begin() can transition it properly.
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: -1}
 
-    // Prepare a node marked as updated so nodesKeys are created and IsLocked path executes.
-    lid := sop.NewUUID()
-    n := &btree.Node[sop.UUID, int]{ID: lid, Version: 0}
-    // Seed registry with matching handle/version.
-    reg.(*mocks.Mock_vid_registry).Lookup[lid] = sop.Handle{LogicalID: lid, PhysicalIDA: lid, Version: 0}
+	// Prepare a node marked as updated so nodesKeys are created and IsLocked path executes.
+	lid := sop.NewUUID()
+	n := &btree.Node[sop.UUID, int]{ID: lid, Version: 0}
+	// Seed registry with matching handle/version.
+	reg.(*mocks.Mock_vid_registry).Lookup[lid] = sop.Handle{LogicalID: lid, PhysicalIDA: lid, Version: 0}
 
-    nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{lid: {node: n, action: updateAction}}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
-    tx.btreesBackend = []btreeBackend{{
-        nodeRepository:                   nr,
-        getStoreInfo:                     func() *sop.StoreInfo { return si },
-        hasTrackedItems:                  func() bool { return true },
-        checkTrackedItems:                func(context.Context) error { return nil },
-        lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-        unlockTrackedItems:               func(context.Context) error { return nil },
-        commitTrackedItemsValues:         func(context.Context) error { return nil },
-        getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-        getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-        refetchAndMerge:                  func(ctx context.Context) error { return nil },
-    }}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{lid: {node: n, action: updateAction}}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(ctx context.Context) error { return nil },
+	}}
 
-    if err := tx.Begin(); err != nil { t.Fatalf("begin err: %v", err) }
-    if err := tx.Phase1Commit(ctx); err != nil {
-        t.Fatalf("Phase1Commit err: %v", err)
-    }
+	if err := tx.Begin(); err != nil {
+		t.Fatalf("begin err: %v", err)
+	}
+	if err := tx.Phase1Commit(ctx); err != nil {
+		t.Fatalf("Phase1Commit err: %v", err)
+	}
 }
-

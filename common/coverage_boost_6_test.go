@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-    "strings"
+	"strings"
 	"testing"
 	"time"
 
@@ -725,186 +725,196 @@ func Test_TransactionLogger_DoPriorityRollbacks_PrbsLockHeld_ReturnsFalse(t *tes
 // Covers itemActionTracker.Add when actively-persisted is enabled but item has nil Value:
 // should skip blob add/log and only bump version and track the item.
 func Test_ItemActionTracker_Add_ActivelyPersisted_NoValue_SkipsPersist(t *testing.T) {
-    ctx := context.Background()
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
-    so := sop.StoreOptions{Name: "iat_add_skip", SlotLength: 4, IsValueDataActivelyPersisted: true, IsValueDataGloballyCached: true}
-    si := sop.NewStoreInfo(so)
-    trk := newItemActionTracker[PersonKey, Person](si, l2, mocks.NewMockBlobStore(), tl)
+	so := sop.StoreOptions{Name: "iat_add_skip", SlotLength: 4, IsValueDataActivelyPersisted: true, IsValueDataGloballyCached: true}
+	si := sop.NewStoreInfo(so)
+	trk := newItemActionTracker[PersonKey, Person](si, l2, mocks.NewMockBlobStore(), tl)
 
-    // Item with nil Value triggers manage() to return nil, so no blob add/log occurs.
-    it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: PersonKey{Lastname: "x"}, Version: 1, Value: nil}
-    if err := trk.Add(ctx, it); err != nil {
-        t.Fatalf("Add err: %v", err)
-    }
-    // Version should still bump.
-    if it.Version != 2 {
-        t.Fatalf("expected version increment to 2, got %d", it.Version)
-    }
-    // Ensure item is tracked with action addAction.
-    ci, ok := trk.items[it.ID]
-    if !ok || ci.Action != addAction {
-        t.Fatalf("expected tracked addAction, ok=%v action=%v", ok, ci.Action)
-    }
+	// Item with nil Value triggers manage() to return nil, so no blob add/log occurs.
+	it := &btree.Item[PersonKey, Person]{ID: sop.NewUUID(), Key: PersonKey{Lastname: "x"}, Version: 1, Value: nil}
+	if err := trk.Add(ctx, it); err != nil {
+		t.Fatalf("Add err: %v", err)
+	}
+	// Version should still bump.
+	if it.Version != 2 {
+		t.Fatalf("expected version increment to 2, got %d", it.Version)
+	}
+	// Ensure item is tracked with action addAction.
+	ci, ok := trk.items[it.ID]
+	if !ok || ci.Action != addAction {
+		t.Fatalf("expected tracked addAction, ok=%v action=%v", ok, ci.Action)
+	}
 }
 
 // Covers itemActionTracker.Update when an existing tracked item is addAction: it should actively persist
 // and update global cache when configured.
 func Test_ItemActionTracker_Update_OnExistingAdd_ActivelyPersisted_Caches(t *testing.T) {
-    ctx := context.Background()
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    bs := mocks.NewMockBlobStore()
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	bs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
-    so := sop.StoreOptions{Name: "iat_upd_on_add", SlotLength: 4, IsValueDataActivelyPersisted: true, IsValueDataGloballyCached: true}
-    si := sop.NewStoreInfo(so)
-    trk := newItemActionTracker[PersonKey, Person](si, l2, bs, tl)
+	so := sop.StoreOptions{Name: "iat_upd_on_add", SlotLength: 4, IsValueDataActivelyPersisted: true, IsValueDataGloballyCached: true}
+	si := sop.NewStoreInfo(so)
+	trk := newItemActionTracker[PersonKey, Person](si, l2, bs, tl)
 
-    // Seed tracker with an addAction entry containing a non-nil value so manage() yields a blob to add.
-    id := sop.NewUUID()
-    val := Person{Email: "a"}
-        it0 := &btree.Item[PersonKey, Person]{ID: id, Key: PersonKey{Lastname: "k"}, Version: 1, Value: &val}
-    trk.items[id] = cacheItem[PersonKey, Person]{lockRecord: lockRecord{LockID: sop.NewUUID(), Action: addAction}, item: it0, versionInDB: it0.Version}
+	// Seed tracker with an addAction entry containing a non-nil value so manage() yields a blob to add.
+	id := sop.NewUUID()
+	val := Person{Email: "a"}
+	it0 := &btree.Item[PersonKey, Person]{ID: id, Key: PersonKey{Lastname: "k"}, Version: 1, Value: &val}
+	trk.items[id] = cacheItem[PersonKey, Person]{lockRecord: lockRecord{LockID: sop.NewUUID(), Action: addAction}, item: it0, versionInDB: it0.Version}
 
-    // Call Update with a separate item instance; code path should use the cached addAction entry.
-    it := &btree.Item[PersonKey, Person]{ID: id, Key: it0.Key, Version: 1, Value: &val}
-    if err := trk.Update(ctx, it); err != nil {
-        t.Fatalf("Update err: %v", err)
-    }
-    // Value should be placed in global cache keyed by the item ID; verify presence.
-    var got Person
-    if ok, _ := l2.GetStruct(ctx, formatItemKey(id.String()), &got); !ok || got.Email != "a" {
-        t.Fatalf("expected cached value after Update on addAction; ok=%v got=%+v", ok, got)
-    }
+	// Call Update with a separate item instance; code path should use the cached addAction entry.
+	it := &btree.Item[PersonKey, Person]{ID: id, Key: it0.Key, Version: 1, Value: &val}
+	if err := trk.Update(ctx, it); err != nil {
+		t.Fatalf("Update err: %v", err)
+	}
+	// Value should be placed in global cache keyed by the item ID; verify presence.
+	var got Person
+	if ok, _ := l2.GetStruct(ctx, formatItemKey(id.String()), &got); !ok || got.Email != "a" {
+		t.Fatalf("expected cached value after Update on addAction; ok=%v got=%+v", ok, got)
+	}
 }
 
 // Increases coverage for Phase1Commit wrapper by forcing rollback to return an error
 // (unlockTrackedItems returns error when committedState >= lockTrackedItems), so wrapper
 // includes "rollback error:" in the returned message.
 func Test_Phase1Commit_Wrapper_Appends_RollbackError(t *testing.T) {
-    ctx := context.Background()
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    bs := mocks.NewMockBlobStore()
-    sr := mocks.NewMockStoreRepository()
-    rg := mocks.NewMockRegistry(false)
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	bs := mocks.NewMockBlobStore()
+	sr := mocks.NewMockStoreRepository()
+	rg := mocks.NewMockRegistry(false)
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
-    tx := &Transaction{mode: sop.ForWriting, phaseDone: -1, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, StoreRepository: sr, registry: rg, logger: tl, maxTime: time.Minute}
+	tx := &Transaction{mode: sop.ForWriting, phaseDone: -1, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, StoreRepository: sr, registry: rg, logger: tl, maxTime: time.Minute}
 
-    // Backend that has tracked items, lock fails to trigger early error, and unlock returns error for rollback.
-    bx := btreeBackend{
-        nodeRepository: &nodeRepositoryBackend{localCache: make(map[sop.UUID]cachedNode)},
-        getStoreInfo:                     func() *sop.StoreInfo { si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_rb_err", SlotLength: 4}); return si },
-        hasTrackedItems:                  func() bool { return true },
-        checkTrackedItems:                func(context.Context) error { return nil },
-        lockTrackedItems:                 func(context.Context, time.Duration) error { return assertError("lock fail") },
-        unlockTrackedItems:               func(context.Context) error { return assertError("unlock fail") },
-        commitTrackedItemsValues:         func(context.Context) error { return nil },
-        getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-        getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-        refetchAndMerge:                  func(context.Context) error { return nil },
-    }
-    tx.btreesBackend = []btreeBackend{bx}
+	// Backend that has tracked items, lock fails to trigger early error, and unlock returns error for rollback.
+	bx := btreeBackend{
+		nodeRepository: &nodeRepositoryBackend{localCache: make(map[sop.UUID]cachedNode)},
+		getStoreInfo: func() *sop.StoreInfo {
+			si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_rb_err", SlotLength: 4})
+			return si
+		},
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return assertError("lock fail") },
+		unlockTrackedItems:               func(context.Context) error { return assertError("unlock fail") },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { return nil },
+	}
+	tx.btreesBackend = []btreeBackend{bx}
 
-    if err := tx.Begin(); err != nil { t.Fatal(err) }
-    err := tx.Phase1Commit(ctx)
-    if err == nil {
-        t.Fatalf("expected error from Phase1Commit")
-    }
-    // Should include "rollback error" from wrapper formatting when rollback fails.
-    if !strings.Contains(err.Error(), "rollback error:") {
-        t.Fatalf("expected rollback error appended, got: %v", err)
-    }
-    if tx.HasBegun() {
-        t.Fatalf("expected transaction to be ended after failure")
-    }
+	if err := tx.Begin(); err != nil {
+		t.Fatal(err)
+	}
+	err := tx.Phase1Commit(ctx)
+	if err == nil {
+		t.Fatalf("expected error from Phase1Commit")
+	}
+	// Should include "rollback error" from wrapper formatting when rollback fails.
+	if !strings.Contains(err.Error(), "rollback error:") {
+		t.Fatalf("expected rollback error appended, got: %v", err)
+	}
+	if tx.HasBegun() {
+		t.Fatalf("expected transaction to be ended after failure")
+	}
 }
 
 // Helper to construct quick errors without importing fmt anew.
 func assertError(msg string) error { return &simpleErr{s: msg} }
+
 type simpleErr struct{ s string }
+
 func (e *simpleErr) Error() string { return e.s }
 
 // Covers rollbackRemovedNodes when nodesAreLocked=false to exercise the Update() path.
 func Test_NodeRepository_RollbackRemovedNodes_UnlockedPath(t *testing.T) {
-    ctx := context.Background()
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    rg := mocks.NewMockRegistry(false)
-    bs := mocks.NewMockBlobStore()
-    tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	rg := mocks.NewMockRegistry(false)
+	bs := mocks.NewMockBlobStore()
+	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
 
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_rm_nodes_unlocked", SlotLength: 4})
-    nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache()}
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_rm_nodes_unlocked", SlotLength: 4})
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache()}
 
-    // Seed registry with deleted/timestamped handles to create a non-empty handlesForRollback.
-    lid := sop.NewUUID()
-    h := sop.NewHandle(lid)
-    h.IsDeleted = true
-    h.WorkInProgressTimestamp = sop.Now().UnixMilli()
-    _ = rg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: si.RegistryTable, IDs: []sop.Handle{h}}})
+	// Seed registry with deleted/timestamped handles to create a non-empty handlesForRollback.
+	lid := sop.NewUUID()
+	h := sop.NewHandle(lid)
+	h.IsDeleted = true
+	h.WorkInProgressTimestamp = sop.Now().UnixMilli()
+	_ = rg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: si.RegistryTable, IDs: []sop.Handle{h}}})
 
-    vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, IDs: []sop.UUID{lid}}}
-    if err := nr.rollbackRemovedNodes(ctx, false, vids); err != nil {
-        t.Fatalf("rollbackRemovedNodes (unlocked) err: %v", err)
-    }
+	vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, IDs: []sop.UUID{lid}}}
+	if err := nr.rollbackRemovedNodes(ctx, false, vids); err != nil {
+		t.Fatalf("rollbackRemovedNodes (unlocked) err: %v", err)
+	}
 }
+
 // stubTLRemoveErr2 returns an error on Remove to exercise error propagation at end of rollback.
 type stubTLRemoveErr2 struct{ mocks.MockTransactionLog }
 
-func (s *stubTLRemoveErr2) Remove(ctx context.Context, tid sop.UUID) error { return fmt.Errorf("rm err") }
+func (s *stubTLRemoveErr2) Remove(ctx context.Context, tid sop.UUID) error {
+	return fmt.Errorf("rm err")
+}
 
 // Covers finalizeCommit branch with non-nil payload when lastCommittedFunctionLog < deleteTrackedItemsValues:
 // should not delete tracked items or obsolete entries, and perform final Remove at the end.
 func Test_TransactionLogger_Rollback_FinalizeWithPayload_Continue_NoDeletes(t *testing.T) {
-    ctx := context.Background()
-    tl := &stubTLRemove{}
-    logger := newTransactionLogger(tl, true)
-    tx := &Transaction{logger: logger}
+	ctx := context.Background()
+	tl := &stubTLRemove{}
+	logger := newTransactionLogger(tl, true)
+	tx := &Transaction{logger: logger}
 
-    // Prepare a non-empty finalize payload but make the last log a lower stage to force the "continue" path.
-    // Structure: Tuple{ First: Tuple{ []RegistryPayload[UUID], []BlobsPayload[UUID] }, Second: []Tuple[bool, BlobsPayload[UUID]] }
-    lids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: "rt", IDs: []sop.UUID{sop.NewUUID()}}}
-    bids := []sop.BlobsPayload[sop.UUID]{{BlobTable: "bt", Blobs: []sop.UUID{sop.NewUUID()}}}
-    tracked := []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]{{First: true, Second: bids[0]}}
-    pl := sop.Tuple[sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]], []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]]{
-        First:  sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{First: lids, Second: bids},
-        Second: tracked,
-    }
+	// Prepare a non-empty finalize payload but make the last log a lower stage to force the "continue" path.
+	// Structure: Tuple{ First: Tuple{ []RegistryPayload[UUID], []BlobsPayload[UUID] }, Second: []Tuple[bool, BlobsPayload[UUID]] }
+	lids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: "rt", IDs: []sop.UUID{sop.NewUUID()}}}
+	bids := []sop.BlobsPayload[sop.UUID]{{BlobTable: "bt", Blobs: []sop.UUID{sop.NewUUID()}}}
+	tracked := []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]{{First: true, Second: bids[0]}}
+	pl := sop.Tuple[sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]], []sop.Tuple[bool, sop.BlobsPayload[sop.UUID]]]{
+		First:  sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{First: lids, Second: bids},
+		Second: tracked,
+	}
 
-    tid := sop.NewUUID()
-    logs := []sop.KeyValuePair[int, []byte]{
-        {Key: int(finalizeCommit), Value: toByteArray(pl)},
-        // Make the last committed function a lower stage so finalize payload branch only continues.
-        {Key: int(commitAddedNodes), Value: nil},
-    }
+	tid := sop.NewUUID()
+	logs := []sop.KeyValuePair[int, []byte]{
+		{Key: int(finalizeCommit), Value: toByteArray(pl)},
+		// Make the last committed function a lower stage so finalize payload branch only continues.
+		{Key: int(commitAddedNodes), Value: nil},
+	}
 
-    if err := logger.rollback(ctx, tx, tid, logs); err != nil {
-        t.Fatalf("rollback returned error: %v", err)
-    }
-    if len(tl.removed) != 1 || tl.removed[0].Compare(tid) != 0 {
-        t.Fatalf("expected Remove called for tid at end-of-loop, got %v", tl.removed)
-    }
+	if err := logger.rollback(ctx, tx, tid, logs); err != nil {
+		t.Fatalf("rollback returned error: %v", err)
+	}
+	if len(tl.removed) != 1 || tl.removed[0].Compare(tid) != 0 {
+		t.Fatalf("expected Remove called for tid at end-of-loop, got %v", tl.removed)
+	}
 }
 
 // Ensures rollback returns error when final Remove(tid) fails and no early return occurs.
 func Test_TransactionLogger_Rollback_EndRemove_Error_Propagates(t *testing.T) {
-    ctx := context.Background()
-    tl := &stubTLRemoveErr2{}
-    logger := newTransactionLogger(tl, true)
-    tx := &Transaction{logger: logger}
+	ctx := context.Background()
+	tl := &stubTLRemoveErr2{}
+	logger := newTransactionLogger(tl, true)
+	tx := &Transaction{logger: logger}
 
-    tid := sop.NewUUID()
-    // Provide a simple log that doesn't early-return so the trailing Remove is executed.
-    logs := []sop.KeyValuePair[int, []byte]{
-        {Key: int(commitAddedNodes), Value: nil},
-    }
+	tid := sop.NewUUID()
+	// Provide a simple log that doesn't early-return so the trailing Remove is executed.
+	logs := []sop.KeyValuePair[int, []byte]{
+		{Key: int(commitAddedNodes), Value: nil},
+	}
 
-    if err := logger.rollback(ctx, tx, tid, logs); err == nil {
-        t.Fatalf("expected error propagated from final Remove")
-    }
+	if err := logger.rollback(ctx, tx, tid, logs); err == nil {
+		t.Fatalf("expected error propagated from final Remove")
+	}
 }

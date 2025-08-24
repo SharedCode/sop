@@ -35,7 +35,6 @@ func Test_TransactionLogger_AcquireLocks_PartialLockByOther_ReturnsFailoverError
 	}
 }
 
-
 // tlErr simulates a TransactionLog that returns errors from GetOne/GetOneOfHour.
 type tlErr struct {
 	errOne  error

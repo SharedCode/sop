@@ -2,7 +2,7 @@ package common
 
 import (
 	"context"
-    "errors"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -656,263 +656,289 @@ func Test_TransactionLogger_DoPriorityRollbacks_VersionAdvance_TriggersFailover(
 
 // lockFailOnceCache fails Lock once to force the phase1Commit loop to set needsRefetchAndMerge.
 type lockFailOnceCache struct {
-    sop.Cache
-    flipped bool
+	sop.Cache
+	flipped bool
 }
 
 func (c *lockFailOnceCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
-    if !c.flipped {
-        c.flipped = true
-        return false, sop.NilUUID, nil
-    }
-    return c.Cache.Lock(ctx, duration, lockKeys)
+	if !c.flipped {
+		c.flipped = true
+		return false, sop.NilUUID, nil
+	}
+	return c.Cache.Lock(ctx, duration, lockKeys)
 }
 
 func Test_Phase1Commit_LockFailOnce_TriggersRefetchAndMerge(t *testing.T) {
-    ctx := context.Background()
+	ctx := context.Background()
 
-    // L2 cache fails first Lock, then succeeds.
-    base := mocks.NewMockClient()
-    l2 := &lockFailOnceCache{Cache: base}
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	// L2 cache fails first Lock, then succeeds.
+	base := mocks.NewMockClient()
+	l2 := &lockFailOnceCache{Cache: base}
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-    reg := mocks.NewMockRegistry(false)
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_lock_fail_once", SlotLength: 2})
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	reg := mocks.NewMockRegistry(false)
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_lock_fail_once", SlotLength: 2})
 
-    tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: -1}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: -1}
 
-    // Prepare updated node so nodesKeys are formed and lock path executes.
-    lid := sop.NewUUID()
-    n := &btree.Node[sop.UUID, int]{ID: lid, Version: 0}
-    // Seed registry with handle
-    reg.(*mocks.Mock_vid_registry).Lookup[lid] = sop.Handle{LogicalID: lid, PhysicalIDA: lid, Version: 0}
+	// Prepare updated node so nodesKeys are formed and lock path executes.
+	lid := sop.NewUUID()
+	n := &btree.Node[sop.UUID, int]{ID: lid, Version: 0}
+	// Seed registry with handle
+	reg.(*mocks.Mock_vid_registry).Lookup[lid] = sop.Handle{LogicalID: lid, PhysicalIDA: lid, Version: 0}
 
-    // Count refetch-and-merge invocations.
-    var refetchCount int
+	// Count refetch-and-merge invocations.
+	var refetchCount int
 
-    nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{lid: {node: n, action: updateAction}}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
-    tx.btreesBackend = []btreeBackend{{
-        nodeRepository:                   nr,
-        getStoreInfo:                     func() *sop.StoreInfo { return si },
-        hasTrackedItems:                  func() bool { return true },
-        checkTrackedItems:                func(context.Context) error { return nil },
-        lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-        unlockTrackedItems:               func(context.Context) error { return nil },
-        commitTrackedItemsValues:         func(context.Context) error { return nil },
-        getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-        getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-        refetchAndMerge:                  func(context.Context) error { refetchCount++; return nil },
-    }}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{lid: {node: n, action: updateAction}}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { refetchCount++; return nil },
+	}}
 
-    if err := tx.Begin(); err != nil { t.Fatalf("begin err: %v", err) }
-    if err := tx.Phase1Commit(ctx); err != nil {
-        t.Fatalf("Phase1Commit err: %v", err)
-    }
-    if refetchCount == 0 {
-        t.Fatalf("expected refetchAndMerge to be invoked at least once")
-    }
+	if err := tx.Begin(); err != nil {
+		t.Fatalf("begin err: %v", err)
+	}
+	if err := tx.Phase1Commit(ctx); err != nil {
+		t.Fatalf("Phase1Commit err: %v", err)
+	}
+	if refetchCount == 0 {
+		t.Fatalf("expected refetchAndMerge to be invoked at least once")
+	}
 }
 
 // errUpdateRegistry wraps a registry and fails on Update to cover nodesAreLocked=false path in rollbackRemovedNodes.
 type errUpdateRegistry struct{ inner sop.Registry }
 
-func (e errUpdateRegistry) Add(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error { return e.inner.Add(ctx, s) }
-func (e errUpdateRegistry) Update(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error { return errors.New("update err") }
+func (e errUpdateRegistry) Add(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error {
+	return e.inner.Add(ctx, s)
+}
+func (e errUpdateRegistry) Update(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error {
+	return errors.New("update err")
+}
 func (e errUpdateRegistry) UpdateNoLocks(ctx context.Context, a bool, s []sop.RegistryPayload[sop.Handle]) error {
-    return e.inner.UpdateNoLocks(ctx, a, s)
+	return e.inner.UpdateNoLocks(ctx, a, s)
 }
 func (e errUpdateRegistry) Get(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
-    return e.inner.Get(ctx, lids)
+	return e.inner.Get(ctx, lids)
 }
-func (e errUpdateRegistry) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error { return e.inner.Remove(ctx, lids) }
+func (e errUpdateRegistry) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error {
+	return e.inner.Remove(ctx, lids)
+}
 func (e errUpdateRegistry) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
-    return e.inner.Replicate(ctx, a, b, c, d)
+	return e.inner.Replicate(ctx, a, b, c, d)
 }
 
 func Test_NodeRepository_RollbackRemovedNodes_Unlocked_UpdateError(t *testing.T) {
-    ctx := context.Background()
-    baseReg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
-    reg := errUpdateRegistry{inner: baseReg}
-    l2 := mocks.NewMockClient()
-    nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: l2}, l2Cache: l2}
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_removed_unlocked_upderr", SlotLength: 2})
+	ctx := context.Background()
+	baseReg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+	reg := errUpdateRegistry{inner: baseReg}
+	l2 := mocks.NewMockClient()
+	nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: l2}, l2Cache: l2}
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_removed_unlocked_upderr", SlotLength: 2})
 
-    id := sop.NewUUID()
-    // Handle without deleted/WIP flags; rollback should try Update with empty set and here error will come from Update anyway.
-    baseReg.Lookup[id] = sop.NewHandle(id)
+	id := sop.NewUUID()
+	// Handle without deleted/WIP flags; rollback should try Update with empty set and here error will come from Update anyway.
+	baseReg.Lookup[id] = sop.NewHandle(id)
 
-    vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{id}}}
-    if err := nr.rollbackRemovedNodes(ctx, false, vids); err == nil {
-        t.Fatalf("expected error from registry.Update in unlocked path")
-    }
+	vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{id}}}
+	if err := nr.rollbackRemovedNodes(ctx, false, vids); err == nil {
+		t.Fatalf("expected error from registry.Update in unlocked path")
+	}
 }
 
 // tlogFailAdd fails Add to test cleanup log error propagation.
 type tlogFailAdd struct{}
 
-func (t tlogFailAdd) PriorityLog() sop.TransactionPriorityLog { return mocks.NewMockTransactionLog().PriorityLog() }
-func (t tlogFailAdd) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error { return errors.New("add fail") }
+func (t tlogFailAdd) PriorityLog() sop.TransactionPriorityLog {
+	return mocks.NewMockTransactionLog().PriorityLog()
+}
+func (t tlogFailAdd) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+	return errors.New("add fail")
+}
 func (t tlogFailAdd) Remove(ctx context.Context, tid sop.UUID) error { return nil }
 func (t tlogFailAdd) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
-    return sop.NilUUID, "", nil, nil
+	return sop.NilUUID, "", nil, nil
 }
 func (t tlogFailAdd) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
-    return sop.NilUUID, nil, nil
+	return sop.NilUUID, nil, nil
 }
 func (t tlogFailAdd) NewUUID() sop.UUID { return sop.NewUUID() }
 
 func Test_Transaction_Cleanup_LogError_Propagates(t *testing.T) {
-    ctx := context.Background()
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
-    tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(tlogFailAdd{}, true)}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(tlogFailAdd{}, true)}
 
-    if err := tx.cleanup(ctx); err == nil {
-        t.Fatalf("expected cleanup to propagate log(Add) error")
-    }
+	if err := tx.cleanup(ctx); err == nil {
+		t.Fatalf("expected cleanup to propagate log(Add) error")
+	}
 }
- 
+
 // isLockedErrOnceCache makes IsLocked return an error the first time to cover the error branch in phase1Commit.
 type isLockedErrOnceCache struct {
-    sop.Cache
-    flipped bool
+	sop.Cache
+	flipped bool
 }
 
 func (c *isLockedErrOnceCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
-    if !c.flipped {
-        c.flipped = true
-        return false, errors.New("islocked err")
-    }
-    return c.Cache.IsLocked(ctx, lockKeys)
+	if !c.flipped {
+		c.flipped = true
+		return false, errors.New("islocked err")
+	}
+	return c.Cache.IsLocked(ctx, lockKeys)
 }
 
 func Test_Phase1Commit_IsLockedError_ThenSucceeds(t *testing.T) {
-    ctx := context.Background()
-    base := mocks.NewMockClient()
-    l2 := &isLockedErrOnceCache{Cache: base}
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	ctx := context.Background()
+	base := mocks.NewMockClient()
+	l2 := &isLockedErrOnceCache{Cache: base}
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-    reg := mocks.NewMockRegistry(false)
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_islocked_err", SlotLength: 2})
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	reg := mocks.NewMockRegistry(false)
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_islocked_err", SlotLength: 2})
 
-    tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: -1}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: -1}
 
-    lid := sop.NewUUID()
-    n := &btree.Node[sop.UUID, int]{ID: lid, Version: 0}
-    reg.(*mocks.Mock_vid_registry).Lookup[lid] = sop.Handle{LogicalID: lid, PhysicalIDA: lid, Version: 0}
+	lid := sop.NewUUID()
+	n := &btree.Node[sop.UUID, int]{ID: lid, Version: 0}
+	reg.(*mocks.Mock_vid_registry).Lookup[lid] = sop.Handle{LogicalID: lid, PhysicalIDA: lid, Version: 0}
 
-    nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{lid: {node: n, action: updateAction}}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
-    tx.btreesBackend = []btreeBackend{{
-        nodeRepository:                   nr,
-        getStoreInfo:                     func() *sop.StoreInfo { return si },
-        hasTrackedItems:                  func() bool { return true },
-        checkTrackedItems:                func(context.Context) error { return nil },
-        lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-        unlockTrackedItems:               func(context.Context) error { return nil },
-        commitTrackedItemsValues:         func(context.Context) error { return nil },
-        getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-        getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-        refetchAndMerge:                  func(context.Context) error { return nil },
-    }}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{lid: {node: n, action: updateAction}}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	tx.btreesBackend = []btreeBackend{{
+		nodeRepository:                   nr,
+		getStoreInfo:                     func() *sop.StoreInfo { return si },
+		hasTrackedItems:                  func() bool { return true },
+		checkTrackedItems:                func(context.Context) error { return nil },
+		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+		unlockTrackedItems:               func(context.Context) error { return nil },
+		commitTrackedItemsValues:         func(context.Context) error { return nil },
+		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+		refetchAndMerge:                  func(context.Context) error { return nil },
+	}}
 
-    if err := tx.Begin(); err != nil { t.Fatalf("begin err: %v", err) }
-    if err := tx.Phase1Commit(ctx); err != nil {
-        t.Fatalf("Phase1Commit err: %v", err)
-    }
+	if err := tx.Begin(); err != nil {
+		t.Fatalf("begin err: %v", err)
+	}
+	if err := tx.Phase1Commit(ctx); err != nil {
+		t.Fatalf("Phase1Commit err: %v", err)
+	}
 }
 
 // errGetRegistry3 fails on Get to cover early error branch in rollbackRemovedNodes.
 type errGetRegistry3 struct{ inner sop.Registry }
 
-func (e errGetRegistry3) Add(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error { return e.inner.Add(ctx, s) }
-func (e errGetRegistry3) Update(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error { return e.inner.Update(ctx, s) }
+func (e errGetRegistry3) Add(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error {
+	return e.inner.Add(ctx, s)
+}
+func (e errGetRegistry3) Update(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error {
+	return e.inner.Update(ctx, s)
+}
 func (e errGetRegistry3) UpdateNoLocks(ctx context.Context, a bool, s []sop.RegistryPayload[sop.Handle]) error {
-    return e.inner.UpdateNoLocks(ctx, a, s)
+	return e.inner.UpdateNoLocks(ctx, a, s)
 }
 func (e errGetRegistry3) Get(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
-    return nil, errors.New("get err")
+	return nil, errors.New("get err")
 }
-func (e errGetRegistry3) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error { return e.inner.Remove(ctx, lids) }
+func (e errGetRegistry3) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error {
+	return e.inner.Remove(ctx, lids)
+}
 func (e errGetRegistry3) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
-    return e.inner.Replicate(ctx, a, b, c, d)
+	return e.inner.Replicate(ctx, a, b, c, d)
 }
 
 func Test_NodeRepository_RollbackRemovedNodes_GetError_EarlyGet(t *testing.T) {
-    ctx := context.Background()
-    reg := errGetRegistry3{inner: mocks.NewMockRegistry(false)}
-    l2 := mocks.NewMockClient()
-    nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: l2}, l2Cache: l2}
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_removed_get_err", SlotLength: 2})
-    id := sop.NewUUID()
-    vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{id}}}
-    if err := nr.rollbackRemovedNodes(ctx, true, vids); err == nil {
-        t.Fatalf("expected error from registry.Get in rollbackRemovedNodes")
-    }
+	ctx := context.Background()
+	reg := errGetRegistry3{inner: mocks.NewMockRegistry(false)}
+	l2 := mocks.NewMockClient()
+	nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: l2}, l2Cache: l2}
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_removed_get_err", SlotLength: 2})
+	id := sop.NewUUID()
+	vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{id}}}
+	if err := nr.rollbackRemovedNodes(ctx, true, vids); err == nil {
+		t.Fatalf("expected error from registry.Get in rollbackRemovedNodes")
+	}
 }
 
 func Test_Transaction_Cleanup_Succeeds_ExecutesAllSteps(t *testing.T) {
-    ctx := context.Background()
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-    tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl}
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl}
 
-    // Seed updated and removed handles so getToBeObsoleteEntries yields work.
-    id := sop.NewUUID()
-    h := sop.Handle{LogicalID: id, PhysicalIDA: id, Version: 1}
-    tx.updatedNodeHandles = []sop.RegistryPayload[sop.Handle]{{BlobTable: "bt", IDs: []sop.Handle{h}}}
-    tx.removedNodeHandles = []sop.RegistryPayload[sop.Handle]{{BlobTable: "bt", IDs: []sop.Handle{h}}}
+	// Seed updated and removed handles so getToBeObsoleteEntries yields work.
+	id := sop.NewUUID()
+	h := sop.Handle{LogicalID: id, PhysicalIDA: id, Version: 1}
+	tx.updatedNodeHandles = []sop.RegistryPayload[sop.Handle]{{BlobTable: "bt", IDs: []sop.Handle{h}}}
+	tx.removedNodeHandles = []sop.RegistryPayload[sop.Handle]{{BlobTable: "bt", IDs: []sop.Handle{h}}}
 
-    if err := tx.cleanup(ctx); err != nil {
-        t.Fatalf("cleanup err: %v", err)
-    }
+	if err := tx.cleanup(ctx); err != nil {
+		t.Fatalf("cleanup err: %v", err)
+	}
 }
 
 // Priority log that fails WriteBackup to cover early continue path in doPriorityRollbacks.
 type plWriteBackupErr struct{}
 
-func (p plWriteBackupErr) IsEnabled() bool { return true }
+func (p plWriteBackupErr) IsEnabled() bool                                             { return true }
 func (p plWriteBackupErr) Add(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
-func (p plWriteBackupErr) Remove(ctx context.Context, tid sop.UUID) error { return nil }
-func (p plWriteBackupErr) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) { return nil, nil }
+func (p plWriteBackupErr) Remove(ctx context.Context, tid sop.UUID) error              { return nil }
+func (p plWriteBackupErr) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
+	return nil, nil
+}
 func (p plWriteBackupErr) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
-    return []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: sop.NewUUID(), Value: nil}}, nil
+	return []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: sop.NewUUID(), Value: nil}}, nil
 }
 func (p plWriteBackupErr) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
-    return nil
+	return nil
 }
-func (p plWriteBackupErr) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error { return errors.New("wb err") }
+func (p plWriteBackupErr) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
+	return errors.New("wb err")
+}
 func (p plWriteBackupErr) RemoveBackup(ctx context.Context, tid sop.UUID) error { return nil }
 
 // transactionLog that returns the above priority log.
 type tlogWithWBErr struct{}
 
 func (t tlogWithWBErr) PriorityLog() sop.TransactionPriorityLog { return plWriteBackupErr{} }
-func (t tlogWithWBErr) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error { return nil }
+func (t tlogWithWBErr) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+	return nil
+}
 func (t tlogWithWBErr) Remove(ctx context.Context, tid sop.UUID) error { return nil }
 func (t tlogWithWBErr) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
-    return sop.NilUUID, "", nil, nil
+	return sop.NilUUID, "", nil, nil
 }
 func (t tlogWithWBErr) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
-    return sop.NilUUID, nil, nil
+	return sop.NilUUID, nil, nil
 }
 func (t tlogWithWBErr) NewUUID() sop.UUID { return sop.NewUUID() }
 
 func Test_TransactionLogger_DoPriorityRollbacks_WriteBackupError_Continues(t *testing.T) {
-    ctx := context.Background()
-    l2 := mocks.NewMockClient()
-    tx := &Transaction{l2Cache: l2}
-    tl := newTransactionLogger(tlogWithWBErr{}, true)
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	tx := &Transaction{l2Cache: l2}
+	tl := newTransactionLogger(tlogWithWBErr{}, true)
 
-    ok, err := tl.doPriorityRollbacks(ctx, tx)
-    if err != nil {
-        t.Fatalf("doPriorityRollbacks unexpected err: %v", err)
-    }
-    if !ok {
-        t.Fatalf("expected ok=true when batch is non-empty even if WriteBackup fails")
-    }
+	ok, err := tl.doPriorityRollbacks(ctx, tx)
+	if err != nil {
+		t.Fatalf("doPriorityRollbacks unexpected err: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected ok=true when batch is non-empty even if WriteBackup fails")
+	}
 }

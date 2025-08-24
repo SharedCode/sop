@@ -98,7 +98,6 @@ func Test_FailedWriteOnOne(t *testing.T) {
 	}
 }
 
-
 // encWrapper embeds a real reedsolomon.Encoder and allows overriding selected methods
 // to exercise error branches deterministically.
 type encWrapper struct {

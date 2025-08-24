@@ -569,6 +569,7 @@ func Test_HandleFailed_PullError_And_GlobalFailed_EarlyReturn(t *testing.T) {
 		t.Fatalf("did not expect replstat write on early return")
 	}
 }
+
 // Drives handleFailedToReplicate into the inner recheck-after-lock early return path
 // by flipping r.FailedToReplicate during the initial L2 pull, while global remains non-failed.
 func Test_HandleFailed_InnerRecheck_EarlyReturn(t *testing.T) {

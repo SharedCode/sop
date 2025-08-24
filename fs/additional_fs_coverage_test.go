@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/encoding"
 	"github.com/sharedcode/sop/common/mocks"
+	"github.com/sharedcode/sop/encoding"
 )
 
 // --- retryIO coverage -------------------------------------------------------

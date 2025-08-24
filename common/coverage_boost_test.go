@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-    "strings"
+	"strings"
 	"testing"
 	"time"
 
@@ -678,128 +678,140 @@ func Test_TransactionLogger_DoPriorityRollbacks_Batch_Succeeds(t *testing.T) {
 // the "can't attain a lock in Redis" error branch.
 type missAfterSetCache struct{ base sop.Cache }
 
-func (m missAfterSetCache) Set(ctx context.Context, k, v string, d time.Duration) error { return m.base.Set(ctx, k, v, d) }
-func (m missAfterSetCache) Get(ctx context.Context, k string) (bool, string, error) { return m.base.Get(ctx, k) }
+func (m missAfterSetCache) Set(ctx context.Context, k, v string, d time.Duration) error {
+	return m.base.Set(ctx, k, v, d)
+}
+func (m missAfterSetCache) Get(ctx context.Context, k string) (bool, string, error) {
+	return m.base.Get(ctx, k)
+}
 func (m missAfterSetCache) GetEx(ctx context.Context, k string, d time.Duration) (bool, string, error) {
-    return m.base.GetEx(ctx, k, d)
+	return m.base.GetEx(ctx, k, d)
 }
 func (m missAfterSetCache) SetStruct(ctx context.Context, k string, v interface{}, d time.Duration) error {
-    if err := m.base.SetStruct(ctx, k, v, d); err != nil {
-        return err
-    }
-    // Immediately remove the struct so the follow-up GetStruct cannot find it.
-    _, _ = m.base.Delete(ctx, []string{k})
-    return nil
+	if err := m.base.SetStruct(ctx, k, v, d); err != nil {
+		return err
+	}
+	// Immediately remove the struct so the follow-up GetStruct cannot find it.
+	_, _ = m.base.Delete(ctx, []string{k})
+	return nil
 }
 func (m missAfterSetCache) GetStruct(ctx context.Context, k string, tgt interface{}) (bool, error) {
-    return m.base.GetStruct(ctx, k, tgt)
+	return m.base.GetStruct(ctx, k, tgt)
 }
 func (m missAfterSetCache) GetStructEx(ctx context.Context, k string, tgt interface{}, d time.Duration) (bool, error) {
-    return m.base.GetStructEx(ctx, k, tgt, d)
+	return m.base.GetStructEx(ctx, k, tgt, d)
 }
-func (m missAfterSetCache) Delete(ctx context.Context, ks []string) (bool, error) { return m.base.Delete(ctx, ks) }
+func (m missAfterSetCache) Delete(ctx context.Context, ks []string) (bool, error) {
+	return m.base.Delete(ctx, ks)
+}
 func (m missAfterSetCache) Ping(ctx context.Context) error { return m.base.Ping(ctx) }
-func (m missAfterSetCache) FormatLockKey(k string) string { return m.base.FormatLockKey(k) }
-func (m missAfterSetCache) CreateLockKeys(keys []string) []*sop.LockKey { return m.base.CreateLockKeys(keys) }
+func (m missAfterSetCache) FormatLockKey(k string) string  { return m.base.FormatLockKey(k) }
+func (m missAfterSetCache) CreateLockKeys(keys []string) []*sop.LockKey {
+	return m.base.CreateLockKeys(keys)
+}
 func (m missAfterSetCache) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
-    return m.base.CreateLockKeysForIDs(keys)
+	return m.base.CreateLockKeysForIDs(keys)
 }
 func (m missAfterSetCache) IsLockedTTL(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, error) {
-    return m.base.IsLockedTTL(ctx, d, lk)
+	return m.base.IsLockedTTL(ctx, d, lk)
 }
 func (m missAfterSetCache) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
-    return m.base.Lock(ctx, d, lk)
+	return m.base.Lock(ctx, d, lk)
 }
-func (m missAfterSetCache) IsLocked(ctx context.Context, lk []*sop.LockKey) (bool, error) { return m.base.IsLocked(ctx, lk) }
+func (m missAfterSetCache) IsLocked(ctx context.Context, lk []*sop.LockKey) (bool, error) {
+	return m.base.IsLocked(ctx, lk)
+}
 func (m missAfterSetCache) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
-    return m.base.IsLockedByOthers(ctx, names)
+	return m.base.IsLockedByOthers(ctx, names)
 }
-func (m missAfterSetCache) Unlock(ctx context.Context, lk []*sop.LockKey) error { return m.base.Unlock(ctx, lk) }
+func (m missAfterSetCache) Unlock(ctx context.Context, lk []*sop.LockKey) error {
+	return m.base.Unlock(ctx, lk)
+}
 func (m missAfterSetCache) Clear(ctx context.Context) error { return m.base.Clear(ctx) }
 
 func Test_ItemActionTracker_Lock_CantAttain_AfterSet_ReturnsError(t *testing.T) {
-    ctx := context.Background()
-    base := mocks.NewMockClient()
-    // Use our sabotaging cache for the tracker, but keep global L1 to something valid.
-    cache.NewGlobalCache(base, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    bs := mocks.NewMockBlobStore()
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock", SlotLength: 2})
-    // Tracker wired with a cache that deletes lock record right after SetStruct.
-    trk := newItemActionTracker[sop.UUID, int](si, missAfterSetCache{base: base}, bs, tl)
+	ctx := context.Background()
+	base := mocks.NewMockClient()
+	// Use our sabotaging cache for the tracker, but keep global L1 to something valid.
+	cache.NewGlobalCache(base, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	bs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock", SlotLength: 2})
+	// Tracker wired with a cache that deletes lock record right after SetStruct.
+	trk := newItemActionTracker[sop.UUID, int](si, missAfterSetCache{base: base}, bs, tl)
 
-    // Seed a tracked GET item so lock() will operate on it (non-addAction path).
-    id := sop.NewUUID()
-    it := &btree.Item[sop.UUID, int]{ID: id, Version: 1, ValueNeedsFetch: false}
-    if err := trk.Get(ctx, it); err != nil {
-        t.Fatalf("Get seed err: %v", err)
-    }
+	// Seed a tracked GET item so lock() will operate on it (non-addAction path).
+	id := sop.NewUUID()
+	it := &btree.Item[sop.UUID, int]{ID: id, Version: 1, ValueNeedsFetch: false}
+	if err := trk.Get(ctx, it); err != nil {
+		t.Fatalf("Get seed err: %v", err)
+	}
 
-    // Attempt to lock must fail on second GetStruct not found.
-    if err := trk.lock(ctx, time.Minute); err == nil || err.Error() == "" || !strings.Contains(err.Error(), "can't attain a lock in Redis") {
-        t.Fatalf("expected can't attain lock error, got: %v", err)
-    }
+	// Attempt to lock must fail on second GetStruct not found.
+	if err := trk.lock(ctx, time.Minute); err == nil || err.Error() == "" || !strings.Contains(err.Error(), "can't attain a lock in Redis") {
+		t.Fatalf("expected can't attain lock error, got: %v", err)
+	}
 }
 
 func Test_CommitTrackedItemsValues_CacheSet_Error_WarnsOnly(t *testing.T) {
-    ctx := context.Background()
-    base := mocks.NewMockClient()
-    cache.NewGlobalCache(base, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    bs := mocks.NewMockBlobStore()
-    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	ctx := context.Background()
+	base := mocks.NewMockClient()
+	cache.NewGlobalCache(base, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	bs := mocks.NewMockBlobStore()
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
-    // Store config to trigger commitTrackedItemsValues path and global caching.
-    si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_vals", SlotLength: 2})
-    si.IsValueDataInNodeSegment = false
-    si.IsValueDataActivelyPersisted = false
-    si.IsValueDataGloballyCached = true
+	// Store config to trigger commitTrackedItemsValues path and global caching.
+	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_vals", SlotLength: 2})
+	si.IsValueDataInNodeSegment = false
+	si.IsValueDataActivelyPersisted = false
+	si.IsValueDataGloballyCached = true
 
-    // Tracker uses an errCache that returns an error from SetStruct for the target key; commit should continue.
-    id := sop.NewUUID()
-    valueKey := formatItemKey(id.String())
-    ec := newErrCache(base, valueKey)
-    trk := newItemActionTracker[sop.UUID, int](si, ec, bs, tl)
+	// Tracker uses an errCache that returns an error from SetStruct for the target key; commit should continue.
+	id := sop.NewUUID()
+	valueKey := formatItemKey(id.String())
+	ec := newErrCache(base, valueKey)
+	trk := newItemActionTracker[sop.UUID, int](si, ec, bs, tl)
 
-    // Track an add with a non-nil value so commitTrackedItemsValues writes blob and attempts cache set.
-    it := &btree.Item[sop.UUID, int]{ID: id, Version: 1, Value: ptr(42)}
-    if err := trk.Add(ctx, it); err != nil {
-        t.Fatalf("Add err: %v", err)
-    }
-    if err := trk.commitTrackedItemsValues(ctx); err != nil {
-        t.Fatalf("commitTrackedItemsValues err: %v", err)
-    }
+	// Track an add with a non-nil value so commitTrackedItemsValues writes blob and attempts cache set.
+	it := &btree.Item[sop.UUID, int]{ID: id, Version: 1, Value: ptr(42)}
+	if err := trk.Add(ctx, it); err != nil {
+		t.Fatalf("Add err: %v", err)
+	}
+	if err := trk.commitTrackedItemsValues(ctx); err != nil {
+		t.Fatalf("commitTrackedItemsValues err: %v", err)
+	}
 }
 
 func ptr[T any](v T) *T { return &v }
 
 func Test_Phase1Commit_NotBegun_ReturnsError(t *testing.T) {
-    ctx := context.Background()
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    bs := mocks.NewMockBlobStore()
-    sr := mocks.NewMockStoreRepository()
-    tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
-    if err != nil {
-        t.Fatalf("ctor err: %v", err)
-    }
-    // Intentionally do not call Begin(); expect an error.
-    if err := tx.Phase1Commit(ctx); err == nil {
-        t.Fatalf("expected Phase1Commit to error when not begun")
-    }
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	bs := mocks.NewMockBlobStore()
+	sr := mocks.NewMockStoreRepository()
+	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
+	if err != nil {
+		t.Fatalf("ctor err: %v", err)
+	}
+	// Intentionally do not call Begin(); expect an error.
+	if err := tx.Phase1Commit(ctx); err == nil {
+		t.Fatalf("expected Phase1Commit to error when not begun")
+	}
 }
 
 func Test_Rollback_NotBegun_ReturnsError(t *testing.T) {
-    ctx := context.Background()
-    l2 := mocks.NewMockClient()
-    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-    bs := mocks.NewMockBlobStore()
-    sr := mocks.NewMockStoreRepository()
-    tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
-    if err != nil {
-        t.Fatalf("ctor err: %v", err)
-    }
-    // Intentionally do not call Begin(); expect an error.
-    if err := tx.Rollback(ctx, nil); err == nil {
-        t.Fatalf("expected Rollback to error when not begun")
-    }
+	ctx := context.Background()
+	l2 := mocks.NewMockClient()
+	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	bs := mocks.NewMockBlobStore()
+	sr := mocks.NewMockStoreRepository()
+	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
+	if err != nil {
+		t.Fatalf("ctor err: %v", err)
+	}
+	// Intentionally do not call Begin(); expect an error.
+	if err := tx.Rollback(ctx, nil); err == nil {
+		t.Fatalf("expected Rollback to error when not begun")
+	}
 }

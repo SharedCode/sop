@@ -334,7 +334,6 @@ func Test_ItemActionTracker_Lock_ConflictDetected(t *testing.T) {
 	}
 }
 
-
 // Basic sanity covering Add, Get, Update, Remove paths using public tracker API.
 func Test_ItemActionTracker_BasicPaths(t *testing.T) {
 	ctx := context.Background()
