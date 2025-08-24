@@ -478,3 +478,354 @@ func TestReplicationTracker_HandleFailedToReplicate_GlobalAlreadyFailed_NoWrite(
 		t.Fatalf("expected no status file write on early return")
 	}
 }
+
+func Test_ReplicationTracker_HandleFailedToReplicate_TrackerAlreadyFailed_NoOp(t *testing.T) {
+	ctx := context.Background()
+	a, p := t.TempDir(), t.TempDir()
+	prev := GlobalReplicationDetails
+	globalReplicationDetailsLocker.Lock()
+	GlobalReplicationDetails = nil
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
+	// Mark tracker itself already failed; early-return guard should trigger.
+	rt.FailedToReplicate = true
+	rt.handleFailedToReplicate(ctx)
+	// Should remain failed and not panic; status file should not be rewritten again implicitly.
+	// We can't assert file touches easily; simply assert the flag remains set.
+	if !rt.FailedToReplicate {
+		t.Fatalf("expected no-op with tracker already failed")
+	}
+}
+
+func Test_ReadStatus_PassivePresent_InvalidJSON_NoFlip_NoError(t *testing.T) {
+	ctx := context.Background()
+	a, p := t.TempDir(), t.TempDir()
+	prev := GlobalReplicationDetails
+	globalReplicationDetailsLocker.Lock()
+	GlobalReplicationDetails = nil
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
+	// Seed only passive file with invalid JSON; active missing.
+	if err := os.WriteFile(filepath.Join(p, replicationStatusFilename), []byte("not-json"), 0o644); err != nil {
+		t.Fatalf("seed passive: %v", err)
+	}
+	rt.ActiveFolderToggler = true
+	if err := rt.readStatusFromHomeFolder(ctx); err != nil {
+		t.Fatalf("expected no error when passive has invalid json (branch ignores error)")
+	}
+	if rt.ActiveFolderToggler != true {
+		t.Fatalf("expected no flip on invalid passive json")
+	}
+}
+
+func Test_ReadStatus_ActivePresent_InvalidJSON_ReturnsError(t *testing.T) {
+	ctx := context.Background()
+	a, p := t.TempDir(), t.TempDir()
+	prev := GlobalReplicationDetails
+	globalReplicationDetailsLocker.Lock()
+	GlobalReplicationDetails = nil
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
+	// Seed active file with invalid JSON so readReplicationStatus returns error.
+	if err := os.WriteFile(filepath.Join(a, replicationStatusFilename), []byte("not-json"), 0o644); err != nil {
+		t.Fatalf("seed active: %v", err)
+	}
+	if err := rt.readStatusFromHomeFolder(ctx); err == nil {
+		t.Fatalf("expected error from invalid active json")
+	}
+}
+
+// --- helper mock caches for syncWithL2Cache ---
+
+type getStructExErrCache2 struct{ sop.Cache }
+
+func (c getStructExErrCache2) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
+	return false, errors.New("getstructex err2")
+}
+
+type getStructExNotFoundCache struct{ sop.Cache }
+
+func (c getStructExNotFoundCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
+	return false, nil
+}
+
+type getStructExFoundCache struct {
+	sop.Cache
+	val ReplicationTrackedDetails
+}
+
+func (c getStructExFoundCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
+	// populate v with c.val
+	if out, ok := v.(*ReplicationTrackedDetails); ok {
+		*out = c.val
+	}
+	return true, nil
+}
+
+type setStructErrCache2 struct{ sop.Cache }
+
+func (c setStructErrCache2) SetStruct(ctx context.Context, key string, value interface{}, exp time.Duration) error {
+	return errors.New("setstruct err2")
+}
+
+// combined wrapper: GetStructEx returns not found, SetStruct returns error
+type notFoundSetErrCache struct{ sop.Cache }
+
+func (c notFoundSetErrCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
+	return false, nil
+}
+func (c notFoundSetErrCache) SetStruct(ctx context.Context, key string, value interface{}, exp time.Duration) error {
+	return errors.New("setstruct err2")
+}
+
+// --- logCommitChanges ---
+
+func Test_LogCommitChanges_Disabled_NoOp(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	rt := &replicationTracker{storesBaseFolders: []string{base, filepath.Join(base, "p")}}
+	rt.ActiveFolderToggler = true
+	rt.LogCommitChanges = false
+
+	tid := sop.NewUUID()
+	if err := rt.logCommitChanges(ctx, tid, nil, nil, nil, nil, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// No file should be created
+	fn := rt.formatActiveFolderEntity(filepath.Join(commitChangesLogFolder, tid.String()+logFileExtension))
+	if _, err := os.Stat(fn); !os.IsNotExist(err) {
+		t.Fatalf("expected no log file; stat err=%v", err)
+	}
+}
+
+func Test_LogCommitChanges_Enabled_Writes(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	rt := &replicationTracker{storesBaseFolders: []string{base, filepath.Join(base, "p")}}
+	rt.ActiveFolderToggler = true
+	rt.LogCommitChanges = true
+
+	// minimal payloads
+	stores := []sop.StoreInfo{{Name: "s"}}
+	tid := sop.NewUUID()
+	if err := rt.logCommitChanges(ctx, tid, stores, nil, nil, nil, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fn := rt.formatActiveFolderEntity(filepath.Join(commitChangesLogFolder, tid.String()+logFileExtension))
+	if fi, err := os.Stat(fn); err != nil || fi.IsDir() {
+		t.Fatalf("expected commit log file; err=%v", err)
+	}
+}
+
+// --- readReplicationStatus ---
+
+func Test_ReadReplicationStatus_Success_And_InvalidJSON(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	okf := filepath.Join(base, "ok.json")
+	badf := filepath.Join(base, "bad.json")
+
+	// write valid JSON
+	if err := os.WriteFile(okf, []byte(`{"FailedToReplicate":false,"ActiveFolderToggler":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// write invalid JSON
+	if err := os.WriteFile(badf, []byte("not-json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := &replicationTracker{}
+	if err := rt.readReplicationStatus(ctx, okf); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if !rt.ActiveFolderToggler || rt.FailedToReplicate {
+		t.Fatalf("unexpected values loaded: %+v", rt.ReplicationTrackedDetails)
+	}
+	if err := rt.readReplicationStatus(ctx, badf); err == nil {
+		t.Fatalf("expected unmarshal error for invalid JSON")
+	}
+}
+
+// --- syncWithL2Cache branches ---
+
+func Test_SyncWithL2Cache_Push_NotFound_Sets(t *testing.T) {
+	ctx := context.Background()
+	// prepare global value
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	g := ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: true}
+	GlobalReplicationDetails = &g
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	rt := &replicationTracker{l2Cache: getStructExNotFoundCache{Cache: mocks.NewMockClient()}}
+	if err := rt.syncWithL2Cache(ctx, true); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+}
+
+func Test_SyncWithL2Cache_Push_FoundEqual_Returns(t *testing.T) {
+	ctx := context.Background()
+	val := ReplicationTrackedDetails{FailedToReplicate: false, ActiveFolderToggler: true}
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = &val
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	rt := &replicationTracker{l2Cache: getStructExFoundCache{Cache: mocks.NewMockClient(), val: val}}
+	if err := rt.syncWithL2Cache(ctx, true); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+}
+
+func Test_SyncWithL2Cache_Push_FoundDifferent_Sets(t *testing.T) {
+	ctx := context.Background()
+	val := ReplicationTrackedDetails{FailedToReplicate: false, ActiveFolderToggler: true}
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = &ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: false}
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	rt := &replicationTracker{l2Cache: getStructExFoundCache{Cache: mocks.NewMockClient(), val: val}}
+	if err := rt.syncWithL2Cache(ctx, true); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+}
+
+func Test_SyncWithL2Cache_Push_GetErr_ReturnsErr(t *testing.T) {
+	ctx := context.Background()
+	rt := &replicationTracker{l2Cache: getStructExErrCache2{Cache: mocks.NewMockClient()}}
+	if err := rt.syncWithL2Cache(ctx, true); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func Test_SyncWithL2Cache_Push_NotFound_SetErr_ReturnsErr(t *testing.T) {
+	ctx := context.Background()
+	// set global to any value
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	g := ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: true}
+	GlobalReplicationDetails = &g
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	// Cache that reports not found on GetStructEx and errors on SetStruct
+	rt := &replicationTracker{l2Cache: notFoundSetErrCache{Cache: mocks.NewMockClient()}}
+	if err := rt.syncWithL2Cache(ctx, true); err == nil {
+		t.Fatalf("expected error on SetStruct")
+	}
+}
+
+func Test_SyncWithL2Cache_Pull_NotFound_NoChange(t *testing.T) {
+	ctx := context.Background()
+	rt := &replicationTracker{l2Cache: getStructExNotFoundCache{Cache: mocks.NewMockClient()}}
+	if err := rt.syncWithL2Cache(ctx, false); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+}
+
+// Ensure handleFailedToReplicate warns on push when SetStruct fails (after a successful write).
+func Test_HandleFailed_PushSetStructError_WarnsAfterWrite(t *testing.T) {
+	ctx := context.Background()
+
+	// Isolate global state
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = nil
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	a := t.TempDir()
+	p := t.TempDir()
+
+	// Use cache that returns not found on pull and errors on push SetStruct.
+	rt, err := NewReplicationTracker(ctx, []string{a, p}, true, notFoundSetErrCache{Cache: mocks.NewMockClient()})
+	if err != nil {
+		t.Fatalf("new rt: %v", err)
+	}
+
+	// Act
+	rt.handleFailedToReplicate(ctx)
+
+	// Assert flags set and replstat written despite push SetStruct error.
+	if !rt.FailedToReplicate {
+		t.Fatalf("expected FailedToReplicate=true")
+	}
+	fname := rt.formatActiveFolderEntity(replicationStatusFilename)
+	if fi, err := os.Stat(fname); err != nil || fi.IsDir() {
+		t.Fatalf("expected replstat file; err=%v", err)
+	}
+}
+
+func Test_SyncWithL2Cache_Pull_GetErr_ReturnsErr(t *testing.T) {
+	ctx := context.Background()
+	rt := &replicationTracker{l2Cache: getStructExErrCache2{Cache: mocks.NewMockClient()}}
+	if err := rt.syncWithL2Cache(ctx, false); err == nil {
+		t.Fatalf("expected error")
+	}
+}
+
+func Test_SyncWithL2Cache_Pull_Found_UpdatesGlobal(t *testing.T) {
+	ctx := context.Background()
+	val := ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: false}
+	rt := &replicationTracker{l2Cache: getStructExFoundCache{Cache: mocks.NewMockClient(), val: val}}
+
+	// Snapshot and restore global
+	globalReplicationDetailsLocker.Lock()
+	prev := GlobalReplicationDetails
+	GlobalReplicationDetails = nil
+	globalReplicationDetailsLocker.Unlock()
+	t.Cleanup(func() {
+		globalReplicationDetailsLocker.Lock()
+		GlobalReplicationDetails = prev
+		globalReplicationDetailsLocker.Unlock()
+	})
+
+	if err := rt.syncWithL2Cache(ctx, false); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+	if GlobalReplicationDetails == nil || *GlobalReplicationDetails != val {
+		t.Fatalf("expected global to be updated from cache; got %+v", GlobalReplicationDetails)
+	}
+}

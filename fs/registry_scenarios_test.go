@@ -584,3 +584,143 @@ func Test_registryMap_remove_Errors_And_Replicate_CloseOverride_2(t *testing.T) 
 		t.Fatalf("expected close override error")
 	}
 }
+
+// failingDirectIOForUpdate simulates WriteAt error to fail hashmap.set during UpdateNoLocks.
+type failingDirectIOForUpdate struct{ directIO }
+
+func (f failingDirectIOForUpdate) WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
+	return 0, errors.New("writeAt boom")
+}
+
+// Covers registryOnDisk.UpdateNoLocks error path by injecting a failing DirectIO that causes set() to error.
+func Test_Registry_UpdateNoLocks_ErrorFromSet(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+
+	// Install failing DirectIO to cause updateFileBlockRegion -> writeAt to fail.
+	prev := DirectIOSim
+	DirectIOSim = failingDirectIOForUpdate{}
+	t.Cleanup(func() { DirectIOSim = prev })
+
+	// Ensure table folder exists to avoid early create path; we want set() to call update.
+	tbl := filepath.Join(base, "tbl")
+	os.MkdirAll(tbl, 0o755)
+
+	reg := NewRegistry(true, 8, rt, mocks.NewMockClient())
+	h := sop.Handle{LogicalID: sop.NewUUID()}
+	if err := reg.UpdateNoLocks(ctx, false, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "tbl", IDs: []sop.Handle{h}}}); err == nil {
+		t.Fatalf("expected error from set due to failing DirectIO.WriteAt")
+	}
+}
+
+// Covers registryOnDisk.Remove error when item is missing in target (already zeroed) -> returns specific error.
+func Test_Registry_Remove_ItemMissing_Error(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+	reg := NewRegistry(true, 8, rt, mocks.NewMockClient())
+
+	// No prior Add; Remove should try to find and then fail with item not found when slot empty.
+	id := sop.NewUUID()
+	if err := reg.Remove(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: "tbl", IDs: []sop.UUID{id}}}); err == nil {
+		t.Fatalf("expected error removing missing item")
+	}
+}
+
+// cache that forces SetStruct to fail to hit the warn path in UpdateNoLocks.
+type setStructErrorCache struct{ sop.Cache }
+
+func (c setStructErrorCache) SetStruct(ctx context.Context, key string, value interface{}, d time.Duration) error {
+	return errors.New("setstruct boom")
+}
+
+// cache that forces Delete to return error to hit the warn path in Remove's deferred cache eviction.
+type deleteErrorCache struct{ sop.Cache }
+
+func (c deleteErrorCache) Delete(ctx context.Context, keys []string) (bool, error) {
+	return false, errors.New("delete boom")
+}
+
+func Test_Registry_UpdateNoLocks_SetStructWarn(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+
+	// Wrap the mock cache to inject SetStruct error while preserving other behaviors (locks, etc.).
+	cache := setStructErrorCache{mocks.NewMockClient()}
+	reg := NewRegistry(true, 8, rt, cache)
+
+	h := sop.Handle{LogicalID: sop.NewUUID()}
+	if err := reg.UpdateNoLocks(ctx, false, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "tbl", IDs: []sop.Handle{h}}}); err != nil {
+		t.Fatalf("UpdateNoLocks expected success despite SetStruct error, got %v", err)
+	}
+}
+
+func Test_Registry_Remove_DeleteWarn(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+
+	// Use cache wrapper that returns error on Delete to exercise warn path inside deferred cache eviction.
+	cache := deleteErrorCache{mocks.NewMockClient()}
+	reg := NewRegistry(true, 8, rt, cache)
+
+	// Seed one handle so Remove performs actual on-disk delete, then triggers cache.Delete warnings.
+	h := sop.NewHandle(sop.NewUUID())
+	if err := reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "tbl", IDs: []sop.Handle{h}}}); err != nil {
+		t.Fatalf("seed add: %v", err)
+	}
+
+	if err := reg.Remove(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: "tbl", IDs: []sop.UUID{h.LogicalID}}}); err != nil {
+		t.Fatalf("Remove expected success, got %v", err)
+	}
+}
+
+// Covers the error-wrapping branch in registryMap.fetch when underlying hashmap.fetch returns an error.
+func Test_registryMap_Fetch_ErrorWrapped(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+	rm := newRegistryMap(true, 8, rt, mocks.NewMockClient())
+
+	// Prepare an empty segment file so findOneFileRegion opens it, then force ReadAt to error.
+	prev := DirectIOSim
+	DirectIOSim = directIOError{}
+	t.Cleanup(func() { DirectIOSim = prev })
+
+	seg := filepath.Join(base, "tblX", "tblX-1"+registryFileExtension)
+	if err := NewFileIO().MkdirAll(ctx, filepath.Dir(seg), permission); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Match the segment size so code goes down normal read path before the injected error.
+	if err := NewFileIO().WriteFile(ctx, seg, make([]byte, int64(8)*blockSize), permission); err != nil {
+		t.Fatalf("seed seg: %v", err)
+	}
+
+	_, err := rm.fetch(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: "tblX", IDs: []sop.UUID{sop.NewUUID()}}})
+	if err == nil || err.Error() == "" {
+		t.Fatalf("expected wrapped fetch error, got %v", err)
+	}
+}
+
+// Drives the remove() path to call markDeleteFileRegion and surface write errors by using a read-only hashmap.
+func Test_registryMap_Remove_WriteError_From_ReadOnlyHashmap(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+	// Seed a handle using a writable Registry so data exists on disk.
+	reg := NewRegistry(true, 8, rt, mocks.NewMockClient())
+	defer reg.Close()
+	table := "c1_r"
+	h := sop.NewHandle(sop.NewUUID())
+	if err := reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: table, IDs: []sop.Handle{h}}}); err != nil {
+		t.Fatalf("seed add: %v", err)
+	}
+
+	// Now create a read-only registryMap pointing at same files; remove should attempt write and fail.
+	rmRO := newRegistryMap(false, reg.hashmap.hashmap.hashModValue, rt, mocks.NewMockClient())
+	if err := rmRO.remove(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: table, IDs: []sop.UUID{h.LogicalID}}}); err == nil {
+		t.Fatalf("expected remove to fail due to read-only file handle")
+	}
+}

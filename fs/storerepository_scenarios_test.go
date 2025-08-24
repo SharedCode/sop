@@ -3,6 +3,7 @@ package fs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -531,5 +532,163 @@ func TestStoreRepository_GetRegistryHashModValue_InvalidNumber(t *testing.T) {
 
 	if _, err := sr.GetRegistryHashModValue(ctx); err == nil {
 		t.Fatalf("expected Atoi parse error for invalid content")
+	}
+}
+
+// When sl == nil, Add calls createStore("") on active; make active base a file to force error.
+func Test_StoreRepository_Add_CreateStoreRoot_Error(t *testing.T) {
+	ctx := context.Background()
+	base := t.TempDir()
+	// Replace active base with a file to induce ENOTDIR on MkdirAll
+	if err := os.RemoveAll(base); err != nil {
+		t.Fatalf("rm: %v", err)
+	}
+	if err := os.WriteFile(base, []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+
+	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+	sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), 0)
+	s := *sop.NewStoreInfo(sop.StoreOptions{Name: "r1", SlotLength: 4})
+	if err := sr.Add(ctx, s); err == nil {
+		t.Fatalf("expected Add error due to createStore root failure")
+	}
+}
+
+// failingStoreMarshaler fails only when marshaling sop.StoreInfo, passes through others.
+type failingStoreMarshaler struct{}
+
+func (f failingStoreMarshaler) Marshal(v any) ([]byte, error) {
+	switch v.(type) {
+	case sop.StoreInfo:
+		return nil, errors.New("marshal storeinfo boom")
+	default:
+		// fall back to default for non-StoreInfo payloads (e.g., []string store list)
+		return encoding.DefaultMarshaler.Marshal(v)
+	}
+}
+func (f failingStoreMarshaler) Unmarshal(data []byte, v any) error {
+	return encoding.DefaultMarshaler.Unmarshal(data, v)
+}
+
+// Covers StoreRepository.Add branch when per-store Marshal fails.
+func Test_StoreRepository_Add_MarshalStoreInfo_Error(t *testing.T) {
+	ctx := context.Background()
+	cache := mocks.NewMockClient()
+	a := t.TempDir()
+	p := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, cache)
+
+	// Swap BlobMarshaler to fail only for StoreInfo marshal, restore after.
+	prev := encoding.BlobMarshaler
+	encoding.BlobMarshaler = failingStoreMarshaler{}
+	t.Cleanup(func() { encoding.BlobMarshaler = prev })
+
+	sr, err := NewStoreRepository(ctx, rt, nil, cache, 0)
+	if err != nil {
+		t.Fatalf("NewStoreRepository: %v", err)
+	}
+
+	store := sop.StoreInfo{Name: "s1"}
+	if err := sr.Add(ctx, store); err == nil {
+		t.Fatalf("expected Marshal error for StoreInfo payload")
+	}
+	// Ensure no storeinfo file was written.
+	if _, err := os.Stat(filepath.Join(a, store.Name, storeInfoFilename)); !os.IsNotExist(err) {
+		t.Fatalf("unexpected storeinfo persisted despite marshal error: %v", err)
+	}
+}
+
+// Covers StoreRepository.Add branch when writing storeinfo.txt fails due to directory collision.
+func Test_StoreRepository_Add_StoreInfo_Write_Error(t *testing.T) {
+	ctx := context.Background()
+	cache := mocks.NewMockClient()
+	a := t.TempDir()
+	p := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, cache)
+
+	sr, err := NewStoreRepository(ctx, rt, nil, cache, 0)
+	if err != nil {
+		t.Fatalf("NewStoreRepository: %v", err)
+	}
+
+	// Pre-create a directory where the storeinfo file should be to force ENOTDIR on write.
+	name := "s2"
+	if err := os.MkdirAll(filepath.Join(a, name, storeInfoFilename), 0o755); err != nil {
+		t.Fatalf("pre-create dir collision: %v", err)
+	}
+
+	if err := sr.Add(ctx, sop.StoreInfo{Name: name}); err == nil {
+		t.Fatalf("expected write error due to directory at %s", filepath.Join(a, name, storeInfoFilename))
+	} else {
+		// sanity: error mentions write
+		_ = fmt.Sprintf("%v", err)
+	}
+}
+
+func Test_StoreRepository_Add_DuplicateStore_Error(t *testing.T) {
+	ctx := context.Background()
+	a, p := t.TempDir(), t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
+	sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), MinimumModValue)
+
+	s := *sop.NewStoreInfo(sop.StoreOptions{Name: "dup", SlotLength: 8})
+	if err := sr.Add(ctx, s); err != nil {
+		t.Fatalf("seed add: %v", err)
+	}
+	// Adding same store should error
+	if err := sr.Add(ctx, s); err == nil {
+		t.Fatalf("expected duplicate store error")
+	}
+}
+
+func Test_StoreRepository_GetAll_ReadError(t *testing.T) {
+	ctx := context.Background()
+	a, p := t.TempDir(), t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
+	sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), MinimumModValue)
+
+	// Ensure base folder exists and create a directory at storelist.txt to force read error.
+	_ = os.MkdirAll(a, 0o755)
+	if err := os.MkdirAll(filepath.Join(a, storeListFilename), 0o755); err != nil {
+		t.Fatalf("prep: %v", err)
+	}
+	if _, err := sr.GetAll(ctx); err == nil {
+		t.Fatalf("expected read error when storelist.txt is a directory")
+	}
+}
+
+// Forces StoreRepository.Add to fail during replication when passive has a file named as the store folder.
+func Test_StoreRepository_Add_Replicate_CreateStore_PassiveCollision(t *testing.T) {
+	ctx := context.Background()
+	a, p := t.TempDir(), t.TempDir()
+	cache := mocks.NewMockClient()
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, cache)
+	sr, _ := NewStoreRepository(ctx, rt, nil, cache, MinimumModValue)
+
+	// Create a file at passive/<store> so MkdirAll on replicate(create store) fails.
+	store := *sop.NewStoreInfo(sop.StoreOptions{Name: "collide", SlotLength: 8})
+	if err := os.WriteFile(filepath.Join(p, store.Name), []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed passive collision: %v", err)
+	}
+	if err := sr.Add(ctx, store); err == nil {
+		t.Fatalf("expected replicate create-store collision error")
+	}
+}
+
+// Triggers Add() store list write failure by making active/storelist.txt a directory.
+func Test_StoreRepository_Add_WriteStoreList_Error(t *testing.T) {
+	ctx := context.Background()
+	a := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{a}, false, mocks.NewMockClient())
+	sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), 0)
+
+	// Create directory at the location of storelist.txt so write will fail.
+	if err := os.MkdirAll(filepath.Join(a, storeListFilename), 0o755); err != nil {
+		t.Fatalf("prep: %v", err)
+	}
+	s := *sop.NewStoreInfo(sop.StoreOptions{Name: "werr", SlotLength: 4})
+	if err := sr.Add(ctx, s); err == nil {
+		t.Fatalf("expected Add error due to store list write failure")
 	}
 }

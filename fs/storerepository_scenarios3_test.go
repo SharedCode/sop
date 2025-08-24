@@ -12,6 +12,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/common/mocks"
+	"github.com/sharedcode/sop/encoding"
 )
 
 // Helper cache mocks consolidated from prior individual test files.
@@ -575,5 +576,118 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 
 	for _, sc := range scenarios {
 		t.Run(sc.name, sc.run)
+	}
+}
+
+// Covers invalid integer in reghashmod.txt path of GetRegistryHashModValue.
+func Test_StoreRepository_GetRegistryHashModValue_Invalid(t *testing.T) {
+	ctx := context.Background()
+	a, p := t.TempDir(), t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
+
+	// Seed invalid content
+	if err := os.WriteFile(filepath.Join(a, registryHashModValueFilename), []byte("not-int"), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), 0)
+	if _, err := sr.GetRegistryHashModValue(ctx); err == nil {
+		t.Fatalf("expected invalid atoi error")
+	}
+}
+
+// Covers Add lock conflict path where store list key is locked by someone else.
+func Test_StoreRepository_Add_LockConflict(t *testing.T) {
+	ctx := context.Background()
+	a, p := t.TempDir(), t.TempDir()
+	cache := mocks.NewMockClient()
+
+	// Pre-lock the store list key with a foreign owner.
+	_ = cache.Set(ctx, cache.FormatLockKey(lockStoreListKey), sop.NewUUID().String(), 0)
+
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, cache)
+	sr, _ := NewStoreRepository(ctx, rt, nil, cache, MinimumModValue)
+	s := *sop.NewStoreInfo(sop.StoreOptions{Name: "L", SlotLength: 8})
+	if err := sr.Add(ctx, s); err == nil {
+		t.Fatalf("expected lock conflict error")
+	}
+}
+
+// writeDenyFileIO returns error if attempting to write into the passive folder.
+type writeDenyFileIO struct {
+	FileIO
+	passiveRoot string
+}
+
+func (w writeDenyFileIO) WriteFile(ctx context.Context, name string, data []byte, perm os.FileMode) error {
+	if len(w.passiveRoot) > 0 && len(name) >= len(w.passiveRoot) && name[:len(w.passiveRoot)] == w.passiveRoot {
+		return errors.New("deny write to passive")
+	}
+	return w.FileIO.WriteFile(ctx, name, data, perm)
+}
+
+func Test_StoreRepository_Remove_Replicate_Failure(t *testing.T) {
+	ctx := context.Background()
+	a, p := t.TempDir(), t.TempDir()
+	cache := mocks.NewMockClient()
+	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, cache)
+
+	// Seed a store via real repo so storelist contains entry and folder exists.
+	sr, _ := NewStoreRepository(ctx, rt, nil, cache, 0)
+	s := *sop.NewStoreInfo(sop.StoreOptions{Name: "rx", SlotLength: 6})
+	if err := sr.Add(ctx, s); err != nil {
+		t.Fatalf("seed add: %v", err)
+	}
+
+	// Now perform a remove using direct fileIO wrapper with injected write-deny to cause replicate() to fail
+	inj := writeDenyFileIO{FileIO: NewFileIO(), passiveRoot: p}
+	fio := newFileIOWithReplicationInjected(rt, NewManageStoreFolder(NewFileIO()), true, inj)
+
+	// Stage actions: update storelist and remove store folder on active, then attempt replicate.
+	if err := fio.write(ctx, storeListFilename, []byte("[]")); err != nil {
+		t.Fatalf("write list: %v", err)
+	}
+	if err := fio.removeStore(ctx, filepath.Join("", s.Name)); err != nil {
+		t.Fatalf("remove active store: %v", err)
+	}
+
+	if err := fio.replicate(ctx); err == nil {
+		t.Fatalf("expected replicate failure on Remove path")
+	}
+}
+
+// failingStoreMarshaler2 mirrors failing behavior for sop.StoreInfo marshal to exercise Replicate error branch.
+type failingStoreMarshaler2 struct{}
+
+func (f failingStoreMarshaler2) Marshal(v any) ([]byte, error) {
+	switch v.(type) {
+	case sop.StoreInfo:
+		return nil, errors.New("marshal storeinfo boom2")
+	default:
+		return encoding.DefaultMarshaler.Marshal(v)
+	}
+}
+func (f failingStoreMarshaler2) Unmarshal(data []byte, v any) error {
+	return encoding.DefaultMarshaler.Unmarshal(data, v)
+}
+
+func Test_StoreRepository_Replicate_Marshal_Error(t *testing.T) {
+	ctx := context.Background()
+	cache := mocks.NewMockClient()
+
+	a := t.TempDir()
+	b := t.TempDir()
+	rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, cache)
+
+	sr, err := NewStoreRepository(ctx, rt, nil, cache, 0)
+	if err != nil {
+		t.Fatalf("NewStoreRepository: %v", err)
+	}
+
+	prev := encoding.BlobMarshaler
+	encoding.BlobMarshaler = failingStoreMarshaler2{}
+	t.Cleanup(func() { encoding.BlobMarshaler = prev })
+
+	if err := sr.Replicate(ctx, []sop.StoreInfo{{Name: "s"}}); err == nil {
+		t.Fatalf("expected marshal error from Replicate")
 	}
 }

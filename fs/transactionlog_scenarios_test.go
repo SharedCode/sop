@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -433,5 +434,138 @@ func Test_TransactionLog_Add_WriteEncodeError(t *testing.T) {
 	}
 	if tl.file != nil {
 		t.Fatalf("expected file handle to be cleared on error")
+	}
+}
+
+// Ensures ByModTime.Swap is exercised by sort.Sort and directly.
+func TestByModTime_Swap_Coverage(t *testing.T) {
+	newer := time.Now()
+	older := newer.Add(-1 * time.Hour)
+
+	// Intentionally place newer first so sorting must swap to ascending (older, newer).
+	fis := ByModTime{
+		{DirEntry: nil, ModTime: newer},
+		{DirEntry: nil, ModTime: older},
+	}
+
+	// This sort should trigger Swap at least once.
+	sort.Sort(fis)
+
+	if !fis[0].ModTime.Before(fis[1].ModTime) {
+		t.Fatalf("expected ascending order by ModTime after sort")
+	}
+
+	// Also call Swap directly to guarantee line coverage of the Swap method.
+	fis.Swap(0, 1)
+	if !fis[1].ModTime.Before(fis[0].ModTime) {
+		t.Fatalf("expected positions to swap after direct Swap call")
+	}
+}
+
+// Ensures GetOne early-returns when lock cannot be acquired.
+func Test_TransactionLog_GetOne_LockFail(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(newAlwaysLockFailCache(), rt)
+	if tid, hour, recs, err := tl.GetOne(ctx); err != nil || !tid.IsNil() || hour != "" || recs != nil {
+		t.Fatalf("expected empty fast-path on lock fail, got %v %s %v %v", tid, hour, recs, err)
+	}
+}
+
+// Uses lostLockCache (defined in transactionprioritylog_scenarios_test.go) to force IsLocked=false after reading logs.
+func Test_TransactionLog_GetOne_LostLockPath(t *testing.T) {
+	ctx := context.Background()
+	baseA := t.TempDir()
+	baseB := t.TempDir()
+	rt, err := NewReplicationTracker(ctx, []string{baseA, baseB}, false, newAlwaysLockFailCache())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	// Build TL with a cache that locks but later reports IsLocked=false
+	tl := NewTransactionLog(newLostLockCache(), rt)
+
+	// Create an eligible transaction log file with one record.
+	tid := sop.NewUUID()
+	fn := rt.formatActiveFolderEntity(filepath.Join(logFolder, tid.String()+logFileExtension))
+	if err := os.MkdirAll(filepath.Dir(fn), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	f, err := os.Create(fn)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	w := bufio.NewWriter(f)
+	enc := json.NewEncoder(w)
+	_ = enc.Encode(sop.KeyValuePair[int, []byte]{Key: 1, Value: []byte("x")})
+	w.Flush()
+	f.Close()
+	past := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(fn, past, past); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	if tidGot, hour, recs, err := tl.GetOne(ctx); err != nil || !tidGot.IsNil() || hour != "" || recs != nil {
+		t.Fatalf("expected empty due to lost lock, got tid=%v hour=%s recs=%v err=%v", tidGot, hour, recs, err)
+	}
+}
+
+// Forces TransactionLog.GetOne to propagate directory read error by making logFolder a file.
+func Test_TransactionLog_GetOne_ReadDir_Error(t *testing.T) {
+	ctx := context.Background()
+	active := t.TempDir()
+	passive := t.TempDir()
+
+	// Create a file where a directory is expected.
+	badPath := active + "/" + logFolder
+	if err := os.WriteFile(badPath, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	rt, err := NewReplicationTracker(ctx, []string{active, passive}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+
+	if tid, hour, recs, err := tl.GetOne(ctx); err == nil || !tid.IsNil() || hour != "" || recs != nil {
+		t.Fatalf("expected error and empty return, got tid=%v hour=%s recs=%v err=%v", tid, hour, recs, err)
+	}
+}
+
+// Triggers bufio.Scanner ErrTooLong in getLogsDetails, causing GetOne to return the error.
+func Test_TransactionLog_GetOne_ScannerError(t *testing.T) {
+	ctx := context.Background()
+	rt, err := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+
+	tid := sop.NewUUID()
+	fn := rt.formatActiveFolderEntity(filepath.Join(logFolder, tid.String()+logFileExtension))
+	if err := os.MkdirAll(filepath.Dir(fn), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	f, err := os.Create(fn)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	// Write one valid record first (to pass initial JSON path), then an overly long line to trip scanner.Err.
+	w := bufio.NewWriter(f)
+	_ = json.NewEncoder(w).Encode(sop.KeyValuePair[int, []byte]{Key: 1, Value: []byte("ok")})
+	long := strings.Repeat("x", 1024*128) // >64k token
+	if _, err := w.WriteString(long + "\n"); err != nil {
+		t.Fatalf("write long: %v", err)
+	}
+	w.Flush()
+	f.Close()
+	past := time.Now().Add(-2 * time.Hour)
+	_ = os.Chtimes(fn, past, past)
+
+	if tid2, hour, recs, err := tl.GetOne(ctx); err == nil || !tid2.IsNil() || hour != "" || recs != nil {
+		t.Fatalf("expected scanner error propagated, got tid=%v hour=%s recs=%v err=%v", tid2, hour, recs, err)
 	}
 }
