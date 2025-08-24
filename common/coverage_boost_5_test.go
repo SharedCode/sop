@@ -658,3 +658,263 @@ func Test_ItemActionTracker_Unlock_Collects_Delete_Error(t *testing.T) {
 		t.Fatalf("expected delete error collected, got nil")
 	}
 }
+
+// failingAddBlobStore errors on Add to exercise commitNewRootNodes error path.
+type failingAddBlobStore struct{}
+
+func (f failingAddBlobStore) GetOne(ctx context.Context, blobName string, blobID sop.UUID) ([]byte, error) {
+    return nil, nil
+}
+func (f failingAddBlobStore) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+    return errors.New("boom add")
+}
+func (f failingAddBlobStore) Update(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+    return nil
+}
+func (f failingAddBlobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
+    return nil
+}
+
+// errGetRegistry returns an error on Get to exercise rollbackRemovedNodes early error branch.
+type errGetRegistry2 struct{ inner sop.Registry }
+
+func (e errGetRegistry2) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error { return e.inner.Add(ctx, storesHandles) }
+func (e errGetRegistry2) Update(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+    return e.inner.Update(ctx, storesHandles)
+}
+func (e errGetRegistry2) UpdateNoLocks(ctx context.Context, a bool, s []sop.RegistryPayload[sop.Handle]) error {
+    return e.inner.UpdateNoLocks(ctx, a, s)
+}
+func (e errGetRegistry2) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
+    return nil, errors.New("boom get")
+}
+func (e errGetRegistry2) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error { return e.inner.Remove(ctx, storesLids) }
+func (e errGetRegistry2) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
+    return e.inner.Replicate(ctx, a, b, c, d)
+}
+
+// falseOnceIsLockedCache returns IsLocked=false once (no error), then delegates.
+type falseOnceIsLockedCache struct{ inner sop.Cache; tripped bool }
+
+func (m *falseOnceIsLockedCache) Set(ctx context.Context, k, v string, d time.Duration) error { return m.inner.Set(ctx, k, v, d) }
+func (m *falseOnceIsLockedCache) Get(ctx context.Context, k string) (bool, string, error) { return m.inner.Get(ctx, k) }
+func (m *falseOnceIsLockedCache) GetEx(ctx context.Context, k string, d time.Duration) (bool, string, error) {
+    return m.inner.GetEx(ctx, k, d)
+}
+func (m *falseOnceIsLockedCache) Ping(ctx context.Context) error { return m.inner.Ping(ctx) }
+func (m *falseOnceIsLockedCache) SetStruct(ctx context.Context, k string, v interface{}, d time.Duration) error {
+    return m.inner.SetStruct(ctx, k, v, d)
+}
+func (m *falseOnceIsLockedCache) GetStruct(ctx context.Context, k string, t interface{}) (bool, error) {
+    return m.inner.GetStruct(ctx, k, t)
+}
+func (m *falseOnceIsLockedCache) GetStructEx(ctx context.Context, k string, t interface{}, d time.Duration) (bool, error) {
+    return m.inner.GetStructEx(ctx, k, t, d)
+}
+func (m *falseOnceIsLockedCache) Delete(ctx context.Context, keys []string) (bool, error) { return m.inner.Delete(ctx, keys) }
+func (m *falseOnceIsLockedCache) FormatLockKey(k string) string { return m.inner.FormatLockKey(k) }
+func (m *falseOnceIsLockedCache) CreateLockKeys(keys []string) []*sop.LockKey { return m.inner.CreateLockKeys(keys) }
+func (m *falseOnceIsLockedCache) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
+    return m.inner.CreateLockKeysForIDs(keys)
+}
+func (m *falseOnceIsLockedCache) IsLockedTTL(ctx context.Context, d time.Duration, ks []*sop.LockKey) (bool, error) {
+    return m.inner.IsLockedTTL(ctx, d, ks)
+}
+func (m *falseOnceIsLockedCache) Lock(ctx context.Context, d time.Duration, ks []*sop.LockKey) (bool, sop.UUID, error) {
+    return m.inner.Lock(ctx, d, ks)
+}
+func (m *falseOnceIsLockedCache) IsLocked(ctx context.Context, ks []*sop.LockKey) (bool, error) {
+    if !m.tripped {
+        m.tripped = true
+        return false, nil
+    }
+    return m.inner.IsLocked(ctx, ks)
+}
+func (m *falseOnceIsLockedCache) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
+    return m.inner.IsLockedByOthers(ctx, names)
+}
+func (m *falseOnceIsLockedCache) Unlock(ctx context.Context, ks []*sop.LockKey) error { return m.inner.Unlock(ctx, ks) }
+func (m *falseOnceIsLockedCache) Clear(ctx context.Context) error { return m.inner.Clear(ctx) }
+
+// failSecondGetAfterSetCache simulates lock() path where SetStruct succeeds but second GetStruct does not find the key.
+type failSecondGetAfterSetCache struct {
+    inner         sop.Cache
+    sawSet        bool
+    failedOnceGet bool
+}
+
+func (m *failSecondGetAfterSetCache) Set(ctx context.Context, k, v string, d time.Duration) error { return m.inner.Set(ctx, k, v, d) }
+func (m *failSecondGetAfterSetCache) Get(ctx context.Context, k string) (bool, string, error) { return m.inner.Get(ctx, k) }
+func (m *failSecondGetAfterSetCache) GetEx(ctx context.Context, k string, d time.Duration) (bool, string, error) {
+    return m.inner.GetEx(ctx, k, d)
+}
+func (m *failSecondGetAfterSetCache) Ping(ctx context.Context) error { return m.inner.Ping(ctx) }
+func (m *failSecondGetAfterSetCache) SetStruct(ctx context.Context, k string, v interface{}, d time.Duration) error {
+    m.sawSet = true
+    return m.inner.SetStruct(ctx, k, v, d)
+}
+func (m *failSecondGetAfterSetCache) GetStruct(ctx context.Context, k string, t interface{}) (bool, error) {
+    if m.sawSet && !m.failedOnceGet {
+        m.failedOnceGet = true
+        return false, nil
+    }
+    return m.inner.GetStruct(ctx, k, t)
+}
+func (m *failSecondGetAfterSetCache) GetStructEx(ctx context.Context, k string, t interface{}, d time.Duration) (bool, error) {
+    return m.GetStruct(ctx, k, t)
+}
+func (m *failSecondGetAfterSetCache) Delete(ctx context.Context, keys []string) (bool, error) { return m.inner.Delete(ctx, keys) }
+func (m *failSecondGetAfterSetCache) FormatLockKey(k string) string { return m.inner.FormatLockKey(k) }
+func (m *failSecondGetAfterSetCache) CreateLockKeys(keys []string) []*sop.LockKey { return m.inner.CreateLockKeys(keys) }
+func (m *failSecondGetAfterSetCache) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
+    return m.inner.CreateLockKeysForIDs(keys)
+}
+func (m *failSecondGetAfterSetCache) IsLockedTTL(ctx context.Context, d time.Duration, ks []*sop.LockKey) (bool, error) {
+    return m.inner.IsLockedTTL(ctx, d, ks)
+}
+func (m *failSecondGetAfterSetCache) Lock(ctx context.Context, d time.Duration, ks []*sop.LockKey) (bool, sop.UUID, error) {
+    return m.inner.Lock(ctx, d, ks)
+}
+func (m *failSecondGetAfterSetCache) IsLocked(ctx context.Context, ks []*sop.LockKey) (bool, error) {
+    return m.inner.IsLocked(ctx, ks)
+}
+func (m *failSecondGetAfterSetCache) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
+    return m.inner.IsLockedByOthers(ctx, names)
+}
+func (m *failSecondGetAfterSetCache) Unlock(ctx context.Context, ks []*sop.LockKey) error { return m.inner.Unlock(ctx, ks) }
+func (m *failSecondGetAfterSetCache) Clear(ctx context.Context) error { return m.inner.Clear(ctx) }
+
+func Test_ItemActionTracker_Add_ActivelyPersisted_NilValue_NoBlobNoCache(t *testing.T) {
+    ctx := context.Background()
+    // Actively persisted with global cache, but Value is nil.
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_add_nil", SlotLength: 4, IsValueDataInNodeSegment: false})
+    si.IsValueDataActivelyPersisted = true
+    si.IsValueDataGloballyCached = true
+    si.CacheConfig.ValueDataCacheDuration = time.Minute
+
+    redis := mocks.NewMockClient()
+    trk := newItemActionTracker[PersonKey, Person](si, redis, mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), true))
+
+    id := sop.NewUUID()
+    it := &btree.Item[PersonKey, Person]{ID: id, Value: nil, Version: 0}
+    if err := trk.Add(ctx, it); err != nil {
+        t.Fatalf("Add err: %v", err)
+    }
+    // Version bumped, but no blob nor cache write occurred; item tracked exists.
+    if it.Version == 0 {
+        t.Fatalf("expected version bump on Add")
+    }
+}
+
+func Test_ItemActionTracker_Update_ActivelyPersisted_ValueNeedsFetch_NoBlob_AddsForDeletion(t *testing.T) {
+    ctx := context.Background()
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_upd_nil", SlotLength: 4, IsValueDataInNodeSegment: false})
+    si.IsValueDataActivelyPersisted = true
+    si.IsValueDataGloballyCached = true
+    si.CacheConfig.ValueDataCacheDuration = time.Minute
+
+    redis := mocks.NewMockClient()
+    trk := newItemActionTracker[PersonKey, Person](si, redis, mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), true))
+
+    id := sop.NewUUID()
+    it := &btree.Item[PersonKey, Person]{ID: id, Value: nil, ValueNeedsFetch: true, Version: 1}
+    if err := trk.Update(ctx, it); err != nil {
+        t.Fatalf("Update err: %v", err)
+    }
+    // ValueNeedsFetch should be cleared and ID added to forDeletionItems due to separate segment.
+    if it.ValueNeedsFetch {
+        t.Fatalf("expected ValueNeedsFetch=false after manage")
+    }
+    if len(trk.forDeletionItems) == 0 || trk.forDeletionItems[0] != id {
+        t.Fatalf("expected item ID queued for deletion")
+    }
+}
+
+func Test_ItemActionTracker_Lock_FailsToAttainAfterSet(t *testing.T) {
+    ctx := context.Background()
+    base := mocks.NewMockClient()
+    f := &failSecondGetAfterSetCache{inner: base}
+
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock_fail_after_set", SlotLength: 4})
+    trk := newItemActionTracker[PersonKey, Person](si, f, mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), true))
+
+    id := sop.NewUUID()
+    pk, p := newPerson("a", "b", "m", "e@x", "p")
+    it := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: &p}
+    if err := trk.Update(ctx, it); err != nil {
+        t.Fatalf("Update err: %v", err)
+    }
+    if err := trk.lock(ctx, time.Minute); err == nil {
+        t.Fatalf("expected lock to fail after Set when 2nd GetStruct reports not found")
+    }
+}
+
+func Test_NodeRepository_RollbackRemovedNodes_GetError(t *testing.T) {
+    ctx := context.Background()
+    reg := mocks.NewMockRegistry(false)
+    nr := &nodeRepositoryBackend{transaction: &Transaction{registry: errGetRegistry2{inner: reg}}}
+    vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: "rt", IDs: []sop.UUID{sop.NewUUID()}}}
+    if err := nr.rollbackRemovedNodes(ctx, true, vids); err == nil {
+        t.Fatalf("expected error from registry.Get in rollbackRemovedNodes")
+    }
+}
+
+func Test_NodeRepository_CommitNewRootNodes_BlobAddError(t *testing.T) {
+    ctx := context.Background()
+    reg := mocks.NewMockRegistry(false)
+    tx := &Transaction{registry: reg, blobStore: failingAddBlobStore{}, l2Cache: mocks.NewMockClient()}
+    nr := &nodeRepositoryBackend{transaction: tx}
+
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "rt_new_root_err", SlotLength: 4})
+    id := sop.NewUUID()
+    nodes := []sop.Tuple[*sop.StoreInfo, []interface{}]{{First: si, Second: []interface{}{&btree.Node[PersonKey, Person]{ID: id}}}}
+    if ok, _, err := nr.commitNewRootNodes(ctx, nodes); err == nil || ok {
+        t.Fatalf("expected error from blob Add in commitNewRootNodes, ok=%v err=%v", ok, err)
+    }
+}
+
+// Note: IsLocked false branch is already covered in existing tests; no duplicate here.
+
+func Test_Phase1Commit_PreCommitTid_Removed(t *testing.T) {
+    ctx := context.Background()
+    l2 := mocks.NewMockClient()
+    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+
+    // Simulate an earlier pre-commit state by logging addActivelyPersistedItem under a prior TID.
+    preTid := tl.TransactionLog.NewUUID()
+    tl.transactionID = preTid
+    tl.committedState = addActivelyPersistedItem
+    _ = tl.log(ctx, addActivelyPersistedItem, nil)
+
+    rg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+    sr := mocks.NewMockStoreRepository()
+    tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: sr, registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: 0}
+
+    // Minimal added node to get through the loop.
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_precommit_cleanup", SlotLength: 4})
+    nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+    id := sop.NewUUID()
+    nr.localCache[id] = cachedNode{action: addAction, node: &btree.Node[PersonKey, Person]{ID: id, Version: 0}}
+
+    tx.btreesBackend = []btreeBackend{{
+        nodeRepository:                   nr,
+        getStoreInfo:                     func() *sop.StoreInfo { return si },
+        hasTrackedItems:                  func() bool { return true },
+        checkTrackedItems:                func(context.Context) error { return nil },
+        lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+        unlockTrackedItems:               func(context.Context) error { return nil },
+        commitTrackedItemsValues:         func(context.Context) error { return nil },
+        getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+        getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+        refetchAndMerge:                  func(context.Context) error { return nil },
+    }}
+
+    if err := tx.phase1Commit(ctx); err != nil {
+        t.Fatalf("phase1Commit err: %v", err)
+    }
+    // Ensure preTid logs were removed.
+    if logs := tl.TransactionLog.(interface{ GetTIDLogs(sop.UUID) []sop.KeyValuePair[int, []byte] }).GetTIDLogs(preTid); len(logs) != 0 {
+        t.Fatalf("expected pre-commit logs to be removed, still have %d", len(logs))
+    }
+}

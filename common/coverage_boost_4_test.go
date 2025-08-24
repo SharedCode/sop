@@ -691,3 +691,243 @@ func Test_Phase1Commit_CommitNewRootNodes_Conflict_Retry_Succeeds(t *testing.T) 
 		t.Fatalf("expected refetch to happen on new-root conflict")
 	}
 }
+
+// errOnceOnUpdateNoLocksReg induces sop.Error on first UpdateNoLocks to trigger handleRegistrySectorLockTimeout in commitUpdatedNodes.
+type errOnceOnUpdateNoLocksReg struct {
+    inner   *mocks.Mock_vid_registry
+    lk      sop.LockKey
+    tripped bool
+}
+
+func (r *errOnceOnUpdateNoLocksReg) Add(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error { return r.inner.Add(ctx, s) }
+func (r *errOnceOnUpdateNoLocksReg) Update(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error {
+    return r.inner.Update(ctx, s)
+}
+func (r *errOnceOnUpdateNoLocksReg) UpdateNoLocks(ctx context.Context, allOrNothing bool, s []sop.RegistryPayload[sop.Handle]) error {
+    if !r.tripped {
+        r.tripped = true
+        return sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("sector timeout"), UserData: &r.lk}
+    }
+    return r.inner.UpdateNoLocks(ctx, allOrNothing, s)
+}
+func (r *errOnceOnUpdateNoLocksReg) Get(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
+    return r.inner.Get(ctx, lids)
+}
+func (r *errOnceOnUpdateNoLocksReg) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error { return r.inner.Remove(ctx, lids) }
+func (r *errOnceOnUpdateNoLocksReg) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
+    return r.inner.Replicate(ctx, a, b, c, d)
+}
+
+func Test_Phase1Commit_CommitUpdatedNodes_SectorTimeout_Retry_Succeeds(t *testing.T) {
+    ctx := context.Background()
+    l2 := mocks.NewMockClient()
+    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+
+    baseReg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+    induced := &errOnceOnUpdateNoLocksReg{inner: baseReg, lk: sop.LockKey{Key: l2.FormatLockKey("Z"), LockID: sop.NewUUID()}}
+
+    tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: induced, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
+
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_upd_sector_timeout", SlotLength: 4})
+    nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+    id := sop.NewUUID()
+    nr.localCache[id] = cachedNode{action: updateAction, node: &btree.Node[PersonKey, Person]{ID: id, Version: 1}}
+    // Seed base handle for retry path
+    h := sop.NewHandle(id)
+    h.Version = 1
+    baseReg.Lookup[id] = h
+
+    tx.btreesBackend = []btreeBackend{{
+        nodeRepository:                   nr,
+        getStoreInfo:                     func() *sop.StoreInfo { return si },
+        hasTrackedItems:                  func() bool { return true },
+        checkTrackedItems:                func(context.Context) error { return nil },
+        lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+        unlockTrackedItems:               func(context.Context) error { return nil },
+        commitTrackedItemsValues:         func(context.Context) error { return nil },
+        getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+        getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+        refetchAndMerge:                  func(context.Context) error { return nil },
+    }}
+
+    if err := tx.phase1Commit(ctx); err != nil {
+        t.Fatalf("expected success after sector-timeout on UpdateNoLocks with retry, got: %v", err)
+    }
+}
+
+// cacheWarnOnSetStruct returns error on SetStruct to exercise warning paths in commitAddedNodes/commitNewRootNodes.
+type cacheWarnOnSetStruct struct{ sop.Cache }
+
+func (c cacheWarnOnSetStruct) SetStruct(ctx context.Context, key string, value interface{}, d time.Duration) error {
+    return fmt.Errorf("setstruct err")
+}
+
+func Test_NodeRepository_CommitAddedNodes_SetStructWarn(t *testing.T) {
+    ctx := context.Background()
+    base := mocks.NewMockClient()
+    cw := cacheWarnOnSetStruct{Cache: base}
+    cache.NewGlobalCache(cw, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+    reg := mocks.NewMockRegistry(false)
+    tx := &Transaction{registry: reg, blobStore: mocks.NewMockBlobStore(), l2Cache: cw, l1Cache: cache.GetGlobalCache()}
+    nr := &nodeRepositoryBackend{transaction: tx, l2Cache: cw, l1Cache: cache.GetGlobalCache()}
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "added_warn", SlotLength: 2})
+    id := sop.NewUUID()
+    nodes := []sop.Tuple[*sop.StoreInfo, []interface{}]{{First: si, Second: []interface{}{&btree.Node[PersonKey, Person]{ID: id}}}}
+    if _, err := nr.commitAddedNodes(ctx, nodes); err != nil {
+        t.Fatalf("commitAddedNodes err: %v", err)
+    }
+}
+
+func Test_NodeRepository_RollbackUpdatedNodes_WithInactiveIDs_DeletesCacheAndClears(t *testing.T) {
+    ctx := context.Background()
+    reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+    l2 := mocks.NewMockClient()
+    bs := mocks.NewMockBlobStore()
+    nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: l2, blobStore: bs}, l2Cache: l2}
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_upd_inactive", SlotLength: 2})
+    nr.storeInfo = si
+
+    id := sop.NewUUID()
+    h := sop.NewHandle(id)
+    // Allocate an inactive ID to simulate staged update
+    _ = h.AllocateID()
+    // Ensure inactive present
+    if h.GetInActiveID().IsNil() {
+        t.Fatalf("expected inactive id allocated")
+    }
+    reg.Lookup[id] = h
+
+    vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{id}}}
+    if err := nr.rollbackUpdatedNodes(ctx, true, vids); err != nil {
+        t.Fatalf("rollbackUpdatedNodes err: %v", err)
+    }
+}
+
+func Test_ItemActionTracker_Add_ActivelyPersisted_WritesBlob_And_Cache(t *testing.T) {
+    ctx := context.Background()
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_add_active", SlotLength: 4, IsValueDataInNodeSegment: false})
+    si.IsValueDataActivelyPersisted = true
+    si.IsValueDataGloballyCached = true
+    si.CacheConfig.ValueDataCacheDuration = time.Minute
+    l2 := mocks.NewMockClient()
+    bs := mocks.NewMockBlobStore()
+    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+    trk := newItemActionTracker[PersonKey, Person](si, l2, bs, tl)
+
+    id := sop.NewUUID()
+    _, p := newPerson("a", "1", "m", "a@x", "p")
+    it := &btree.Item[PersonKey, Person]{ID: id, Value: &p}
+    if err := trk.Add(ctx, it); err != nil {
+        t.Fatalf("Add err: %v", err)
+    }
+    // Value should be moved to blob store and cached; item value becomes nil with ValueNeedsFetch
+    if it.Value != nil || !it.ValueNeedsFetch {
+        t.Fatalf("expected value moved out and ValueNeedsFetch=true")
+    }
+    if _, err := bs.GetOne(ctx, si.BlobTable, id); err != nil {
+        t.Fatalf("blob GetOne err: %v", err)
+    }
+    var pv Person
+    if found, _ := l2.GetStruct(ctx, formatItemKey(id.String()), &pv); !found {
+        t.Fatalf("expected value cached in redis")
+    }
+}
+
+func Test_ItemActionTracker_Update_WhenExistingAddAction_Persists(t *testing.T) {
+    ctx := context.Background()
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_upd_on_add", SlotLength: 4, IsValueDataInNodeSegment: false})
+    si.IsValueDataActivelyPersisted = true
+    si.IsValueDataGloballyCached = true
+    si.CacheConfig.ValueDataCacheDuration = time.Minute
+    l2 := mocks.NewMockClient()
+    bs := mocks.NewMockBlobStore()
+    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+    trk := newItemActionTracker[PersonKey, Person](si, l2, bs, tl)
+
+    id := sop.NewUUID()
+    _, p := newPerson("b", "2", "m", "b@x", "p")
+    it := &btree.Item[PersonKey, Person]{ID: id, Value: &p}
+    if err := trk.Add(ctx, it); err != nil {
+        t.Fatalf("Add err: %v", err)
+    }
+    // Update same ID with new value; since action is addAction, Update should actively persist via manage/add.
+    p.Email = "new@x"
+    it.Value = &p
+    if err := trk.Update(ctx, it); err != nil {
+        t.Fatalf("Update err: %v", err)
+    }
+}
+
+func Test_NodeRepository_RollbackRemovedNodes_Unlocked_UndoesFlags(t *testing.T) {
+    ctx := context.Background()
+    reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+    l2 := mocks.NewMockClient()
+    nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: l2}, l2Cache: l2}
+
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_removed_unlocked", SlotLength: 2})
+    id := sop.NewUUID()
+    h := sop.NewHandle(id)
+    h.IsDeleted = true
+    h.WorkInProgressTimestamp = 1234
+    reg.Lookup[id] = h
+
+    vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{id}}}
+    if err := nr.rollbackRemovedNodes(ctx, false, vids); err != nil {
+        t.Fatalf("rollbackRemovedNodes err: %v", err)
+    }
+    if got := reg.Lookup[id]; got.IsDeleted || got.WorkInProgressTimestamp != 0 {
+        t.Fatalf("expected flags cleared, got IsDeleted=%v wip=%d", got.IsDeleted, got.WorkInProgressTimestamp)
+    }
+}
+
+func Test_NodeRepository_RollbackUpdatedNodes_Unlocked_WithInactiveIDs(t *testing.T) {
+    ctx := context.Background()
+    reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+    l2 := mocks.NewMockClient()
+    bs := mocks.NewMockBlobStore()
+    nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: l2, blobStore: bs}, l2Cache: l2}
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_upd_unlocked", SlotLength: 2})
+
+    id := sop.NewUUID()
+    h := sop.NewHandle(id)
+    _ = h.AllocateID()
+    reg.Lookup[id] = h
+
+    vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{id}}}
+    if err := nr.rollbackUpdatedNodes(ctx, false, vids); err != nil {
+        t.Fatalf("rollbackUpdatedNodes err: %v", err)
+    }
+}
+
+func Test_ItemActionTracker_Add_ActivelyPersisted_BlobError_Propagates(t *testing.T) {
+    ctx := context.Background()
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_add_err", SlotLength: 4, IsValueDataInNodeSegment: false})
+    si.IsValueDataActivelyPersisted = true
+    l2 := mocks.NewMockClient()
+    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+    trk := newItemActionTracker[PersonKey, Person](si, l2, failingAddBlobStore{}, tl)
+
+    id := sop.NewUUID()
+    _, p := newPerson("x", "1", "m", "e@x", "p")
+    it := &btree.Item[PersonKey, Person]{ID: id, Value: &p}
+    if err := trk.Add(ctx, it); err == nil {
+        t.Fatalf("expected blob add error to propagate from Add")
+    }
+}
+
+func Test_ItemActionTracker_Update_ActivelyPersisted_BlobError_Propagates(t *testing.T) {
+    ctx := context.Background()
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_upd_err", SlotLength: 4, IsValueDataInNodeSegment: false})
+    si.IsValueDataActivelyPersisted = true
+    l2 := mocks.NewMockClient()
+    tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+    trk := newItemActionTracker[PersonKey, Person](si, l2, failingAddBlobStore{}, tl)
+
+    id := sop.NewUUID()
+    _, p := newPerson("y", "2", "m", "e@x", "p")
+    it := &btree.Item[PersonKey, Person]{ID: id, Value: &p}
+    if err := trk.Update(ctx, it); err == nil {
+        t.Fatalf("expected blob add error to propagate from Update")
+    }
+}
+

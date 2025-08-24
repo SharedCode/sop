@@ -724,3 +724,133 @@ func Test_AcquireLocks_LockError_Propagates(t *testing.T) {
 		t.Fatalf("expected forced lock error, got %v", err)
 	}
 }
+
+// getFlipRegistry returns mismatching versions on first Get, then matching on next calls.
+type getFlipRegistry struct{ *mocks.Mock_vid_registry; cnt int }
+
+func (g *getFlipRegistry) Get(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
+    g.cnt++
+    out := make([]sop.RegistryPayload[sop.Handle], len(lids))
+    for i := range lids {
+        out[i].RegistryTable = lids[i].RegistryTable
+        out[i].IDs = make([]sop.Handle, len(lids[i].IDs))
+        for j := range lids[i].IDs {
+            h := sop.NewHandle(lids[i].IDs[j])
+            if g.cnt == 1 {
+                // Force version mismatch for first pass to return false from areFetchedItemsIntact
+                h.Version = 999
+            } else {
+                // Match fetched node version (=1) on subsequent passes
+                h.Version = 1
+            }
+            out[i].IDs[j] = h
+        }
+    }
+    return out, nil
+}
+
+// tlogFailOnFunc forces Add to fail for a specific commit function id.
+type tlogFailOnFunc struct{ inner sop.TransactionLog; target int }
+
+func (t tlogFailOnFunc) PriorityLog() sop.TransactionPriorityLog { return t.inner.PriorityLog() }
+func (t tlogFailOnFunc) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+    if commitFunction == t.target {
+        return errors.New("add fail on target")
+    }
+    return t.inner.Add(ctx, tid, commitFunction, payload)
+}
+func (t tlogFailOnFunc) Remove(ctx context.Context, tid sop.UUID) error { return t.inner.Remove(ctx, tid) }
+func (t tlogFailOnFunc) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
+    return t.inner.GetOne(ctx)
+}
+func (t tlogFailOnFunc) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
+    return t.inner.GetOneOfHour(ctx, hour)
+}
+func (t tlogFailOnFunc) NewUUID() sop.UUID { return t.inner.NewUUID() }
+
+func Test_Phase1Commit_AreFetchedItemsIntact_FalseThenRetrySucceeds(t *testing.T) {
+    ctx := context.Background()
+    l2 := mocks.NewMockClient()
+    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+    bs := mocks.NewMockBlobStore()
+
+    // Registry that flips from mismatch to match on successive Get calls.
+    baseReg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
+    reg := &getFlipRegistry{Mock_vid_registry: baseReg}
+
+    tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
+
+    // Backend with one fetched node; no updates/removes/adds/root nodes.
+    si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_fetched_retry", SlotLength: 2})
+    nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+    fid := sop.NewUUID()
+    // Version must be 1 to match reg on retry
+    nr.localCache[fid] = cachedNode{action: getAction, node: &btree.Node[PersonKey, Person]{ID: fid, Version: 1}}
+
+    tx.btreesBackend = []btreeBackend{
+        {
+            nodeRepository:                   nr,
+            getStoreInfo:                     func() *sop.StoreInfo { return si },
+            hasTrackedItems:                  func() bool { return true },
+            checkTrackedItems:                func(context.Context) error { return nil },
+            lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
+            unlockTrackedItems:               func(context.Context) error { return nil },
+            commitTrackedItemsValues:         func(context.Context) error { return nil },
+            getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
+            getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
+            refetchAndMerge:                  func(context.Context) error { return nil },
+        },
+    }
+
+    if err := tx.phase1Commit(ctx); err != nil {
+        t.Fatalf("phase1Commit err on fetched retry path: %v", err)
+    }
+}
+
+func Test_Transaction_Cleanup_LogError_DeleteObsoleteEntries(t *testing.T) {
+    ctx := context.Background()
+    l2 := mocks.NewMockClient()
+    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+    tl := newTransactionLogger(tlogFailOnFunc{inner: mocks.NewMockTransactionLog(), target: int(deleteObsoleteEntries)}, true)
+    tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), registry: mocks.NewMockRegistry(false), logger: tl}
+    if err := tx.cleanup(ctx); err == nil {
+        t.Fatalf("expected error from cleanup when deleteObsoleteEntries log fails")
+    }
+}
+
+func Test_Transaction_Cleanup_LogError_DeleteTrackedItemsValues(t *testing.T) {
+    ctx := context.Background()
+    l2 := mocks.NewMockClient()
+    cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+    tl := newTransactionLogger(tlogFailOnFunc{inner: mocks.NewMockTransactionLog(), target: int(deleteTrackedItemsValues)}, true)
+    tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), registry: mocks.NewMockRegistry(false), logger: tl}
+    if err := tx.cleanup(ctx); err == nil {
+        t.Fatalf("expected error from cleanup when deleteTrackedItemsValues log fails")
+    }
+}
+
+func Test_TransactionLogger_DoPriorityRollbacks_RemoveError_Skips(t *testing.T) {
+    ctx := context.Background()
+    l2 := mocks.NewMockClient()
+    reg := mocks.NewMockRegistry(false)
+    tx := &Transaction{l2Cache: l2, registry: reg}
+
+    // Seed registry to avoid version failover during checks
+    lid := sop.NewUUID()
+    _ = reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid)}}})
+
+    tid := sop.NewUUID()
+    pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: tid, Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", BlobTable: "bt", IDs: []sop.Handle{sop.NewHandle(lid)}}}}}, removeErr: map[string]error{tid.String(): errors.New("rm fail")}}
+    tl := newTransactionLogger(stubTLog{pl: pl}, true)
+
+    consumed, err := tl.doPriorityRollbacks(ctx, tx)
+    if err != nil {
+        t.Fatalf("unexpected error: %v", err)
+    }
+    if !consumed {
+        t.Fatalf("expected consumed=true for non-empty batch")
+    }
+    if pl.removeBackupHit[tid.String()] == 0 {
+        t.Fatalf("expected RemoveBackup called when Remove errors")
+    }
+}
