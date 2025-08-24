@@ -11,6 +11,7 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 - Quick start
 - Prerequisites
 - Running integration tests (Docker)
+ - Testing (unit, integration, stress)
 - Usability
 - SOP API discussions
 - SOP for Python (sop4py)
@@ -81,6 +82,23 @@ See https://github.com/SharedCode/sop/blob/master/Dockerfile and https://github.
 If you’re using VS Code, there are ready-made tasks:
 - Docker: Build and Test — builds image mydi
 - Docker: Run Tests — runs tests in the container
+
+## Testing (unit, integration, stress)
+Run tests locally without Docker using build tags:
+
+- Unit tests (fast): go test ./...
+- Integration tests (require Redis running on localhost and a writable data folder):
+	- Set environment variable datapath to your data directory (defaults to a local path if unset).
+	- Run: go test -tags=integration ./inredfs/integrationtests
+- Stress tests (long-running): go test -timeout 2h -tags=stress ./inredfs/stresstests/...
+
+VS Code tasks provided:
+- Go: Test (Unit)
+- Go: Test (Integration)
+- Go: Test (Stress)
+- Go: Test (Unit + Integration) runs both in sequence
+
+CI note: GitHub Actions runs unit tests on pushes/PRs; a nightly/manual job runs the stress suite with -tags=stress.
 
 # Usability
 See details here: https://github.com/sharedcode/sop/blob/master/README2.md#usability

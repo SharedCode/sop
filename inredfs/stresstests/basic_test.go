@@ -1,5 +1,5 @@
-//go:build integration
-// +build integration
+//go:build stress
+// +build stress
 
 package integrationtests
 
