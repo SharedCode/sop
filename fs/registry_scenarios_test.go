@@ -111,6 +111,24 @@ func (m *mockCacheImmediateLockFail) Lock(ctx context.Context, d time.Duration, 
 }
 
 func TestRegistry_AllScenarios(t *testing.T) {
+	// ensureTableDir creates the registry table directory under the active base folder.
+	ensureTableDir := func(t *testing.T, rt *replicationTracker, table string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), table), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+	}
+	// ensurePassiveTableDir creates the registry table directory under the passive base folder.
+	ensurePassiveTableDir := func(t *testing.T, rt *replicationTracker, table string) {
+		t.Helper()
+		if rt == nil || rt.getPassiveBaseFolder() == "" {
+			return
+		}
+		if err := os.MkdirAll(filepath.Join(rt.getPassiveBaseFolder(), table), 0o755); err != nil {
+			t.Fatalf("mkdir passive: %v", err)
+		}
+	}
+
 	type scenario struct {
 		name string
 		run  func(t *testing.T)
@@ -123,6 +141,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
+			ensureTableDir(t, rt, "rg")
 			h := sop.NewHandle(sop.NewUUID())
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rg", IDs: []sop.Handle{h}}}); err != nil {
 				t.Fatalf("add: %v", err)
@@ -141,6 +160,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
+			ensureTableDir(t, rt, "rgx")
 			h1 := sop.NewHandle(sop.NewUUID())
 			h2 := sop.NewHandle(sop.NewUUID())
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rgx", IDs: []sop.Handle{h1, h2}}}); err != nil {
@@ -168,6 +188,8 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
+			ensureTableDir(t, rt, "rgrepl")
+			ensurePassiveTableDir(t, rt, "rgrepl")
 			hRoot := sop.NewHandle(sop.NewUUID())
 			hAdd := sop.NewHandle(sop.NewUUID())
 			hUpd := sop.NewHandle(sop.NewUUID())
@@ -213,6 +235,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{active, passiveFile}, true, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
+			ensureTableDir(t, rt, "rgep")
 			h := sop.NewHandle(sop.NewUUID())
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rgep", IDs: []sop.Handle{h}}}); err != nil {
 				t.Fatalf("seed: %v", err)
@@ -234,6 +257,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
+			ensureTableDir(t, rt, "pr")
 			h1 := sop.NewHandle(sop.NewUUID())
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "pr", IDs: []sop.Handle{h1}}}); err != nil {
 				t.Fatalf("seed: %v", err)
@@ -258,6 +282,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
+			ensureTableDir(t, rt, "geta")
 			h1 := sop.NewHandle(sop.NewUUID())
 			h2 := sop.NewHandle(sop.NewUUID())
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "geta", IDs: []sop.Handle{h1, h2}}}); err != nil {
@@ -275,6 +300,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{base}, false, cg)
 			r := NewRegistry(true, MinimumModValue, rt, cg)
 			defer r.Close()
+			ensureTableDir(t, rt, "geterr")
 			h := sop.NewHandle(sop.NewUUID())
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "geterr", IDs: []sop.Handle{h}}}); err != nil {
 				t.Fatalf("add: %v", err)
@@ -295,6 +321,8 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
+			ensureTableDir(t, rt, "replc")
+			ensurePassiveTableDir(t, rt, "replc")
 			h1 := sop.NewHandle(sop.NewUUID())
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "replc", IDs: []sop.Handle{h1}}}); err != nil {
 				t.Fatalf("seed: %v", err)
@@ -314,6 +342,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt2, _ := NewReplicationTracker(ctx, []string{a2, passiveFile}, true, l2)
 			r2 := NewRegistry(true, MinimumModValue, rt2, l2)
 			defer r2.Close()
+			ensureTableDir(t, rt2, "replcerr")
 			h2 := sop.NewHandle(sop.NewUUID())
 			if err := r2.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "replcerr", IDs: []sop.Handle{h2}}}); err != nil {
 				t.Fatalf("seed2: %v", err)
@@ -338,6 +367,8 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{active, passiveFile}, true, cache)
 			r := NewRegistry(true, MinimumModValue, rt, cache)
 			defer r.Close()
+			ensureTableDir(t, rt, "rlay")
+			// passive is a file; do not create passive table dir to keep the error path
 			hSeed := sop.NewHandle(sop.NewUUID())
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rlay", IDs: []sop.Handle{hSeed}}}); err != nil {
 				t.Fatalf("seed add: %v", err)
@@ -377,6 +408,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2seed)
 			r := NewRegistry(true, MinimumModValue, rt, l2seed)
 			defer r.Close()
+			ensureTableDir(t, rt, "rg")
 			h := sop.NewHandle(sop.NewUUID())
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rg", IDs: []sop.Handle{h}}}); err != nil {
 				t.Fatalf("add: %v", err)
@@ -393,6 +425,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
+			ensureTableDir(t, rt, "regerr")
 			h := sop.NewHandle(sop.NewUUID())
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "regerr", IDs: []sop.Handle{h}}}); err != nil {
 				t.Fatalf("seed add: %v", err)
@@ -400,6 +433,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "regerr", IDs: []sop.Handle{h}}}); err == nil || !strings.Contains(err.Error(), "registryMap.add failed") {
 				t.Fatalf("expected duplicate add error: %v", err)
 			}
+			ensureTableDir(t, rt, "reglock")
 			missing := sop.NewUUID()
 			if err := r.Remove(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: "regerr", IDs: []sop.UUID{missing}}}); err == nil || !strings.Contains(err.Error(), "registryMap.remove failed") {
 				t.Fatalf("expected remove missing error: %v", err)
@@ -424,6 +458,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2)
 			r := NewRegistry(true, MinimumModValue, rt, l2)
 			defer r.Close()
+			ensureTableDir(t, rt, "regttl")
 			h := sop.NewHandle(sop.NewUUID())
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "regttl", CacheDuration: time.Minute, IDs: []sop.Handle{h}}}); err != nil {
 				t.Fatalf("seed add: %v", err)
@@ -439,6 +474,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			rt, _ := NewReplicationTracker(ctx, []string{base}, false, l2)
 			rm := newRegistryMap(true, MinimumModValue, rt, l2)
 			defer rm.close()
+			ensureTableDir(t, rt, "regmap")
 			h := sop.NewHandle(sop.NewUUID())
 			if err := rm.add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "regmap", IDs: []sop.Handle{h}}}); err != nil {
 				t.Fatalf("add: %v", err)
@@ -500,7 +536,10 @@ func TestRegistry_ReplicateErrorBranches_Scenario(t *testing.T) {
 	r := NewRegistry(true, MinimumModValue, rt, cache)
 	defer r.Close()
 
-	// Seed active with a handle used in added/updated/removed slices.
+	// Ensure table directory exists and seed active with a handle used in added/updated/removed slices.
+	if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), "regrep"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	hAdd := sop.NewHandle(sop.NewUUID())
 	if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "regrep", IDs: []sop.Handle{hAdd}}}); err != nil {
 		t.Fatalf("seed add: %v", err)
@@ -551,6 +590,10 @@ func Test_registryMap_remove_Errors_And_Replicate_CloseOverride_2(t *testing.T) 
 	defer reg.Close()
 
 	table := "c1_r"
+	// Ensure table dir exists for writes
+	if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), table), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	h := sop.Handle{LogicalID: sop.NewUUID()}
 	if err := reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: table, IDs: []sop.Handle{h}}}); err != nil {
 		t.Fatalf("add: %v", err)
@@ -585,11 +628,11 @@ func Test_registryMap_remove_Errors_And_Replicate_CloseOverride_2(t *testing.T) 
 	}
 }
 
-// failingDirectIOForUpdate simulates WriteAt error to fail hashmap.set during UpdateNoLocks.
-type failingDirectIOForUpdate struct{ directIO }
+// lockFailCache forces Lock to fail to exercise error path in UpdateNoLocks -> set -> updateFileBlockRegion.
+type lockFailCache struct{ sop.Cache }
 
-func (f failingDirectIOForUpdate) WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
-	return 0, errors.New("writeAt boom")
+func (c lockFailCache) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
+	return false, sop.NilUUID, nil
 }
 
 // Covers registryOnDisk.UpdateNoLocks error path by injecting a failing DirectIO that causes set() to error.
@@ -597,20 +640,16 @@ func Test_Registry_UpdateNoLocks_ErrorFromSet(t *testing.T) {
 	ctx := context.Background()
 	base := t.TempDir()
 	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
+	// Use a cache that always fails Lock to force set() to error without relying on global DirectIO shims.
+	reg := NewRegistry(true, 8, rt, lockFailCache{mocks.NewMockClient()})
 
-	// Install failing DirectIO to cause updateFileBlockRegion -> writeAt to fail.
-	prev := DirectIOSim
-	DirectIOSim = failingDirectIOForUpdate{}
-	t.Cleanup(func() { DirectIOSim = prev })
-
-	// Ensure table folder exists to avoid early create path; we want set() to call update.
+	// Ensure table folder exists to avoid early create path; we want set() to proceed then fail on lock.
 	tbl := filepath.Join(base, "tbl")
 	os.MkdirAll(tbl, 0o755)
 
-	reg := NewRegistry(true, 8, rt, mocks.NewMockClient())
 	h := sop.Handle{LogicalID: sop.NewUUID()}
 	if err := reg.UpdateNoLocks(ctx, false, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "tbl", IDs: []sop.Handle{h}}}); err == nil {
-		t.Fatalf("expected error from set due to failing DirectIO.WriteAt")
+		t.Fatalf("expected error from set due to lock failure")
 	}
 }
 
@@ -651,6 +690,11 @@ func Test_Registry_UpdateNoLocks_SetStructWarn(t *testing.T) {
 	cache := setStructErrorCache{mocks.NewMockClient()}
 	reg := NewRegistry(true, 8, rt, cache)
 
+	// Ensure the target table directory exists under active folder.
+	if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), "tbl"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
 	h := sop.Handle{LogicalID: sop.NewUUID()}
 	if err := reg.UpdateNoLocks(ctx, false, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "tbl", IDs: []sop.Handle{h}}}); err != nil {
 		t.Fatalf("UpdateNoLocks expected success despite SetStruct error, got %v", err)
@@ -668,6 +712,9 @@ func Test_Registry_Remove_DeleteWarn(t *testing.T) {
 
 	// Seed one handle so Remove performs actual on-disk delete, then triggers cache.Delete warnings.
 	h := sop.NewHandle(sop.NewUUID())
+	if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), "tbl"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	if err := reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "tbl", IDs: []sop.Handle{h}}}); err != nil {
 		t.Fatalf("seed add: %v", err)
 	}
@@ -684,19 +731,18 @@ func Test_registryMap_Fetch_ErrorWrapped(t *testing.T) {
 	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
 	rm := newRegistryMap(true, 8, rt, mocks.NewMockClient())
 
-	// Prepare an empty segment file so findOneFileRegion opens it, then force ReadAt to error.
-	prev := DirectIOSim
-	DirectIOSim = directIOError{}
-	t.Cleanup(func() { DirectIOSim = prev })
-
 	seg := filepath.Join(base, "tblX", "tblX-1"+registryFileExtension)
 	if err := NewFileIO().MkdirAll(ctx, filepath.Dir(seg), permission); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	// Match the segment size so code goes down normal read path before the injected error.
+	// Seed a properly sized segment file, then remove read/write permissions to force open/read failure.
 	if err := NewFileIO().WriteFile(ctx, seg, make([]byte, int64(8)*blockSize), permission); err != nil {
 		t.Fatalf("seed seg: %v", err)
 	}
+	if err := os.Chmod(seg, 0o000); err != nil {
+		t.Fatalf("chmod seg: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(seg, 0o644) })
 
 	_, err := rm.fetch(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: "tblX", IDs: []sop.UUID{sop.NewUUID()}}})
 	if err == nil || err.Error() == "" {
@@ -713,6 +759,9 @@ func Test_registryMap_Remove_WriteError_From_ReadOnlyHashmap(t *testing.T) {
 	reg := NewRegistry(true, 8, rt, mocks.NewMockClient())
 	defer reg.Close()
 	table := "c1_r"
+	if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), table), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	h := sop.NewHandle(sop.NewUUID())
 	if err := reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: table, IDs: []sop.Handle{h}}}); err != nil {
 		t.Fatalf("seed add: %v", err)

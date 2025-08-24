@@ -122,6 +122,10 @@ func TestRegistry_AddUpdate_SetStructErrorTolerated(t *testing.T) {
 	defer r.Close()
 	r.l2Cache = setStructErrCache{Cache: realCache}
 	h := sop.NewHandle(sop.NewUUID())
+	// Ensure table directory exists under active folder for registry writes
+	if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), "rg"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rg", IDs: []sop.Handle{h}}}); err != nil {
 		t.Fatalf("Add unexpected error: %v", err)
 	}
@@ -131,9 +135,16 @@ func TestRegistry_AddUpdate_SetStructErrorTolerated(t *testing.T) {
 	}
 }
 
-// partialWriteDirectIO forces a partial block write to trigger updateFileBlockRegion error path.
-type partialWriteDirectIO struct{ directIOShim }
+// partialWriteDirectIO implements DirectIO and forces a partial block write to trigger
+// updateFileBlockRegion error path during tests.
+type partialWriteDirectIO struct{}
 
+func (p partialWriteDirectIO) Open(ctx context.Context, filename string, flag int, perm os.FileMode) (*os.File, error) {
+	if dir := filepath.Dir(filename); dir != "." {
+		_ = os.MkdirAll(dir, perm)
+	}
+	return os.OpenFile(filename, flag, perm)
+}
 func (p partialWriteDirectIO) WriteAt(ctx context.Context, f *os.File, b []byte, off int64) (int, error) {
 	// Write only half of the block without error -> treated as partial write.
 	half := len(b) / 2
@@ -142,6 +153,10 @@ func (p partialWriteDirectIO) WriteAt(ctx context.Context, f *os.File, b []byte,
 	}
 	return f.WriteAt(b[:half], off)
 }
+func (p partialWriteDirectIO) ReadAt(ctx context.Context, f *os.File, b []byte, off int64) (int, error) {
+	return f.ReadAt(b, off)
+}
+func (p partialWriteDirectIO) Close(f *os.File) error { return f.Close() }
 
 // Covers registry Update eviction path (write failure triggers L1/L2 delete + unlock early return).
 func TestRegistry_Update_WriteFailureEvicts(t *testing.T) {
@@ -152,6 +167,9 @@ func TestRegistry_Update_WriteFailureEvicts(t *testing.T) {
 	r := NewRegistry(true, MinimumModValue, rt, cache)
 	defer r.Close()
 	h := sop.NewHandle(sop.NewUUID())
+	if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), "ev"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "ev", IDs: []sop.Handle{h}}}); err != nil {
 		t.Fatalf("seed add: %v", err)
 	}

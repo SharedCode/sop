@@ -151,10 +151,10 @@ func TestHashmap_AllScenarios(t *testing.T) {
 
 	// --- Scenario: write + read + delete lifecycle ---
 	table := "regcase"
+	if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), table), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	id := sop.NewUUID()
-	old := DirectIOSim
-	DirectIOSim = &fakeDirectIO{}
-	t.Cleanup(func() { DirectIOSim = old })
 	frd, err := hm.findOneFileRegion(ctx, true, table, id)
 	if err != nil {
 		t.Fatalf("findOneFileRegion(write): %v", err)
@@ -203,29 +203,36 @@ func TestHashmap_AllScenarios(t *testing.T) {
 	// --- Scenario: setupNewFile lock acquisition failure ---
 	mcLockFail := &mockCacheHashmap{base: mocks.NewMockClient(), lockFail: true}
 	hmLock := newHashmap(true, 16, rt, mcLockFail)
-	DirectIOSim = &failingDirectIO{}
 	if _, err := hmLock.findOneFileRegion(ctx, true, "tblLock", sop.NewUUID()); err == nil {
 		t.Fatalf("expected lock fail")
 	}
 
-	// --- Scenario: partial read & partial write in updateFileRegion ---
+	// --- Scenario: partial read & partial write in updateFileBlockRegion (via injected dio) ---
 	mcAlways := &mockCacheHashmap{base: mocks.NewMockClient(), isLockedAlways: true}
 	hmPart := newHashmap(true, 16, rt, mcAlways)
-	fd := &failingDirectIO{partialRead: true}
-	DirectIOSim = fd
-	id3 := sop.NewUUID()
-	frd3, err := hmPart.findOneFileRegion(ctx, true, "tblP", id3)
-	if err != nil {
-		t.Fatalf("prep partial: %v", err)
+	// Create a temp segment file and open with injected DirectIO to control read/write behavior.
+	segPart := filepath.Join(base, "partio-1.reg")
+	if err := os.WriteFile(segPart, make([]byte, blockSize), 0o644); err != nil {
+		t.Fatalf("seed seg for partials: %v", err)
 	}
-	if err := hmPart.updateFileRegion(ctx, []fileRegionDetails{{dio: frd3.dio, blockOffset: frd3.blockOffset, handleInBlockOffset: frd3.handleInBlockOffset, handle: sop.NewHandle(id3)}}); err == nil {
+	// Case 1: partial read without error -> expect explicit error
+	dioPR := newFileDirectIOInjected(&failingDirectIO{partialRead: true})
+	if err := dioPR.open(ctx, segPart, os.O_RDWR, permission); err != nil {
+		t.Fatalf("open seg (pr): %v", err)
+	}
+	if err := hmPart.updateFileBlockRegion(ctx, dioPR, 0, 0, make([]byte, sop.HandleSizeInBytes)); err == nil {
 		t.Fatalf("expected partial read err")
 	}
-	fd.partialRead = false
-	fd.partialWrite = true
-	if err := hmPart.updateFileRegion(ctx, []fileRegionDetails{{dio: frd3.dio, blockOffset: frd3.blockOffset, handleInBlockOffset: frd3.handleInBlockOffset, handle: sop.NewHandle(id3)}}); err == nil {
+	_ = dioPR.close()
+	// Case 2: full read, partial write (n != blockSize, err=nil) -> expect explicit error
+	dioPW := newFileDirectIOInjected(&failingDirectIO{partialWrite: true})
+	if err := dioPW.open(ctx, segPart, os.O_RDWR, permission); err != nil {
+		t.Fatalf("open seg (pw): %v", err)
+	}
+	if err := hmPart.updateFileBlockRegion(ctx, dioPW, 0, 0, make([]byte, sop.HandleSizeInBytes)); err == nil {
 		t.Fatalf("expected partial write err")
 	}
+	_ = dioPW.close()
 
 	// --- Scenario: write error in updateFileBlockRegion (err != nil branch) ---
 	// Covered separately from partial write above which exercises (err == nil && n != blockSize).
@@ -249,11 +256,21 @@ func TestHashmap_AllScenarios(t *testing.T) {
 		t.Fatalf("expected write error branch")
 	}
 
-	// --- Scenario: open failure path ---
-	fd2 := &failingDirectIO{openErr: os.ErrPermission}
-	DirectIOSim = fd2
-	if _, err := newHashmap(false, 8, rt, mocks.NewMockClient()).findOneFileRegion(ctx, false, "tblOpen", sop.NewUUID()); err == nil {
-		t.Fatalf("expected open error")
+	// --- Scenario: open failure path (simulate via permissions) ---
+	{
+		hmOpenErr := newHashmap(false, 8, rt, mocks.NewMockClient())
+		table := "tblOpen"
+		dir := filepath.Join(base, table)
+		_ = os.MkdirAll(dir, 0o755)
+		seg := filepath.Join(dir, table+"-1"+registryFileExtension)
+		// Create a properly sized segment and make it unreadable to force open error.
+		if err := os.WriteFile(seg, make([]byte, hmOpenErr.getSegmentFileSize()), 0o000); err != nil {
+			t.Fatalf("seed unreadable seg: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(seg, 0o644) })
+		if _, err := hmOpenErr.findOneFileRegion(ctx, false, table, sop.NewUUID()); err == nil {
+			t.Fatalf("expected open error")
+		}
 	}
 
 	// --- Scenario: helpers getBlockOffset, getIDs, isZeroData ---
@@ -284,6 +301,9 @@ func TestHashmap_Fetch_MixedIDs_Scenario(t *testing.T) {
 	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
 	hm := newHashmap(true, 32, rt, mocks.NewMockClient())
 	idExisting := sop.NewUUID()
+	if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), "tblmix"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
 	frd, err := hm.findOneFileRegion(ctx, true, "tblmix", idExisting)
 	if err != nil {
 		t.Fatalf("prep frd: %v", err)
@@ -343,17 +363,10 @@ func (directIOShortRead) ReadAt(ctx context.Context, file *os.File, block []byte
 func (directIOShortRead) Close(file *os.File) error { return file.Close() }
 
 func TestHashmap_findOneFileRegion_ReadEOFAndPartial(t *testing.T) {
-	// Not parallel: modifies global DirectIOSim.
-
+	t.Parallel()
 	ctx := context.Background()
 	base := t.TempDir()
 	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
-
-	// Case 1: EOF when forWriting=false returns not found error.
-	prev := DirectIOSim
-	DirectIOSim = directIOReadEOF{}
-	t.Cleanup(func() { DirectIOSim = prev })
-
 	hm := newHashmap(true, 8, rt, mocks.NewMockClient())
 	// Pre-create segment file so Open succeeds.
 	seg := filepath.Join(rt.getActiveBaseFolder(), "tblEOF", "tblEOF-1.reg")
@@ -366,14 +379,18 @@ func TestHashmap_findOneFileRegion_ReadEOFAndPartial(t *testing.T) {
 	}
 	f.Close()
 
+	// Inject a DirectIO that always returns EOF via the fileDirectIO wrapper.
+	dioEOF := newFileDirectIOInjected(directIOReadEOF{})
+	// Open the injected dio on the segment file and place it into hashmap's fileHandles.
+	if err := dioEOF.open(ctx, seg, os.O_RDWR, permission); err != nil {
+		t.Fatalf("open injected EOF dio: %v", err)
+	}
+	hm.fileHandles[seg] = dioEOF
+
 	if _, err := hm.findOneFileRegion(ctx, false, "tblEOF", sop.NewUUID()); err == nil {
 		t.Fatalf("expected not found error on EOF for read path")
 	}
-
 	// Case 2: partial read without error triggers explicit partial-read error.
-	DirectIOSim = directIOShortRead{}
-
-	// Reuse same hm but different table name; also create the segment file so Open succeeds.
 	seg2 := filepath.Join(rt.getActiveBaseFolder(), "tblPartial", "tblPartial-1.reg")
 	if err := os.MkdirAll(filepath.Dir(seg2), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -384,37 +401,35 @@ func TestHashmap_findOneFileRegion_ReadEOFAndPartial(t *testing.T) {
 	}
 	f2.Close()
 
+	dioShort := newFileDirectIOInjected(directIOShortRead{})
+	if err := dioShort.open(ctx, seg2, os.O_RDWR, permission); err != nil {
+		t.Fatalf("open injected short dio: %v", err)
+	}
+	hm.fileHandles[seg2] = dioShort
+
 	if _, err := hm.findOneFileRegion(ctx, false, "tblPartial", sop.NewUUID()); err == nil || err.Error() == "" {
 		t.Fatalf("expected partial-read error, got %v", err)
 	}
 }
 
+
 // Ensure fetch() skips IDs missing with not found errors and returns other errors.
 func TestHashmap_fetch_MissingIDsSkipsAndError(t *testing.T) {
-	// Not parallel: modifies global DirectIOSim.
-
 	ctx := context.Background()
 	base := t.TempDir()
 	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
 
 	hm := newHashmap(true, 8, rt, mocks.NewMockClient())
 
-	// Create empty file, and set DirectIO to return EOF on reads.
-	prev := DirectIOSim
-	DirectIOSim = directIOReadEOF{}
-	t.Cleanup(func() { DirectIOSim = prev })
-
-	seg := filepath.Join(rt.getActiveBaseFolder(), "tblF", "tblF-1.reg")
-	if err := os.MkdirAll(filepath.Dir(seg), 0o755); err != nil {
+	// Case 1: Small segment file triggers idNotFound path; fetch should skip and return empty slice.
+	segDir := filepath.Join(base, "tblF")
+	if err := os.MkdirAll(segDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	f, err := os.Create(seg)
-	if err != nil {
-		t.Fatalf("create: %v", err)
+	seg := filepath.Join(segDir, "tblF-1"+registryFileExtension)
+	if err := os.WriteFile(seg, make([]byte, blockSize/2), 0o644); err != nil {
+		t.Fatalf("seed small seg: %v", err)
 	}
-	f.Close()
-
-	// Two IDs: both will be treated as missing -> fetch returns empty slice, nil error.
 	items, err := hm.fetch(ctx, "tblF", []sop.UUID{sop.NewUUID(), sop.NewUUID()})
 	if err != nil {
 		t.Fatalf("fetch unexpected error: %v", err)
@@ -423,27 +438,17 @@ func TestHashmap_fetch_MissingIDsSkipsAndError(t *testing.T) {
 		t.Fatalf("expected no items, got %d", len(items))
 	}
 
-	// Now simulate non-notfound error by swapping DirectIO to return a plain error.
-	DirectIOSim = directIOError{}
-	// Pre-create the file so Open succeeds, and ReadAt returns a non-notfound error.
-	seg3 := filepath.Join(rt.getActiveBaseFolder(), "tblF2", "tblF2-1.reg")
-	if err := os.MkdirAll(filepath.Dir(seg3), 0o755); err != nil {
+	// Case 2: Propagate non-notfound error by making segment unreadable.
+	seg2 := filepath.Join(base, "tblF2", "tblF2-1"+registryFileExtension)
+	if err := os.MkdirAll(filepath.Dir(seg2), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	f3, err := os.Create(seg3)
-	if err != nil {
-		t.Fatalf("create: %v", err)
+	// Proper size so code takes the read path; then chmod 0 to cause open/read failure.
+	if err := os.WriteFile(seg2, make([]byte, int64(8)*blockSize), 0o000); err != nil {
+		t.Fatalf("seed unreadable seg: %v", err)
 	}
-	f3.Close()
-
-	// Ensure segment file has at least one block so read path is exercised (not the not-found early return).
-	// Match segment size for hashModValue=8 so findOneFileRegion treats it as a valid segment.
-	if err := os.Truncate(seg3, int64(8*blockSize)); err != nil {
-		t.Fatalf("truncate: %v", err)
-	}
-
-	_, err = hm.fetch(ctx, "tblF2", []sop.UUID{sop.NewUUID()})
-	if err == nil {
+	t.Cleanup(func() { _ = os.Chmod(seg2, 0o644) })
+	if _, err := hm.fetch(ctx, "tblF2", []sop.UUID{sop.NewUUID()}); err == nil {
 		t.Fatalf("expected error from fetch on non-notfound path")
 	}
 }
@@ -493,10 +498,6 @@ func Test_findOneFileRegion_AdditionalBranches_Table(t *testing.T) {
 		{
 			name: "partial read returns specific error",
 			prep: func(t *testing.T) (*hashmap, string, sop.UUID) {
-				// Inject DirectIO that performs partial reads.
-				old := DirectIOSim
-				DirectIOSim = &failingDirectIO{partialRead: true}
-				t.Cleanup(func() { DirectIOSim = old })
 				hm := newHashmap(true, 32, rt, mocks.NewMockClient())
 				table := "tblB"
 				dir := filepath.Join(base, table)
@@ -504,6 +505,12 @@ func Test_findOneFileRegion_AdditionalBranches_Table(t *testing.T) {
 				f := filepath.Join(dir, table+"-1"+registryFileExtension)
 				// Ensure file is large enough so open path doesn't try to preallocate
 				_ = os.WriteFile(f, make([]byte, int(hm.getSegmentFileSize())), 0o644)
+				// Seed injected partial-read DirectIO for this file path and open it
+				dio := newFileDirectIOInjected(&failingDirectIO{partialRead: true})
+				if err := dio.open(ctx, f, os.O_RDWR, permission); err != nil {
+					t.Fatalf("open injected dio: %v", err)
+				}
+				hm.fileHandles[f] = dio
 				return hm, table, sop.NewUUID()
 			},
 			forWriting:    false,

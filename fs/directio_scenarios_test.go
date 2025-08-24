@@ -125,10 +125,7 @@ func TestDirectIOAndFileDirectIO_Scenarios(t *testing.T) {
 			}
 		}},
 		{name: "FileDirectIO_OpenFailuresAndEarlyErrors", run: func(t *testing.T) {
-			prev := DirectIOSim
-			DirectIOSim = failOpenDirectIO{}
-			defer func() { DirectIOSim = prev }()
-			fio := newFileDirectIO()
+			fio := newFileDirectIOInjected(failOpenDirectIO{})
 			if err := fio.open(ctx, filepath.Join(t.TempDir(), "a.dat"), os.O_RDWR, 0o644); err == nil {
 				t.Fatalf("expected open error")
 			}
@@ -143,10 +140,7 @@ func TestDirectIOAndFileDirectIO_Scenarios(t *testing.T) {
 			}
 		}},
 		{name: "FileDirectIO_DoubleOpen_WriteFail_IdempotentClose", run: func(t *testing.T) {
-			prev := DirectIOSim
-			DirectIOSim = errDirectIO{failWrite: true}
-			defer func() { DirectIOSim = prev }()
-			fio := newFileDirectIO()
+			fio := newFileDirectIOInjected(errDirectIO{failWrite: true})
 			tmp := filepath.Join(t.TempDir(), "seg.dat")
 			if err := fio.open(ctx, tmp, os.O_RDWR, 0o600); err != nil {
 				t.Fatalf("open: %v", err)
@@ -165,10 +159,7 @@ func TestDirectIOAndFileDirectIO_Scenarios(t *testing.T) {
 			}
 		}},
 		{name: "FileDirectIO_HappyPath_ReadWriteHelpers", run: func(t *testing.T) {
-			prev := DirectIOSim
-			DirectIOSim = stdTestDirectIO{}
-			defer func() { DirectIOSim = prev }()
-			fio := newFileDirectIO()
+			fio := newFileDirectIOInjected(stdTestDirectIO {})
 			name := filepath.Join(t.TempDir(), "ok.dat")
 			if err := fio.open(ctx, name, os.O_RDWR|os.O_CREATE, 0o644); err != nil {
 				t.Fatalf("open: %v", err)
@@ -203,20 +194,14 @@ func TestDirectIOAndFileDirectIO_Scenarios(t *testing.T) {
 				t.Fatalf("close: %v", err)
 			}
 		}},
-		{name: "FileDirectIO_NewWhenSimNil", run: func(t *testing.T) {
-			prev := DirectIOSim
-			DirectIOSim = nil
-			defer func() { DirectIOSim = prev }()
+		{name: "FileDirectIO_DefaultConcrete", run: func(t *testing.T) {
 			fio := newFileDirectIO()
 			if fio.directIO == nil {
 				t.Fatalf("expected default NewDirectIO implementation")
 			}
 		}},
 		{name: "FileDirectIO_FileExistsFalse_GetFileSizeErr", run: func(t *testing.T) {
-			prev := DirectIOSim
-			DirectIOSim = stdTestDirectIO{}
-			defer func() { DirectIOSim = prev }()
-			fio := newFileDirectIO()
+			fio := newFileDirectIOInjected(stdTestDirectIO{})
 			missing := filepath.Join(t.TempDir(), "missing.bin")
 			if fio.fileExists(missing) {
 				t.Fatalf("fileExists should be false for missing file")

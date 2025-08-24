@@ -356,6 +356,13 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			hAdd := sop.NewHandle(sop.NewUUID())
 			hUpd := sop.NewHandle(sop.NewUUID())
 			hDel := hAdd
+			// Ensure the registry table exists on both active and passive for replication writes.
+			if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), "reg"), 0o755); err != nil {
+				t.Fatalf("mkdir active reg: %v", err)
+			}
+			if err := os.MkdirAll(filepath.Join(rt.getPassiveBaseFolder(), "reg"), 0o755); err != nil {
+				t.Fatalf("mkdir passive reg: %v", err)
+			}
 			payload := sop.Tuple[[]sop.StoreInfo, [][]sop.RegistryPayload[sop.Handle]]{First: []sop.StoreInfo{store}, Second: [][]sop.RegistryPayload[sop.Handle]{{{RegistryTable: "reg", IDs: []sop.Handle{hNew}}}, {{RegistryTable: "reg", IDs: []sop.Handle{hAdd}}}, {{RegistryTable: "reg", IDs: []sop.Handle{hUpd}}}, {{RegistryTable: "reg", IDs: []sop.Handle{hDel}}}}}
 			ba, _ := encoding.DefaultMarshaler.Marshal(payload)
 			commitDir := rt.formatActiveFolderEntity(commitChangesLogFolder)
@@ -382,6 +389,13 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			rt2.FailedToReplicate = true
 			store2 := sop.StoreInfo{Name: "s2", Count: 1}
 			h := sop.NewHandle(sop.NewUUID())
+			// Ensure directories for reg2 on both active and passive
+			if err := os.MkdirAll(filepath.Join(rt2.getActiveBaseFolder(), "reg2"), 0o755); err != nil {
+				t.Fatalf("mkdir active reg2: %v", err)
+			}
+			if err := os.MkdirAll(filepath.Join(rt2.getPassiveBaseFolder(), "reg2"), 0o755); err != nil {
+				t.Fatalf("mkdir passive reg2: %v", err)
+			}
 			payload2 := sop.Tuple[[]sop.StoreInfo, [][]sop.RegistryPayload[sop.Handle]]{First: []sop.StoreInfo{store2}, Second: [][]sop.RegistryPayload[sop.Handle]{{{RegistryTable: "reg2", IDs: []sop.Handle{h}}}, {}, {}, {}}}
 			ba2, _ := encoding.DefaultMarshaler.Marshal(payload2)
 			commitDir2 := rt2.formatActiveFolderEntity(commitChangesLogFolder)

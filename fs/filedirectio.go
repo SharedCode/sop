@@ -15,14 +15,15 @@ type fileDirectIO struct {
 	directIO DirectIO
 }
 
-// Allows unit test to inject a fake or a simulator.
-var DirectIOSim DirectIO
-
 // Instantiate a direct File IO object.
 // Uses DirectIO implementation to perform aligned, page-sized reads/writes
 // suitable for registry segment access.
 func newFileDirectIO() *fileDirectIO {
-	directIO := DirectIOSim
+	return newFileDirectIOInjected(nil)
+}
+// Allows unit tests to inject a fake DirectIO.
+func newFileDirectIOInjected(dio DirectIO) *fileDirectIO {
+	directIO := dio
 	if directIO == nil {
 		directIO = NewDirectIO()
 	}

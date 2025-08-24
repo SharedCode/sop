@@ -251,10 +251,7 @@ func TestTransactionAndPriorityLog_Scenarios(t *testing.T) {
 	}
 
 	// fileDirectIO close error branch
-	prevSim := DirectIOSim
-	DirectIOSim = failingCloseDirectIO{}
-	defer func() { DirectIOSim = prevSim }()
-	fio := newFileDirectIO()
+	fio := newFileDirectIOInjected(failingCloseDirectIO{})
 	name := filepath.Join(t.TempDir(), "c.dat")
 	if err := fio.open(ctx, name, os.O_RDWR, 0o644); err != nil {
 		t.Fatalf("directIO open: %v", err)
