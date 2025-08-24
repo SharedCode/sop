@@ -1,6 +1,29 @@
-Scalable Objects Persistence (SOP) Framework - Golang V2
+# Scalable Objects Persistence (SOP) Library — Golang V2
 
-Code Coverage: https://app.codecov.io/github/sharedcode/sop
+Code coverage: https://app.codecov.io/github/sharedcode/sop
+
+## Table of contents
+
+- Summary
+- High-level features and articles
+- Simple usage (transaction + B-tree + replication)
+- Replication: Active/Passive and Erasure Coding (EC)
+- Store caching config guide
+- Data partitioning
+- Usability
+- Best practices
+- SOP in Redis & File System
+- Sample code (Go) and struct keys
+- Streaming data (big data upload/download/partial updates)
+- Transaction batching and ACID
+- Fine tuning
+- Transaction logging, serialization, two-phase commit
+- Optimistic Orchestration Algorithm (OOA)
+- Concurrent/parallel commits
+- ACID vs Big Data
+- Another Big Data example
+- Tidbits and background
+- SOP in-memory
 
 # Summary
 
@@ -62,7 +85,7 @@ func init() {
 ```
 The init function as shown above will create a map containing Erasure Coding information about the three disk drives & paths which will store the replicated data, EC based, i.e. - disk1, disk2 for data shards & disk3 for parity.
 
-b. instantiate a transaction and b-tree with replication feature, referencing the EC config specified in init (as shown above)
+b. Instantiate a transaction and B-tree with replication feature, referencing the EC config specified in init
 ```
 package main
 
@@ -133,7 +156,7 @@ Within these replication events and life cycle, 100% data protection is provided
 ## Erasure Coding (EC) based Replication
 For the B-tree nodes & large data file nodes, these files are replicated using EC based replication. SOP sports very efficient software based replication via Reed Solomon algorithm erasure coding, similar to MinIO S3's implementation. Based on a given EC configuration, e.g. - data shards & parity shards, data redundancy & thus, high data protection is achieved. Typically, 50% drive failure is tolerated and SOP will allow full read & write operations even in this degraded redundancy state. Admins are expected though to work on bringing back redundancy to the normal state of drive availability.
 
-SOP's EC has auto-repair mode for detected missing or bitrot shards if the RepairCorruptedShards flag is turned on (see inredfs/NewTransactionWithReplication API support on this flag). Use-case is, you can set this flag off then upon disk drive failure detection, you can replace the drive, turn on this flag then restart the application. SOP will then automatically repair the missing shard files (on the newly reinstated drive) that can get reconstructed from the available shards.
+SOP's EC has auto-repair mode for detected missing or bitrot shards if the RepairCorruptedShards flag is turned on (see inredfs/NewTransactionWithReplication). Use-case: keep it off during failure, replace the drive, turn it on, restart, SOP reconstructs missing shards automatically.
 
 If left untouched, SOP can operate even with drive(s) failures so long as data can be reconstructed from the available shards. The sample I made(see inredfs/integration_tests/basic_ec_test.go) uses 2 data shards and 1 parity shard. Yes, you can use minimal replication and it will work to your desire, if enough to support drive(s) failure.
 See above "Sample Usage" section for EC configuration.
@@ -508,7 +531,7 @@ Two phase commit is required so SOP can offer "seamless" integration with your A
 On successful commit on Phase 1, SOP will then commit Phase 2, which is, to tell all Btrees affected in the transaction to finalize the committed Nodes and make them available on succeeding Btree I/O.
 Phase 2 commit is a very fast, quick action as changes and Nodes are already resident on the Btree storage, it is just a matter of finalizing the Virtual ID registry with the new Nodes' physical addresses to swap the old with the new ones.
 
-See here for more details on two phase commit & how to access it for your application transaction integration: https://github.com/sharedcode/sop/blob/21f1a1b35ef71327882d3ab5bfee0b9d744345fa/transaction.go#L23a
+See [transaction.go](./transaction.go) for more details on two phase commit & how to access it for your application transaction integration.
 
 ## Optimistic Orchestration Algorithm (OOA)
 SOP uses a new, proprietary & open sourced, thus MIT licensed, unique algorithm using Redis I/O for orchestration, which aids in decentralized, highly parallelized operations. It uses simple Redis I/O ```fetch-set-fetch``` (not the Redis lock API!) for conflict detection/resolution and data merging across transactions whether in same machine or across different machines.

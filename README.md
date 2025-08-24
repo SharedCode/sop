@@ -1,6 +1,21 @@
-Scalable Objects Persistence (SOP) Framework - Golang V2
+# Scalable Objects Persistence (SOP) Library
 
-Code Coverage: https://app.codecov.io/github/sharedcode/sop
+[![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions) [![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml) [![codecov](https://codecov.io/gh/SharedCode/sop/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/sop) [![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/sop.svg)](https://pkg.go.dev/github.com/sharedcode/sop) [![Go Report Card](https://goreportcard.com/badge/github.com/sharedcode/sop)](https://goreportcard.com/report/github.com/sharedcode/sop)
+
+Golang V2 code library for high-performance, ACID storage with B-tree indexing, Redis-backed caching, and optional erasure-coded replication.
+
+## Table of contents
+
+- Introduction
+- High-level features and articles
+- Quick start
+- Prerequisites
+- Running integration tests (Docker)
+- Usability
+- SOP API discussions
+- SOP for Python (sop4py)
+- Community & support
+- Contributing & license
 
 # Introduction
 What is SOP?
@@ -16,29 +31,39 @@ Before I go, I would like to say, SOP is a green field, totally new. What is bei
 ## High level features/usability articles about SOP
 See the entire list & details here: https://github.com/sharedcode/sop/blob/master/README2.md#high-level-features-articles-about-sop
 
-# How to Use SOP?
-You will be surprised how easy to use SOP. Because we have shipped in SOP everything you need to manage your data & at SUPER scale! Its API is like NoSQL (Key/Value pair based), but it does NOT need anything else other than Redis for caching. That is it. Think of it this way, your Cassandra/MongoDB/Oracle/ElasticSearch (SOP provides unlimited B-tree! limited only by your hardware), etc.. & their client libraries IS IN SOP code library. Boom, simple, nothing else needed in this option to do storage management using SOP.
+## Quick start
+SOP is a NoSQL-like key/value storage engine with built-in indexing and transactions. You only need Redis and Go to start.
 
-First, you need to decide & pick a hardware/software setup for your production and your development environments (& anything in between). SOP supports all or most of them, so, you will have freedom/flexibility which one to choose. Ensure you have plenty of disk drives storage space, enough to store your planned amount of data to manage.
+1) Plan your environment
+- Ensure sufficient disk capacity for your datasets. SOP stores on local filesystems and can replicate across drives.
 
-For software dependency, SOP only depends on Redis & the Golang compiler/runtime (1.24.3 & above). Here are instructions to setup the environments including your development machine:
-1. Setup/install Redis in your target environment(s), e.g. in Production cluster & in your development machine/cluster. Make sure to give Redis in each of the environment plenty of resources, e.g. - memory/RAM so it can serve/scale to the needs of your cluster.
+2) Prerequisites
+- Redis (recent version)
+- Go 1.24.3 or later (module requires go 1.24.3)
 
-2. Ensure you have provisioned the disk drives where you will tell SOP to store/manage the data, in each of the environment.
-NOTE: please use sector size of 4096 when formatting the drives. This is the default sector size in most Linux & MacOS servers, thus, SOP uses that size in its direct IO memory aligned allocations. Windows supports this sector size as well.
+3) Install and run Redis
+- Install Redis locally or point to your cluster. Allocate enough RAM for your workload.
 
-3. In development machine, import SOP code library to your application and start coding using SOP API to manage the data. We recommend the "inredfs" package as it is very lean & requiring only Redis as dependency. SOP github location: https://github.com/sharedcode/sop/inredfs Since SOP was written in Golang, then you have a few ways to use it in your application, depending on which language you are writing your application (or microservice or API, any app type...). If your application is written in Golang then you can directly import the SOP package and use the package in the Golang fashion. If your application is written in other languages, you have a choice whether to use SOP via its compiled binary. So, you can download SOP source code, build binary to your target hardware architecture & OS. Example, build it for Linux x86.
-THEN you can integrate with this binary in your application. For example, if in Python, you can use GoPy to integrate. If in Java, you will need JNI, etc... Each of this technique has its own challenges, the best & easiest is to write your application in Golang then SOP is imported/used as a normal Go package.
-Second best is, to make it available as a microservice to your application(s), write a microservice in Go using SOP. Then you have solved communications and reuse via RESTful API interactions. Or gRPC, etc... which ever you want to support in your microservice. You can then freely author your application in any language, even in DotNet c# if you want to.
+4) Add SOP to your Go app
+- Import package: github.com/sharedcode/sop/inredfs
+- We recommend the inredfs package: lean, storage on filesystem, Redis-backed caching
+- Repo path: https://github.com/sharedcode/sop/tree/master/inredfs
 
-4. See SOP's API discussions (link is in bottom below) for more details on how to use different features/functionalities of SOP. Like how to initialize Redis passing the Redis cluster config details.
-How to create/begin & commit/rollback SOP transactions, use its B-tree API to store/manage key/value pairs of data sets (CRUD: Add, GetXx, Update, Remove), and how to do searches (FindOne, navigation methods like First, Last, Next, Previous, etc...).
+5) Initialize Redis and start coding
+- Initialize Redis connection, open a transaction, create/open a B-tree, then use CRUD and search (FindOne, First/Last/Next/Previous, paging APIs). See API links below.
 
-5. Once done and you are satisfied with your application development, you can then release your application, SOP library & other dependencies to your next target environment. This will be nothing special than your typical applications development and release process. SOP is just a code library/package. And your microservice (if you made one) that manages your data (using SOP perhaps!) should be released following your team's standard method of releasing a microservice to your target environment, manually and/or CICD.
+6) Deploy
+- Ship your app and SOP along your usual release flow (binary or container). If you expose SOP via a microservice, choose REST/gRPC as needed.
 
-6. Ensure you have setup a proper application user with proper permission to your target disk drives. Follow the standard way how to do it in your environment. Nothing is special here, SOP uses files/disk drives like ordinary packages, but via DirectIO & OS File System API. SOP enables support for different OS/hardware architectures without requiring anything else, other than what was discussed above. It uses the same locking mechanism via Redis to lock the virtual IDs and the low-level file sectors. And what is called as "unified locks", because the same can serve both purposes, high level & low level locks.
+7) Permissions
+- Ensure the process user has RW permissions on the target data directories/drives. SOP uses DirectIO and filesystem APIs with 4096-byte sector alignment.
 
-7. SOP Python bindings is in PyPi: https://pypi.org/project/sop4py. When ready & your team is into Python applications development, you can download sop4py from PyPi. The SOP Python bindings package source code is in https://github.com/sharedcode/sop/tree/master/jsondb/python. The API was designed to be easy to use and fit for Python "idiomatic" usage for database management & rich search. Please checkout the unit tests under this folder (test_btree.py & test_btree_idx.py) to get idea how to use the SOP Python bindings API for managing data & rich search within transactions.
+Tip: Using Python? See “SOP for Python” below.
+
+## Prerequisites
+- Redis server (local or cluster)
+- Go 1.24.3+
+- Data directories on disks you intend SOP to use (4096-byte sector size recommended)
 
 ## Running Integration Tests
 You can run the SOP's integration tests from "inredfs" package using the following docker commands:
@@ -51,7 +76,11 @@ The docker image will be built with alpine (linux) and Redis server in it. Copy 
 On docker run, the shell script ensures that the Redis server is up & running then run the ("inredfs" package's integration) test files.
 
 You can pattern how the test sets the (datapath) env't variable so you can run the same integration tests in your host machine, if needed, and yes, you need Redis running locally for this to work.
-See https://github.com/SharedCode/sop/blob/master/Dockerfile & https://github.com/SharedCode/sop/blob/master/docker-entrypoint.sh for more details.
+See https://github.com/SharedCode/sop/blob/master/Dockerfile and https://github.com/SharedCode/sop/blob/master/docker-entrypoint.sh for more details.
+
+If you’re using VS Code, there are ready-made tasks:
+- Docker: Build and Test — builds image mydi
+- Docker: Run Tests — runs tests in the container
 
 # Usability
 See details here: https://github.com/sharedcode/sop/blob/master/README2.md#usability
@@ -61,3 +90,12 @@ See details here: https://github.com/sharedcode/sop/blob/master/README2.md#simpl
 
 # SOP for Python (sop4py)
 See details here: https://github.com/sharedcode/sop/tree/master/jsondb/python#readme
+
+## Community & support
+- Issues: https://github.com/SharedCode/sop/issues
+- Discussions: https://github.com/SharedCode/sop/discussions (design/usage topics)
+
+## Contributing & license
+- Contributing guide: see CONTRIBUTING.md
+- Code of Conduct: see CODE_OF_CONDUCT.md
+- License: MIT, see LICENSE
