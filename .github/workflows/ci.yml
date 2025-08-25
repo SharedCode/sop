@@ -11,6 +11,16 @@ jobs:
     name: Build & Test (public + integration)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,8 +40,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
+      - name: Wait for Redis
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Waiting for Redis..."
+          for i in {1..60}; do
+            (echo > /dev/tcp/127.0.0.1/6379) && break || sleep 2
+          done
+          echo "Redis reachable."
+
       - name: Run tests (exclude all internal/* packages)
         shell: bash
+        env:
+          datapath: ${{ github.workspace }}/.sop_data
         run: |
           set -euo pipefail
           pkgs=$(go list ./... | grep -vE "/internal(/|$)")
