@@ -67,7 +67,7 @@ jobs:
           set -euo pipefail
           pkgs=$(go list ./... | grep -vE "/internal(/|$)")
           echo "Testing packages:" $pkgs
-          go test -v -tags=integration -count=1 $pkgs
+          go test -timeout 5m -v -tags=integration -count=1 $pkgs
 
   internal-inredcfs-it:
     name: Internal InRedCFS Integration Tests (opt-in)
