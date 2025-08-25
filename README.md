@@ -69,7 +69,7 @@ SOP is designed to keep your app online through common storage failures.
 - Registry and StoreRepository: These metadata files use Active/Passive replication. Only I/O errors on Registry/StoreRepository can generate a failover. On a failover, SOP flips to the passive path and continues. When you restore the failed drive, reinstate it as the passive side; SOP will fast‑forward any missing deltas and return it to rotation.
 - Auto‑repair: With EC repair enabled, after replacing a failed blob drive, SOP reconstructs missing shards automatically and restores full redundancy in the background.
 
-See the detailed lifecycle guide (failures, observability, reinstate/fast‑forward, and drive replacement) in README2.md: “Lifecycle: Failures, Failover, Reinstate, and EC Auto‑Repair” (https://github.com/SharedCode/sop/blob/master/README2.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair)
+See the detailed lifecycle guide (failures, observability, reinstate/fast‑forward, and drive replacement) in README2.md: https://github.com/SharedCode/sop/blob/master/README2.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair)
 
 ## Prerequisites
 - Redis server (local or cluster)
