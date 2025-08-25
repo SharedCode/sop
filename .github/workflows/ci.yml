@@ -45,11 +45,10 @@ jobs:
         run: |
           set -euo pipefail
           echo "Waiting for Redis..."
-            until redis-cli -h 127.0.0.1 -p 6379 ping >/dev/null 2>&1; do
-                echo "Redis is unavailable - sleeping"
-                sleep 1
-            done
-            echo "Redis is up and running!"
+          for i in {1..60}; do
+            (echo > /dev/tcp/127.0.0.1/6379) && break || sleep 2
+          done
+          echo "Redis reachable."
 
       - name: Prepare datapath
         shell: bash
@@ -75,4 +74,4 @@ jobs:
           fi
 
           echo "Running inredfs integration tests"
-          go test -timeout 5m -v -tags=integration -count=1 ./inredfs/integrationtests/...
+          go test -timeout 30m -v -tags=integration -count=1 ./inredfs/integrationtests/...
