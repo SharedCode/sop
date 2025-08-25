@@ -67,7 +67,8 @@ func ShouldRetry(err error) bool {
 	}
 
 	// Last-resort heuristic for EROFS text across platforms/drivers.
-	if strings.Contains(err.Error(), "read-only file system") {
+    s := err.Error()
+	if strings.Contains(s, "read-only file system")  || strings.Contains(s, "readonly file system"){
 		return false
 	}
 
