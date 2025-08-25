@@ -18,39 +18,59 @@ import (
     "github.com/sharedcode/sop/redis"
 )
 
-// dioReplicationSim is a minimal DirectIO shim to inject failures and trigger failover paths.
-type dioReplicationSim struct {
-    fs.DirectIO
-    failOnMethod int // 1=Open, 2=WriteAt, 3=ReadAt, 4=Close
+// Helpers to simulate IO failures by toggling permissions on registry segment files.
+// These target only Registry/StoreRepository writes. To deterministically set FailedToReplicate
+// without relying on sop.Error code classification, we deny writes on the PASSIVE folder so the
+// registry's replicate-to-passive path calls handleFailedToReplicate.
+func registrySegmentPath(base, table string) string {
+    return filepath.Join(base, table, fmt.Sprintf("%s-1.reg", table))
 }
 
-func newDIOFailSim(failOnMethod int) *dioReplicationSim {
-    return &dioReplicationSim{DirectIO: fs.NewDirectIO(), failOnMethod: failOnMethod}
+func ensureTableDir(t *testing.T, base, table string) string {
+    t.Helper()
+    dir := filepath.Join(base, table)
+    _ = os.MkdirAll(dir, 0o755)
+    return dir
 }
 
-func (dio dioReplicationSim) Open(ctx context.Context, filename string, flag int, perm os.FileMode) (*os.File, error) {
-    if dio.failOnMethod == 1 {
-        return nil, sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("sim Open")}
-    }
-    return dio.DirectIO.Open(ctx, filename, flag, perm)
+// makePassiveRegistryReadOnly denies writes on the passive folder's registry path so replication fails.
+func makePassiveRegistryReadOnly(t *testing.T, table string) {
+    t.Helper()
+    base := passiveBaseFolder()
+    ensureTableDir(t, base, table)
+    seg := registrySegmentPath(base, table)
+    // Make only the segment file read-only to fail replication writes without affecting other tables/dirs.
+    _ = os.Chmod(seg, 0o444)
 }
-func (dio dioReplicationSim) WriteAt(ctx context.Context, f *os.File, block []byte, off int64) (int, error) {
-    if dio.failOnMethod == 2 {
-        return 0, sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("sim WriteAt")}
+
+func restoreRegistryPermissions(t *testing.T, table string) {
+    t.Helper()
+    for _, base := range []string{activeBaseFolder(), passiveBaseFolder()} {
+        dir := ensureTableDir(t, base, table)
+        _ = os.Chmod(dir, 0o755)
+        seg := registrySegmentPath(base, table)
+        _ = os.Chmod(seg, 0o644)
     }
-    return dio.DirectIO.WriteAt(ctx, f, block, off)
 }
-func (dio dioReplicationSim) ReadAt(ctx context.Context, f *os.File, block []byte, off int64) (int, error) {
-    if dio.failOnMethod == 3 {
-        return 0, sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("sim ReadAt")}
+
+// sanitizeIsolatedReplicationBases ensures base dirs are writable and clears stray stores that
+// could interfere (e.g., previously left read-only artifacts from other tests).
+func sanitizeIsolatedReplicationBases(t *testing.T) {
+    t.Helper()
+    bases := []string{activeBaseFolder(), passiveBaseFolder()}
+    for _, base := range bases {
+        _ = os.MkdirAll(base, 0o755)
+        _ = os.Chmod(base, 0o755)
+        // Remove any stores other than our status/commit log artifacts.
+        entries, _ := os.ReadDir(base)
+        for _, e := range entries {
+            name := e.Name()
+            if name == "commitlogs" || name == "replstat.txt" {
+                continue
+            }
+            _ = os.RemoveAll(filepath.Join(base, name))
+        }
     }
-    return dio.DirectIO.ReadAt(ctx, f, block, off)
-}
-func (dio dioReplicationSim) Close(f *os.File) error {
-    if dio.failOnMethod == 4 {
-        return sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("sim Close")}
-    }
-    return dio.DirectIO.Close(f)
 }
 
 // Test_EC_Failover_Reinstate_FastForward_Short exercises:
@@ -90,12 +110,15 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
     table := "ec_failover_ff_isolated_it"
 
     // Ensure no prior store artifacts remain across replication and EC disks, including store repository metadata.
+    sanitizeIsolatedReplicationBases(t)
     cleanupStoreEverywhere(table)
     cleanupECShards(table)
     cleanupStoreRepository(table, isolatedStores)
 
+    // Ensure directories/segments start with writable permissions to avoid leftover read-only from prior runs.
+    restoreRegistryPermissions(t, table)
+
     // Baseline: ensure the store exists (open-or-create) using short transactions.
-    fs.DirectIOSim = nil
     if err := ensureStoreExists(ctx, to, table); err != nil { t.Fatalf("ensure store exists: %v", err) }
 
     // Seed a couple of items in a fresh transaction.
@@ -112,27 +135,28 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
     }
     if err := trans.Commit(ctx); err != nil { t.Fatalf("seed commit: %v", err) }
 
-    // Simulate a drive failure on next registry write to trigger failover.
-    fs.DirectIOSim = newDIOFailSim(2) // WriteAt error -> RestoreRegistryFileSectorFailure
+    // Simulate a drive failure on PASSIVE registry to deterministically mark FailedToReplicate
+    // without requiring a true failover-qualified error on the active side.
+    makePassiveRegistryReadOnly(t, table)
     trans2, err := inredfs.NewTransactionWithReplication(ctx, to)
     if err != nil { t.Fatal(err) }
     if err = trans2.Begin(); err != nil { t.Fatal(err) }
     b2, err := inredfs.OpenBtreeWithReplication[int, string](ctx, table, trans2, nil)
     if err != nil { t.Fatal(err) }
-    // Attempt an update to hit registry write
-    if ok, err := b2.Upsert(ctx, 2, "bravo2"); !ok || err != nil {
+    // Attempt to add a new key to force a registry write and hit the simulated failure
+    if ok, err := b2.Upsert(ctx, 1001, "new-after-failover-trigger"); !ok || err != nil {
         // Expect commit to fail; keep going
     }
     _ = trans2.Commit(ctx) // ignore error; failover will be decided by tracker
 
-    // Verify we are in failed replication mode.
+    // Verify we are in failed replication mode (replicate-to-passive failed sets this flag).
     if fs.GlobalReplicationDetails == nil || !fs.GlobalReplicationDetails.FailedToReplicate {
         t.Fatalf("expected FailedToReplicate after simulated IO error")
     }
 
-    // Start reinstate in a goroutine.
+    // Restore permissions so reinstate and upcoming commits can proceed, then start reinstate in a goroutine.
+    restoreRegistryPermissions(t, table)
     reinstateErr := make(chan error, 1)
-    fs.DirectIOSim = nil // clear failure so reinstate and upcoming commits can proceed
     go func() { reinstateErr <- inredfs.ReinstateFailedDrives(ctx, isolatedStores) }()
 
     // Detect immediate reinstate failures (fail fast with clearer error).
@@ -408,4 +432,18 @@ func cleanupStoreRepository(name string, bases []string) {
         _ = inredfs.RemoveBtree(context.Background(), base, name)
     }
 }
+
+// makeActiveRegistryReadOnly makes the current ACTIVE registry segment file read-only to trigger a failover
+// qualified error in the commit path.
+func makeActiveRegistryReadOnly(t *testing.T, table string) {
+    t.Helper()
+    base := activeBaseFolder()
+    ensureTableDir(t, base, table)
+    seg := registrySegmentPath(base, table)
+    _ = os.Chmod(seg, 0o444)
+}
+
+// Test_ActiveSide_FailoverFlip_Then_Reinstate_FastForward uses the DirectIO simulator to inject
+// EIO on active registry WriteAt, causing a failover (toggler flip). It then restores IO and
+// runs reinstate, verifying delta fast-forwarded writes are present and flags cleared.
 

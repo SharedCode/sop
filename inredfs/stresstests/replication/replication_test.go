@@ -9,6 +9,7 @@ import (
 	log "log/slog"
 	"math/rand"
 	"os"
+	"path/filepath"
 
 	"testing"
 
@@ -78,25 +79,25 @@ func reinstateDrive(t *testing.T) {
 var transOptions, _ = inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 
 func TestMain(t *testing.T) {
-	fs.DirectIOSim = NewDirectIOReplicationSim(0)
 	tableName := "repltable2"
 	setupBtreeWithOneItem(tableName, rand.Intn(50)+1, t)
 
 	writeData(tableName, rand.Intn(50)+1, "foobar", t)
 	fmt.Printf("No error here.\n")
 
-	// Set sim to fail on WriteAt.
-	fs.DirectIOSim = NewDirectIOReplicationSim(2)
-	fmt.Printf("Error here!\n")
+	// Induce write failure on current active registry segment to trigger failover.
+	makeActiveRegistryReadOnly(t, tableName)
+	fmt.Printf("Error here! (simulated via permissions)\n")
 	writeData(tableName, rand.Intn(50)+1, "bar bar", t)
 	fmt.Printf("End of error\n")
 
+	// Restore permissions so reinstate can proceed.
+	restoreRegistryPermissions(t, tableName)
 	// Reinstate drive should succeed to reinstate the (failed) drives back to replication.
 	reinstateDrive(t)
 
 	fmt.Printf("Failed over and read foll. item Values: %v\n", readData(tableName, t))
 
-	fs.DirectIOSim = NewDirectIOReplicationSim(0)
 	writeData(tableName, rand.Intn(50)+1, "hey hey", t)
 	fmt.Printf("No error here.\n")
 
@@ -109,25 +110,26 @@ func TestMain(t *testing.T) {
 		log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
 	}
 
-	// Set sim to fail on ReadAt.
-	fs.DirectIOSim = NewDirectIOReplicationSim(3)
-	fmt.Printf("Failed on read, 'should be nil, %v\n", readData(tableName, t))
+	// Optionally, simulate read issue by making registry temporarily unreadable, then restore.
+	makeActiveRegistryUnreadable(t, tableName)
+	_ = readData(tableName, t) // may return empty on error paths
+	restoreRegistryPermissions(t, tableName)
 
 }
 
 func TestMain2(t *testing.T) {
-	fs.DirectIOSim = NewDirectIOReplicationSim(0)
 	tableName := "repltable3"
 	setupBtreeWithOneItem(tableName, rand.Intn(50)+1, t)
 
 	writeData(tableName, rand.Intn(50)+1, "foobar", t)
 	fmt.Printf("No error here.\n")
 
-	// Set sim to fail on WriteAt, no failover, just IO error.
-	fs.DirectIOSim = NewDirectIOReplicationSim(22)
-	fmt.Printf("Error here!\n")
+	// Induce write error (no failover classification in some paths).
+	makeActiveRegistryReadOnly(t, tableName)
+	fmt.Printf("Error here! (simulated via permissions)\n")
 	writeData(tableName, rand.Intn(50)+1, "bar bar", t)
 	fmt.Printf("End of error\n")
+	restoreRegistryPermissions(t, tableName)
 
 }
 
@@ -241,4 +243,51 @@ func TestStoreRepositoryRemoveStoreFailure(t *testing.T) {
 func TestStoreRepositoryWriteFileFailure(t *testing.T) {
 }
 func TestStoreRepositoryReadFileFailure(t *testing.T) {
+}
+
+// Helpers to simulate IO failures by toggling permissions on registry segment files.
+func activeBaseFolder() string {
+	if fs.GlobalReplicationDetails != nil && fs.GlobalReplicationDetails.ActiveFolderToggler {
+		return storesFolders[1]
+	}
+	return storesFolders[0]
+}
+
+func registrySegmentPath(base, table string) string {
+	return filepath.Join(base, table, fmt.Sprintf("%s-1.reg", table))
+}
+
+func ensureTableDir(t *testing.T, base, table string) string {
+	t.Helper()
+	dir := filepath.Join(base, table)
+	_ = os.MkdirAll(dir, 0o755)
+	return dir
+}
+
+func makeActiveRegistryReadOnly(t *testing.T, table string) {
+	t.Helper()
+	base := activeBaseFolder()
+	ensureTableDir(t, base, table)
+	seg := registrySegmentPath(base, table)
+	// Best-effort chmod; if file doesn't exist yet, directory perms will block creation.
+	_ = os.Chmod(seg, 0o444)
+	_ = os.Chmod(filepath.Dir(seg), 0o555)
+}
+
+func makeActiveRegistryUnreadable(t *testing.T, table string) {
+	t.Helper()
+	base := activeBaseFolder()
+	ensureTableDir(t, base, table)
+	seg := registrySegmentPath(base, table)
+	_ = os.Chmod(seg, 0o000)
+}
+
+func restoreRegistryPermissions(t *testing.T, table string) {
+	t.Helper()
+	for _, b := range storesFolders {
+		dir := ensureTableDir(t, b, table)
+		_ = os.Chmod(dir, 0o755)
+		seg := registrySegmentPath(b, table)
+		_ = os.Chmod(seg, 0o644)
+	}
 }

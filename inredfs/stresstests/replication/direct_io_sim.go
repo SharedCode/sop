@@ -40,7 +40,7 @@ func (dio dioReplicationSim) WriteAt(ctx context.Context, file *os.File, block [
 	}
 	if dio.failOnMethod == 22 {
 		return 0, sop.Error{
-			Code: sop.FileIOError,
+			Code: sop.FileIOErrorFailoverQualified,
 			Err:  fmt.Errorf("simulated error on WriteAt"),
 		}
 	}

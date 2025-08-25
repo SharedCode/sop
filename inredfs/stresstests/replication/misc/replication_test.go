@@ -8,13 +8,13 @@ import (
 	"fmt"
 	log "log/slog"
 	"os"
+	"path/filepath"
 
 	"testing"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/inredfs"
-	"github.com/sharedcode/sop/inredfs/integrationtests/replication"
 	"github.com/sharedcode/sop/redis"
 )
 
@@ -42,7 +42,6 @@ func init() {
 	// 	log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
 	// }
 	initErasureCoding()
-	fs.DirectIOSim = replication.NewDirectIOReplicationSim(1)
 }
 
 func initErasureCoding() {
@@ -95,7 +94,6 @@ func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 }
 
 func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
-	fs.DirectIOSim = replication.NewDirectIOReplicationSim(1)
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
 	to, _ := inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
@@ -119,16 +117,19 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 
 	fmt.Printf("GlobalReplication ActiveFolderToggler Before Fail: %v\n", fs.GlobalReplicationDetails.ActiveFolderToggler)
 
+	// Simulate Open failure by making registry directory read-only before first write.
+	makeRegistryDirReadOnly(t, storesFolders, so.Name)
 	b3.Add(ctx, 1, "hello world")
 	if err := trans.Commit(ctx); err == nil {
 		t.Error("expected error but none was returned")
 		t.FailNow()
 	}
+	// Restore permissions for subsequent success path
+	restoreRegistryDirPerms(t, storesFolders, so.Name)
 
 	fmt.Printf("GlobalReplication ActiveFolderToggler After Fail: %v\n", fs.GlobalReplicationDetails.ActiveFolderToggler)
 
 	// Now, check whether transaction IO on new "active" target paths will be successful.
-	fs.DirectIOSim = nil
 
 	ctx = context.Background()
 	trans, err = inredfs.NewTransactionWithReplication(ctx, to)
@@ -159,8 +160,6 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 }
 
 func TestOpenBtree_TransWithRepl_failed(t *testing.T) {
-	fs.DirectIOSim = replication.NewDirectIOReplicationSim(1)
-
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
 	to, _ := inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
@@ -179,8 +178,6 @@ func TestOpenBtree_TransWithRepl_failed(t *testing.T) {
 }
 
 func TestOpenBtreeWithRepl_succeeded(t *testing.T) {
-	fs.DirectIOSim = replication.NewDirectIOReplicationSim(1)
-
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
 	to, _ := inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
@@ -195,5 +192,30 @@ func TestOpenBtreeWithRepl_succeeded(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected to succeed but failed, details: %v", err)
 		t.FailNow()
+	}
+}
+
+// test helpers
+func currentActive(stores []string) string {
+	if fs.GlobalReplicationDetails != nil && fs.GlobalReplicationDetails.ActiveFolderToggler {
+		return stores[1]
+	}
+	return stores[0]
+}
+
+func makeRegistryDirReadOnly(t *testing.T, stores []string, table string) {
+	t.Helper()
+	base := currentActive(stores)
+	dir := filepath.Join(base, table)
+	_ = os.MkdirAll(dir, 0o755)
+	_ = os.Chmod(dir, 0o555)
+}
+
+func restoreRegistryDirPerms(t *testing.T, stores []string, table string) {
+	t.Helper()
+	for _, b := range stores {
+		dir := filepath.Join(b, table)
+		_ = os.MkdirAll(dir, 0o755)
+		_ = os.Chmod(dir, 0o755)
 	}
 }

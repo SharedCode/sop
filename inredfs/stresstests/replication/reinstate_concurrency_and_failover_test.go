@@ -67,8 +67,8 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
         _ = tr.Commit(ctx)
     }
 
-    // Trigger failover on next registry write.
-    fs.DirectIOSim = NewDirectIOReplicationSim(2)
+    // Trigger failover on next registry write by making active registry path read-only.
+    makeRegistryReadOnly(t, stores, tables[0])
     tr0, _ := inredfs.NewTransactionWithReplication(ctx, to)
     _ = tr0.Begin()
     b0, _ := inredfs.OpenBtreeWithReplication[int, string](ctx, tables[0], tr0, nil)
@@ -79,8 +79,8 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
         t.Fatalf("expected FailedToReplicate true")
     }
 
-    // Start reinstate and hammer writes concurrently on all tables.
-    fs.DirectIOSim = nil
+    // Restore permissions and start reinstate while hammering writes concurrently on all tables.
+    restoreRegistryDirs(t, stores, tables)
     reinstateErr := make(chan error, 1)
     go func() { reinstateErr <- inredfs.ReinstateFailedDrives(ctx, stores) }()
 
@@ -124,14 +124,14 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
         t.Fatalf("expected FailedToReplicate false after reinstate")
     }
 
-    // Second failover and a quick write.
-    fs.DirectIOSim = NewDirectIOReplicationSim(2)
+    // Second failover and a quick write (toggle active registry path again).
+    makeRegistryReadOnly(t, stores, tables[1])
     tr2, _ := inredfs.NewTransactionWithReplication(ctx, to)
     _ = tr2.Begin()
     b2, _ := inredfs.OpenBtreeWithReplication[int, string](ctx, tables[1], tr2, nil)
     _, _ = b2.Upsert(ctx, 202, "second-failover")
     _ = tr2.Commit(ctx)
-    fs.DirectIOSim = nil
+    restoreRegistryDirs(t, stores, tables)
 }
 
 func getDataPath() string {
@@ -139,4 +139,32 @@ func getDataPath() string {
         return s
     }
     return "/Users/grecinto/sop_data"
+}
+
+// helpers
+func makeRegistryReadOnly(t *testing.T, stores []string, table string) {
+    t.Helper()
+    // Resolve current active based on toggler.
+    active := stores[0]
+    if fs.GlobalReplicationDetails != nil && fs.GlobalReplicationDetails.ActiveFolderToggler {
+        active = stores[1]
+    }
+    dir := filepath.Join(active, table)
+    _ = os.MkdirAll(dir, 0o755)
+    _ = os.Chmod(dir, 0o555)
+    seg := filepath.Join(dir, fmt.Sprintf("%s-1.reg", table))
+    _ = os.Chmod(seg, 0o444)
+}
+
+func restoreRegistryDirs(t *testing.T, stores []string, tables []string) {
+    t.Helper()
+    for _, s := range stores {
+        for _, tb := range tables {
+            dir := filepath.Join(s, tb)
+            _ = os.MkdirAll(dir, 0o755)
+            _ = os.Chmod(dir, 0o755)
+            seg := filepath.Join(dir, fmt.Sprintf("%s-1.reg", tb))
+            _ = os.Chmod(seg, 0o644)
+        }
+    }
 }
