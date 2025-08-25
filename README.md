@@ -9,6 +9,7 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 - Introduction
 - High-level features and articles
 - Quick start
+- Lifecycle: failures, failover, reinstate, EC auto-repair
 - Prerequisites
 - Running integration tests (Docker)
  - Testing (unit, integration, stress)
@@ -60,6 +61,15 @@ SOP is a NoSQL-like key/value storage engine with built-in indexing and transact
 - Ensure the process user has RW permissions on the target data directories/drives. SOP uses DirectIO and filesystem APIs with 4096-byte sector alignment.
 
 Tip: Using Python? See “SOP for Python” below.
+
+## Lifecycle: failures, failover, reinstate, EC auto-repair
+SOP is designed to keep your app online through common storage failures.
+
+- Blob store with EC: B-tree nodes and large blobs are stored using Erasure Coding (EC). Up to the configured parity, reads/writes continue even when some drives are offline. When failures exceed parity, writes roll back (no failover is generated) and reads may require recovery.
+- Registry and StoreRepository: These metadata files use Active/Passive replication. Only I/O errors on Registry/StoreRepository can generate a failover. On a failover, SOP flips to the passive path and continues. When you restore the failed drive, reinstate it as the passive side; SOP will fast‑forward any missing deltas and return it to rotation.
+- Auto‑repair: With EC repair enabled, after replacing a failed blob drive, SOP reconstructs missing shards automatically and restores full redundancy in the background.
+
+See the detailed lifecycle guide (failures, observability, reinstate/fast‑forward, and drive replacement) in README2.md: “Lifecycle: Failures, Failover, Reinstate, and EC Auto‑Repair”.
 
 ## Prerequisites
 - Redis server (local or cluster)

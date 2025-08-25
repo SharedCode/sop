@@ -147,10 +147,15 @@ func Test_EC_BlobStore_ShardsExceedParity_Rollback_NoFailover(t *testing.T) {
     // Open the store; it should exist now.
     btr, err := common.OpenBtree[int, string](ctx, table, tx, nil)
     if err != nil { t.Fatalf("OpenBtree: %v", err) }
-    if _, err := btr.Upsert(ctx, 100, "blob-data-100"); err != nil { t.Fatalf("Upsert: %v", err) }
-    // Commit should fail due to EC write failures exceeding parity.
-    if err := tx.Commit(ctx); err == nil {
-        t.Fatalf("expected commit error due to EC shard write failures exceeding parity")
+    _, upErr := btr.Upsert(ctx, 100, "blob-data-100")
+    // If active persistence fails during Upsert (BlobStore.Add error), roll back to clean staged blobs.
+    if upErr != nil {
+        _ = tx.Rollback(ctx)
+    } else {
+        // Otherwise, commit should fail due to EC write failures exceeding parity.
+        if err := tx.Commit(ctx); err == nil {
+            t.Fatalf("expected commit error due to EC shard write failures exceeding parity")
+        }
     }
 
     // Assert no failover occurred and FailedToReplicate did not flip.

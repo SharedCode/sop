@@ -8,6 +8,7 @@ Code coverage: https://app.codecov.io/github/sharedcode/sop
 - High-level features and articles
 - Simple usage (transaction + B-tree + replication)
 - Replication: Active/Passive and Erasure Coding (EC)
+- Lifecycle: Failures, Failover, Reinstate, and EC Auto-Repair
 - Store caching config guide
 - Data partitioning
 - Usability
@@ -160,6 +161,60 @@ SOP's EC has auto-repair mode for detected missing or bitrot shards if the Repai
 
 If left untouched, SOP can operate even with drive(s) failures so long as data can be reconstructed from the available shards. The sample I made(see inredfs/integration_tests/basic_ec_test.go) uses 2 data shards and 1 parity shard. Yes, you can use minimal replication and it will work to your desire, if enough to support drive(s) failure.
 See above "Sample Usage" section for EC configuration.
+
+## Lifecycle: Failures, Failover, Reinstate, and EC Auto-Repair
+
+This section describes what happens during drive failures, how SOP reacts, and how to safely reinstate drives after replacement.
+
+Key terms
+- StoreRepository and Registry: SOP’s metadata/state; covered by Active/Passive replication. Only I/O errors here can trigger a failover.
+- Blob store: User data and B-tree node files; protected by Erasure Coding (EC). Blob I/O errors never cause a failover; they are handled via rollback or EC repair.
+
+Failure scenarios and behavior
+1) Blob drive failure (EC-protected)
+	- Up to parity failures: Reads/writes continue. SOP reconstructs missing shards on read and writes to available shards. With RepairCorruptedShards=true, SOP will background-repair missing/bitrotted shards when a replacement drive is introduced.
+	- Beyond parity: Write attempts fail and are rolled back; no failover event is generated. Reads may fail if data cannot be reconstructed. Replace drives to restore parity, then restart/continue for auto-repair.
+
+2) Registry/StoreRepository drive failure (Active/Passive)
+	- On qualified I/O errors during critical sections, SOP flips from active to passive (failover) and continues serving requests.
+	- BlobStore I/O errors do not participate in failover decisions.
+	- Observability: a failover event is recorded and a “failed to replicate” flag may be set if the passive side cannot be updated.
+
+3) Reinstate workflow after drive replacement
+	- Replace/format the failed drive and mount to the expected passive path.
+	- Trigger reinstate (administratively or via API if exposed). SOP will fast-forward deltas from the active to the reinstated passive, clear failure flags, and return the pair to steady-state replication.
+	- For EC (blob) data, enable RepairCorruptedShards and let SOP reconstruct missing shards on the replacement drive(s).
+
+Operational guidance
+- Monitoring: Track failover events and “failed to replicate” flags to identify replication gaps.
+- Maintenance windows: Reinstate during low traffic to reduce fast-forward latency for large delta sets.
+- Capacity planning: Ensure enough drives and parity to continue writes during failures; EC parity determines tolerated concurrent failures.
+
+Developer contract
+- Failover eligibility: Only sop.Error codes from Registry and StoreRepository I/O paths that are classified as failover-qualified can trigger failover. BlobStore errors must not.
+- Transaction outcomes: If a BlobStore write fails beyond EC tolerance, Upsert/Commit returns an error and the transaction rolls back. No failover is raised; your code should surface a retriable error and/or backoff until replacement/repair completes.
+
+Related tests (deterministic integration)
+- Active-side failover flip, reinstate, and fast-forward
+- Passive-side replication failure then reinstate
+- BlobStore EC failures beyond parity cause rollback without failover
+
+### Try it locally (optional)
+You can exercise the lifecycle behaviors using the inredfs integration tests. Ensure Redis is running locally and your data path is writable (see README.md prerequisites).
+
+Optional commands
+- Run active-side failover flip, reinstate, and fast-forward
+	- go test -tags=integration ./inredfs/integrationtests -run Test_ActiveSide_FailoverFlip_Then_Reinstate_FastForward -count=1 -v
+- Run passive-side replication failure then reinstate/fast-forward
+	- go test -tags=integration ./inredfs/integrationtests -run Test_EC_Failover_Reinstate_FastForward_Short -count=1 -v
+- Run EC beyond parity: rollback without failover (BlobStore)
+	- go test -tags=integration ./inredfs/integrationtests -run Test_EC_BlobStore_ShardsExceedParity_Rollback_NoFailover -count=1 -v
+
+What to look for
+- Logs like “failover event occurred” indicate an Active/Passive flip on Registry/StoreRepository errors.
+- After reinstate, tests verify “fast-forward” (deltas applied to the reinstated side) and that failure flags are cleared.
+- For EC beyond parity, the test asserts rollback and the absence of a failover event.
+
 
 # Store Caching Config Guide
 Below examples illustrate how to configure the Store caching config feature. This feature provides automatic Redis based caching of data store's different data sets, both internal, for use to accelerate IO on internal needs of the B-trees and external, the enduser large data.

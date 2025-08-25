@@ -50,7 +50,7 @@ const batchSize = 200
 func Test_SimpleAddPerson(t *testing.T) {
 	trans, err := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatalf("%v", err)
 	}
 	trans.Begin()
 
@@ -97,7 +97,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	trans, err := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatalf("%v", err)
 	}
 
 	trans2, err := inredcfs.NewTransaction(sop.ForWriting, -1, false)
@@ -106,7 +106,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	trans2.Begin()
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
-	b3, err := inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
+    b3, err := inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -116,7 +116,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		return
 	}
 
-	b32, err := inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans2, Compare)
+    b32, err := inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans2, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -137,7 +137,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 func Test_AddAndSearchManyPersons(t *testing.T) {
 	trans, err := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatalf("%v", err)
 	}
 
 	trans.Begin()
@@ -165,26 +165,26 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 			return
 		}
 	}
-	if err := trans.Commit(ctx); err != nil {
-		t.Errorf(err.Error())
+    if err := trans.Commit(ctx); err != nil {
+		t.Errorf("%v", err)
 		t.Fail()
 		return
 	}
 
-	trans, err = inredcfs.NewTransaction(sop.ForReading, -1, false)
+    trans, err = inredcfs.NewTransaction(sop.ForReading, -1, false)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("%v", err)
 		t.Fail()
 		return
 	}
 
-	if err := trans.Begin(); err != nil {
-		t.Errorf(err.Error())
+    if err := trans.Begin(); err != nil {
+		t.Errorf("%v", err)
 		t.Fail()
 		return
 	}
 
-	b3, err = inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
+    b3, err = inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()

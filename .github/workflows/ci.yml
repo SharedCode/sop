@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build & Test (public + integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Run tests (exclude all internal/* packages)
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkgs=$(go list ./... | grep -vE "/internal(/|$)")
+          echo "Testing packages:" $pkgs
+          go test -v -tags=integration -count=1 $pkgs
+
+  internal-inredcfs-it:
+    name: Internal InRedCFS Integration Tests (opt-in)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      cassandra:
+        image: cassandra:4
+        ports:
+          - 9042:9042
+        options: >-
+          --health-cmd "bash -lc 'nodetool status || exit 1'"
+          --health-interval 20s
+          --health-timeout 10s
+          --health-retries 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Wait for services
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Waiting for Redis and Cassandra..."
+          for i in {1..60}; do
+            (echo > /dev/tcp/127.0.0.1/6379) && break || sleep 2
+          done
+          for i in {1..180}; do
+            (echo > /dev/tcp/127.0.0.1/9042) && break || sleep 5
+          done
+          echo "Services appear reachable."
+
+      - name: Run internal integration tests
+        shell: bash
+        env:
+          SOP_RUN_INREDCFS_IT: "1"
+        run: |
+          set -euo pipefail
+          go test -v -tags=integration -count=1 ./internal/inredcfs/integrationtests/...
