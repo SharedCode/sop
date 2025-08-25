@@ -22,7 +22,7 @@ const permission os.FileMode = os.ModeSticky | os.ModePerm
 // If fileIO or toFilePath are nil, sensible defaults are used.
 func NewBlobStore(toFilePath ToFilePathFunc, fileIO FileIO) sop.BlobStore {
 	if fileIO == nil {
-		fileIO = NewFileIO()
+		fileIO = newFileIO(sop.FileIOError)
 	}
 	if toFilePath == nil {
 		toFilePath = DefaultToFilePath

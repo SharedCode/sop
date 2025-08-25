@@ -412,7 +412,6 @@ func TestHashmap_findOneFileRegion_ReadEOFAndPartial(t *testing.T) {
 	}
 }
 
-
 // Ensure fetch() skips IDs missing with not found errors and returns other errors.
 func TestHashmap_fetch_MissingIDsSkipsAndError(t *testing.T) {
 	ctx := context.Background()

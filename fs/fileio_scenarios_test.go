@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/sharedcode/sop"
 )
 
 // TestFileIOScenarios consolidates FileIO coverage: write (mkdir branch & direct),
@@ -82,7 +84,7 @@ func TestFileIOScenarios(t *testing.T) {
 			return errors.New("temp")
 		}
 		return nil
-	}); err != nil {
+	}, sop.FileIOError); err != nil {
 		t.Fatalf("retryIO unexpected err: %v", err)
 	}
 	if attempts != 2 {
@@ -131,7 +133,7 @@ func TestFileIOScenarios(t *testing.T) {
 	// 9. Timeout context sanity for retryIO (no retries triggered) – ensures context honored.
 	tctx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
-	if err := retryIO(tctx, func(context.Context) error { return nil }); err != nil {
+	if err := retryIO(tctx, func(context.Context) error { return nil }, sop.FileIOError); err != nil {
 		t.Fatalf("retryIO with timeout ctx: %v", err)
 	}
 

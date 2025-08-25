@@ -12,27 +12,6 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-// retryIO is a package-local retry helper for filesystem operations.
-// It retries retryable errors per ShouldRetry and always wraps errors with sop.Error
-// so upstream failover logic can classify them.
-func retryIO(ctx context.Context, task func(ctx context.Context) error) error {
-	b := retry.NewFibonacci(1 * time.Second)
-	var lastErr error
-	err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
-		if err := task(ctx); err != nil {
-			if sop.ShouldRetry(err) {
-				return retry.RetryableError(sop.Error{Code: sop.FileIOError, Err: err})
-			}
-			lastErr = err
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	return lastErr
-}
-
 // FileIO defines filesystem operations used by this package. The default
 // implementation delegates to the standard library's os package with retry
 // semantics for transient errors.
@@ -49,14 +28,20 @@ type FileIO interface {
 }
 
 type defaultFileIO struct {
-	// stateless implementation; methods delegate to os with retries
+	errorCode sop.ErrorCode
 }
 
 // NewFileIO returns a FileIO that performs I/O via the os package with basic
 // retry handling for transient errors (e.g., NFS hiccups). Directories are
 // created on-demand for writes.
 func NewFileIO() FileIO {
-	return &defaultFileIO{}
+	return newFileIO(sop.FileIOErrorFailoverQualified)
+}
+
+func newFileIO(errorCode sop.ErrorCode) FileIO {
+	return &defaultFileIO{
+		errorCode: errorCode,
+	}
 }
 
 // WriteFile writes data to a file, creating parent directories if needed, and
@@ -67,7 +52,7 @@ func (dio defaultFileIO) WriteFile(ctx context.Context, name string, data []byte
 		// Ensure parent directories exist with sensible directory permissions.
 		if derr := dio.MkdirAll(ctx, dirPath, 0o755); derr == nil {
 			// Parent created (or already existed): retry write on transient errors.
-			return retryIO(ctx, func(context.Context) error { return os.WriteFile(name, data, perm) })
+			return dio.retryIO(ctx, func(context.Context) error { return os.WriteFile(name, data, perm) })
 		}
 		// Parent creation failed: surface the original write error to the caller.
 		return err
@@ -78,7 +63,7 @@ func (dio defaultFileIO) WriteFile(ctx context.Context, name string, data []byte
 // ReadFile reads an entire file into memory with retry on transient errors.
 func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, error) {
 	var ba []byte
-	err := retryIO(ctx, func(context.Context) error {
+	err := dio.retryIO(ctx, func(context.Context) error {
 		var e error
 		ba, e = os.ReadFile(name)
 		return e
@@ -88,17 +73,17 @@ func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, err
 
 // Remove deletes a file with retry on transient errors.
 func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
-	return retryIO(ctx, func(context.Context) error { return os.Remove(name) })
+	return dio.retryIO(ctx, func(context.Context) error { return os.Remove(name) })
 }
 
 // MkdirAll creates a directory tree with retry on transient errors.
 func (dio defaultFileIO) MkdirAll(ctx context.Context, path string, perm os.FileMode) error {
-	return retryIO(ctx, func(context.Context) error { return os.MkdirAll(path, perm) })
+	return dio.retryIO(ctx, func(context.Context) error { return os.MkdirAll(path, perm) })
 }
 
 // RemoveAll removes a directory tree with retry on transient errors.
 func (dio defaultFileIO) RemoveAll(ctx context.Context, path string) error {
-	return retryIO(ctx, func(context.Context) error { return os.RemoveAll(path) })
+	return dio.retryIO(ctx, func(context.Context) error { return os.RemoveAll(path) })
 }
 
 // Exists returns true if the given path exists (file or directory).
@@ -115,10 +100,45 @@ func (dio defaultFileIO) Exists(ctx context.Context, path string) bool {
 func (dio defaultFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os.DirEntry, error) {
 	var r []os.DirEntry
 	// Use SOP retry policy to soften intermittent filesystem/NFS glitches during listings.
-	err := retryIO(ctx, func(context.Context) error {
+	err := dio.retryIO(ctx, func(context.Context) error {
 		var e error
 		r, e = os.ReadDir(sourceDir)
 		return e
 	})
 	return r, err
+}
+
+func (dio defaultFileIO) retryIO(ctx context.Context, task func(ctx context.Context) error) error {
+	return retryIO(ctx, task, dio.errorCode)
+}
+
+// retryIO is a package-local retry helper for filesystem operations.
+// It retries retryable errors per ShouldRetry and always wraps errors with sop.Error
+// so upstream failover logic can classify them.
+func retryIO(ctx context.Context, task func(ctx context.Context) error, errorCode sop.ErrorCode) error {
+	b := retry.NewFibonacci(1 * time.Second)
+	var lastErr error
+	err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
+		if err := task(ctx); err != nil {
+			if sop.ShouldRetry(err) {
+				if !sop.IsFailoverQualifiedIOError(err) {
+					return retry.RetryableError(err)
+				}
+				// Wrap into sop.Error to allow failover handler to evaluate & generate failover event if
+				// error is a failover qualified error.
+				return retry.RetryableError(sop.Error{Code: errorCode, Err: err})
+			}
+			lastErr = err
+			// Wrap into sop.Error to allow failover handler to evaluate & generate failover event if 
+			// error is a failover qualified error.
+			if sop.IsFailoverQualifiedIOError(err) {
+				lastErr = sop.Error{Code: errorCode, Err: err}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return lastErr
 }

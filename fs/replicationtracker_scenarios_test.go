@@ -37,7 +37,7 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			}
 			beforeToggle := rt.ActiveFolderToggler
 			// Use a non-failover-qualified error code and indicate rollback succeeded.
-			ioErr := sop.Error{Code: sop.FileIOError, Err: errors.New("temporary io")}
+			ioErr := sop.Error{Code: sop.FileIOErrorFailoverQualified, Err: errors.New("temporary io")}
 			rt.HandleReplicationRelatedError(ctx, ioErr, nil, true)
 			if rt.ActiveFolderToggler != beforeToggle || rt.FailedToReplicate {
 				t.Fatalf("expected no-op: toggler %v->%v failed=%v", beforeToggle, rt.ActiveFolderToggler, rt.FailedToReplicate)

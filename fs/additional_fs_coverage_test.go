@@ -36,13 +36,13 @@ func Test_retryIO_Table(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// For nil taskErr, simulate success on first try.
 			if tt.taskErr == nil {
-				if err := retryIO(ctx, func(context.Context) error { return nil }); err != nil {
+				if err := retryIO(ctx, func(context.Context) error { return nil }, sop.FileIOError); err != nil {
 					t.Fatalf("expected nil, got %v", err)
 				}
 				return
 			}
 			// Always return the configured error to exercise both branches.
-			err := retryIO(ctx, func(context.Context) error { return tt.taskErr })
+			err := retryIO(ctx, func(context.Context) error { return tt.taskErr }, sop.FileIOError)
 			if tt.wantNil {
 				if err != nil {
 					t.Fatalf("want nil, got %v", err)
@@ -411,7 +411,7 @@ func TestRetryIO_RetryableThenSuccess(t *testing.T) {
 			return sop.Error{Code: sop.FileIOError, Err: errors.New("transient")}
 		}
 		return nil
-	})
+	}, sop.FileIOError)
 	if err != nil {
 		t.Fatalf("retryIO unexpected error: %v", err)
 	}

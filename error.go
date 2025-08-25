@@ -10,10 +10,14 @@ const (
 	Unknown ErrorCode = iota
 	// LockAcquisitionFailure indicates failure to acquire a required lock.
 	LockAcquisitionFailure
+	// FileIOError represents file I/O related errors, e.g. encountered by BlobStore (w/ & w/o EC).
+	// This should not generate Failover event because BlobStore errors are either handled internally for no EC
+	// or by EC replication feature.
+	FileIOError
 	// FailoverQualifiedError marks an error that qualifies the operation for failover handling.
 	FailoverQualifiedError = 77 + iota
-	// FileIOError represents file I/O related errors.
-	FileIOError
+	// FileIOErrorFailoverQualified represents file I/O related errors.
+	FileIOErrorFailoverQualified
 	// RestoreRegistryFileSectorFailure indicates a failure while restoring a registry file sector.
 	RestoreRegistryFileSectorFailure
 )

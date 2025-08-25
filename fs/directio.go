@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/ncw/directio"
+	"github.com/sharedcode/sop"
 )
 
 // DirectIO exposes unbuffered file operations using O_DIRECT semantics where
@@ -41,7 +42,7 @@ func (dio directIO) Open(ctx context.Context, filename string, flag int, permiss
 		var e error
 		f, e = directio.OpenFile(filename, flag, permission)
 		return e
-	})
+	}, sop.FileIOErrorFailoverQualified)
 	return f, err
 }
 
@@ -53,7 +54,7 @@ func (dio directIO) WriteAt(ctx context.Context, file *os.File, block []byte, of
 		var e error
 		i, e = file.WriteAt(block, offset)
 		return e
-	})
+	}, sop.FileIOErrorFailoverQualified)
 	return i, err
 }
 
@@ -65,7 +66,7 @@ func (dio directIO) ReadAt(ctx context.Context, file *os.File, block []byte, off
 		var e error
 		i, e = file.ReadAt(block, offset)
 		return e
-	})
+	}, sop.FileIOErrorFailoverQualified)
 	return i, err
 }
 

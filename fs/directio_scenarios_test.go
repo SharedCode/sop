@@ -159,7 +159,7 @@ func TestDirectIOAndFileDirectIO_Scenarios(t *testing.T) {
 			}
 		}},
 		{name: "FileDirectIO_HappyPath_ReadWriteHelpers", run: func(t *testing.T) {
-			fio := newFileDirectIOInjected(stdTestDirectIO {})
+			fio := newFileDirectIOInjected(stdTestDirectIO{})
 			name := filepath.Join(t.TempDir(), "ok.dat")
 			if err := fio.open(ctx, name, os.O_RDWR|os.O_CREATE, 0o644); err != nil {
 				t.Fatalf("open: %v", err)
