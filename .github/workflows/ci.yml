@@ -59,15 +59,22 @@ jobs:
           mkdir -p "$datapath"
           echo "datapath prepared at: $datapath"
 
-      - name: Run tests (exclude all internal/* packages)
+      - name: Run unit tests + inredfs integration tests
         shell: bash
         env:
           datapath: ${{ github.workspace }}/.sop_data
         run: |
           set -euo pipefail
-          pkgs=$(go list ./... | grep -vE "/internal(/|$)")
-          echo "Testing packages:" $pkgs
-          go test -timeout 5m -v -tags=integration -count=1 $pkgs
+          echo "Running unit tests (excluding internal/, inredfs/integrationtests, inredfs/stresstests)"
+          unit_pkgs=$(go list ./... | grep -vE "/internal(/|$)|/inredfs/integrationtests(/|$)|/inredfs/stresstests(/|$)" || true)
+          if [ -n "${unit_pkgs}" ]; then
+            go test -timeout 5m -v -count=1 ${unit_pkgs}
+          else
+            echo "No unit test packages to run."
+          fi
+
+          echo "Running inredfs integration tests"
+          go test -timeout 5m -v -tags=integration -count=1 ./inredfs/integrationtests/...
 
   internal-inredcfs-it:
     name: Internal InRedCFS Integration Tests (opt-in)
