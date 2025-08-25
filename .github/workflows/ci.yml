@@ -45,10 +45,11 @@ jobs:
         run: |
           set -euo pipefail
           echo "Waiting for Redis..."
-          for i in {1..60}; do
-            (echo > /dev/tcp/127.0.0.1/6379) && break || sleep 2
-          done
-          echo "Redis reachable."
+            until redis-cli -h 127.0.0.1 -p 6379 ping >/dev/null 2>&1; do
+                echo "Redis is unavailable - sleeping"
+                sleep 1
+            done
+            echo "Redis is up and running!"
 
       - name: Prepare datapath
         shell: bash
