@@ -50,6 +50,15 @@ jobs:
           done
           echo "Redis reachable."
 
+      - name: Prepare datapath
+        shell: bash
+        env:
+          datapath: ${{ github.workspace }}/.sop_data
+        run: |
+          set -euo pipefail
+          mkdir -p "$datapath"
+          echo "datapath prepared at: $datapath"
+
       - name: Run tests (exclude all internal/* packages)
         shell: bash
         env:
