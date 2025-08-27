@@ -19,6 +19,19 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 - Community & support
 - Contributing & license
 
+## Cluster reboot procedure
+When rebooting an entire cluster running applications that use SOP, follow this order to avoid stale locks and ensure clean recovery:
+
+1) Gracefully stop all apps that use SOP across the cluster.
+2) Stop the Redis service(s) used by these SOP apps.
+3) Reboot hosts if needed (or proceed directly if not).
+4) Start the Redis service(s) first and verify they are healthy.
+5) Start the apps that use SOP.
+
+Notes:
+- SOP relies on Redis for coordination (locks, recovery bookkeeping). Bringing Redis up before SOP apps prevents unnecessary failovers or stale-lock handling during app startup.
+- If any node was force-killed, SOP’s stale-lock and rollback paths will repair on next write; starting Redis first ensures that path has the needed state.
+
 # Introduction
 What is SOP?
 
@@ -70,6 +83,8 @@ SOP is designed to keep your app online through common storage failures.
 - Auto‑repair: With EC repair enabled, after replacing a failed blob drive, SOP reconstructs missing shards automatically and restores full redundancy in the background.
 
 See the detailed lifecycle guide (failures, observability, reinstate/fast‑forward, and drive replacement) in README2.md: https://github.com/SharedCode/sop/blob/master/README2.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair
+
+For planned maintenance, see Cluster reboot procedure: [Cluster reboot procedure](#cluster-reboot-procedure).
 
 ## Prerequisites
 - Redis server (local or cluster)

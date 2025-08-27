@@ -26,6 +26,19 @@ Code coverage: https://app.codecov.io/github/sharedcode/sop
 - Tidbits and background
 - SOP in-memory
 
+## Cluster reboot procedure
+When rebooting an entire cluster running applications that use SOP, follow this order to avoid stale locks and ensure clean recovery:
+
+1) Gracefully stop all apps that use SOP across the cluster.
+2) Stop the Redis service(s) used by these SOP apps.
+3) Reboot hosts if needed (or proceed directly if not).
+4) Start the Redis service(s) first and verify they are healthy.
+5) Start the apps that use SOP.
+
+Notes:
+- SOP relies on Redis for coordination (locks and recovery bookkeeping). Bringing Redis up before SOP apps prevents unnecessary failovers or stale-lock handling during app startup.
+- If any node was force-killed, SOP’s stale-lock and rollback paths will repair on next write; starting Redis first ensures the required state is available.
+
 # Summary
 
 SOP has the low-level B-tree storage engine in it to offer raw muscle in direct IO based data management. Adds Redis for out of process caching, "ultra fast realtime" orchestration and to provide ultra fast "data merging" surface. Combined with ACID transactions, formed a tightly woven code library that turns your applications/micro-services "cluster" into the (raw!) storage engine (cluster) itself, no across the wire sending of data (other than what Redis is for).
@@ -144,7 +157,7 @@ The code above:
 
 # Software Based Efficient Replication
 There are two types of replication in SOP, they are:
-* Active/Passive replication for the StoreRepository & Handles' (a.k.a. virtual IDs) Registry
+* Active/Passive replication for the metadata, i.e. - StoreRepository & Handles' (a.k.a. virtual IDs) Registry
 * Erasure Coding (EC) based replication for the B-tree & large data nodes
 
 ## Active/Passive Replication
@@ -165,6 +178,8 @@ See above "Sample Usage" section for EC configuration.
 ## Lifecycle: Failures, Failover, Reinstate, and EC Auto-Repair
 
 This section describes what happens during drive failures, how SOP reacts, and how to safely reinstate drives after replacement.
+
+For planned maintenance across a cluster, see also: [Cluster reboot procedure](#cluster-reboot-procedure).
 
 Key terms
 - StoreRepository and Registry: SOP’s metadata/state; covered by Active/Passive replication. Only I/O errors here can trigger a failover.
