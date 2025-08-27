@@ -79,7 +79,7 @@ jobs:
         env:
           datapath: ${{ github.workspace }}/.sop_data
         run: |
-          go test -timeout 2h -tags=stress ./inredfs/stresstests/...
+          go test -timeout 2h -tags=stress ./inredfs/stresstests
 
   stress-replication-only:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
