@@ -129,7 +129,7 @@ func retryIO(ctx context.Context, task func(ctx context.Context) error, errorCod
 				return retry.RetryableError(sop.Error{Code: errorCode, Err: err})
 			}
 			lastErr = err
-			// Wrap into sop.Error to allow failover handler to evaluate & generate failover event if 
+			// Wrap into sop.Error to allow failover handler to evaluate & generate failover event if
 			// error is a failover qualified error.
 			if sop.IsFailoverQualifiedIOError(err) {
 				lastErr = sop.Error{Code: errorCode, Err: err}

@@ -512,8 +512,10 @@ func (t *Transaction) onIdle(ctx context.Context) {
 		prioritylocker.Unlock()
 		if runTime {
 			if found, err := t.logger.doPriorityRollbacks(ctx, t); err != nil {
-				// Trigger a failover.
-				t.HandleReplicationRelatedError(ctx, err, nil, true)
+				// Trigger a failover if a handler is registered; otherwise, just log path state.
+				if t.HandleReplicationRelatedError != nil {
+					t.HandleReplicationRelatedError(ctx, err, nil, true)
+				}
 				priorityLogFound = false
 			} else {
 				priorityLogFound = found

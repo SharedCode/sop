@@ -85,7 +85,7 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr Trans
 	}
 	bs, err := fs.NewBlobStoreWithEC(fs.DefaultToFilePath, nil, towr.ErasureConfig)
 	if err != nil {
-		return nil, err 
+		return nil, err
 	}
 	mbsf := fs.NewManageStoreFolder(fio)
 	if towr.Cache == nil {
