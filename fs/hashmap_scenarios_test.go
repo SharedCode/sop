@@ -617,7 +617,7 @@ func Test_updateFileBlockRegion_ErrorPaths_Table(t *testing.T) {
 		}
 	})
 
-	t.Run("Lock never acquired -> timeout returns sop.Error", func(t *testing.T) {
+	t.Run("Lock never acquired -> context timeout returns raw error", func(t *testing.T) {
 		// Very short deadline to trigger TimedOut quickly.
 		cctx, cancel := context.WithTimeout(ctx, 5_000_000) // 5ms
 		defer cancel()
@@ -632,10 +632,9 @@ func Test_updateFileBlockRegion_ErrorPaths_Table(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected timeout error")
 		}
-		// Expect framework-specific error type with LockAcquisitionFailure code.
-		var se sop.Error
-		if !errors.As(err, &se) || se.Code != sop.LockAcquisitionFailure {
-			t.Fatalf("expected sop.Error with LockAcquisitionFailure, got %T %v", err, err)
+		// Now expecting the raw context timeout/canceled error (no sop.Error failover signal)
+		if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected context timeout/canceled error, got %T %v", err, err)
 		}
 	})
 }

@@ -213,13 +213,12 @@ func Test_updateFileBlockRegion_LockTimeout(t *testing.T) {
 	dio.filename = filepath.Join(base, "seg-1.reg") // only used for lock key formatting
 
 	err = hm.updateFileBlockRegion(ctx, dio, 0, 0, make([]byte, sop.HandleSizeInBytes))
-	// Expect a sop.Error with LockAcquisitionFailure code
+	// With a canceled/expired context, expect the raw context error (no failover/sop.Error)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	var se sop.Error
-	if !errors.As(err, &se) || se.Code != sop.LockAcquisitionFailure {
-		t.Fatalf("expected sop.Error with LockAcquisitionFailure, got %T %v", err, err)
+	if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context timeout/canceled error, got %T %v", err, err)
 	}
 }
 
