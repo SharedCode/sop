@@ -76,7 +76,7 @@ type TransactionPriorityLog interface {
 	IsEnabled() bool
 	// Add appends a priority log for a transaction.
 	Add(ctx context.Context, tid UUID, payload []byte) error
-	// Remove deletes all logs associated with a transaction.
+	// Remove deletes priority log file of a transaction.
 	Remove(ctx context.Context, tid UUID) error
 	// Get retrieves priority log details for a transaction.
 	Get(ctx context.Context, tid UUID) ([]RegistryPayload[Handle], error)

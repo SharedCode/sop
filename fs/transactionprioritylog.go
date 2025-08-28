@@ -124,7 +124,7 @@ func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 
 // Remove deletes the priority log for a transaction, if present.
 func (l priorityLog) Remove(ctx context.Context, tid sop.UUID) error {
-	fio := NewFileIO()
+	fio := newFileIO(sop.FileIOErrorFailoverQualified)
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogFileExtension))
 	if fio.Exists(ctx, filename) {
 		return fio.Remove(ctx, filename)
