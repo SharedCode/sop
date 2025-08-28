@@ -3,10 +3,8 @@ package fs
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	log "log/slog"
-	"strings"
 	"time"
 
 	"github.com/sharedcode/sop"
@@ -74,10 +72,6 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 			}
 		}
 		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
-			// If the context is canceled or the operation timed out, return the error.
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "timed out") {
-				return err
-			}
 			// Return a lock acquisition failure error to allow caller to attempt to "acquire lock of a potentially stalled sector lock".
 			err = fmt.Errorf("updateFileBlockRegion failed: %w", err)
 			log.Debug(err.Error())
