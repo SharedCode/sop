@@ -87,6 +87,34 @@ func Test_PriorityLog_GetBatch_LimitOne(t *testing.T) {
 	}
 }
 
+// Verifies PriorityLog.Add returns an error when the log directory is not writable.
+func Test_PriorityLog_Add_WriteFile_Error_ReturnsError(t *testing.T) {
+	ctx := context.Background()
+	// Create active/passive roots and tracker.
+	active := t.TempDir()
+	passive := t.TempDir()
+	rt, err := NewReplicationTracker(ctx, []string{active, passive}, false, mocks.NewMockClient())
+	if err != nil {
+		t.Fatalf("rt: %v", err)
+	}
+	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+
+	// Create the translogs folder and then make it read-only to force a write failure.
+	dir := rt.formatActiveFolderEntity(logFolder)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Make directory read-only (common cause of EACCES/EPERM on write).
+	_ = os.Chmod(dir, 0o555)
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	tid := sop.NewUUID()
+	payload := []byte("[]")
+	if err := pl.Add(ctx, tid, payload); err == nil {
+		t.Fatalf("expected error from PriorityLog.Add when directory is not writable")
+	}
+}
+
 // Verifies missing base folder causes GetBatch to create it (or attempt) and return nil, nil early.
 func Test_PriorityLog_GetBatch_MissingBase_ReturnsNil(t *testing.T) {
 	ctx := context.Background()

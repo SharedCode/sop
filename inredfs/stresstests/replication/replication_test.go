@@ -93,6 +93,10 @@ func TestMain(t *testing.T) {
 
 	// Restore permissions so reinstate can proceed.
 	restoreRegistryPermissions(t, tableName)
+	// Also restore perms for other known tables that other stress suites may have toggled,
+	// to avoid cross-test interference during reinstate (which scans all tables).
+	restoreRegistryPermissions(t, "repltable")
+	restoreRegistryPermissions(t, "repltable3")
 	// Reinstate drive should succeed to reinstate the (failed) drives back to replication.
 	reinstateDrive(t)
 

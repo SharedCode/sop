@@ -125,6 +125,14 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 	close(stop)
 	wg.Wait()
 
+	// Wait briefly for the flag to clear as status writes and L2 sync can be asynchronous across goroutines.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if fs.GlobalReplicationDetails != nil && !fs.GlobalReplicationDetails.FailedToReplicate {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 	if fs.GlobalReplicationDetails == nil || fs.GlobalReplicationDetails.FailedToReplicate {
 		t.Fatalf("expected FailedToReplicate false after reinstate")
 	}

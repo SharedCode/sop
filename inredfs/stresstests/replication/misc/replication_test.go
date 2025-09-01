@@ -5,6 +5,7 @@ package replication
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	log "log/slog"
 	"os"
@@ -68,6 +69,21 @@ var storesFolders = []string{
 	fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
 }
 
+// openFailDirectIO implements fs.DirectIO and fails on Open to deterministically
+// trigger DirectIO setup errors in tests without relying on filesystem permissions.
+type openFailDirectIO struct{}
+
+func (o *openFailDirectIO) Open(ctx context.Context, filename string, flag int, perm os.FileMode) (*os.File, error) {
+	return nil, errors.New("simulated open failure")
+}
+func (o *openFailDirectIO) WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
+	return 0, errors.New("unreachable in this test")
+}
+func (o *openFailDirectIO) ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
+	return 0, errors.New("unreachable in this test")
+}
+func (o *openFailDirectIO) Close(file *os.File) error { return nil }
+
 func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 	ctx := context.Background()
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
@@ -85,7 +101,12 @@ func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	// Failure due to DirectIO sim will throw on open file and cause rollback & error from trans commit.
+	// Simulate DirectIO open failure using a test-only DirectIO shim to ensure deterministic error.
+	// We expect commit to return an error when DirectIO cannot open the underlying registry file.
+	// Swap in a simulated DirectIO that fails on Open.
+	prev := fs.DirectIOSim
+	fs.DirectIOSim = &openFailDirectIO{}
+	defer func() { fs.DirectIOSim = prev }()
 	b3.Add(ctx, 1, "hello world")
 	if err := trans.Commit(ctx); err == nil {
 		t.Error("expected error but none was returned")
@@ -117,11 +138,16 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 
 	fmt.Printf("GlobalReplication ActiveFolderToggler Before Fail: %v\n", fs.GlobalReplicationDetails.ActiveFolderToggler)
 
-	// Simulate Open failure by making registry directory read-only before first write.
+	// Simulate registry write failure on passive by toggling permissions.
+	// Commit should still succeed (phase 2), but FailedToReplicate should be set.
 	makeRegistryDirReadOnly(t, storesFolders, so.Name)
 	b3.Add(ctx, 1, "hello world")
-	if err := trans.Commit(ctx); err == nil {
-		t.Error("expected error but none was returned")
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("expected no error on commit despite replication failure, got: %v", err)
+		t.FailNow()
+	}
+	if fs.GlobalReplicationDetails == nil || !fs.GlobalReplicationDetails.FailedToReplicate {
+		t.Errorf("expected FailedToReplicate true after replication error")
 		t.FailNow()
 	}
 	// Restore permissions for subsequent success path

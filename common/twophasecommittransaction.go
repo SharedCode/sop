@@ -474,7 +474,9 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 	if len(updatedNodesHandles) > 0 || len(removedNodesHandles) > 0 {
 		// Log the updated nodes & removed nodes handles for use in their rollback in File System Registry implementation.
 		// Cassandra tlogger will ignore this as it has its own "all or nothing" feature handled inside Cassandra cluster.
-		t.logger.PriorityLog().Add(ctx, t.GetID(), toByteArray(append(updatedNodesHandles, removedNodesHandles...)))
+		if err := t.logger.PriorityLog().Add(ctx, t.GetID(), toByteArray(append(updatedNodesHandles, removedNodesHandles...))); err != nil {
+			return err
+		}
 	}
 
 	// Prepare to switch to active "state" the (inactive) updated Nodes, in phase2Commit.

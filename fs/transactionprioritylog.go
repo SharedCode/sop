@@ -30,13 +30,10 @@ func (l priorityLog) IsEnabled() bool {
 }
 
 // Add writes the priority log payload for a transaction.
-// Note: errors from WriteFile are currently ignored (fire-and-forget), as the system can
-// proceed without strict durability here; callers rely on batching and backups instead.
 func (l priorityLog) Add(ctx context.Context, tid sop.UUID, payload []byte) error {
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogFileExtension))
 	fio := NewFileIO()
-	fio.WriteFile(ctx, filename, payload, permission)
-	return nil
+	return fio.WriteFile(ctx, filename, payload, permission)
 }
 
 // LogCommitChanges persists commit-change metadata used when reinstating failed drives.
