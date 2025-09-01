@@ -23,7 +23,8 @@ import (
 // without relying on sop.Error code classification, we deny writes on the PASSIVE folder so the
 // registry's replicate-to-passive path calls handleFailedToReplicate.
 func registrySegmentPath(base, table string) string {
-    return filepath.Join(base, table, fmt.Sprintf("%s-1.reg", table))
+    rt := sop.FormatRegistryTable(table)
+    return filepath.Join(base, rt, fmt.Sprintf("%s-1.reg", rt))
 }
 
 func ensureTableDir(t *testing.T, base, table string) string {
@@ -37,7 +38,9 @@ func ensureTableDir(t *testing.T, base, table string) string {
 func makePassiveRegistryReadOnly(t *testing.T, table string) {
     t.Helper()
     base := passiveBaseFolder()
-    ensureTableDir(t, base, table)
+    dir := ensureTableDir(t, base, sop.FormatRegistryTable(table))
+    // Make the directory read-only to block creation/truncation of any segment files.
+    _ = os.Chmod(dir, 0o555)
     seg := registrySegmentPath(base, table)
     // Ensure the segment file exists so chmod will take effect across platforms/umasks.
     if _, err := os.Stat(seg); os.IsNotExist(err) {
@@ -51,7 +54,7 @@ func makePassiveRegistryReadOnly(t *testing.T, table string) {
 func restoreRegistryPermissions(t *testing.T, table string) {
     t.Helper()
     for _, base := range []string{activeBaseFolder(), passiveBaseFolder()} {
-        dir := ensureTableDir(t, base, table)
+        dir := ensureTableDir(t, base, sop.FormatRegistryTable(table))
         _ = os.Chmod(dir, 0o755)
         seg := registrySegmentPath(base, table)
         _ = os.Chmod(seg, 0o644)
