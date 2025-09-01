@@ -44,6 +44,10 @@ type Transaction interface {
 
 	// GetID returns the transaction ID.
 	GetID() UUID
+
+	// CommitMaxDuration returns the configured maximum duration for commit operations.
+	// Effective runtime limit is min(ctx deadline, CommitMaxDuration()).
+	CommitMaxDuration() time.Duration
 }
 
 // TwoPhaseCommitTransaction defines infrastructure-facing two-phase commit operations.
@@ -69,6 +73,9 @@ type TwoPhaseCommitTransaction interface {
 
 	// GetID returns the transaction ID.
 	GetID() UUID
+
+	// CommitMaxDuration returns the configured maximum duration for the two-phase commit.
+	CommitMaxDuration() time.Duration
 }
 
 // SinglePhaseTransaction wraps a TwoPhaseCommitTransaction providing an end-user friendly API
@@ -111,6 +118,9 @@ func (t *SinglePhaseTransaction) Close() error {
 
 // Commit executes phase 1 on all participants and then phase 2; on error, Rollback is invoked.
 func (t *SinglePhaseTransaction) Commit(ctx context.Context) error {
+	// Timeout semantics: Commit will end when the earlier of the context deadline
+	// or the transaction's configured maxTime is reached. Internal lock TTLs follow
+	// maxTime to ensure bounded lock lifetimes independent of caller cancellation.
 	// Phase 1 commit.
 	if err := t.SopPhaseCommitTransaction.Phase1Commit(ctx); err != nil {
 		t.Rollback(ctx)
@@ -178,4 +188,9 @@ func (t *SinglePhaseTransaction) GetStores(ctx context.Context) ([]string, error
 // GetID returns the transaction ID.
 func (t *SinglePhaseTransaction) GetID() UUID {
 	return t.SopPhaseCommitTransaction.GetID()
+}
+
+// CommitMaxDuration returns the configured commit duration cap from the underlying implementation.
+func (t *SinglePhaseTransaction) CommitMaxDuration() time.Duration {
+	return t.SopPhaseCommitTransaction.CommitMaxDuration()
 }

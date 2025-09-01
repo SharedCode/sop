@@ -113,6 +113,17 @@
 				"Go: Test (Integration)"
 			],
 			"problemMatcher": []
+		},
+		{
+			"label": "Docker: Run Integration (No Coverage)",
+			"type": "shell",
+			"command": "docker",
+			"args": [
+				"run",
+				"--rm",
+				"mydi-nocov"
+			],
+			"group": "test"
 		}
 	]
 }

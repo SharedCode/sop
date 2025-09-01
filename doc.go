@@ -14,3 +14,18 @@
 //
 // See `inredfs package` for a concrete implementation of a File System-based store with built-in Redis caching.
 package sop
+
+// Timeout model
+//
+// SOP operations (notably transaction commits) are bounded by two timers:
+//  1. The caller-provided context deadline/cancellation which propagates across subsystems.
+//  2. An operation-specific maximum duration (e.g., transaction maxTime) used for internal safety
+//     limits and lock TTLs.
+//
+// The effective commit duration is the earlier of the context deadline and the transaction's maxTime.
+// Locks use the transaction maxTime as their TTL so that locks are safely released even if the caller's
+// context is canceled. If replication and cleanup should run within the caller's budget, prefer setting
+// ctx.Deadline >= maxTime plus a small slack.
+//
+// Timeouts are normalized with ErrTimeout which wraps the underlying context error when applicable
+// to preserve errors.Is(err, context.DeadlineExceeded) while providing consistent timeout detection.

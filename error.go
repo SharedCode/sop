@@ -1,6 +1,9 @@
 package sop
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // ErrorCode enumerates SOP error categories used across packages.
 type ErrorCode int
@@ -33,3 +36,33 @@ type Error struct {
 func (e Error) Error() string {
 	return fmt.Errorf("error code: %d, user data: %v, details: %w", e.Code, e.UserData, e.Err).Error()
 }
+
+// ErrTimeout is returned when an operation exceeds its allowed time budget.
+//
+// Semantics:
+// - If a context cancellation or deadline triggered the timeout, Cause carries the
+//   original context error (context.Canceled or context.DeadlineExceeded). Unwrap()
+//   returns that Cause so errors.Is(err, context.DeadlineExceeded) works.
+// - If the operation-specific maximum duration triggered the timeout, Cause may be nil;
+//   MaxTime contains the configured bound for the operation.
+//
+// This enables callers to branch on timeouts consistently while preserving the
+// original context semantics when applicable.
+type ErrTimeout struct {
+	// Name is a short label for the operation (e.g., "transaction", "lockFileBlockRegion").
+	Name string
+	// MaxTime is the maximum duration allowed for the operation when applicable.
+	MaxTime time.Duration
+	// Cause is the underlying timeout/cancellation cause, typically a context error.
+	Cause error
+}
+
+func (e ErrTimeout) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("%s timed out (maxTime=%v): %v", e.Name, e.MaxTime, e.Cause)
+	}
+	return fmt.Sprintf("%s timed out (maxTime=%v)", e.Name, e.MaxTime)
+}
+
+// Unwrap exposes the underlying cause (e.g., context.DeadlineExceeded) for errors.Is/As.
+func (e ErrTimeout) Unwrap() error { return e.Cause }

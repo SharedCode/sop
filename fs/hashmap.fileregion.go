@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	lockSectorRetryTimeoutInSecs = 30
+	lockSectorRetryTimeoutInSecs = 3 * 60
 )
 
 var zeroSector = bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)

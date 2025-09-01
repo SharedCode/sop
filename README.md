@@ -134,6 +134,15 @@ See details here: https://github.com/sharedcode/sop/blob/master/README2.md#simpl
 # SOP for Python (sop4py)
 See details here: https://github.com/sharedcode/sop/tree/master/jsondb/python#readme
 
+## Timeouts and deadlines
+SOP commits are governed by two bounds:
+- The caller context (deadline/cancellation)
+- The transaction maxTime (commit max duration)
+
+The commit ends when the earlier of these two is reached. Internal lock TTLs use maxTime to ensure locks are bounded even if the caller cancels early.
+
+Recommendation: If you want replication/log cleanup to complete under the same budget, set your context deadline to at least maxTime plus a small grace period.
+
 ## Community & support
 - Issues: https://github.com/SharedCode/sop/issues
 - Discussions: https://github.com/SharedCode/sop/discussions (design/usage topics)

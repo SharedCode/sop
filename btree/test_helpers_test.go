@@ -3,6 +3,7 @@ package btree
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/sharedcode/sop"
 )
@@ -51,6 +52,7 @@ func (m *mockTx) GetMode() sop.TransactionMode                    { return m.mod
 func (m *mockTx) GetStores(ctx context.Context) ([]string, error) { return nil, nil }
 func (m *mockTx) Close() error                                    { return nil }
 func (m *mockTx) GetID() sop.UUID                                 { return sop.NewUUID() }
+func (m *mockTx) CommitMaxDuration() time.Duration                 { return time.Minute }
 
 // iatErr induces an error on Add to exercise rollback path in the wrapper.
 type iatErr[TK Ordered, TV any] struct{}

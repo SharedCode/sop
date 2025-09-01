@@ -71,20 +71,21 @@ type Transaction struct {
 }
 
 // NewTwoPhaseCommitTransaction creates a new two-phase commit controller.
-// maxTime limits commit duration; logging enables crash-safe recovery via a transaction log.
-func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool,
+// commitMaxDuration limits commit duration; logging enables crash-safe recovery via a transaction log.
+// Note: commitMaxDuration is the internal safety cap for commit and lock TTLs; the effective limit is min(ctx deadline, commitMaxDuration).
+func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration time.Duration, logging bool,
 	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, l2Cache sop.Cache, transactionLog sop.TransactionLog) (*Transaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
-	if maxTime <= 0 {
-		maxTime = time.Duration(15 * time.Minute)
+	if commitMaxDuration <= 0 {
+		commitMaxDuration = time.Duration(15 * time.Minute)
 	}
 	// Maximum transaction commit time is 1 hour.
-	if maxTime > time.Duration(1*time.Hour) {
-		maxTime = time.Duration(1 * time.Hour)
+	if commitMaxDuration > time.Duration(1*time.Hour) {
+		commitMaxDuration = time.Duration(1 * time.Hour)
 	}
 	return &Transaction{
 		mode:            mode,
-		maxTime:         maxTime,
+		maxTime:         commitMaxDuration,
 		StoreRepository: storeRepository,
 		registry:        registry,
 		l2Cache:         l2Cache,
@@ -259,6 +260,10 @@ func (t *Transaction) GetStoreRepository() sop.StoreRepository {
 func (t *Transaction) GetID() sop.UUID {
 	return t.id
 }
+
+// CommitMaxDuration returns the configured maximum commit duration for this transaction.
+// This is used as the internal cap and lock TTL; the effective runtime cap is min(ctx deadline, this duration).
+func (t *Transaction) CommitMaxDuration() time.Duration { return t.maxTime }
 
 // phase1Commit coordinates locking, conflict checks, value writes, and
 // classifies node mutations, retrying when needed until success or timeout.
