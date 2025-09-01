@@ -39,6 +39,11 @@ func makePassiveRegistryReadOnly(t *testing.T, table string) {
     base := passiveBaseFolder()
     ensureTableDir(t, base, table)
     seg := registrySegmentPath(base, table)
+    // Ensure the segment file exists so chmod will take effect across platforms/umasks.
+    if _, err := os.Stat(seg); os.IsNotExist(err) {
+        // Best-effort create an empty segment file; permissions will be tightened next.
+        _ = os.WriteFile(seg, []byte{}, 0o644)
+    }
     // Make only the segment file read-only to fail replication writes without affecting other tables/dirs.
     _ = os.Chmod(seg, 0o444)
 }
