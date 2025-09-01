@@ -16,7 +16,7 @@ func NewTransaction(ctx context.Context, to TransationOptions) (sop.Transaction,
 	if err != nil {
 		return nil, err
 	}
-	return sop.NewTransaction(to.Mode, twoPT, to.MaxTime, true)
+	return sop.NewTransaction(to.Mode, twoPT, true)
 }
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
@@ -67,7 +67,7 @@ func NewTransactionWithReplication(ctx context.Context, towr TransationOptionsWi
 	if err != nil {
 		return nil, err
 	}
-	return sop.NewTransaction(towr.Mode, twoPT, towr.MaxTime, true)
+	return sop.NewTransaction(towr.Mode, twoPT, true)
 }
 
 // NewTwoPhaseCommitTransactionWithReplication creates a two-phase commit transaction with replication enabled.

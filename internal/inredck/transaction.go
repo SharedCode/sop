@@ -16,7 +16,7 @@ func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging boo
 	if err != nil {
 		return nil, err
 	}
-	return sop.NewTransaction(mode, twoPT, maxTime, logging)
+	return sop.NewTransaction(mode, twoPT, logging)
 }
 
 // NewTwoPhaseCommitTransaction instantiates a transaction for writing (forWriting=true) or reading (forWriting=false).

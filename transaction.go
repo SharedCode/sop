@@ -86,12 +86,12 @@ type SinglePhaseTransaction struct {
 }
 
 // NewTransaction constructs a Transaction wrapper around a TwoPhaseCommitTransaction.
-// mode controls permissions; maxTime caps the allowed commit duration (-1 uses 15m). When logging is true
-// SOP records commit steps to aid recovery and cleanup of expired resources.
+// mode controls permissions. When logging is true, lower layers may record commit steps
+// to aid recovery and cleanup of expired resources.
 func NewTransaction(mode TransactionMode,
 	twoPhaseCommitTrans TwoPhaseCommitTransaction,
-	maxTime time.Duration, logging bool) (Transaction, error) {
-	twoPhase := twoPhaseCommitTrans // NewTwoPhaseCommitTransaction(mode, maxTime, logging)
+	logging bool) (Transaction, error) {
+	twoPhase := twoPhaseCommitTrans
 	return &SinglePhaseTransaction{
 		SopPhaseCommitTransaction: twoPhase,
 	}, nil

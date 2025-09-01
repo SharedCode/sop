@@ -123,7 +123,7 @@ func Test_EC_BlobStore_ShardsExceedParity_Rollback_NoFailover(t *testing.T) {
     rt.SetTransactionID(twoPT.GetID())
 
     // Wrap into sop.Transaction to use higher-level helpers
-    tx, err := sop.NewTransaction(sop.ForWriting, twoPT, -1, true)
+    tx, err := sop.NewTransaction(sop.ForWriting, twoPT, true)
     if err != nil { t.Fatalf("sop.NewTransaction: %v", err) }
 
     // Ensure store exists via StoreRepository to avoid dependency on helper options.
