@@ -231,6 +231,15 @@ What to look for
 - For EC beyond parity, the test asserts rollback and the absence of a failover event.
 
 
+## Operational caveats
+
+- Replication disabled (Active/Passive off): Metadata I/O errors will not trigger a failover. Commits to the single active path may fail depending on the error; recovery is manual. Prefer enabling replication to benefit from automatic failover and reinstate/fast‑forward.
+
+- Passive replication failures: When writes to the passive side fail, SOP sets FailedToReplicate. Active-side commits typically continue because the active write succeeded. Plan to run ReinstateFailedDrives to resync the passive, then fast‑forward recent deltas; monitor the FailedToReplicate flag until it clears.
+
+- After a flip: Immediately after an Active/Passive flip, some in‑flight or lingering operations aimed at the old active can encounter errors. Design clients for idempotent retry: start a fresh transaction and retry the operation.
+
+
 # Store Caching Config Guide
 Below examples illustrate how to configure the Store caching config feature. This feature provides automatic Redis based caching of data store's different data sets, both internal, for use to accelerate IO on internal needs of the B-trees and external, the enduser large data.
 

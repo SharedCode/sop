@@ -84,6 +84,8 @@ SOP is designed to keep your app online through common storage failures.
 
 See the detailed lifecycle guide (failures, observability, reinstate/fast‑forward, and drive replacement) in README2.md: https://github.com/SharedCode/sop/blob/master/README2.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair
 
+Also see Operational caveats: https://github.com/SharedCode/sop/blob/master/README2.md#operational-caveats
+
 For planned maintenance, see Cluster reboot procedure: [Cluster reboot procedure](#cluster-reboot-procedure).
 
 ## Prerequisites
