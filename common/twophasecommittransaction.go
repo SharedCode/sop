@@ -348,10 +348,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		}
 		//* End: Try to lock all updated & removed nodes before moving forward.
 
-		if err := t.logger.log(ctx, commitTrackedItemsValues, toByteArray(t.getForRollbackTrackedItemsValues())); err != nil {
-			return err
-		}
-		if err := t.commitTrackedItemsValues(ctx); err != nil {
+		if err := t.commitTrackedValuesWithLogging(ctx); err != nil {
 			return err
 		}
 
@@ -367,78 +364,47 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		bibs := convertToBlobRequestPayload(rootNodes)
 		vids := convertToRegistryRequestPayload(rootNodes)
 
-		if err := t.logger.log(ctx, commitNewRootNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
-			First: vids, Second: bibs,
-		})); err != nil {
+		if s, err := t.commitRootNodesWithLogging(ctx, vids, bibs, rootNodes); err != nil {
 			return err
-		}
-		if successful, t.newRootNodeHandles, err = t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes); err != nil {
-			var se sop.Error
-			if errors.As(err, &se) {
-				if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
-					return err
-				}
-			} else {
-				return err
-			}
+		} else {
+			successful = s
 		}
 
 		if successful {
 			// Check for conflict on fetched items.
-			if err := t.logger.log(ctx, areFetchedItemsIntact, nil); err != nil {
+			if s, err := t.checkFetchedItemsIntactWithLogging(ctx, fetchedNodes); err != nil {
 				return err
-			}
-			if successful, err = t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes); err != nil {
-				return err
+			} else {
+				successful = s
 			}
 		}
 		if successful {
 			// Commit updated nodes.
-			if successful, updatedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes); err != nil {
-				var se sop.Error
-				if errors.As(err, &se) {
-					if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
-						return err
-					}
-				} else {
-					return err
-				}
-			}
-			// Log the inactive Blobs' IDs of newly written so we can just easily remove them when cleaning up "dead" transaction logs.
-			if err := t.logger.log(ctx, commitUpdatedNodes, toByteArray(extractInactiveBlobsIDs(updatedNodesHandles))); err != nil {
+			if uhs, s, err := t.commitUpdatedNodesWithLogging(ctx, updatedNodes); err != nil {
 				return err
+			} else {
+				updatedNodesHandles = uhs
+				successful = s
 			}
 		}
 		// Only do commit removed nodes if successful so far.
 		if successful {
 			// Commit removed nodes.
-			if err := t.logger.log(ctx, commitRemovedNodes, toByteArray(convertToRegistryRequestPayload(removedNodes))); err != nil {
+			if rhs, s, err := t.commitRemovedNodesWithLogging(ctx, removedNodes); err != nil {
 				return err
-			}
-			if successful, removedNodesHandles, err = t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes); err != nil {
-				return err
+			} else {
+				removedNodesHandles = rhs
+				successful = s
 			}
 		}
 
 		// Only do commit added nodes if successful so far.
 		if successful {
 			// Commit added nodes.
-			if err := t.logger.log(ctx, commitAddedNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
-				First:  convertToRegistryRequestPayload(addedNodes),
-				Second: convertToBlobRequestPayload(addedNodes),
-			})); err != nil {
+			if s, err := t.commitAddedNodesWithLogging(ctx, addedNodes); err != nil {
 				return err
-			}
-			if t.addedNodeHandles, err = t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes); err != nil {
-				var se sop.Error
-				if errors.As(err, &se) {
-					if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
-						return err
-					}
-					successful = false
-				} else {
-					return err
-				}
+			} else if !s {
+				successful = false
 			}
 		}
 
@@ -507,6 +473,99 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 	t.updatedNodes = updatedNodes
 
 	return nil
+}
+
+// commitTrackedValuesWithLogging logs and persists tracked item values segment.
+func (t *Transaction) commitTrackedValuesWithLogging(ctx context.Context) error {
+	if err := t.logger.log(ctx, commitTrackedItemsValues, toByteArray(t.getForRollbackTrackedItemsValues())); err != nil {
+		return err
+	}
+	return t.commitTrackedItemsValues(ctx)
+}
+
+// commitRootNodesWithLogging logs and commits new root nodes, handling registry sector lock timeout semantics.
+func (t *Transaction) commitRootNodesWithLogging(ctx context.Context, vids []sop.RegistryPayload[sop.UUID], bibs []sop.BlobsPayload[sop.UUID], rootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, error) {
+	if err := t.logger.log(ctx, commitNewRootNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{First: vids, Second: bibs})); err != nil {
+		return false, err
+	}
+	successful, handles, err := t.btreesBackend[0].nodeRepository.commitNewRootNodes(ctx, rootNodes)
+	if err != nil {
+		var se sop.Error
+		if errors.As(err, &se) {
+			if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
+				return false, err
+			}
+			// treat as handled; keep successful as-is from repo
+		} else {
+			return false, err
+		}
+	}
+	t.newRootNodeHandles = handles
+	return successful, nil
+}
+
+// checkFetchedItemsIntactWithLogging logs and checks fetched item conflicts.
+func (t *Transaction) checkFetchedItemsIntactWithLogging(ctx context.Context, fetchedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, error) {
+	if err := t.logger.log(ctx, areFetchedItemsIntact, nil); err != nil {
+		return false, err
+	}
+	return t.btreesBackend[0].nodeRepository.areFetchedItemsIntact(ctx, fetchedNodes)
+}
+
+// commitUpdatedNodesWithLogging commits updated nodes and logs inactive blob IDs for cleanup.
+func (t *Transaction) commitUpdatedNodesWithLogging(ctx context.Context, updatedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]) ([]sop.RegistryPayload[sop.Handle], bool, error) {
+	successful, updatedNodesHandles, err := t.btreesBackend[0].nodeRepository.commitUpdatedNodes(ctx, updatedNodes)
+	if err != nil {
+		var se sop.Error
+		if errors.As(err, &se) {
+			if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
+				return nil, false, err
+			}
+		} else {
+			return nil, false, err
+		}
+	}
+	// Log inactive blobs from updated nodes for later cleanup of dead transactions.
+	if err := t.logger.log(ctx, commitUpdatedNodes, toByteArray(extractInactiveBlobsIDs(updatedNodesHandles))); err != nil {
+		return nil, false, err
+	}
+	return updatedNodesHandles, successful, nil
+}
+
+// commitRemovedNodesWithLogging logs and commits removed nodes.
+func (t *Transaction) commitRemovedNodesWithLogging(ctx context.Context, removedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]) ([]sop.RegistryPayload[sop.Handle], bool, error) {
+	if err := t.logger.log(ctx, commitRemovedNodes, toByteArray(convertToRegistryRequestPayload(removedNodes))); err != nil {
+		return nil, false, err
+	}
+	successful, removedNodesHandles, err := t.btreesBackend[0].nodeRepository.commitRemovedNodes(ctx, removedNodes)
+	if err != nil {
+		return nil, false, err
+	}
+	return removedNodesHandles, successful, nil
+}
+
+// commitAddedNodesWithLogging logs and commits added nodes; on handled registry sector lock timeout, signals retry needed via false.
+func (t *Transaction) commitAddedNodesWithLogging(ctx context.Context, addedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]) (bool, error) {
+	if err := t.logger.log(ctx, commitAddedNodes, toByteArray(sop.Tuple[[]sop.RegistryPayload[sop.UUID], []sop.BlobsPayload[sop.UUID]]{
+		First:  convertToRegistryRequestPayload(addedNodes),
+		Second: convertToBlobRequestPayload(addedNodes),
+	})); err != nil {
+		return false, err
+	}
+	handles, err := t.btreesBackend[0].nodeRepository.commitAddedNodes(ctx, addedNodes)
+	if err != nil {
+		var se sop.Error
+		if errors.As(err, &se) {
+			if err := t.handleRegistrySectorLockTimeout(ctx, se); err != nil {
+				return false, err
+			}
+			// handled; signal caller to retry path by returning false
+			return false, nil
+		}
+		return false, err
+	}
+	t.addedNodeHandles = handles
+	return true, nil
 }
 
 // phase2Commit finalizes the commit process and does cleanup afterwards.
