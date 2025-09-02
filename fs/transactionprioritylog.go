@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	priorityLogFileExtension       = ".plg"
-	priorityLogMinAgeInMin         = 5
+	priorityLogFileExtension = ".plg"
+	priorityLogMinAgeInMin   = 5
+	// regionSignalFolder is where per-region winner signals are written.
+	// Kept separate from priority log folder to avoid interfering with batching logic.
+	regionSignalFolder = "regionsignals"
 )
 
 // priorityLog persists per-transaction payloads that guide prioritized replication/work.
@@ -24,9 +27,7 @@ type priorityLog struct {
 }
 
 // IsEnabled reports whether priority logging is enabled.
-func (l priorityLog) IsEnabled() bool {
-	return true
-}
+func (l priorityLog) IsEnabled() bool { return true }
 
 // Add writes the priority log payload for a transaction.
 func (l priorityLog) Add(ctx context.Context, tid sop.UUID, payload []byte) error {
@@ -47,13 +48,15 @@ func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPaylo
 	if !fio.Exists(ctx, filename) {
 		return nil, nil
 	}
-	if ba, err := fio.ReadFile(ctx, filename); err != nil {
+	ba, err := fio.ReadFile(ctx, filename)
+	if err != nil {
 		return nil, err
-	} else {
-		var data []sop.RegistryPayload[sop.Handle]
-		err := encoding.DefaultMarshaler.Unmarshal(ba, &data)
-		return data, err
 	}
+	var data []sop.RegistryPayload[sop.Handle]
+	if err := encoding.DefaultMarshaler.Unmarshal(ba, &data); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 // GetBatch returns up to batchSize oldest priority log entries ready for processing.
@@ -65,12 +68,10 @@ func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 
 	f := func(de os.DirEntry) bool {
 		info, _ := de.Info()
-
 		fts := info.ModTime().Format(DateHourLayout)
 		ft, _ := time.Parse(DateHourLayout, fts)
 		filename := info.Name()
-		_, err := sop.ParseUUID(filename[0 : len(filename)-len(priorityLogFileExtension)])
-		if err != nil {
+		if _, err := sop.ParseUUID(filename[0 : len(filename)-len(priorityLogFileExtension)]); err != nil {
 			return false
 		}
 		return cappedHour.Compare(ft) >= 0
@@ -88,18 +89,12 @@ func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 	if err != nil || len(files) == 0 {
 		return nil, err
 	}
-
-	// 25 is default batch size.
 	if batchSize <= 0 {
 		batchSize = 25
 	}
 
-	// Get the oldest first & so on...
 	res := make([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], 0, batchSize)
-	for i := range batchSize {
-		if i == len(files) {
-			break
-		}
+	for i := 0; i < len(files) && i < batchSize; i++ {
 		filename := files[i].Name()
 		tid, te := sop.ParseUUID(filename[0 : len(filename)-len(priorityLogFileExtension)])
 		if te != nil {
@@ -110,10 +105,7 @@ func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 		if e != nil {
 			return res, e
 		}
-		res = append(res, sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{
-			Key:   tid,
-			Value: r,
-		})
+		res = append(res, sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{Key: tid, Value: r})
 	}
 	return res, nil
 }
@@ -124,6 +116,60 @@ func (l priorityLog) Remove(ctx context.Context, tid sop.UUID) error {
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogFileExtension))
 	if fio.Exists(ctx, filename) {
 		return fio.Remove(ctx, filename)
+	}
+	return nil
+}
+
+// formatRegionSignalName builds the filename r[modFileNumber][modFileSectorNumber].plg
+// Example: r12035.plg for modFileNumber=12 and modFileSectorNumber=035.
+// No separators are used to keep the name compact; callers should choose widths to avoid ambiguity if needed.
+func formatRegionSignalName(modFileNumber int, modFileSectorNumber int) string {
+	// Zero-padded: 4 digits for file number, 6 digits for sector number (supports up to 9999 files, 999999 sectors).
+	return fmt.Sprintf("r%04d%06d%s", modFileNumber, modFileSectorNumber, priorityLogFileExtension)
+}
+
+// RegionSignalExists checks if the per-region signal marker already exists.
+func (l priorityLog) RegionSignalExists(ctx context.Context, modFileNumber int, modFileSectorNumber int) bool {
+	fn := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegionSignalName(modFileNumber, modFileSectorNumber)))
+	return NewFileIO().Exists(ctx, fn)
+}
+
+// WriteRegionSignal writes a small per-region signal file with empty content (fast/light).
+// The file is named r[modFileNumber][modFileSectorNumber].plg and stored under regionSignalFolder.
+func (l priorityLog) WriteRegionSignal(ctx context.Context, modFileNumber int, modFileSectorNumber int, _ sop.UUID) error {
+	base := l.replicationTracker.formatActiveFolderEntity(regionSignalFolder)
+	fio := NewFileIO()
+	_ = fio.MkdirAll(ctx, base, permission)
+	target := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegionSignalName(modFileNumber, modFileSectorNumber)))
+	// Use a temp file + hard link to atomically publish the marker without overwriting an existing one.
+	// 1) Create a unique temp file.
+	tmp := fmt.Sprintf("%s.tmp.%d", target, time.Now().UnixNano())
+	tf, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, permission)
+	if err != nil {
+		return err
+	}
+	_ = tf.Close()
+	// 2) Atomically link temp to target; fails with EEXIST if target already present.
+	if err := os.Link(tmp, target); err != nil {
+		// Cleanup the temp file; report existence as a win by someone else.
+		_ = os.Remove(tmp)
+		// If the target already exists, signal caller to treat as not-acquired.
+		if os.IsExist(err) {
+			return os.ErrExist
+		}
+		return err
+	}
+	// 3) Remove temp file, leaving the target link.
+	_ = os.Remove(tmp)
+	return nil
+}
+
+// RemoveRegionSignal removes the region signal file if present.
+func (l priorityLog) RemoveRegionSignal(ctx context.Context, modFileNumber int, modFileSectorNumber int) error {
+	fn := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegionSignalName(modFileNumber, modFileSectorNumber)))
+	fio := NewFileIO()
+	if fio.Exists(ctx, fn) {
+		return fio.Remove(ctx, fn)
 	}
 	return nil
 }

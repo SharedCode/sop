@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	log "log/slog"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sharedcode/sop"
@@ -115,7 +118,9 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 	}
 	// Unlock the block file region.
 	return hm.unlockFileBlockRegion(ctx, lk)
+
 }
+
 
 func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *fileDirectIO, offset int64) (bool, sop.UUID, *sop.LockKey, error) {
 	tid := hm.replicationTracker.tid
@@ -130,12 +135,84 @@ func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *fileDirectIO, o
 		},
 	})
 	ok, uuid, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
+	if err == nil && ok {
+		// Confirm lock ownership, then write a per-region signal marker to file system.
+		if isLocked, ierr := hm.cache.IsLocked(ctx, []*sop.LockKey{lk[0]}); ierr == nil && isLocked {
+			modFileNumber := parseSegmentIndex(dio.filename)
+			modFileSectorNumber := int(offset / int64(blockSize))
+			pl := priorityLog{replicationTracker: hm.replicationTracker, tid: tid}
+			if werr := pl.WriteRegionSignal(ctx, modFileNumber, modFileSectorNumber, tid); werr != nil {
+				// If another process already created the marker, consider we lost the race: unlock and return not-acquired.
+				if errors.Is(werr, os.ErrExist) {
+					_ = hm.cache.Unlock(ctx, []*sop.LockKey{lk[0]})
+					return false, sop.NilUUID, lk[0], nil
+				}
+				log.Debug(fmt.Sprintf("failed writing region signal for %s idx=%d sector=%d: %v", dio.filename, modFileNumber, modFileSectorNumber, werr))
+			}
+		}
+	}
 	return ok, uuid, lk[0], err
 }
 func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, lk *sop.LockKey) error {
+	// Attempt to remove the region signal based on the lock key's metadata before unlocking.
+	// Try to parse the lock key into filename and offset to reconstruct the marker name.
+	// Lock key format uses hm.formatLockKey("infs"+filename+offset), so split filename/offset heuristically.
+	// Best-effort: only act when we can derive a valid segment index and sector number.
+	// Note: We can't access dio here, so parse from the key string.
+	fn, off, ok := parseFilenameAndOffsetFromLockKey(lk.Key)
+	if ok {
+		modFileNumber := parseSegmentIndex(fn)
+		modFileSectorNumber := int(off / int64(blockSize))
+		pl := priorityLog{replicationTracker: hm.replicationTracker}
+		_ = pl.RemoveRegionSignal(ctx, modFileNumber, modFileSectorNumber)
+	}
 	return hm.cache.Unlock(ctx, []*sop.LockKey{lk})
 }
 
 func (hm *hashmap) formatLockKey(filename string, offset int64) string {
 	return hm.cache.FormatLockKey(fmt.Sprintf("%s%s%v", lockFileRegionKeyPrefix, filename, offset))
+}
+
+// parseSegmentIndex extracts the numeric segment index from a segment filename like "table-12.reg".
+// Returns 0 when parsing fails.
+func parseSegmentIndex(segmentFilename string) int {
+	// Expect pattern: <name>-<index>.reg
+	dash := strings.LastIndex(segmentFilename, "-")
+	dot := strings.LastIndex(segmentFilename, ".")
+	if dash == -1 || dot == -1 || dot <= dash+1 {
+		return 0
+	}
+	n, err := strconv.Atoi(segmentFilename[dash+1 : dot])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// parseFilenameAndOffsetFromLockKey attempts to pull the original filename and numeric offset from a lock key string.
+// The key is built as FormatLockKey("infs" + filename + offset). We strip any global format prefix, then split by the
+// last dash/dot pattern to isolate the filename; the trailing digits are interpreted as the offset.
+func parseFilenameAndOffsetFromLockKey(key string) (string, int64, bool) {
+	// Remove possible cache formatting; ensure our prefix is present.
+	idx := strings.Index(key, lockFileRegionKeyPrefix)
+	if idx == -1 {
+		return "", 0, false
+	}
+	raw := key[idx+len(lockFileRegionKeyPrefix):]
+	// raw is filename + offset concatenated. We know filename has ".reg" and offset is digits at the end.
+	// Find the last occurrence of ".reg" and parse digits after it.
+	regIdx := strings.LastIndex(raw, registryFileExtension)
+	if regIdx == -1 {
+		return "", 0, false
+	}
+	filename := raw[:regIdx+len(registryFileExtension)]
+	offStr := raw[regIdx+len(registryFileExtension):]
+	if offStr == "" {
+		return "", 0, false
+	}
+	off, err := strconv.ParseInt(offStr, 10, 64)
+	if err != nil {
+		return "", 0, false
+	}
+	return filename, off, true
 }
