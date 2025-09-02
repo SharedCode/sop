@@ -66,14 +66,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 			return err
 		}
 		if ok {
-			// Double check to ensure we have no race condition and 100% acquired a lock on the sector.
-			if ok, err := hm.cache.IsLocked(ctx, []*sop.LockKey{lk}); ok {
-				break
-			} else if err != nil {
-				// Unlock the sector just in case it can "get through", before return.
-				hm.unlockFileBlockRegion(ctx, lk)
-				return err
-			}
+			break
 		}
 		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
 			// If the context is canceled or the operation's context deadline was exceeded, return the raw error
@@ -120,7 +113,6 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 	return hm.unlockFileBlockRegion(ctx, lk)
 
 }
-
 
 func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *fileDirectIO, offset int64) (bool, sop.UUID, *sop.LockKey, error) {
 	tid := hm.replicationTracker.tid
