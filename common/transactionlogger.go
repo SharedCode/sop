@@ -46,6 +46,9 @@ type transactionLog struct {
 
 const (
 	defaultLockDuration = 5 * time.Minute
+	// coordinatorLockName is the global coordinator lock used to serialize
+	// priority rollbacks across the cluster.
+	coordinatorLockName = "Prbs"
 )
 
 // Instantiate a transaction logger.
@@ -106,19 +109,37 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 }
 
 func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) (bool, error) {
-	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey("Prbs")})
+	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey(coordinatorLockName)})
 	const maxDuration = 5 * time.Minute
-	if ok, _, _ := t.l2Cache.Lock(ctx, maxDuration, lk); ok {
-		if ok, _ := t.l2Cache.IsLocked(ctx, lk); !ok {
-			return false, nil
+	// When restart-triggered, ctx may contain the flag to ignore age. In that mode we
+	// will process multiple batches; if not the winner, we pause and poll until the
+	// coordinator lock is released.
+	ignoreAge := false
+	if v := ctx.Value(sop.ContextPriorityLogIgnoreAge); v != nil {
+		if b, ok := v.(bool); ok && b {
+			ignoreAge = true
 		}
-		log.Info("Entering doPriorityRollbacks loop(5).")
-		defer t.l2Cache.Unlock(ctx, lk)
-		start := sop.Now()
+	}
 
+	ok1, _, _ := t.l2Cache.Lock(ctx, maxDuration, lk)
+	ok2, _ := t.l2Cache.IsLocked(ctx, lk)
+	if !ok1 || !ok2 {
+		if ignoreAge {
+			if err := tl.waitForCoordinatorRelease(ctx, t, coordinatorLockName, maxDuration); err != nil {
+				return false, err
+			}
+		}
+		return false, nil
+	}
+	defer t.l2Cache.Unlock(ctx, lk)
+
+	log.Info("Entering doPriorityRollbacks loop(restore).")
+	consumed := false
+	start := sop.Now()
+	for {
 		v, err := tl.PriorityLog().GetBatch(ctx, 20)
 		if len(v) == 0 || err != nil {
-			return false, err
+			return consumed, err
 		}
 		for i := range v {
 			tid := v[i].Key
@@ -181,10 +202,34 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 				return true, err
 			}
 		}
-
-		return true, nil
+		consumed = true
+		if !ignoreAge {
+			break // single batch in normal mode
+		}
 	}
-	return false, nil
+	return true, nil
+}
+
+// waitForCoordinatorRelease blocks until the global coordinator lock is not held by others
+// or until the max wait duration elapses. Logs a status at most once every ~2 seconds.
+func (tl *transactionLog) waitForCoordinatorRelease(ctx context.Context, t *Transaction, lockName string, maxWait time.Duration) error {
+	names := []string{t.l2Cache.FormatLockKey(lockName)}
+	start := sop.Now()
+	lastLog := time.Time{}
+	for {
+		heldByOthers, _ := t.l2Cache.IsLockedByOthers(ctx, names)
+		if !heldByOthers {
+			return nil
+		}
+		if lastLog.IsZero() || time.Since(lastLog) >= 2*time.Second {
+			log.Info("waiting for coordinator lock to be released", "lock", lockName)
+			lastLog = time.Now()
+		}
+		if err := sop.TimedOut(ctx, "waitPrbs", start, maxWait); err != nil {
+			return err
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
 
 // acquireLocks creates per-ID lock keys, sorts by UUID to avoid deadlocks, and attempts to

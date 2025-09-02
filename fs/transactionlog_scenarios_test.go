@@ -263,6 +263,9 @@ func (c *cacheIsLockedFalse) Unlock(ctx context.Context, lk []*sop.LockKey) erro
 	return c.base.Unlock(ctx, lk)
 }
 func (c *cacheIsLockedFalse) Clear(ctx context.Context) error { return c.base.Clear(ctx) }
+func (c *cacheIsLockedFalse) IsRestarted(ctx context.Context) (bool, error) {
+	return c.base.IsRestarted(ctx)
+}
 
 // Exercises the final IsLocked check inside GetOne returning nils.
 func Test_TransactionLog_GetOne_FinalIsLockedFalse(t *testing.T) {

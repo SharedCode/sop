@@ -135,6 +135,19 @@
 				"mydi-nocov"
 			],
 			"group": "test"
+		},
+		{
+			"label": "Go: Test (Unit)",
+			"type": "shell",
+			"command": "go",
+			"args": [
+				"test",
+				"./..."
+			],
+			"problemMatcher": [
+				"$go"
+			],
+			"group": "test"
 		}
 	]
 }

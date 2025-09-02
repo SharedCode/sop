@@ -123,6 +123,9 @@ type getErrCache struct{ sop.Cache }
 func (g getErrCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, fmt.Errorf("getstruct err")
 }
+func (g getErrCache) IsRestarted(ctx context.Context) (bool, error) {
+	return g.Cache.IsRestarted(ctx)
+}
 
 func Test_ItemActionTracker_CheckTrackedItems_Error_And_GetCompat(t *testing.T) {
 	ctx := context.Background()
@@ -495,6 +498,9 @@ func (c errIsLockedCache13) Unlock(ctx context.Context, lockKeys []*sop.LockKey)
 	return c.inner.Unlock(ctx, lockKeys)
 }
 func (c errIsLockedCache13) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
+func (c errIsLockedCache13) IsRestarted(ctx context.Context) (bool, error) {
+	return c.inner.IsRestarted(ctx)
+}
 
 // errGetExCache13 wraps a cache and forces GetEx to error to hit acquireLocks' takeover GetEx error path.
 type errGetExCache13 struct {
@@ -547,6 +553,9 @@ func (c errGetExCache13) Unlock(ctx context.Context, lockKeys []*sop.LockKey) er
 	return c.inner.Unlock(ctx, lockKeys)
 }
 func (c errGetExCache13) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
+func (c errGetExCache13) IsRestarted(ctx context.Context) (bool, error) {
+	return c.inner.IsRestarted(ctx)
+}
 
 func Test_TransactionLogger_AcquireLocks_IsLocked_Error_UnlocksAndReturns(t *testing.T) {
 	ctx := context.Background()

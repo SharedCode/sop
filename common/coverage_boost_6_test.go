@@ -631,6 +631,10 @@ func Test_RefetchAndMerge_Add_InNode_DuplicateKey_ReturnsError(t *testing.T) {
 // unlockErrCache wraps a cache to force Unlock errors.
 type unlockErrCache struct{ sop.Cache }
 
+func (c unlockErrCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
+
 func (c unlockErrCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return fmt.Errorf("unlock error")
 }
@@ -707,7 +711,7 @@ func Test_TransactionLogger_DoPriorityRollbacks_PrbsLockHeld_ReturnsFalse(t *tes
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
 	// Pre-lock the exact key used internally: FormatLockKey applied twice (matching implementation).
-	prbsKey := l2.FormatLockKey(l2.FormatLockKey("Prbs"))
+	prbsKey := l2.FormatLockKey(l2.FormatLockKey(coordinatorLockName))
 	_ = l2.Set(ctx, prbsKey, sop.NewUUID().String(), time.Minute)
 
 	tl := newTransactionLogger(stubTLog{pl: &stubPriorityLog{}}, true)

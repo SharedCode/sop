@@ -474,9 +474,9 @@ func Test_TransactionLogger_DoPriorityRollbacks_MultiEntry_MixedOutcomes(t *test
 	tl := newTransactionLogger(stubTLog{pl: pl}, true)
 
 	// Let locks be acquirable and stable
-	_ = l2.Set(ctx, l2.FormatLockKey("Prbs"), sop.NewUUID().String(), time.Minute)
+	_ = l2.Set(ctx, l2.FormatLockKey(coordinatorLockName), sop.NewUUID().String(), time.Minute)
 	// Clear to allow our lock to be acquired by doPriorityRollbacks
-	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey("Prbs")})
+	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey(coordinatorLockName)})
 
 	consumed, err := tl.doPriorityRollbacks(ctx, tx)
 	if err == nil {
@@ -803,6 +803,9 @@ func (m *failSecondGetAfterSetCache) Unlock(ctx context.Context, ks []*sop.LockK
 	return m.inner.Unlock(ctx, ks)
 }
 func (m *failSecondGetAfterSetCache) Clear(ctx context.Context) error { return m.inner.Clear(ctx) }
+func (m *failSecondGetAfterSetCache) IsRestarted(ctx context.Context) (bool, error) {
+	return m.inner.IsRestarted(ctx)
+}
 
 func Test_ItemActionTracker_Add_ActivelyPersisted_NilValue_NoBlobNoCache(t *testing.T) {
 	ctx := context.Background()

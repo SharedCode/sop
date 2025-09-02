@@ -589,8 +589,8 @@ func Test_TransactionLogger_DoPriorityRollbacks_RemoveError_ReturnsError(t *test
 	tx := &Transaction{l2Cache: l2, registry: reg}
 
 	// Seed lock ownership for the batch processing loop to enter.
-	_ = l2.Set(ctx, l2.FormatLockKey("Prbs"), sop.NewUUID().String(), time.Minute)
-	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey("Prbs")})
+	_ = l2.Set(ctx, l2.FormatLockKey(coordinatorLockName), sop.NewUUID().String(), time.Minute)
+	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey(coordinatorLockName)})
 
 	tid := sop.NewUUID()
 	lid := sop.NewUUID()
@@ -620,8 +620,8 @@ func Test_TransactionLogger_DoPriorityRollbacks_VersionAdvance_TriggersFailover(
 	tx := &Transaction{l2Cache: l2, registry: reg}
 
 	// Unlockable processing lock.
-	_ = l2.Set(ctx, l2.FormatLockKey("Prbs"), sop.NewUUID().String(), time.Minute)
-	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey("Prbs")})
+	_ = l2.Set(ctx, l2.FormatLockKey(coordinatorLockName), sop.NewUUID().String(), time.Minute)
+	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey(coordinatorLockName)})
 
 	tid := sop.NewUUID()
 	lid := sop.NewUUID()

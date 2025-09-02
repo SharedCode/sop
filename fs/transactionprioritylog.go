@@ -65,15 +65,24 @@ func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPaylo
 func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 	cappedHour := mh.Add(-time.Duration(priorityLogMinAgeInMin * time.Minute))
+	ignoreAge := false
+	if v := ctx.Value(sop.ContextPriorityLogIgnoreAge); v != nil {
+		if b, ok := v.(bool); ok && b {
+			ignoreAge = true
+		}
+	}
 
 	f := func(de os.DirEntry) bool {
 		info, _ := de.Info()
-		fts := info.ModTime().Format(DateHourLayout)
-		ft, _ := time.Parse(DateHourLayout, fts)
 		filename := info.Name()
 		if _, err := sop.ParseUUID(filename[0 : len(filename)-len(priorityLogFileExtension)]); err != nil {
 			return false
 		}
+		if ignoreAge {
+			return true
+		}
+		fts := info.ModTime().Format(DateHourLayout)
+		ft, _ := time.Parse(DateHourLayout, fts)
 		return cappedHour.Compare(ft) >= 0
 	}
 

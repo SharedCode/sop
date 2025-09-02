@@ -200,7 +200,7 @@ func Test_TransactionLogger_DoPriorityRollbacks_LockNotAcquired(t *testing.T) {
 	txn := &Transaction{l2Cache: mocks.NewMockClient()}
 	// Pre-acquire the priority lock with another owner so doPriorityRollbacks cannot enter.
 	// Note: doPriorityRollbacks formats the key twice, so mirror that here.
-	k := txn.l2Cache.FormatLockKey(txn.l2Cache.FormatLockKey("Prbs"))
+	k := txn.l2Cache.FormatLockKey(txn.l2Cache.FormatLockKey(coordinatorLockName))
 	_ = txn.l2Cache.Set(ctx, k, sop.NewUUID().String(), time.Minute)
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	ok, err := tl.doPriorityRollbacks(ctx, txn)
@@ -718,6 +718,9 @@ func (m missAfterSetCache) Unlock(ctx context.Context, lk []*sop.LockKey) error 
 	return m.base.Unlock(ctx, lk)
 }
 func (m missAfterSetCache) Clear(ctx context.Context) error { return m.base.Clear(ctx) }
+func (m missAfterSetCache) IsRestarted(ctx context.Context) (bool, error) {
+	return m.base.IsRestarted(ctx)
+}
 
 func Test_ItemActionTracker_Lock_CantAttain_AfterSet_ReturnsError(t *testing.T) {
 	ctx := context.Background()

@@ -78,6 +78,9 @@ func (f *flakyCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error 
 	return f.base.Unlock(ctx, lockKeys)
 }
 func (f *flakyCache) Clear(ctx context.Context) error { return f.base.Clear(ctx) }
+func (f *flakyCache) IsRestarted(ctx context.Context) (bool, error) {
+	return f.base.IsRestarted(ctx)
+}
 
 func Test_ItemActionTracker_Lock_PostSetReadMiss_ReturnsError(t *testing.T) {
 	ctx := context.Background()
@@ -163,6 +166,9 @@ func (e *errLockCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) erro
 	return e.base.Unlock(ctx, lockKeys)
 }
 func (e *errLockCache) Clear(ctx context.Context) error { return e.base.Clear(ctx) }
+func (e *errLockCache) IsRestarted(ctx context.Context) (bool, error) {
+	return e.base.IsRestarted(ctx)
+}
 
 func Test_ItemActionTracker_Lock_EarlyGetStructError(t *testing.T) {
 	ctx := context.Background()
@@ -294,6 +300,9 @@ func (e *errCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return e.base.Unlock(ctx, lockKeys)
 }
 func (e *errCache) Clear(ctx context.Context) error { return e.base.Clear(ctx) }
+func (e *errCache) IsRestarted(ctx context.Context) (bool, error) {
+	return e.base.IsRestarted(ctx)
+}
 
 func Test_ItemActionTracker_Get_RedisErrors_UsesBlob_StillSucceeds(t *testing.T) {
 	ctx := context.Background()

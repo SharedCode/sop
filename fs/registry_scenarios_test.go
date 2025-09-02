@@ -20,12 +20,16 @@ import (
 // Local helper types for lock behavior.
 type testLockFail struct{ sop.Cache }
 
+func (t testLockFail) IsRestarted(ctx context.Context) (bool, error) { return t.Cache.IsRestarted(ctx) }
+
 func (lf testLockFail) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.UUID{}, nil
 }
 func (lf testLockFail) Unlock(ctx context.Context, lk []*sop.LockKey) error { return nil }
 
 type testAllLock struct{ sop.Cache }
+
+func (t testAllLock) IsRestarted(ctx context.Context) (bool, error) { return t.Cache.IsRestarted(ctx) }
 
 func (al testAllLock) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return true, sop.UUID{}, nil
@@ -102,9 +106,16 @@ func (c *cacheGetError) Unlock(ctx context.Context, lks []*sop.LockKey) error {
 	return c.base.Unlock(ctx, lks)
 }
 func (c *cacheGetError) Clear(ctx context.Context) error { return c.base.Clear(ctx) }
+func (c *cacheGetError) IsRestarted(ctx context.Context) (bool, error) {
+	return c.base.IsRestarted(ctx)
+}
 
 // mockCacheImmediateLockFail forces Lock to fail to trigger UpdateNoLocks set error path.
 type mockCacheImmediateLockFail struct{ sop.Cache }
+
+func (m mockCacheImmediateLockFail) IsRestarted(ctx context.Context) (bool, error) {
+	return m.Cache.IsRestarted(ctx)
+}
 
 func (m *mockCacheImmediateLockFail) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, errors.New("induced lock fail")
@@ -631,6 +642,10 @@ func Test_registryMap_remove_Errors_And_Replicate_CloseOverride_2(t *testing.T) 
 // lockFailCache forces Lock to fail to exercise error path in UpdateNoLocks -> set -> updateFileBlockRegion.
 type lockFailCache struct{ sop.Cache }
 
+func (l lockFailCache) IsRestarted(ctx context.Context) (bool, error) {
+	return l.Cache.IsRestarted(ctx)
+}
+
 func (c lockFailCache) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, nil
 }
@@ -670,12 +685,20 @@ func Test_Registry_Remove_ItemMissing_Error(t *testing.T) {
 // cache that forces SetStruct to fail to hit the warn path in UpdateNoLocks.
 type setStructErrorCache struct{ sop.Cache }
 
+func (s setStructErrorCache) IsRestarted(ctx context.Context) (bool, error) {
+	return s.Cache.IsRestarted(ctx)
+}
+
 func (c setStructErrorCache) SetStruct(ctx context.Context, key string, value interface{}, d time.Duration) error {
 	return errors.New("setstruct boom")
 }
 
 // cache that forces Delete to return error to hit the warn path in Remove's deferred cache eviction.
 type deleteErrorCache struct{ sop.Cache }
+
+func (d deleteErrorCache) IsRestarted(ctx context.Context) (bool, error) {
+	return d.Cache.IsRestarted(ctx)
+}
 
 func (c deleteErrorCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	return false, errors.New("delete boom")

@@ -107,6 +107,10 @@ func TestRegistry_Replicate_rmCloseOverrideError(t *testing.T) {
 // Cache wrapper that forces SetStruct to return an error to exercise log.Warn paths in Add & Update.
 type setStructErrCache struct{ sop.Cache }
 
+func (c setStructErrCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
+
 func (c setStructErrCache) SetStruct(ctx context.Context, key string, value interface{}, exp time.Duration) error {
 	return errors.New("induced setstruct error")
 }

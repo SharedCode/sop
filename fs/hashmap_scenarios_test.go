@@ -116,6 +116,9 @@ func (m *mockCacheHashmap) Unlock(ctx context.Context, lk []*sop.LockKey) error 
 	return m.base.Unlock(ctx, lk)
 }
 func (m *mockCacheHashmap) Clear(ctx context.Context) error { return m.base.Clear(ctx) }
+func (m *mockCacheHashmap) IsRestarted(ctx context.Context) (bool, error) {
+	return m.base.IsRestarted(ctx)
+}
 
 func contains(s, sub string) bool {
 	return len(sub) == 0 || (len(s) >= len(sub) && indexOf(s, sub) >= 0)
@@ -148,7 +151,6 @@ func TestHashmap_AllScenarios(t *testing.T) {
 
 	cache := mocks.NewMockClient()
 	hm := newHashmap(true, 32, rt, cache)
-
 	// --- Scenario: write + read + delete lifecycle ---
 	table := "regcase"
 	if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), table), 0o755); err != nil {
@@ -586,6 +588,9 @@ func (m *mockCacheIsLockedErr) IsLocked(ctx context.Context, lk []*sop.LockKey) 
 		return false, e
 	}
 	return m.mockCacheHashmap.IsLocked(ctx, lk)
+}
+func (m *mockCacheIsLockedErr) IsRestarted(ctx context.Context) (bool, error) {
+	return m.mockCacheHashmap.IsRestarted(ctx)
 }
 
 func Test_updateFileBlockRegion_ErrorPaths_Table(t *testing.T) {

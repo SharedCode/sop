@@ -357,6 +357,9 @@ func (c *alwaysLockFailCache) IsLockedByOthers(ctx context.Context, ks []string)
 }
 func (c *alwaysLockFailCache) Unlock(ctx context.Context, lks []*sop.LockKey) error { return nil }
 func (c *alwaysLockFailCache) Clear(ctx context.Context) error                      { return c.mocksCache.Clear(ctx) }
+func (c *alwaysLockFailCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.mocksCache.IsRestarted(ctx)
+}
 
 // lostLockCache acquires locks but reports them lost on IsLocked check.
 type lostLockCache struct{ *alwaysLockFailCache }
@@ -367,6 +370,9 @@ func (c *lostLockCache) Lock(ctx context.Context, d time.Duration, lks []*sop.Lo
 }
 func (c *lostLockCache) IsLocked(ctx context.Context, lks []*sop.LockKey) (bool, error) {
 	return false, nil
+}
+func (c *lostLockCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.mocksCache.IsRestarted(ctx)
 }
 
 // Covers the successful GetOneOfHour path (eligible file within TTL window returning records).

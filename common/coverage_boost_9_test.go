@@ -543,6 +543,10 @@ func Test_ItemActionTracker_Manage_Remove_AppendsForDeletion(t *testing.T) {
 // errGetExCache wraps the mock cache to force Lock(false, owner=tid) and GetEx error during takeover.
 type errGetExCache struct{ sop.Cache }
 
+func (c errGetExCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
+
 func (e errGetExCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	// Signal takeover path by returning owner tid equal to the transaction tid passed later.
 	// We don't know tid here; acquireLocks compares with provided tid and ownerTID!=0 triggers else branch.
@@ -588,6 +592,10 @@ func Test_TransactionLogger_Rollback_NoLogs_RemovesTid_NoError(t *testing.T) {
 
 // isLockedErrCache forces Lock to succeed and IsLocked to return an error.
 type isLockedErrCache struct{ sop.Cache }
+
+func (c isLockedErrCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
 
 func (c isLockedErrCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return true, sop.NilUUID, nil
@@ -635,12 +643,20 @@ func Test_ItemActionTracker_Get_BlobStore_Error_Propagates(t *testing.T) {
 // lockErrCache makes Lock return an explicit error to exercise the error path in acquireLocks.
 type lockErrCache2 struct{ sop.Cache }
 
+func (c lockErrCache2) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
+
 func (c lockErrCache2) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, fmt.Errorf("lock failed")
 }
 
 // ownerMismatchCache makes Lock report a different non-nil ownerTID to trigger the owner mismatch branch.
 type ownerMismatchCache struct{ sop.Cache }
+
+func (c ownerMismatchCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
 
 var _ownerMismatchTID = sop.NewUUID()
 

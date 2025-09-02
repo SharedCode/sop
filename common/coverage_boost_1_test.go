@@ -637,6 +637,9 @@ func (c lockThenIsLockedFalseCache) Unlock(ctx context.Context, lockKeys []*sop.
 	return c.inner.Unlock(ctx, lockKeys)
 }
 func (c lockThenIsLockedFalseCache) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
+func (c lockThenIsLockedFalseCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.inner.IsRestarted(ctx)
+}
 
 // lockErrorCache forces Lock to return an error to trigger error propagation path in acquireLocks.
 type lockErrorCache struct{ inner sop.Cache }
@@ -686,6 +689,9 @@ func (c lockErrorCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) err
 	return c.inner.Unlock(ctx, lockKeys)
 }
 func (c lockErrorCache) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
+func (c lockErrorCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.inner.IsRestarted(ctx)
+}
 
 func Test_AcquireLocks_PartialAfterOk_ReturnsFailover(t *testing.T) {
 	ctx := context.Background()
