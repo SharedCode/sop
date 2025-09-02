@@ -47,8 +47,6 @@ func (r *recPrioLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 func (r *recPrioLog) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (r *recPrioLog) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
-func (r *recPrioLog) RemoveBackup(ctx context.Context, tid sop.UUID) error                { return nil }
 
 // wrapCache lets us override IsLocked once to simulate transient lock verification failure.
 type wrapCache struct {
@@ -373,8 +371,6 @@ func (w warnPL) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair
 func (w warnPL) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return fmt.Errorf("warn: log commit changes")
 }
-func (w warnPL) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
-func (w warnPL) RemoveBackup(ctx context.Context, tid sop.UUID) error                { return nil }
 
 // wrapTL delegates to the mock transaction log but returns a warnPL for PriorityLog.
 type wrapTL struct{ inner *mocks.MockTransactionLog }
@@ -594,9 +590,9 @@ func Test_TransactionLogger_AcquireLocks_Takeover_DeadOwner_Succeeds(t *testing.
 
 // prioLogBatch provides a single-batch PriorityLog for doPriorityRollbacks success path.
 type prioLogBatch struct {
-	tid                       sop.UUID
-	batch                     [][]sop.RegistryPayload[sop.Handle]
-	wrote, removed, removedBk int
+	tid            sop.UUID
+	batch          [][]sop.RegistryPayload[sop.Handle]
+	wrote, removed int
 }
 
 func (p *prioLogBatch) IsEnabled() bool                                             { return true }
@@ -616,14 +612,8 @@ func (p *prioLogBatch) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyVa
 func (p *prioLogBatch) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (p *prioLogBatch) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
-	p.wrote++
-	return nil
-}
-func (p *prioLogBatch) RemoveBackup(ctx context.Context, tid sop.UUID) error {
-	p.removedBk++
-	return nil
-}
+
+// Backup APIs removed; count Add/Remove via existing methods.
 
 // tlWithPL wires a custom PriorityLog while deferring all other methods to the mock TL.
 type tlWithPL struct {
@@ -668,8 +658,8 @@ func Test_TransactionLogger_DoPriorityRollbacks_Batch_Succeeds(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("expected batch to be processed, ok=true, err=nil; got ok=%v err=%v", ok, err)
 	}
-	if p.wrote == 0 || p.removed == 0 || p.removedBk == 0 {
-		t.Fatalf("expected backup write/remove and backup remove to be called")
+	if p.removed == 0 {
+		t.Fatalf("expected priority log remove to be called")
 	}
 }
 

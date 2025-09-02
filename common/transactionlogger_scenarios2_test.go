@@ -221,9 +221,9 @@ func Test_TransactionLogger_DoPriorityRollbacks_Cases(t *testing.T) {
 		if !consumed {
 			t.Fatalf("expected consumed=true")
 		}
-		// Backup should be removed
-		if pl.removeBackupHit[tid.String()] == 0 {
-			t.Fatalf("expected RemoveBackup to be called")
+		// Priority log should be removed
+		if pl.removedHit[tid.String()] == 0 {
+			t.Fatalf("expected Remove to be called")
 		}
 	})
 
@@ -248,7 +248,7 @@ func Test_TransactionLogger_DoPriorityRollbacks_Cases(t *testing.T) {
 		}
 	})
 
-	t.Run("remove_error_continue", func(t *testing.T) {
+	t.Run("remove_error_returns_error", func(t *testing.T) {
 		redis := mocks.NewMockClient()
 		reg := mocks.NewMockRegistry(false)
 		tx := &Transaction{l2Cache: redis, registry: reg}
@@ -260,11 +260,11 @@ func Test_TransactionLogger_DoPriorityRollbacks_Cases(t *testing.T) {
 		pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: tid, Value: makePayload("rt", "bt", []sop.Handle{mkHandle(lid, 1)})}}, removeErr: map[string]error{tid.String(): fmt.Errorf("rm err")}}
 		tl := newTransactionLogger(stubTLog{pl: pl}, true)
 		consumed, err := tl.doPriorityRollbacks(ctx, tx)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
+		if err == nil {
+			t.Fatalf("expected error from Remove to be returned")
 		}
-		if !consumed {
-			t.Fatalf("expected consumed=true due to batch present")
+		if consumed {
+			t.Fatalf("expected consumed=false when Remove returns error")
 		}
 	})
 

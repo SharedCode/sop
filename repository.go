@@ -86,11 +86,6 @@ type TransactionPriorityLog interface {
 
 	// LogCommitChanges writes a special commit-change log used during drive reinstate for replication.
 	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
-
-	// WriteBackup writes a backup copy of the priority log payload.
-	WriteBackup(ctx context.Context, tid UUID, payload []byte) error
-	// RemoveBackup deletes the backup file for the transaction.
-	RemoveBackup(ctx context.Context, tid UUID) error
 }
 
 // TransactionLog persists transaction steps and provides job-distribution accessors for cleanup tasks.

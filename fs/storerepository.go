@@ -450,7 +450,9 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 		// Persist store info into a JSON text file.
 		ba, err := encoding.Marshal(stores[i])
 		if err != nil {
-			// For now, 'just log if store marshal fails, it is not supposed to happen.
+			// Handle store marshal failures, it is not supposed to happen.
+			// passive-side write failed: mark replication as failed to stop further passive writes
+			sr.replicationTracker.handleFailedToReplicate(ctx)
 			return fmt.Errorf("storeRepository.Replicate failed, error Marshal of store '%s', details: %w", stores[i].Name, err)
 		}
 		// When store is being written and it failed, we need to handle whether to turn off writing to the replication's passive destination
@@ -458,7 +460,9 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 		// to resume.
 		filename := sr.replicationTracker.formatPassiveFolderEntity(fmt.Sprintf("%s%c%s", stores[i].Name, os.PathSeparator, storeInfoFilename))
 		if err := fio.WriteFile(ctx, filename, ba, permission); err != nil {
-			return fmt.Errorf("storeRepository.Replicate failed, error writing store '%s', details: %w", filename, err)
+			// passive-side write failed: mark replication as failed to stop further passive writes
+			sr.replicationTracker.handleFailedToReplicate(ctx)
+			return err
 		}
 	}
 

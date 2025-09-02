@@ -244,22 +244,15 @@ func TestFileIOWithReplication_Replicate_PassiveWriteError(t *testing.T) {
 	}
 }
 
-// Covers priorityLog RemoveBackup when file is absent (early return) and WriteBackup best-effort.
-func TestPriorityLog_RemoveBackupAbsentAndWriteBackup(t *testing.T) {
+// Backup APIs removed: ensure PriorityLog basic Remove on non-existent is harmless.
+func TestPriorityLog_Remove_NonExistent_NoError(t *testing.T) {
 	ctx := context.Background()
 	rt, _ := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, true, mocks.NewMockClient())
 	tl := NewTransactionLog(mocks.NewMockClient(), rt)
 	pl := tl.PriorityLog()
 	tid := sop.NewUUID()
-	// RemoveBackup before writing backup (no file) -> no error path.
-	if err := pl.RemoveBackup(ctx, tid); err != nil {
-		t.Fatalf("RemoveBackup absent: %v", err)
-	}
-	if err := pl.WriteBackup(ctx, tid, []byte("[]")); err != nil {
-		t.Fatalf("WriteBackup: %v", err)
-	}
-	if err := pl.RemoveBackup(ctx, tid); err != nil {
-		t.Fatalf("RemoveBackup present: %v", err)
+	if err := pl.Remove(ctx, tid); err != nil {
+		t.Fatalf("Remove non-existent: %v", err)
 	}
 }
 
@@ -313,7 +306,7 @@ func TestBlobStoreWithEC_GlobalFallbackAdd(t *testing.T) {
 	}
 }
 
-// Covers priorityLog full lifecycle: IsEnabled, Add, Get, WriteBackup/RemoveBackup, Remove, LogCommitChanges, Remove non-existent.
+// Covers priorityLog full lifecycle: IsEnabled, Add, Get, Remove, LogCommitChanges, Remove non-existent.
 func TestPriorityLog_FullLifecycle(t *testing.T) {
 	ctx := context.Background()
 	// Preserve and restore global replication details to avoid cross-test interference.
@@ -351,13 +344,7 @@ func TestPriorityLog_FullLifecycle(t *testing.T) {
 	if err := pl.LogCommitChanges(ctx, nil, nil, nil, nil, nil); err != nil {
 		t.Fatalf("LogCommitChanges: %v", err)
 	}
-	// Write & Remove backup.
-	if err := pl.WriteBackup(ctx, tid, payload); err != nil {
-		t.Fatalf("WriteBackup: %v", err)
-	}
-	if err := pl.RemoveBackup(ctx, tid); err != nil {
-		t.Fatalf("RemoveBackup: %v", err)
-	}
+	// Backup APIs removed; ensure Remove works whether file exists or not.
 	// Remove existing log.
 	if err := pl.Remove(ctx, tid); err != nil {
 		t.Fatalf("Remove existing: %v", err)

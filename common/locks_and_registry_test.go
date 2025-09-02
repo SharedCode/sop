@@ -41,10 +41,9 @@ func (s *stubPriorityLog2) GetBatch(ctx context.Context, batchSize int) ([]sop.K
 func (s *stubPriorityLog2) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (s *stubPriorityLog2) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
-	return nil
-}
-func (s *stubPriorityLog2) RemoveBackup(ctx context.Context, tid sop.UUID) error { return nil }
+
+// Backup methods removed from interface; no-op methods deleted.
+// Removed backup methods
 
 // stubTLog2 returns our stubPriorityLog2
 type stubTLog2 struct{ pl *stubPriorityLog2 }

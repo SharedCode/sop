@@ -425,10 +425,6 @@ func (prioRemoveWarn) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyVal
 func (prioRemoveWarn) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (prioRemoveWarn) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
-	return nil
-}
-func (prioRemoveWarn) RemoveBackup(ctx context.Context, tid sop.UUID) error { return nil }
 
 // wrapTLAddErr implements sop.TransactionLog with Add error and PriorityLog warn-on-remove.
 type wrapTLAddErr struct{ tlAddErr }
@@ -837,7 +833,7 @@ func Test_Transaction_Cleanup_LogError_DeleteTrackedItemsValues(t *testing.T) {
 	}
 }
 
-func Test_TransactionLogger_DoPriorityRollbacks_RemoveError_Skips(t *testing.T) {
+func Test_TransactionLogger_DoPriorityRollbacks_RemoveError_Propagates_Alt(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
 	reg := mocks.NewMockRegistry(false)
@@ -852,13 +848,13 @@ func Test_TransactionLogger_DoPriorityRollbacks_RemoveError_Skips(t *testing.T) 
 	tl := newTransactionLogger(stubTLog{pl: pl}, true)
 
 	consumed, err := tl.doPriorityRollbacks(ctx, tx)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected error when Remove fails")
 	}
-	if !consumed {
-		t.Fatalf("expected consumed=true for non-empty batch")
+	if consumed {
+		t.Fatalf("expected consumed=false when error occurs")
 	}
-	if pl.removeBackupHit[tid.String()] == 0 {
-		t.Fatalf("expected RemoveBackup called when Remove errors")
+	if pl.removedHit[tid.String()] == 0 {
+		t.Fatalf("expected Remove attempted when Remove errors")
 	}
 }

@@ -13,7 +13,6 @@ import (
 
 const (
 	priorityLogFileExtension       = ".plg"
-	priorityLogBackupFileExtension = ".plb"
 	priorityLogMinAgeInMin         = 5
 )
 
@@ -121,27 +120,10 @@ func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 
 // Remove deletes the priority log for a transaction, if present.
 func (l priorityLog) Remove(ctx context.Context, tid sop.UUID) error {
-	fio := newFileIO(sop.FileIOErrorFailoverQualified)
+	fio := NewFileIO()
 	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogFileExtension))
 	if fio.Exists(ctx, filename) {
 		return fio.Remove(ctx, filename)
 	}
-	return nil
-}
-
-// WriteBackup writes a backup copy of the priority log payload.
-// Similar to Add, this ignores errors (best-effort) and returns nil.
-func (l priorityLog) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
-	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogBackupFileExtension))
-	fio := NewFileIO()
-	fio.WriteFile(ctx, filename, payload, permission)
-	return nil
-}
-
-// RemoveBackup deletes the backup copy of the priority log payload.
-func (l priorityLog) RemoveBackup(ctx context.Context, tid sop.UUID) error {
-	filename := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s%s", logFolder, os.PathSeparator, tid.String(), priorityLogBackupFileExtension))
-	fio := NewFileIO()
-	fio.Remove(ctx, filename)
 	return nil
 }

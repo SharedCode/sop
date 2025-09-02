@@ -516,7 +516,7 @@ func (t *Transaction) onIdle(ctx context.Context) {
 				if t.HandleReplicationRelatedError != nil {
 					t.HandleReplicationRelatedError(ctx, err, nil, true)
 				}
-				priorityLogFound = false
+				priorityLogFound = found
 			} else {
 				priorityLogFound = found
 			}

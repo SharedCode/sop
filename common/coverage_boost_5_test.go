@@ -225,8 +225,6 @@ func (r *recPrioLog2) GetBatch(context.Context, int) ([]sop.KeyValuePair[sop.UUI
 func (r *recPrioLog2) LogCommitChanges(context.Context, []sop.StoreInfo, []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (r *recPrioLog2) WriteBackup(context.Context, sop.UUID, []byte) error { return nil }
-func (r *recPrioLog2) RemoveBackup(context.Context, sop.UUID) error        { return nil }
 
 // TransactionLog wrapper that returns our recPrioLog2.
 type tlWithPL2 struct{ pl sop.TransactionPriorityLog }
@@ -450,9 +448,7 @@ func Test_HandleRegistrySectorLockTimeout_PriorityRollbackError_ReturnsOriginal(
 	}
 }
 
-// Covers doPriorityRollbacks iterating over a multi-entry batch where the first succeeds
-// and the second hits WriteBackup error and is skipped. Ensures per-entry handling, not
-// just single-element behavior.
+// Covers doPriorityRollbacks iterating over a multi-entry batch where both entries are processed.
 func Test_TransactionLogger_DoPriorityRollbacks_MultiEntry_MixedOutcomes(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
@@ -469,11 +465,11 @@ func Test_TransactionLogger_DoPriorityRollbacks_MultiEntry_MixedOutcomes(t *test
 	_ = reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid1)}}})
 	_ = reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid2)}}})
 
-	// Batch: first will succeed; second will fail at WriteBackup
+	// Batch: two entries
 	pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{
 		{Key: tid1, Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", BlobTable: "bt", IDs: []sop.Handle{sop.NewHandle(lid1)}}}},
 		{Key: tid2, Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", BlobTable: "bt", IDs: []sop.Handle{sop.NewHandle(lid2)}}}},
-	}, writeBackupErr: map[string]error{tid2.String(): context.DeadlineExceeded}}
+	}, removeErr: map[string]error{tid2.String(): errors.New("rm fail")}}
 
 	tl := newTransactionLogger(stubTLog{pl: pl}, true)
 
@@ -483,19 +479,16 @@ func Test_TransactionLogger_DoPriorityRollbacks_MultiEntry_MixedOutcomes(t *test
 	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey("Prbs")})
 
 	consumed, err := tl.doPriorityRollbacks(ctx, tx)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
+	if err == nil {
+		t.Fatalf("expected error from Remove to be returned")
 	}
-	if !consumed {
-		t.Fatalf("expected consumed=true with non-empty batch")
+	if consumed {
+		t.Fatalf("expected consumed=false when Remove errors")
 	}
 
-	// RemoveBackup should be called for tid1 (success path), not for tid2 (write backup error)
-	if pl.removeBackupHit[tid1.String()] == 0 {
-		t.Fatalf("expected RemoveBackup called for tid1")
-	}
-	if pl.removeBackupHit[tid2.String()] != 0 {
-		t.Fatalf("expected no RemoveBackup for tid2 with write-backup error")
+	// Remove should be attempted for both tids
+	if pl.removedHit[tid1.String()] == 0 || pl.removedHit[tid2.String()] == 0 {
+		t.Fatalf("expected Remove attempted for both tids")
 	}
 }
 

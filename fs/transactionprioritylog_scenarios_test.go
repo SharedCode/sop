@@ -63,14 +63,6 @@ func TestTransactionAndPriorityLog_Scenarios(t *testing.T) {
 		t.Fatalf("Priority Get mismatch: %+v err=%v", got, err)
 	}
 
-	// WriteBackup / RemoveBackup
-	if err := pl.WriteBackup(ctx, tid1, ba1); err != nil {
-		t.Fatalf("Priority WriteBackup: %v", err)
-	}
-	if err := pl.RemoveBackup(ctx, tid1); err != nil {
-		t.Fatalf("Priority RemoveBackup: %v", err)
-	}
-
 	// Remove existing then again (graceful)
 	if err := pl.Remove(ctx, tid1); err != nil {
 		t.Fatalf("Priority Remove: %v", err)
@@ -511,17 +503,7 @@ func TestPriorityLog_BasicGetRemovePaths_Merged(t *testing.T) {
 	if err := pl.Remove(ctx, tid); err != nil {
 		t.Fatalf("remove absent: %v", err)
 	}
-	payload := []byte(`[{}]`)
-	if err := pl.WriteBackup(ctx, tid, payload); err != nil {
-		t.Fatalf("write backup: %v", err)
-	}
-	backupFile := rt.formatActiveFolderEntity(filepath.Join(logFolder, tid.String()+priorityLogBackupFileExtension))
-	if _, err := os.Stat(backupFile); err != nil {
-		t.Fatalf("expected backup file: %v", err)
-	}
-	if err := pl.RemoveBackup(ctx, tid); err != nil {
-		t.Fatalf("remove backup: %v", err)
-	}
+	// Removed unused variable payload
 }
 
 func TestTransactionLog_RemoveClosesFile_Merged(t *testing.T) {

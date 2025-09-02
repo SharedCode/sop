@@ -116,20 +116,13 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 		defer t.l2Cache.Unlock(ctx, lk)
 		start := sop.Now()
 
-		v, gerr := tl.PriorityLog().GetBatch(ctx, 20)
+		v, err := tl.PriorityLog().GetBatch(ctx, 20)
+		if len(v) == 0 || err != nil {
+			return false, err
+		}
 		for i := range v {
 			tid := v[i].Key
 			uhAndrh := v[i].Value
-
-			if err := tl.PriorityLog().WriteBackup(ctx, tid, toByteArray(uhAndrh)); err != nil {
-				log.Warn(fmt.Sprintf("unable to write a priority log backup file for %s, skip priority log rollback", tid.String()))
-				continue
-			}
-			if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
-				log.Info(fmt.Sprintf("priority log file failed to remove (potentially live transaction running too long) for transaction %s, details: %v", tid.String(), err))
-				tl.PriorityLog().RemoveBackup(ctx, tid)
-				continue
-			}
 
 			var lks []*sop.LockKey
 			var err error
@@ -178,16 +171,18 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 				log.Info(fmt.Sprintf("restoring a priority log for transaction %s occurred", tid.String()))
 			}
 
-			// Remove the backup file as we succeeded in registry file sector restore.
-			tl.PriorityLog().RemoveBackup(ctx, tid)
+			// Remove the priority log file as we succeeded in registry file sector restore.
+			if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
+				return false, err
+			}
 
 			// Loop through & consume entire batch or until timeout if busy.
 			if err := sop.TimedOut(ctx, "doPriorityRollbacks", start, maxDuration); err != nil {
-				return true, gerr
+				return true, err
 			}
 		}
 
-		return len(v) > 0, gerr
+		return true, nil
 	}
 	return false, nil
 }

@@ -676,6 +676,10 @@ func Test_StoreRepository_Replicate_Marshal_Error(t *testing.T) {
 
 	a := t.TempDir()
 	b := t.TempDir()
+	// Ensure global replication state doesn't short-circuit Replicate due to prior tests.
+	prevGlob := GlobalReplicationDetails
+	GlobalReplicationDetails = &ReplicationTrackedDetails{}
+	t.Cleanup(func() { GlobalReplicationDetails = prevGlob })
 	rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, cache)
 
 	sr, err := NewStoreRepository(ctx, rt, nil, cache, 0)

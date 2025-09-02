@@ -70,10 +70,6 @@ func (p prioLogRemoveErr) GetBatch(ctx context.Context, batchSize int) ([]sop.Ke
 func (p prioLogRemoveErr) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (p prioLogRemoveErr) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
-	return nil
-}
-func (p prioLogRemoveErr) RemoveBackup(ctx context.Context, tid sop.UUID) error { return nil }
 
 // wrapTLPrioRemoveErr delegates to inner TransactionLog but returns prioLogRemoveErr for PriorityLog.
 type wrapTLPrioRemoveErr struct{ inner *mocks.MockTransactionLog }
@@ -585,8 +581,8 @@ func Test_TransactionLogger_Rollback_FinalizeWithTrackedValuesOnly(t *testing.T)
 	}
 }
 
-// Covers doPriorityRollbacks path when Remove returns error: it should call RemoveBackup and continue.
-func Test_TransactionLogger_DoPriorityRollbacks_RemoveError_CallsRemoveBackup(t *testing.T) {
+// Covers doPriorityRollbacks path when Remove returns error: error is returned and consumed=false.
+func Test_TransactionLogger_DoPriorityRollbacks_RemoveError_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
 	reg := mocks.NewMockRegistry(false)
@@ -608,14 +604,11 @@ func Test_TransactionLogger_DoPriorityRollbacks_RemoveError_CallsRemoveBackup(t 
 	tl := newTransactionLogger(stubTLog{pl: pl}, true)
 
 	consumed, err := tl.doPriorityRollbacks(ctx, tx)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
+	if err == nil {
+		t.Fatalf("expected Remove error to be returned")
 	}
-	if !consumed {
-		t.Fatalf("expected consumed=true")
-	}
-	if pl.removeBackupHit[tid.String()] == 0 {
-		t.Fatalf("expected RemoveBackup to be called when Remove errors")
+	if consumed {
+		t.Fatalf("expected consumed=false on Remove error")
 	}
 }
 
@@ -892,53 +885,4 @@ func Test_Transaction_Cleanup_Succeeds_ExecutesAllSteps(t *testing.T) {
 	}
 }
 
-// Priority log that fails WriteBackup to cover early continue path in doPriorityRollbacks.
-type plWriteBackupErr struct{}
-
-func (p plWriteBackupErr) IsEnabled() bool                                             { return true }
-func (p plWriteBackupErr) Add(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
-func (p plWriteBackupErr) Remove(ctx context.Context, tid sop.UUID) error              { return nil }
-func (p plWriteBackupErr) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
-	return nil, nil
-}
-func (p plWriteBackupErr) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
-	return []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: sop.NewUUID(), Value: nil}}, nil
-}
-func (p plWriteBackupErr) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
-	return nil
-}
-func (p plWriteBackupErr) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
-	return errors.New("wb err")
-}
-func (p plWriteBackupErr) RemoveBackup(ctx context.Context, tid sop.UUID) error { return nil }
-
-// transactionLog that returns the above priority log.
-type tlogWithWBErr struct{}
-
-func (t tlogWithWBErr) PriorityLog() sop.TransactionPriorityLog { return plWriteBackupErr{} }
-func (t tlogWithWBErr) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
-	return nil
-}
-func (t tlogWithWBErr) Remove(ctx context.Context, tid sop.UUID) error { return nil }
-func (t tlogWithWBErr) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
-	return sop.NilUUID, "", nil, nil
-}
-func (t tlogWithWBErr) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
-	return sop.NilUUID, nil, nil
-}
-func (t tlogWithWBErr) NewUUID() sop.UUID { return sop.NewUUID() }
-
-func Test_TransactionLogger_DoPriorityRollbacks_WriteBackupError_Continues(t *testing.T) {
-	ctx := context.Background()
-	l2 := mocks.NewMockClient()
-	tx := &Transaction{l2Cache: l2}
-	tl := newTransactionLogger(tlogWithWBErr{}, true)
-
-	ok, err := tl.doPriorityRollbacks(ctx, tx)
-	if err != nil {
-		t.Fatalf("doPriorityRollbacks unexpected err: %v", err)
-	}
-	if !ok {
-		t.Fatalf("expected ok=true when batch is non-empty even if WriteBackup fails")
-	}
-}
+// Backup APIs removed: drop WriteBackup error scenario; keep doPriorityRollbacks exercised elsewhere.
