@@ -513,7 +513,7 @@ func (t *Transaction) onIdle(ctx context.Context) {
 
 	// Allow only one priority rollback processor.
 	// Check every 5 minutes if there are any pending rollbacks that "aged" (5min or older).
-	priorityInterval := fs.LockFileRegionDuration + (2 + time.Minute)
+	priorityInterval := fs.LockFileRegionDuration + (2 * time.Minute)
 	if priorityLogFound {
 		priorityInterval = time.Duration(30*time.Second)
 	}
