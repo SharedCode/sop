@@ -49,25 +49,69 @@ func (dio directIO) Open(ctx context.Context, filename string, flag int, permiss
 // WriteAt writes a block at an aligned offset, retrying transient errors via SOP's retry helper.
 // The caller is responsible for providing an aligned buffer (e.g., via directio.AlignedBlock).
 func (dio directIO) WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
-	var i int
-	err := retryIO(ctx, func(context.Context) error {
-		var e error
-		i, e = file.WriteAt(block, offset)
-		return e
+	var n int
+	// Use retryIO to retain transient error handling, but perform the actual
+	// write in a worker goroutine and respect ctx for a soft timeout.
+	err := retryIO(ctx, func(ctx context.Context) error {
+		// Fast-path: if context already cancelled, abort without starting work.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		done := make(chan struct{})
+		var werr error
+		var wn int
+
+		go func() {
+			wn, werr = file.WriteAt(block, offset)
+			close(done)
+		}()
+
+		select {
+		case <-ctx.Done():
+			// Soft-timeout: return the context error; the in-flight write may
+			// still complete in the background. Do not mark as retryable here.
+			return ctx.Err()
+		case <-done:
+			n = wn
+			return werr
+		}
 	}, sop.FileIOErrorFailoverQualified)
-	return i, err
+	return n, err
 }
 
 // ReadAt reads a block at an aligned offset, retrying transient errors via SOP's retry helper.
 // The caller is responsible for providing an aligned buffer (e.g., via directio.AlignedBlock).
 func (dio directIO) ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
-	var i int
-	err := retryIO(ctx, func(context.Context) error {
-		var e error
-		i, e = file.ReadAt(block, offset)
-		return e
+	var n int
+	err := retryIO(ctx, func(ctx context.Context) error {
+		// Honor context before starting.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		done := make(chan struct{})
+		var rerr error
+		var rn int
+
+		go func() {
+			rn, rerr = file.ReadAt(block, offset)
+			close(done)
+		}()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-done:
+			n = rn
+			return rerr
+		}
 	}, sop.FileIOErrorFailoverQualified)
-	return i, err
+	return n, err
 }
 
 func (dio directIO) Close(file *os.File) error {

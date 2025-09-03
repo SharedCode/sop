@@ -13,7 +13,6 @@ import (
 
 const (
 	priorityLogFileExtension = ".plg"
-	priorityLogMinAgeInMin   = 5
 	// regionSignalFolder is where per-sector claim markers are written.
 	// Kept separate from priority log folder to avoid interfering with batching logic.
 	regionSignalFolder = "regionsignals"
@@ -69,7 +68,7 @@ func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPaylo
 // priorityLogMinAgeInMin from the current hour (capped to the hour).
 func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
-	cappedHour := mh.Add(-time.Duration(priorityLogMinAgeInMin * time.Minute))
+	cappedHour := mh.Add(-time.Duration(LockFileRegionDuration + (2 + time.Minute)))
 	ignoreAge := false
 	if v := ctx.Value(sop.ContextPriorityLogIgnoreAge); v != nil {
 		if b, ok := v.(bool); ok && b {

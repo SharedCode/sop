@@ -47,7 +47,6 @@ const (
 	// Growing the file needs more time to complete.
 	lockPreallocateFileTimeout = time.Duration(20 * time.Minute)
 	lockFileRegionKeyPrefix    = "infs"
-	lockFileRegionDuration     = time.Duration(5 * time.Minute)
 	idNotFoundErr              = "unable to find the item with id"
 
 	registryFileExtension = ".reg"
@@ -62,6 +61,34 @@ const (
 	// 750k, should generate 3GB file segment.  Formula: 750k X 4096 = 3GB
 	MaximumModValue = 750000
 )
+
+// Configurable lock TTL and slack for file-region operations.
+// Defaults retain previous behavior: 5m TTL and ~2% slack (min 2s).
+var (
+	LockFileRegionDuration   = time.Duration(5 * time.Minute)
+	LockDeadlineSlackPercent = 0.02
+)
+
+// SetLockFileRegionDuration updates the TTL for per-block file region locks.
+// Non-positive values are ignored.
+func SetLockFileRegionDuration(d time.Duration) {
+	if d > 0 {
+		LockFileRegionDuration = d
+	}
+}
+
+// SetLockDeadlineSlackPercent sets the fraction of the TTL to reserve as slack
+// when computing I/O deadlines (0 <= p < 1). Values outside range are clamped.
+// A minimum of 2s is applied when deriving deadlines.
+func SetLockDeadlineSlackPercent(p float64) {
+	if p < 0 {
+		p = 0
+	}
+	if p >= 1 {
+		p = 0.5
+	}
+	LockDeadlineSlackPercent = p
+}
 
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
 func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache) *hashmap {

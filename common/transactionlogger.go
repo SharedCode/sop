@@ -49,6 +49,7 @@ const (
 	// coordinatorLockName is the global coordinator lock used to serialize
 	// priority rollbacks across the cluster.
 	coordinatorLockName = "Prbs"
+	maxPriorityRollbacksDuration = 20 * time.Minute
 )
 
 // Instantiate a transaction logger.
@@ -110,7 +111,6 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 
 func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) (bool, error) {
 	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey(coordinatorLockName)})
-	const maxDuration = 5 * time.Minute
 	// When restart-triggered, ctx may contain the flag to ignore age. In that mode we
 	// will process multiple batches; if not the winner, we pause and poll until the
 	// coordinator lock is released.
@@ -121,11 +121,11 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 		}
 	}
 
-	ok1, _, _ := t.l2Cache.Lock(ctx, maxDuration, lk)
+	ok1, _, _ := t.l2Cache.Lock(ctx, maxPriorityRollbacksDuration, lk)
 	ok2, _ := t.l2Cache.IsLocked(ctx, lk)
 	if !ok1 || !ok2 {
 		if ignoreAge {
-			if err := tl.waitForCoordinatorRelease(ctx, t, coordinatorLockName, maxDuration); err != nil {
+			if err := tl.waitForCoordinatorRelease(ctx, t, coordinatorLockName, maxPriorityRollbacksDuration); err != nil {
 				return false, err
 			}
 		}
@@ -206,7 +206,7 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 			}
 
 			// Loop through & consume entire batch or until timeout if busy.
-			if err := sop.TimedOut(ctx, "doPriorityRollbacks", start, maxDuration); err != nil {
+			if err := sop.TimedOut(ctx, "doPriorityRollbacks", start, maxPriorityRollbacksDuration); err != nil {
 				return true, err
 			}
 		}

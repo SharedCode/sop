@@ -9,6 +9,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/inmemory"
 )
 
@@ -486,7 +487,7 @@ var lastOnIdleRunTime int64
 var locker = sync.Mutex{}
 
 var lastPriorityOnIdleTime int64
-var prioritylocker = sync.Mutex{}
+var priorityLocker = sync.Mutex{}
 var priorityLogFound bool
 
 func (t *Transaction) onIdle(ctx context.Context) {
@@ -512,19 +513,19 @@ func (t *Transaction) onIdle(ctx context.Context) {
 
 	// Allow only one priority rollback processor.
 	// Check every 5 minutes if there are any pending rollbacks that "aged" (5min or older).
-	interval := 300
+	priorityInterval := fs.LockFileRegionDuration + (2 + time.Minute)
 	if priorityLogFound {
-		interval = 5
+		priorityInterval = time.Duration(30*time.Second)
 	}
-	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Second).UnixMilli()
+	nextRunTime := sop.Now().Add(-priorityInterval).UnixMilli()
 	if t.logger.PriorityLog().IsEnabled() && lastPriorityOnIdleTime < nextRunTime {
 		runTime := false
-		prioritylocker.Lock()
+		priorityLocker.Lock()
 		if lastPriorityOnIdleTime < nextRunTime {
 			lastPriorityOnIdleTime = sop.Now().UnixMilli()
 			runTime = true
 		}
-		prioritylocker.Unlock()
+		priorityLocker.Unlock()
 		if runTime {
 			if found, err := t.logger.doPriorityRollbacks(ctx, t); err != nil {
 				// Trigger a failover if a handler is registered; otherwise, just log path state.
@@ -541,7 +542,7 @@ func (t *Transaction) onIdle(ctx context.Context) {
 	// If it is known that there is nothing to clean up then do 4hr interval polling,
 	// otherwise do shorter interval of 5 minutes, to allow faster cleanup.
 	// Having "abandoned" commit is a very rare occurrence.
-	interval = 4 * 60
+	interval := 4 * 60
 	if hourBeingProcessed != "" {
 		interval = 5
 	}

@@ -117,7 +117,8 @@ func TestTransactionAndPriorityLog_Scenarios(t *testing.T) {
 		t.Fatalf("write new: %v", err)
 	}
 	nowHour, _ := time.Parse(DateHourLayout, time.Now().Format(DateHourLayout))
-	past := nowHour.Add(-time.Duration((priorityLogMinAgeInMin + 10) * time.Minute))
+	// Age the file beyond the batching threshold: lock TTL plus an extra 10 minutes buffer.
+	past := nowHour.Add(-(LockFileRegionDuration + 10*time.Minute))
 	if err := os.Chtimes(oldFile, past, past); err != nil {
 		t.Fatalf("chtimes old: %v", err)
 	}

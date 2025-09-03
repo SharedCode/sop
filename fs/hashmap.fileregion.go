@@ -17,6 +17,43 @@ import (
 
 var zeroSector = bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)
 
+// deriveLockAlignedContext returns a child context with a deadline that does not exceed
+// the lockFileRegionDuration minus a slack percentage (with a small minimum). If the
+// parent already has a sooner deadline, the sooner deadline is kept. This provides a soft
+// timeout for I/O so calls return before the lock expires, without attempting to cancel
+// the underlying kernel I/O.
+func deriveLockAlignedContext(parent context.Context) (context.Context, context.CancelFunc) {
+	// Compute desired relative timeout using a percentage slack with a small minimum.
+	slack := time.Duration(float64(LockFileRegionDuration) * LockDeadlineSlackPercent)
+	if slack < 2*time.Second {
+		slack = 2 * time.Second
+	}
+	lockBudget := LockFileRegionDuration - slack
+	if lockBudget <= 0 {
+		lockBudget = LockFileRegionDuration / 2
+		if lockBudget <= 0 {
+			lockBudget = 5 * time.Second
+		}
+	}
+	// If parent has a deadline earlier than now+lockBudget, honor that.
+	if dl, ok := parent.Deadline(); ok {
+		parentBudget := time.Until(dl)
+		// Pick the smaller of parentBudget and lockBudget.
+		if parentBudget < lockBudget {
+			lockBudget = parentBudget
+		}
+		if lockBudget <= 0 {
+			// Parent already expired or insufficient budget; return an already-cancelled context
+			// to ensure callers notice immediately.
+			cctx, cancel := context.WithCancel(parent)
+			cancel()
+			return cctx, func() {}
+		}
+		return context.WithTimeout(parent, lockBudget)
+	}
+	return context.WithTimeout(parent, lockBudget)
+}
+
 // updateFileRegion marshals each handle and writes it into the correct position within its block.
 func (hm *hashmap) updateFileRegion(ctx context.Context, fileRegionDetails []fileRegionDetails) error {
 	m := encoding.NewHandleMarshaler()
@@ -64,7 +101,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 		if ok {
 			break
 		}
-		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, lockFileRegionDuration+(1*time.Minute)); err != nil {
+		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, LockFileRegionDuration+(1*time.Minute)); err != nil {
 			// If the context is canceled or the operation's context deadline was exceeded, return the raw error
 			// so callers treat it as a normal timeout/cancellation and NOT a failover trigger.
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -86,8 +123,12 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 
 	alignedBuffer := dio.createAlignedBlock()
 
+	// Derive a single deadline aligned to the lock TTL and use it for both read and write.
+	opCtx, opCancel := deriveLockAlignedContext(ctx)
+	defer opCancel()
+
 	// Read the block file region data.
-	if n, err := dio.readAt(ctx, alignedBuffer, blockOffset); n != blockSize || err != nil {
+	if n, err := dio.readAt(opCtx, alignedBuffer, blockOffset); n != blockSize || err != nil {
 		hm.unlockFileBlockRegion(ctx, lk)
 		if err == nil {
 			return fmt.Errorf("only partially (n=%d) read the block at offset %v", n, blockOffset)
@@ -98,7 +139,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 	// Merge the updated Handle record w/ the read block file region data.
 	copy(alignedBuffer[handleInBlockOffset:handleInBlockOffset+sop.HandleSizeInBytes], handleData)
 	// Update the block file region with merged data.
-	if n, err := dio.writeAt(ctx, alignedBuffer, blockOffset); n != blockSize || err != nil {
+	if n, err := dio.writeAt(opCtx, alignedBuffer, blockOffset); n != blockSize || err != nil {
 		hm.unlockFileBlockRegion(ctx, lk)
 		if err == nil {
 			return fmt.Errorf("only partially (n=%d) wrote at block offset %v, data: %v", n, blockOffset, handleData)
@@ -122,7 +163,7 @@ func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *fileDirectIO, o
 			Second: tid,
 		},
 	})
-	ok, uuid, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
+	ok, uuid, err := hm.cache.Lock(ctx, LockFileRegionDuration, lk)
 	if err == nil && ok {
 		// Confirm lock ownership, then write a per-sector claim marker to the file system.
 		if isLocked, ierr := hm.cache.IsLocked(ctx, []*sop.LockKey{lk[0]}); ierr == nil && isLocked {
