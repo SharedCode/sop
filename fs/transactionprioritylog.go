@@ -145,31 +145,21 @@ func (l priorityLog) RegistrySectorClaimExists(ctx context.Context, modFileNumbe
 
 // WriteRegistrySectorClaim writes a small per-sector claim marker file with empty content (fast/light).
 // The file is named r[modFileNumber][modFileSectorNumber].plg and stored under regionSignalFolder.
+// Implementation uses O_CREAT|O_EXCL to atomically create the marker; if it already exists, EEXIST is returned.
 func (l priorityLog) WriteRegistrySectorClaim(ctx context.Context, modFileNumber int, modFileSectorNumber int, _ sop.UUID) error {
 	base := l.replicationTracker.formatActiveFolderEntity(regionSignalFolder)
 	fio := NewFileIO()
 	_ = fio.MkdirAll(ctx, base, permission)
 	target := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegistrySectorClaimName(modFileNumber, modFileSectorNumber)))
-	// Use a temp file + hard link to atomically publish the marker without overwriting an existing one.
-	// 1) Create a unique temp file.
-	tmp := fmt.Sprintf("%s.tmp.%d", target, time.Now().UnixNano())
-	tf, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, permission)
+	// Atomically create the marker file; fails with EEXIST if already present.
+	f, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, permission)
 	if err != nil {
-		return err
-	}
-	_ = tf.Close()
-	// 2) Atomically link temp to target; fails with EEXIST if target already present.
-	if err := os.Link(tmp, target); err != nil {
-		// Cleanup the temp file; report existence as a win by someone else.
-		_ = os.Remove(tmp)
-		// If the target already exists, signal caller to treat as not-acquired.
 		if os.IsExist(err) {
 			return os.ErrExist
 		}
 		return err
 	}
-	// 3) Remove temp file, leaving the target link.
-	_ = os.Remove(tmp)
+	_ = f.Close()
 	return nil
 }
 
