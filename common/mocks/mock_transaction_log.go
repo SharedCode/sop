@@ -150,6 +150,7 @@ func (d dummyPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.Ke
 func (d dummyPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (d dummyPriorityLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // Fetch the transaction logs details given a tranasction ID.
 func (tl *MockTransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {

@@ -14,7 +14,7 @@ import (
 const (
 	priorityLogFileExtension = ".plg"
 	priorityLogMinAgeInMin   = 5
-	// regionSignalFolder is where per-region winner signals are written.
+	// regionSignalFolder is where per-sector claim markers are written.
 	// Kept separate from priority log folder to avoid interfering with batching logic.
 	regionSignalFolder = "regionsignals"
 )
@@ -129,27 +129,27 @@ func (l priorityLog) Remove(ctx context.Context, tid sop.UUID) error {
 	return nil
 }
 
-// formatRegionSignalName builds the filename r[modFileNumber][modFileSectorNumber].plg
+// formatRegistrySectorClaimName builds the filename r[modFileNumber][modFileSectorNumber].plg
 // Example: r12035.plg for modFileNumber=12 and modFileSectorNumber=035.
 // No separators are used to keep the name compact; callers should choose widths to avoid ambiguity if needed.
-func formatRegionSignalName(modFileNumber int, modFileSectorNumber int) string {
+func formatRegistrySectorClaimName(modFileNumber int, modFileSectorNumber int) string {
 	// Zero-padded: 4 digits for file number, 6 digits for sector number (supports up to 9999 files, 999999 sectors).
 	return fmt.Sprintf("r%04d%06d%s", modFileNumber, modFileSectorNumber, priorityLogFileExtension)
 }
 
-// RegionSignalExists checks if the per-region signal marker already exists.
-func (l priorityLog) RegionSignalExists(ctx context.Context, modFileNumber int, modFileSectorNumber int) bool {
-	fn := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegionSignalName(modFileNumber, modFileSectorNumber)))
+// RegistrySectorClaimExists checks if the per-sector claim marker already exists.
+func (l priorityLog) RegistrySectorClaimExists(ctx context.Context, modFileNumber int, modFileSectorNumber int) bool {
+	fn := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegistrySectorClaimName(modFileNumber, modFileSectorNumber)))
 	return NewFileIO().Exists(ctx, fn)
 }
 
-// WriteRegionSignal writes a small per-region signal file with empty content (fast/light).
+// WriteRegistrySectorClaim writes a small per-sector claim marker file with empty content (fast/light).
 // The file is named r[modFileNumber][modFileSectorNumber].plg and stored under regionSignalFolder.
-func (l priorityLog) WriteRegionSignal(ctx context.Context, modFileNumber int, modFileSectorNumber int, _ sop.UUID) error {
+func (l priorityLog) WriteRegistrySectorClaim(ctx context.Context, modFileNumber int, modFileSectorNumber int, _ sop.UUID) error {
 	base := l.replicationTracker.formatActiveFolderEntity(regionSignalFolder)
 	fio := NewFileIO()
 	_ = fio.MkdirAll(ctx, base, permission)
-	target := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegionSignalName(modFileNumber, modFileSectorNumber)))
+	target := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegistrySectorClaimName(modFileNumber, modFileSectorNumber)))
 	// Use a temp file + hard link to atomically publish the marker without overwriting an existing one.
 	// 1) Create a unique temp file.
 	tmp := fmt.Sprintf("%s.tmp.%d", target, time.Now().UnixNano())
@@ -173,12 +173,23 @@ func (l priorityLog) WriteRegionSignal(ctx context.Context, modFileNumber int, m
 	return nil
 }
 
-// RemoveRegionSignal removes the region signal file if present.
-func (l priorityLog) RemoveRegionSignal(ctx context.Context, modFileNumber int, modFileSectorNumber int) error {
-	fn := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegionSignalName(modFileNumber, modFileSectorNumber)))
+// RemoveRegistrySectorClaim removes the per-sector claim marker file if present.
+func (l priorityLog) RemoveRegistrySectorClaim(ctx context.Context, modFileNumber int, modFileSectorNumber int) error {
+	fn := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegistrySectorClaimName(modFileNumber, modFileSectorNumber)))
 	fio := NewFileIO()
 	if fio.Exists(ctx, fn) {
 		return fio.Remove(ctx, fn)
 	}
 	return nil
+}
+
+// ClearRegistrySectorClaims deletes the entire per-sector claim folder tree under the active folder.
+// It is safe to call even if the directory does not exist.
+func (l priorityLog) ClearRegistrySectorClaims(ctx context.Context) error {
+	base := l.replicationTracker.formatActiveFolderEntity(regionSignalFolder)
+	fio := NewFileIO()
+	if !fio.Exists(ctx, base) {
+		return nil
+	}
+	return fio.RemoveAll(ctx, base)
 }

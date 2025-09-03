@@ -569,6 +569,7 @@ func (p *prioLogAddCounter) GetBatch(ctx context.Context, batchSize int) ([]sop.
 func (p *prioLogAddCounter) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (p *prioLogAddCounter) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // tlWithCustomPL injects a custom PriorityLog while delegating to the mock transaction log.
 type tlWithCustomPL struct {

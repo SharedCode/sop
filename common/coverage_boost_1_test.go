@@ -425,6 +425,7 @@ func (prioRemoveWarn) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyVal
 func (prioRemoveWarn) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (prioRemoveWarn) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // wrapTLAddErr implements sop.TransactionLog with Add error and PriorityLog warn-on-remove.
 type wrapTLAddErr struct{ tlAddErr }

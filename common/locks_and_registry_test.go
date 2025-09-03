@@ -41,6 +41,7 @@ func (s *stubPriorityLog2) GetBatch(ctx context.Context, batchSize int) ([]sop.K
 func (s *stubPriorityLog2) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (s *stubPriorityLog2) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // Backup methods removed from interface; no-op methods deleted.
 // Removed backup methods

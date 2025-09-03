@@ -225,6 +225,7 @@ func (r *recPrioLog2) GetBatch(context.Context, int) ([]sop.KeyValuePair[sop.UUI
 func (r *recPrioLog2) LogCommitChanges(context.Context, []sop.StoreInfo, []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (r *recPrioLog2) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // TransactionLog wrapper that returns our recPrioLog2.
 type tlWithPL2 struct{ pl sop.TransactionPriorityLog }

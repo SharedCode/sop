@@ -47,6 +47,7 @@ func (r *recPrioLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 func (r *recPrioLog) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (r *recPrioLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // wrapCache lets us override IsLocked once to simulate transient lock verification failure.
 type wrapCache struct {
@@ -371,6 +372,7 @@ func (w warnPL) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair
 func (w warnPL) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return fmt.Errorf("warn: log commit changes")
 }
+func (w warnPL) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // wrapTL delegates to the mock transaction log but returns a warnPL for PriorityLog.
 type wrapTL struct{ inner *mocks.MockTransactionLog }
@@ -612,6 +614,7 @@ func (p *prioLogBatch) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyVa
 func (p *prioLogBatch) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (p *prioLogBatch) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // Backup APIs removed; count Add/Remove via existing methods.
 

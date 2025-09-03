@@ -48,7 +48,8 @@ func (noOpPrioLog) GetBatch(context.Context, int) ([]sop.KeyValuePair[sop.UUID, 
 func (noOpPrioLog) LogCommitChanges(context.Context, []sop.StoreInfo, []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (t *tlRecorder) PriorityLog() sop.TransactionPriorityLog { return noOpPrioLog{} }
+func (noOpPrioLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
+func (t *tlRecorder) PriorityLog() sop.TransactionPriorityLog        { return noOpPrioLog{} }
 func (t *tlRecorder) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
 	t.added = append(t.added, sop.KeyValuePair[int, []byte]{Key: commitFunction, Value: payload})
 	return nil
@@ -107,6 +108,7 @@ func (s *stubPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.Ke
 func (s *stubPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (s *stubPriorityLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // stubTLog implements sop.TransactionLog and returns our stubPriorityLog.
 type stubTLog struct{ pl *stubPriorityLog }

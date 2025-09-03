@@ -128,25 +128,25 @@ func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *fileDirectIO, o
 	})
 	ok, uuid, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
 	if err == nil && ok {
-		// Confirm lock ownership, then write a per-region signal marker to file system.
+	// Confirm lock ownership, then write a per-sector claim marker to the file system.
 		if isLocked, ierr := hm.cache.IsLocked(ctx, []*sop.LockKey{lk[0]}); ierr == nil && isLocked {
 			modFileNumber := parseSegmentIndex(dio.filename)
 			modFileSectorNumber := int(offset / int64(blockSize))
 			pl := priorityLog{replicationTracker: hm.replicationTracker, tid: tid}
-			if werr := pl.WriteRegionSignal(ctx, modFileNumber, modFileSectorNumber, tid); werr != nil {
+			if werr := pl.WriteRegistrySectorClaim(ctx, modFileNumber, modFileSectorNumber, tid); werr != nil {
 				// If another process already created the marker, consider we lost the race: unlock and return not-acquired.
 				if errors.Is(werr, os.ErrExist) {
 					_ = hm.cache.Unlock(ctx, []*sop.LockKey{lk[0]})
 					return false, sop.NilUUID, lk[0], nil
 				}
-				log.Debug(fmt.Sprintf("failed writing region signal for %s idx=%d sector=%d: %v", dio.filename, modFileNumber, modFileSectorNumber, werr))
+				log.Debug(fmt.Sprintf("failed writing sector claim for %s idx=%d sector=%d: %v", dio.filename, modFileNumber, modFileSectorNumber, werr))
 			}
 		}
 	}
 	return ok, uuid, lk[0], err
 }
 func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, lk *sop.LockKey) error {
-	// Attempt to remove the region signal based on the lock key's metadata before unlocking.
+	// Attempt to remove the sector claim based on the lock key's metadata before unlocking.
 	// Try to parse the lock key into filename and offset to reconstruct the marker name.
 	// Lock key format uses hm.formatLockKey("infs"+filename+offset), so split filename/offset heuristically.
 	// Best-effort: only act when we can derive a valid segment index and sector number.
@@ -155,8 +155,8 @@ func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, lk *sop.LockKey) e
 	if ok {
 		modFileNumber := parseSegmentIndex(fn)
 		modFileSectorNumber := int(off / int64(blockSize))
-		pl := priorityLog{replicationTracker: hm.replicationTracker}
-		_ = pl.RemoveRegionSignal(ctx, modFileNumber, modFileSectorNumber)
+	pl := priorityLog{replicationTracker: hm.replicationTracker}
+	_ = pl.RemoveRegistrySectorClaim(ctx, modFileNumber, modFileSectorNumber)
 	}
 	return hm.cache.Unlock(ctx, []*sop.LockKey{lk})
 }

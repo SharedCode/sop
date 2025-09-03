@@ -70,6 +70,7 @@ func (p prioLogRemoveErr) GetBatch(ctx context.Context, batchSize int) ([]sop.Ke
 func (p prioLogRemoveErr) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (p prioLogRemoveErr) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // wrapTLPrioRemoveErr delegates to inner TransactionLog but returns prioLogRemoveErr for PriorityLog.
 type wrapTLPrioRemoveErr struct{ inner *mocks.MockTransactionLog }

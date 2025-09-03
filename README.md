@@ -18,6 +18,7 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 - SOP for Python (sop4py)
 - Community & support
 - Contributing & license
+ - Coordination model (OOA) and safety
 
 ## Cluster reboot procedure
 When rebooting an entire cluster running applications that use SOP, follow this order to avoid stale locks and ensure clean recovery:
@@ -144,6 +145,42 @@ SOP commits are governed by two bounds:
 The commit ends when the earlier of these two is reached. Internal lock TTLs use maxTime to ensure locks are bounded even if the caller cancels early.
 
 Recommendation: If you want replication/log cleanup to complete under the same budget, set your context deadline to at least maxTime plus a small grace period.
+
+## Coordination model (OOA) and safety
+
+### Coordination model: Redis-assisted, storage-anchored
+
+SOP uses Redis for fast, ephemeral coordination and the filesystem for durable sector claims. Redis locks provide low-latency contention detection; per-sector claim markers on storage enforce exclusive access for CUD operations. This hybrid keeps coordination responsive without coupling correctness to Redis durability.
+
+### Why this is safe (despite Redis tail loss/failover)
+
+- Locks are advisory; correctness is anchored in storage-sector claims and idempotent commit/rollback.
+- On Redis restart, SOP detects it and performs cleanup sweeps (clearing stale sector claims) before resuming.
+- Time-bounded lock TTLs, takeover checks, and rollback paths ensure progress without split-brain.
+- Priority logs and deterministic rollback let workers resume or repair safely after interruptions.
+
+### Operational properties
+
+- Decentralized: no leader or quorum; any node can coordinate on a sector independently.
+- Horizontally scalable: sharded by registry sectors; no global hot spots.
+- No single point of failure: loss of Redis state slows coordination briefly but doesn’t corrupt data.
+- Low latency: lock checks and claim writes are O(1) on hot path; no multi-round consensus.
+
+### When Redis is unavailable
+
+- Writes that need exclusivity will wait/fail fast; storage remains consistent.
+- On recovery, restart sweeps clear stale sector claims; workers resume.
+
+### Comparison to Paxos-style consensus
+
+- SOP avoids global consensus, leader election, and replicated logs—lower coordination latency and cost.
+- Better horizontal scaling for partitioned workloads (per-sector independence).
+- No SPOF in the coordination layer; failover is trivial and stateless.
+- If you need a globally ordered, cross-region commit log, consensus is still the right tool; SOP targets high-throughput, partition-aligned coordination. But then again, SOP is not a coordination engine, it is a storage engine. Its internal piece for coordination is what was described here.
+
+### TL;DR
+
+SOP builds a fast, decentralized coordination layer using Redis only for ephemeral locks and relies on storage-anchored sector claims for correctness. It scales out naturally and avoids consensus overhead while remaining safe under failover.
 
 ## Community & support
 - Issues: https://github.com/SharedCode/sop/issues

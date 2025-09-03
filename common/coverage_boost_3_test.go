@@ -495,6 +495,7 @@ func (t timeoutPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.
 func (t timeoutPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (t timeoutPriorityLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // stubTLogTimeout wraps stubPriorityLog inside a TransactionLog implementation.
 type stubTLogTimeout struct{ pl timeoutPriorityLog }
@@ -795,6 +796,7 @@ func (p prioNoop) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePa
 func (p prioNoop) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (p prioNoop) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 func Test_ItemActionTracker_Add_ActivelyPersisted_LogError_Propagates(t *testing.T) {
 	ctx := context.Background()

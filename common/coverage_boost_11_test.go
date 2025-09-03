@@ -607,6 +607,7 @@ func (p plGetErr) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePa
 func (p plGetErr) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (p plGetErr) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // plRemoveErr returns payload but Remove returns error to propagate.
 type plRemoveErr struct {
@@ -626,6 +627,7 @@ func (p plRemoveErr) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 func (p plRemoveErr) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (p plRemoveErr) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 func Test_TransactionLogger_PriorityRollback_Get_Error_Propagated(t *testing.T) {
 	ctx := context.Background()

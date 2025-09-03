@@ -134,6 +134,14 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 	defer t.l2Cache.Unlock(ctx, lk)
 
 	log.Info("Entering doPriorityRollbacks loop(restore).")
+	// In restart-driven sweep mode, clear all per-region signal markers up-front so they will not cause false "locks"
+	// in Registry file sector updates. Consider all of them having a lock on sectors to get rolledback because Redis got restarted.
+	// All in-flight transactions will detect Redis restart & will rollback. Deleting these markers will allow for a clean state.
+	if ignoreAge {
+		if err := tl.PriorityLog().ClearRegistrySectorClaims(ctx); err != nil {
+			log.Warn("failed to clear registry sector claims at sweep start", "err", err)
+		}
+	}
 	consumed := false
 	start := sop.Now()
 	for {
