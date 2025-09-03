@@ -1164,6 +1164,9 @@ func (e errUpdateNoLocksReg2) Get(ctx context.Context, lids []sop.RegistryPayloa
 func (e errUpdateNoLocksReg2) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error {
 	return e.inner.Remove(ctx, lids)
 }
+func (e errUpdateNoLocksReg2) Unlock(ctx context.Context, lk *sop.LockKey) error {
+	return e.inner.Unlock(ctx, lk)
+}
 func (e errUpdateNoLocksReg2) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return e.inner.Replicate(ctx, a, b, c, d)
 }

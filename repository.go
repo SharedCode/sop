@@ -37,6 +37,9 @@ type Registry interface {
 	// Remove deletes Handles (given logical IDs) from registry table(s).
 	Remove(context.Context, []RegistryPayload[UUID]) error
 
+	// Allows the transaction manager to release locks on Handles due to timeouts or other reasons.
+	Unlock(ctx context.Context, lockKey *LockKey) error
+
 	// Replicate performs post-commit replication of blobs/data to passive targets.
 	Replicate(ctx context.Context, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
 }
@@ -192,7 +195,7 @@ type Cache interface {
 	// IsLockedTTL reports whether all keys are locked and refreshes TTL with the provided duration.
 	IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
 
-	// Lock attempts to lock all keys; returns success, lock owner UUID, and any error encountered.
+	// Lock attempts to lock all keys; returns success, lock owner ID string, and any error encountered.
 	Lock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, UUID, error)
 	// IsLocked reports whether all keys are currently locked.
 	IsLocked(ctx context.Context, lockKeys []*LockKey) (bool, error)

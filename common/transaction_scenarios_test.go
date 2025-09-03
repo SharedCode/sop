@@ -177,6 +177,7 @@ func (s *seqRegistry) Remove(ctx context.Context, storesLids []sop.RegistryPaylo
 func (s *seqRegistry) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (s *seqRegistry) Unlock(ctx context.Context, lk *sop.LockKey) error { return nil }
 
 // Reader commit refetch loop converges when registry version stabilizes.
 func Test_ReaderCommit_RefetchLoop_Converges(t *testing.T) {

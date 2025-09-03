@@ -134,6 +134,7 @@ func (r *errOnceOnAddReg) Remove(ctx context.Context, storesLids []sop.RegistryP
 	r.removeCount++
 	return r.inner.Remove(ctx, storesLids)
 }
+func (r *errOnceOnAddReg) Unlock(ctx context.Context, lk *sop.LockKey) error { return nil }
 func (r *errOnceOnAddReg) Replicate(ctx context.Context, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles []sop.RegistryPayload[sop.Handle]) error {
 	return r.inner.Replicate(ctx, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles)
 }
@@ -258,6 +259,9 @@ func (r *onceMismatchGetReg) Remove(ctx context.Context, storesLids []sop.Regist
 }
 func (r *onceMismatchGetReg) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return r.inner.Replicate(ctx, a, b, c, d)
+}
+func (r *onceMismatchGetReg) Unlock(ctx context.Context, lk *sop.LockKey) error {
+	return r.inner.Unlock(ctx, lk)
 }
 
 // Covers commitRemovedNodes returning false (mismatch) -> rollback -> needsRefetchAndMerge -> retry success.
@@ -389,6 +393,9 @@ func (r *onceVersionMismatchReg) Remove(ctx context.Context, storesLids []sop.Re
 }
 func (r *onceVersionMismatchReg) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return r.inner.Replicate(ctx, a, b, c, d)
+}
+func (r *onceVersionMismatchReg) Unlock(ctx context.Context, lk *sop.LockKey) error {
+	return r.inner.Unlock(ctx, lk)
 }
 
 // Covers commitUpdatedNodes returning false (version mismatch) on first attempt then success after refetch & retry.

@@ -692,6 +692,9 @@ func (e errOnAddRegistry) Get(ctx context.Context, lids []sop.RegistryPayload[so
 func (e errOnAddRegistry) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error {
 	return e.inner.Remove(ctx, lids)
 }
+func (e errOnAddRegistry) Unlock(ctx context.Context, lk *sop.LockKey) error {
+	return e.inner.Unlock(ctx, lk)
+}
 func (e errOnAddRegistry) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return e.inner.Replicate(ctx, a, b, c, d)
 }

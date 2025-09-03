@@ -15,10 +15,6 @@ import (
 	"github.com/sharedcode/sop/encoding"
 )
 
-const (
-	lockSectorRetryTimeoutInSecs = 3 * 60
-)
-
 var zeroSector = bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)
 
 // updateFileRegion marshals each handle and writes it into the correct position within its block.
@@ -68,7 +64,7 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 		if ok {
 			break
 		}
-		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
+		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, lockFileRegionDuration+(1*time.Minute)); err != nil {
 			// If the context is canceled or the operation's context deadline was exceeded, return the raw error
 			// so callers treat it as a normal timeout/cancellation and NOT a failover trigger.
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -128,7 +124,7 @@ func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *fileDirectIO, o
 	})
 	ok, uuid, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
 	if err == nil && ok {
-	// Confirm lock ownership, then write a per-sector claim marker to the file system.
+		// Confirm lock ownership, then write a per-sector claim marker to the file system.
 		if isLocked, ierr := hm.cache.IsLocked(ctx, []*sop.LockKey{lk[0]}); ierr == nil && isLocked {
 			modFileNumber := parseSegmentIndex(dio.filename)
 			modFileSectorNumber := int(offset / int64(blockSize))
@@ -155,8 +151,15 @@ func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, lk *sop.LockKey) e
 	if ok {
 		modFileNumber := parseSegmentIndex(fn)
 		modFileSectorNumber := int(off / int64(blockSize))
-	pl := priorityLog{replicationTracker: hm.replicationTracker}
-	_ = pl.RemoveRegistrySectorClaim(ctx, modFileNumber, modFileSectorNumber)
+		pl := priorityLog{replicationTracker: hm.replicationTracker}
+		exists, _ := pl.RemoveRegistrySectorClaim(ctx, modFileNumber, modFileSectorNumber)
+		if !exists {
+			hm.cache.Unlock(ctx, []*sop.LockKey{lk})
+
+			// Another transaction may have removed the claim due to timeout waiting for its turn.
+			// This should cause a transaction rollback for the caller.
+			return fmt.Errorf("sector claim is missing for %s idx=%d sector=%d", fn, modFileNumber, modFileSectorNumber)
+		}
 	}
 	return hm.cache.Unlock(ctx, []*sop.LockKey{lk})
 }

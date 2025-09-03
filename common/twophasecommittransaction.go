@@ -610,21 +610,26 @@ func (t *Transaction) handleRegistrySectorLockTimeout(ctx context.Context, err s
 	lk := t.l2Cache.CreateLockKeys([]string{lockKey})
 	if ok, _, _ := t.l2Cache.Lock(ctx, defaultLockDuration, lk); ok {
 		if ok, _ = t.l2Cache.IsLocked(ctx, lk); ok {
+
+			defer t.l2Cache.Unlock(ctx, lk)
 			ud, ok := err.UserData.(*sop.LockKey)
 			if !ok {
-				t.l2Cache.Unlock(ctx, lk)
 				return err
 			}
 			if err2 := t.logger.priorityRollback(ctx, t, ud.LockID); err2 != nil {
-				log.Info(fmt.Sprintf("error priorityRollback on tid %v, details: %v", err.UserData, err2))
-				t.l2Cache.Unlock(ctx, lk)
+				log.Error(fmt.Sprintf("error priorityRollback on tid %v, details: %v", err.UserData, err2))
 				return err
 			}
 
 			log.Info(fmt.Sprintf("priorityRollback on tid %v, success", err.UserData))
 			ud.IsLockOwner = true
-			t.l2Cache.Unlock(ctx, []*sop.LockKey{ud})
-			t.l2Cache.Unlock(ctx, lk)
+
+			// Best-effort unlock: registry may be nil in some test setups.
+			if t.registry != nil {
+				if err2 := t.registry.Unlock(ctx, ud); err2 != nil {
+					log.Error(fmt.Sprintf("registry.Unlock failed, details: %v", err2))
+				}
+			}
 			return nil
 		}
 	}

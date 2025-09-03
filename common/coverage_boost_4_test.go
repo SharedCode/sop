@@ -724,6 +724,9 @@ func (r *errOnceOnUpdateNoLocksReg) Get(ctx context.Context, lids []sop.Registry
 func (r *errOnceOnUpdateNoLocksReg) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error {
 	return r.inner.Remove(ctx, lids)
 }
+func (r *errOnceOnUpdateNoLocksReg) Unlock(ctx context.Context, lk *sop.LockKey) error {
+	return r.inner.Unlock(ctx, lk)
+}
 func (r *errOnceOnUpdateNoLocksReg) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return r.inner.Replicate(ctx, a, b, c, d)
 }

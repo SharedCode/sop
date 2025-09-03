@@ -186,13 +186,13 @@ func (l priorityLog) WriteRegistrySectorClaim(ctx context.Context, modFileNumber
 }
 
 // RemoveRegistrySectorClaim removes the per-sector claim marker file if present.
-func (l priorityLog) RemoveRegistrySectorClaim(ctx context.Context, modFileNumber int, modFileSectorNumber int) error {
+func (l priorityLog) RemoveRegistrySectorClaim(ctx context.Context, modFileNumber int, modFileSectorNumber int) (bool, error) {
 	fn := l.replicationTracker.formatActiveFolderEntity(formatRegistrySectorClaimRelPath(modFileNumber, modFileSectorNumber))
 	fio := NewFileIO()
 	if fio.Exists(ctx, fn) {
-		return fio.Remove(ctx, fn)
+		return true, fio.Remove(ctx, fn)
 	}
-	return nil
+	return false, nil
 }
 
 // ClearRegistrySectorClaims deletes the entire per-sector claim folder tree under the active folder.

@@ -216,6 +216,11 @@ func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPa
 	return r.hashmap.remove(ctx, storesLids)
 }
 
+// Unlock is a no-op because Cassandra provides its own locking mechanism.
+func (r *registryOnDisk) Unlock(ctx context.Context, lockKey *sop.LockKey) error {
+	return r.hashmap.hashmap.unlockFileBlockRegion(ctx, lockKey)
+}
+
 /*
    Replication events:
    - IO (reading or writing) to active drive generated an IO error. SOP should be able to detect that special error and decide to failover if warranted.

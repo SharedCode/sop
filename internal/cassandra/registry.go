@@ -298,6 +298,12 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 	return nil
 }
 
+// Unlock is a no-op because Cassandra provides its own locking mechanism.
+func (v *registry) Unlock(ctx context.Context, lockKey *sop.LockKey) error {
+	return nil
+}
+
+
 // Replicate is a no-op because Cassandra provides its own replication.
 func (v *registry) Replicate(ctx context.Context, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil

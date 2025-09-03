@@ -74,6 +74,7 @@ func (e errorRegistry) Get(context.Context, []sop.RegistryPayload[sop.UUID]) ([]
 	return nil, nil
 }
 func (e errorRegistry) Remove(context.Context, []sop.RegistryPayload[sop.UUID]) error { return nil }
+func (e errorRegistry) Unlock(context.Context, *sop.LockKey) error                    { return nil }
 func (e errorRegistry) Replicate(context.Context, []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }

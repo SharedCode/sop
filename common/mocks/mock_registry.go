@@ -76,6 +76,11 @@ func (v *Mock_vid_registry) Remove(ctx context.Context, storesLids []sop.Registr
 	return nil
 }
 
+// Unlock is a no-op in the mock; production implementation releases file-region locks.
+func (v *Mock_vid_registry) Unlock(ctx context.Context, lockKey *sop.LockKey) error {
+	return nil
+}
+
 // Mock does NOT replicate.
 func (v *Mock_vid_registry) Replicate(ctx context.Context, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil

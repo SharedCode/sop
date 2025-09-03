@@ -13,6 +13,8 @@ const (
 	Unknown ErrorCode = iota
 	// LockAcquisitionFailure indicates failure to acquire a required lock.
 	LockAcquisitionFailure
+	// RegistrySectorClaimMissing indicates a missing registry sector claim.
+	RegistrySectorClaimMissing
 	// FileIOError represents file I/O related errors, e.g. encountered by BlobStore (w/ & w/o EC).
 	// This should not generate Failover event because BlobStore errors are either handled internally for no EC
 	// or by EC replication feature.

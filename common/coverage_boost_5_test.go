@@ -253,6 +253,7 @@ func (f failingRegistry) Get(context.Context, []sop.RegistryPayload[sop.UUID]) (
 	return nil, nil
 }
 func (f failingRegistry) Remove(context.Context, []sop.RegistryPayload[sop.UUID]) error { return nil }
+func (f failingRegistry) Unlock(ctx context.Context, lk *sop.LockKey) error             { return nil }
 func (f failingRegistry) Replicate(context.Context, []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
@@ -686,6 +687,9 @@ func (e errGetRegistry2) Get(ctx context.Context, storesLids []sop.RegistryPaylo
 }
 func (e errGetRegistry2) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
 	return e.inner.Remove(ctx, storesLids)
+}
+func (e errGetRegistry2) Unlock(ctx context.Context, lk *sop.LockKey) error {
+	return e.inner.Unlock(ctx, lk)
 }
 func (e errGetRegistry2) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return e.inner.Replicate(ctx, a, b, c, d)

@@ -354,6 +354,7 @@ func (e errRegistry) Get(ctx context.Context, storesLids []sop.RegistryPayload[s
 func (e errRegistry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
 	return nil
 }
+func (e errRegistry) Unlock(ctx context.Context, lk *sop.LockKey) error { return nil }
 func (e errRegistry) Replicate(ctx context.Context, newRootNodeHandles, addedNodeHandles, updatedNodeHandles, removedNodeHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
