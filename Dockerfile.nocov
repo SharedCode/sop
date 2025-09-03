@@ -26,5 +26,5 @@ CMD ["docker-entrypoint-nocov.sh"]
 
 # Sample commands to build then run docker image:
 # docker build -f Dockerfile.nocov -t mydi-nocov .
-# docker run mydi-nocov
+# docker run --rm mydi-nocov
 #   This will run the integration tests in inredfs package that requires Redis which is provided in docker image.
