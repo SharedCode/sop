@@ -17,6 +17,11 @@ const (
 	// regionSignalFolder is where per-sector claim markers are written.
 	// Kept separate from priority log folder to avoid interfering with batching logic.
 	regionSignalFolder = "regionsignals"
+	// regionSignalBucketCount defines how many sub-folders we shard into per level
+	// to avoid a single hot directory. We use a two-level directory structure:
+	// regionsignals/XX/YY/<filename>
+	// where XX and YY are zero-padded [00..N-1].
+	regionSignalBucketCount = 20
 )
 
 // priorityLog persists per-transaction payloads that guide prioritized replication/work.
@@ -137,9 +142,21 @@ func formatRegistrySectorClaimName(modFileNumber int, modFileSectorNumber int) s
 	return fmt.Sprintf("r%04d%06d%s", modFileNumber, modFileSectorNumber, priorityLogFileExtension)
 }
 
+// formatRegistrySectorClaimRelPath builds the bucketed relative path where the
+// per-sector claim marker should live under the active folder.
+// Example: regionsignals/07/13/r0012000035.plg
+func formatRegistrySectorClaimRelPath(modFileNumber int, modFileSectorNumber int) string {
+	filename := formatRegistrySectorClaimName(modFileNumber, modFileSectorNumber)
+	// Two-level bucketing for better directory spreading.
+	// Simple, fast, and deterministic: mix indices with small primes to vary distribution.
+	b1 := (modFileNumber + modFileSectorNumber) % regionSignalBucketCount
+	b2 := (modFileNumber*13 + modFileSectorNumber*7) % regionSignalBucketCount
+	return fmt.Sprintf("%s%c%02d%c%02d%c%s", regionSignalFolder, os.PathSeparator, b1, os.PathSeparator, b2, os.PathSeparator, filename)
+}
+
 // RegistrySectorClaimExists checks if the per-sector claim marker already exists.
 func (l priorityLog) RegistrySectorClaimExists(ctx context.Context, modFileNumber int, modFileSectorNumber int) bool {
-	fn := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegistrySectorClaimName(modFileNumber, modFileSectorNumber)))
+	fn := l.replicationTracker.formatActiveFolderEntity(formatRegistrySectorClaimRelPath(modFileNumber, modFileSectorNumber))
 	return NewFileIO().Exists(ctx, fn)
 }
 
@@ -147,10 +164,15 @@ func (l priorityLog) RegistrySectorClaimExists(ctx context.Context, modFileNumbe
 // The file is named r[modFileNumber][modFileSectorNumber].plg and stored under regionSignalFolder.
 // Implementation uses O_CREAT|O_EXCL to atomically create the marker; if it already exists, EEXIST is returned.
 func (l priorityLog) WriteRegistrySectorClaim(ctx context.Context, modFileNumber int, modFileSectorNumber int, _ sop.UUID) error {
-	base := l.replicationTracker.formatActiveFolderEntity(regionSignalFolder)
+	// Ensure bucket directories exist then create the marker atomically.
 	fio := NewFileIO()
-	_ = fio.MkdirAll(ctx, base, permission)
-	target := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegistrySectorClaimName(modFileNumber, modFileSectorNumber)))
+	// Build the two-level bucket dir.
+	b1 := (modFileNumber + modFileSectorNumber) % regionSignalBucketCount
+	b2 := (modFileNumber*13 + modFileSectorNumber*7) % regionSignalBucketCount
+	bucketDir := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%02d%c%02d", regionSignalFolder, os.PathSeparator, b1, os.PathSeparator, b2))
+	_ = fio.MkdirAll(ctx, bucketDir, permission)
+
+	target := l.replicationTracker.formatActiveFolderEntity(formatRegistrySectorClaimRelPath(modFileNumber, modFileSectorNumber))
 	// Atomically create the marker file; fails with EEXIST if already present.
 	f, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, permission)
 	if err != nil {
@@ -165,7 +187,7 @@ func (l priorityLog) WriteRegistrySectorClaim(ctx context.Context, modFileNumber
 
 // RemoveRegistrySectorClaim removes the per-sector claim marker file if present.
 func (l priorityLog) RemoveRegistrySectorClaim(ctx context.Context, modFileNumber int, modFileSectorNumber int) error {
-	fn := l.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", regionSignalFolder, os.PathSeparator, formatRegistrySectorClaimName(modFileNumber, modFileSectorNumber)))
+	fn := l.replicationTracker.formatActiveFolderEntity(formatRegistrySectorClaimRelPath(modFileNumber, modFileSectorNumber))
 	fio := NewFileIO()
 	if fio.Exists(ctx, fn) {
 		return fio.Remove(ctx, fn)
