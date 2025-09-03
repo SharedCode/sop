@@ -163,7 +163,7 @@ SOP uses Redis for fast, ephemeral coordination and the filesystem for durable s
 
 - Decentralized: no leader or quorum; any node can coordinate on a sector independently.
 - Horizontally scalable: sharded by registry sectors; no global hot spots.
-- No single point of failure: loss of Redis state slows coordination briefly but doesn’t corrupt data.
+- No single point of failure: loss of Redis state slows coordination briefly but doesn't corrupt data.
 - Low latency: lock checks and claim writes are O(1) on hot path; no multi-round consensus.
 
 ### When Redis is unavailable
@@ -176,7 +176,7 @@ SOP uses Redis for fast, ephemeral coordination and the filesystem for durable s
 - SOP avoids global consensus, leader election, and replicated logs—lower coordination latency and cost.
 - Better horizontal scaling for partitioned workloads (per-sector independence).
 - No SPOF in the coordination layer; failover is trivial and stateless.
-- If you need a globally ordered, cross-region commit log, consensus is still the right tool; SOP targets high-throughput, partition-aligned coordination. But then again, SOP is not a coordination engine, it is a storage engine. Its internal piece for coordination is what was described here.
+- If you need a globally ordered, cross-region commit log, consensus is still the right tool; SOP targets high-throughput, partition-aligned coordination. But then again, SOP is not a coordination engine, it is a storage engine. Its internal piece for coordination, e.g. - of handle (virtual ID) Registry, is what was described here.
 
 ### TL;DR
 
