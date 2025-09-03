@@ -2,7 +2,6 @@ package sop
 
 import (
 	"context"
-	"fmt"
 	log "log/slog"
 	"math/rand"
 	"time"
@@ -20,12 +19,13 @@ func SetJitterRNG(r *rand.Rand) {
 
 // TimedOut returns an error if the context is done or if the elapsed time since startTime exceeds maxTime.
 func TimedOut(ctx context.Context, name string, startTime time.Time, maxTime time.Duration) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		// Wrap context cancellation/deadline so callers can detect both a timeout and the original cause.
+		return ErrTimeout{Name: name, MaxTime: maxTime, Cause: err}
 	}
-	diff := Now().Sub(startTime)
-	if diff > maxTime {
-		return fmt.Errorf("%s timed out(maxTime=%v)", name, maxTime)
+	if Now().Sub(startTime) > maxTime {
+		// Operation-specific timeout (no context cause).
+		return ErrTimeout{Name: name, MaxTime: maxTime}
 	}
 	return nil
 }

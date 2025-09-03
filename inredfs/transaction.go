@@ -16,11 +16,15 @@ func NewTransaction(ctx context.Context, to TransationOptions) (sop.Transaction,
 	if err != nil {
 		return nil, err
 	}
-	return sop.NewTransaction(to.Mode, twoPT, to.MaxTime, true)
+	return sop.NewTransaction(to.Mode, twoPT, true)
 }
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
 // or for reading(forWriting=false). Pass in -1 on maxTime to default to 15 minutes of max "commit" duration.
+//
+// Timeout semantics: the commit ends when the earlier of ctx deadline or maxTime is reached.
+// Locks use maxTime as TTL so they are bounded even if ctx is canceled. If you want replication/log
+// cleanup to finish under the same budget, set ctx.Deadline to at least maxTime plus a small grace period.
 func NewTwoPhaseCommitTransaction(ctx context.Context, to TransationOptions) (sop.TwoPhaseCommitTransaction, error) {
 	if !IsInitialized() {
 		return nil, fmt.Errorf("redis was not initialized")
@@ -63,10 +67,12 @@ func NewTransactionWithReplication(ctx context.Context, towr TransationOptionsWi
 	if err != nil {
 		return nil, err
 	}
-	return sop.NewTransaction(towr.Mode, twoPT, towr.MaxTime, true)
+	return sop.NewTransaction(towr.Mode, twoPT, true)
 }
 
 // NewTwoPhaseCommitTransactionWithReplication creates a two-phase commit transaction with replication enabled.
+//
+// Timeout semantics: see NewTwoPhaseCommitTransaction for guidance on ctx.Deadline vs maxTime and lock TTLs.
 // Returns sop.TwoPhaseCommitTransaction to allow integration with custom application transactions requiring direct access to SOP's API.
 func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr TransationOptionsWithReplication) (sop.TwoPhaseCommitTransaction, error) {
 	if towr.IsEmpty() {

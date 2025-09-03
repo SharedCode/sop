@@ -15,6 +15,10 @@ import (
 
 type getStructExErrCache struct{ sop.Cache }
 
+func (c getStructExErrCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
+
 func (c getStructExErrCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
 	return false, errors.New("l2 boom")
 }
@@ -557,11 +561,19 @@ func Test_ReadStatus_ActivePresent_InvalidJSON_ReturnsError(t *testing.T) {
 
 type getStructExErrCache2 struct{ sop.Cache }
 
+func (c getStructExErrCache2) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
+
 func (c getStructExErrCache2) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
 	return false, errors.New("getstructex err2")
 }
 
 type getStructExNotFoundCache struct{ sop.Cache }
+
+func (c getStructExNotFoundCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
 
 func (c getStructExNotFoundCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
 	return false, nil
@@ -582,12 +594,20 @@ func (c getStructExFoundCache) GetStructEx(ctx context.Context, key string, v in
 
 type setStructErrCache2 struct{ sop.Cache }
 
+func (c setStructErrCache2) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
+
 func (c setStructErrCache2) SetStruct(ctx context.Context, key string, value interface{}, exp time.Duration) error {
 	return errors.New("setstruct err2")
 }
 
 // combined wrapper: GetStructEx returns not found, SetStruct returns error
 type notFoundSetErrCache struct{ sop.Cache }
+
+func (c notFoundSetErrCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
 
 func (c notFoundSetErrCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
 	return false, nil

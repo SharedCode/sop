@@ -170,12 +170,8 @@ func Test_Rollback_Error_From_PreCommitTrackedValues_Delete(t *testing.T) {
 func Test_OnIdle_Runs_Priority_And_Expired_Paths(t *testing.T) {
 	ctx := context.Background()
 	pl := &stubPriorityLog{
-		batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{
-			{Key: sop.NewUUID(), Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(sop.NewUUID())}}}},
-		},
-		writeBackupErr:  map[string]error{},
-		removeErr:       map[string]error{},
-		removeBackupHit: map[string]int{},
+		batch:     []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: sop.NewUUID(), Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(sop.NewUUID())}}}}},
+		removeErr: map[string]error{},
 	}
 	tl := newTransactionLogger(stubTLog{pl: pl}, true)
 	reg := mocks.NewMockRegistry(false)
@@ -206,8 +202,9 @@ func Test_OnIdle_Runs_Priority_And_Expired_Paths(t *testing.T) {
 	if hourBeingProcessed != "" {
 		t.Fatalf("expected hourBeingProcessed reset, got %q", hourBeingProcessed)
 	}
-	if len(pl.removeBackupHit) == 0 {
-		t.Fatalf("expected RemoveBackup to be called at least once")
+	// Ensure some progress occurred by checking priority batch was consumed or Remove attempted.
+	if len(pl.removedHit) == 0 {
+		t.Fatalf("expected priority Remove to be attempted at least once")
 	}
 }
 

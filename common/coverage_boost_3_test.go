@@ -232,25 +232,28 @@ func (p *prioLogRemoveFail) Remove(ctx context.Context, tid sop.UUID) error {
 	return fmt.Errorf("remove fail")
 }
 
-func Test_TransactionLogger_DoPriorityRollbacks_RemoveError_BackupRemoved(t *testing.T) {
+func Test_TransactionLogger_DoPriorityRollbacks_RemoveError_Propagates(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
 	tid := sop.NewUUID()
-	// Prepare batch with one entry; Remove will fail, so RemoveBackup should still be called
+	// Prepare batch with one entry; Remove will fail and error should be returned.
+	lid := sop.NewUUID()
 	base := &prioLogRemoveFail{prioLogBatch{tid: tid, batch: [][]sop.RegistryPayload[sop.Handle]{
-		{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(sop.NewUUID())}}},
+		{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid)}}},
 	}}}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	// Wrap TransactionLog to return our prio log behavior
 	tl.TransactionLog = tlWithPL{inner: tl.TransactionLog.(*mocks.MockTransactionLog), pl: base}
-	// Registry not used due to early remove error; just provide transaction with cache
-	txn := &Transaction{l2Cache: l2, registry: mocks.NewMockRegistry(false)}
+	// Seed registry so version checks don't panic; provide transaction with cache
+	reg := mocks.NewMockRegistry(false)
+	_ = reg.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(lid)}}})
+	txn := &Transaction{l2Cache: l2, registry: reg}
 	ok, err := tl.doPriorityRollbacks(ctx, txn)
-	if err != nil || !ok {
-		t.Fatalf("expected ok=true err=nil; got ok=%v err=%v", ok, err)
+	if err == nil {
+		t.Fatalf("expected error from Remove to be returned")
 	}
-	if base.wrote == 0 || base.removedBk == 0 {
-		t.Fatalf("expected backup write and backup remove on remove error")
+	if ok {
+		t.Fatalf("expected ok=false when Remove returns error")
 	}
 }
 
@@ -492,10 +495,7 @@ func (t timeoutPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.
 func (t timeoutPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (t timeoutPriorityLog) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
-	return nil
-}
-func (t timeoutPriorityLog) RemoveBackup(ctx context.Context, tid sop.UUID) error { return nil }
+func (t timeoutPriorityLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // stubTLogTimeout wraps stubPriorityLog inside a TransactionLog implementation.
 type stubTLogTimeout struct{ pl timeoutPriorityLog }
@@ -796,8 +796,7 @@ func (p prioNoop) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePa
 func (p prioNoop) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (p prioNoop) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
-func (p prioNoop) RemoveBackup(ctx context.Context, tid sop.UUID) error                { return nil }
+func (p prioNoop) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 func Test_ItemActionTracker_Add_ActivelyPersisted_LogError_Propagates(t *testing.T) {
 	ctx := context.Background()

@@ -19,6 +19,7 @@ Code coverage: https://app.codecov.io/github/sharedcode/sop
 - Transaction batching and ACID
 - Fine tuning
 - Transaction logging, serialization, two-phase commit
+- Coordination model (OOA) and safety
 - Optimistic Orchestration Algorithm (OOA)
 - Concurrent/parallel commits
 - ACID vs Big Data
@@ -229,6 +230,15 @@ What to look for
 - Logs like “failover event occurred” indicate an Active/Passive flip on Registry/StoreRepository errors.
 - After reinstate, tests verify “fast-forward” (deltas applied to the reinstated side) and that failure flags are cleared.
 - For EC beyond parity, the test asserts rollback and the absence of a failover event.
+
+
+## Operational caveats
+
+- Replication disabled (Active/Passive off): Metadata I/O errors will not trigger a failover. Commits to the single active path may fail depending on the error; recovery is manual. Prefer enabling replication to benefit from automatic failover and reinstate/fast‑forward.
+
+- Passive replication failures: When writes to the passive side fail, SOP sets FailedToReplicate. Active-side commits typically continue because the active write succeeded. Plan to run ReinstateFailedDrives to resync the passive, then fast‑forward recent deltas; monitor the FailedToReplicate flag until it clears.
+
+- After a flip: Immediately after an Active/Passive flip, some in‑flight or lingering operations aimed at the old active can encounter errors. Design clients for idempotent retry: start a fresh transaction and retry the operation.
 
 
 # Store Caching Config Guide
@@ -602,6 +612,44 @@ On successful commit on Phase 1, SOP will then commit Phase 2, which is, to tell
 Phase 2 commit is a very fast, quick action as changes and Nodes are already resident on the Btree storage, it is just a matter of finalizing the Virtual ID registry with the new Nodes' physical addresses to swap the old with the new ones.
 
 See [transaction.go](./transaction.go) for more details on two phase commit & how to access it for your application transaction integration.
+
+## Coordination model (OOA) and safety
+
+### Coordination model: Redis-assisted, storage-anchored
+
+SOP uses Redis for fast, ephemeral coordination and the filesystem for durable sector claims. Redis locks provide low-latency contention detection; per-sector claim markers on storage enforce exclusive access for CUD operations. This hybrid keeps coordination responsive without coupling correctness to Redis durability.
+
+### Why this is safe (despite Redis tail loss/failover)
+
+- Locks are advisory; correctness is anchored in storage-sector claims and idempotent commit/rollback.
+- On Redis restart, SOP detects it and performs cleanup sweeps (clearing stale sector claims) before resuming.
+- Time-bounded lock TTLs, takeover checks, and rollback paths ensure progress without split-brain.
+- Priority logs and deterministic rollback let workers resume or repair safely after interruptions.
+
+### Operational properties
+
+- Decentralized: no leader or quorum; any node can coordinate on a sector independently.
+- Horizontally scalable: sharded by registry sectors; no global hot spots.
+- No single point of failure: loss of Redis state slows coordination briefly but doesn’t corrupt data.
+- Low latency: lock checks and claim writes are O(1) on hot path; no multi-round consensus.
+
+### When Redis is unavailable
+
+- Writes that need exclusivity will wait/fail fast; storage remains consistent.
+- On recovery, restart sweeps clear stale sector claims; workers resume.
+
+### Comparison to Paxos-style consensus
+
+- SOP avoids global consensus, leader election, and replicated logs—lower coordination latency and cost.
+- Better horizontal scaling for partitioned workloads (per-sector independence).
+- No SPOF in the coordination layer; failover is trivial and stateless.
+- If you need a globally ordered, cross-region commit log, consensus is still the right tool; SOP targets high-throughput, partition-aligned coordination. But then again, SOP is not a coordination engine, it is a storage engine. Its internal piece for coordination is what was described here.
+
+### TL;DR
+
+SOP builds a fast, decentralized coordination layer using Redis only for ephemeral locks and relies on storage-anchored sector claims for correctness. It scales out naturally and avoids consensus overhead while remaining safe under failover.
+
+See also: README.md section “Coordination model (OOA) and safety”.
 
 ## Optimistic Orchestration Algorithm (OOA)
 SOP uses a new, proprietary & open sourced, thus MIT licensed, unique algorithm using Redis I/O for orchestration, which aids in decentralized, highly parallelized operations. It uses simple Redis I/O ```fetch-set-fetch``` (not the Redis lock API!) for conflict detection/resolution and data merging across transactions whether in same machine or across different machines.

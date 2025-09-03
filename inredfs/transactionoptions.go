@@ -15,7 +15,9 @@ type TransationOptions struct {
 	StoresBaseFolder string
 	// Transaction Mode can be Read-only or Read-Write.
 	Mode sop.TransactionMode
-	// Transaction maximum "commit" time. If commits takes longer than this then transaction will roll back.
+	// Transaction maximum "commit" time. Acts as the commit window cap and lock TTL.
+	// Effective limit is min(ctx deadline, MaxTime). If commit exceeds this, the transaction will roll back.
+	// For end-to-end bounded operations, prefer ctx.Deadline >= MaxTime plus a small slack.
 	MaxTime time.Duration
 	// Registry hash modulo value used for hashing.
 	RegistryHashModValue int
@@ -31,7 +33,9 @@ type TransationOptionsWithReplication struct {
 	StoresBaseFolders []string `json:"stores_folders"`
 	// Transaction Mode can be Read-only or Read-Write.
 	Mode sop.TransactionMode `json:"mode"`
-	// Transaction maximum "commit" time. If commits takes longer than this then transaction will roll back.
+	// Transaction maximum "commit" time. Acts as the commit window cap and lock TTL.
+	// Effective limit is min(ctx deadline, MaxTime). If commit exceeds this, the transaction will roll back.
+	// For end-to-end bounded operations, prefer ctx.Deadline >= MaxTime plus a small slack.
 	MaxTime time.Duration `json:"max_time"`
 	// Registry hash modulo value used for hashing.
 	RegistryHashModValue int `json:"registry_hash_mod"`

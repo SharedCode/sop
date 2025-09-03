@@ -252,10 +252,7 @@ func (d dummy) Remove(ctx context.Context, tid sop.UUID) error {
 }
 
 // Write a backup file for the priority log contents (payload).
-func (d dummy) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
-	return nil
-}
+// Backup APIs removed; no-op methods deleted.
 
-func (d dummy) RemoveBackup(ctx context.Context, tid sop.UUID) error {
-	return nil
-}
+// ClearRegistrySectorClaims is a no-op for Cassandra.
+func (d dummy) ClearRegistrySectorClaims(ctx context.Context) error { return nil }

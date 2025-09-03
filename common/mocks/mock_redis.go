@@ -11,6 +11,7 @@ import (
 type mockRedis struct {
 	lookup      map[string][]byte // for SetStruct/GetStruct
 	stringStore map[string]string // for Set/Get and locking values
+	restarted   bool              // toggled to simulate a restart event once
 }
 
 // Returns a new Redis mock client.
@@ -38,6 +39,15 @@ func (m *mockRedis) GetEx(ctx context.Context, key string, expiration time.Durat
 	return m.Get(ctx, key)
 }
 func (m *mockRedis) Ping(ctx context.Context) error { return nil }
+
+// IsRestarted returns the internal flag once and then resets it to false.
+func (m *mockRedis) IsRestarted(ctx context.Context) (bool, error) {
+	if m.restarted {
+		m.restarted = false
+		return true, nil
+	}
+	return false, nil
+}
 
 // Struct operations used by value caching and item locks.
 func (m *mockRedis) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {

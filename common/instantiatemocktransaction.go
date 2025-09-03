@@ -22,7 +22,7 @@ func newMockTransaction(t *testing.T, mode sop.TransactionMode, maxTime time.Dur
 	// Ensure global L1 cache uses the mock Redis client to avoid real Redis dependency in tests.
 	cache.NewGlobalCache(mockRedisCache, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, mode, maxTime, false)
-	return sop.NewTransaction(mode, twoPhase, maxTime, false)
+	return sop.NewTransaction(mode, twoPhase, false)
 }
 
 // NewMockTransaction with logging turned on.
@@ -31,7 +31,7 @@ func newMockTransactionWithLogging(t *testing.T, mode sop.TransactionMode, maxTi
 	// Ensure global L1 cache uses the mock Redis client to avoid real Redis dependency in tests.
 	cache.NewGlobalCache(mockRedisCache, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	twoPhase, _ := newMockTwoPhaseCommitTransaction(t, mode, maxTime, true)
-	return sop.NewTransaction(mode, twoPhase, maxTime, true)
+	return sop.NewTransaction(mode, twoPhase, true)
 }
 
 func newMockTwoPhaseCommitTransaction(t *testing.T, mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.TwoPhaseCommitTransaction, error) {

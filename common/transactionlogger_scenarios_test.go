@@ -48,9 +48,8 @@ func (noOpPrioLog) GetBatch(context.Context, int) ([]sop.KeyValuePair[sop.UUID, 
 func (noOpPrioLog) LogCommitChanges(context.Context, []sop.StoreInfo, []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (noOpPrioLog) WriteBackup(context.Context, sop.UUID, []byte) error { return nil }
-func (noOpPrioLog) RemoveBackup(context.Context, sop.UUID) error        { return nil }
-func (t *tlRecorder) PriorityLog() sop.TransactionPriorityLog           { return noOpPrioLog{} }
+func (noOpPrioLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
+func (t *tlRecorder) PriorityLog() sop.TransactionPriorityLog        { return noOpPrioLog{} }
 func (t *tlRecorder) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
 	t.added = append(t.added, sop.KeyValuePair[int, []byte]{Key: commitFunction, Value: payload})
 	return nil
@@ -70,15 +69,26 @@ func (t *tlRecorder) NewUUID() sop.UUID { return t.tid }
 // ---- Stubs for priority log and transaction log used by priority/onIdle tests ----
 // stubPriorityLog implements sop.TransactionPriorityLog for deterministic tests.
 type stubPriorityLog struct {
-	batch           []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]
+	batch     []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]
+	removeErr map[string]error
+	// Following fields kept for compatibility with older tests; RemoveBackup is no longer used.
 	writeBackupErr  map[string]error
-	removeErr       map[string]error
 	removeBackupHit map[string]int
+	removedHit      map[string]int
 }
 
 func (s *stubPriorityLog) IsEnabled() bool                                             { return true }
 func (s *stubPriorityLog) Add(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
 func (s *stubPriorityLog) Remove(ctx context.Context, tid sop.UUID) error {
+	if s.removedHit == nil {
+		s.removedHit = map[string]int{}
+	}
+	s.removedHit[tid.String()]++
+	// For tests that still look at removeBackupHit, mirror the counter.
+	if s.removeBackupHit == nil {
+		s.removeBackupHit = map[string]int{}
+	}
+	s.removeBackupHit[tid.String()]++
 	if err, ok := s.removeErr[tid.String()]; ok {
 		return err
 	}
@@ -98,19 +108,7 @@ func (s *stubPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.Ke
 func (s *stubPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (s *stubPriorityLog) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
-	if err, ok := s.writeBackupErr[tid.String()]; ok {
-		return err
-	}
-	return nil
-}
-func (s *stubPriorityLog) RemoveBackup(ctx context.Context, tid sop.UUID) error {
-	if s.removeBackupHit == nil {
-		s.removeBackupHit = make(map[string]int)
-	}
-	s.removeBackupHit[tid.String()]++
-	return nil
-}
+func (s *stubPriorityLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // stubTLog implements sop.TransactionLog and returns our stubPriorityLog.
 type stubTLog struct{ pl *stubPriorityLog }

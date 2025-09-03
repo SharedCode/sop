@@ -28,7 +28,7 @@ func NewTransactionExt(toFilePath fs.ToFilePathFunc, mode sop.TransactionMode, m
 	if err != nil {
 		return nil, err
 	}
-	return sop.NewTransaction(mode, twoPT, maxTime, logging)
+	return sop.NewTransaction(mode, twoPT, logging)
 }
 
 // Create a transaction that supports Erasure Coding file IO.
@@ -49,5 +49,5 @@ func NewTransactionWithEC(mode sop.TransactionMode, maxTime time.Duration, loggi
 	if err != nil {
 		return nil, err
 	}
-	return sop.NewTransaction(mode, twoPT, maxTime, logging)
+	return sop.NewTransaction(mode, twoPT, logging)
 }

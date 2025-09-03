@@ -173,6 +173,10 @@ func Test_RollbackRemovedNodes_RegistryGetError(t *testing.T) {
 // getStructErrCache forces GetStruct to return an error while indicating not found.
 type getStructErrCache struct{ sop.Cache }
 
+func (c getStructErrCache) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
+
 func (g getStructErrCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, fmt.Errorf("getstruct err")
 }
@@ -237,6 +241,8 @@ func Test_ItemActionTracker_CheckTrackedItems_Conflict(t *testing.T) {
 
 // zeroSetCache stores a zero LockID in SetStruct to trigger the "can't attain a lock" path after re-get.
 type zeroSetCache struct{ sop.Cache }
+
+func (c zeroSetCache) IsRestarted(ctx context.Context) (bool, error) { return c.Cache.IsRestarted(ctx) }
 
 func (z zeroSetCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	if lr, ok := value.(*lockRecord); ok {
@@ -761,6 +767,10 @@ func Test_Phase1Commit_CommitUpdatedNodes_SectorTimeout_Retry_Succeeds(t *testin
 
 // cacheWarnOnSetStruct returns error on SetStruct to exercise warning paths in commitAddedNodes/commitNewRootNodes.
 type cacheWarnOnSetStruct struct{ sop.Cache }
+
+func (c cacheWarnOnSetStruct) IsRestarted(ctx context.Context) (bool, error) {
+	return c.Cache.IsRestarted(ctx)
+}
 
 func (c cacheWarnOnSetStruct) SetStruct(ctx context.Context, key string, value interface{}, d time.Duration) error {
 	return fmt.Errorf("setstruct err")

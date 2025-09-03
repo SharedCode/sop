@@ -495,9 +495,24 @@ func (t *Transaction) onIdle(ctx context.Context) {
 		return
 	}
 
+	// If cache backend restarted, attempt a one-time priority rollback sweep immediately.
+	if t.l2Cache != nil && t.logger != nil && t.logger.PriorityLog().IsEnabled() {
+		if restarted, err := t.l2Cache.IsRestarted(ctx); err == nil && restarted {
+			// On restart, sweep all priority logs (ignore age) once.
+			ctxAll := context.WithValue(ctx, sop.ContextPriorityLogIgnoreAge, true)
+			if _, err := t.logger.doPriorityRollbacks(ctxAll, t); err != nil {
+				if t.HandleReplicationRelatedError != nil {
+					t.HandleReplicationRelatedError(ctx, err, nil, true)
+				}
+			}
+			// Reset the priority log found flag so interval will be at decent time (default).
+			priorityLogFound = false
+		}
+	}
+
 	// Allow only one priority rollback processor.
-	// Check every 2.5 minutes if there are any pending rollbacks that "aged" (5min or older).
-	interval := 150
+	// Check every 5 minutes if there are any pending rollbacks that "aged" (5min or older).
+	interval := 300
 	if priorityLogFound {
 		interval = 5
 	}
@@ -516,7 +531,7 @@ func (t *Transaction) onIdle(ctx context.Context) {
 				if t.HandleReplicationRelatedError != nil {
 					t.HandleReplicationRelatedError(ctx, err, nil, true)
 				}
-				priorityLogFound = false
+				priorityLogFound = found
 			} else {
 				priorityLogFound = found
 			}

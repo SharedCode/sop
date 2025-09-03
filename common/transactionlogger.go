@@ -46,6 +46,9 @@ type transactionLog struct {
 
 const (
 	defaultLockDuration = 5 * time.Minute
+	// coordinatorLockName is the global coordinator lock used to serialize
+	// priority rollbacks across the cluster.
+	coordinatorLockName = "Prbs"
 )
 
 // Instantiate a transaction logger.
@@ -106,30 +109,49 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 }
 
 func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) (bool, error) {
-	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey("Prbs")})
+	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey(coordinatorLockName)})
 	const maxDuration = 5 * time.Minute
-	if ok, _, _ := t.l2Cache.Lock(ctx, maxDuration, lk); ok {
-		if ok, _ := t.l2Cache.IsLocked(ctx, lk); !ok {
-			return false, nil
+	// When restart-triggered, ctx may contain the flag to ignore age. In that mode we
+	// will process multiple batches; if not the winner, we pause and poll until the
+	// coordinator lock is released.
+	ignoreAge := false
+	if v := ctx.Value(sop.ContextPriorityLogIgnoreAge); v != nil {
+		if b, ok := v.(bool); ok && b {
+			ignoreAge = true
 		}
-		log.Info("Entering doPriorityRollbacks loop(5).")
-		defer t.l2Cache.Unlock(ctx, lk)
-		start := sop.Now()
+	}
 
-		v, gerr := tl.PriorityLog().GetBatch(ctx, 20)
+	ok1, _, _ := t.l2Cache.Lock(ctx, maxDuration, lk)
+	ok2, _ := t.l2Cache.IsLocked(ctx, lk)
+	if !ok1 || !ok2 {
+		if ignoreAge {
+			if err := tl.waitForCoordinatorRelease(ctx, t, coordinatorLockName, maxDuration); err != nil {
+				return false, err
+			}
+		}
+		return false, nil
+	}
+	defer t.l2Cache.Unlock(ctx, lk)
+
+	log.Info("Entering doPriorityRollbacks loop(restore).")
+	// In restart-driven sweep mode, clear all per-region signal markers up-front so they will not cause false "locks"
+	// in Registry file sector updates. Consider all of them having a lock on sectors to get rolledback because Redis got restarted.
+	// All in-flight transactions will detect Redis restart & will rollback. Deleting these markers will allow for a clean state.
+	if ignoreAge {
+		if err := tl.PriorityLog().ClearRegistrySectorClaims(ctx); err != nil {
+			log.Warn("failed to clear registry sector claims at sweep start", "err", err)
+		}
+	}
+	consumed := false
+	start := sop.Now()
+	for {
+		v, err := tl.PriorityLog().GetBatch(ctx, 20)
+		if len(v) == 0 || err != nil {
+			return consumed, err
+		}
 		for i := range v {
 			tid := v[i].Key
 			uhAndrh := v[i].Value
-
-			if err := tl.PriorityLog().WriteBackup(ctx, tid, toByteArray(uhAndrh)); err != nil {
-				log.Warn(fmt.Sprintf("unable to write a priority log backup file for %s, skip priority log rollback", tid.String()))
-				continue
-			}
-			if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
-				log.Info(fmt.Sprintf("priority log file failed to remove (potentially live transaction running too long) for transaction %s, details: %v", tid.String(), err))
-				tl.PriorityLog().RemoveBackup(ctx, tid)
-				continue
-			}
 
 			var lks []*sop.LockKey
 			var err error
@@ -178,18 +200,44 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 				log.Info(fmt.Sprintf("restoring a priority log for transaction %s occurred", tid.String()))
 			}
 
-			// Remove the backup file as we succeeded in registry file sector restore.
-			tl.PriorityLog().RemoveBackup(ctx, tid)
+			// Remove the priority log file as we succeeded in registry file sector restore.
+			if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
+				return false, err
+			}
 
 			// Loop through & consume entire batch or until timeout if busy.
 			if err := sop.TimedOut(ctx, "doPriorityRollbacks", start, maxDuration); err != nil {
-				return true, gerr
+				return true, err
 			}
 		}
-
-		return len(v) > 0, gerr
+		consumed = true
+		if !ignoreAge {
+			break // single batch in normal mode
+		}
 	}
-	return false, nil
+	return true, nil
+}
+
+// waitForCoordinatorRelease blocks until the global coordinator lock is not held by others
+// or until the max wait duration elapses. Logs a status at most once every ~2 seconds.
+func (tl *transactionLog) waitForCoordinatorRelease(ctx context.Context, t *Transaction, lockName string, maxWait time.Duration) error {
+	names := []string{t.l2Cache.FormatLockKey(lockName)}
+	start := sop.Now()
+	lastLog := time.Time{}
+	for {
+		heldByOthers, _ := t.l2Cache.IsLockedByOthers(ctx, names)
+		if !heldByOthers {
+			return nil
+		}
+		if lastLog.IsZero() || time.Since(lastLog) >= 2*time.Second {
+			log.Info("waiting for coordinator lock to be released", "lock", lockName)
+			lastLog = time.Now()
+		}
+		if err := sop.TimedOut(ctx, "waitPrbs", start, maxWait); err != nil {
+			return err
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
 
 // acquireLocks creates per-ID lock keys, sorts by UUID to avoid deadlocks, and attempts to

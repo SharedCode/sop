@@ -87,10 +87,10 @@ type TransactionPriorityLog interface {
 	// LogCommitChanges writes a special commit-change log used during drive reinstate for replication.
 	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
 
-	// WriteBackup writes a backup copy of the priority log payload.
-	WriteBackup(ctx context.Context, tid UUID, payload []byte) error
-	// RemoveBackup deletes the backup file for the transaction.
-	RemoveBackup(ctx context.Context, tid UUID) error
+	// ClearRegistrySectorClaims clears all per-sector claim markers used to coordinate exclusive
+	// access to registry file sector CUD operations. Implementations should make best-effort and
+	// return nil if there is nothing to clear.
+	ClearRegistrySectorClaims(ctx context.Context) error
 }
 
 // TransactionLog persists transaction steps and provides job-distribution accessors for cleanup tasks.
@@ -167,6 +167,10 @@ type Cache interface {
 	// GetEx returns found(bool), value(string), err using TTL/sliding expiration semantics.
 	GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error)
 
+	// IsRestarted reports whether the cache backend (e.g., Redis) has restarted since the last check.
+	// Implementations should return true once per backend restart event per-process and false otherwise.
+	IsRestarted(ctx context.Context) (bool, error)
+
 	// SetStruct upserts a struct value under a key.
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
 	// GetStruct fetches a struct value; first return indicates success (false for not found or error).
@@ -200,6 +204,14 @@ type Cache interface {
 	// Clear purges the entire cache database.
 	Clear(ctx context.Context) error
 }
+
+// CtxPriorityLogIgnoreAge is a context key used by priority log implementations to
+// opt into processing all .plg files regardless of age (used for restart-triggered sweeps).
+// When set to true in context, GetBatch should ignore the age filter.
+type contextKey string
+
+// ContextPriorityLogIgnoreAge signals priority log GetBatch to ignore age filter when true.
+const ContextPriorityLogIgnoreAge contextKey = "plg_ignore_age"
 
 // CloseableCache is a Cache that also implements io.Closer for explicit lifecycle control.
 type CloseableCache interface {

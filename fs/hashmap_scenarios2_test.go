@@ -19,6 +19,9 @@ type lockFailOkFalse struct{ sop.Cache }
 func (m lockFailOkFalse) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, nil
 }
+func (m lockFailOkFalse) IsRestarted(ctx context.Context) (bool, error) {
+	return m.Cache.IsRestarted(ctx)
+}
 
 // Ensures setupNewFile surfaces lock-acquisition failure and does not create/truncate the segment.
 func TestHashmap_setupNewFile_LockFailure_NoCreate(t *testing.T) {

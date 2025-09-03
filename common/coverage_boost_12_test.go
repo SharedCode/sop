@@ -37,10 +37,7 @@ func (s stubPriorityLogRemoveErr) GetBatch(ctx context.Context, batchSize int) (
 func (s stubPriorityLogRemoveErr) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (s stubPriorityLogRemoveErr) WriteBackup(ctx context.Context, tid sop.UUID, payload []byte) error {
-	return nil
-}
-func (s stubPriorityLogRemoveErr) RemoveBackup(ctx context.Context, tid sop.UUID) error { return nil }
+func (s stubPriorityLogRemoveErr) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 type tlogWithPrioRemoveErr struct{ pl stubPriorityLogRemoveErr }
 
