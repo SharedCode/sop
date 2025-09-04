@@ -48,9 +48,12 @@ const (
 	defaultLockDuration = 5 * time.Minute
 	// coordinatorLockName is the global coordinator lock used to serialize
 	// priority rollbacks across the cluster.
-	coordinatorLockName = "Prbs"
-	maxPriorityRollbacksDuration = 20 * time.Minute
+	coordinatorLockName           = "Prbs"
+	coordinatorRestoreAllLockName = "AllPrbs"
 )
+
+var maxPriorityRollbacksDurationAll = 25 * time.Minute
+var maxPriorityRollbacksDuration = 15 * time.Minute
 
 // Instantiate a transaction logger.
 func newTransactionLogger(logger sop.TransactionLog, logging bool) *transactionLog {
@@ -109,112 +112,120 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 	return tl.rollback(ctx, t, tid, committedFunctionLogs)
 }
 
-func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) (bool, error) {
-	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey(coordinatorLockName)})
-	// When restart-triggered, ctx may contain the flag to ignore age. In that mode we
-	// will process multiple batches; if not the winner, we pause and poll until the
-	// coordinator lock is released.
-	ignoreAge := false
-	if v := ctx.Value(sop.ContextPriorityLogIgnoreAge); v != nil {
-		if b, ok := v.(bool); ok && b {
-			ignoreAge = true
-		}
-	}
-
-	ok1, _, _ := t.l2Cache.Lock(ctx, maxPriorityRollbacksDuration, lk)
+func (tl *transactionLog) doPriorityRollbacksAll(ctx context.Context, t *Transaction) (bool, error) {
+	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey(coordinatorRestoreAllLockName)})
+	ok1, _, _ := t.l2Cache.Lock(ctx, maxPriorityRollbacksDurationAll, lk)
 	ok2, _ := t.l2Cache.IsLocked(ctx, lk)
 	if !ok1 || !ok2 {
-		if ignoreAge {
-			if err := tl.waitForCoordinatorRelease(ctx, t, coordinatorLockName, maxPriorityRollbacksDuration); err != nil {
-				return false, err
-			}
+		if err := tl.waitForCoordinatorRelease(ctx, t, coordinatorRestoreAllLockName, maxPriorityRollbacksDurationAll); err != nil {
+			return false, err
 		}
 		return false, nil
 	}
 	defer t.l2Cache.Unlock(ctx, lk)
 
-	log.Info("Entering doPriorityRollbacks loop(restore).")
+	log.Info("Entering doPriorityRollbacksAll loop(restore).")
 	// In restart-driven sweep mode, clear all per-region signal markers up-front so they will not cause false "locks"
 	// in Registry file sector updates. Consider all of them having a lock on sectors to get rolledback because Redis got restarted.
 	// All in-flight transactions will detect Redis restart & will rollback. Deleting these markers will allow for a clean state.
-	if ignoreAge {
-		if err := tl.PriorityLog().ClearRegistrySectorClaims(ctx); err != nil {
-			log.Warn("failed to clear registry sector claims at sweep start", "err", err)
-		}
+	if err := tl.PriorityLog().ClearRegistrySectorClaims(ctx); err != nil {
+		log.Warn("failed to clear registry sector claims at sweep start", "err", err)
 	}
 	consumed := false
 	start := sop.Now()
 	for {
-		v, err := tl.PriorityLog().GetBatch(ctx, 20)
-		if len(v) == 0 || err != nil {
-			return consumed, err
+		if ok, err := tl.priorityRollbacks(ctx, t, start, "doPriorityRollbacksAll", maxPriorityRollbacksDurationAll); err != nil {
+			return ok, err
+		} else if ok {
+			consumed = true
+		} else {
+			break
 		}
-		for i := range v {
-			tid := v[i].Key
-			uhAndrh := v[i].Value
+	}
+	return consumed, nil
+}
 
-			var lks []*sop.LockKey
-			var err error
-			// Acquire locks may involve attempt to override existing locks that may be for the dead transactions.
-			if lks, err = tl.acquireLocks(ctx, t, tid, uhAndrh); err != nil {
-				if se, ok := err.(sop.Error); ok && se.Code == sop.RestoreRegistryFileSectorFailure {
-					// Allow failover event to occur, return the error.
-					return false, se
-				}
-				log.Error(fmt.Sprintf("unable to acquire locks for transaction %s, skip priority log rollback, err details: %v", tid.String(), err))
-				continue
+func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) (bool, error) {
+	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey(coordinatorLockName)})
+	ok1, _, _ := t.l2Cache.Lock(ctx, maxPriorityRollbacksDuration, lk)
+	ok2, _ := t.l2Cache.IsLocked(ctx, lk)
+	if !ok1 || !ok2 {
+		return false, nil
+	}
+	defer t.l2Cache.Unlock(ctx, lk)
+
+	log.Info("Entering doPriorityRollbacks loop(restore).")
+	start := sop.Now()
+	return tl.priorityRollbacks(ctx, t, start, "doPriorityRollbacks", maxPriorityRollbacksDuration)
+}
+
+func (tl *transactionLog) priorityRollbacks(ctx context.Context, t *Transaction, start time.Time, label string, maxDuration time.Duration) (bool, error) {
+	v, err := tl.PriorityLog().GetBatch(ctx, 20)
+	if len(v) == 0 || err != nil {
+		return false, err
+	}
+	for i := range v {
+		tid := v[i].Key
+		uhAndrh := v[i].Value
+
+		var lks []*sop.LockKey
+		var err error
+		// Acquire locks may involve attempt to override existing locks that may be for the dead transactions.
+		if lks, err = tl.acquireLocks(ctx, t, tid, uhAndrh); err != nil {
+			if se, ok := err.(sop.Error); ok && se.Code == sop.RestoreRegistryFileSectorFailure {
+				// Allow failover event to occur, return the error.
+				return false, se
 			}
+			log.Error(fmt.Sprintf("unable to acquire locks for transaction %s, skip priority log rollback, err details: %v", tid.String(), err))
+			continue
+		}
 
-			reqIDs := sop.ExtractLogicalIDs(uhAndrh)
-			if cuhAndrh, err := t.registry.Get(ctx, reqIDs); err != nil {
-				log.Info(fmt.Sprintf("error reading (partly expected) current registry sector values for transaction %s, err details: %v", tid.String(), err))
-			} else {
-				for i := range uhAndrh {
-					for ii := range uhAndrh[i].IDs {
-						if !(uhAndrh[i].IDs[ii].Version == cuhAndrh[i].IDs[ii].Version || uhAndrh[i].IDs[ii].Version+1 == cuhAndrh[i].IDs[ii].Version) {
-							t.l2Cache.Unlock(ctx, lks)
-							// Version in Registry had gone past the value we can repair, 'just trigger a failover.
-							return false, sop.Error{
-								Code:     sop.RestoreRegistryFileSectorFailure,
-								Err:      fmt.Errorf("version in Registry had gone past the value we can repair, 'just trigger a failover"),
-								UserData: tid,
-							}
+		reqIDs := sop.ExtractLogicalIDs(uhAndrh)
+		if cuhAndrh, err := t.registry.Get(ctx, reqIDs); err != nil {
+			log.Info(fmt.Sprintf("error reading (partly expected) current registry sector values for transaction %s, err details: %v", tid.String(), err))
+		} else {
+			for i := range uhAndrh {
+				for ii := range uhAndrh[i].IDs {
+					if !(uhAndrh[i].IDs[ii].Version == cuhAndrh[i].IDs[ii].Version || uhAndrh[i].IDs[ii].Version+1 == cuhAndrh[i].IDs[ii].Version) {
+						t.l2Cache.Unlock(ctx, lks)
+						// Version in Registry had gone past the value we can repair, 'just trigger a failover.
+						return false, sop.Error{
+							Code:     sop.RestoreRegistryFileSectorFailure,
+							Err:      fmt.Errorf("version in Registry had gone past the value we can repair, 'just trigger a failover"),
+							UserData: tid,
 						}
 					}
 				}
 			}
+		}
 
-			if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
-				t.l2Cache.Unlock(ctx, lks)
-				// When Registry is known to be corrupted, we can raise a failover event.
-				return false, sop.Error{
-					Code:     sop.RestoreRegistryFileSectorFailure,
-					Err:      err,
-					UserData: tid,
-				}
-			}
-
-			if err := t.l2Cache.Unlock(ctx, lks); err != nil {
-				log.Warn(fmt.Sprintf("error releasing locks for transaction %s, but priority log got rolled back", tid.String()))
-			} else {
-				log.Info(fmt.Sprintf("restoring a priority log for transaction %s occurred", tid.String()))
-			}
-
-			// Remove the priority log file as we succeeded in registry file sector restore.
-			if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
-				return false, err
-			}
-
-			// Loop through & consume entire batch or until timeout if busy.
-			if err := sop.TimedOut(ctx, "doPriorityRollbacks", start, maxPriorityRollbacksDuration); err != nil {
-				return true, err
+		if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
+			t.l2Cache.Unlock(ctx, lks)
+			// When Registry is known to be corrupted, we can raise a failover event.
+			return false, sop.Error{
+				Code:     sop.RestoreRegistryFileSectorFailure,
+				Err:      err,
+				UserData: tid,
 			}
 		}
-		consumed = true
-		if !ignoreAge {
-			break // single batch in normal mode
+
+		if err := t.l2Cache.Unlock(ctx, lks); err != nil {
+			log.Warn(fmt.Sprintf("error releasing locks for transaction %s, but priority log got rolled back", tid.String()))
+		} else {
+			log.Info(fmt.Sprintf("restoring a priority log for transaction %s occurred", tid.String()))
+		}
+
+		// Remove the priority log file as we succeeded in registry file sector restore.
+		if err := tl.PriorityLog().Remove(ctx, tid); err != nil {
+			return false, err
+		}
+
+		// Loop through & consume entire batch or until timeout if busy.
+		if err := sop.TimedOut(ctx, label, start, maxDuration); err != nil {
+			return true, err
 		}
 	}
+
 	return true, nil
 }
 

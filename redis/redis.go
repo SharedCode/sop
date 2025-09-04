@@ -14,9 +14,8 @@ import (
 type client struct {
 	conn    *Connection
 	isOwner bool
-	// lastSeenRunID tracks the last observed Redis server run_id to detect restarts.
-	lastSeenRunID string
 }
+
 
 // NewClient returns a Cache backed by the default shared Redis connection.
 // The underlying connection must have been initialized via package-level setup.
@@ -66,64 +65,7 @@ func (c client) Ping(ctx context.Context) error {
 	return nil
 }
 
-// IsRestarted returns true if the Redis server run_id has changed since the previous call.
-// It uses the INFO server section to read run_id, caching it per client instance.
-func (c *client) IsRestarted(ctx context.Context) (bool, error) {
-	if c.conn == nil {
-		return false, fmt.Errorf("redis connection is not open; can't create new client")
-	}
-	// Use INFO server to get run_id which changes on restart.
-	info, err := c.conn.Client.Info(ctx, "server").Result()
-	if err != nil {
-		return false, err
-	}
-	// Parse run_id: lines are of the form key:value
-	runID := ""
-	for _, line := range splitLines(info) {
-		// skip comments and empty lines
-		if len(line) == 0 || line[0] == '#' {
-			continue
-		}
-		if len(line) > 7 && line[:7] == "run_id:" {
-			runID = line[7:]
-			break
-		}
-	}
-	if runID == "" {
-		return false, fmt.Errorf("unable to read run_id from INFO server response")
-	}
-	if c.lastSeenRunID == "" {
-		c.lastSeenRunID = runID
-		return false, nil
-	}
-	if runID != c.lastSeenRunID {
-		c.lastSeenRunID = runID
-		return true, nil
-	}
-	return false, nil
-}
 
-// splitLines is a tiny helper to avoid strings import bloat here.
-func splitLines(s string) []string {
-	// INFO uses \r\n line endings typically; support both.
-	lines := make([]string, 0, 32)
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			// trim optional carriage return
-			end := i
-			if end > start && s[end-1] == '\r' {
-				end--
-			}
-			lines = append(lines, s[start:end])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
-}
 
 // Clear removes all keys in the current Redis database. Use with caution.
 func (c client) Clear(ctx context.Context) error {
@@ -245,4 +187,11 @@ func (c client) Delete(ctx context.Context, keys []string) (bool, error) {
 		err = nil
 	}
 	return r, err
+}
+
+func (c client) Info(ctx context.Context, section string) (string, error) {
+	if c.conn == nil {
+		return "", fmt.Errorf("redis connection is not open; can't create new client")
+	}
+	return c.conn.Client.Info(ctx, section).Result()
 }

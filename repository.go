@@ -170,10 +170,6 @@ type Cache interface {
 	// GetEx returns found(bool), value(string), err using TTL/sliding expiration semantics.
 	GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error)
 
-	// IsRestarted reports whether the cache backend (e.g., Redis) has restarted since the last check.
-	// Implementations should return true once per backend restart event per-process and false otherwise.
-	IsRestarted(ctx context.Context) (bool, error)
-
 	// SetStruct upserts a struct value under a key.
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
 	// GetStruct fetches a struct value; first return indicates success (false for not found or error).
@@ -206,6 +202,9 @@ type Cache interface {
 
 	// Clear purges the entire cache database.
 	Clear(ctx context.Context) error
+
+	// Info retrieves information about the cache Server.
+	Info(ctx context.Context, section string) (string, error)
 }
 
 // CtxPriorityLogIgnoreAge is a context key used by priority log implementations to
