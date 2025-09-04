@@ -63,9 +63,10 @@ func (m mockCacheWarn) IsLockedByOthers(ctx context.Context, names []string) (bo
 func (m mockCacheWarn) Unlock(ctx context.Context, ks []*sop.LockKey) error {
 	return m.inner.Unlock(ctx, ks)
 }
-func (m mockCacheWarn) Clear(ctx context.Context) error { return m.inner.Clear(ctx) }
-func (m mockCacheWarn) IsRestarted(ctx context.Context) (bool, error) {
-	return m.inner.IsRestarted(ctx)
+func (m mockCacheWarn) Clear(ctx context.Context) error               { return m.inner.Clear(ctx) }
+func (m mockCacheWarn) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (m mockCacheWarn) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 type mockCacheDeleteWarn struct{ sop.Cache }
@@ -73,8 +74,9 @@ type mockCacheDeleteWarn struct{ sop.Cache }
 func (m mockCacheDeleteWarn) Delete(context.Context, []string) (bool, error) {
 	return false, errors.New("fail delete")
 }
-func (m mockCacheDeleteWarn) IsRestarted(ctx context.Context) (bool, error) {
-	return m.Cache.IsRestarted(ctx)
+func (m mockCacheDeleteWarn) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (m mockCacheDeleteWarn) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 type mockCacheSetStructWarn struct{ sop.Cache }
@@ -82,8 +84,9 @@ type mockCacheSetStructWarn struct{ sop.Cache }
 func (m mockCacheSetStructWarn) SetStruct(context.Context, string, interface{}, time.Duration) error {
 	return errors.New("fail setstruct")
 }
-func (m mockCacheSetStructWarn) IsRestarted(ctx context.Context) (bool, error) {
-	return m.Cache.IsRestarted(ctx)
+func (m mockCacheSetStructWarn) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (m mockCacheSetStructWarn) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 // mockCacheAlwaysLocked forces Lock to report the key(s) are already locked, so Update's
@@ -93,8 +96,9 @@ type mockCacheAlwaysLocked struct{ sop.Cache }
 func (m mockCacheAlwaysLocked) Lock(ctx context.Context, d time.Duration, ks []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NewUUID(), nil
 }
-func (m mockCacheAlwaysLocked) IsRestarted(ctx context.Context) (bool, error) {
-	return m.Cache.IsRestarted(ctx)
+func (m mockCacheAlwaysLocked) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (m mockCacheAlwaysLocked) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 // failingRemoveAll triggers RemoveAll failure for passive replicated path ending with /x1.

@@ -15,8 +15,9 @@ import (
 
 type getStructExErrCache struct{ sop.Cache }
 
-func (c getStructExErrCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c getStructExErrCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c getStructExErrCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (c getStructExErrCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
@@ -561,8 +562,9 @@ func Test_ReadStatus_ActivePresent_InvalidJSON_ReturnsError(t *testing.T) {
 
 type getStructExErrCache2 struct{ sop.Cache }
 
-func (c getStructExErrCache2) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c getStructExErrCache2) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c getStructExErrCache2) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (c getStructExErrCache2) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
@@ -571,8 +573,9 @@ func (c getStructExErrCache2) GetStructEx(ctx context.Context, key string, v int
 
 type getStructExNotFoundCache struct{ sop.Cache }
 
-func (c getStructExNotFoundCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c getStructExNotFoundCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c getStructExNotFoundCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (c getStructExNotFoundCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
@@ -594,8 +597,9 @@ func (c getStructExFoundCache) GetStructEx(ctx context.Context, key string, v in
 
 type setStructErrCache2 struct{ sop.Cache }
 
-func (c setStructErrCache2) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c setStructErrCache2) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c setStructErrCache2) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (c setStructErrCache2) SetStruct(ctx context.Context, key string, value interface{}, exp time.Duration) error {
@@ -605,8 +609,9 @@ func (c setStructErrCache2) SetStruct(ctx context.Context, key string, value int
 // combined wrapper: GetStructEx returns not found, SetStruct returns error
 type notFoundSetErrCache struct{ sop.Cache }
 
-func (c notFoundSetErrCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c notFoundSetErrCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c notFoundSetErrCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (c notFoundSetErrCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {

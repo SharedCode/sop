@@ -631,8 +631,9 @@ func Test_RefetchAndMerge_Add_InNode_DuplicateKey_ReturnsError(t *testing.T) {
 // unlockErrCache wraps a cache to force Unlock errors.
 type unlockErrCache struct{ sop.Cache }
 
-func (c unlockErrCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c unlockErrCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c unlockErrCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (c unlockErrCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {

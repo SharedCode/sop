@@ -123,8 +123,9 @@ type getErrCache struct{ sop.Cache }
 func (g getErrCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, fmt.Errorf("getstruct err")
 }
-func (g getErrCache) IsRestarted(ctx context.Context) (bool, error) {
-	return g.Cache.IsRestarted(ctx)
+func (g getErrCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (g getErrCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func Test_ItemActionTracker_CheckTrackedItems_Error_And_GetCompat(t *testing.T) {
@@ -497,9 +498,10 @@ func (c errIsLockedCache13) IsLockedByOthers(ctx context.Context, lockKeyNames [
 func (c errIsLockedCache13) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return c.inner.Unlock(ctx, lockKeys)
 }
-func (c errIsLockedCache13) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
-func (c errIsLockedCache13) IsRestarted(ctx context.Context) (bool, error) {
-	return c.inner.IsRestarted(ctx)
+func (c errIsLockedCache13) Clear(ctx context.Context) error               { return c.inner.Clear(ctx) }
+func (c errIsLockedCache13) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c errIsLockedCache13) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 // errGetExCache13 wraps a cache and forces GetEx to error to hit acquireLocks' takeover GetEx error path.
@@ -552,9 +554,10 @@ func (c errGetExCache13) IsLockedByOthers(ctx context.Context, lockKeyNames []st
 func (c errGetExCache13) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return c.inner.Unlock(ctx, lockKeys)
 }
-func (c errGetExCache13) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
-func (c errGetExCache13) IsRestarted(ctx context.Context) (bool, error) {
-	return c.inner.IsRestarted(ctx)
+func (c errGetExCache13) Clear(ctx context.Context) error               { return c.inner.Clear(ctx) }
+func (c errGetExCache13) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c errGetExCache13) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func Test_TransactionLogger_AcquireLocks_IsLocked_Error_UnlocksAndReturns(t *testing.T) {

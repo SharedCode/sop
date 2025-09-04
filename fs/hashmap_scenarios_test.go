@@ -117,7 +117,10 @@ func (m *mockCacheHashmap) Unlock(ctx context.Context, lk []*sop.LockKey) error 
 }
 func (m *mockCacheHashmap) Clear(ctx context.Context) error { return m.base.Clear(ctx) }
 func (m *mockCacheHashmap) IsRestarted(ctx context.Context) (bool, error) {
-	return m.base.IsRestarted(ctx)
+	return false, nil
+}
+func (m *mockCacheHashmap) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func contains(s, sub string) bool {
@@ -590,7 +593,10 @@ func (m *mockCacheIsLockedErr) IsLocked(ctx context.Context, lk []*sop.LockKey) 
 	return m.mockCacheHashmap.IsLocked(ctx, lk)
 }
 func (m *mockCacheIsLockedErr) IsRestarted(ctx context.Context) (bool, error) {
-	return m.mockCacheHashmap.IsRestarted(ctx)
+	return false, nil
+}
+func (m *mockCacheIsLockedErr) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func Test_updateFileBlockRegion_ErrorPaths_Table(t *testing.T) {

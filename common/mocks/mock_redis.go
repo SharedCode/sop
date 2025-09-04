@@ -40,13 +40,9 @@ func (m *mockRedis) GetEx(ctx context.Context, key string, expiration time.Durat
 }
 func (m *mockRedis) Ping(ctx context.Context) error { return nil }
 
-// IsRestarted returns the internal flag once and then resets it to false.
-func (m *mockRedis) IsRestarted(ctx context.Context) (bool, error) {
-	if m.restarted {
-		m.restarted = false
-		return true, nil
-	}
-	return false, nil
+// Info returns a minimal stub string; real redis client returns INFO server output.
+func (m *mockRedis) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nredis_version:mock\nrun_id:mockrunid\n", nil
 }
 
 // Struct operations used by value caching and item locks.

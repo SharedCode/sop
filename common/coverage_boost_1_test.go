@@ -637,9 +637,10 @@ func (c lockThenIsLockedFalseCache) IsLockedByOthers(ctx context.Context, lockKe
 func (c lockThenIsLockedFalseCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return c.inner.Unlock(ctx, lockKeys)
 }
-func (c lockThenIsLockedFalseCache) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
-func (c lockThenIsLockedFalseCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.inner.IsRestarted(ctx)
+func (c lockThenIsLockedFalseCache) Clear(ctx context.Context) error               { return c.inner.Clear(ctx) }
+func (c lockThenIsLockedFalseCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c lockThenIsLockedFalseCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 // lockErrorCache forces Lock to return an error to trigger error propagation path in acquireLocks.
@@ -689,9 +690,10 @@ func (c lockErrorCache) IsLockedByOthers(ctx context.Context, lockKeyNames []str
 func (c lockErrorCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return c.inner.Unlock(ctx, lockKeys)
 }
-func (c lockErrorCache) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
-func (c lockErrorCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.inner.IsRestarted(ctx)
+func (c lockErrorCache) Clear(ctx context.Context) error               { return c.inner.Clear(ctx) }
+func (c lockErrorCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c lockErrorCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func Test_AcquireLocks_PartialAfterOk_ReturnsFailover(t *testing.T) {

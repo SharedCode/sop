@@ -51,6 +51,7 @@ type Transaction struct {
 
 	// Handle replication related error.
 	HandleReplicationRelatedError func(ctx context.Context, ioError error, rollbackError error, rollbackSucceeded bool)
+	cacheRestartHelper *cacheRestartHelper
 
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles []sop.RegistryPayload[sop.Handle]
@@ -92,6 +93,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration ti
 		l1Cache:         cache.GetGlobalCache(),
 		blobStore:       blobStore,
 		logger:          newTransactionLogger(transactionLog, logging),
+		cacheRestartHelper: newCacheRestartHelper(l2Cache),
 		phaseDone:       -1,
 		id:              sop.NewUUID(),
 	}, nil

@@ -498,8 +498,7 @@ func (t *Transaction) onIdle(ctx context.Context) {
 
 	// If cache backend restarted, attempt a one-time priority rollback sweep immediately.
 	if t.l2Cache != nil && t.logger != nil && t.logger.PriorityLog().IsEnabled() {
-		rh := newCacheRestartHelper(t.l2Cache)
-		if restarted, err := rh.IsRestarted(ctx); err == nil && restarted {
+		if restarted, err := t.cacheRestartHelper.IsRestarted(ctx); err == nil && restarted {
 			// On restart, sweep all priority logs (ignore age) once.
 			ctxAll := context.WithValue(ctx, sop.ContextPriorityLogIgnoreAge, true)
 			if _, err := t.logger.doPriorityRollbacksAll(ctxAll, t); err != nil {

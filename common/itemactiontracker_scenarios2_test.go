@@ -77,9 +77,10 @@ func (f *flakyCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string
 func (f *flakyCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return f.base.Unlock(ctx, lockKeys)
 }
-func (f *flakyCache) Clear(ctx context.Context) error { return f.base.Clear(ctx) }
-func (f *flakyCache) IsRestarted(ctx context.Context) (bool, error) {
-	return f.base.IsRestarted(ctx)
+func (f *flakyCache) Clear(ctx context.Context) error               { return f.base.Clear(ctx) }
+func (f *flakyCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (f *flakyCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func Test_ItemActionTracker_Lock_PostSetReadMiss_ReturnsError(t *testing.T) {
@@ -165,9 +166,10 @@ func (e *errLockCache) IsLockedByOthers(ctx context.Context, lockKeyNames []stri
 func (e *errLockCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return e.base.Unlock(ctx, lockKeys)
 }
-func (e *errLockCache) Clear(ctx context.Context) error { return e.base.Clear(ctx) }
-func (e *errLockCache) IsRestarted(ctx context.Context) (bool, error) {
-	return e.base.IsRestarted(ctx)
+func (e *errLockCache) Clear(ctx context.Context) error               { return e.base.Clear(ctx) }
+func (e *errLockCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (e *errLockCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func Test_ItemActionTracker_Lock_EarlyGetStructError(t *testing.T) {
@@ -299,9 +301,10 @@ func (e *errCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) 
 func (e *errCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return e.base.Unlock(ctx, lockKeys)
 }
-func (e *errCache) Clear(ctx context.Context) error { return e.base.Clear(ctx) }
-func (e *errCache) IsRestarted(ctx context.Context) (bool, error) {
-	return e.base.IsRestarted(ctx)
+func (e *errCache) Clear(ctx context.Context) error               { return e.base.Clear(ctx) }
+func (e *errCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (e *errCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func Test_ItemActionTracker_Get_RedisErrors_UsesBlob_StillSucceeds(t *testing.T) {

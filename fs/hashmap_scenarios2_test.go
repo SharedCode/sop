@@ -19,8 +19,9 @@ type lockFailOkFalse struct{ sop.Cache }
 func (m lockFailOkFalse) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, nil
 }
-func (m lockFailOkFalse) IsRestarted(ctx context.Context) (bool, error) {
-	return m.Cache.IsRestarted(ctx)
+func (m lockFailOkFalse) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (m lockFailOkFalse) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 // Ensures setupNewFile surfaces lock-acquisition failure and does not create/truncate the segment.

@@ -197,8 +197,9 @@ func (m *lockFailingCache) IsLockedByOthers(ctx context.Context, ks []string) (b
 }
 func (m *lockFailingCache) Unlock(ctx context.Context, lks []*sop.LockKey) error { return nil }
 func (m *lockFailingCache) Clear(ctx context.Context) error                      { return m.base.Clear(ctx) }
-func (m *lockFailingCache) IsRestarted(ctx context.Context) (bool, error) {
-	return m.base.IsRestarted(ctx)
+func (m *lockFailingCache) IsRestarted(ctx context.Context) (bool, error)        { return false, nil }
+func (m *lockFailingCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 func Test_updateFileBlockRegion_LockTimeout(t *testing.T) {
 	// Short-deadline context forces the timeout branch on lock acquisition loop.

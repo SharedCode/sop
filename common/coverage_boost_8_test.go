@@ -634,8 +634,9 @@ func Test_TransactionLogger_Rollback_Finalize_WithDeleteTrackedItemsValues_Propa
 // to exercise acquireLocks partial-lock failover branch.
 type partialLockCache struct{ sop.Cache }
 
-func (c partialLockCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c partialLockCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c partialLockCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (p *partialLockCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {

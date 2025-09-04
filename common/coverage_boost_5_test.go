@@ -809,7 +809,10 @@ func (m *failSecondGetAfterSetCache) Unlock(ctx context.Context, ks []*sop.LockK
 }
 func (m *failSecondGetAfterSetCache) Clear(ctx context.Context) error { return m.inner.Clear(ctx) }
 func (m *failSecondGetAfterSetCache) IsRestarted(ctx context.Context) (bool, error) {
-	return m.inner.IsRestarted(ctx)
+	return false, nil
+}
+func (m *failSecondGetAfterSetCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func Test_ItemActionTracker_Add_ActivelyPersisted_NilValue_NoBlobNoCache(t *testing.T) {

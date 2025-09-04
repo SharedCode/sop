@@ -720,9 +720,10 @@ func (m missAfterSetCache) IsLockedByOthers(ctx context.Context, names []string)
 func (m missAfterSetCache) Unlock(ctx context.Context, lk []*sop.LockKey) error {
 	return m.base.Unlock(ctx, lk)
 }
-func (m missAfterSetCache) Clear(ctx context.Context) error { return m.base.Clear(ctx) }
-func (m missAfterSetCache) IsRestarted(ctx context.Context) (bool, error) {
-	return m.base.IsRestarted(ctx)
+func (m missAfterSetCache) Clear(ctx context.Context) error               { return m.base.Clear(ctx) }
+func (m missAfterSetCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (m missAfterSetCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func Test_ItemActionTracker_Lock_CantAttain_AfterSet_ReturnsError(t *testing.T) {

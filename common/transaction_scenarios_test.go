@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -556,5 +557,173 @@ func Test_Transaction_Methods_Errors(t *testing.T) {
 	trans5, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog())
 	if err := trans5.Close(); err != nil {
 		t.Errorf("unexpected error on Close with nil registry: %v", err)
+	}
+}
+
+// mutableRunIDCache wraps the existing mock redis cache but allows mutating the run_id
+// returned by Info() so we can simulate redis restarts (run_id changes) without touching
+// production code.
+type mutableRunIDCache struct {
+	base  sop.Cache
+	runID atomic.Value // string
+}
+
+func newMutableRunIDCache(initial string) *mutableRunIDCache {
+	c := &mutableRunIDCache{base: mocks.NewMockClient()}
+	c.runID.Store(initial)
+	return c
+}
+
+// Implement sop.Cache by forwarding all calls except Info.
+func (m *mutableRunIDCache) Set(ctx context.Context, key string, value string, exp time.Duration) error {
+	return m.base.Set(ctx, key, value, exp)
+}
+func (m *mutableRunIDCache) Get(ctx context.Context, key string) (bool, string, error) {
+	return m.base.Get(ctx, key)
+}
+func (m *mutableRunIDCache) GetEx(ctx context.Context, key string, exp time.Duration) (bool, string, error) {
+	return m.base.GetEx(ctx, key, exp)
+}
+func (m *mutableRunIDCache) SetStruct(ctx context.Context, key string, v interface{}, exp time.Duration) error {
+	return m.base.SetStruct(ctx, key, v, exp)
+}
+func (m *mutableRunIDCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
+	return m.base.GetStruct(ctx, key, target)
+}
+func (m *mutableRunIDCache) GetStructEx(ctx context.Context, key string, target interface{}, exp time.Duration) (bool, error) {
+	return m.base.GetStructEx(ctx, key, target, exp)
+}
+func (m *mutableRunIDCache) Delete(ctx context.Context, keys []string) (bool, error) {
+	return m.base.Delete(ctx, keys)
+}
+func (m *mutableRunIDCache) Ping(ctx context.Context) error { return m.base.Ping(ctx) }
+func (m *mutableRunIDCache) FormatLockKey(k string) string  { return m.base.FormatLockKey(k) }
+func (m *mutableRunIDCache) CreateLockKeys(keys []string) []*sop.LockKey {
+	return m.base.CreateLockKeys(keys)
+}
+func (m *mutableRunIDCache) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID]) []*sop.LockKey {
+	return m.base.CreateLockKeysForIDs(keys)
+}
+func (m *mutableRunIDCache) IsLockedTTL(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, error) {
+	return m.base.IsLockedTTL(ctx, d, lk)
+}
+func (m *mutableRunIDCache) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
+	return m.base.Lock(ctx, d, lk)
+}
+func (m *mutableRunIDCache) IsLocked(ctx context.Context, lk []*sop.LockKey) (bool, error) {
+	return m.base.IsLocked(ctx, lk)
+}
+func (m *mutableRunIDCache) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
+	return m.base.IsLockedByOthers(ctx, names)
+}
+func (m *mutableRunIDCache) Unlock(ctx context.Context, lk []*sop.LockKey) error {
+	return m.base.Unlock(ctx, lk)
+}
+func (m *mutableRunIDCache) Clear(ctx context.Context) error { return m.base.Clear(ctx) }
+func (m *mutableRunIDCache) Info(ctx context.Context, section string) (string, error) {
+	runID := m.runID.Load().(string)
+	return "# Server\nredis_version:mock\nrun_id:" + runID + "\n", nil
+}
+
+func (m *mutableRunIDCache) setRunID(v string) { m.runID.Store(v) }
+
+// priorityLogCounter implements TransactionPriorityLog and counts ClearRegistrySectorClaims calls
+// which uniquely indicates doPriorityRollbacksAll occurred (production code only calls it there once per sweep).
+type priorityLogCounter struct {
+	clearCount int32
+}
+
+func (p *priorityLogCounter) IsEnabled() bool                                             { return true }
+func (p *priorityLogCounter) Add(ctx context.Context, tid sop.UUID, payload []byte) error { return nil }
+func (p *priorityLogCounter) Remove(ctx context.Context, tid sop.UUID) error              { return nil }
+func (p *priorityLogCounter) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
+	return nil, nil
+}
+func (p *priorityLogCounter) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
+	// Return empty so regular priority rollback loops don't run.
+	return nil, nil
+}
+func (p *priorityLogCounter) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
+	return nil
+}
+func (p *priorityLogCounter) ClearRegistrySectorClaims(ctx context.Context) error {
+	atomic.AddInt32(&p.clearCount, 1)
+	return nil
+}
+
+// txLogCounter implements TransactionLog; only methods used in test are fully implemented.
+type txLogCounter struct {
+	prio *priorityLogCounter
+}
+
+func (l *txLogCounter) PriorityLog() sop.TransactionPriorityLog { return l.prio }
+func (l *txLogCounter) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
+	return nil
+}
+func (l *txLogCounter) Remove(ctx context.Context, tid sop.UUID) error { return nil }
+func (l *txLogCounter) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
+	return sop.NilUUID, "", nil, nil
+}
+func (l *txLogCounter) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
+	return sop.NilUUID, nil, nil
+}
+func (l *txLogCounter) NewUUID() sop.UUID { return sop.NewUUID() }
+
+// TestTransactionOnIdleRestartSweep verifies that onIdle triggers exactly one global priority rollback sweep
+// (doPriorityRollbacksAll) per redis run_id change.
+func TestTransactionOnIdleRestartSweep(t *testing.T) {
+	ctx := context.Background()
+	// Make restart detection very fast & deterministic (always do INFO).
+	SetRestartCheckInterval(10 * time.Millisecond)
+	SetRestartInfoEveryN(1)
+
+	// Build transaction dependencies using existing helper wiring.
+	cache := newMutableRunIDCache("runA")
+
+	// Minimal setup for other dependencies using existing mock helpers.
+	// We reuse newMockTwoPhaseCommitTransaction pattern indirectly by constructing a Transaction manually.
+	prio := &priorityLogCounter{}
+	tl := newTransactionLogger(&txLogCounter{prio: prio}, false)
+
+	// Use simple in-memory repositories & stores already covered by other tests.
+	// For this focused test we only need logger + cache + cacheRestartHelper field.
+	tr := &Transaction{
+		l2Cache:            cache,
+		logger:             tl,
+		cacheRestartHelper: newCacheRestartHelper(cache),
+		maxTime:            2 * time.Second,
+	}
+
+	// Provide a single backend btree stub so onIdle early return (len==0) doesn't trigger.
+	tr.btreesBackend = []btreeBackend{{}}
+	// The real code expects at least one backend with nodeRepository etc for other paths, but we don't
+	// exercise those here. Empty backend is sufficient for len check.
+
+	// First onIdle: establishes baseline run_id (no sweep expected).
+	tr.onIdle(ctx)
+	if c := atomic.LoadInt32(&prio.clearCount); c != 0 {
+		t.Fatalf("expected 0 sweeps after first onIdle, got %d", c)
+	}
+
+	// Simulate restart: change run_id and allow interval to elapse.
+	cache.setRunID("runB")
+	time.Sleep(15 * time.Millisecond)
+	tr.onIdle(ctx)
+	if c := atomic.LoadInt32(&prio.clearCount); c != 1 {
+		t.Fatalf("expected 1 sweep after run_id change to runB, got %d", c)
+	}
+
+	// Subsequent rapid onIdle with same run_id should NOT increment sweeps.
+	tr.onIdle(ctx)
+	if c := atomic.LoadInt32(&prio.clearCount); c != 1 {
+		t.Fatalf("expected still 1 sweep on repeated onIdle without run_id change, got %d", c)
+	}
+
+	// Simulate second restart (promotion/failover) run_id change.
+	cache.setRunID("runC")
+	time.Sleep(15 * time.Millisecond)
+	tr.onIdle(ctx)
+	if c := atomic.LoadInt32(&prio.clearCount); c != 2 {
+		t.Fatalf("expected 2 sweeps after second run_id change to runC, got %d", c)
 	}
 }

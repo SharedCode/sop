@@ -176,7 +176,8 @@ func Test_OnIdle_Runs_Priority_And_Expired_Paths(t *testing.T) {
 	tl := newTransactionLogger(stubTLog{pl: pl}, true)
 	reg := mocks.NewMockRegistry(false)
 	_ = reg.Add(ctx, pl.batch[0].Value)
-	tx := &Transaction{logger: tl, l2Cache: mocks.NewMockClient(), registry: reg}
+	redisClient := mocks.NewMockClient()
+	tx := &Transaction{logger: tl, l2Cache: redisClient, registry: reg, cacheRestartHelper: newCacheRestartHelper(redisClient)}
 	tx.btreesBackend = []btreeBackend{{}}
 
 	prevPrio := lastPriorityOnIdleTime
