@@ -35,7 +35,7 @@ func newTLRT(t *testing.T) (*TransactionLog, *replicationTracker) {
 	if err != nil {
 		t.Fatalf("NewReplicationTracker: %v", err)
 	}
-	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	tl := NewTransactionLog(mocks.NewMockClient(), rt, nil)
 	return tl, rt
 }
 
@@ -190,7 +190,7 @@ func TestTransactionAndPriorityLog_Scenarios(t *testing.T) {
 	}
 
 	// GetOne with no eligible (fresh TL instance, empty folder)
-	tlEmpty := NewTransactionLog(mocks.NewMockClient(), rt)
+	tlEmpty := NewTransactionLog(mocks.NewMockClient(), rt, nil)
 	_ = tlEmpty.Remove(ctx, sop.NewUUID()) // no-op just to touch path
 	// Temporarily point to new empty folder
 	rt2base := filepath.Join(t.TempDir(), "c")
@@ -385,7 +385,7 @@ func TestTransactionLog_GetOneOfHour_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	tl := NewTransactionLog(mocks.NewMockClient(), rt, nil)
 
 	tid := sop.NewUUID()
 	for i := 0; i < 3; i++ {
@@ -417,7 +417,7 @@ func TestTransactionLog_GetOneOfHour_TooOldUnlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	tl := NewTransactionLog(mocks.NewMockClient(), rt, nil)
 
 	oldHour := time.Now().Add(-5 * time.Hour).Format(DateHourLayout)
 	tid, recs, err := tl.GetOneOfHour(ctx, oldHour)
@@ -435,7 +435,7 @@ func TestTransactionLog_getLogsDetails_UnmarshalSkip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	tl := NewTransactionLog(mocks.NewMockClient(), rt, nil)
 
 	tid := sop.NewUUID()
 	filename := tl.format(tid)
@@ -463,7 +463,7 @@ func TestPriorityLog_GetBatch_WithCorruptFileError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	pl := NewTransactionLog(mocks.NewMockClient(), rt, nil).PriorityLog()
 	dir := rt.formatActiveFolderEntity(logFolder)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -500,7 +500,7 @@ func TestPriorityLog_BasicGetRemovePaths_Merged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	tl := NewTransactionLog(mocks.NewMockClient(), rt, nil)
 	pl := tl.PriorityLog()
 	if !pl.IsEnabled() {
 		t.Fatalf("expected enabled")
@@ -521,7 +521,7 @@ func TestTransactionLog_RemoveClosesFile_Merged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	tl := NewTransactionLog(mocks.NewMockClient(), rt, nil)
 	tid := sop.NewUUID()
 	if err := tl.Add(ctx, tid, 1, []byte("x")); err != nil {
 		t.Fatalf("add: %v", err)
@@ -543,7 +543,7 @@ func TestTransactionLog_getOne_IgnoresInvalidFiles_Merged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	tl := NewTransactionLog(mocks.NewMockClient(), rt, nil)
 	base := rt.formatActiveFolderEntity(logFolder)
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)

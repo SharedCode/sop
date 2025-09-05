@@ -49,7 +49,7 @@ func newMockTwoPhaseCommitTransaction(t *testing.T, mode sop.TransactionMode, ma
 		// Use the global L1 cache which has been initialized with the mock redis client above.
 		l1Cache:   cache.GetGlobalCache(),
 		blobStore: mockNodeBlobStore,
-		cacheRestartHelper: newCacheRestartHelper(mockRedisCache),
+		cacheRestartHelper: sop.NewCacheRestartHelper(mockRedisCache),
 		logger:    newTransactionLogger(mocks.NewMockTransactionLog(), logging),
 		phaseDone: -1,
 		// Assign a real transaction ID so logs are recorded under a valid TID (non-nil).

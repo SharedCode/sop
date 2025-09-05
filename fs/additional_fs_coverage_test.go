@@ -537,7 +537,7 @@ func Test_TransactionLog_GetOne_BasicFlow(t *testing.T) {
 	ageLimit = 0
 	t.Cleanup(func() { ageLimit = prevAge })
 
-	tl := NewTransactionLog(mocks.NewMockClient(), rt)
+	tl := NewTransactionLog(mocks.NewMockClient(), rt, nil)
 	tid := sop.NewUUID()
 	// Write one record
 	payload, _ := encoding.DefaultMarshaler.Marshal(sop.KeyValuePair[int, []byte]{Key: 1, Value: []byte("x")})
@@ -558,7 +558,7 @@ func Test_PriorityLog_Get_And_GetBatch(t *testing.T) {
 	ctx := context.Background()
 	a, p := t.TempDir(), t.TempDir()
 	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
-	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	pl := NewTransactionLog(mocks.NewMockClient(), rt, nil).PriorityLog()
 
 	tid := sop.NewUUID()
 	// Prepare payload ([]RegistryPayload[Handle]) and add

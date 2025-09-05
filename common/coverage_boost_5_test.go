@@ -476,9 +476,9 @@ func Test_TransactionLogger_DoPriorityRollbacks_MultiEntry_MixedOutcomes(t *test
 	tl := newTransactionLogger(stubTLog{pl: pl}, true)
 
 	// Let locks be acquirable and stable
-	_ = l2.Set(ctx, l2.FormatLockKey(coordinatorLockName), sop.NewUUID().String(), time.Minute)
+	_ = l2.Set(ctx, l2.FormatLockKey(unifiedCoordinatorLockName), sop.NewUUID().String(), time.Minute)
 	// Clear to allow our lock to be acquired by doPriorityRollbacks
-	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey(coordinatorLockName)})
+	_, _ = l2.Delete(ctx, []string{l2.FormatLockKey(unifiedCoordinatorLockName)})
 
 	consumed, err := tl.doPriorityRollbacks(ctx, tx)
 	if err == nil {

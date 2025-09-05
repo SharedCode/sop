@@ -51,7 +51,7 @@ type Transaction struct {
 
 	// Handle replication related error.
 	HandleReplicationRelatedError func(ctx context.Context, ioError error, rollbackError error, rollbackSucceeded bool)
-	cacheRestartHelper            *cacheRestartHelper
+	cacheRestartHelper            *sop.CacheRestartHelper
 
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles []sop.RegistryPayload[sop.Handle]
@@ -75,7 +75,8 @@ type Transaction struct {
 // commitMaxDuration limits commit duration; logging enables crash-safe recovery via a transaction log.
 // Note: commitMaxDuration is the internal safety cap for commit and lock TTLs; the effective limit is min(ctx deadline, commitMaxDuration).
 func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration time.Duration, logging bool,
-	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, l2Cache sop.Cache, transactionLog sop.TransactionLog) (*Transaction, error) {
+	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, l2Cache sop.Cache,
+	transactionLog sop.TransactionLog, cacheRestartHelper *sop.CacheRestartHelper) (*Transaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if commitMaxDuration <= 0 {
 		commitMaxDuration = time.Duration(15 * time.Minute)
@@ -93,7 +94,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration ti
 		l1Cache:            cache.GetGlobalCache(),
 		blobStore:          blobStore,
 		logger:             newTransactionLogger(transactionLog, logging),
-		cacheRestartHelper: newCacheRestartHelper(l2Cache),
+		cacheRestartHelper: cacheRestartHelper,
 		phaseDone:          -1,
 		id:                 sop.NewUUID(),
 	}, nil

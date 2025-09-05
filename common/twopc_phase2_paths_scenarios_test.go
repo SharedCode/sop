@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -177,27 +178,27 @@ func Test_OnIdle_Runs_Priority_And_Expired_Paths(t *testing.T) {
 	reg := mocks.NewMockRegistry(false)
 	_ = reg.Add(ctx, pl.batch[0].Value)
 	redisClient := mocks.NewMockClient()
-	tx := &Transaction{logger: tl, l2Cache: redisClient, registry: reg, cacheRestartHelper: newCacheRestartHelper(redisClient)}
+	tx := &Transaction{logger: tl, l2Cache: redisClient, registry: reg, cacheRestartHelper: sop.NewCacheRestartHelper(redisClient)}
 	tx.btreesBackend = []btreeBackend{{}}
 
 	prevPrio := lastPriorityOnIdleTime
-	prevFound := priorityLogFound
+	prevFound := atomic.LoadUint32(&priorityLogFound)
 	prevHour := hourBeingProcessed
 	prevIdle := lastOnIdleRunTime
 	lastPriorityOnIdleTime = 0
-	priorityLogFound = false
+	atomic.StoreUint32(&priorityLogFound, 0)
 	hourBeingProcessed = "some-hour"
 	lastOnIdleRunTime = 0
 	defer func() {
 		lastPriorityOnIdleTime = prevPrio
-		priorityLogFound = prevFound
+		atomic.StoreUint32(&priorityLogFound, prevFound)
 		hourBeingProcessed = prevHour
 		lastOnIdleRunTime = prevIdle
 	}()
 
 	tx.onIdle(ctx)
 
-	if !priorityLogFound {
+	if atomic.LoadUint32(&priorityLogFound) == 0 {
 		t.Fatalf("expected priorityLogFound to be true after onIdle")
 	}
 	if hourBeingProcessed != "" {

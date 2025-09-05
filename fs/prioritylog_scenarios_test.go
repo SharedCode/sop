@@ -18,7 +18,7 @@ func Test_PriorityLog_Get_ReadFile_Error(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	pl := NewTransactionLog(mocks.NewMockClient(), rt, nil).PriorityLog()
 
 	tid := sop.NewUUID()
 	// Create a directory at the file path expected by Get.
@@ -38,7 +38,7 @@ func Test_PriorityLog_GetBatch_Get_Error(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	pl := NewTransactionLog(mocks.NewMockClient(), rt, nil).PriorityLog()
 
 	// Write an eligible .plg file with invalid JSON content to cause pl.Get -> unmarshal error.
 	logDir := rt.formatActiveFolderEntity(logFolder)
@@ -66,7 +66,7 @@ func Test_PriorityLog_GetBatch_LimitOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	pl := NewTransactionLog(mocks.NewMockClient(), rt, nil).PriorityLog()
 
 	// Create 2 eligible files and ensure only 1 is returned when batchSize=1
 	dir := rt.formatActiveFolderEntity(logFolder)
@@ -97,7 +97,7 @@ func Test_PriorityLog_Add_WriteFile_Error_ReturnsError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	pl := NewTransactionLog(mocks.NewMockClient(), rt, nil).PriorityLog()
 
 	// Create the translogs folder and then make it read-only to force a write failure.
 	dir := rt.formatActiveFolderEntity(logFolder)
@@ -124,7 +124,7 @@ func Test_PriorityLog_GetBatch_MissingBase_ReturnsNil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	pl := NewTransactionLog(mocks.NewMockClient(), rt, nil).PriorityLog()
 
 	// active/translogs does not exist; Exists returns false; function returns nil, nil regardless of mkdir result.
 	if batch, err := pl.GetBatch(ctx, 5); err != nil || batch != nil {
@@ -148,7 +148,7 @@ func Test_PriorityLog_GetBatch_ReadDir_Error(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	pl := NewTransactionLog(mocks.NewMockClient(), rt, nil).PriorityLog()
 	if r, e := pl.GetBatch(ctx, 10); e == nil || r != nil {
 		t.Fatalf("expected error and nil result, got %v %v", r, e)
 	}
@@ -161,7 +161,7 @@ func Test_PriorityLog_GetBatch_TimeFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}
-	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	pl := NewTransactionLog(mocks.NewMockClient(), rt, nil).PriorityLog()
 
 	dir := rt.formatActiveFolderEntity(logFolder)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -199,7 +199,7 @@ func Test_PriorityLog_Get_InvalidJSON(t *testing.T) {
 	ctx := context.Background()
 	a, p := t.TempDir(), t.TempDir()
 	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
-	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	pl := NewTransactionLog(mocks.NewMockClient(), rt, nil).PriorityLog()
 
 	tid := sop.NewUUID()
 	// Seed invalid JSON in .plg
@@ -219,7 +219,7 @@ func Test_PriorityLog_GetBatch_Skip_InvalidUUID_And_InvalidJSON(t *testing.T) {
 	ctx := context.Background()
 	a, p := t.TempDir(), t.TempDir()
 	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
-	pl := NewTransactionLog(mocks.NewMockClient(), rt).PriorityLog()
+	pl := NewTransactionLog(mocks.NewMockClient(), rt, nil).PriorityLog()
 
 	base := rt.formatActiveFolderEntity(logFolder)
 	if err := os.MkdirAll(base, 0o755); err != nil {

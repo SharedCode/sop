@@ -199,7 +199,7 @@ func TestTransactionLog_AddAndGetOneExtended(t *testing.T) {
 	ctx := context.Background()
 	cache := mocks.NewMockClient()
 	rt, _ := NewReplicationTracker(ctx, []string{t.TempDir()}, false, cache)
-	tl := NewTransactionLog(cache, rt)
+	tl := NewTransactionLog(cache, rt, nil)
 	tid := sop.NewUUID()
 	if err := tl.Add(ctx, tid, 1, []byte("x")); err != nil {
 		t.Fatalf("Add: %v", err)

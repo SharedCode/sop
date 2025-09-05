@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/common/mocks"
 )
 
@@ -13,10 +14,10 @@ import (
 func TestCacheRestartHelper_Throttling(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	SetRestartCheckInterval(50 * time.Millisecond)
-	SetRestartInfoEveryN(1)
+	sop.SetRestartCheckInterval(50 * time.Millisecond)
+	sop.SetRestartInfoEveryN(1)
 
-	h := newCacheRestartHelper(base)
+	h := sop.NewCacheRestartHelper(base)
 	// First call: no prior run_id so should return false (nothing to compare yet)
 	if restarted, err := h.IsRestarted(ctx); err != nil || restarted {
 		t.Fatalf("expected first call false,nil got %v,%v", restarted, err)

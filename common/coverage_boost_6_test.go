@@ -712,7 +712,7 @@ func Test_TransactionLogger_DoPriorityRollbacks_PrbsLockHeld_ReturnsFalse(t *tes
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
 	// Pre-lock the exact key used internally: FormatLockKey applied twice (matching implementation).
-	prbsKey := l2.FormatLockKey(l2.FormatLockKey(coordinatorLockName))
+	prbsKey := l2.FormatLockKey(l2.FormatLockKey(unifiedCoordinatorLockName))
 	_ = l2.Set(ctx, prbsKey, sop.NewUUID().String(), time.Minute)
 
 	tl := newTransactionLogger(stubTLog{pl: &stubPriorityLog{}}, true)

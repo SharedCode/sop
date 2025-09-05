@@ -1,16 +1,14 @@
-package common
+package sop
 
 import (
 	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
-
-	"github.com/sharedcode/sop"
 )
 
-type cacheRestartHelper struct {
-	cache sop.Cache
+type CacheRestartHelper struct {
+	cache Cache
 	// Atomic restart detection state (lock-free snapshot + guard)
 	restartState    atomic.Value // stores restartState
 	restartChecking atomic.Int32 // 0 or 1 when a goroutine is performing a check
@@ -23,15 +21,19 @@ type restartState struct {
 	cycle     uint64 // number of completed cycles
 }
 
+const(
+	UnifiedCoordinatorLockName = "Prbs"
+	restartSentinelKey   = "sentl"
+)
+
 // Restart detection configuration.
 var (
 	restartCheckInterval = 2 * time.Second
 	restartInfoEveryN    = 2 // every 2nd interval -> INFO
-	restartSentinelKey   = "sop:sentl"
 )
 
-func newCacheRestartHelper(cache sop.Cache) *cacheRestartHelper {
-	return &cacheRestartHelper{
+func NewCacheRestartHelper(cache Cache) *CacheRestartHelper {
+	return &CacheRestartHelper{
 		cache: cache,
 	}
 }
@@ -41,9 +43,9 @@ func newCacheRestartHelper(cache sop.Cache) *cacheRestartHelper {
 // Sentinel key holds the last observed run_id to make cheap cycles O(1 GET) and
 // expensive verification cycles every N intervals. Missing sentinel forces an
 // INFO confirmation (to avoid false positives on eviction).
-func (c *cacheRestartHelper) IsRestarted(ctx context.Context) (bool, error) {
+func (c *CacheRestartHelper) IsRestarted(ctx context.Context) (bool, error) {
 	// If a cluster-wide restart window is active, always report restarted so higher layers can freeze
-	if active, err := c.cache.IsLockedByOthers(ctx, []string{c.cache.FormatLockKey(coordinatorRestoreAllLockName)}); err == nil && active {
+	if active, err := c.cache.IsLockedByOthers(ctx, []string{c.cache.FormatLockKey(UnifiedCoordinatorLockName)}); err == nil && active {
 		return true, nil
 	}
 	// Initialize state lazily.
@@ -111,7 +113,7 @@ func (c *cacheRestartHelper) IsRestarted(ctx context.Context) (bool, error) {
 }
 
 // fetchRunID performs an INFO server call and extracts run_id.
-func (c *cacheRestartHelper) fetchRunID(ctx context.Context) (string, error) {
+func (c *CacheRestartHelper) fetchRunID(ctx context.Context) (string, error) {
 	info, err := c.cache.Info(ctx, "server")
 	if err != nil {
 		return "", err
@@ -143,13 +145,6 @@ func SetRestartCheckInterval(d time.Duration) {
 func SetRestartInfoEveryN(n int) {
 	if n >= 1 {
 		restartInfoEveryN = n
-	}
-}
-
-// SetMaxPriorityRollbacksDuration overrides TTL for the restart window marker (must be >0).
-func SetMaxPriorityRollbacksDuration(d time.Duration) {
-	if d > 0 {
-		maxPriorityRollbacksDurationAll = d
 	}
 }
 

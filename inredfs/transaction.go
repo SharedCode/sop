@@ -50,10 +50,11 @@ func NewTwoPhaseCommitTransaction(ctx context.Context, to TransationOptions) (so
 		to.RegistryHashModValue = i
 	}
 
-	tl := fs.NewTransactionLog(to.Cache, replicationTracker)
+	crh := sop.NewCacheRestartHelper(to.Cache)
+	tl := fs.NewTransactionLog(to.Cache, replicationTracker, crh)
 	t, err := common.NewTwoPhaseCommitTransaction(to.Mode, to.MaxTime, true,
 		fs.NewBlobStore(fs.DefaultToFilePath, nil), sr, fs.NewRegistry(to.Mode == sop.ForWriting,
-			to.RegistryHashModValue, replicationTracker, to.Cache), to.Cache, tl)
+			to.RegistryHashModValue, replicationTracker, to.Cache), to.Cache, tl, crh)
 
 	// Tell Replication Tracker to use transaction ID as ID when locking registry handle record's file sector during writes.
 	replicationTracker.SetTransactionID(t.GetID())
@@ -113,10 +114,11 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr Trans
 		towr.RegistryHashModValue = i
 	}
 
-	tl := fs.NewTransactionLog(towr.Cache, replicationTracker)
+	crh := sop.NewCacheRestartHelper(towr.Cache)
+	tl := fs.NewTransactionLog(towr.Cache, replicationTracker, crh)
 
 	t, err := common.NewTwoPhaseCommitTransaction(towr.Mode, towr.MaxTime, true, bs, sr,
-		fs.NewRegistry(towr.Mode == sop.ForWriting, towr.RegistryHashModValue, replicationTracker, towr.Cache), towr.Cache, tl)
+		fs.NewRegistry(towr.Mode == sop.ForWriting, towr.RegistryHashModValue, replicationTracker, towr.Cache), towr.Cache, tl, crh)
 	t.HandleReplicationRelatedError = replicationTracker.HandleReplicationRelatedError
 
 	// Tell Replication Tracker to use transaction ID as ID when locking registry handle record's file sector during writes.

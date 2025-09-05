@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	log "log/slog"
-	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sharedcode/sop"
@@ -483,12 +483,11 @@ func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tup
 	t.nodesKeys = keys
 }
 
-var lastOnIdleRunTime int64
-var locker = sync.Mutex{}
+var lastOnIdleRunTime int64      // accessed atomically
+var lastPriorityOnIdleTime int64 // accessed atomically
 
-var lastPriorityOnIdleTime int64
-var priorityLocker = sync.Mutex{}
-var priorityLogFound bool
+// priorityLogFound stores whether previous sweep found work (0=false,1=true)
+var priorityLogFound uint32
 
 func (t *Transaction) onIdle(ctx context.Context) {
 	// Required to have a backend btree to do cleanup.
@@ -496,67 +495,81 @@ func (t *Transaction) onIdle(ctx context.Context) {
 		return
 	}
 
-	// If cache backend restarted, attempt a one-time priority rollback sweep immediately.
-	if t.l2Cache != nil && t.logger != nil && t.logger.PriorityLog().IsEnabled() {
-		if restarted, err := t.cacheRestartHelper.IsRestarted(ctx); err == nil && restarted {
-			// On restart, sweep all priority logs (ignore age) once.
-			ctxAll := context.WithValue(ctx, sop.ContextPriorityLogIgnoreAge, true)
-			if _, err := t.logger.doPriorityRollbacksAll(ctxAll, t); err != nil {
-				if t.HandleReplicationRelatedError != nil {
-					t.HandleReplicationRelatedError(ctx, err, nil, true)
-				}
-			}
-			// Reset the priority log found flag so interval will be at decent time (default).
-			priorityLogFound = false
+	if t.logger.PriorityLog().IsEnabled() {
+		// Restart-driven ALL sweep block.
+		if !t.sweepPriorityRollbacks(ctx){
+			// Periodic priority rollback (only if restart sweep not executed).
+			t.periodicPriorityRollbacks(ctx)
 		}
 	}
+	// Expired transaction non-priority logs cleanup.
+	t.onIdleHandleExpiredLogs(ctx)
+}
 
-	// Allow only one priority rollback processor.
-	// Check every 5 minutes if there are any pending rollbacks that "aged" (5min or older).
+// sweepPriorityRollbacks runs a full priority rollback sweep if a backend restart is detected.
+// Returns true if an ALL sweep was executed (caller should skip periodic sweep this invocation).
+func (t *Transaction) sweepPriorityRollbacks(ctx context.Context) bool {
+	if t.l2Cache == nil || t.logger == nil {
+		return false
+	}
+	if restarted, err := t.cacheRestartHelper.IsRestarted(ctx); err == nil && restarted {
+		if _, err := t.logger.doPriorityRollbacksAll(ctx, t); err != nil {
+			if t.HandleReplicationRelatedError != nil {
+				t.HandleReplicationRelatedError(ctx, err, nil, true)
+			}
+		}
+		atomic.StoreUint32(&priorityLogFound, 0)
+		return true
+	}
+	return false
+}
+
+// periodicPriorityRollbacks performs the periodic aged priority rollback pass when due.
+func (t *Transaction) periodicPriorityRollbacks(ctx context.Context) {
+	if t.logger == nil {
+		return
+	}
 	priorityInterval := fs.LockFileRegionDuration + (2 * time.Minute)
-	if priorityLogFound {
-		priorityInterval = time.Duration(30*time.Second)
+	if atomic.LoadUint32(&priorityLogFound) == 1 {
+		priorityInterval = time.Duration(30 * time.Second)
 	}
 	nextRunTime := sop.Now().Add(-priorityInterval).UnixMilli()
-	if t.logger.PriorityLog().IsEnabled() && lastPriorityOnIdleTime < nextRunTime {
-		runTime := false
-		priorityLocker.Lock()
-		if lastPriorityOnIdleTime < nextRunTime {
-			lastPriorityOnIdleTime = sop.Now().UnixMilli()
-			runTime = true
-		}
-		priorityLocker.Unlock()
-		if runTime {
-			if found, err := t.logger.doPriorityRollbacks(ctx, t ); err != nil {
-				// Trigger a failover if a handler is registered; otherwise, just log path state.
-				if t.HandleReplicationRelatedError != nil {
-					t.HandleReplicationRelatedError(ctx, err, nil, true)
-				}
-				priorityLogFound = found
+	if atomic.LoadInt64(&lastPriorityOnIdleTime) >= nextRunTime {
+		return
+	}
+	if atomic.LoadInt64(&lastPriorityOnIdleTime) < nextRunTime &&
+		atomic.CompareAndSwapInt64(&lastPriorityOnIdleTime, atomic.LoadInt64(&lastPriorityOnIdleTime), sop.Now().UnixMilli()) {
+		if found, err := t.logger.doPriorityRollbacks(ctx, t); err != nil {
+			if t.HandleReplicationRelatedError != nil {
+				t.HandleReplicationRelatedError(ctx, err, nil, true)
+			}
+			if found {
+				atomic.StoreUint32(&priorityLogFound, 1)
 			} else {
-				priorityLogFound = found
+				atomic.StoreUint32(&priorityLogFound, 0)
+			}
+		} else {
+			if found {
+				atomic.StoreUint32(&priorityLogFound, 1)
+			} else {
+				atomic.StoreUint32(&priorityLogFound, 0)
 			}
 		}
 	}
+}
 
-	// If it is known that there is nothing to clean up then do 4hr interval polling,
-	// otherwise do shorter interval of 5 minutes, to allow faster cleanup.
-	// Having "abandoned" commit is a very rare occurrence.
-	interval := 4 * 60
+// onIdleHandleExpiredLogs performs periodic cleanup of abandoned transaction logs.
+func (t *Transaction) onIdleHandleExpiredLogs(ctx context.Context) {
+	interval := 4 * 60 // minutes
 	if hourBeingProcessed != "" {
 		interval = 5
 	}
-	nextRunTime = sop.Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
-	if lastOnIdleRunTime < nextRunTime {
-		runTime := false
-		locker.Lock()
-		if lastOnIdleRunTime < nextRunTime {
-			lastOnIdleRunTime = sop.Now().UnixMilli()
-			runTime = true
-		}
-		locker.Unlock()
-		if runTime {
-			t.logger.processExpiredTransactionLogs(ctx, t)
-		}
+	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
+	if atomic.LoadInt64(&lastOnIdleRunTime) >= nextRunTime {
+		return
+	}
+	if atomic.LoadInt64(&lastOnIdleRunTime) < nextRunTime &&
+		atomic.CompareAndSwapInt64(&lastOnIdleRunTime, atomic.LoadInt64(&lastOnIdleRunTime), sop.Now().UnixMilli()) {
+		t.logger.processExpiredTransactionLogs(ctx, t)
 	}
 }

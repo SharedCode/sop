@@ -28,6 +28,7 @@ const (
 type priorityLog struct {
 	replicationTracker *replicationTracker
 	tid                sop.UUID
+	cacheRestartHelper *sop.CacheRestartHelper
 }
 
 // IsEnabled reports whether priority logging is enabled.
@@ -69,11 +70,9 @@ func (l priorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPaylo
 func (l priorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
 	cappedHour := mh.Add(-time.Duration(LockFileRegionDuration + (2 + time.Minute)))
-	ignoreAge := false
-	if v := ctx.Value(sop.ContextPriorityLogIgnoreAge); v != nil {
-		if b, ok := v.(bool); ok && b {
-			ignoreAge = true
-		}
+	ignoreAge, err := l.cacheRestartHelper.IsRestarted(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	f := func(de os.DirEntry) bool {

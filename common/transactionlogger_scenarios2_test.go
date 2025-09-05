@@ -10,8 +10,37 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/common/mocks"
+	"github.com/sharedcode/sop/common/teststubs"
 	cas "github.com/sharedcode/sop/internal/cassandra"
 )
+
+// BenchmarkPriorityRollbacks measures throughput of doPriorityRollbacks with varying batch sizes.
+func BenchmarkPriorityRollbacks(b *testing.B) {
+	ctx := context.Background()
+	batchSizes := []int{1, 5, 10, 20}
+	for _, sz := range batchSizes {
+		b.Run(fmt.Sprintf("batch_%d", sz), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				// Fresh priority log each iteration to keep conditions consistent.
+				pl := &stubPriorityLog{}
+				// Populate batch with sz tids each having 1 handle.
+				batch := make([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], sz)
+				for j := 0; j < sz; j++ {
+					tid := sop.NewUUID()
+					batch[j] = sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{Key: tid, Value: []sop.RegistryPayload[sop.Handle]{
+						{RegistryTable: "rt", IDs: []sop.Handle{{LogicalID: sop.NewUUID(), Version: 1}}},
+					}}
+				}
+				pl.batch = batch
+				tl := newTransactionLogger(stubTLog{pl: pl}, false)
+				tx := &Transaction{registry: &teststubs.RegistryStub{}, l2Cache: mocks.NewMockClient()}
+				if consumed, err := tl.doPriorityRollbacks(ctx, tx); err != nil || !consumed {
+					b.Fatalf("expected consumed=true err=nil, got consumed=%v err=%v", consumed, err)
+				}
+			}
+		})
+	}
+}
 
 // stubTLRemoveErr allows observing Remove calls and returning a configured error.
 type stubTLRemove struct {
@@ -157,6 +186,7 @@ func Test_ProcessExpiredTransactionLogs_ConsumesHourAndClears(t *testing.T) {
 	}
 }
 
+// (Removed malformed concurrency exclusivity test placeholder; a proper lock exclusivity test will be added later.)
 func Test_PriorityRollback_NilTransaction_NoPanic(t *testing.T) {
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	if err := tl.priorityRollback(context.Background(), nil, sop.NewUUID()); err != nil {
@@ -376,6 +406,30 @@ func Test_TransactionLogger_PriorityRollback_ErrorBranch(t *testing.T) {
 	// Expect a wrapped sop.Error carrying failover code
 	if se, ok := err.(sop.Error); !ok || se.Code != sop.RestoreRegistryFileSectorFailure {
 		t.Fatalf("expected sop.RestoreRegistryFileSectorFailure, got %v", err)
+	}
+}
+
+// Validates doPriorityRollbacks propagates UpdateNoLocks failure using shared ErrorRegistryStub and returns consumed=false.
+func Test_TransactionLogger_DoPriorityRollbacks_ErrorRegistryStub(t *testing.T) {
+	ctx := context.Background()
+	// Error after first UpdateNoLocks call.
+	reg := teststubs.NewErrorRegistryStub(0, fmt.Errorf("injected update error"))
+	// Priority log with one batch entry so path attempts UpdateNoLocks once.
+	tid := sop.NewUUID()
+	pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: tid, Value: []sop.RegistryPayload[sop.Handle]{
+		{RegistryTable: "rt", IDs: []sop.Handle{{LogicalID: sop.NewUUID(), Version: 1}}},
+	}}}}
+	tl := newTransactionLogger(stubTLog{pl: pl}, true)
+	tx := &Transaction{registry: reg, l2Cache: mocks.NewMockClient()}
+	consumed, err := tl.doPriorityRollbacks(ctx, tx)
+	if err == nil {
+		t.Fatalf("expected error from doPriorityRollbacks")
+	}
+	if consumed {
+		t.Fatalf("expected consumed=false on error")
+	}
+	if se, ok := err.(sop.Error); !ok || se.Code != sop.RestoreRegistryFileSectorFailure {
+		t.Fatalf("expected failover sop.Error code=%d, got %v", sop.RestoreRegistryFileSectorFailure, err)
 	}
 }
 

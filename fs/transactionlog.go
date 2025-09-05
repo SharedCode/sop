@@ -36,12 +36,13 @@ type TransactionLog struct {
 var ageLimit float64 = 70
 
 // NewTransactionLog constructs a TransactionLog bound to the provided cache and replication tracker.
-func NewTransactionLog(cache sop.Cache, rt *replicationTracker) *TransactionLog {
+func NewTransactionLog(cache sop.Cache, rt *replicationTracker, cacheRestartHelper *sop.CacheRestartHelper) *TransactionLog {
 	return &TransactionLog{
 		cache:       cache,
 		hourLockKey: cache.CreateLockKeys([]string{"HBP"})[0],
 		priorityLog: priorityLog{
 			replicationTracker: rt,
+			cacheRestartHelper: cacheRestartHelper,
 		},
 	}
 }

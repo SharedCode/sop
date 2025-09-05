@@ -523,7 +523,7 @@ func Test_Transaction_onIdle_DoesNotPanic_WithBackendAndDisabledPriorityLog(t *t
 
 func Test_Transaction_Methods_Errors(t *testing.T) {
 	ctx := context.Background()
-	trans, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog())
+	trans, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog(), nil)
 	if err != nil {
 		t.Fatalf("failed to create transaction: %v", err)
 	}
@@ -537,20 +537,20 @@ func Test_Transaction_Methods_Errors(t *testing.T) {
 	}
 
 	// Phase1Commit before Begin should error
-	trans2, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog())
+	trans2, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog(), nil)
 	if err := trans2.Phase1Commit(ctx); err == nil {
 		t.Errorf("expected error on Phase1Commit before Begin, got nil")
 	}
 
 	// Phase2Commit before Phase1Commit should error
-	trans3, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog())
+	trans3, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog(), nil)
 	trans3.Begin(ctx)
 	if err := trans3.Phase2Commit(ctx); err == nil {
 		t.Errorf("expected error on Phase2Commit before Phase1Commit, got nil")
 	}
 
 	// Rollback after commit should error
-	trans4, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog())
+	trans4, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog(), nil)
 	trans4.Begin(ctx)
 	trans4.phaseDone = 2 // simulate committed
 	if err := trans4.Rollback(ctx, nil); err == nil {
@@ -558,7 +558,7 @@ func Test_Transaction_Methods_Errors(t *testing.T) {
 	}
 
 	// Close should not panic if registry is nil
-	trans5, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog())
+	trans5, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog(), nil)
 	if err := trans5.Close(); err != nil {
 		t.Errorf("unexpected error on Close with nil registry: %v", err)
 	}
@@ -678,8 +678,8 @@ func (l *txLogCounter) NewUUID() sop.UUID { return sop.NewUUID() }
 func TestTransactionOnIdleRestartSweep(t *testing.T) {
 	ctx := context.Background()
 	// Make restart detection very fast & deterministic (always do INFO).
-	SetRestartCheckInterval(10 * time.Millisecond)
-	SetRestartInfoEveryN(1)
+	sop.SetRestartCheckInterval(10 * time.Millisecond)
+	sop.SetRestartInfoEveryN(1)
 
 	// Build transaction dependencies using existing helper wiring.
 	cache := newMutableRunIDCache("runA")
@@ -694,7 +694,7 @@ func TestTransactionOnIdleRestartSweep(t *testing.T) {
 	tr := &Transaction{
 		l2Cache:            cache,
 		logger:             tl,
-		cacheRestartHelper: newCacheRestartHelper(cache),
+		cacheRestartHelper: sop.NewCacheRestartHelper(cache),
 		maxTime:            2 * time.Second,
 	}
 

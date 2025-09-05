@@ -201,7 +201,7 @@ func Test_TransactionLogger_DoPriorityRollbacks_LockNotAcquired(t *testing.T) {
 	txn := &Transaction{l2Cache: mocks.NewMockClient()}
 	// Pre-acquire the priority lock with another owner so doPriorityRollbacks cannot enter.
 	// Note: doPriorityRollbacks formats the key twice, so mirror that here.
-	k := txn.l2Cache.FormatLockKey(txn.l2Cache.FormatLockKey(coordinatorLockName))
+	k := txn.l2Cache.FormatLockKey(txn.l2Cache.FormatLockKey(unifiedCoordinatorLockName))
 	_ = txn.l2Cache.Set(ctx, k, sop.NewUUID().String(), time.Minute)
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	ok, err := tl.doPriorityRollbacks(ctx, txn)
@@ -787,7 +787,7 @@ func Test_Phase1Commit_NotBegun_ReturnsError(t *testing.T) {
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	bs := mocks.NewMockBlobStore()
 	sr := mocks.NewMockStoreRepository()
-	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
+	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog(), nil)
 	if err != nil {
 		t.Fatalf("ctor err: %v", err)
 	}
@@ -803,7 +803,7 @@ func Test_Rollback_NotBegun_ReturnsError(t *testing.T) {
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	bs := mocks.NewMockBlobStore()
 	sr := mocks.NewMockStoreRepository()
-	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
+	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog(), nil)
 	if err != nil {
 		t.Fatalf("ctor err: %v", err)
 	}

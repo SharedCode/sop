@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -502,18 +503,18 @@ func Test_OnIdle_PriorityPaths(t *testing.T) {
 	prevHour := hourBeingProcessed
 	prevLast := lastOnIdleRunTime
 	prevPrLast := lastPriorityOnIdleTime
-	prevFound := priorityLogFound
+	prevFound := atomic.LoadUint32(&priorityLogFound)
 	defer func() {
 		hourBeingProcessed = prevHour
 		lastOnIdleRunTime = prevLast
 		lastPriorityOnIdleTime = prevPrLast
-		priorityLogFound = prevFound
+		atomic.StoreUint32(&priorityLogFound, prevFound)
 	}()
 
 	// Build a transaction with l2 cache and registry seeded for doPriorityRollbacks to succeed.
 	redis := mocks.NewMockClient()
 	reg := mocks.NewMockRegistry(false)
-	tx := &Transaction{l2Cache: redis, registry: reg, cacheRestartHelper: newCacheRestartHelper(redis)}
+	tx := &Transaction{l2Cache: redis, registry: reg, cacheRestartHelper: sop.NewCacheRestartHelper(redis)}
 	// Add a dummy backend to avoid early return in onIdle
 	tx.btreesBackend = []btreeBackend{{}}
 
@@ -533,11 +534,11 @@ func Test_OnIdle_PriorityPaths(t *testing.T) {
 	// Force both onIdle blocks to run by resetting last run times.
 	lastOnIdleRunTime = 0
 	lastPriorityOnIdleTime = 0
-	priorityLogFound = false
+	atomic.StoreUint32(&priorityLogFound, 0)
 
 	// First run: should consume batch and set priorityLogFound accordingly.
 	tx.onIdle(ctx)
-	if !priorityLogFound {
+	if atomic.LoadUint32(&priorityLogFound) == 0 {
 		t.Fatalf("expected priorityLogFound=true after consuming non-empty batch")
 	}
 
@@ -546,7 +547,7 @@ func Test_OnIdle_PriorityPaths(t *testing.T) {
 	// Reset priority timer to allow another run immediately.
 	lastPriorityOnIdleTime = 0
 	tx.onIdle(ctx)
-	if priorityLogFound {
+	if atomic.LoadUint32(&priorityLogFound) == 1 {
 		t.Fatalf("expected priorityLogFound=false after empty batch")
 	}
 }

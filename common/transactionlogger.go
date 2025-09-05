@@ -46,14 +46,20 @@ type transactionLog struct {
 
 const (
 	defaultLockDuration = 5 * time.Minute
-	// coordinatorLockName is the global coordinator lock used to serialize
-	// priority rollbacks across the cluster.
-	coordinatorLockName           = "Prbs"
-	coordinatorRestoreAllLockName = "AllPrbs"
+	// unifiedCoordinatorLockName is the single cluster-wide lock used for both
+	// periodic (aged) and full (restart-driven) priority rollback sweeps to
+	// prevent competing processors. Formerly two locks (Prbs, AllPrbs).
+	unifiedCoordinatorLockName = "Prbs" // keep existing name for compatibility
 )
 
-var maxPriorityRollbacksDurationAll = 25 * time.Minute
-var maxPriorityRollbacksDuration = 15 * time.Minute
+// Priority logs rollback max duration.
+var MaxPriorityRollbacksDuration = 25 * time.Minute
+// SetMaxPriorityRollbacksDuration overrides TTL for the restart window marker (must be >0).
+func SetMaxPriorityRollbacksDuration(d time.Duration) {
+	if d > 0 {
+		MaxPriorityRollbacksDuration = d
+	}
+}
 
 // Instantiate a transaction logger.
 func newTransactionLogger(logger sop.TransactionLog, logging bool) *transactionLog {
@@ -112,51 +118,70 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 	return tl.rollback(ctx, t, tid, committedFunctionLogs)
 }
 
-func (tl *transactionLog) doPriorityRollbacksAll(ctx context.Context, t *Transaction) (bool, error) {
-	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey(coordinatorRestoreAllLockName)})
-	ok1, _, _ := t.l2Cache.Lock(ctx, maxPriorityRollbacksDurationAll, lk)
+// doPriorityRollbacksInternal implements both periodic (aged) and full (restart-driven) priority rollback passes.
+func (tl *transactionLog) doPriorityRollbacksInternal(ctx context.Context, t *Transaction, sweepAll bool) (bool, error) {
+	// Acquire unified coordinator lock.
+	maxDur := MaxPriorityRollbacksDuration
+	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey(unifiedCoordinatorLockName)})
+	ok1, _, _ := t.l2Cache.Lock(ctx, maxDur, lk)
 	ok2, _ := t.l2Cache.IsLocked(ctx, lk)
 	if !ok1 || !ok2 {
-		if err := tl.waitForCoordinatorRelease(ctx, t, coordinatorRestoreAllLockName, maxPriorityRollbacksDurationAll); err != nil {
+		if sweepAll {
+			err := tl.waitForCoordinatorRelease(ctx, t, unifiedCoordinatorLockName, maxDur)
+			return false, err
+		}
+		if restarted, _ := t.cacheRestartHelper.IsRestarted(ctx); restarted {
+			err := tl.waitForCoordinatorRelease(ctx, t, unifiedCoordinatorLockName, maxDur)
 			return false, err
 		}
 		return false, nil
 	}
 	defer t.l2Cache.Unlock(ctx, lk)
 
-	log.Info("Entering doPriorityRollbacksAll loop(restore).")
-	// In restart-driven sweep mode, clear all per-region signal markers up-front so they will not cause false "locks"
-	// in Registry file sector updates. Consider all of them having a lock on sectors to get rolledback because Redis got restarted.
-	// All in-flight transactions will detect Redis restart & will rollback. Deleting these markers will allow for a clean state.
-	if err := tl.PriorityLog().ClearRegistrySectorClaims(ctx); err != nil {
-		log.Warn("failed to clear registry sector claims at sweep start", "err", err)
+	ctx2 := ctx
+	if sweepAll {
+		log.Info("Entering unified rollback loop (ALL mode).")
+		if err := tl.PriorityLog().ClearRegistrySectorClaims(ctx); err != nil {
+			log.Warn("failed to clear registry sector claims at sweep start", "err", err)
+		}
+		ctx2 = context.WithValue(ctx, sop.ContextPriorityLogIgnoreAge, true)
+	} else {
+		log.Info("Entering unified rollback loop (periodic mode).")
 	}
-	consumed := false
+
 	start := sop.Now()
+	consumed := false
+
 	for {
-		if ok, err := tl.priorityRollbacks(ctx, t, start, "doPriorityRollbacksAll", maxPriorityRollbacksDurationAll); err != nil {
-			return ok, err
+		if ok, err := tl.priorityRollbacks(ctx2, t, start, "doPriorityRollbacksInternal", maxDur); err != nil {
+			return ok || consumed, err
 		} else if ok {
 			consumed = true
 		} else {
 			break
 		}
+		// periodic processes at most one batch per invocation, sweepAll processes all.
+		if !sweepAll {
+			if restarted, err := t.cacheRestartHelper.IsRestarted(ctx2); err != nil || !restarted {
+				break
+			}
+			if !sweepAll {
+				log.Info("Cache was restarted, 'switching to sweeping all priority rollback logs.")
+				sweepAll = true
+			}
+		}
 	}
 	return consumed, nil
 }
 
-func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) (bool, error) {
-	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey(coordinatorLockName)})
-	ok1, _, _ := t.l2Cache.Lock(ctx, maxPriorityRollbacksDuration, lk)
-	ok2, _ := t.l2Cache.IsLocked(ctx, lk)
-	if !ok1 || !ok2 {
-		return false, nil
-	}
-	defer t.l2Cache.Unlock(ctx, lk)
+// doPriorityRollbacksAll now delegates to unified internal implementation.
+func (tl *transactionLog) doPriorityRollbacksAll(ctx context.Context, t *Transaction) (bool, error) {
+	return tl.doPriorityRollbacksInternal(ctx, t, true)
+}
 
-	log.Info("Entering doPriorityRollbacks loop(restore).")
-	start := sop.Now()
-	return tl.priorityRollbacks(ctx, t, start, "doPriorityRollbacks", maxPriorityRollbacksDuration)
+// doPriorityRollbacks (periodic aged pass) delegates to unified internal implementation.
+func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) (bool, error) {
+	return tl.doPriorityRollbacksInternal(ctx, t, false)
 }
 
 func (tl *transactionLog) priorityRollbacks(ctx context.Context, t *Transaction, start time.Time, label string, maxDuration time.Duration) (bool, error) {
