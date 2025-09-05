@@ -818,7 +818,7 @@ func Test_Phase1Commit_Wrapper_Appends_RollbackError(t *testing.T) {
 	}
 	tx.btreesBackend = []btreeBackend{bx}
 
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	err := tx.Phase1Commit(ctx)

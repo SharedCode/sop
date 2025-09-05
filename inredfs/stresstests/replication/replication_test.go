@@ -146,7 +146,7 @@ func setupBtreeWithOneItem(btreeName string, itemID int, t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	if err = trans.Begin(); err != nil {
+	if err = trans.Begin(ctx); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -179,7 +179,7 @@ func writeData(btreeName string, itemID int, msg string, t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	if err = trans.Begin(); err != nil {
+	if err = trans.Begin(ctx); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -207,7 +207,7 @@ func readData(btreeName string, t *testing.T) []sop.KeyValuePair[int, string] {
 		t.Error(err)
 		t.FailNow()
 	}
-	if err = trans.Begin(); err != nil {
+	if err = trans.Begin(ctx); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}

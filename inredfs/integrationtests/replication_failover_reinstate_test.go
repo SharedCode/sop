@@ -162,7 +162,7 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = trans.Begin(); err != nil {
+	if err = trans.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	b, err := inredfs.OpenBtreeWithReplication[int, string](ctx, table, trans, nil)
@@ -194,7 +194,7 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = trans2.Begin(); err != nil {
+	if err = trans2.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	b2, err := inredfs.OpenBtreeWithReplication[int, string](ctx, table, trans2, nil)
@@ -244,7 +244,7 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 				if err != nil {
 					continue
 				}
-				if err = tw.Begin(); err != nil {
+				if err = tw.Begin(ctx); err != nil {
 					_ = tw.Rollback(ctx)
 					continue
 				}
@@ -264,7 +264,7 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = transU.Begin(); err != nil {
+	if err = transU.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	bu, err := inredfs.OpenBtreeWithReplication[int, string](ctx, table, transU, nil)
@@ -284,7 +284,7 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = transFix.Begin(); err != nil {
+		if err = transFix.Begin(ctx); err != nil {
 			t.Fatal(err)
 		}
 		bf, err := inredfs.OpenBtreeWithReplication[int, string](ctx, table, transFix, nil)
@@ -310,7 +310,7 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = transW.Begin(); err != nil {
+		if err = transW.Begin(ctx); err != nil {
 			t.Fatal(err)
 		}
 		bw, err := inredfs.OpenBtreeWithReplication[int, string](ctx, table, transW, nil)
@@ -361,7 +361,7 @@ func readAll(ctx context.Context, to inredfs.TransationOptionsWithReplication, t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = trans.Begin(); err != nil {
+	if err = trans.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	b, err := inredfs.OpenBtreeWithReplication[int, string](ctx, table, trans, nil)
@@ -392,7 +392,7 @@ func getValue(ctx context.Context, to inredfs.TransationOptionsWithReplication, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = trans.Begin(); err != nil {
+	if err = trans.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	b, err := inredfs.OpenBtreeWithReplication[int, string](ctx, table, trans, nil)
@@ -416,7 +416,7 @@ func getValue(ctx context.Context, to inredfs.TransationOptionsWithReplication, 
 func ensureStoreExists(ctx context.Context, to inredfs.TransationOptionsWithReplication, name string) error {
 	// Try open first.
 	if trans, err := inredfs.NewTransactionWithReplication(ctx, to); err == nil {
-		if err = trans.Begin(); err == nil {
+		if err = trans.Begin(ctx); err == nil {
 			if _, err2 := inredfs.OpenBtreeWithReplication[int, string](ctx, name, trans, nil); err2 == nil {
 				_ = trans.Commit(ctx)
 				return nil
@@ -427,7 +427,7 @@ func ensureStoreExists(ctx context.Context, to inredfs.TransationOptionsWithRepl
 	}
 	// Create it.
 	if trans, err := inredfs.NewTransactionWithReplication(ctx, to); err == nil {
-		if err = trans.Begin(); err == nil {
+		if err = trans.Begin(ctx); err == nil {
 			_, err2 := inredfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 				Name: name, SlotLength: 8, IsValueDataInNodeSegment: true,
 			}, trans, nil)
@@ -437,7 +437,7 @@ func ensureStoreExists(ctx context.Context, to inredfs.TransationOptionsWithRepl
 			// If already exists, try open once more.
 			_ = trans.Rollback(ctx)
 			if trans2, err3 := inredfs.NewTransactionWithReplication(ctx, to); err3 == nil {
-				if err = trans2.Begin(); err == nil {
+				if err = trans2.Begin(ctx); err == nil {
 					if _, err4 := inredfs.OpenBtreeWithReplication[int, string](ctx, name, trans2, nil); err4 == nil {
 						return trans2.Commit(ctx)
 					}

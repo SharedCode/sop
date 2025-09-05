@@ -21,7 +21,7 @@ func Test_Phase1Commit_NoCheck_ReturnsImmediately(t *testing.T) {
 		t.Fatalf("newMockTwoPhaseCommitTransaction failed: %v", err)
 	}
 	tr := twoPhase.(*Transaction)
-	if err := tr.Begin(); err != nil {
+	if err := tr.Begin(ctx); err != nil {
 		t.Fatalf("Begin failed: %v", err)
 	}
 	if err := tr.Phase1Commit(ctx); err != nil {
@@ -36,7 +36,7 @@ func Test_Phase1Commit_ForReading_NoTrackedItems(t *testing.T) {
 		t.Fatalf("newMockTwoPhaseCommitTransaction failed: %v", err)
 	}
 	tr := twoPhase.(*Transaction)
-	if err := tr.Begin(); err != nil {
+	if err := tr.Begin(ctx); err != nil {
 		t.Fatalf("Begin failed: %v", err)
 	}
 	if err := tr.Phase1Commit(ctx); err != nil {
@@ -218,7 +218,7 @@ func Test_Phase1Commit_RefetchAndMerge_Retry_Succeeds(t *testing.T) {
 		t.Fatalf("newMockTwoPhaseCommitTransaction failed: %v", err)
 	}
 	tr := twoPhase.(*Transaction)
-	if err := tr.Begin(); err != nil {
+	if err := tr.Begin(ctx); err != nil {
 		t.Fatalf("Begin failed: %v", err)
 	}
 

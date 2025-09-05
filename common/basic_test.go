@@ -2,6 +2,7 @@ package common
 
 import (
 	"cmp"
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -19,8 +20,9 @@ func init() {
 }
 
 func Test_OpenVsNewBTree(t *testing.T) {
+	ctx := context.Background()
 	trans, _ := newMockTransaction(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore",
 		SlotLength:               8,
@@ -39,8 +41,9 @@ func Test_OpenVsNewBTree(t *testing.T) {
 }
 
 func Test_SingleBTree(t *testing.T) {
+	ctx := context.Background()
 	trans, _ := newMockTransaction(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore",
 		SlotLength:               8,
@@ -76,8 +79,9 @@ func Test_SingleBTree(t *testing.T) {
 // This test exercise & demonstrate to use B-Tree that is unique on Keys.
 // Adding an item with a key matching an existing item in the trie will fail.
 func Test_UniqueKeyBTree(t *testing.T) {
+	ctx := context.Background()
 	trans, _ := newMockTransaction(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooWorld",
 		SlotLength:               8,
@@ -99,8 +103,9 @@ func Test_UniqueKeyBTree(t *testing.T) {
 }
 
 func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
+	ctx := context.Background()
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooWorld2",
 		SlotLength:               8,
@@ -117,7 +122,7 @@ func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 	}
 
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 	// Open the same trie created above.
 	b32, _ := OpenBtree[int, string](ctx, "fooWorld2", t2, nil)
 	if ok, _ := b32.Add(ctx, 1, "hello world"); ok {
@@ -131,8 +136,9 @@ func Test_UniqueKeyBTreeAcrossCommits(t *testing.T) {
 
 // Fail 2nd commit as item key 1 was added in 1st and is also being added in 2nd.
 func Test_UniqueKeyBTreeOnMultipleCommits(t *testing.T) {
+	ctx := context.Background()
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooWorld3",
 		SlotLength:               8,
@@ -145,7 +151,7 @@ func Test_UniqueKeyBTreeOnMultipleCommits(t *testing.T) {
 	b3.Add(ctx, 2, "foo bar")
 
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 	// Open the same trie created above.
 	b32, _ := OpenBtree[int, string](ctx, "fooWorld3", t2, nil)
 	b32.Add(ctx, 1, "hello world")
@@ -161,11 +167,12 @@ func Test_UniqueKeyBTreeOnMultipleCommits(t *testing.T) {
 }
 
 func Test_StoreCachingMinRuleCheck(t *testing.T) {
+	ctx := context.Background()
 	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecachingminrule",
 		SlotLength:               8,
@@ -192,11 +199,12 @@ func Test_StoreCachingMinRuleCheck(t *testing.T) {
 }
 
 func Test_StoreCachingDefaultCacheApplied(t *testing.T) {
+	ctx := context.Background()
 	trans, err := newMockTransaction(t, sop.ForWriting, -1)
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecachingdefault",
 		SlotLength:               8,

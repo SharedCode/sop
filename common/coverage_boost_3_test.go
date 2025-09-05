@@ -918,7 +918,7 @@ func Test_Phase1Commit_IsLockedFalse_ThenSucceeds(t *testing.T) {
 		refetchAndMerge:                  func(ctx context.Context) error { return nil },
 	}}
 
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("begin err: %v", err)
 	}
 	if err := tx.Phase1Commit(ctx); err != nil {

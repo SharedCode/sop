@@ -38,7 +38,7 @@ type mockTx struct {
 	lastRollbackErr error
 }
 
-func (m *mockTx) Begin() error                           { m.begun = true; return nil }
+func (m *mockTx) Begin(ctx context.Context) error                           { m.begun = true; return nil }
 func (m *mockTx) Phase1Commit(ctx context.Context) error { return nil }
 func (m *mockTx) Phase2Commit(ctx context.Context) error { return nil }
 func (m *mockTx) Rollback(ctx context.Context, err error) error {

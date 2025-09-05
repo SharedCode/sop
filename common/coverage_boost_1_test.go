@@ -258,7 +258,7 @@ func (e errGetBlobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsP
 func Test_NewBtree_AddFails_CleansUpAndRollsBack(t *testing.T) {
 	ctx := context.Background()
 	trans, _ := newMockTransaction(t, sop.ForWriting, -1)
-	if err := trans.Begin(); err != nil {
+	if err := trans.Begin(ctx); err != nil {
 		t.Fatalf("begin err: %v", err)
 	}
 	// Swap repository with erroring one
@@ -290,7 +290,7 @@ func Test_NewBtree_AddFails_CleansUpAndRollsBack(t *testing.T) {
 func Test_OpenBtree_StoreRepositoryError_RollsBack(t *testing.T) {
 	ctx := context.Background()
 	trans, _ := newMockTransaction(t, sop.ForWriting, -1)
-	_ = trans.Begin()
+	_ = trans.Begin(ctx)
 	t2 := trans.GetPhasedTransaction().(*Transaction)
 	t2.StoreRepository = &errOnGetStoreRepo{err: errors.New("get error")}
 	cmp := func(a, b int) int {

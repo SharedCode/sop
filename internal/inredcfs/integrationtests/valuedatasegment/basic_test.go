@@ -37,7 +37,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredcfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore1",
 		SlotLength:               8,
@@ -69,7 +69,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredcfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore2",
 		SlotLength:               8,
@@ -113,7 +113,7 @@ func Test_ByteArrayValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredcfs.NewBtree[int, []byte](ctx, sop.StoreOptions{
 		Name:                    "baStore",
 		SlotLength:              8,
@@ -155,7 +155,7 @@ func Test_ByteArrayValueGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredcfs.NewBtree[int, []byte](ctx, sop.StoreOptions{
 		Name:                    "baStore",
 		SlotLength:              8,

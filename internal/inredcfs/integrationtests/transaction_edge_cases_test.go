@@ -22,8 +22,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 	t2, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
@@ -48,7 +48,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
 		t1, _ = inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb77", t1, Compare)
 	}
 
@@ -75,7 +75,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		t.Error("Commit #2, got = succeess, want = fail.")
 	}
 	t1, _ = inredcfs.NewTransaction(sop.ForReading, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ = inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
 		SlotLength:               nodeSlotLength,
@@ -109,8 +109,8 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 	t2, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
@@ -135,7 +135,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
 		t1, _ = inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
@@ -182,8 +182,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 	t2, _ := inredcfs.NewTransaction(sop.ForReading, -1, false)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
@@ -208,7 +208,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
 		t1, _ = inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
@@ -256,8 +256,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 	t2, _ := inredcfs.NewTransaction(sop.ForReading, -1, false)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
@@ -284,7 +284,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		b3.Add(ctx, pk3, p3)
 		t1.Commit(ctx)
 		t1, _ = inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
@@ -331,8 +331,8 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 	t2, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb77",
@@ -363,7 +363,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		b3.Add(ctx, pk5, p5)
 		t1.Commit(ctx)
 		t1, _ = inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb77",
 			SlotLength:               nodeSlotLength,
@@ -436,7 +436,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	sr.Remove(ctx, "twophase3")
 
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := inredcfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase3",
 		SlotLength:               8,
@@ -454,7 +454,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 
 	f1 := func() error {
 		t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ := inredcfs.NewBtree[int, string](ctx2, sop.StoreOptions{
 			Name:                     "twophase3",
 			SlotLength:               8,
@@ -472,7 +472,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 
 	f2 := func() error {
 		t2, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t2.Begin()
+		t2.Begin(ctx)
 		b32, _ := inredcfs.NewBtree[int, string](ctx2, sop.StoreOptions{
 			Name:                     "twophase3",
 			SlotLength:               8,
@@ -497,7 +497,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	}
 
 	t1, _ = inredcfs.NewTransaction(sop.ForReading, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	b3, _ = inredcfs.OpenBtree[int, string](ctx, "twophase3", t1, nil)
 
@@ -526,7 +526,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	sr.Remove(ctx, "tablex")
 
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := inredcfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "tablex",
 		SlotLength:               8,
@@ -544,7 +544,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 
 	f1 := func() error {
 		t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ := inredcfs.OpenBtree[int, string](ctx2, "tablex", t1, nil)
 		b3.Add(ctx2, 50, "I am the value with 5000 key.")
 		b3.Add(ctx2, 51, "I am the value with 5001 key.")
@@ -554,7 +554,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 
 	f2 := func() error {
 		t2, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t2.Begin()
+		t2.Begin(ctx)
 		b32, _ := inredcfs.OpenBtree[int, string](ctx2, "tablex", t2, nil)
 		b32.Add(ctx2, 550, "I am the value with 5000 key.")
 		b32.Add(ctx2, 551, "I am the value with 5001 key.")
@@ -564,7 +564,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 
 	f3 := func() error {
 		t3, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t3.Begin()
+		t3.Begin(ctx)
 		b32, _ := inredcfs.OpenBtree[int, string](ctx2, "tablex", t3, nil)
 		b32.Add(ctx2, 550, "random foo.")
 		b32.Add(ctx2, 551, "bar hello.")
@@ -581,7 +581,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	}
 
 	t1, _ = inredcfs.NewTransaction(sop.ForReading, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	b3, _ = inredcfs.OpenBtree[int, string](ctx, "tablex", t1, nil)
 	b3.First(ctx)
@@ -613,7 +613,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	sr.Remove(ctx, "tablex2")
 
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := inredcfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "tablex2",
 		SlotLength:               8,
@@ -631,7 +631,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 
 	f1 := func() error {
 		t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ := inredcfs.OpenBtree[int, string](ctx2, "tablex2", t1, nil)
 		b3.Add(ctx2, 50, "I am the value with 5000 key.")
 		b3.Add(ctx2, 51, "I am the value with 5001 key.")
@@ -641,7 +641,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 
 	f2 := func() error {
 		t2, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t2.Begin()
+		t2.Begin(ctx)
 		b32, _ := inredcfs.OpenBtree[int, string](ctx2, "tablex2", t2, nil)
 		b32.Add(ctx2, 550, "I am the value with 5000 key.")
 		b32.Add(ctx2, 551, "I am the value with 5001 key.")
@@ -651,7 +651,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 
 	f3 := func() error {
 		t3, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t3.Begin()
+		t3.Begin(ctx)
 		b32, _ := inredcfs.OpenBtree[int, string](ctx2, "tablex2", t3, nil)
 		b32.Add(ctx2, 550, "random foo.")
 		b32.Add(ctx2, 551, "bar hello.")
@@ -668,7 +668,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	}
 
 	t1, _ = inredcfs.NewTransaction(sop.ForReading, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	b3, _ = inredcfs.OpenBtree[int, string](ctx, "tablex2", t1, nil)
 	b3.First(ctx)
@@ -698,7 +698,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	sr.Remove(ctx, "tabley")
 
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := inredcfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "tabley",
 		SlotLength:               8,
@@ -720,7 +720,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 
 	f1 := func() error {
 		t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ := inredcfs.OpenBtree[int, string](ctx3, "tabley", t1, nil)
 		b3.Add(ctx3, 50, "I am the value with 5000 key.")
 		b3.Add(ctx3, 51, "I am the value with 5001 key.")
@@ -730,7 +730,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 
 	f2 := func() error {
 		t2, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t2.Begin()
+		t2.Begin(ctx)
 		b32, _ := inredcfs.OpenBtree[int, string](ctx2, "tabley", t2, nil)
 		b32.Update(ctx2, 550, "I am the value with 5000 key.")
 		b32.Update(ctx2, 551, "I am the value with 5001 key.")
@@ -740,7 +740,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 
 	f3 := func() error {
 		t3, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t3.Begin()
+		t3.Begin(ctx)
 		b32, _ := inredcfs.OpenBtree[int, string](ctx2, "tabley", t3, nil)
 		b32.Update(ctx2, 550, "random foo.")
 		b32.Update(ctx2, 551, "bar hello.")
@@ -761,7 +761,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	}
 
 	t1, _ = inredcfs.NewTransaction(sop.ForReading, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	b3, _ = inredcfs.OpenBtree[int, string](ctx, "tabley", t1, nil)
 	b3.First(ctx)

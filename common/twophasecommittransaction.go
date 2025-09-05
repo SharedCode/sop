@@ -51,7 +51,7 @@ type Transaction struct {
 
 	// Handle replication related error.
 	HandleReplicationRelatedError func(ctx context.Context, ioError error, rollbackError error, rollbackSucceeded bool)
-	cacheRestartHelper *cacheRestartHelper
+	cacheRestartHelper            *cacheRestartHelper
 
 	// Phase 1 commit generated objects required for phase 2 commit.
 	updatedNodeHandles []sop.RegistryPayload[sop.Handle]
@@ -85,21 +85,21 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration ti
 		commitMaxDuration = time.Duration(1 * time.Hour)
 	}
 	return &Transaction{
-		mode:            mode,
-		maxTime:         commitMaxDuration,
-		StoreRepository: storeRepository,
-		registry:        registry,
-		l2Cache:         l2Cache,
-		l1Cache:         cache.GetGlobalCache(),
-		blobStore:       blobStore,
-		logger:          newTransactionLogger(transactionLog, logging),
+		mode:               mode,
+		maxTime:            commitMaxDuration,
+		StoreRepository:    storeRepository,
+		registry:           registry,
+		l2Cache:            l2Cache,
+		l1Cache:            cache.GetGlobalCache(),
+		blobStore:          blobStore,
+		logger:             newTransactionLogger(transactionLog, logging),
 		cacheRestartHelper: newCacheRestartHelper(l2Cache),
-		phaseDone:       -1,
-		id:              sop.NewUUID(),
+		phaseDone:          -1,
+		id:                 sop.NewUUID(),
 	}, nil
 }
 
-func (t *Transaction) Begin() error {
+func (t *Transaction) Begin(ctx context.Context) error {
 	if t.HasBegun() {
 		return fmt.Errorf("transaction is ongoing, 'can't begin again")
 	}
@@ -107,6 +107,8 @@ func (t *Transaction) Begin() error {
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 0
+	// Perform maintenance (restart detection / priority log cleanup) early.
+	t.onIdle(ctx)
 	return nil
 }
 
@@ -123,8 +125,6 @@ func (t *Transaction) Close() error {
 // - validates state, takes locks, refetches/merges on contention,
 // - persists value blobs and prepares node mutations without finalizing registry updates.
 func (t *Transaction) Phase1Commit(ctx context.Context) error {
-	// Service the cleanup of left hanging transactions.
-	t.onIdle(ctx)
 
 	if !t.HasBegun() {
 		return fmt.Errorf("no transaction to commit, call Begin to start a transaction")

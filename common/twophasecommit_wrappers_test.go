@@ -41,14 +41,14 @@ func Test_NewTwoPhase_TimeBounds_Begin_Close(t *testing.T) {
 	if tx.HasBegun() {
 		t.Fatal("HasBegun true before Begin")
 	}
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("Begin err: %v", err)
 	}
 	if !tx.HasBegun() {
 		t.Fatal("HasBegun false after Begin")
 	}
 	// Begin again -> error
-	if err := tx.Begin(); err == nil {
+	if err := tx.Begin(ctx); err == nil {
 		t.Fatal("expected Begin again to error")
 	}
 	// Close calls underlying Closer
@@ -92,7 +92,7 @@ func Test_Phase1Commit_Modes_And_Error(t *testing.T) {
 
 	// NoCheck -> early return
 	txNo := &Transaction{mode: sop.NoCheck, phaseDone: -1, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, StoreRepository: sr, registry: mocks.NewMockRegistry(false), logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
-	if err := txNo.Begin(); err != nil {
+	if err := txNo.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := txNo.Phase1Commit(ctx); err != nil {
@@ -115,7 +115,7 @@ func Test_Phase1Commit_Modes_And_Error(t *testing.T) {
 		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
 		refetchAndMerge:                  func(context.Context) error { return nil },
 	}}
-	if err := txR.Begin(); err != nil {
+	if err := txR.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := txR.Phase1Commit(ctx); err != nil {
@@ -137,7 +137,7 @@ func Test_Phase1Commit_Modes_And_Error(t *testing.T) {
 		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
 		refetchAndMerge:                  func(context.Context) error { return nil },
 	}}
-	if err := txW.Begin(); err != nil {
+	if err := txW.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := txW.Phase1Commit(ctx); err != nil {
@@ -162,7 +162,7 @@ func Test_Phase1Commit_Modes_And_Error(t *testing.T) {
 		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
 		refetchAndMerge:                  func(context.Context) error { return nil },
 	}}
-	if err := txE.Begin(); err != nil {
+	if err := txE.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := txE.Phase1Commit(ctx); err == nil {
@@ -279,7 +279,7 @@ func Test_Rollback_Wrapper_Success_And_Fail(t *testing.T) {
 
 	// Success path: nothing to rollback, committedState unknown
 	txS := &Transaction{mode: sop.ForWriting, phaseDone: -1, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, StoreRepository: sr, registry: mocks.NewMockRegistry(false), logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
-	if err := txS.Begin(); err != nil {
+	if err := txS.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := txS.Rollback(ctx, nil); err != nil {
@@ -289,7 +289,7 @@ func Test_Rollback_Wrapper_Success_And_Fail(t *testing.T) {
 	// Fail path: set state as already committed so internal rollback errors
 	cr := &closerRegistry{}
 	txF := &Transaction{mode: sop.ForWriting, phaseDone: -1, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, StoreRepository: sr, registry: cr, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
-	if err := txF.Begin(); err != nil {
+	if err := txF.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	txF.logger.committedState = finalizeCommit + 1

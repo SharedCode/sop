@@ -459,7 +459,7 @@ func Test_ItemActionTracker_Get_NoFetch_WhenPresent(t *testing.T) {
 func Test_NewBtree_WithTTL_And_EmptyName_Error(t *testing.T) {
 	ctx := context.Background()
 	tx, _ := newMockTransaction(t, sop.ForWriting, -1)
-	_ = tx.Begin()
+	_ = tx.Begin(ctx)
 	// With TTL path: provide CacheConfig
 	so := sop.StoreOptions{Name: "nb_ttl", SlotLength: 4}
 	so.CacheConfig = &sop.StoreCacheConfig{IsStoreInfoCacheTTL: true, StoreInfoCacheDuration: time.Minute}
@@ -475,7 +475,7 @@ func Test_NewBtree_WithTTL_And_EmptyName_Error(t *testing.T) {
 func Test_NewBtree_Incompatible_Config_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	tx, _ := newMockTransaction(t, sop.ForWriting, -1)
-	_ = tx.Begin()
+	_ = tx.Begin(ctx)
 	// Seed store repo with a StoreInfo of slot length 8
 	existing := sop.StoreOptions{Name: "nb_incompat", SlotLength: 8}
 	si := sop.NewStoreInfo(existing)

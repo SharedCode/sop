@@ -52,7 +52,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
@@ -102,11 +102,11 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 
 	trans2, err := inredcfs.NewTransaction(sop.ForWriting, -1, false)
 
-	trans.Begin()
-	trans2.Begin()
+	trans.Begin(ctx)
+	trans2.Begin(ctx)
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
-    b3, err := inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
+	b3, err := inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -116,7 +116,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		return
 	}
 
-    b32, err := inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans2, Compare)
+	b32, err := inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans2, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -140,7 +140,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
@@ -165,26 +165,26 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 			return
 		}
 	}
-    if err := trans.Commit(ctx); err != nil {
+	if err := trans.Commit(ctx); err != nil {
 		t.Errorf("%v", err)
 		t.Fail()
 		return
 	}
 
-    trans, err = inredcfs.NewTransaction(sop.ForReading, -1, false)
+	trans, err = inredcfs.NewTransaction(sop.ForReading, -1, false)
 	if err != nil {
 		t.Errorf("%v", err)
 		t.Fail()
 		return
 	}
 
-    if err := trans.Begin(); err != nil {
+	if err := trans.Begin(ctx); err != nil {
 		t.Errorf("%v", err)
 		t.Fail()
 		return
 	}
 
-    b3, err = inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
+	b3, err = inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
 	if err != nil {
 		t.Errorf("Error instantiating Btree, details: %v.", err)
 		t.Fail()
@@ -206,7 +206,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	end := 100000
 
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
@@ -230,7 +230,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = inredcfs.NewTransaction(sop.ForWriting, -1, false)
-			t1.Begin()
+			t1.Begin(ctx)
 			b3, _ = inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
@@ -254,7 +254,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = inredcfs.NewTransaction(sop.ForReading, -1, false)
-			t1.Begin()
+			t1.Begin(ctx)
 			b3, _ = inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
@@ -266,7 +266,7 @@ func VolumeDeletes(t *testing.T) {
 	end := 100000
 
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
@@ -292,7 +292,7 @@ func VolumeDeletes(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = inredcfs.NewTransaction(sop.ForWriting, -1, false)
-			t1.Begin()
+			t1.Begin(ctx)
 			b3, _ = inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
@@ -305,7 +305,7 @@ func MixedOperations(t *testing.T) {
 	end := 14000
 
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := inredcfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
@@ -346,7 +346,7 @@ func MixedOperations(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = inredcfs.NewTransaction(sop.ForWriting, -1, false)
-			t1.Begin()
+			t1.Begin(ctx)
 			b3, _ = inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
@@ -382,7 +382,7 @@ func MixedOperations(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = inredcfs.NewTransaction(sop.ForWriting, -1, false)
-			t1.Begin()
+			t1.Begin(ctx)
 			b3, _ = inredcfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
@@ -390,7 +390,7 @@ func MixedOperations(t *testing.T) {
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	b3, _ := inredcfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase",
@@ -415,7 +415,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 		twoPhase.Rollback(ctx, nil)
 
 		t1, _ = inredcfs.NewTransaction(sop.ForWriting, -1, false)
-		t1.Begin()
+		t1.Begin(ctx)
 
 		b3, _ = inredcfs.OpenBtree[int, string](ctx, "twophase", t1, nil)
 		if b3.Count() != originalCount {
@@ -428,7 +428,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 
 func Test_IllegalBtreeStoreName(t *testing.T) {
 	t1, _ := inredcfs.NewTransaction(sop.ForWriting, -1, false)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	if _, err := inredcfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "2phase",

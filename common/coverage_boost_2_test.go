@@ -699,7 +699,7 @@ func Test_Phase1Commit_LockFailOnce_TriggersRefetchAndMerge(t *testing.T) {
 		refetchAndMerge:                  func(context.Context) error { refetchCount++; return nil },
 	}}
 
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("begin err: %v", err)
 	}
 	if err := tx.Phase1Commit(ctx); err != nil {
@@ -827,7 +827,7 @@ func Test_Phase1Commit_IsLockedError_ThenSucceeds(t *testing.T) {
 		refetchAndMerge:                  func(context.Context) error { return nil },
 	}}
 
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("begin err: %v", err)
 	}
 	if err := tx.Phase1Commit(ctx); err != nil {
