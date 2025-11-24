@@ -10,17 +10,14 @@ SOP follows a strict separation between public APIs and internal implementation 
 
 These packages are intended for direct use by consumers of the library:
 
-*   **`github.com/sharedcode/sop/inredcfs`**: The primary entry point for the "Hybrid" backend. It combines:
-    *   **Cassandra**: For metadata and registry storage (high availability, scalability).
-    *   **Filesystem**: For raw data storage (performance, direct I/O).
-    *   **Redis**: For caching and coordination (locking).
-    *   *Usage*: Use this package to create and manage B-Trees in a distributed environment.
+*   **`github.com/sharedcode/sop/inredfs`**: The **primary and recommended** backend. It uses the local filesystem for both metadata (via a high-performance hashmap) and data, with Redis for caching and coordination.
+    *   *Usage*: Ideal for both **distributed clusters** and single-node deployments. It outperforms the hybrid backend in stress tests.
 
-*   **`github.com/sharedcode/sop/streamingdata`**: Provides the Streaming Data Store functionality.
-    *   *Usage*: Use this for handling large binary objects (BLOBs) or streaming data requirements within the SOP ecosystem.
-
-*   **`github.com/sharedcode/sop/inredfs`**: A lighter-weight backend that uses the local filesystem for both metadata and data, with Redis for caching.
-    *   *Usage*: Ideal for single-node deployments or testing where Cassandra is not required.
+*   **`github.com/sharedcode/sop/inredcfs`**: The "Hybrid" backend. It combines:
+    *   **Cassandra**: For metadata and registry storage.
+    *   **Filesystem**: For raw data storage.
+    *   **Redis**: For caching and coordination.
+    *   *Usage*: Use this if you have a specific requirement for Cassandra-based metadata management.
 
 ### Internal Packages
 
@@ -43,26 +40,26 @@ These packages are intended for direct use by consumers of the library:
 
 SOP supports two primary backends, each with a distinct architecture for handling metadata and data.
 
-### 1. Hybrid Backend (`inredcfs`)
+### 1. Filesystem Backend (`inredfs`) - **Recommended**
 
-Designed for distributed, high-scale environments.
-
-*   **Registry (Cassandra)**: Stores metadata, B-Tree root information, and the "Virtual ID" registry.
-    *   *Why*: High availability and linear scalability for critical metadata.
-*   **Blob Store (Filesystem)**: Stores the actual B-Tree nodes and data values as serialized blobs.
-    *   *Why*: Direct filesystem I/O is extremely fast and cost-effective for bulk data.
-*   **Locking & Caching (Redis)**: Handles distributed locking and caches frequently accessed nodes.
-
-### 2. Filesystem Backend (`inredfs`)
-
-Designed for single-node deployments or environments where Cassandra is not available.
+Designed for **distributed, high-scale environments** as well as single-node deployments.
 
 *   **Registry (Filesystem)**: Stores metadata and the registry in a specialized, memory-mapped hashmap file on disk.
-    *   *Why*: Simplicity and self-contained deployment without external database dependencies (other than Redis, which is optional).
-*   **Blob Store (Filesystem)**: Same as `inredcfs`, stores nodes/values as blobs.
+    *   *Why*: **Superior Performance**. The proprietary registry hashmap on disk, combined with Redis coordination, has been proven to scale better than the Hybrid Cassandra model. In stress tests simulating heavy workloads across machines on commodity hardware, `inredfs` performed **25% faster** than `inredcfs`.
+*   **Blob Store (Filesystem)**: Stores nodes/values as blobs.
 *   **Locking & Caching**:
     *   **Redis (Default)**: Uses Redis for distributed locking and caching.
     *   **In-Memory (Standalone)**: Can be configured to use internal memory for locking and caching, removing the Redis dependency entirely.
+
+### 2. Hybrid Backend (`inredcfs`)
+
+An alternative backend for distributed environments.
+
+*   **Registry (Cassandra)**: Stores metadata, B-Tree root information, and the "Virtual ID" registry.
+    *   *Why*: Provided as an option for environments that prefer Cassandra for metadata high availability, though `inredfs` is now the proposed model for performance.
+*   **Blob Store (Filesystem)**: Stores the actual B-Tree nodes and data values as serialized blobs.
+    *   *Why*: Direct filesystem I/O is extremely fast and cost-effective for bulk data.
+*   **Locking & Caching (Redis)**: Handles distributed locking and caches frequently accessed nodes.
 
 ### Transaction Data Flow
 
@@ -121,14 +118,20 @@ The flow is identical to the above, except **Cassandra** is replaced by the **Fi
 
 SOP is designed to run in two distinct modes, catering to different scale requirements.
 
-### 1. Standalone Mode (Embedded)
+### 1. Filesystem Backend (`inredfs`) - **Recommended**
+*   **Backend**: `inredfs`.
+*   **Architecture**: Multiple application nodes, shared storage (Network FS/S3) + Redis.
+*   **Use Case**: Enterprise applications, high-availability services, distributed clusters.
+*   **Pros**: **Highest performance** (25% faster than hybrid), horizontal scalability, fault tolerance, ACID guarantees.
+
+### 2. Hybrid Mode (Distributed)
+*   **Backend**: `inredcfs`.
+*   **Architecture**: Multiple application nodes, shared storage (Cassandra + Network FS/S3).
+*   **Use Case**: Environments with existing Cassandra infrastructure or specific metadata requirements.
+*   **Pros**: Horizontal scalability, fault tolerance.
+
+### 3. Standalone Mode (Embedded)
 *   **Backend**: `inredfs` (or `inmemory` for pure RAM).
 *   **Architecture**: Single process, local storage.
 *   **Use Case**: Desktop apps, CLI tools, local AI vector stores.
 *   **Pros**: Zero external dependencies, maximum single-node performance.
-
-### 2. Cluster Mode (Distributed)
-*   **Backend**: `inredcfs`.
-*   **Architecture**: Multiple application nodes, shared storage (Cassandra + Network FS/S3).
-*   **Use Case**: Enterprise applications, high-availability services.
-*   **Pros**: Horizontal scalability, fault tolerance, ACID guarantees across the cluster.

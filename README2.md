@@ -362,16 +362,20 @@ Please feel free to file a request/discussion entry if you have a special domain
 
 # SOP in Redis, Cassandra & File System (inredcfs)
 This package (`inredcfs`) offers a hybrid storage approach:
-- **Registry (Metadata)**: Stored in Cassandra. This provides robust, scalable management for B-tree node virtual IDs (handles).
+- **Registry (Cassandra)**: Stored in Cassandra. This provides robust, scalable management for B-tree node virtual IDs (handles).
 - **Data Blobs (Nodes & Values)**: Stored in the File System (local disk or network mount). This retains the raw performance and cost benefits of filesystem storage for bulk data.
 - **Caching & Locking**: Redis is used for L2 caching and the OOA coordination/locking mechanism.
 
-This hybrid model is ideal when you want the metadata reliability and scalability of Cassandra but prefer the filesystem for storing the actual data content (blobs), or when you want to offload the heavy lifting of blob storage from Cassandra.
+This hybrid model is available for environments that prefer Cassandra for metadata. However, note that the pure **`inredfs` backend is now the recommended model for distributed, high-scale environments**. In stress tests simulating heavy workloads across machines, `inredfs` (using its proprietary on-disk registry hashmap) performed **25% faster** than this hybrid model on commodity hardware.
 
 Usage is very similar to `inredfs`, but you import `github.com/sharedcode/sop/inredcfs` and provide Cassandra configuration in `Initialize`.
 
 # SOP in Redis & File System
+**The Recommended Backend for Distributed & Local Workloads**
+
 B-tree–based object persistence (balanced M-ary, multiway search tree), File System as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the `Redis Lock API`, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
+
+**Distributed Scale**: Contrary to earlier assumptions, `inredfs` is not just for single nodes. It is the **most performant choice for distributed clusters**. Its proprietary registry hashmap on disk, combined with Redis coordination, scales better than the Cassandra hybrid model (`inredcfs`), offering ~25% higher throughput in stress tests.
 
 **Standalone Mode**: SOP can also run in a pure standalone mode without Redis. By configuring the `CacheFactory` to `InMemory`, SOP uses internal memory for caching and locking. This is ideal for single-node applications, embedded databases, or local development where distributed coordination is not required.
 
