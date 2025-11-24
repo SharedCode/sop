@@ -94,6 +94,18 @@ func (f *fakeFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os.DirEnt
 	f.calls = append(f.calls, "ReadDir:"+sourceDir)
 	return os.ReadDir(sourceDir)
 }
+func (f *fakeFileIO) List(ctx context.Context, path string) ([]string, error) {
+	f.calls = append(f.calls, "List:"+path)
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names, nil
+}
 
 func Test_fileIO_removeStore_and_replicate_Table(t *testing.T) {
 	ctx := context.Background()
@@ -192,13 +204,19 @@ func (m *lockFailingCache) Lock(ctx context.Context, d time.Duration, lks []*sop
 func (m *lockFailingCache) IsLocked(ctx context.Context, lks []*sop.LockKey) (bool, error) {
 	return false, nil
 }
+func (m *lockFailingCache) DualLock(ctx context.Context, d time.Duration, lks []*sop.LockKey) (bool, sop.UUID, error) {
+	return false, sop.NilUUID, nil
+}
 func (m *lockFailingCache) IsLockedByOthers(ctx context.Context, ks []string) (bool, error) {
 	return m.base.IsLockedByOthers(ctx, ks)
 }
 func (m *lockFailingCache) Unlock(ctx context.Context, lks []*sop.LockKey) error { return nil }
 func (m *lockFailingCache) Clear(ctx context.Context) error                      { return m.base.Clear(ctx) }
+func (m *lockFailingCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
+}
 func (m *lockFailingCache) IsRestarted(ctx context.Context) (bool, error) {
-	return m.base.IsRestarted(ctx)
+	return false, nil
 }
 func Test_updateFileBlockRegion_LockTimeout(t *testing.T) {
 	// Short-deadline context forces the timeout branch on lock acquisition loop.

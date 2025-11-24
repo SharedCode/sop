@@ -5,7 +5,7 @@
 package inredck
 
 import (
-	cas "github.com/sharedcode/sop/internal/cassandra"
+	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/redis"
 )
 

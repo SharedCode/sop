@@ -23,8 +23,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t1, _ := inredfs.NewTransaction(ctx, to)
 	t2, _ := inredfs.NewTransaction(ctx, to)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := inredfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "personvdb7",
@@ -48,7 +48,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
 		t1, _ = inredfs.NewTransaction(ctx, to)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = inredfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "personvdb7",
 			SlotLength:               nodeSlotLength,
@@ -91,7 +91,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 
 	to2, _ := inredfs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
 	t1, _ = inredfs.NewTransaction(ctx, to2)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	var person Person
 	b3.Find(ctx, pk2, false)
@@ -118,8 +118,8 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	t1, _ := inredfs.NewTransaction(ctx, to)
 	t2, _ := inredfs.NewTransaction(ctx, to)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := inredfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "personvdb7",
@@ -143,7 +143,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
 		t1, _ = inredfs.NewTransaction(ctx, to)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
 
@@ -177,8 +177,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	to2, _ := inredfs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
 	t2, _ := inredfs.NewTransaction(ctx, to2)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := inredfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "personvdb7",
@@ -202,7 +202,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
 		t1, _ = inredfs.NewTransaction(ctx, to)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
 
@@ -236,8 +236,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	to2, _ := inredfs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
 	t2, _ := inredfs.NewTransaction(ctx, to2)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := inredfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "personvdb7",
@@ -263,7 +263,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		b3.Add(ctx, pk3, p3)
 		t1.Commit(ctx)
 		t1, _ = inredfs.NewTransaction(ctx, to)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
 
@@ -295,8 +295,8 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	t1, _ := inredfs.NewTransaction(ctx, to)
 	t2, _ := inredfs.NewTransaction(ctx, to)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := inredfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "personvdb7",
@@ -326,7 +326,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		b3.Add(ctx, pk5, p5)
 		t1.Commit(ctx)
 		t1, _ = inredfs.NewTransaction(ctx, to)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
 
@@ -383,7 +383,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := inredfs.NewTransaction(ctx, to)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase2",
 		SlotLength:               8,
@@ -400,7 +400,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 
 	f1 := func() error {
 		t1, _ := inredfs.NewTransaction(ctx2, to)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ := inredfs.OpenBtree[int, string](ctx2, "twophase2", t1, nil)
 		b3.Add(ctx2, 5000, "I am the value with 5000 key.")
 		b3.Add(ctx2, 5001, "I am the value with 5001 key.")
@@ -410,7 +410,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 
 	f2 := func() error {
 		t2, _ := inredfs.NewTransaction(ctx2, to)
-		t2.Begin()
+		t2.Begin(ctx)
 		b32, _ := inredfs.OpenBtree[int, string](ctx2, "twophase2", t2, nil)
 		b32.Add(ctx2, 5500, "I am the value with 5000 key.")
 		b32.Add(ctx2, 5501, "I am the value with 5001 key.")
@@ -428,7 +428,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 
 	to2, _ := inredfs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
 	t1, _ = inredfs.NewTransaction(ctx, to2)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	b3, _ = inredfs.OpenBtree[int, string](ctx, "twophase2", t1, nil)
 

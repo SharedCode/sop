@@ -23,21 +23,7 @@ func (rm registryMap) add(ctx context.Context, storesHandles []sop.RegistryPaylo
 	// Individually write to the file area occupied by the handle so we don't create "lock pressure".
 	for _, item := range storesHandles {
 		for _, h := range item.IDs {
-			frd, err := rm.hashmap.findFileRegion(ctx, item.RegistryTable, []sop.UUID{h.LogicalID})
-			if err != nil {
-				return err
-			}
-
-			// Fail if item exists in target.
-			if !frd[0].handle.IsEmpty() {
-				return fmt.Errorf("registryMap.add failed, can't overwrite an item at offset=%v, item details: %v", frd[0].getOffset(), frd[0].handle)
-			}
-
-			frd[0].handle = h
-
-			log.Debug(fmt.Sprintf("adding to file %s, sector offset %v, offset in block %v", frd[0].dio.filename, frd[0].blockOffset, frd[0].handleInBlockOffset))
-
-			if err := rm.hashmap.updateFileRegion(ctx, frd); err != nil {
+			if err := rm.hashmap.findAndAdd(ctx, item.RegistryTable, h); err != nil {
 				return err
 			}
 		}

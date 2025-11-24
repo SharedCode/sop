@@ -97,7 +97,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration ti
 	}, nil
 }
 
-func (t *Transaction) Begin() error {
+func (t *Transaction) Begin(ctx context.Context) error {
 	if t.HasBegun() {
 		return fmt.Errorf("transaction is ongoing, 'can't begin again")
 	}
@@ -177,8 +177,8 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
-		if t.areNodesKeysLocked() {
-			if p1Err := t.logger.priorityRollback(ctx, t, t.GetID()); p1Err != nil {
+		if t.nodesKeysExist() {
+			if p1Err := t.logger.priorityRollback(ctx, t.registry, t.GetID()); p1Err != nil {
 				log.Error(fmt.Sprintf("phase 2 commit priorityRollback failed, details: %v", p1Err))
 				// Should generate a failover below.
 				if se, ok := p1Err.(sop.Error); ok && se.Code == sop.RestoreRegistryFileSectorFailure {
@@ -496,6 +496,11 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
+	// Ensure that we still hold the locks on the nodes' keys before finalizing the commit.
+	if ok, err := t.nodesKeysNilOrLocked(ctx); !ok || err != nil {
+		return err
+	}
+
 	log.Debug(fmt.Sprintf("phase 1 commit ends, tid: %v", t.GetID()))
 
 	// Populate the phase 2 commit required objects.
@@ -608,25 +613,23 @@ func (t *Transaction) handleRegistrySectorLockTimeout(ctx context.Context, err s
 	)
 
 	lk := t.l2Cache.CreateLockKeys([]string{lockKey})
-	if ok, _, _ := t.l2Cache.Lock(ctx, defaultLockDuration, lk); ok {
-		if ok, _ = t.l2Cache.IsLocked(ctx, lk); ok {
-			ud, ok := err.UserData.(*sop.LockKey)
-			if !ok {
-				t.l2Cache.Unlock(ctx, lk)
-				return err
-			}
-			if err2 := t.logger.priorityRollback(ctx, t, ud.LockID); err2 != nil {
-				log.Info(fmt.Sprintf("error priorityRollback on tid %v, details: %v", err.UserData, err2))
-				t.l2Cache.Unlock(ctx, lk)
-				return err
-			}
-
-			log.Info(fmt.Sprintf("priorityRollback on tid %v, success", err.UserData))
-			ud.IsLockOwner = true
-			t.l2Cache.Unlock(ctx, []*sop.LockKey{ud})
-			t.l2Cache.Unlock(ctx, lk)
-			return nil
+	if ok, _, _ := t.l2Cache.DualLock(ctx, defaultLockDuration, lk); ok {
+		defer t.l2Cache.Unlock(ctx, lk)
+		ud, ok := err.UserData.(*sop.LockKey)
+		if !ok {
+			return err
 		}
+		// In this case, LockID is the transaction ID that holds the lock.
+		tid := ud.LockID
+		if err2 := t.logger.priorityRollback(ctx, t.registry, tid); err2 != nil {
+			log.Info(fmt.Sprintf("error priorityRollback on tid %v, details: %v", err.UserData, err2))
+			return err
+		}
+
+		log.Info(fmt.Sprintf("priorityRollback on tid %v, success", err.UserData))
+		ud.IsLockOwner = true
+		t.l2Cache.Unlock(ctx, []*sop.LockKey{ud})
+		return nil
 	}
 
 	return err

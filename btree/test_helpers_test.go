@@ -38,7 +38,7 @@ type mockTx struct {
 	lastRollbackErr error
 }
 
-func (m *mockTx) Begin() error                           { m.begun = true; return nil }
+func (m *mockTx) Begin(ctx context.Context) error        { m.begun = true; return nil }
 func (m *mockTx) Phase1Commit(ctx context.Context) error { return nil }
 func (m *mockTx) Phase2Commit(ctx context.Context) error { return nil }
 func (m *mockTx) Rollback(ctx context.Context, err error) error {
@@ -52,7 +52,7 @@ func (m *mockTx) GetMode() sop.TransactionMode                    { return m.mod
 func (m *mockTx) GetStores(ctx context.Context) ([]string, error) { return nil, nil }
 func (m *mockTx) Close() error                                    { return nil }
 func (m *mockTx) GetID() sop.UUID                                 { return sop.NewUUID() }
-func (m *mockTx) CommitMaxDuration() time.Duration                 { return time.Minute }
+func (m *mockTx) CommitMaxDuration() time.Duration                { return time.Minute }
 
 // iatErr induces an error on Add to exercise rollback path in the wrapper.
 type iatErr[TK Ordered, TV any] struct{}

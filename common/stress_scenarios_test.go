@@ -15,15 +15,15 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
+	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/common/mocks"
-	cas "github.com/sharedcode/sop/internal/cassandra"
 )
 
 // ---- Streaming data store ----
 func TestStress_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 	// Populate with good data.
 	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	so := sop.ConfigureStore("xyz", true, 8, "Streaming data", sop.BigData, "")
 	sds, _ := NewBtree[string, string](ctx, so, trans, nil)
@@ -33,7 +33,7 @@ func TestStress_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 
 	// Now, populate then rollback and validate TID logs are gone.
 	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 	sds, _ = OpenBtree[string, string](ctx, "xyz", trans, nil)
 	sds.Add(ctx, "fooVideo2", "video content")
 
@@ -64,7 +64,7 @@ func TestStress_TLog_FailOnFinalizeCommit(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 
 	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "tlogtable",
@@ -81,7 +81,7 @@ func TestStress_TLog_FailOnFinalizeCommit(t *testing.T) {
 	trans.Commit(ctx)
 
 	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "tlogtable", trans, Compare)
 	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
@@ -118,8 +118,8 @@ func TestStress_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -144,7 +144,7 @@ func TestStress_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
 		t1, _ = newMockTransaction(t, sop.ForWriting, -1)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
 			SlotLength:               nodeSlotLength,
@@ -184,8 +184,8 @@ func TestStress_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 
-	t1.Begin()
-	t2.Begin()
+	t1.Begin(ctx)
+	t2.Begin(ctx)
 
 	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -209,7 +209,7 @@ func TestStress_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
 		t1, _ = newMockTransaction(t, sop.ForWriting, -1)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 			Name:                     "persondb",
 			SlotLength:               nodeSlotLength,
@@ -248,7 +248,7 @@ func TestStress_AddAndSearchManyPersons(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
@@ -289,7 +289,7 @@ func TestStress_ValueDataInSeparateSegment_TwoTransactionsWithNoConflict(t *test
 	// Prepare second transaction handle but don't begin yet; we'll run it after committing the first.
 	trans2, _ := newMockTransaction(t, sop.ForWriting, -1)
 
-	trans.Begin()
+	trans.Begin(ctx)
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
 	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -317,7 +317,7 @@ func TestStress_ValueDataInSeparateSegment_TwoTransactionsWithNoConflict(t *test
 	}
 
 	// Now begin and use the second writer transaction with a different key.
-	trans2.Begin()
+	trans2.Begin(ctx)
 
 	b32, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                         "persondb7",
@@ -350,7 +350,7 @@ func TestStress_ValueDataInSeparateSegment_AddAndSearchManyPersons(t *testing.T)
 		t.Fatal(err.Error())
 	}
 
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                         "persondb7",
 		SlotLength:                   nodeSlotLength,
@@ -389,7 +389,7 @@ func TestStress_ValueDataInSeparateSegment_AddAndSearchManyPersons(t *testing.T)
 		return
 	}
 
-	if err := trans.Begin(); err != nil {
+	if err := trans.Begin(ctx); err != nil {
 		t.Error(err.Error())
 		t.Fail()
 		return

@@ -10,9 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/sharedcode/sop"
+	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/fs"
-	cas "github.com/sharedcode/sop/internal/cassandra"
-	"github.com/sharedcode/sop/internal/inredcfs"
+	"github.com/sharedcode/sop/inredcfs"
 	"github.com/sharedcode/sop/redis"
 
 	"github.com/sharedcode/sop/restapi"
@@ -66,7 +66,7 @@ func createStores() error {
 	if err != nil {
 		return err
 	}
-	if err = trans.Begin(); err != nil {
+	if err = trans.Begin(ctx); err != nil {
 		return err
 	}
 
@@ -113,7 +113,7 @@ func getByKey(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "new transaction call in fetching an item failed"})
 	}
-	if err := trans.Begin(); err != nil {
+	if err := trans.Begin(c); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("trans.begin failed, error: %v", err)})
 		return
 	}
@@ -166,7 +166,7 @@ func addItem(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "new transaction call in fetching an item failed"})
 	}
-	if err := trans.Begin(); err != nil {
+	if err := trans.Begin(c); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("trans.begin failed, error: %v", err)})
 		return
 	}

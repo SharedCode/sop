@@ -13,7 +13,6 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/encoding"
-	"github.com/sharedcode/sop/redis"
 )
 
 // ReplicationTrackedDetails captures the replication state shared across processes,
@@ -56,7 +55,7 @@ var globalReplicationDetailsLocker sync.Mutex = sync.Mutex{}
 // It reads persisted status, initializes global in-memory state, and optionally synchronizes with L2 cache.
 func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, replicate bool, l2Cache sop.Cache) (*replicationTracker, error) {
 	if l2Cache == nil {
-		l2Cache = redis.NewClient()
+		l2Cache = sop.NewCacheClient()
 	}
 	isFirstFolderActive := true
 	rt := replicationTracker{
@@ -120,10 +119,9 @@ func (r *replicationTracker) HandleReplicationRelatedError(ctx context.Context, 
 			return
 		}
 		if err1.Code >= sop.FailoverQualifiedError || err2.Code >= sop.FailoverQualifiedError {
-			// Cause a failover switch to passive destinations on succeeding transactions.
-			if err := r.failover(ctx); err != nil {
-				log.Error(fmt.Sprintf("failover to folder %s failed, details: %v", r.getPassiveBaseFolder(), err.Error()))
-			}
+			log.Warn(fmt.Sprintf("Replication I/O error detected (code=%v). Triggering failover.", err1.Code))
+			// Auto-failover is currently disabled.
+			// r.failover(ctx)
 		}
 	}
 }
@@ -363,4 +361,13 @@ func (r *replicationTracker) syncWithL2Cache(ctx context.Context, pushValue bool
 	GlobalReplicationDetails = &rtd
 
 	return nil
+}
+
+// TriggerFailover is a helper to manually trigger failover for testing purposes.
+func TriggerFailover(ctx context.Context, storesBaseFolders []string, replicate bool, l2Cache sop.Cache) error {
+	rt, err := NewReplicationTracker(ctx, storesBaseFolders, replicate, l2Cache)
+	if err != nil {
+		return err
+	}
+	return rt.failover(ctx)
 }

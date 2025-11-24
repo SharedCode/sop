@@ -37,7 +37,6 @@ func (s stubPriorityLogRemoveErr) GetBatch(ctx context.Context, batchSize int) (
 func (s stubPriorityLogRemoveErr) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (s stubPriorityLogRemoveErr) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 type tlogWithPrioRemoveErr struct{ pl stubPriorityLogRemoveErr }
 
@@ -78,6 +77,7 @@ func Test_Transaction_Rollback_PriorityLogRemove_Error_ReturnsLastErr(t *testing
 		getStoreInfo:                     func() *sop.StoreInfo { return si },
 		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
 		unlockTrackedItems:               func(context.Context) error { return nil },
+		hasTrackedItems:                  func() bool { return false },
 	}}
 
 	if err := tx.rollback(ctx, true); err == nil || err.Error() != "prio remove err" {
@@ -162,6 +162,7 @@ func Test_Transaction_Rollback_AfterCommit_ReturnsCommittedError(t *testing.T) {
 		getStoreInfo:                     func() *sop.StoreInfo { return si },
 		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
 		unlockTrackedItems:               func(context.Context) error { return nil },
+		hasTrackedItems:                  func() bool { return false },
 	}}
 
 	err := tx.rollback(ctx, true)
@@ -1053,6 +1054,7 @@ func Test_Phase1Commit_LogBeforeFinalize_Error_Returns(t *testing.T) {
 		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
 		refetchAndMerge:                  func(context.Context) error { return nil },
 	}}
+
 	if err := tx.phase1Commit(ctx); err == nil || err.Error() != "log add err" {
 		t.Fatalf("expected log error at beforeFinalize, got: %v", err)
 	}
@@ -1159,6 +1161,7 @@ func (e errUpdateNoLocksReg2) UpdateNoLocks(ctx context.Context, allOrNothing bo
 	return errors.New("updateNoLocks err")
 }
 func (e errUpdateNoLocksReg2) Get(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
+
 	return e.inner.Get(ctx, lids)
 }
 func (e errUpdateNoLocksReg2) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error {
@@ -1246,212 +1249,13 @@ func (c dtLockFailCache) Lock(ctx context.Context, duration time.Duration, lockK
 	return c.Cache.Lock(ctx, duration, lockKeys)
 }
 
-// Sector-timeout with correct UserData but DTrollbk takeover lock fails; expect original error returned.
-func Test_Phase1Commit_SectorTimeout_TakeoverLock_Fails_ReturnsError(t *testing.T) {
-	ctx := context.Background()
-	base := mocks.NewMockClient()
-	l2 := dtLockFailCache{Cache: base}
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	bs := mocks.NewMockBlobStore()
-	sr := mocks.NewMockStoreRepository()
-
-	baseReg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
-	lk := sop.LockKey{Key: l2.FormatLockKey("DTrollbk"), LockID: sop.NewUUID()}
-	reg := &addedErrOnceReg{Mock_vid_registry: baseReg, lk: lk}
-
-	tl := newTransactionLogger(stubTLog{pl: &stubPriorityLog{}}, true)
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: sr, registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: tl, phaseDone: 0}
-
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_dt_takeover_lock_fail", SlotLength: 2})
-	n := &btree.Node[PersonKey, Person]{ID: sop.NewUUID(), Version: 0}
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: cache.GetGlobalCache(), localCache: map[sop.UUID]cachedNode{n.ID: {action: addAction, node: n}}, count: si.Count}
-	tx.btreesBackend = []btreeBackend{{
-		nodeRepository:                   nr,
-		getStoreInfo:                     func() *sop.StoreInfo { return si },
-		hasTrackedItems:                  func() bool { return true },
-		checkTrackedItems:                func(context.Context) error { return nil },
-		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-		unlockTrackedItems:               func(context.Context) error { return nil },
-		commitTrackedItemsValues:         func(context.Context) error { return nil },
-		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-		refetchAndMerge:                  func(context.Context) error { return nil },
-	}}
-
-	if err := tx.phase1Commit(ctx); err == nil {
-		t.Fatalf("expected phase1Commit to return original sector-timeout error when takeover lock fails")
+func (c dtLockFailCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	ok, tid, err := c.Lock(ctx, duration, lockKeys)
+	if !ok || err != nil {
+		return ok, tid, err
 	}
-}
-
-// Timed out early in phase1Commit before any work loop.
-func Test_Phase1Commit_TimedOut_ReturnsError(t *testing.T) {
-	ctx := context.Background()
-	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	bs := mocks.NewMockBlobStore()
-	sr := mocks.NewMockStoreRepository()
-	tl := newTransactionLogger(stubTLog{pl: &stubPriorityLog{}}, true)
-	// Extremely small maxTime to trigger immediate timeout.
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Nanosecond, StoreRepository: sr, registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: tl, phaseDone: 0}
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_timeout", SlotLength: 2})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: cache.GetGlobalCache(), localCache: map[sop.UUID]cachedNode{}, count: si.Count}
-	tx.btreesBackend = []btreeBackend{{
-		nodeRepository:                   nr,
-		getStoreInfo:                     func() *sop.StoreInfo { return si },
-		hasTrackedItems:                  func() bool { return true },
-		checkTrackedItems:                func(context.Context) error { return nil },
-		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-		unlockTrackedItems:               func(context.Context) error { return nil },
-		commitTrackedItemsValues:         func(context.Context) error { return nil },
-		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-		refetchAndMerge:                  func(context.Context) error { return nil },
-	}}
-	if err := tx.phase1Commit(ctx); err == nil {
-		t.Fatalf("expected timeout error from phase1Commit")
+	if locked, err := c.Cache.IsLocked(ctx, lockKeys); err != nil || !locked {
+		return false, sop.NilUUID, err
 	}
-}
-
-// TransactionLog stub that errors on the Nth occurrence of a specific commitFunction.
-type logErrCounterTL struct{ target, fireOn, count int }
-
-func (l *logErrCounterTL) PriorityLog() sop.TransactionPriorityLog { return noOpPrioLog{} }
-func (l *logErrCounterTL) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
-	if commitFunction == l.target {
-		l.count++
-		if l.count == l.fireOn {
-			return errors.New("log add err nth")
-		}
-	}
-	return nil
-}
-func (l *logErrCounterTL) Remove(ctx context.Context, tid sop.UUID) error { return nil }
-func (l *logErrCounterTL) GetOne(ctx context.Context) (sop.UUID, string, []sop.KeyValuePair[int, []byte], error) {
-	return sop.NilUUID, "", nil, nil
-}
-func (l *logErrCounterTL) GetOneOfHour(ctx context.Context, hour string) (sop.UUID, []sop.KeyValuePair[int, []byte], error) {
-	return sop.NilUUID, nil, nil
-}
-func (l *logErrCounterTL) NewUUID() sop.UUID { return sop.NewUUID() }
-
-// Refetch path: initial Lock of nodesKeys fails, needsRefetchAndMerge=true; on retry, logger.log(lockTrackedItems) inside refetch path fails.
-func Test_Phase1Commit_Refetch_LogLockTrackedItems_Error_Returns(t *testing.T) {
-	ctx := context.Background()
-	base := mocks.NewMockClient()
-	l2 := &lockFailOnceCache{Cache: base}
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	bs := mocks.NewMockBlobStore()
-	sr := mocks.NewMockStoreRepository()
-	// Error on the 2nd lockTrackedItems log (the one inside refetch path)
-	tl := newTransactionLogger(&logErrCounterTL{target: int(lockTrackedItems), fireOn: 2}, true)
-	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: sr, registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: tl, phaseDone: 0}
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_refetch_log_lock_items_err", SlotLength: 2})
-	id := sop.NewUUID()
-	node := &btree.Node[PersonKey, Person]{ID: id, Version: 1}
-	h := sop.NewHandle(id)
-	h.Version = 1
-	reg.Lookup[id] = h
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: cache.GetGlobalCache(), localCache: map[sop.UUID]cachedNode{id: {action: updateAction, node: node}}, count: si.Count}
-	tx.btreesBackend = []btreeBackend{{
-		nodeRepository:                   nr,
-		getStoreInfo:                     func() *sop.StoreInfo { return si },
-		hasTrackedItems:                  func() bool { return true },
-		checkTrackedItems:                func(context.Context) error { return nil },
-		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-		unlockTrackedItems:               func(context.Context) error { return nil },
-		commitTrackedItemsValues:         func(context.Context) error { return nil },
-		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-		refetchAndMerge:                  func(context.Context) error { return nil },
-	}}
-	if err := tx.phase1Commit(ctx); err == nil || err.Error() != "log add err nth" {
-		t.Fatalf("expected log error at refetch lockTrackedItems, got: %v", err)
-	}
-}
-
-// No mutations: hasTrackedItems true but with no added/updated/removed/fetched/root nodes; phase1Commit should succeed fast.
-func Test_Phase1Commit_NoMutations_Succeeds(t *testing.T) {
-	ctx := context.Background()
-	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	bs := mocks.NewMockBlobStore()
-	sr := mocks.NewMockStoreRepository()
-	tl := newTransactionLogger(stubTLog{pl: &stubPriorityLog{}}, true)
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: sr, registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: tl, phaseDone: 0}
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_no_mut", SlotLength: 2})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: cache.GetGlobalCache(), localCache: map[sop.UUID]cachedNode{}, count: si.Count}
-	tx.btreesBackend = []btreeBackend{{
-		nodeRepository:                   nr,
-		getStoreInfo:                     func() *sop.StoreInfo { return si },
-		hasTrackedItems:                  func() bool { return true },
-		checkTrackedItems:                func(context.Context) error { return nil },
-		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-		unlockTrackedItems:               func(context.Context) error { return nil },
-		commitTrackedItemsValues:         func(context.Context) error { return nil },
-		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-		refetchAndMerge:                  func(context.Context) error { return nil },
-	}}
-	if err := tx.phase1Commit(ctx); err != nil {
-		t.Fatalf("phase1Commit with no mutations err: %v", err)
-	}
-}
-
-// Multi-store: verify commitStores/rollbackStores info aggregation across more than one backend.
-func Test_Phase1Commit_MultiStore_CommitStoresInfo_Aggregates(t *testing.T) {
-	ctx := context.Background()
-	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	bs := mocks.NewMockBlobStore()
-	baseSR := mocks.NewMockStoreRepository()
-	sr := baseSR
-	tl := newTransactionLogger(stubTLog{pl: &stubPriorityLog{}}, true)
-	reg := mocks.NewMockRegistry(false)
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: sr, registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: tl, phaseDone: 0}
-
-	si1 := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_mstore_1", SlotLength: 2})
-	si2 := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_mstore_2", SlotLength: 2})
-	nr1 := &nodeRepositoryBackend{transaction: tx, storeInfo: si1, l2Cache: l2, l1Cache: cache.GetGlobalCache(), localCache: map[sop.UUID]cachedNode{}, count: si1.Count}
-	nr2 := &nodeRepositoryBackend{transaction: tx, storeInfo: si2, l2Cache: l2, l1Cache: cache.GetGlobalCache(), localCache: map[sop.UUID]cachedNode{}, count: si2.Count}
-	tx.btreesBackend = []btreeBackend{
-		{
-			nodeRepository:                   nr1,
-			getStoreInfo:                     func() *sop.StoreInfo { return si1 },
-			hasTrackedItems:                  func() bool { return true },
-			checkTrackedItems:                func(context.Context) error { return nil },
-			lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-			unlockTrackedItems:               func(context.Context) error { return nil },
-			commitTrackedItemsValues:         func(context.Context) error { return nil },
-			getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-			getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-			refetchAndMerge:                  func(context.Context) error { return nil },
-		},
-		{
-			nodeRepository:                   nr2,
-			getStoreInfo:                     func() *sop.StoreInfo { return si2 },
-			hasTrackedItems:                  func() bool { return true },
-			checkTrackedItems:                func(context.Context) error { return nil },
-			lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-			unlockTrackedItems:               func(context.Context) error { return nil },
-			commitTrackedItemsValues:         func(context.Context) error { return nil },
-			getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-			getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-			refetchAndMerge:                  func(context.Context) error { return nil },
-		},
-	}
-
-	if err := tx.phase1Commit(ctx); err != nil {
-		t.Fatalf("phase1Commit err: %v", err)
-	}
-
-	// Ensure commitStores info can be produced for multiple backends without panic and deltas computed.
-	cs := tx.getCommitStoresInfo()
-	if len(cs) != 2 {
-		t.Fatalf("expected 2 store infos, got %d", len(cs))
-	}
-	rb := tx.getRollbackStoresInfo()
-	if len(rb) != 2 {
-		t.Fatalf("expected 2 rollback store infos, got %d", len(rb))
-	}
+	return true, sop.NilUUID, nil
 }

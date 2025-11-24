@@ -1,7 +1,7 @@
 //go:build stress
 // +build stress
 
-package integrationtests
+package stresstests
 
 import (
 	"cmp"
@@ -64,7 +64,7 @@ func Test_Basic_EC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstoreec",
 		SlotLength:               8,
@@ -106,7 +106,7 @@ func Test_Basic_EC_Get(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstoreec",
 		SlotLength:               8,

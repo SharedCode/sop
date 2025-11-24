@@ -53,7 +53,7 @@ func Test_NewTwoPhaseCommitTransaction_Defaults(t *testing.T) {
 		t.Fatalf("mode mismatch: %v", trans.GetMode())
 	}
 	if !trans.HasBegun() {
-		_ = trans.Begin()
+		_ = trans.Begin(ctx)
 	}
 	if err := trans.Close(); err != nil {
 		t.Fatalf("Close error: %v", err)
@@ -62,7 +62,7 @@ func Test_NewTwoPhaseCommitTransaction_Defaults(t *testing.T) {
 
 func Test_ReaderTransaction_CommitChecksOnly(t *testing.T) {
 	trans, _ := newMockTransaction(t, sop.ForReading, -1)
-	if err := trans.Begin(); err != nil {
+	if err := trans.Begin(ctx); err != nil {
 		t.Fatalf("Begin error: %v", err)
 	}
 	if err := trans.Commit(ctx); err != nil {
@@ -90,11 +90,11 @@ func Test_Transaction_UnlockNodesKeys_NoKeys_NoOp(t *testing.T) {
 
 func Test_Transaction_AreNodesKeysLocked_Toggles(t *testing.T) {
 	tx := &Transaction{}
-	if tx.areNodesKeysLocked() {
+	if tx.nodesKeysExist() {
 		t.Fatalf("expected false when nodesKeys is nil")
 	}
 	tx.nodesKeys = []*sop.LockKey{{Key: "Lk"}}
-	if !tx.areNodesKeysLocked() {
+	if !tx.nodesKeysExist() {
 		t.Fatalf("expected true when nodesKeys is set")
 	}
 }
@@ -191,7 +191,7 @@ func Test_ReaderCommit_RefetchLoop_Converges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := trans.Begin(); err != nil {
+	if err := trans.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	b3, err := OpenBtree[PersonKey, Person](ctx, name, trans, Compare)
@@ -277,7 +277,7 @@ func Test_CommitAndRollbackStoresInfo_Paths(t *testing.T) {
 // ---- Selected stable tests from transaction_test.go ----
 func Test_Rollback(t *testing.T) {
 	trans, _ := newMockTransaction(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -294,7 +294,7 @@ func Test_Rollback(t *testing.T) {
 	trans.Commit(ctx)
 
 	trans, _ = newMockTransaction(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
 	b3.Update(ctx, pk, p)
@@ -302,7 +302,7 @@ func Test_Rollback(t *testing.T) {
 	trans.Rollback(ctx)
 
 	trans, _ = newMockTransaction(t, sop.ForReading, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, _ = NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
@@ -328,7 +328,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
@@ -373,7 +373,7 @@ func Test_NoCheckCommitAddFail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
@@ -396,7 +396,7 @@ func Test_NoCheckCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
@@ -418,7 +418,7 @@ func Test_NoCheckCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondbnc", trans, Compare)
 	b3.Find(ctx, pk, false)
@@ -523,10 +523,10 @@ func Test_Transaction_Methods_Errors(t *testing.T) {
 	}
 
 	// Begin twice should error
-	if err := trans.Begin(); err != nil {
+	if err := trans.Begin(ctx); err != nil {
 		t.Errorf("unexpected error on first Begin: %v", err)
 	}
-	if err := trans.Begin(); err == nil {
+	if err := trans.Begin(ctx); err == nil {
 		t.Errorf("expected error on second Begin, got nil")
 	}
 
@@ -538,14 +538,14 @@ func Test_Transaction_Methods_Errors(t *testing.T) {
 
 	// Phase2Commit before Phase1Commit should error
 	trans3, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog())
-	trans3.Begin()
+	trans3.Begin(ctx)
 	if err := trans3.Phase2Commit(ctx); err == nil {
 		t.Errorf("expected error on Phase2Commit before Phase1Commit, got nil")
 	}
 
 	// Rollback after commit should error
 	trans4, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog())
-	trans4.Begin()
+	trans4.Begin(ctx)
 	trans4.phaseDone = 2 // simulate committed
 	if err := trans4.Rollback(ctx, nil); err == nil {
 		t.Errorf("expected error on Rollback after commit, got nil")

@@ -26,7 +26,7 @@ import (
 func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 	ctx := context.Background()
 
-	dataPath := getDataPath()
+	dataPath := getDataPathReinstate()
 	stores := []string{
 		fmt.Sprintf("%s%cdisk8", dataPath, os.PathSeparator),
 		fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
@@ -59,7 +59,7 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 		}
 		// Create and pre-seed
 		tr, _ := inredfs.NewTransactionWithReplication(ctx, to)
-		_ = tr.Begin()
+		_ = tr.Begin(ctx)
 		b, _ := inredfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{Name: tb, SlotLength: 8, IsValueDataInNodeSegment: true}, tr, nil)
 		for i := 0; i < 100; i++ {
 			_, _ = b.Upsert(ctx, i, fmt.Sprintf("seed-%d", i))
@@ -70,7 +70,7 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 	// Trigger failover on next registry write by making active registry path read-only.
 	makeRegistryReadOnly(t, stores, tables[0])
 	tr0, _ := inredfs.NewTransactionWithReplication(ctx, to)
-	_ = tr0.Begin()
+	_ = tr0.Begin(ctx)
 	b0, _ := inredfs.OpenBtreeWithReplication[int, string](ctx, tables[0], tr0, nil)
 	_, _ = b0.Upsert(ctx, 101, "after-failover-trigger")
 	_ = tr0.Commit(ctx)
@@ -100,7 +100,7 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 					return
 				case <-rnd.C:
 					tr, _ := inredfs.NewTransactionWithReplication(ctx, to)
-					if tr.Begin() != nil {
+					if tr.Begin(ctx) != nil {
 						continue
 					}
 					tb := tables[(id+int(time.Now().UnixNano()))%len(tables)]
@@ -140,14 +140,14 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 	// Second failover and a quick write (toggle active registry path again).
 	makeRegistryReadOnly(t, stores, tables[1])
 	tr2, _ := inredfs.NewTransactionWithReplication(ctx, to)
-	_ = tr2.Begin()
+	_ = tr2.Begin(ctx)
 	b2, _ := inredfs.OpenBtreeWithReplication[int, string](ctx, tables[1], tr2, nil)
 	_, _ = b2.Upsert(ctx, 202, "second-failover")
 	_ = tr2.Commit(ctx)
 	restoreRegistryDirs(t, stores, tables)
 }
 
-func getDataPath() string {
+func getDataPathReinstate() string {
 	if s := os.Getenv("datapath"); s != "" {
 		return s
 	}

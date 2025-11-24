@@ -39,35 +39,58 @@ func (c client) IsLockedTTL(ctx context.Context, duration time.Duration, lockKey
 // If any key is already locked by another owner, it returns false and that owner's UUID.
 func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	for _, lk := range lockKeys {
+		// Try to set the lock using SetNX
+		set, err := c.conn.Client.SetNX(ctx, lk.Key, lk.LockID.String(), duration).Result()
+		if err != nil {
+			return false, sop.NilUUID, err
+		}
+		if set {
+			lk.IsLockOwner = true
+			continue
+		}
+
+		// If failed to set, check if we already own it
 		found, readItem, err := c.Get(ctx, lk.Key)
 		if err != nil {
 			return false, sop.NilUUID, err
 		}
 		if found {
-			// Item found in Redis, check if not ours. Most likely, but check anyway.
-			if readItem != lk.LockID.String() {
-				id, _ := sop.ParseUUID(readItem)
-				return false, id, nil
+			if readItem == lk.LockID.String() {
+				// We already own it.
+				lk.IsLockOwner = true
+				continue
 			}
-			continue
-		}
-
-		// Item does not exist, upsert it.
-		if err := c.Set(ctx, lk.Key, lk.LockID.String(), duration); err != nil {
-			return false, sop.NilUUID, err
-		}
-		// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-		if found, readItem2, err := c.Get(ctx, lk.Key); !found || err != nil {
-			return false, sop.NilUUID, err
-		} else if readItem2 != lk.LockID.String() {
+			// Owned by someone else
 			id, _ := sop.ParseUUID(readItem)
-			// Item found in Redis, lock attempt failed.
 			return false, id, nil
 		}
-		// We got the item locked, ensure we can unlock it.
-		lk.IsLockOwner = true
+		// If not found (expired between SetNX and Get?), return false to let caller retry.
+		return false, sop.NilUUID, nil
 	}
 	// Successfully locked.
+	return true, sop.NilUUID, nil
+}
+
+// DualLock attempts to acquire locks for all provided keys using the given TTL duration.
+// It calls Lock then IsLocked to ensure the lock is acquired and persisted.
+func (c client) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	ok, owner, err := c.Lock(ctx, duration, lockKeys)
+	if err != nil || !ok {
+		return ok, owner, err
+	}
+	// Verify lock acquisition
+	isLocked, err := c.IsLocked(ctx, lockKeys)
+	if err != nil {
+		// If verification fails, we should probably unlock to be safe, or just return error.
+		_ = c.Unlock(ctx, lockKeys)
+		return false, sop.NilUUID, err
+	}
+	if !isLocked {
+		// If IsLocked returns false, it means we lost the lock.
+		// Unlock just in case (though IsLocked saying false implies we might not own it or it expired).
+		_ = c.Unlock(ctx, lockKeys)
+		return false, sop.NilUUID, nil
+	}
 	return true, sop.NilUUID, nil
 }
 

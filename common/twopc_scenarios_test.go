@@ -27,7 +27,7 @@ func Test_TwoPC_Preconditions_And_BeginClose(t *testing.T) {
 	}
 
 	// verify Begin/HasBegun and Close paths minimally
-	if err := tr.Begin(); err != nil {
+	if err := tr.Begin(ctx); err != nil {
 		t.Fatalf("begin err: %v", err)
 	}
 	if !tr.HasBegun() {
@@ -59,15 +59,15 @@ func Test_TwoPC_Preconditions_And_BeginClose(t *testing.T) {
 func Test_TwoPC_Begin_Errors_And_Rollback_Preconditions(t *testing.T) {
 	ctx := context.Background()
 	tr := &Transaction{phaseDone: -1}
-	if err := tr.Begin(); err != nil {
+	if err := tr.Begin(ctx); err != nil {
 		t.Fatalf("first begin should succeed: %v", err)
 	}
-	if err := tr.Begin(); err == nil {
+	if err := tr.Begin(ctx); err == nil {
 		t.Fatalf("second begin should fail")
 	}
 
 	tr2 := &Transaction{phaseDone: 2}
-	if err := tr2.Begin(); err == nil {
+	if err := tr2.Begin(ctx); err == nil {
 		t.Fatalf("begin after done should fail")
 	}
 
@@ -90,7 +90,7 @@ func Test_TwoPC_Phase1_And_Phase2_Preconditions(t *testing.T) {
 
 	t.Run("phase1_no_check_returns_nil", func(t *testing.T) {
 		tr, _ := newMockTransaction(t, sop.NoCheck, -1)
-		if err := tr.Begin(); err != nil {
+		if err := tr.Begin(ctx); err != nil {
 			t.Fatalf("begin failed: %v", err)
 		}
 		if err := tr.GetPhasedTransaction().(*Transaction).Phase1Commit(ctx); err != nil {
@@ -100,7 +100,7 @@ func Test_TwoPC_Phase1_And_Phase2_Preconditions(t *testing.T) {
 
 	t.Run("phase1_reader_calls_conflict_check_only", func(t *testing.T) {
 		tr, _ := newMockTransaction(t, sop.ForReading, -1)
-		if err := tr.Begin(); err != nil {
+		if err := tr.Begin(ctx); err != nil {
 			t.Fatalf("begin failed: %v", err)
 		}
 		if err := tr.GetPhasedTransaction().(*Transaction).Phase1Commit(ctx); err != nil {
@@ -117,7 +117,7 @@ func Test_TwoPC_Phase1_And_Phase2_Preconditions(t *testing.T) {
 
 	t.Run("phase2_reader_returns_nil", func(t *testing.T) {
 		tr, _ := newMockTransaction(t, sop.ForReading, -1)
-		if err := tr.Begin(); err != nil {
+		if err := tr.Begin(ctx); err != nil {
 			t.Fatalf("begin failed: %v", err)
 		}
 		tr.GetPhasedTransaction().(*Transaction).phaseDone = 1
@@ -128,7 +128,7 @@ func Test_TwoPC_Phase1_And_Phase2_Preconditions(t *testing.T) {
 
 	t.Run("phase2_errors_when_phase1_not_done", func(t *testing.T) {
 		tr := &Transaction{phaseDone: -1}
-		if err := tr.Begin(); err != nil {
+		if err := tr.Begin(ctx); err != nil {
 			t.Fatalf("begin err: %v", err)
 		}
 		if err := tr.Phase2Commit(ctx); err == nil {
@@ -155,7 +155,7 @@ func Test_TwoPC_Merge_Unlock_And_HandleSectorLockTimeout(t *testing.T) {
 
 	// Merge keys, should create two lock keys
 	tx.mergeNodesKeys(ctx, updated, removed)
-	if !tx.areNodesKeysLocked() || len(tx.nodesKeys) != 2 {
+	if !tx.nodesKeysExist() || len(tx.nodesKeys) != 2 {
 		t.Fatalf("expected 2 merged lock keys, got %+v", tx.nodesKeys)
 	}
 
@@ -163,7 +163,7 @@ func Test_TwoPC_Merge_Unlock_And_HandleSectorLockTimeout(t *testing.T) {
 	updated2 := []sop.Tuple[*sop.StoreInfo, []any]{{First: si, Second: []any{n1}}}
 	removed2 := []sop.Tuple[*sop.StoreInfo, []any]{}
 	tx.mergeNodesKeys(ctx, updated2, removed2)
-	if !tx.areNodesKeysLocked() || len(tx.nodesKeys) != 1 {
+	if !tx.nodesKeysExist() || len(tx.nodesKeys) != 1 {
 		t.Fatalf("expected 1 lock key after merge, got %+v", tx.nodesKeys)
 	}
 
@@ -171,7 +171,7 @@ func Test_TwoPC_Merge_Unlock_And_HandleSectorLockTimeout(t *testing.T) {
 	if err := tx.unlockNodesKeys(ctx); err != nil {
 		t.Fatalf("unlockNodesKeys error: %v", err)
 	}
-	if tx.areNodesKeysLocked() {
+	if tx.nodesKeysExist() {
 		t.Fatalf("nodes keys should be unlocked")
 	}
 

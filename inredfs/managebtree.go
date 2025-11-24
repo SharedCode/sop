@@ -11,8 +11,7 @@ import (
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/fs"
-	sd "github.com/sharedcode/sop/internal/streamingdata"
-	"github.com/sharedcode/sop/redis"
+	sd "github.com/sharedcode/sop/streamingdata"
 )
 
 // NewBtree creates a new B-tree instance with data persisted to the backend storage upon commit.
@@ -68,7 +67,7 @@ func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, nam
 func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) error {
 	log.Info(fmt.Sprintf("Btree %s%c%s is about to be deleted", storesBaseFolder, os.PathSeparator, name))
 
-	cache := redis.NewClient()
+	cache := sop.NewCacheClient()
 	replicationTracker, err := fs.NewReplicationTracker(ctx, []string{storesBaseFolder}, false, cache)
 	if err != nil {
 		return err
@@ -88,7 +87,7 @@ func ReinstateFailedDrives(ctx context.Context, storesFolders []string) error {
 		return fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths)")
 	}
 
-	cache := redis.NewClient()
+	cache := sop.NewCacheClient()
 	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, cache)
 	if err != nil {
 		log.Error(fmt.Sprintf("failed instantiating Replication Tracker, details: %v", err))

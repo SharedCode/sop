@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/internal/inredcfs"
+	"github.com/sharedcode/sop/inredcfs"
 )
 
 // GetStores godoc
@@ -52,7 +52,7 @@ func GetStoreByName(c *gin.Context) {
 	if err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "new transaction call in fetching stores list failed"})
 	}
-	if err := trans.Begin(); err != nil {
+	if err := trans.Begin(c); err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("trans.begin failed, error: %v", err)})
 		return
 	}

@@ -9,7 +9,7 @@ import (
 
 func Test_ValueDataInSeparateSegment_Rollback(t *testing.T) {
 	trans, _ := newMockTransaction(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                         "persondb7",
@@ -28,7 +28,7 @@ func Test_ValueDataInSeparateSegment_Rollback(t *testing.T) {
 	trans.Commit(ctx)
 
 	trans, _ = newMockTransaction(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
 	b3.Update(ctx, pk, p)
@@ -36,7 +36,7 @@ func Test_ValueDataInSeparateSegment_Rollback(t *testing.T) {
 	trans.Rollback(ctx)
 
 	trans, _ = newMockTransaction(t, sop.ForReading, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", trans, Compare)
 	pk, _ = newPerson("joe", "shroeger", "male", "email", "phone")
 
@@ -54,7 +54,7 @@ func Test_ValueDataInSeparateSegment_SimpleAddPerson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
@@ -111,7 +111,7 @@ func Test_ValueDataInSeparateSegment_TwoTransactionsWithNoConflict(t *testing.T)
 	// Prepare second transaction handle but don't begin yet; we'll run it after committing the first.
 	trans2, _ := newMockTransaction(t, sop.ForWriting, -1)
 
-	trans.Begin()
+	trans.Begin(ctx)
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
 	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -139,7 +139,7 @@ func Test_ValueDataInSeparateSegment_TwoTransactionsWithNoConflict(t *testing.T)
 	}
 
 	// Now begin and use the second writer transaction with a different key.
-	trans2.Begin()
+	trans2.Begin(ctx)
 
 	b32, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                         "persondb7",
@@ -176,7 +176,7 @@ func Test_ValueDataInSeparateSegment_AddAndSearchManyPersons(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                         "persondb7",
 		SlotLength:                   nodeSlotLength,
@@ -215,7 +215,7 @@ func Test_ValueDataInSeparateSegment_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	if err := trans.Begin(); err != nil {
+	if err := trans.Begin(ctx); err != nil {
 		t.Error(err.Error())
 		t.Fail()
 		return
@@ -246,7 +246,7 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 	end := 15000
 
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                         "persondb7",
 		SlotLength:                   nodeSlotLength,
@@ -269,7 +269,7 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
-			t1.Begin()
+			t1.Begin(ctx)
 			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
 		}
 	}
@@ -292,7 +292,7 @@ func Test_ValueDataInSeparateSegment_VolumeAddThenSearch(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = newMockTransaction(t, sop.ForReading, -1)
-			t1.Begin()
+			t1.Begin(ctx)
 			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
 		}
 	}
@@ -307,7 +307,7 @@ func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 	end := 10000
 
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                         "persondb7",
 		SlotLength:                   nodeSlotLength,
@@ -333,7 +333,7 @@ func Test_ValueDataInSeparateSegment_VolumeDeletes(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
-			t1.Begin()
+			t1.Begin(ctx)
 			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
 		}
 	}
@@ -348,7 +348,7 @@ func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 	end := 9500
 
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                         "persondb7",
 		SlotLength:                   nodeSlotLength,
@@ -390,7 +390,7 @@ func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
-			t1.Begin()
+			t1.Begin(ctx)
 			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
 		}
 	}
@@ -426,7 +426,7 @@ func Test_ValueDataInSeparateSegment_MixedOperations(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
-			t1.Begin()
+			t1.Begin(ctx)
 			b3, _ = OpenBtree[PersonKey, Person](ctx, "persondb7", t1, Compare)
 		}
 	}

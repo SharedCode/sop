@@ -14,7 +14,6 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/redis"
 )
 
 // ecFailFileIO simulates shard write failures for BlobStoreWithEC by failing WriteFile
@@ -96,7 +95,7 @@ func Test_EC_BlobStore_ShardsExceedParity_Rollback_NoFailover(t *testing.T) {
 	cleanupStoreRepository(table, isolatedStores)
 
 	// Build components mirroring NewTwoPhaseCommitTransactionWithReplication but with a custom BlobStore fileIO.
-	cache := redis.NewClient()
+	cache := sop.NewCacheClient()
 	rt, err := fs.NewReplicationTracker(ctx, isolatedStores, true, cache)
 	if err != nil {
 		t.Fatalf("NewReplicationTracker: %v", err)
@@ -159,7 +158,7 @@ func Test_EC_BlobStore_ShardsExceedParity_Rollback_NoFailover(t *testing.T) {
 	}
 
 	// Perform a write that will cause EC Add to fail > parity and trigger rollback.
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("Begin: %v", err)
 	}
 	// Open the store; it should exist now.

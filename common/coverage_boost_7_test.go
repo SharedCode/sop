@@ -137,6 +137,16 @@ func (f *flipLockRefetchCache) Lock(ctx context.Context, d time.Duration, keys [
 	return f.Cache.Lock(ctx, d, keys)
 }
 
+func (f *flipLockRefetchCache) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
+	if s, l, err := f.Lock(ctx, duration, keys); !s || err != nil {
+		return s, l, err
+	}
+	if s, err := f.IsLocked(ctx, keys); !s || err != nil {
+		return s, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
+
 // Ensures that if refetchAndMergeModifications returns error, phase1Commit propagates it.
 func Test_Phase1Commit_RefetchError_Propagates(t *testing.T) {
 	ctx := context.Background()
@@ -569,7 +579,6 @@ func (p *prioLogAddCounter) GetBatch(ctx context.Context, batchSize int) ([]sop.
 func (p *prioLogAddCounter) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (p *prioLogAddCounter) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // tlWithCustomPL injects a custom PriorityLog while delegating to the mock transaction log.
 type tlWithCustomPL struct {
@@ -651,6 +660,16 @@ func (f *flipOnceLock) Lock(ctx context.Context, d time.Duration, keys []*sop.Lo
 		return false, sop.NilUUID, nil
 	}
 	return f.Cache.Lock(ctx, d, keys)
+}
+
+func (f *flipOnceLock) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
+	if s, l, err := f.Lock(ctx, duration, keys); !s || err != nil {
+		return s, l, err
+	}
+	if s, err := f.IsLocked(ctx, keys); !s || err != nil {
+		return s, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
 }
 
 func Test_Phase1Commit_LockTrackedItems_Error_AfterRefetch_Propagates(t *testing.T) {
@@ -762,6 +781,16 @@ func (m *isLockedFalseOnce) IsLocked(ctx context.Context, lockKeys []*sop.LockKe
 		return false, nil
 	}
 	return m.Cache.IsLocked(ctx, lockKeys)
+}
+
+func (m *isLockedFalseOnce) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
+	if s, l, err := m.Lock(ctx, duration, keys); !s || err != nil {
+		return s, l, err
+	}
+	if s, err := m.IsLocked(ctx, keys); !s || err != nil {
+		return s, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
 }
 
 func Test_Phase1Commit_IsLockedFalseThenSucceed(t *testing.T) {

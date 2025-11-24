@@ -11,7 +11,6 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/encoding"
-	"github.com/sharedcode/sop/redis"
 )
 
 type l1CacheEntry struct {
@@ -45,6 +44,8 @@ var Global *L1Cache
 func NewGlobalCache(l2CacheNodes sop.Cache, minCapacity, maxCapacity int) *L1Cache {
 	if Global == nil || Global.mru.minCapacity != minCapacity || Global.mru.maxCapacity != maxCapacity {
 		Global = NewL1Cache(l2CacheNodes, minCapacity, maxCapacity)
+	} else {
+		Global.l2CacheNodes = l2CacheNodes
 	}
 	return Global
 }
@@ -53,7 +54,7 @@ func NewGlobalCache(l2CacheNodes sop.Cache, minCapacity, maxCapacity int) *L1Cac
 // with a Redis L2 cache and default capacities when necessary.
 func GetGlobalCache() *L1Cache {
 	if Global == nil {
-		c := redis.NewClient()
+		c := sop.NewCacheClient()
 		NewGlobalCache(c, DefaultMinCapacity, DefaultMaxCapacity)
 	}
 	return Global

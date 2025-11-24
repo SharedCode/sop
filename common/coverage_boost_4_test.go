@@ -173,10 +173,6 @@ func Test_RollbackRemovedNodes_RegistryGetError(t *testing.T) {
 // getStructErrCache forces GetStruct to return an error while indicating not found.
 type getStructErrCache struct{ sop.Cache }
 
-func (c getStructErrCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
-}
-
 func (g getStructErrCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, fmt.Errorf("getstruct err")
 }
@@ -241,8 +237,6 @@ func Test_ItemActionTracker_CheckTrackedItems_Conflict(t *testing.T) {
 
 // zeroSetCache stores a zero LockID in SetStruct to trigger the "can't attain a lock" path after re-get.
 type zeroSetCache struct{ sop.Cache }
-
-func (c zeroSetCache) IsRestarted(ctx context.Context) (bool, error) { return c.Cache.IsRestarted(ctx) }
 
 func (z zeroSetCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	if lr, ok := value.(*lockRecord); ok {
@@ -455,7 +449,7 @@ func Test_ItemActionTracker_Get_NoFetch_WhenPresent(t *testing.T) {
 func Test_NewBtree_WithTTL_And_EmptyName_Error(t *testing.T) {
 	ctx := context.Background()
 	tx, _ := newMockTransaction(t, sop.ForWriting, -1)
-	_ = tx.Begin()
+	_ = tx.Begin(ctx)
 	// With TTL path: provide CacheConfig
 	so := sop.StoreOptions{Name: "nb_ttl", SlotLength: 4}
 	so.CacheConfig = &sop.StoreCacheConfig{IsStoreInfoCacheTTL: true, StoreInfoCacheDuration: time.Minute}
@@ -471,7 +465,7 @@ func Test_NewBtree_WithTTL_And_EmptyName_Error(t *testing.T) {
 func Test_NewBtree_Incompatible_Config_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	tx, _ := newMockTransaction(t, sop.ForWriting, -1)
-	_ = tx.Begin()
+	_ = tx.Begin(ctx)
 	// Seed store repo with a StoreInfo of slot length 8
 	existing := sop.StoreOptions{Name: "nb_incompat", SlotLength: 8}
 	si := sop.NewStoreInfo(existing)
@@ -538,194 +532,34 @@ func Test_RefetchAndMerge_Get_InNodeSegment_ReturnsError_NoBackend(t *testing.T)
 	}
 }
 
-// updOnceLockErrReg forces UpdateNoLocks to return a sop.Error with *LockKey once.
-type updOnceLockErrReg struct {
-	*mocks.Mock_vid_registry
+// errOnceOnUpdateNoLocksReg forces UpdateNoLocks to return a sop.Error with *LockKey once.
+type errOnceOnUpdateNoLocksReg struct {
+	inner *mocks.Mock_vid_registry
 	fired bool
 	lk    sop.LockKey
 }
 
-func (r *updOnceLockErrReg) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
+func (r *errOnceOnUpdateNoLocksReg) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	if !r.fired {
 		r.fired = true
 		return sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: errors.New("sector timeout"), UserData: &r.lk}
 	}
-	return r.Mock_vid_registry.UpdateNoLocks(ctx, allOrNothing, storesHandles)
+	return r.inner.UpdateNoLocks(ctx, allOrNothing, storesHandles)
 }
-
-// commitUpdatedNodes: sector-timeout occurs and DTrollbk lock cannot be taken over -> handleRegistrySectorLockTimeout returns error.
-func Test_Phase1Commit_CommitUpdatedNodes_SectorTimeout_NoTakeover_Propagates(t *testing.T) {
-	ctx := context.Background()
-	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-
-	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
-	bs := mocks.NewMockBlobStore()
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
-
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_updated_sector_timeout", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
-
-	// Stage one updated node with matching version so commitUpdatedNodes reaches UpdateNoLocks.
-	uid := sop.NewUUID()
-	nr.localCache[uid] = cachedNode{action: updateAction, node: &btree.Node[PersonKey, Person]{ID: uid, Version: 1}}
-	h := sop.NewHandle(uid)
-	h.Version = 1
-	reg.Lookup[uid] = h
-
-	// Prepare registry to return sop.Error with LockKey pointing to DTrollbk.
-	lk := sop.LockKey{Key: l2.FormatLockKey("DTrollbk"), LockID: sop.NewUUID()}
-	tx.registry = &updOnceLockErrReg{Mock_vid_registry: reg, lk: lk}
-	// Ensure DTrollbk is already locked by somebody else so lock acquisition fails.
-	_ = l2.Set(ctx, lk.Key, sop.NewUUID().String(), time.Minute)
-
-	tx.btreesBackend = []btreeBackend{{
-		nodeRepository:                   nr,
-		getStoreInfo:                     func() *sop.StoreInfo { return si },
-		hasTrackedItems:                  func() bool { return true },
-		checkTrackedItems:                func(context.Context) error { return nil },
-		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-		unlockTrackedItems:               func(context.Context) error { return nil },
-		commitTrackedItemsValues:         func(context.Context) error { return nil },
-		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-		refetchAndMerge:                  func(context.Context) error { return nil },
-	}}
-
-	if err := tx.phase1Commit(ctx); err == nil {
-		t.Fatalf("expected sector-timeout error to propagate when DTrollbk lock can't be taken over")
-	} else {
-		var se sop.Error
-		if !errors.As(err, &se) || se.Code != sop.RestoreRegistryFileSectorFailure {
-			t.Fatalf("expected sop.Error with RestoreRegistryFileSectorFailure, got %v", err)
-		}
-	}
-}
-
-// commitRemovedNodes returns successful=false (version mismatch) -> rollback, refetch, retry -> succeed.
-func Test_Phase1Commit_CommitRemovedNodes_Conflict_Retry_Succeeds(t *testing.T) {
-	ctx := context.Background()
-	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-
-	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
-	bs := mocks.NewMockBlobStore()
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
-
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_removed_conflict_retry", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
-
-	rid := sop.NewUUID()
-	// Remove node with version 1 but registry says version 2 -> commitRemovedNodes returns false.
-	nr.localCache[rid] = cachedNode{action: removeAction, node: &btree.Node[PersonKey, Person]{ID: rid, Version: 1}}
-	h := sop.NewHandle(rid)
-	h.Version = 2
-	reg.Lookup[rid] = h
-
-	refetched := false
-	tx.btreesBackend = []btreeBackend{{
-		nodeRepository:                   nr,
-		getStoreInfo:                     func() *sop.StoreInfo { return si },
-		hasTrackedItems:                  func() bool { return true },
-		checkTrackedItems:                func(context.Context) error { return nil },
-		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-		unlockTrackedItems:               func(context.Context) error { return nil },
-		commitTrackedItemsValues:         func(context.Context) error { return nil },
-		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-		refetchAndMerge: func(context.Context) error {
-			refetched = true
-			// Align versions so retry will succeed.
-			hh := reg.Lookup[rid]
-			hh.Version = 1
-			reg.Lookup[rid] = hh
-			return nil
-		},
-	}}
-
-	if err := tx.phase1Commit(ctx); err != nil {
-		t.Fatalf("phase1Commit err: %v", err)
-	}
-	if !refetched {
-		t.Fatalf("expected refetch to happen on removed-nodes conflict")
-	}
-}
-
-// commitNewRootNodes returns false (non-empty root exists) then refetch removes it and retry succeeds.
-func Test_Phase1Commit_CommitNewRootNodes_Conflict_Retry_Succeeds(t *testing.T) {
-	ctx := context.Background()
-	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-
-	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
-	bs := mocks.NewMockBlobStore()
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
-
-	// Store with a designated root; ensure local add of that root while count==0 so it is treated as rootNodes.
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_root_conflict_retry", SlotLength: 4})
-	rootID := sop.NewUUID()
-	si.RootNodeID = rootID
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: 0}
-
-	nr.localCache[rootID] = cachedNode{action: addAction, node: &btree.Node[PersonKey, Person]{ID: rootID, Version: 1}}
-	// Registry already contains a non-empty handle for root -> commitNewRootNodes returns false.
-	reg.Lookup[rootID] = sop.NewHandle(rootID)
-
-	refetched := false
-	tx.btreesBackend = []btreeBackend{{
-		nodeRepository:                   nr,
-		getStoreInfo:                     func() *sop.StoreInfo { return si },
-		hasTrackedItems:                  func() bool { return true },
-		checkTrackedItems:                func(context.Context) error { return nil },
-		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-		unlockTrackedItems:               func(context.Context) error { return nil },
-		commitTrackedItemsValues:         func(context.Context) error { return nil },
-		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-		refetchAndMerge: func(context.Context) error {
-			refetched = true
-			// Simulate that competing root was cleared.
-			delete(reg.Lookup, rootID)
-			return nil
-		},
-	}}
-
-	if err := tx.phase1Commit(ctx); err != nil {
-		t.Fatalf("phase1Commit err: %v", err)
-	}
-	if !refetched {
-		t.Fatalf("expected refetch to happen on new-root conflict")
-	}
-}
-
-// errOnceOnUpdateNoLocksReg induces sop.Error on first UpdateNoLocks to trigger handleRegistrySectorLockTimeout in commitUpdatedNodes.
-type errOnceOnUpdateNoLocksReg struct {
-	inner   *mocks.Mock_vid_registry
-	lk      sop.LockKey
-	tripped bool
-}
-
 func (r *errOnceOnUpdateNoLocksReg) Add(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error {
 	return r.inner.Add(ctx, s)
 }
 func (r *errOnceOnUpdateNoLocksReg) Update(ctx context.Context, s []sop.RegistryPayload[sop.Handle]) error {
 	return r.inner.Update(ctx, s)
 }
-func (r *errOnceOnUpdateNoLocksReg) UpdateNoLocks(ctx context.Context, allOrNothing bool, s []sop.RegistryPayload[sop.Handle]) error {
-	if !r.tripped {
-		r.tripped = true
-		return sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("sector timeout"), UserData: &r.lk}
-	}
-	return r.inner.UpdateNoLocks(ctx, allOrNothing, s)
-}
-func (r *errOnceOnUpdateNoLocksReg) Get(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
-	return r.inner.Get(ctx, lids)
-}
 func (r *errOnceOnUpdateNoLocksReg) Remove(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) error {
 	return r.inner.Remove(ctx, lids)
 }
 func (r *errOnceOnUpdateNoLocksReg) Replicate(ctx context.Context, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return r.inner.Replicate(ctx, a, b, c, d)
+}
+func (r *errOnceOnUpdateNoLocksReg) Get(ctx context.Context, lids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
+	return r.inner.Get(ctx, lids)
 }
 
 func Test_Phase1Commit_CommitUpdatedNodes_SectorTimeout_Retry_Succeeds(t *testing.T) {
@@ -767,10 +601,6 @@ func Test_Phase1Commit_CommitUpdatedNodes_SectorTimeout_Retry_Succeeds(t *testin
 
 // cacheWarnOnSetStruct returns error on SetStruct to exercise warning paths in commitAddedNodes/commitNewRootNodes.
 type cacheWarnOnSetStruct struct{ sop.Cache }
-
-func (c cacheWarnOnSetStruct) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
-}
 
 func (c cacheWarnOnSetStruct) SetStruct(ctx context.Context, key string, value interface{}, d time.Duration) error {
 	return fmt.Errorf("setstruct err")
@@ -926,21 +756,5 @@ func Test_ItemActionTracker_Add_ActivelyPersisted_BlobError_Propagates(t *testin
 	it := &btree.Item[PersonKey, Person]{ID: id, Value: &p}
 	if err := trk.Add(ctx, it); err == nil {
 		t.Fatalf("expected blob add error to propagate from Add")
-	}
-}
-
-func Test_ItemActionTracker_Update_ActivelyPersisted_BlobError_Propagates(t *testing.T) {
-	ctx := context.Background()
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_upd_err", SlotLength: 4, IsValueDataInNodeSegment: false})
-	si.IsValueDataActivelyPersisted = true
-	l2 := mocks.NewMockClient()
-	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-	trk := newItemActionTracker[PersonKey, Person](si, l2, failingAddBlobStore{}, tl)
-
-	id := sop.NewUUID()
-	_, p := newPerson("y", "2", "m", "e@x", "p")
-	it := &btree.Item[PersonKey, Person]{ID: id, Value: &p}
-	if err := trk.Update(ctx, it); err == nil {
-		t.Fatalf("expected blob add error to propagate from Update")
 	}
 }

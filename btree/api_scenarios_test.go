@@ -1,6 +1,7 @@
 package btree
 
 import (
+	"context"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -248,7 +249,7 @@ func TestWithTransaction_UpdateCurrentItem(t *testing.T) {
 	w := NewBtreeWithTransaction[int, string](tx, b)
 
 	// Begin transaction and add one item to select it.
-	_ = tx.Begin()
+	_ = tx.Begin(context.Background())
 	if ok, err := w.Add(nil, 9, "v"); !ok || err != nil {
 		t.Fatalf("add err=%v", err)
 	}

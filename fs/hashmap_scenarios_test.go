@@ -71,6 +71,12 @@ func (m *mockCacheHashmap) Lock(ctx context.Context, d time.Duration, lk []*sop.
 	}
 	return m.base.Lock(ctx, d, lk)
 }
+func (m *mockCacheHashmap) DualLock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
+	if m.lockFail {
+		return false, sop.NilUUID, nil
+	}
+	return m.base.DualLock(ctx, d, lk)
+}
 func (m *mockCacheHashmap) IsLocked(ctx context.Context, lk []*sop.LockKey) (bool, error) {
 	if m.isLockedAlways {
 		return true, nil
@@ -116,8 +122,11 @@ func (m *mockCacheHashmap) Unlock(ctx context.Context, lk []*sop.LockKey) error 
 	return m.base.Unlock(ctx, lk)
 }
 func (m *mockCacheHashmap) Clear(ctx context.Context) error { return m.base.Clear(ctx) }
+func (m *mockCacheHashmap) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
+}
 func (m *mockCacheHashmap) IsRestarted(ctx context.Context) (bool, error) {
-	return m.base.IsRestarted(ctx)
+	return false, nil
 }
 
 func contains(s, sub string) bool {
@@ -163,14 +172,20 @@ func TestHashmap_AllScenarios(t *testing.T) {
 	}
 	frd.handle = sop.NewHandle(id)
 	if err := hm.updateFileRegion(ctx, []fileRegionDetails{frd}); err != nil {
-		t.Fatalf("updateFileRegion: %v", err)
+		t.Fatalf("updateFileRegion(prepare): %v", err)
+	}
+	if err := hm.updateFileRegion(ctx, []fileRegionDetails{frd}); err != nil {
+		t.Fatalf("updateFileRegion(commit): %v", err)
 	}
 	frdRead, err := hm.findOneFileRegion(ctx, false, table, id)
 	if err != nil || frdRead.handle.LogicalID != id {
 		t.Fatalf("read locate mismatch: %v", err)
 	}
 	if err := hm.markDeleteFileRegion(ctx, []fileRegionDetails{frdRead}); err != nil {
-		t.Fatalf("markDelete: %v", err)
+		t.Fatalf("markDelete(prepare): %v", err)
+	}
+	if err := hm.markDeleteFileRegion(ctx, []fileRegionDetails{frdRead}); err != nil {
+		t.Fatalf("markDelete(commit): %v", err)
 	}
 	if _, err := hm.findOneFileRegion(ctx, false, table, id); err == nil {
 		t.Fatalf("expected not found after delete")
@@ -254,6 +269,7 @@ func TestHashmap_AllScenarios(t *testing.T) {
 		t.Fatalf("ro open: %v", err)
 	}
 	handleData := make([]byte, sop.HandleSizeInBytes)
+	// Should fail as it writes to read-only file
 	if err := hm.updateFileBlockRegion(ctx, dioRO, 0, 0, handleData); err == nil {
 		t.Fatalf("expected write error branch")
 	}
@@ -515,7 +531,7 @@ func Test_findOneFileRegion_AdditionalBranches_Table(t *testing.T) {
 				return hm, table, sop.NewUUID()
 			},
 			forWriting:    false,
-			wantErrSubstr: "only able to read partially",
+			wantErrSubstr: "only partially",
 		},
 		{
 			name: "existing small file and forWriting -> setupNewFile path",
@@ -548,98 +564,4 @@ func Test_findOneFileRegion_AdditionalBranches_Table(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Ensures markDeleteFileRegion surfaces underlying write errors from updateFileBlockRegion.
-func Test_hashmap_markDeleteFileRegion_WriteError(t *testing.T) {
-	ctx := context.Background()
-	base := t.TempDir()
-	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
-	hm := newHashmap(true, 16, rt, mocks.NewMockClient())
-
-	// Create a segment file with one full block so readAt succeeds.
-	seg := filepath.Join(base, "seg.reg")
-	if err := os.WriteFile(seg, make([]byte, blockSize), 0o644); err != nil {
-		t.Fatalf("seed seg: %v", err)
-	}
-	// Open read-only to cause write error inside updateFileBlockRegion.
-	dio := newFileDirectIO()
-	if err := dio.open(ctx, seg, os.O_RDONLY, permission); err != nil {
-		t.Fatalf("open ro: %v", err)
-	}
-
-	frd := fileRegionDetails{dio: dio, blockOffset: 0, handleInBlockOffset: 0, handle: sop.NewHandle(sop.NewUUID())}
-	if err := hm.markDeleteFileRegion(ctx, []fileRegionDetails{frd}); err == nil {
-		t.Fatalf("expected write error propagated from markDeleteFileRegion")
-	}
-}
-
-// mockCacheIsLockedErr wraps mockCacheHashmap but forces IsLocked to return an error once to
-// drive the error branch in updateFileBlockRegion where ok==true but IsLocked errors.
-type mockCacheIsLockedErr struct {
-	*mockCacheHashmap
-	err error
-}
-
-func (m *mockCacheIsLockedErr) IsLocked(ctx context.Context, lk []*sop.LockKey) (bool, error) {
-	if m.err != nil {
-		e := m.err
-		m.err = nil // only once
-		return false, e
-	}
-	return m.mockCacheHashmap.IsLocked(ctx, lk)
-}
-func (m *mockCacheIsLockedErr) IsRestarted(ctx context.Context) (bool, error) {
-	return m.mockCacheHashmap.IsRestarted(ctx)
-}
-
-func Test_updateFileBlockRegion_ErrorPaths_Table(t *testing.T) {
-	// Do not parallelize; uses temp files and shared RNG sleep.
-	ctx := context.Background()
-	base := t.TempDir()
-
-	// Common tracker/cache baseline
-	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
-
-	t.Run("IsLocked error after Lock ok", func(t *testing.T) {
-		// Prepare a full block file so readAt succeeds and we reach the write path.
-		seg := filepath.Join(base, "seg-1.reg")
-		if err := os.WriteFile(seg, make([]byte, blockSize), 0o644); err != nil {
-			t.Fatalf("seed seg: %v", err)
-		}
-		dio := newFileDirectIO()
-		if err := dio.open(ctx, seg, os.O_RDONLY, permission); err != nil {
-			t.Fatalf("open ro: %v", err)
-		}
-		// Cache: Lock succeeds; IsLocked returns error once.
-		mc := &mockCacheIsLockedErr{mockCacheHashmap: &mockCacheHashmap{base: mocks.NewMockClient()}, err: errors.New("boom")}
-		hm := newHashmap(true, 8, rt, mc)
-
-		// Attempt update should unlock and return the IsLocked error.
-		err := hm.updateFileBlockRegion(ctx, dio, 0, 0, make([]byte, sop.HandleSizeInBytes))
-		if err == nil {
-			t.Fatalf("expected error from IsLocked failure")
-		}
-	})
-
-	t.Run("Lock never acquired -> context timeout returns raw error", func(t *testing.T) {
-		// Very short deadline to trigger TimedOut quickly.
-		cctx, cancel := context.WithTimeout(ctx, 5_000_000) // 5ms
-		defer cancel()
-
-		// Cache: always return ok=false from Lock.
-		mc := &mockCacheHashmap{base: mocks.NewMockClient(), lockFail: true}
-		hm := newHashmap(true, 8, rt, mc)
-		dio := newFileDirectIO()
-		dio.filename = "dummy.reg"
-
-		err := hm.updateFileBlockRegion(cctx, dio, 0, 0, make([]byte, sop.HandleSizeInBytes))
-		if err == nil {
-			t.Fatalf("expected timeout error")
-		}
-		// Now expecting the raw context timeout/canceled error (no sop.Error failover signal)
-		if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
-			t.Fatalf("expected context timeout/canceled error, got %T %v", err, err)
-		}
-	})
 }

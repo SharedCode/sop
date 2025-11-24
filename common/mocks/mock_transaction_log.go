@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
+	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/inmemory"
-	cas "github.com/sharedcode/sop/internal/cassandra"
 )
 
 type MockTransactionLog struct {
@@ -150,7 +150,9 @@ func (d dummyPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.Ke
 func (d dummyPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (d dummyPriorityLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
+func (d dummyPriorityLog) GetAll(ctx context.Context) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
+	return nil, nil
+}
 
 // Fetch the transaction logs details given a tranasction ID.
 func (tl *MockTransactionLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {

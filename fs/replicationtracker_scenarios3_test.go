@@ -15,8 +15,8 @@ import (
 
 type getStructExErrCache struct{ sop.Cache }
 
-func (c getStructExErrCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c getStructExErrCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (c getStructExErrCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
@@ -250,8 +250,9 @@ func TestReplicationTracker_Failover_SyncL2ErrorStillFlips(t *testing.T) {
 	}
 
 	// Trigger failover-qualified error with rollbackSucceeded=false.
-	ioErr := sop.Error{Code: sop.FailoverQualifiedError, Err: errors.New("boom")}
-	rt.HandleReplicationRelatedError(ctx, ioErr, nil, false)
+	// ioErr := sop.Error{Code: sop.FailoverQualifiedError, Err: errors.New("boom")}
+	// rt.HandleReplicationRelatedError(ctx, ioErr, nil, false)
+	rt.failover(ctx)
 
 	// Expect toggler flipped to passive (false), and status file written on passive.
 	if rt.ActiveFolderToggler {
@@ -326,8 +327,9 @@ func TestReplicationTracker_Failover_WriteReplicationStatusError(t *testing.T) {
 	}
 
 	// Trigger failover by calling HandleReplicationRelatedError with a failover-qualified code and rollbackSucceeded=false.
-	ioErr := sop.Error{Code: sop.FailoverQualifiedError, Err: errors.New("invalid argument")}
-	rt.HandleReplicationRelatedError(ctx, ioErr, nil, false)
+	// ioErr := sop.Error{Code: sop.FailoverQualifiedError, Err: errors.New("invalid argument")}
+	// rt.HandleReplicationRelatedError(ctx, ioErr, nil, false)
+	rt.failover(ctx)
 	// Expect that ActiveFolderToggler did not change due to error writing status file.
 	if rt.ActiveFolderToggler != true {
 		t.Fatalf("expected no toggler change on failover error")
@@ -561,8 +563,8 @@ func Test_ReadStatus_ActivePresent_InvalidJSON_ReturnsError(t *testing.T) {
 
 type getStructExErrCache2 struct{ sop.Cache }
 
-func (c getStructExErrCache2) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c getStructExErrCache2) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (c getStructExErrCache2) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
@@ -571,8 +573,8 @@ func (c getStructExErrCache2) GetStructEx(ctx context.Context, key string, v int
 
 type getStructExNotFoundCache struct{ sop.Cache }
 
-func (c getStructExNotFoundCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c getStructExNotFoundCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (c getStructExNotFoundCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {
@@ -594,8 +596,8 @@ func (c getStructExFoundCache) GetStructEx(ctx context.Context, key string, v in
 
 type setStructErrCache2 struct{ sop.Cache }
 
-func (c setStructErrCache2) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c setStructErrCache2) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (c setStructErrCache2) SetStruct(ctx context.Context, key string, value interface{}, exp time.Duration) error {
@@ -605,8 +607,8 @@ func (c setStructErrCache2) SetStruct(ctx context.Context, key string, value int
 // combined wrapper: GetStructEx returns not found, SetStruct returns error
 type notFoundSetErrCache struct{ sop.Cache }
 
-func (c notFoundSetErrCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
+func (c notFoundSetErrCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 func (c notFoundSetErrCache) GetStructEx(ctx context.Context, key string, v interface{}, ttl time.Duration) (bool, error) {

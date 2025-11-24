@@ -20,21 +20,25 @@ import (
 // Local helper types for lock behavior.
 type testLockFail struct{ sop.Cache }
 
-func (t testLockFail) IsRestarted(ctx context.Context) (bool, error) { return t.Cache.IsRestarted(ctx) }
-
 func (lf testLockFail) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.UUID{}, nil
 }
+func (lf testLockFail) DualLock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
+	return lf.Lock(ctx, d, lk)
+}
 func (lf testLockFail) Unlock(ctx context.Context, lk []*sop.LockKey) error { return nil }
+func (lf testLockFail) IsRestarted(ctx context.Context) (bool, error)       { return false, nil }
 
 type testAllLock struct{ sop.Cache }
-
-func (t testAllLock) IsRestarted(ctx context.Context) (bool, error) { return t.Cache.IsRestarted(ctx) }
 
 func (al testAllLock) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return true, sop.UUID{}, nil
 }
+func (al testAllLock) DualLock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
+	return al.Lock(ctx, d, lk)
+}
 func (al testAllLock) Unlock(ctx context.Context, lk []*sop.LockKey) error { return nil }
+func (al testAllLock) IsRestarted(ctx context.Context) (bool, error)       { return false, nil }
 
 // Shared test fixtures (were previously in registry_test.go) still needed by other *_test files.
 var uuid, _ = sop.ParseUUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
@@ -96,6 +100,9 @@ func (c *cacheGetError) IsLockedTTL(ctx context.Context, d time.Duration, lks []
 func (c *cacheGetError) Lock(ctx context.Context, d time.Duration, lks []*sop.LockKey) (bool, sop.UUID, error) {
 	return c.base.Lock(ctx, d, lks)
 }
+func (c *cacheGetError) DualLock(ctx context.Context, d time.Duration, lks []*sop.LockKey) (bool, sop.UUID, error) {
+	return c.base.DualLock(ctx, d, lks)
+}
 func (c *cacheGetError) IsLocked(ctx context.Context, lks []*sop.LockKey) (bool, error) {
 	return c.base.IsLocked(ctx, lks)
 }
@@ -106,19 +113,25 @@ func (c *cacheGetError) Unlock(ctx context.Context, lks []*sop.LockKey) error {
 	return c.base.Unlock(ctx, lks)
 }
 func (c *cacheGetError) Clear(ctx context.Context) error { return c.base.Clear(ctx) }
-func (c *cacheGetError) IsRestarted(ctx context.Context) (bool, error) {
-	return c.base.IsRestarted(ctx)
+func (c *cacheGetError) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
+func (c *cacheGetError) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
 
 // mockCacheImmediateLockFail forces Lock to fail to trigger UpdateNoLocks set error path.
 type mockCacheImmediateLockFail struct{ sop.Cache }
 
-func (m mockCacheImmediateLockFail) IsRestarted(ctx context.Context) (bool, error) {
-	return m.Cache.IsRestarted(ctx)
+func (m mockCacheImmediateLockFail) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
+func (m mockCacheImmediateLockFail) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
 
 func (m *mockCacheImmediateLockFail) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, errors.New("induced lock fail")
+}
+
+func (m *mockCacheImmediateLockFail) DualLock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
+	return m.Lock(ctx, d, lk)
 }
 
 func TestRegistry_AllScenarios(t *testing.T) {
@@ -642,12 +655,17 @@ func Test_registryMap_remove_Errors_And_Replicate_CloseOverride_2(t *testing.T) 
 // lockFailCache forces Lock to fail to exercise error path in UpdateNoLocks -> set -> updateFileBlockRegion.
 type lockFailCache struct{ sop.Cache }
 
-func (l lockFailCache) IsRestarted(ctx context.Context) (bool, error) {
-	return l.Cache.IsRestarted(ctx)
+func (l lockFailCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
+func (l lockFailCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
 
 func (c lockFailCache) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, nil
+}
+
+func (c lockFailCache) DualLock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
+	return c.Lock(ctx, d, lk)
 }
 
 // Covers registryOnDisk.UpdateNoLocks error path by injecting a failing DirectIO that causes set() to error.
@@ -685,9 +703,10 @@ func Test_Registry_Remove_ItemMissing_Error(t *testing.T) {
 // cache that forces SetStruct to fail to hit the warn path in UpdateNoLocks.
 type setStructErrorCache struct{ sop.Cache }
 
-func (s setStructErrorCache) IsRestarted(ctx context.Context) (bool, error) {
-	return s.Cache.IsRestarted(ctx)
+func (s setStructErrorCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
+func (s setStructErrorCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
 
 func (c setStructErrorCache) SetStruct(ctx context.Context, key string, value interface{}, d time.Duration) error {
 	return errors.New("setstruct boom")
@@ -696,9 +715,10 @@ func (c setStructErrorCache) SetStruct(ctx context.Context, key string, value in
 // cache that forces Delete to return error to hit the warn path in Remove's deferred cache eviction.
 type deleteErrorCache struct{ sop.Cache }
 
-func (d deleteErrorCache) IsRestarted(ctx context.Context) (bool, error) {
-	return d.Cache.IsRestarted(ctx)
+func (d deleteErrorCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
+func (d deleteErrorCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
 
 func (c deleteErrorCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	return false, errors.New("delete boom")
@@ -792,6 +812,7 @@ func Test_registryMap_Remove_WriteError_From_ReadOnlyHashmap(t *testing.T) {
 
 	// Now create a read-only registryMap pointing at same files; remove should attempt write and fail.
 	rmRO := newRegistryMap(false, reg.hashmap.hashmap.hashModValue, rt, mocks.NewMockClient())
+	// Should fail (Read-Only)
 	if err := rmRO.remove(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: table, IDs: []sop.UUID{h.LogicalID}}}); err == nil {
 		t.Fatalf("expected remove to fail due to read-only file handle")
 	}

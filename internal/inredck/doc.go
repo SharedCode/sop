@@ -1,3 +1,2 @@
-// Package inredck is part of the internal baseline and is unsupported for public use.
-// It is provided for internal comparison/testing and may change without notice.
+// Package inredck contains the common kernel for Redis-based SOP implementations.
 package inredck

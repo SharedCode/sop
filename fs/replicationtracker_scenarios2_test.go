@@ -343,11 +343,11 @@ func Test_HandleReplicationRelatedError_RollbackSucceededButFailoverError(t *tes
 	before := rt.getActiveBaseFolder()
 	ioErr := sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: os.ErrInvalid}
 	rt.HandleReplicationRelatedError(ctx, ioErr, nil, true)
-	if rt.getActiveBaseFolder() == before {
-		t.Fatalf("expected failover despite rollback succeeded")
+	if rt.getActiveBaseFolder() != before {
+		t.Fatalf("expected no failover despite rollback succeeded")
 	}
-	if !rt.FailedToReplicate {
-		t.Fatalf("expected FailedToReplicate set")
+	if rt.FailedToReplicate {
+		t.Fatalf("expected FailedToReplicate NOT set")
 	}
 }
 

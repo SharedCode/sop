@@ -54,7 +54,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	_ = trans.Begin(ctx)
 
 	pk, p := newPerson("joe", "krueger", "male", "email", "phone")
 
@@ -103,8 +103,8 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
-	trans.Begin()
-	trans2.Begin()
+	_ = trans.Begin(ctx)
+	_ = trans2.Begin(ctx)
 
 	pk, p := newPerson("tracy", "swift", "female", "email", "phone")
 	b3, err := inredfs.OpenBtree[PersonKey, Person](ctx, "persondb", trans, Compare)
@@ -142,7 +142,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 
-	trans.Begin()
+	_ = trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:       "persondb",
 		SlotLength: nodeSlotLength,
@@ -176,7 +176,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	if err := trans.Begin(); err != nil {
+	if err := trans.Begin(ctx); err != nil {
 		t.Error(err.Error())
 		t.Fail()
 		return
@@ -205,7 +205,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := inredfs.NewTransaction(ctx, to)
-	t1.Begin()
+	_ = t1.Begin(ctx)
 	b3, _ := inredfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:       "persondb",
 		SlotLength: nodeSlotLength,
@@ -224,7 +224,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = inredfs.NewTransaction(ctx, to)
-			t1.Begin()
+			_ = t1.Begin(ctx)
 			b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
@@ -249,7 +249,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 			}
 			tor, _ := inredfs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
 			t1, _ = inredfs.NewTransaction(ctx, tor)
-			t1.Begin()
+			_ = t1.Begin(ctx)
 			b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
@@ -262,7 +262,7 @@ func VolumeDeletes(t *testing.T) {
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := inredfs.NewTransaction(ctx, to)
-	t1.Begin()
+	_ = t1.Begin(ctx)
 	b3, _ := inredfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:       "persondb",
 		SlotLength: nodeSlotLength,
@@ -283,7 +283,7 @@ func VolumeDeletes(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = inredfs.NewTransaction(ctx, to)
-			t1.Begin()
+			_ = t1.Begin(ctx)
 			b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
@@ -297,7 +297,7 @@ func MixedOperations(t *testing.T) {
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := inredfs.NewTransaction(ctx, to)
-	t1.Begin()
+	_ = t1.Begin(ctx)
 	b3, _ := inredfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
 		SlotLength:               nodeSlotLength,
@@ -336,8 +336,17 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = inredfs.NewTransaction(ctx, to)
-			t1.Begin()
+			var err error
+			t1, err = inredfs.NewTransaction(ctx, to)
+			if err != nil {
+				t.Fatalf("NewTransaction failed: %v", err)
+			}
+			if t1 == nil {
+				t.Fatal("NewTransaction returned nil t1")
+			}
+			if err := t1.Begin(ctx); err != nil {
+				t.Fatalf("Begin failed: %v", err)
+			}
 			b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
@@ -373,7 +382,7 @@ func MixedOperations(t *testing.T) {
 				t.Fail()
 			}
 			t1, _ = inredfs.NewTransaction(ctx, to)
-			t1.Begin()
+			_ = t1.Begin(ctx)
 			b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
 	}
@@ -382,7 +391,7 @@ func MixedOperations(t *testing.T) {
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := inredfs.NewTransaction(ctx, to)
-	t1.Begin()
+	_ = t1.Begin(ctx)
 
 	b3, _ := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:              "twophase",
@@ -403,7 +412,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 		twoPhase.Rollback(ctx, nil)
 
 		t1, _ = inredfs.NewTransaction(ctx, to)
-		t1.Begin()
+		_ = t1.Begin(ctx)
 
 		b3, _ = inredfs.OpenBtree[int, string](ctx, "twophase", t1, nil)
 		if b3.Count() != originalCount {
@@ -420,7 +429,7 @@ func Test_StrangeBtreeStoreName(t *testing.T) {
 	inredfs.RemoveBtree(ctx, dataPath, "2phase")
 
 	t1, _ := inredfs.NewTransaction(ctx, to)
-	t1.Begin()
+	_ = t1.Begin(ctx)
 
 	if _, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:       "2phase",

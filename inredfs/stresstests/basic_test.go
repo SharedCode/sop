@@ -1,7 +1,7 @@
 //go:build stress
 // +build stress
 
-package integrationtests
+package stresstests
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func getDataPath() string {
 	// Read the 'home' data folder from Env if available.
 	s := os.Getenv("datapath")
 	if s == "" {
-		s = "/Users/grecinto/sop_data"
+		s = "/Users/grecinto/sop_data/stress"
 	}
 	return s
 }
@@ -48,7 +48,7 @@ func init() {
 	// Initialize Erasure Coding (EC) for the EC tests.
 	initErasureCoding()
 
-	cache := redis.NewClient()
+	cache := sop.NewCacheClient()
 	log.Info("about to issue cache.Clear")
 	ctx := context.Background()
 	if err := cache.Clear(ctx); err != nil {
@@ -81,7 +81,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, err := inredfs.OpenBtree[int, string](ctx, "emptyStore", trans, nil)
 	if err == nil {
@@ -95,7 +95,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 		return
 	}
 	trans, _ = inredfs.NewTransaction(ctx, to)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, err = inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "emptyStore",
@@ -120,7 +120,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstore2",
 		SlotLength:               8,
@@ -151,7 +151,7 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstore1",
 		SlotLength:               8,
@@ -190,7 +190,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "barstore1",
 		SlotLength:               8,
@@ -236,7 +236,7 @@ func Test_RegistryZeroDurationCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	so := sop.StoreCacheConfig{}
 	b3, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "regnotcached",
@@ -284,7 +284,7 @@ func Test_StoreCaching(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecaching",
 		SlotLength:               8,
@@ -326,7 +326,7 @@ func Test_StoreCachingTTL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "storecachingttl",
 		SlotLength:               8,
@@ -363,7 +363,7 @@ func Test_BtreeOpenedTwice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "opentwice",
 		SlotLength:               8,
@@ -388,7 +388,7 @@ func Test_BtreeOpenedTwice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	_, err = inredfs.OpenBtree[int, string](ctx, "opentwice", trans, nil)
 	if err != nil {
 		t.Error(err)

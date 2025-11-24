@@ -543,10 +543,6 @@ func Test_ItemActionTracker_Manage_Remove_AppendsForDeletion(t *testing.T) {
 // errGetExCache wraps the mock cache to force Lock(false, owner=tid) and GetEx error during takeover.
 type errGetExCache struct{ sop.Cache }
 
-func (c errGetExCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
-}
-
 func (e errGetExCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	// Signal takeover path by returning owner tid equal to the transaction tid passed later.
 	// We don't know tid here; acquireLocks compares with provided tid and ownerTID!=0 triggers else branch.
@@ -593,15 +589,22 @@ func Test_TransactionLogger_Rollback_NoLogs_RemovesTid_NoError(t *testing.T) {
 // isLockedErrCache forces Lock to succeed and IsLocked to return an error.
 type isLockedErrCache struct{ sop.Cache }
 
-func (c isLockedErrCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
-}
-
 func (c isLockedErrCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return true, sop.NilUUID, nil
 }
 func (c isLockedErrCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	return false, fmt.Errorf("islocked err")
+}
+
+func (c isLockedErrCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	ok, tid, err := c.Lock(ctx, duration, lockKeys)
+	if err != nil || !ok {
+		return ok, tid, err
+	}
+	if _, err := c.IsLocked(ctx, lockKeys); err != nil {
+		return false, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
 }
 
 func Test_TransactionLogger_AcquireLocks_IsLocked_Error_Propagates(t *testing.T) {
@@ -643,25 +646,25 @@ func Test_ItemActionTracker_Get_BlobStore_Error_Propagates(t *testing.T) {
 // lockErrCache makes Lock return an explicit error to exercise the error path in acquireLocks.
 type lockErrCache2 struct{ sop.Cache }
 
-func (c lockErrCache2) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
-}
-
 func (c lockErrCache2) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, fmt.Errorf("lock failed")
+}
+
+func (c lockErrCache2) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	return c.Lock(ctx, duration, lockKeys)
 }
 
 // ownerMismatchCache makes Lock report a different non-nil ownerTID to trigger the owner mismatch branch.
 type ownerMismatchCache struct{ sop.Cache }
 
-func (c ownerMismatchCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
-}
-
 var _ownerMismatchTID = sop.NewUUID()
 
 func (c ownerMismatchCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, _ownerMismatchTID, nil
+}
+
+func (c ownerMismatchCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	return c.Lock(ctx, duration, lockKeys)
 }
 
 func Test_TransactionLogger_AcquireLocks_Lock_Error_ReturnsErr(t *testing.T) {

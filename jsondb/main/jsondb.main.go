@@ -184,7 +184,7 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 		if err != nil {
 			return err
 		}
-		if err := t.First.Begin(); err != nil {
+		if err := t.First.Begin(ctx); err != nil {
 			errMsg := fmt.Sprintf("transaction %v Begin failed, details: %v", t.First.GetID().String(), err)
 
 			transactionLookupLocker.Lock()

@@ -6,9 +6,6 @@ import (
 	"errors"
 	"fmt"
 	log "log/slog"
-	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/sharedcode/sop"
@@ -49,11 +46,7 @@ func (hm *hashmap) markDeleteFileRegion(ctx context.Context, fileRegionDetails [
 	return nil
 }
 
-// updateFileBlockRegion acquires a cache-backed lock for the target block region, reads the block,
-// merges the handle data, writes back, and finally releases the lock. Retries acquiring the lock
-// until timeout to avoid deadlocks across writers.
-func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO, blockOffset int64, handleInBlockOffset int, handleData []byte) error {
-	// Lock the block file region.
+func (hm *hashmap) lockFileBlockRegionWithRetry(ctx context.Context, dio *fileDirectIO, offset int64) (*sop.LockKey, error) {
 	var lk *sop.LockKey
 	var err error
 	var ok bool
@@ -61,14 +54,107 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 	startTime := sop.Now()
 	var tid sop.UUID
 	for {
-		ok, tid, lk, err = hm.lockFileBlockRegion(ctx, dio, blockOffset)
+		ok, tid, lk, err = hm.lockFileBlockRegion(ctx, dio, offset)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			return lk, nil
+		}
+		if err := sop.TimedOut(ctx, "lockFileBlockRegionWithRetry", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
+			// If the context is canceled or the operation's context deadline was exceeded, return the raw error
+			// so callers treat it as a normal timeout/cancellation and NOT a failover trigger.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil, err
+			}
+			// Otherwise, convert to a lock acquisition failure to allow callers to attempt
+			// stale-lock recovery (e.g., priority rollback) using the lock key in UserData.
+			err = fmt.Errorf("lockFileBlockRegionWithRetry(%v) failed: %w", offset, err)
+			log.Debug(err.Error())
+			lk.LockID = tid
+			return nil, sop.Error{
+				Code:     sop.LockAcquisitionFailure,
+				Err:      err,
+				UserData: lk,
+			}
+		}
+		sop.RandomSleep(ctx)
+	}
+}
+
+// updateFileBlockRegion acquires a cache-backed lock for the target block region, reads the block,
+// merges the handle data, writes back, and finally releases the lock. Retries acquiring the lock
+// until timeout to avoid deadlocks across writers.
+func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO, blockOffset int64, handleInBlockOffset int, handleData []byte) error {
+	// Lock the block file region.
+	lk, err := hm.lockFileBlockRegionWithRetry(ctx, dio, blockOffset)
+	if err != nil {
+		return err
+	}
+	defer hm.unlockFileBlockRegion(ctx, lk)
+
+	alignedBuffer := dio.createAlignedBlock()
+
+	if err := hm.readAndRestoreBlock(ctx, dio, blockOffset, alignedBuffer); err != nil {
+		return err
+	}
+
+	return hm.writeBlockRegionPayload(ctx, dio, blockOffset, handleInBlockOffset, handleData, alignedBuffer)
+}
+
+func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *fileDirectIO, offset int64) (bool, sop.UUID, *sop.LockKey, error) {
+	tid := hm.replicationTracker.tid
+	if tid == sop.NilUUID {
+		tid = sop.NewUUID()
+	}
+
+	s := hm.formatLockKey(dio.filename, offset)
+	lk := hm.cache.CreateLockKeysForIDs([]sop.Tuple[string, sop.UUID]{
+		{
+			First:  s,
+			Second: tid,
+		},
+	})
+	ok, uuid, err := hm.cache.DualLock(ctx, LockFileRegionDuration, lk)
+	return ok, uuid, lk[0], err
+}
+
+func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, lk *sop.LockKey) error {
+	return hm.cache.Unlock(ctx, []*sop.LockKey{lk})
+}
+
+// findAndAdd searches for a slot for the given handle and updates it atomically under a block lock.
+// It uses optimistic concurrency: finds a candidate slot, locks it, verifies it's still available, and writes.
+func (hm *hashmap) findAndAdd(ctx context.Context, filename string, handle sop.Handle) error {
+	// Lock the "Logical Slot" (the "bucket" determined by the hash) to prevent race conditions.
+	// This serializes access to the same logical slot across all segment files.
+	blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(handle.LogicalID)
+	s := hm.formatLockKey(filename, blockOffset+handleInBlockOffset)
+	tid := hm.replicationTracker.tid
+	if tid == sop.NilUUID {
+		tid = sop.NewUUID()
+	}
+	lk := hm.cache.CreateLockKeysForIDs([]sop.Tuple[string, sop.UUID]{
+		{
+			First:  s,
+			Second: tid,
+		},
+	})
+
+	// Retry loop to acquire the lock.
+	startTime := sop.Now()
+	var ownerTID sop.UUID
+	for {
+		var ok bool
+		var err error
+		ok, ownerTID, err = hm.cache.DualLock(ctx, LockFileRegionDuration, lk)
 		if err != nil {
 			return err
 		}
 		if ok {
 			break
 		}
-		if err := sop.TimedOut(ctx, "lockFileBlockRegion", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
+		if err := sop.TimedOut(ctx, "findAndAdd lock acquisition", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
 			// If the context is canceled or the operation's context deadline was exceeded, return the raw error
 			// so callers treat it as a normal timeout/cancellation and NOT a failover trigger.
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -76,9 +162,9 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 			}
 			// Otherwise, convert to a lock acquisition failure to allow callers to attempt
 			// stale-lock recovery (e.g., priority rollback) using the lock key in UserData.
-			err = fmt.Errorf("updateFileBlockRegion failed: %w", err)
+			err = fmt.Errorf("findAndAdd lock acquisition(%v:%v) failed: %w", blockOffset, handleInBlockOffset, err)
 			log.Debug(err.Error())
-			lk.LockID = tid
+			lk[0].LockID = ownerTID
 			return sop.Error{
 				Code:     sop.LockAcquisitionFailure,
 				Err:      err,
@@ -87,124 +173,82 @@ func (hm *hashmap) updateFileBlockRegion(ctx context.Context, dio *fileDirectIO,
 		}
 		sop.RandomSleep(ctx)
 	}
+	defer hm.cache.Unlock(ctx, lk)
 
-	alignedBuffer := dio.createAlignedBlock()
+	// 1. Find a candidate slot (read-only, no lock yet).
+	frd, err := hm.findOneFileRegion(ctx, true, filename, handle.LogicalID)
+	if err != nil {
+		return err
+	}
 
-	// Read the block file region data.
+	// Fail if item exists in target.
+	if !frd.handle.IsEmpty() {
+		return fmt.Errorf("findAndAdd failed, can't overwrite an item at offset=%v, item details: %v", frd.getOffset(), frd.handle)
+	}
+
+	// 2. Write.
+	m := encoding.NewHandleMarshaler()
+	var buf [sop.HandleSizeInBytes]byte
+	b, _ := m.Marshal(handle, buf[:0])
+
+	return hm.updateFileBlockRegion(ctx, frd.dio, frd.blockOffset, int(frd.handleInBlockOffset), b)
+}
+
+// readAndRestoreBlock reads the block.
+func (hm *hashmap) readAndRestoreBlock(ctx context.Context, dio *fileDirectIO, blockOffset int64, alignedBuffer []byte) error {
 	if n, err := dio.readAt(ctx, alignedBuffer, blockOffset); n != blockSize || err != nil {
-		hm.unlockFileBlockRegion(ctx, lk)
 		if err == nil {
 			return fmt.Errorf("only partially (n=%d) read the block at offset %v", n, blockOffset)
 		}
+		// If read failed, we might still want to check COW?
+		// For now, propagate error as we can't verify checksum of unread data.
 		return err
 	}
 
-	// Merge the updated Handle record w/ the read block file region data.
+	// Verify checksum
+	if _, err := unmarshalData(alignedBuffer); err == nil {
+		// Valid block. Check for stale COW and delete it.
+		_ = hm.deleteCow(ctx, dio.file.Name(), blockOffset)
+		return nil
+	}
+
+	// Check for COW file first
+	cowData, shouldRestore, err := hm.checkCow(ctx, dio.file.Name(), blockOffset)
+	if err != nil {
+		return err
+	}
+	if shouldRestore {
+		return hm.restoreFromCow(ctx, dio, blockOffset, alignedBuffer, cowData)
+	}
+
+	return nil
+}
+
+// writeBlockRegionPayload updates the buffer with handleData and writes to disk.
+func (hm *hashmap) writeBlockRegionPayload(ctx context.Context, dio *fileDirectIO, blockOffset int64, handleInBlockOffset int, handleData []byte, alignedBuffer []byte) error {
+	// Create COW backup
+	if err := hm.createCow(ctx, dio.file.Name(), blockOffset, alignedBuffer); err != nil {
+		return err
+	}
+
+	// Merge the updated Handle record
 	copy(alignedBuffer[handleInBlockOffset:handleInBlockOffset+sop.HandleSizeInBytes], handleData)
-	// Update the block file region with merged data.
+
+	// Add Checksum on the end.
+	marshalData(alignedBuffer[:blockSize-4], alignedBuffer)
+
+	// Write to main file
 	if n, err := dio.writeAt(ctx, alignedBuffer, blockOffset); n != blockSize || err != nil {
-		hm.unlockFileBlockRegion(ctx, lk)
 		if err == nil {
-			return fmt.Errorf("only partially (n=%d) wrote at block offset %v, data: %v", n, blockOffset, handleData)
+			return fmt.Errorf("only partially (n=%d) wrote at block offset %v", n, blockOffset)
 		}
 		return err
 	}
-	// Unlock the block file region.
-	return hm.unlockFileBlockRegion(ctx, lk)
 
-}
-
-func (hm *hashmap) lockFileBlockRegion(ctx context.Context, dio *fileDirectIO, offset int64) (bool, sop.UUID, *sop.LockKey, error) {
-	tid := hm.replicationTracker.tid
-	if tid == sop.NilUUID {
-		tid = sop.NewUUID()
-	}
-	s := hm.formatLockKey(dio.filename, offset)
-	lk := hm.cache.CreateLockKeysForIDs([]sop.Tuple[string, sop.UUID]{
-		{
-			First:  s,
-			Second: tid,
-		},
-	})
-	ok, uuid, err := hm.cache.Lock(ctx, lockFileRegionDuration, lk)
-	if err == nil && ok {
-	// Confirm lock ownership, then write a per-sector claim marker to the file system.
-		if isLocked, ierr := hm.cache.IsLocked(ctx, []*sop.LockKey{lk[0]}); ierr == nil && isLocked {
-			modFileNumber := parseSegmentIndex(dio.filename)
-			modFileSectorNumber := int(offset / int64(blockSize))
-			pl := priorityLog{replicationTracker: hm.replicationTracker, tid: tid}
-			if werr := pl.WriteRegistrySectorClaim(ctx, modFileNumber, modFileSectorNumber, tid); werr != nil {
-				// If another process already created the marker, consider we lost the race: unlock and return not-acquired.
-				if errors.Is(werr, os.ErrExist) {
-					_ = hm.cache.Unlock(ctx, []*sop.LockKey{lk[0]})
-					return false, sop.NilUUID, lk[0], nil
-				}
-				log.Debug(fmt.Sprintf("failed writing sector claim for %s idx=%d sector=%d: %v", dio.filename, modFileNumber, modFileSectorNumber, werr))
-			}
-		}
-	}
-	return ok, uuid, lk[0], err
-}
-func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, lk *sop.LockKey) error {
-	// Attempt to remove the sector claim based on the lock key's metadata before unlocking.
-	// Try to parse the lock key into filename and offset to reconstruct the marker name.
-	// Lock key format uses hm.formatLockKey("infs"+filename+offset), so split filename/offset heuristically.
-	// Best-effort: only act when we can derive a valid segment index and sector number.
-	// Note: We can't access dio here, so parse from the key string.
-	fn, off, ok := parseFilenameAndOffsetFromLockKey(lk.Key)
-	if ok {
-		modFileNumber := parseSegmentIndex(fn)
-		modFileSectorNumber := int(off / int64(blockSize))
-	pl := priorityLog{replicationTracker: hm.replicationTracker}
-	_ = pl.RemoveRegistrySectorClaim(ctx, modFileNumber, modFileSectorNumber)
-	}
-	return hm.cache.Unlock(ctx, []*sop.LockKey{lk})
+	// Delete COW backup
+	return hm.deleteCow(ctx, dio.file.Name(), blockOffset)
 }
 
 func (hm *hashmap) formatLockKey(filename string, offset int64) string {
 	return hm.cache.FormatLockKey(fmt.Sprintf("%s%s%v", lockFileRegionKeyPrefix, filename, offset))
-}
-
-// parseSegmentIndex extracts the numeric segment index from a segment filename like "table-12.reg".
-// Returns 0 when parsing fails.
-func parseSegmentIndex(segmentFilename string) int {
-	// Expect pattern: <name>-<index>.reg
-	dash := strings.LastIndex(segmentFilename, "-")
-	dot := strings.LastIndex(segmentFilename, ".")
-	if dash == -1 || dot == -1 || dot <= dash+1 {
-		return 0
-	}
-	n, err := strconv.Atoi(segmentFilename[dash+1 : dot])
-	if err != nil {
-		return 0
-	}
-	return n
-}
-
-// parseFilenameAndOffsetFromLockKey attempts to pull the original filename and numeric offset from a lock key string.
-// The key is built as FormatLockKey("infs" + filename + offset). We strip any global format prefix, then split by the
-// last dash/dot pattern to isolate the filename; the trailing digits are interpreted as the offset.
-func parseFilenameAndOffsetFromLockKey(key string) (string, int64, bool) {
-	// Remove possible cache formatting; ensure our prefix is present.
-	idx := strings.Index(key, lockFileRegionKeyPrefix)
-	if idx == -1 {
-		return "", 0, false
-	}
-	raw := key[idx+len(lockFileRegionKeyPrefix):]
-	// raw is filename + offset concatenated. We know filename has ".reg" and offset is digits at the end.
-	// Find the last occurrence of ".reg" and parse digits after it.
-	regIdx := strings.LastIndex(raw, registryFileExtension)
-	if regIdx == -1 {
-		return "", 0, false
-	}
-	filename := raw[:regIdx+len(registryFileExtension)]
-	offStr := raw[regIdx+len(registryFileExtension):]
-	if offStr == "" {
-		return "", 0, false
-	}
-	off, err := strconv.ParseInt(offStr, 10, 64)
-	if err != nil {
-		return "", 0, false
-	}
-	return filename, off, true
 }

@@ -96,6 +96,9 @@ func NewTransactionOptionsWithReplication(mode sop.TransactionMode, maxTime time
 	if erasureConfig == nil {
 		erasureConfig = fs.GetGlobalErasureConfig()
 	}
+	if erasureConfig == nil {
+		return TransationOptionsWithReplication{}, fmt.Errorf("erasureConfig can't be nil")
+	}
 	if len(storesFolders) != 2 {
 		return TransationOptionsWithReplication{}, fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths)")
 	}

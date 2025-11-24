@@ -58,7 +58,7 @@ func Test_ManageBtree_OpenNewBtree_Cases(t *testing.T) {
 			}
 			trans, _ := newMockTransaction(t, sop.ForWriting, -1)
 			if tc.begin {
-				_ = trans.Begin()
+				_ = trans.Begin(ctx)
 			} else if trans.HasBegun() {
 				_ = trans.Close()
 			}
@@ -142,7 +142,7 @@ func mustNewBtree[TK btree.Ordered, TV any](t *testing.T, si sop.StoreOptions, c
 	if err != nil {
 		t.Fatalf("newMockTransaction error: %v", err)
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := NewBtree[TK, TV](context.Background(), si, trans, comparer)
 	if err != nil {
 		t.Fatalf("NewBtree error: %v", err)

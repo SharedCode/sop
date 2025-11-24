@@ -47,7 +47,10 @@ func Test_PriorityLog_GetBatch_Get_Error(t *testing.T) {
 	}
 	badID := sop.NewUUID().String()
 	fn := filepath.Join(logDir, badID+priorityLogFileExtension)
-	if err := os.WriteFile(fn, []byte("not-json"), 0o644); err != nil {
+	payload := []byte("not-json")
+	blob := make([]byte, len(payload)+4)
+	marshalData(payload, blob)
+	if err := os.WriteFile(fn, blob, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	past := time.Now().Add(-2 * time.Hour)
@@ -75,8 +78,8 @@ func Test_PriorityLog_GetBatch_LimitOne(t *testing.T) {
 	tid2 := sop.NewUUID()
 	f1 := filepath.Join(dir, tid1.String()+priorityLogFileExtension)
 	f2 := filepath.Join(dir, tid2.String()+priorityLogFileExtension)
-	_ = os.WriteFile(f1, []byte("[]"), 0o644)
-	_ = os.WriteFile(f2, []byte("[]"), 0o644)
+	_ = pl.Add(ctx, tid1, []byte("[]"))
+	_ = pl.Add(ctx, tid2, []byte("[]"))
 	past := time.Now().Add(-2 * time.Hour)
 	_ = os.Chtimes(f1, past, past)
 	_ = os.Chtimes(f2, past, past)
@@ -171,7 +174,7 @@ func Test_PriorityLog_GetBatch_TimeFilter(t *testing.T) {
 	// Recent file should be filtered out.
 	tidNew := sop.NewUUID()
 	fNew := filepath.Join(dir, tidNew.String()+priorityLogFileExtension)
-	if err := os.WriteFile(fNew, []byte("[]"), 0o644); err != nil {
+	if err := pl.Add(ctx, tidNew, []byte("[]")); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now()
@@ -180,7 +183,7 @@ func Test_PriorityLog_GetBatch_TimeFilter(t *testing.T) {
 	// Old-enough file should be returned.
 	tidOld := sop.NewUUID()
 	fOld := filepath.Join(dir, tidOld.String()+priorityLogFileExtension)
-	if err := os.WriteFile(fOld, []byte("[]"), 0o644); err != nil {
+	if err := pl.Add(ctx, tidOld, []byte("[]")); err != nil {
 		t.Fatal(err)
 	}
 	past := time.Now().Add(-2 * time.Hour)
@@ -207,7 +210,10 @@ func Test_PriorityLog_Get_InvalidJSON(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(fn), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(fn, []byte("not-json"), 0o644); err != nil {
+	payload := []byte("not-json")
+	blob := make([]byte, len(payload)+4)
+	marshalData(payload, blob)
+	if err := os.WriteFile(fn, blob, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pl.Get(ctx, tid); err == nil {
@@ -228,7 +234,10 @@ func Test_PriorityLog_GetBatch_Skip_InvalidUUID_And_InvalidJSON(t *testing.T) {
 
 	// File with invalid UUID in name should be skipped.
 	badName := filepath.Join(base, "not-a-uuid"+priorityLogFileExtension)
-	if err := os.WriteFile(badName, []byte("[]"), 0o644); err != nil {
+	payload := []byte("[]")
+	blob := make([]byte, len(payload)+4)
+	marshalData(payload, blob)
+	if err := os.WriteFile(badName, blob, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	past := time.Now().Add(-2 * time.Hour)
@@ -237,7 +246,10 @@ func Test_PriorityLog_GetBatch_Skip_InvalidUUID_And_InvalidJSON(t *testing.T) {
 	// Valid UUID filename but invalid JSON should return error when encountered.
 	tid := sop.NewUUID()
 	badJSON := filepath.Join(base, tid.String()+priorityLogFileExtension)
-	if err := os.WriteFile(badJSON, []byte("nope"), 0o644); err != nil {
+	payload2 := []byte("nope")
+	blob2 := make([]byte, len(payload2)+4)
+	marshalData(payload2, blob2)
+	if err := os.WriteFile(badJSON, blob2, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_ = os.Chtimes(badJSON, past, past)

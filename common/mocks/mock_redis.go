@@ -22,11 +22,29 @@ func NewMockClient() sop.Cache {
 	}
 }
 
+// IsRestarted returns the internal flag once and then resets it to false.
+func (m *mockRedis) IsRestarted(ctx context.Context) (bool, error) {
+	if m.restarted {
+		m.restarted = false
+		return true, nil
+	}
+	return false, nil
+}
+
 // String operations used by locking implementation.
 func (m *mockRedis) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	m.stringStore[key] = value
 	return nil
 }
+
+func (m *mockRedis) SetNX(ctx context.Context, key string, value string, expiration time.Duration) (bool, error) {
+	if _, ok := m.stringStore[key]; ok {
+		return false, nil
+	}
+	m.stringStore[key] = value
+	return true, nil
+}
+
 func (m *mockRedis) Get(ctx context.Context, key string) (bool, string, error) {
 	v, ok := m.stringStore[key]
 	if !ok {
@@ -39,15 +57,6 @@ func (m *mockRedis) GetEx(ctx context.Context, key string, expiration time.Durat
 	return m.Get(ctx, key)
 }
 func (m *mockRedis) Ping(ctx context.Context) error { return nil }
-
-// IsRestarted returns the internal flag once and then resets it to false.
-func (m *mockRedis) IsRestarted(ctx context.Context) (bool, error) {
-	if m.restarted {
-		m.restarted = false
-		return true, nil
-	}
-	return false, nil
-}
 
 // Struct operations used by value caching and item locks.
 func (m *mockRedis) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
@@ -128,21 +137,25 @@ func (m *mockRedis) IsLockedTTL(ctx context.Context, duration time.Duration, loc
 }
 
 func (m *mockRedis) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
-	// Try to acquire all locks; if any conflict is found, return false with owner UUID.
+	// Check all keys first for conflicts
 	for _, lk := range lockKeys {
 		if v, ok := m.stringStore[lk.Key]; ok {
 			if v != lk.LockID.String() {
 				id, _ := sop.ParseUUID(v)
 				return false, id, nil
 			}
-			// already ours; skip
-			continue
 		}
-		// Not present: acquire
+	}
+	// No conflicts, acquire all
+	for _, lk := range lockKeys {
 		m.stringStore[lk.Key] = lk.LockID.String()
 		lk.IsLockOwner = true
 	}
 	return true, sop.NilUUID, nil
+}
+
+func (m *mockRedis) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	return m.Lock(ctx, duration, lockKeys)
 }
 
 func (m *mockRedis) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {

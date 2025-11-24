@@ -44,6 +44,8 @@ Notes:
 
 SOP has the low-level B-tree storage engine in it to offer raw muscle in direct IO based data management. Adds Redis for out of process caching, "ultra fast realtime" orchestration and to provide ultra fast "data merging" surface. Combined with ACID transactions, formed a tightly woven code library that turns your applications/micro-services "cluster" into the (raw!) storage engine (cluster) itself, no across the wire sending of data (other than what Redis is for).
 
+With the introduction of `inredcfs`, SOP now also supports a hybrid backend using Cassandra for metadata and the File System for data blobs, giving developers more choices for their infrastructure needs.
+
 Plus, SOP is multi-modal, not what the industry calls as multi-modal, SOP was built from the ground up & ships with its own B-tree & such. No reuse of 3rd party libraries, re-written storage engine and makes it as a base for other higher level constructs, or for direct IO, raw storage uses!
 
 Multi-modal in the sense that, it supports varying data sizes, from small to huge data, it has features to scale management and rich search capabilities. The similarity with other multi-modal databases in the market ends there. Because they do just repackage existing other specialized storage engines and surfaces an API that commands these.
@@ -60,6 +62,26 @@ Revolutionary Storage & Cache Strategy: https://www.linkedin.com/pulse/revolutio
 Google Slides Presentation: https://docs.google.com/presentation/d/17BWiLXcz1fPGVtCkAwvE9wR0cDq_dJPjxKgzMcWKkp4/edit#slide=id.p
 
 SOP as AI database: https://www.linkedin.com/pulse/sop-ai-database-engine-gerardo-recinto-tzlbc/?trackingId=yRXnbOEGSvS2knwVOAyxCA%3D%3D
+
+## SOP as AI Vector Database (Partitioned Vector Search)
+SOP is uniquely positioned to serve as a high-performance Vector Database for AI/RAG applications. Recent findings demonstrate that SOP B-Trees can outperform specialized vector stores (like HNSW) for specific partitioned workloads by leveraging its efficient blob storage and range query capabilities.
+
+**The Architecture:**
+1.  **Partitioning**: Vectors are grouped by a "Partition ID" (e.g., `DocumentID`, `UserID`, or a clustering centroid).
+2.  **Key Structure**: The B-Tree key is a composite of `{PartitionID, VectorID}`. This ensures that all vectors belonging to a partition are stored contiguously on disk.
+3.  **Blob Storage**: We configure the store with `IsValueDataInNodeSegment = false`.
+    *   **Why?**: This keeps the B-Tree index nodes (containing only keys) extremely compact and cache-friendly.
+    *   **Value**: The actual high-dimensional vector data (e.g., `[]float32`) is stored in the "Value" part, which SOP offloads to separate data segments (blobs).
+4.  **Streaming/Chunking**: For massive partitions, the value can be a "chunked blob" (using `StreamingDataStore`), allowing efficient retrieval of vector batches without loading the entire dataset into memory.
+
+**The Benefit**:
+When querying, you can perform a "Partition Scan":
+*   `b3.FindOne({PartitionID, MinVectorID})` jumps instantly to the start of the partition.
+*   `b3.Next()` iterates through the vectors in that partition with sequential I/O speed.
+    *   **Chunked Iteration**: For massive partitions, you can divide the vectors into chunks (e.g., 10MB blocks) and iterate through them efficiently. `b3.Next()` will seamlessly move from one chunk to the next, allowing you to process gigabytes of vector data without memory pressure.
+*   Since the index is compact, the traversal is lightning fast, and you only load the vector blobs you need.
+
+This approach eliminates the "random walk" overhead of graph-based indexes (like HNSW) when you can scope your search to a partition, making SOP an optimal storage engine for hybrid search (Metadata Filter + Vector Similarity).
 
 Anatomy of a Video Blob: https://www.linkedin.com/pulse/sop-anatomy-video-blob-gerardo-recinto-4170c/?trackingId=mXG7oM1IRVyP4yIZtWWlmg%3D%3D
 
@@ -317,8 +339,9 @@ SOP can be used in a wide, diverse storage usability scenarios. Ranging from gen
   * B. Large data storage and management, where your data is stored in its own data segment. See StoreInfo.IsValueDataInNodeSegment = false (default) flag
   * C. Streaming Data application domain enabling very large data storage - search and management, supporting multi-GBs record or item, limited only by your storage drive/sub-system. See sop/inredfs/NewStreamingDataStore or OpenStreamingDataStore for code & sample usage in test
   * D. High Performance Search Engine, alternative to ElasticSearch/SOLR but also has attributes of a real database engine, with ACID/two phase commit transactions
+  * E. Standalone Embedded Database: Run SOP without any external dependencies (no Redis, no Cassandra). Ideal for desktop applications, CLI tools, or local AI models where you need the power of a B-Tree on the local filesystem.
 
-Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3 & a DBMS like Postgres for indexing). But SOP supports all four of them out of the box.
+Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3 & a DBMS like Postgres for indexing). But SOP supports all five of them out of the box.
 
 In all of these, ACID transactions, high speed, scalable searches and management comes built-in. As SOP turned the B-tree (an M-ary, multiway search tree) into a commodity available in all of its usage scenarios. Horizontally scalable in the cluster, meaning, there is no single point of failure. SOP offers a decentralized approach in searching & management of your data. It works with optimal efficiency in the cluster. It fully parallelize I/O in the cluster, not needing any communication for "orchestration"(see new "communication free" OOA algorithm section below) to detect conflict and auto-merging of changes across transactions occuring simultaneously or in time.
 
@@ -337,16 +360,28 @@ For these three use-cases, there is not much competition for what SOP has to off
 
 Please feel free to file a request/discussion entry if you have a special domain-use in mind, as perhaps we can further optimize. Today, SOP piggy backs on the global cache(Redis) re-seeding the local cache of each transaction. It has a lot of advantages including solving data synchronization requirements among different instances running in the cluster without requiring to communicate & "orchestrate" with one another thus, maintaining a fully parallelized execution model with sustained throughput for each instance.
 
+# SOP in Redis, Cassandra & File System (inredcfs)
+This package (`inredcfs`) offers a hybrid storage approach:
+- **Registry (Metadata)**: Stored in Cassandra. This provides robust, scalable management for B-tree node virtual IDs (handles).
+- **Data Blobs (Nodes & Values)**: Stored in the File System (local disk or network mount). This retains the raw performance and cost benefits of filesystem storage for bulk data.
+- **Caching & Locking**: Redis is used for L2 caching and the OOA coordination/locking mechanism.
+
+This hybrid model is ideal when you want the metadata reliability and scalability of Cassandra but prefer the filesystem for storing the actual data content (blobs), or when you want to offload the heavy lifting of blob storage from Cassandra.
+
+Usage is very similar to `inredfs`, but you import `github.com/sharedcode/sop/inredcfs` and provide Cassandra configuration in `Initialize`.
+
 # SOP in Redis & File System
 B-tree–based object persistence (balanced M-ary, multiway search tree), File System as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the `Redis Lock API`, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.
+
+**Standalone Mode**: SOP can also run in a pure standalone mode without Redis. By configuring the `CacheFactory` to `InMemory`, SOP uses internal memory for caching and locking. This is ideal for single-node applications, embedded databases, or local development where distributed coordination is not required.
 
 SOP has all the bits required to be used like a golang map but which, has the features of a B-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your application. No need to have impedance mismatch.
 
 Requirements:
-  * Redis
   * Storage Drive(s) or sub-system (paths) for Blobs
   * User that you will use for the process which has Read/Write permissions(e.g. - 0777) to the drive(s)/storage path(s)
   * Golang that supports generics, SOP package (go.mod) currently is set to use 1.24.3 and higher
+  * (Optional) Redis - required only for distributed/cluster mode or if using Redis-backed caching.
 
 ## Sample Code
 Another sample code, edited for brevity and to show the important parts.
@@ -630,7 +665,7 @@ SOP uses Redis for fast, ephemeral coordination and the filesystem for durable s
 
 - Decentralized: no leader or quorum; any node can coordinate on a sector independently.
 - Horizontally scalable: sharded by registry sectors; no global hot spots.
-- No single point of failure: loss of Redis state slows coordination briefly but doesn’t corrupt data.
+- No single point of failure: loss of Redis state slows coordination briefly but doesn't corrupt data.
 - Low latency: lock checks and claim writes are O(1) on hot path; no multi-round consensus.
 
 ### When Redis is unavailable
@@ -643,7 +678,7 @@ SOP uses Redis for fast, ephemeral coordination and the filesystem for durable s
 - SOP avoids global consensus, leader election, and replicated logs—lower coordination latency and cost.
 - Better horizontal scaling for partitioned workloads (per-sector independence).
 - No SPOF in the coordination layer; failover is trivial and stateless.
-- If you need a globally ordered, cross-region commit log, consensus is still the right tool; SOP targets high-throughput, partition-aligned coordination. But then again, SOP is not a coordination engine, it is a storage engine. Its internal piece for coordination is what was described here.
+- If you need a globally ordered, cross-region commit log, consensus is still the right tool; SOP targets high-throughput, partition-aligned coordination. But then again, SOP is not a coordination engine, it is a storage engine. Its internal piece for coordination, e.g. - of handle (virtual ID) Registry, is what was described here.
 
 ### TL;DR
 
@@ -914,7 +949,3 @@ Hello, I am the value with 5000 key..
 Hello, I am the value with 5001 key..
 Btree hello world ended.
 ```
-
-Requirements
-  * Golang version that supports generics
-  * Internet access to github

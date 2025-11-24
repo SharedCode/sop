@@ -11,7 +11,7 @@ import (
 
 func Test_HelloWorld(t *testing.T) {
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	so := sop.ConfigureStore("inmymemory", false, 8, "", sop.SmallData, "")
 	so.LeafLoadBalancing = true
@@ -36,7 +36,7 @@ func Test_HelloWorld(t *testing.T) {
 
 func Test_FunctionalityTests(t *testing.T) {
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "inmymemory1",
@@ -128,7 +128,7 @@ func Test_FunctionalityTests(t *testing.T) {
 func Test_ComplexDataMgmtCases(t *testing.T) {
 	max := 100000
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "inmymemory2",
 		SlotLength:               8,
@@ -316,7 +316,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 	t1.Commit(ctx)
 
 	t1, _ = newMockTransaction(t, sop.ForReading, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ = OpenBtree[int, string](ctx, "inmymemory2", t1, nil)
 
 	// Find those items populated in previous transaction.
@@ -341,7 +341,7 @@ func Test_ComplexDataMgmtCases(t *testing.T) {
 func Test_SimpleDataMgmtCases(t *testing.T) {
 	max := 100000
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	so := sop.ConfigureStore("inmymemory3", false, 8, "", sop.SmallData, "")
 	so.LeafLoadBalancing = true
@@ -429,7 +429,7 @@ func Test_SimpleDataMgmtCases(t *testing.T) {
 	t1.Commit(ctx)
 
 	t1, _ = newMockTransaction(t, sop.ForReading, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 	b3, _ = OpenBtree[string, string](ctx, "inmymemory3", t1, nil)
 
 	for _, test := range tests {

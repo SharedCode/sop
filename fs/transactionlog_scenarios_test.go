@@ -256,6 +256,9 @@ func (c *cacheIsLockedFalse) Lock(ctx context.Context, d time.Duration, lk []*so
 func (c *cacheIsLockedFalse) IsLocked(ctx context.Context, lk []*sop.LockKey) (bool, error) {
 	return false, nil
 }
+func (c *cacheIsLockedFalse) DualLock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
+	return c.base.DualLock(ctx, d, lk)
+}
 func (c *cacheIsLockedFalse) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
 	return c.base.IsLockedByOthers(ctx, names)
 }
@@ -265,6 +268,9 @@ func (c *cacheIsLockedFalse) Unlock(ctx context.Context, lk []*sop.LockKey) erro
 func (c *cacheIsLockedFalse) Clear(ctx context.Context) error { return c.base.Clear(ctx) }
 func (c *cacheIsLockedFalse) IsRestarted(ctx context.Context) (bool, error) {
 	return c.base.IsRestarted(ctx)
+}
+func (c *cacheIsLockedFalse) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 // Exercises the final IsLocked check inside GetOne returning nils.

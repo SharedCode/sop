@@ -21,7 +21,7 @@
         ]
     }
 ],
-"editor.lineNumbers": "on",
+"editor.lineNumbers": "off",
 "python.testing.unittestArgs": [
     "-v",
     "-s",

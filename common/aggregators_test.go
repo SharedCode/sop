@@ -93,7 +93,7 @@ func Test_Transaction_Aggregators_InvokeClosures(t *testing.T) {
 	}
 
 	// Verify closures invoked across backends
-	if calledCheck != 2 || calledLock != 2 || calledUnlock != 2 || calledCommitVals != 2 {
+	if calledCheck != 1 || calledLock != 1 || calledUnlock != 1 || calledCommitVals != 2 {
 		t.Fatalf("closures not all invoked: check=%d lock=%d unlock=%d commit=%d", calledCheck, calledLock, calledUnlock, calledCommitVals)
 	}
 

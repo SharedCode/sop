@@ -9,7 +9,6 @@ import (
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/encoding"
-	"github.com/sharedcode/sop/redis"
 )
 
 // Backend facing Node Repository. Part of where the magic happens.
@@ -69,7 +68,7 @@ func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.
 		storeInfo:      storeInfo,
 		readNodesCache: cache.NewCache[sop.UUID, any](readNodesMruMinCapacity, readNodesMruMaxCapacity),
 		localCache:     make(map[sop.UUID]cachedNode),
-		l2Cache:        redis.NewClient(),
+		l2Cache:        sop.NewCacheClient(),
 		l1Cache:        cache.GetGlobalCache(),
 		count:          storeInfo.Count,
 	}

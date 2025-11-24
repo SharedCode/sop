@@ -82,7 +82,10 @@ func TestTransactionAndPriorityLog_Scenarios(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(badFn), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(badFn, []byte("not-json"), 0o644); err != nil {
+	payload := []byte("not-json")
+	blob := make([]byte, len(payload)+4)
+	marshalData(payload, blob)
+	if err := os.WriteFile(badFn, blob, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	if r, e := pl.Get(ctx, tidBad); e == nil || r != nil {
@@ -109,15 +112,16 @@ func TestTransactionAndPriorityLog_Scenarios(t *testing.T) {
 		t.Fatalf("mkdir logDir: %v", err)
 	}
 	oldFile := filepath.Join(logDir, oldTid.String()+priorityLogFileExtension)
-	newFile := filepath.Join(logDir, newTid.String()+priorityLogFileExtension)
-	if err := os.WriteFile(oldFile, []byte("[]"), 0o644); err != nil {
+	// newFile is not needed as pl.Add writes it
+	if err := pl.Add(ctx, oldTid, []byte("[]")); err != nil {
 		t.Fatalf("write old: %v", err)
 	}
-	if err := os.WriteFile(newFile, []byte("[]"), 0o644); err != nil {
+	if err := pl.Add(ctx, newTid, []byte("[]")); err != nil {
 		t.Fatalf("write new: %v", err)
 	}
 	nowHour, _ := time.Parse(DateHourLayout, time.Now().Format(DateHourLayout))
-	past := nowHour.Add(-time.Duration((priorityLogMinAgeInMin + 10) * time.Minute))
+	// Age the file beyond the batching threshold: lock TTL plus an extra 10 minutes buffer.
+	past := nowHour.Add(-(LockFileRegionDuration + 10*time.Minute))
 	if err := os.Chtimes(oldFile, past, past); err != nil {
 		t.Fatalf("chtimes old: %v", err)
 	}
@@ -130,7 +134,7 @@ func TestTransactionAndPriorityLog_Scenarios(t *testing.T) {
 	agedIDs := []sop.UUID{sop.NewUUID(), sop.NewUUID(), sop.NewUUID()}
 	for _, id := range agedIDs {
 		fn := filepath.Join(logDir, id.String()+priorityLogFileExtension)
-		if err := os.WriteFile(fn, []byte("[]"), 0o644); err != nil {
+		if err := pl.Add(ctx, id, []byte("[]")); err != nil {
 			t.Fatalf("write aged: %v", err)
 		}
 		past2 := time.Now().Add(-2 * time.Hour)
@@ -144,7 +148,10 @@ func TestTransactionAndPriorityLog_Scenarios(t *testing.T) {
 
 	// 4. Malformed filename skip
 	badName := filepath.Join(logDir, "badname"+priorityLogFileExtension)
-	if err := os.WriteFile(badName, []byte("[]"), 0o644); err != nil {
+	payload2 := []byte("[]")
+	blob2 := make([]byte, len(payload2)+4)
+	marshalData(payload2, blob2)
+	if err := os.WriteFile(badName, blob2, 0o644); err != nil {
 		t.Fatalf("write badname: %v", err)
 	}
 	if batchAfterBad, e := pl.GetBatch(ctx, 0); e != nil || len(batchAfterBad) == 0 {
@@ -352,6 +359,9 @@ func (c *alwaysLockFailCache) Lock(ctx context.Context, d time.Duration, lks []*
 func (c *alwaysLockFailCache) IsLocked(ctx context.Context, lks []*sop.LockKey) (bool, error) {
 	return false, nil
 }
+func (c *alwaysLockFailCache) DualLock(ctx context.Context, d time.Duration, lks []*sop.LockKey) (bool, sop.UUID, error) {
+	return false, sop.NilUUID, nil
+}
 func (c *alwaysLockFailCache) IsLockedByOthers(ctx context.Context, ks []string) (bool, error) {
 	return c.mocksCache.IsLockedByOthers(ctx, ks)
 }
@@ -359,6 +369,9 @@ func (c *alwaysLockFailCache) Unlock(ctx context.Context, lks []*sop.LockKey) er
 func (c *alwaysLockFailCache) Clear(ctx context.Context) error                      { return c.mocksCache.Clear(ctx) }
 func (c *alwaysLockFailCache) IsRestarted(ctx context.Context) (bool, error) {
 	return c.mocksCache.IsRestarted(ctx)
+}
+func (c *alwaysLockFailCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 // lostLockCache acquires locks but reports them lost on IsLocked check.
@@ -371,8 +384,8 @@ func (c *lostLockCache) Lock(ctx context.Context, d time.Duration, lks []*sop.Lo
 func (c *lostLockCache) IsLocked(ctx context.Context, lks []*sop.LockKey) (bool, error) {
 	return false, nil
 }
-func (c *lostLockCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.mocksCache.IsRestarted(ctx)
+func (c *lostLockCache) Info(ctx context.Context, section string) (string, error) {
+	return "# Server\nrun_id:mock\n", nil
 }
 
 // Covers the successful GetOneOfHour path (eligible file within TTL window returning records).
@@ -467,7 +480,7 @@ func TestPriorityLog_GetBatch_WithCorruptFileError(t *testing.T) {
 	}
 	tidValid := sop.NewUUID()
 	vf := filepath.Join(dir, tidValid.String()+priorityLogFileExtension)
-	if err := os.WriteFile(vf, []byte("[]"), 0o644); err != nil {
+	if err := pl.Add(ctx, tidValid, []byte("[]")); err != nil {
 		t.Fatalf("write valid: %v", err)
 	}
 	past := time.Now().Add(-2 * time.Hour)
@@ -476,7 +489,10 @@ func TestPriorityLog_GetBatch_WithCorruptFileError(t *testing.T) {
 	}
 	tidBad := sop.NewUUID()
 	bf := filepath.Join(dir, tidBad.String()+priorityLogFileExtension)
-	if err := os.WriteFile(bf, []byte("not-json"), 0o644); err != nil {
+	payload3 := []byte("not-json")
+	blob3 := make([]byte, len(payload3)+4)
+	marshalData(payload3, blob3)
+	if err := os.WriteFile(bf, blob3, 0o644); err != nil {
 		t.Fatalf("write bad: %v", err)
 	}
 	if err := os.Chtimes(bf, past.Add(1*time.Minute), past.Add(1*time.Minute)); err != nil {

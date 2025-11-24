@@ -6,6 +6,7 @@ package valuedatasegment
 import (
 	"bytes"
 	"context"
+	"os"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -26,7 +27,15 @@ func init() {
 
 var ctx = context.Background()
 
-const dataPath string = "/Users/grecinto/sop_data"
+func getDataPath() string {
+	s := os.Getenv("datapath")
+	if s == "" {
+		s = "/Users/grecinto/sop_data_valuedatasegment"
+	}
+	return s
+}
+
+const dataPath string = "/Users/grecinto/sop_data/valuedatasegment"
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
@@ -34,7 +43,7 @@ func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	_ = trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore1",
 		SlotLength:               8,
@@ -66,7 +75,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	_ = trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "fooStore2",
 		SlotLength:               8,
@@ -110,7 +119,7 @@ func Test_ByteArrayValue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	_ = trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[int, []byte](ctx, sop.StoreOptions{
 		Name:              "baStore",
 		SlotLength:        8,
@@ -152,7 +161,7 @@ func Test_ByteArrayValueGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[int, []byte](ctx, sop.StoreOptions{
 		Name:              "baStore",
 		SlotLength:        8,

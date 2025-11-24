@@ -41,7 +41,6 @@ func (s *stubPriorityLog2) GetBatch(ctx context.Context, batchSize int) ([]sop.K
 func (s *stubPriorityLog2) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (s *stubPriorityLog2) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // Backup methods removed from interface; no-op methods deleted.
 // Removed backup methods
@@ -102,7 +101,7 @@ func Test_TransactionLogger_PriorityRollback_Cases(t *testing.T) {
 		h := sop.NewHandle(lid)
 		pl := &stubPriorityLog2{payload: map[string][]sop.RegistryPayload[sop.Handle]{tid.String(): {{RegistryTable: "rt", IDs: []sop.Handle{h}}}}}
 		tl := &transactionLog{TransactionLog: stubTLog2{pl: pl}, logging: true}
-		if err := tl.priorityRollback(ctx, &Transaction{}, tid); err != nil {
+		if err := tl.priorityRollback(ctx, nil, tid); err != nil {
 			t.Fatalf("unexpected err: %v", err)
 		}
 	}
@@ -114,7 +113,7 @@ func Test_TransactionLogger_PriorityRollback_Cases(t *testing.T) {
 		pl := &stubPriorityLog2{payload: map[string][]sop.RegistryPayload[sop.Handle]{tid.String(): {{RegistryTable: "rt", IDs: []sop.Handle{h}}}}}
 		tl := &transactionLog{TransactionLog: stubTLog2{pl: pl}, logging: true}
 		tx := &Transaction{registry: errorRegistry{}}
-		if err := tl.priorityRollback(ctx, tx, tid); err == nil {
+		if err := tl.priorityRollback(ctx, tx.registry, tid); err == nil {
 			t.Fatalf("expected failover error")
 		} else if se, ok := err.(sop.Error); !ok || se.Code != sop.RestoreRegistryFileSectorFailure {
 			t.Fatalf("expected RestoreRegistryFileSectorFailure, got %v", err)
@@ -152,7 +151,7 @@ func Test_Transaction_NodesKeys_Utilities(t *testing.T) {
 	rc := mocks.NewMockClient()
 	tx := &Transaction{l2Cache: rc}
 
-	if tx.areNodesKeysLocked() {
+	if tx.nodesKeysExist() {
 		t.Fatalf("expected no nodes keys locked initially")
 	}
 	// Seed one key as owned
@@ -162,7 +161,7 @@ func Test_Transaction_NodesKeys_Utilities(t *testing.T) {
 	k.IsLockOwner = true
 	tx.nodesKeys = []*sop.LockKey{k}
 
-	if !tx.areNodesKeysLocked() {
+	if !tx.nodesKeysExist() {
 		t.Fatalf("expected areNodesKeysLocked true")
 	}
 	// merge with empty slices should unlock and nil the field

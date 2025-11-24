@@ -1,7 +1,7 @@
 //go:build stress
 // +build stress
 
-package integrationtests
+package stresstests
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, _ := inredfs.NewTransaction(ctx, to)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, _ := inredfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "ztab1",
@@ -44,7 +44,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 
 	trans, _ = inredfs.NewTransaction(ctx, to)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	pk, p := newPerson("joe", "krueger77", "male", "email", "phone")
@@ -57,7 +57,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 
 	trans, _ = inredfs.NewTransaction(ctx, to)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	pk, p = newPerson("joe", "krueger47", "male", "email2", "phone")
@@ -71,7 +71,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	trans, _ = inredfs.NewTransaction(ctx, to)
 
 	// Cleanup should be launched from this call.
-	trans.Begin()
+	trans.Begin(ctx)
 }
 
 func Cleanup(t *testing.T) {
@@ -81,7 +81,7 @@ func Cleanup(t *testing.T) {
 
 	to2, _ := inredfs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
 	trans, _ := inredfs.NewTransaction(ctx, to2)
-	trans.Begin()
+	trans.Begin(ctx)
 	_, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	trans.Commit(ctx)
 
@@ -89,7 +89,7 @@ func Cleanup(t *testing.T) {
 	sop.Now = func() time.Time { return yesterday }
 
 	trans, _ = inredfs.NewTransaction(ctx, to2)
-	trans.Begin()
+	trans.Begin(ctx)
 	_, _ = inredfs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	trans.Commit(ctx)
 }

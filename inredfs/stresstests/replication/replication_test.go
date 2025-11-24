@@ -19,7 +19,7 @@ import (
 	"github.com/sharedcode/sop/redis"
 )
 
-const dataPath string = "/Users/grecinto/sop_data"
+// const dataPath string = "/Users/grecinto/sop_data/replication"
 
 // Redis config.
 var redisConfig = redis.Options{
@@ -28,6 +28,18 @@ var redisConfig = redis.Options{
 	DB:       0,  // use default DB
 }
 
+var transOptions inredfs.TransationOptionsWithReplication
+
+func getDataPath() string {
+	s := os.Getenv("datapath")
+	if s == "" {
+		s = "/Users/grecinto/sop_data_replication"
+	}
+	return s
+}
+
+var dataPath string = getDataPath()
+
 func init() {
 	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
 		Level: log.LevelInfo,
@@ -35,48 +47,12 @@ func init() {
 	log.SetDefault(l) // configures log package to print with LevelInfo
 	inredfs.Initialize(redisConfig)
 	initErasureCoding()
-}
-
-func initErasureCoding() {
-	// Erasure Coding configuration lookup table (map).
-	ec := make(map[string]fs.ErasureCodingConfig)
-
-	// Erasure Coding config for "barstoreec" table uses three base folder paths that mimicks three disks.
-	// Two data shards and one parity shard.
-	ec[""] = fs.ErasureCodingConfig{
-		DataShardsCount:   2,
-		ParityShardsCount: 1,
-		BaseFolderPathsAcrossDrives: []string{
-			fmt.Sprintf("%s%cdisk8", dataPath, os.PathSeparator),
-			fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
-			fmt.Sprintf("%s%cdisk10", dataPath, os.PathSeparator),
-		},
-		RepairCorruptedShards: true,
+	var err error
+	transOptions, err = inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	if err != nil {
+		panic(err)
 	}
-	fs.SetGlobalErasureConfig(ec)
 }
-
-var storesFolders = []string{
-	fmt.Sprintf("%s%cdisk8", dataPath, os.PathSeparator),
-	fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
-}
-
-// Test to issue Reinstate of failed drives. But only works if the replcation flag is true and the replication status
-// FailedToReplicate = true.
-func reinstateDrive(t *testing.T) {
-	ctx := context.Background()
-	if err := inredfs.ReinstateFailedDrives(ctx, storesFolders); err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
-	if fs.GlobalReplicationDetails.ActiveFolderToggler {
-		fmt.Printf("Active Folder is: %s\n", storesFolders[0])
-		return
-	}
-	fmt.Printf("Active Folder is: %s\n", storesFolders[1])
-}
-
-var transOptions, _ = inredfs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
 
 func TestMain(t *testing.T) {
 	tableName := "repltable2"
@@ -108,7 +84,7 @@ func TestMain(t *testing.T) {
 	fmt.Printf("Failed over and read foll. item Values: %v\n", readData(tableName, t))
 
 	// Fail on reading.
-	cache := redis.NewClient()
+	cache := sop.NewCacheClient()
 	ctx := context.Background()
 	if err := cache.Clear(ctx); err != nil {
 		log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
@@ -146,7 +122,7 @@ func setupBtreeWithOneItem(btreeName string, itemID int, t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	if err = trans.Begin(); err != nil {
+	if err = trans.Begin(ctx); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -179,7 +155,7 @@ func writeData(btreeName string, itemID int, msg string, t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	if err = trans.Begin(); err != nil {
+	if err = trans.Begin(ctx); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -207,7 +183,7 @@ func readData(btreeName string, t *testing.T) []sop.KeyValuePair[int, string] {
 		t.Error(err)
 		t.FailNow()
 	}
-	if err = trans.Begin(); err != nil {
+	if err = trans.Begin(ctx); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -294,4 +270,43 @@ func restoreRegistryPermissions(t *testing.T, table string) {
 		seg := registrySegmentPath(b, table)
 		_ = os.Chmod(seg, 0o644)
 	}
+}
+
+func initErasureCoding() {
+	// Erasure Coding configuration lookup table (map).
+	ec := make(map[string]fs.ErasureCodingConfig)
+
+	// Erasure Coding config for "barstoreec" table uses three base folder paths that mimicks three disks.
+	// Two data shards and one parity shard.
+	ec[""] = fs.ErasureCodingConfig{
+		DataShardsCount:   2,
+		ParityShardsCount: 1,
+		BaseFolderPathsAcrossDrives: []string{
+			fmt.Sprintf("%s%cdisk8", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk10", dataPath, os.PathSeparator),
+		},
+		RepairCorruptedShards: true,
+	}
+	fs.SetGlobalErasureConfig(ec)
+}
+
+var storesFolders = []string{
+	fmt.Sprintf("%s%cdisk8", dataPath, os.PathSeparator),
+	fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
+}
+
+// Test to issue Reinstate of failed drives. But only works if the replcation flag is true and the replication status
+// FailedToReplicate = true.
+func reinstateDrive(t *testing.T) {
+	ctx := context.Background()
+	if err := inredfs.ReinstateFailedDrives(ctx, storesFolders); err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	if fs.GlobalReplicationDetails.ActiveFolderToggler {
+		fmt.Printf("Active Folder is: %s\n", storesFolders[0])
+		return
+	}
+	fmt.Printf("Active Folder is: %s\n", storesFolders[1])
 }

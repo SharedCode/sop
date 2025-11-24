@@ -47,7 +47,6 @@ const (
 	// Growing the file needs more time to complete.
 	lockPreallocateFileTimeout = time.Duration(20 * time.Minute)
 	lockFileRegionKeyPrefix    = "infs"
-	lockFileRegionDuration     = time.Duration(5 * time.Minute)
 	idNotFoundErr              = "unable to find the item with id"
 
 	registryFileExtension = ".reg"
@@ -61,6 +60,12 @@ const (
 	MinimumModValue = 250
 	// 750k, should generate 3GB file segment.  Formula: 750k X 4096 = 3GB
 	MaximumModValue = 750000
+)
+
+// Configurable lock TTL and slack for file-region operations.
+// Defaults retain previous behavior: 5m TTL and ~2% slack (min 2s).
+var (
+	LockFileRegionDuration = time.Duration(5 * time.Minute)
 )
 
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
@@ -108,7 +113,8 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 		}
 
 		// Resolve the active path for the segment file and reuse an open handle if available.
-		fn := hm.replicationTracker.formatActiveFolderEntity(fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename))
+		relativeSegmentPath := fmt.Sprintf("%s%c%s", filename, os.PathSeparator, segmentFilename)
+		fn := hm.replicationTracker.formatActiveFolderEntity(relativeSegmentPath)
 		if f, ok := hm.fileHandles[fn]; ok {
 			dio = f
 		} else {
@@ -148,8 +154,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 		blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(id)
 
 		// Read one block containing the target slot.
-		n, err := dio.readAt(ctx, alignedBuffer, blockOffset)
-		if err != nil {
+		if err := hm.readAndRestoreBlock(ctx, dio, blockOffset, alignedBuffer); err != nil {
 			// If we reached EOF on a short file, either return a write location or continue to next segment.
 			if dio.isEOF(err) {
 				if forWriting {
@@ -163,10 +168,6 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 			} else {
 				return result, err
 			}
-		}
-		if n != len(alignedBuffer) {
-			// A full block is expected; partial reads indicate an unexpected short read.
-			return result, fmt.Errorf("only able to read partially (%d bytes) the block record at offset %v", n, blockOffset)
 		}
 
 		// Unmarshal and check the ideal slot first.
@@ -255,7 +256,7 @@ func (hm *hashmap) fetch(ctx context.Context, filename string, ids []sop.UUID) (
 	return completedItems, nil
 }
 
-// Find the file region(s) that a set of UUIDs correlate to and return these region(s)' offsett/Handle if in case
+// Find the file region(s) that a set of UUIDs correlate to and return these region(s)' offset/Handle if in case
 // useful to the caller.
 func (hm *hashmap) findFileRegion(ctx context.Context, filename string, ids []sop.UUID) ([]fileRegionDetails, error) {
 	foundItems := make([]fileRegionDetails, 0, len(ids))
@@ -299,7 +300,7 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 
 	// Coordinate file preallocation across processes using a distributed lock.
 	lk := hm.cache.CreateLockKeys([]string{preallocateFileLockKey})
-	if ok, _, err := hm.cache.Lock(ctx, lockPreallocateFileTimeout, lk); !ok || err != nil {
+	if ok, _, err := hm.cache.DualLock(ctx, lockPreallocateFileTimeout, lk); !ok || err != nil {
 		if err == nil {
 			err = fmt.Errorf("can't acquire a lock to preallocate file %s", filename)
 		}
@@ -328,13 +329,4 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 
 func (hm *hashmap) getSegmentFileSize() int64 {
 	return int64(hm.hashModValue) * blockSize
-}
-
-func isZeroData(data []byte) bool {
-	for _, b := range data {
-		if b != 0 {
-			return false
-		}
-	}
-	return true
 }

@@ -627,15 +627,25 @@ func Test_TransactionLogger_Rollback_Finalize_WithDeleteTrackedItemsValues_Propa
 // to exercise acquireLocks partial-lock failover branch.
 type partialLockCache struct{ sop.Cache }
 
-func (c partialLockCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
-}
-
 func (p *partialLockCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return true, sop.NilUUID, nil
 }
 func (p *partialLockCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	return false, nil
+}
+
+func (p *partialLockCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	ok, tid, err := p.Lock(ctx, duration, lockKeys)
+	if err != nil || !ok {
+		return ok, tid, err
+	}
+	if locked, err := p.IsLocked(ctx, lockKeys); err != nil || !locked {
+		if err == nil {
+			err = sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("failover")}
+		}
+		return false, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
 }
 
 // Ensures refetchAndMergeClosure returns an error when AddItem returns false with no error

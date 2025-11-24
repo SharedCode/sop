@@ -87,7 +87,7 @@ func (r *registryOnDisk) Update(ctx context.Context, storesHandles []sop.Registr
 			// Update registry record.
 			// Acquire a short-lived lock per logical ID to avoid concurrent writers updating the same slot.
 			lk := r.l2Cache.CreateLockKeys([]string{h.LogicalID.String()})
-			if ok, _, err := r.l2Cache.Lock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
+			if ok, _, err := r.l2Cache.DualLock(ctx, updateAllOrNothingOfHandleSetLockTimeout, lk); !ok || err != nil {
 				if err == nil {
 					err = fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key)
 				}
@@ -216,22 +216,6 @@ func (r *registryOnDisk) Remove(ctx context.Context, storesLids []sop.RegistryPa
 	return r.hashmap.remove(ctx, storesLids)
 }
 
-/*
-   Replication events:
-   - IO (reading or writing) to active drive generated an IO error. SOP should be able to detect that special error and decide to failover if warranted.
-       - perhaps the deciding factor is, if rollback to undo file changes fail as well then we can decide that the active drives are unworkable.
-       Then failover to passive, make that active, log the event as error/fatal & needing manual intervention on the previous active drive
-       that is now unusable. If rollback works then active drive is still intact.
-   - Writing to passive drive errored, log an error/fatal then stop writing to the passive targets. Until a manual reset of the flag is done.
-
-   Handling stories:
-   - on rollback error, do a failover to the passive drive.
-   If failed, then log FATAL and stop on succeeding runs.
-
-   Model this on a smaller setup. Perhaps create a simulator so we can synthesize failures, failover and cut out of failing passive IO.
-   We need to also detect manual intervention to cause "recover" (the opposite of failover).
-*/
-
 // Replicate writes registry updates to the passive destination, if replication is enabled.
 // It opens a registry map pointing at the passive folder, applies add/set/remove operations,
 // and marks the replication tracker as failed on any I/O error so future operations can fail over.
@@ -289,6 +273,11 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 	}
 
 	return lastErr
+}
+
+// Unlock releases a set of keys.
+func (r *registryOnDisk) Unlock(ctx context.Context, lockKey *sop.LockKey) error {
+	return r.l2Cache.Unlock(ctx, []*sop.LockKey{lockKey})
 }
 
 // convertToKvp maps a slice of Handles to L1 cache entries keyed by LogicalID.

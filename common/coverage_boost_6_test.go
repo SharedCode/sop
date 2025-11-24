@@ -631,10 +631,6 @@ func Test_RefetchAndMerge_Add_InNode_DuplicateKey_ReturnsError(t *testing.T) {
 // unlockErrCache wraps a cache to force Unlock errors.
 type unlockErrCache struct{ sop.Cache }
 
-func (c unlockErrCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
-}
-
 func (c unlockErrCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return fmt.Errorf("unlock error")
 }
@@ -817,7 +813,7 @@ func Test_Phase1Commit_Wrapper_Appends_RollbackError(t *testing.T) {
 	}
 	tx.btreesBackend = []btreeBackend{bx}
 
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatal(err)
 	}
 	err := tx.Phase1Commit(ctx)

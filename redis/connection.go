@@ -2,8 +2,11 @@
 package redis
 
 import (
+	"context"
 	"crypto/tls"
+	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -75,13 +78,56 @@ func CloseConnection() error {
 	return err
 }
 
+var lastSeenRunID atomic.Value
+var hasRestarted int64
+
 // openConnection creates a new redis client connection from options.
 func openConnection(options Options) *Connection {
 	client := redis.NewClient(&redis.Options{
 		TLSConfig: options.TLSConfig,
 		Addr:      options.Address,
 		Password:  options.Password,
-		DB:        options.DB})
+		DB:        options.DB,
+		OnConnect: func(ctx context.Context, cn *redis.Conn) error {
+			// Use INFO server to get run_id which changes on restart.
+			info, err := cn.Info(ctx, "server").Result()
+			if err != nil {
+				return err
+			}
+			// Parse run_id: lines are of the form key:value
+			runID := ""
+			lines := strings.Split(info, "\r\n")
+			for _, line := range lines {
+				if len(line) > 7 && line[:7] == "run_id:" {
+					runID = line[7:]
+					break
+				}
+			}
+			if runID == "" {
+				// Fallback for systems using \n only
+				lines = strings.Split(info, "\n")
+				for _, line := range lines {
+					if len(line) > 7 && line[:7] == "run_id:" {
+						runID = line[7:]
+						break
+					}
+				}
+			}
+
+			if runID != "" {
+				val := lastSeenRunID.Load()
+				var lastID string
+				if val != nil {
+					lastID = val.(string)
+				}
+				if lastID != "" && runID != lastID {
+					atomic.StoreInt64(&hasRestarted, 1)
+				}
+				lastSeenRunID.Store(runID)
+			}
+			return nil
+		},
+	})
 
 	c := Connection{
 		Client:  client,

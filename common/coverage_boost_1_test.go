@@ -258,7 +258,7 @@ func (e errGetBlobStore) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsP
 func Test_NewBtree_AddFails_CleansUpAndRollsBack(t *testing.T) {
 	ctx := context.Background()
 	trans, _ := newMockTransaction(t, sop.ForWriting, -1)
-	if err := trans.Begin(); err != nil {
+	if err := trans.Begin(ctx); err != nil {
 		t.Fatalf("begin err: %v", err)
 	}
 	// Swap repository with erroring one
@@ -290,7 +290,7 @@ func Test_NewBtree_AddFails_CleansUpAndRollsBack(t *testing.T) {
 func Test_OpenBtree_StoreRepositoryError_RollsBack(t *testing.T) {
 	ctx := context.Background()
 	trans, _ := newMockTransaction(t, sop.ForWriting, -1)
-	_ = trans.Begin()
+	_ = trans.Begin(ctx)
 	t2 := trans.GetPhasedTransaction().(*Transaction)
 	t2.StoreRepository = &errOnGetStoreRepo{err: errors.New("get error")}
 	cmp := func(a, b int) int {
@@ -425,7 +425,6 @@ func (prioRemoveWarn) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyVal
 func (prioRemoveWarn) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (prioRemoveWarn) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // wrapTLAddErr implements sop.TransactionLog with Add error and PriorityLog warn-on-remove.
 type wrapTLAddErr struct{ tlAddErr }
@@ -628,6 +627,19 @@ func (c lockThenIsLockedFalseCache) IsLockedTTL(ctx context.Context, duration ti
 func (c lockThenIsLockedFalseCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return c.inner.Lock(ctx, duration, lockKeys)
 }
+func (c lockThenIsLockedFalseCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	ok, tid, err := c.Lock(ctx, duration, lockKeys)
+	if !ok || err != nil {
+		return ok, tid, err
+	}
+	if locked, err := c.IsLocked(ctx, lockKeys); err != nil || !locked {
+		if err == nil {
+			err = sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("failover")}
+		}
+		return false, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
 func (c lockThenIsLockedFalseCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	return false, nil
 }
@@ -678,6 +690,9 @@ func (c lockErrorCache) IsLockedTTL(ctx context.Context, duration time.Duration,
 	return c.inner.IsLockedTTL(ctx, duration, lockKeys)
 }
 func (c lockErrorCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	return false, sop.NilUUID, fmt.Errorf("forced lock error")
+}
+func (c lockErrorCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, fmt.Errorf("forced lock error")
 }
 func (c lockErrorCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {

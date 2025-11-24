@@ -75,6 +75,7 @@ func (f *testFileIO) MkdirAll(_ context.Context, path string, _ os.FileMode) err
 	return nil
 }
 func (f *testFileIO) ReadDir(_ context.Context, _ string) ([]os.DirEntry, error) { return nil, nil }
+func (f *testFileIO) List(_ context.Context, _ string) ([]string, error)         { return nil, nil }
 
 // Table-driven coverage of typical failure/success paths for fileIO + replication.
 func TestFileIOWithReplication_Scenarios(t *testing.T) {
@@ -181,7 +182,7 @@ func TestFileIOWithReplication_Scenarios(t *testing.T) {
 			ctx := context.Background()
 			active := filepath.Join(t.TempDir(), "active")
 			passive := filepath.Join(t.TempDir(), "passive")
-			rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, nil)
+			rt, err := NewReplicationTracker(ctx, []string{active, passive}, true, mocks.NewMockClient())
 			if err != nil {
 				t.Fatalf("tracker: %v", err)
 			}

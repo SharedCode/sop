@@ -123,9 +123,6 @@ type getErrCache struct{ sop.Cache }
 func (g getErrCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, fmt.Errorf("getstruct err")
 }
-func (g getErrCache) IsRestarted(ctx context.Context) (bool, error) {
-	return g.Cache.IsRestarted(ctx)
-}
 
 func Test_ItemActionTracker_CheckTrackedItems_Error_And_GetCompat(t *testing.T) {
 	ctx := context.Background()
@@ -269,7 +266,7 @@ func Test_TransactionLogger_PriorityRollback_Success_RemovesLog(t *testing.T) {
 	tl := &transactionLog{TransactionLog: stubTLog2{pl: pl}, logging: true}
 	tx := &Transaction{registry: mocks.NewMockRegistry(false)}
 
-	if err := tl.priorityRollback(ctx, tx, tid); err != nil {
+	if err := tl.priorityRollback(ctx, tx.registry, tid); err != nil {
 		t.Fatalf("priorityRollback err: %v", err)
 	}
 	if pl.removed[tid.String()] == 0 {
@@ -488,6 +485,15 @@ func (c errIsLockedCache13) IsLockedTTL(ctx context.Context, duration time.Durat
 func (c errIsLockedCache13) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return c.inner.Lock(ctx, duration, lockKeys)
 }
+func (c errIsLockedCache13) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
+	if s, l, err := c.Lock(ctx, duration, keys); !s || err != nil {
+		return s, l, err
+	}
+	if s, err := c.IsLocked(ctx, keys); !s || err != nil {
+		return s, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
 func (c errIsLockedCache13) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	return false, c.err
 }
@@ -542,6 +548,15 @@ func (c errGetExCache13) IsLockedTTL(ctx context.Context, duration time.Duration
 }
 func (c errGetExCache13) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return c.inner.Lock(ctx, duration, lockKeys)
+}
+func (c errGetExCache13) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
+	if s, l, err := c.Lock(ctx, duration, keys); !s || err != nil {
+		return s, l, err
+	}
+	if s, err := c.IsLocked(ctx, keys); !s || err != nil {
+		return s, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
 }
 func (c errGetExCache13) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	return c.inner.IsLocked(ctx, lockKeys)
@@ -607,7 +622,6 @@ func (p plGetErr) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePa
 func (p plGetErr) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (p plGetErr) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // plRemoveErr returns payload but Remove returns error to propagate.
 type plRemoveErr struct {
@@ -627,13 +641,12 @@ func (p plRemoveErr) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 func (p plRemoveErr) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (p plRemoveErr) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 func Test_TransactionLogger_PriorityRollback_Get_Error_Propagated(t *testing.T) {
 	ctx := context.Background()
 	baseTL := mocks.NewMockTransactionLog().(*mocks.MockTransactionLog)
 	tl := newTransactionLogger(tlWithPL{inner: baseTL, pl: plGetErr{e: errors.New("get failed")}}, true)
-	if err := tl.priorityRollback(ctx, &Transaction{}, sop.NewUUID()); err == nil || err.Error() != "get failed" {
+	if err := tl.priorityRollback(ctx, nil, sop.NewUUID()); err == nil || err.Error() != "get failed" {
 		t.Fatalf("expected get failed error, got: %v", err)
 	}
 }
@@ -647,7 +660,7 @@ func Test_TransactionLogger_PriorityRollback_Remove_Error_Propagated(t *testing.
 	baseTL := mocks.NewMockTransactionLog().(*mocks.MockTransactionLog)
 	tl := newTransactionLogger(tlWithPL{inner: baseTL, pl: plRemoveErr{payload: payload, e: errors.New("remove failed")}}, true)
 	tx := &Transaction{registry: mocks.NewMockRegistry(false)}
-	if err := tl.priorityRollback(ctx, tx, sop.NewUUID()); err == nil || err.Error() != "remove failed" {
+	if err := tl.priorityRollback(ctx, tx.registry, sop.NewUUID()); err == nil || err.Error() != "remove failed" {
 		t.Fatalf("expected remove failed error, got: %v", err)
 	}
 }

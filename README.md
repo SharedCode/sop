@@ -8,6 +8,10 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 
 - Introduction
 - High-level features and articles
+- Architecture Guide
+- Configuration & Tuning
+- Operational Guide
+- API Cookbook
 - Quick start
 - Lifecycle: failures, failover, reinstate, EC auto-repair
 - Prerequisites
@@ -40,6 +44,40 @@ Scalable Objects Persistence(SOP) is a raw storage engine that bakes together a 
 
 SOP V2 ships as a Golang code library. Thus, it can be used for storage management by applications of many types across different hardware architectures & Operating Systems (OS), that are supported by the Golang compiler.
 
+## Key Use Cases
+
+SOP is designed to be versatile, powering everything from small embedded tools to massive enterprise clusters.
+
+### 1. Standalone App (Embedded DB)
+*   **Scenario**: Desktop apps, CLI tools, or single-node services needing rich indexing.
+*   **Why SOP**:
+    *   **Pure Power**: Direct B-Tree indexing on disk.
+    *   **Speed**: "NoCheck" transaction mode offers raw speed for read-heavy or single-writer workloads.
+    *   **Simplicity**: No external database dependencies (just a local file structure).
+
+### 2. Enterprise Cluster App
+*   **Scenario**: Distributed systems requiring high availability and ACID guarantees.
+*   **Why SOP**:
+    *   **ACID Transactions**: Two-Phase Commit (2PC) across distributed nodes.
+    *   **Scalability**: Cassandra-backed registry for infinite metadata scaling.
+    *   **Resilience**: Active/Passive registry replication and Erasure Coding for data blobs ensure zero data loss.
+
+### 3. AI Vector Database
+*   **Scenario**: Storing and retrieving millions of vector embeddings for RAG (Retrieval-Augmented Generation) applications.
+*   **Why SOP**:
+    *   **Optimal Storage**: SOP B-Trees are uniquely suited for vector storage. You can store high-dimensional vectors (blobs) directly in the B-Tree values. By configuring `IsValueDataInNodeSegment=false`, SOP keeps the index structure compact (keys only) while offloading the heavy vector data to separate data segments. This ensures high-performance traversals and efficient memory usage.
+    *   **Partitioned Search**: SOP's architecture supports natural partitioning (e.g., by `PartitionID` + `VectorID`), enabling scalable, parallelized vector searches across massive datasets.
+    *   **Hybrid Search**: Combine vector similarity with traditional B-Tree range queries (e.g., "Find vectors where date > 2024") in a single, ACID-compliant transaction.
+    *   **Standalone Capable**: Run a full-featured vector store in your application with zero external dependencies (no Redis required) using SOP's in-memory caching and local filesystem storage.
+
+For a deeper dive into the system's design and package structure (including the Public vs. Internal split), please see the [Architecture Guide](ARCHITECTURE.md).
+
+For configuration options and performance tuning, see the [Configuration Guide](CONFIGURATION.md).
+
+For operational best practices (failover, backups), see the [Operational Guide](OPERATIONS.md).
+
+For code examples, check out the [API Cookbook](COOKBOOK.md).
+
 See more details here that describe further, the different qualities & attributes/features of SOP, and why it is a good choice as a storage engine for your applications today: [Summary](README2.md)
 
 Before I go, I would like to say, SOP is a green field, totally new. What is being shipped in V2 is just the start of this new product. We are barely scratching the surface of what can be done that will help storage management at super scale. SOP is a super computing enabler. The way its architecture was laid out, independent features and together, they are meant to give us the best/most efficient performance & IO of a group of computers (cluster), network & their storage, that can possibly give us.
@@ -48,22 +86,23 @@ Before I go, I would like to say, SOP is a green field, totally new. What is bei
 See the entire list & details here: https://github.com/sharedcode/sop/blob/master/README2.md#high-level-features-articles-about-sop
 
 ## Quick start
-SOP is a NoSQL-like key/value storage engine with built-in indexing and transactions. You only need Redis and Go to start.
+SOP is a NoSQL-like key/value storage engine with built-in indexing and transactions. You only need Go to start (Redis is optional for distributed setups).
 
 1) Plan your environment
 - Ensure sufficient disk capacity for your datasets. SOP stores on local filesystems and can replicate across drives.
 
 2) Prerequisites
-- Redis (recent version)
 - Go 1.24.3 or later (module requires go 1.24.3)
+- (Optional) Redis (recent version) - required only for distributed/cluster mode or if using Redis-backed caching.
 
-3) Install and run Redis
-- Install Redis locally or point to your cluster. Allocate enough RAM for your workload.
+3) Install and run Redis (Optional)
+- If using distributed features, install Redis locally or point to your cluster.
 
 4) Add SOP to your Go app
-- Import package: github.com/sharedcode/sop/inredfs
-- We recommend the inredfs package: lean, storage on filesystem, Redis-backed caching
-- Repo path: https://github.com/sharedcode/sop/tree/master/inredfs
+- Import package:
+  - `github.com/sharedcode/sop/inredfs` (Recommended: lean, storage on filesystem, supports both in-memory and Redis-backed caching)
+  - `github.com/sharedcode/sop/inredcfs` (Hybrid: Cassandra for metadata/registry, Filesystem for data, Redis-backed caching)
+- Repo path: https://github.com/sharedcode/sop
 
 5) Initialize Redis and start coding
 - Initialize Redis connection, open a transaction, create/open a B-tree, then use CRUD and search (FindOne, First/Last/Next/Previous, paging APIs). See API links below.
@@ -89,9 +128,26 @@ Also see Operational caveats: https://github.com/SharedCode/sop/blob/master/READ
 
 For planned maintenance, see Cluster reboot procedure: [Cluster reboot procedure](#cluster-reboot-procedure).
 
+### Transaction idle maintenance (onIdle) & priority rollback sweeps
+Each write or read transaction opportunistically invokes an internal onIdle() path after key phases. This lightweight pass performs two independent maintenance tasks:
+
+1. Priority rollback sweeps: Recovers/rolls back interrupted higher-priority transactions by consulting per‑transaction priority log (.plg) files.
+	- Restart fast path: On detecting a Redis (L2 cache) restart (run_id change), SOP triggers a one‑time sweep of all priority logs immediately, ignoring age. This accelerates recovery of any half‑committed writes that were waiting for the periodic window.
+	- Periodic path: Absent a restart, one worker periodically processes aged logs. Base interval = (fs.LockFileRegionDuration + 2m). If the previous sweep found work, a shorter 30s backoff is used to drain backlog faster. Intervals are governed by two atomically updated globals: lastPriorityOnIdleTime (Unix ms) and priorityLogFound (0/1 flag).
+	- Concurrency: A mutex plus atomic timestamp prevents overlapping sweeps; only one goroutine performs a rollback batch at a time even under high Begin() concurrency.
+	- Rationale: Using onIdle piggybacks maintenance on natural transaction flow without a dedicated background goroutine, simplifying embedding into host applications that manage their own scheduling.
+
+2. Expired transaction log cleanup: Removes obsolete commit/rollback artifacts. If recent activity suggests potential pending cleanup (hourBeingProcessed != ""), a 5m cadence is used; otherwise a 4h cadence minimizes overhead during idle periods. Timing uses an atomic lastOnIdleRunTime.
+
+Thread safety: Earlier versions used unsynchronized globals; these now use atomic loads/stores (sync/atomic) to eliminate race detector warnings when tests force timer rewinds. Tests that manipulate timing (to speed up sweep scenarios) reset the atomic counters instead of writing plain globals.
+
+Operational impact: You generally do not need to call anything explicitly—just ensure transactions continue to flow. If you embed SOP in a service that may become read‑only idle for long stretches but you still want prompt rollback of higher‑priority interruptions, periodically issue a lightweight read transaction to trigger onIdle.
+
+Testing notes: Unit tests rewind lastPriorityOnIdleTime and priorityLogFound (atomically) to force immediate sweep execution; this pattern is acceptable only in test code. Production code should never reset these values manually.
+
 ## Prerequisites
-- Redis server (local or cluster)
 - Go 1.24.3+
+- (Optional) Redis server (local or cluster) - for distributed coordination
 - Data directories on disks you intend SOP to use (4096-byte sector size recommended)
 
 ## Running Integration Tests
@@ -163,7 +219,7 @@ SOP uses Redis for fast, ephemeral coordination and the filesystem for durable s
 
 - Decentralized: no leader or quorum; any node can coordinate on a sector independently.
 - Horizontally scalable: sharded by registry sectors; no global hot spots.
-- No single point of failure: loss of Redis state slows coordination briefly but doesn’t corrupt data.
+- No single point of failure: loss of Redis state slows coordination briefly but doesn't corrupt data.
 - Low latency: lock checks and claim writes are O(1) on hot path; no multi-round consensus.
 
 ### When Redis is unavailable
@@ -176,7 +232,7 @@ SOP uses Redis for fast, ephemeral coordination and the filesystem for durable s
 - SOP avoids global consensus, leader election, and replicated logs—lower coordination latency and cost.
 - Better horizontal scaling for partitioned workloads (per-sector independence).
 - No SPOF in the coordination layer; failover is trivial and stateless.
-- If you need a globally ordered, cross-region commit log, consensus is still the right tool; SOP targets high-throughput, partition-aligned coordination. But then again, SOP is not a coordination engine, it is a storage engine. Its internal piece for coordination is what was described here.
+- If you need a globally ordered, cross-region commit log, consensus is still the right tool; SOP targets high-throughput, partition-aligned coordination. But then again, SOP is not a coordination engine, it is a storage engine. Its internal piece for coordination, e.g. - of handle (virtual ID) Registry, is what was described here.
 
 ### TL;DR
 

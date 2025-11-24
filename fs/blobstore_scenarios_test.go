@@ -52,6 +52,9 @@ func (e *scenarioErrFileIO) MkdirAll(ctx context.Context, path string, perm os.F
 func (e *scenarioErrFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os.DirEntry, error) {
 	return nil, nil
 }
+func (e *scenarioErrFileIO) List(ctx context.Context, path string) ([]string, error) {
+	return nil, nil
+}
 
 // scenarioFailingRemoveFileIO mirrors failingRemoveFileIO from legacy tests with a unique name.
 type scenarioFailingRemoveFileIO struct {
@@ -121,6 +124,9 @@ func (f *scenarioFailingMultiShardFileIO) MkdirAll(context.Context, string, os.F
 	return nil
 }
 func (f *scenarioFailingMultiShardFileIO) ReadDir(context.Context, string) ([]os.DirEntry, error) {
+	return nil, nil
+}
+func (f *scenarioFailingMultiShardFileIO) List(context.Context, string) ([]string, error) {
 	return nil, nil
 }
 

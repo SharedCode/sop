@@ -86,11 +86,6 @@ type TransactionPriorityLog interface {
 
 	// LogCommitChanges writes a special commit-change log used during drive reinstate for replication.
 	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
-
-	// ClearRegistrySectorClaims clears all per-sector claim markers used to coordinate exclusive
-	// access to registry file sector CUD operations. Implementations should make best-effort and
-	// return nil if there is nothing to clear.
-	ClearRegistrySectorClaims(ctx context.Context) error
 }
 
 // TransactionLog persists transaction steps and provides job-distribution accessors for cleanup tasks.
@@ -194,6 +189,9 @@ type Cache interface {
 
 	// Lock attempts to lock all keys; returns success, lock owner UUID, and any error encountered.
 	Lock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, UUID, error)
+	// DualLock attempts to lock all keys; returns success, lock owner UUID, and any error encountered.
+	// It calls Lock then IsLocked to ensure the lock is acquired and persisted.
+	DualLock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, UUID, error)
 	// IsLocked reports whether all keys are currently locked.
 	IsLocked(ctx context.Context, lockKeys []*LockKey) (bool, error)
 	// IsLockedByOthers reports whether the keys are locked by other processes.

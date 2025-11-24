@@ -47,7 +47,6 @@ func (r *recPrioLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 func (r *recPrioLog) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (r *recPrioLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // wrapCache lets us override IsLocked once to simulate transient lock verification failure.
 type wrapCache struct {
@@ -63,6 +62,20 @@ func (w *wrapCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool
 	return w.Cache.IsLocked(ctx, lockKeys)
 }
 
+func (w *wrapCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	ok, tid, err := w.Cache.Lock(ctx, duration, lockKeys)
+	if err != nil || !ok {
+		return ok, tid, err
+	}
+	if locked, err := w.IsLocked(ctx, lockKeys); err != nil || !locked {
+		if err == nil {
+			err = sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("failover")}
+		}
+		return false, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
+
 // flipLockCache forces the first Lock call to fail, succeeding thereafter.
 type flipLockCache struct {
 	sop.Cache
@@ -75,6 +88,17 @@ func (f *flipLockCache) Lock(ctx context.Context, duration time.Duration, lockKe
 		return false, sop.NilUUID, nil
 	}
 	return f.Cache.Lock(ctx, duration, lockKeys)
+}
+
+func (f *flipLockCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	ok, tid, err := f.Lock(ctx, duration, lockKeys)
+	if err != nil || !ok {
+		return ok, tid, err
+	}
+	if locked, err := f.Cache.IsLocked(ctx, lockKeys); err != nil || !locked {
+		return false, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
 }
 
 // --- Tests ---
@@ -372,7 +396,6 @@ func (w warnPL) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair
 func (w warnPL) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return fmt.Errorf("warn: log commit changes")
 }
-func (w warnPL) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // wrapTL delegates to the mock transaction log but returns a warnPL for PriorityLog.
 type wrapTL struct{ inner *mocks.MockTransactionLog }
@@ -614,7 +637,6 @@ func (p *prioLogBatch) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyVa
 func (p *prioLogBatch) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (p *prioLogBatch) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // Backup APIs removed; count Add/Remove via existing methods.
 
@@ -711,19 +733,22 @@ func (m missAfterSetCache) IsLockedTTL(ctx context.Context, d time.Duration, lk 
 func (m missAfterSetCache) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return m.base.Lock(ctx, d, lk)
 }
+func (m missAfterSetCache) DualLock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
+	return m.base.DualLock(ctx, d, lk)
+}
 func (m missAfterSetCache) IsLocked(ctx context.Context, lk []*sop.LockKey) (bool, error) {
 	return m.base.IsLocked(ctx, lk)
 }
 func (m missAfterSetCache) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
 	return m.base.IsLockedByOthers(ctx, names)
 }
+func (m missAfterSetCache) IsRestarted(ctx context.Context) (bool, error) {
+	return m.base.IsRestarted(ctx)
+}
 func (m missAfterSetCache) Unlock(ctx context.Context, lk []*sop.LockKey) error {
 	return m.base.Unlock(ctx, lk)
 }
 func (m missAfterSetCache) Clear(ctx context.Context) error { return m.base.Clear(ctx) }
-func (m missAfterSetCache) IsRestarted(ctx context.Context) (bool, error) {
-	return m.base.IsRestarted(ctx)
-}
 
 func Test_ItemActionTracker_Lock_CantAttain_AfterSet_ReturnsError(t *testing.T) {
 	ctx := context.Background()

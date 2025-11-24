@@ -121,9 +121,8 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 		}
 	}
 
-	ok1, _, _ := t.l2Cache.Lock(ctx, maxDuration, lk)
-	ok2, _ := t.l2Cache.IsLocked(ctx, lk)
-	if !ok1 || !ok2 {
+	ok1, _, _ := t.l2Cache.DualLock(ctx, maxDuration, lk)
+	if !ok1 {
 		if ignoreAge {
 			if err := tl.waitForCoordinatorRelease(ctx, t, coordinatorLockName, maxDuration); err != nil {
 				return false, err
@@ -134,14 +133,6 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 	defer t.l2Cache.Unlock(ctx, lk)
 
 	log.Info("Entering doPriorityRollbacks loop(restore).")
-	// In restart-driven sweep mode, clear all per-region signal markers up-front so they will not cause false "locks"
-	// in Registry file sector updates. Consider all of them having a lock on sectors to get rolledback because Redis got restarted.
-	// All in-flight transactions will detect Redis restart & will rollback. Deleting these markers will allow for a clean state.
-	if ignoreAge {
-		if err := tl.PriorityLog().ClearRegistrySectorClaims(ctx); err != nil {
-			log.Warn("failed to clear registry sector claims at sweep start", "err", err)
-		}
-	}
 	consumed := false
 	start := sop.Now()
 	for {
@@ -263,23 +254,12 @@ func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid 
 		}
 	}
 
-	if ok, ownerTID, err := t.l2Cache.Lock(ctx, defaultLockDuration, keys); ok {
-		if ok, err := t.l2Cache.IsLocked(ctx, keys); ok {
-			return keys, nil
-		} else if err != nil {
-			t.l2Cache.Unlock(ctx, keys)
-			return keys, err
-		} else {
-			t.l2Cache.Unlock(ctx, keys)
-			// Just return failed since partial lock occurred, means there is a competing transaction elsewhere
-			// that got ownership partially of the locks. In this case, we would want to just cause a failover
-			// to minimize risk of potential data corruption.
-			return keys, sop.Error{
-				Code: sop.RestoreRegistryFileSectorFailure,
-				Err:  fmt.Errorf("key(s) is partially locked by another transaction, 'can't acquire lock to restore registry"),
-			}
-		}
-	} else if !ownerTID.IsNil() {
+	if ok, ownerTID, err := t.l2Cache.DualLock(ctx, defaultLockDuration, keys); ok {
+		return keys, nil
+	} else if ownerTID.IsNil() {
+		t.l2Cache.Unlock(ctx, keys)
+		return keys, err
+	} else {
 		if ownerTID.Compare(tid) != 0 {
 			t.l2Cache.Unlock(ctx, keys)
 			return keys, sop.Error{
@@ -313,18 +293,33 @@ func (tl *transactionLog) acquireLocks(ctx context.Context, t *Transaction, tid 
 				// Unlock any key that got locked by lock call above, if there is any.
 				t.l2Cache.Unlock(ctx, keysCopy)
 				return keys, err
+			} else {
+				// Key not found, so it is free. We must lock it.
+				if ok, owner, err := t.l2Cache.DualLock(ctx, defaultLockDuration, []*sop.LockKey{keys[i]}); !ok {
+					// Failed to lock.
+					t.l2Cache.Unlock(ctx, keysCopy)
+					if err != nil {
+						return keys, err
+					}
+					return keys, sop.Error{
+						Code: sop.RestoreRegistryFileSectorFailure,
+						Err:  fmt.Errorf("key(s) %s could not be locked (owner: %s), 'can't acquire lock to restore registry", keys[i].Key, owner),
+					}
+				}
+				// Update keysCopy to reflect that we now own this lock, so Unlock(keysCopy) will release it if we fail later.
+				keysCopy[i].IsLockOwner = true
 			}
 		}
 		// At this point, it is as good as we have achieved full lock on the set of keys, because they acquired lock ownership.
 		return keys, nil
-	} else {
-		t.l2Cache.Unlock(ctx, keys)
-		return keys, err
 	}
 }
 
-// priorityRollback replays a single transaction's priority log into the registry and removes it.
-func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, tid sop.UUID) error {
+// priorityRollback restores a single transaction's priority log into the registry and removes it.
+func (tl *transactionLog) priorityRollback(ctx context.Context, registry sop.Registry, tid sop.UUID) error {
+	if !tl.PriorityLog().IsEnabled() {
+		return nil
+	}
 	if uhAndrh, err := tl.PriorityLog().Get(ctx, tid); err != nil {
 		return err
 	} else {
@@ -333,10 +328,10 @@ func (tl *transactionLog) priorityRollback(ctx context.Context, t *Transaction, 
 			return tl.PriorityLog().Remove(ctx, tid)
 		}
 		// If registry is not available, avoid panic and treat as no-op for safety.
-		if t == nil || t.registry == nil {
+		if registry == nil {
 			return nil
 		}
-		if err := t.registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
+		if err := registry.UpdateNoLocks(ctx, false, uhAndrh); err != nil {
 			// When Registry is known to be corrupted, we can raise a failover event.
 			return sop.Error{
 				Code:     sop.RestoreRegistryFileSectorFailure,

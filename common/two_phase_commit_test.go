@@ -10,7 +10,7 @@ import (
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase",
@@ -40,7 +40,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 
 func Test_TwoPhaseCommitCommitted(t *testing.T) {
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase1",
@@ -65,7 +65,7 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 		twoPhase.Phase2Commit(ctx)
 
 		t1, _ = newMockTransaction(t, sop.ForReading, -1)
-		t1.Begin()
+		t1.Begin(ctx)
 		b3, _ = OpenBtree[int, string](ctx, "twophase1", t1, cmp.Compare)
 		twoPhase = t1.GetPhasedTransaction()
 
@@ -92,7 +92,7 @@ func Test_TwoPhaseCommitCommitted(t *testing.T) {
 
 func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 	t1, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t1.Begin()
+	t1.Begin(ctx)
 
 	b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase2",
@@ -114,7 +114,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 			twoPhase.Rollback(ctx, err2)
 
 			t1, _ = newMockTransaction(t, sop.ForWriting, -1)
-			t1.Begin()
+			t1.Begin(ctx)
 			twoPhase := t1.GetPhasedTransaction()
 
 			b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{

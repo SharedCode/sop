@@ -16,7 +16,7 @@ func Test_TransactionInducedErrorOnNew(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	t2.Begin()
+	t2.Begin(ctx)
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
 
@@ -51,7 +51,7 @@ func Test_TransactionInducedErrorOnOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	OpenBtree[int, string](ctx, "fooStore33", trans, cmp.Compare)
 	if trans.HasBegun() {
 		t.Error("Transaction is not rolled back after an error on OpenBtree")
@@ -60,7 +60,7 @@ func Test_TransactionInducedErrorOnOpen(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnAdd(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -76,7 +76,7 @@ func Test_TransactionWithInducedErrorOnAdd(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnAddIfNotExist(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -92,7 +92,7 @@ func Test_TransactionWithInducedErrorOnAddIfNotExist(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnUpdate(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -108,7 +108,7 @@ func Test_TransactionWithInducedErrorOnUpdate(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnUpdateCurrentItem(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -124,7 +124,7 @@ func Test_TransactionWithInducedErrorOnUpdateCurrentItem(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnRemove(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -140,7 +140,7 @@ func Test_TransactionWithInducedErrorOnRemove(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnRemoveCurrentItem(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -156,7 +156,7 @@ func Test_TransactionWithInducedErrorOnRemoveCurrentItem(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnFindOne(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -172,7 +172,7 @@ func Test_TransactionWithInducedErrorOnFindOne(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnFindOneWithID(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -188,7 +188,7 @@ func Test_TransactionWithInducedErrorOnFindOneWithID(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnGetCurrentValue(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -204,7 +204,7 @@ func Test_TransactionWithInducedErrorOnGetCurrentValue(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnGetCurrentItem(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -220,7 +220,7 @@ func Test_TransactionWithInducedErrorOnGetCurrentItem(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnFirst(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -236,7 +236,7 @@ func Test_TransactionWithInducedErrorOnFirst(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnLast(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -252,7 +252,7 @@ func Test_TransactionWithInducedErrorOnLast(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnNext(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -268,7 +268,7 @@ func Test_TransactionWithInducedErrorOnNext(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnPrevious(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)
@@ -284,7 +284,7 @@ func Test_TransactionWithInducedErrorOnPrevious(t *testing.T) {
 
 func Test_TransactionWithInducedErrorOnUpsert(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
-	t2.Begin()
+	t2.Begin(ctx)
 
 	var t3 interface{} = t2.GetPhasedTransaction()
 	trans := t3.(*Transaction)

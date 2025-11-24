@@ -23,7 +23,7 @@ const (
 // Transaction defines end-user-facing transactional operations.
 type Transaction interface {
 	// Begin starts the transaction.
-	Begin() error
+	Begin(ctx context.Context) error
 	// Commit finalizes the transaction.
 	Commit(ctx context.Context) error
 	// Rollback aborts the transaction.
@@ -53,7 +53,7 @@ type Transaction interface {
 // TwoPhaseCommitTransaction defines infrastructure-facing two-phase commit operations.
 type TwoPhaseCommitTransaction interface {
 	// Begin starts the transaction.
-	Begin() error
+	Begin(ctx context.Context) error
 	// Phase1Commit performs the first phase (prepare) of the commit.
 	Phase1Commit(ctx context.Context) error
 	// Phase2Commit performs the second phase (finalize) of the commit.
@@ -98,12 +98,12 @@ func NewTransaction(mode TransactionMode,
 }
 
 // Begin starts the wrapped transaction and any registered participants.
-func (t *SinglePhaseTransaction) Begin() error {
-	if err := t.SopPhaseCommitTransaction.Begin(); err != nil {
+func (t *SinglePhaseTransaction) Begin(ctx context.Context) error {
+	if err := t.SopPhaseCommitTransaction.Begin(ctx); err != nil {
 		return err
 	}
 	for _, t := range t.otherTransactions {
-		if err := t.Begin(); err != nil {
+		if err := t.Begin(ctx); err != nil {
 			return err
 		}
 	}
@@ -150,8 +150,10 @@ func (t *SinglePhaseTransaction) Commit(ctx context.Context) error {
 
 // Rollback aborts the transaction and attempts to rollback all participants, returning the last error if any.
 func (t *SinglePhaseTransaction) Rollback(ctx context.Context) error {
-	t.SopPhaseCommitTransaction.Rollback(ctx, nil)
 	var lastErr error
+	if err := t.SopPhaseCommitTransaction.Rollback(ctx, nil); err != nil {
+		lastErr = err
+	}
 	for _, ot := range t.otherTransactions {
 		if err := ot.Rollback(ctx, nil); err != nil {
 			lastErr = err

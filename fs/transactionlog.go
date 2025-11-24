@@ -128,12 +128,13 @@ func (tl *TransactionLog) GetOne(ctx context.Context) (sop.UUID, string, []sop.K
 		tl.cache.Unlock(ctx, hlk)
 		return sop.NilUUID, "", nil, err
 	}
-	// Check one more time to remove potential (.1%) race condition issue.
+
+	// Final check to ensure we still hold the lock before returning the data.
 	if ok, err := tl.cache.IsLocked(ctx, hlk); !ok || err != nil {
 		tl.cache.Unlock(ctx, hlk)
-		// Just return nils as we can't attain a lock.
 		return sop.NilUUID, "", nil, nil
 	}
+
 	return sop.UUID(tid), hour, r, nil
 }
 

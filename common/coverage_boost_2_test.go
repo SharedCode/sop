@@ -44,6 +44,17 @@ func (e errIsLockedCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey)
 	return false, fmt.Errorf("islocked err")
 }
 
+func (e errIsLockedCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	ok, tid, err := e.Lock(ctx, duration, lockKeys)
+	if !ok || err != nil {
+		return ok, tid, err
+	}
+	if _, err := e.IsLocked(ctx, lockKeys); err != nil {
+		return false, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
+
 // (removed) errUpdateRegistry: use mocks.NewMockRegistry(true) to induce Update errors instead.
 
 // lockErrCache forces Lock to return an error to cover acquireLocks' error branch.
@@ -51,6 +62,10 @@ type lockErrCache struct{ sop.Cache }
 
 func (l lockErrCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, fmt.Errorf("lock err")
+}
+
+func (l lockErrCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	return l.Lock(ctx, duration, lockKeys)
 }
 
 // prioLogRemoveErr implements TransactionPriorityLog with Remove returning error to exercise warn path.
@@ -70,7 +85,6 @@ func (p prioLogRemoveErr) GetBatch(ctx context.Context, batchSize int) ([]sop.Ke
 func (p prioLogRemoveErr) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (p prioLogRemoveErr) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // wrapTLPrioRemoveErr delegates to inner TransactionLog but returns prioLogRemoveErr for PriorityLog.
 type wrapTLPrioRemoveErr struct{ inner *mocks.MockTransactionLog }
@@ -445,6 +459,20 @@ func (c isLockedFalseCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKe
 	return false, nil
 }
 
+func (c isLockedFalseCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	ok, tid, err := c.Lock(ctx, duration, lockKeys)
+	if !ok || err != nil {
+		return ok, tid, err
+	}
+	if locked, err := c.IsLocked(ctx, lockKeys); err != nil || !locked {
+		if err == nil {
+			err = sop.Error{Code: sop.RestoreRegistryFileSectorFailure, Err: fmt.Errorf("failover")}
+		}
+		return false, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
+
 func Test_TransactionLogger_AcquireLocks_IsLockedFalse_RaisesFailover(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
@@ -662,6 +690,17 @@ func (c *lockFailOnceCache) Lock(ctx context.Context, duration time.Duration, lo
 	return c.Cache.Lock(ctx, duration, lockKeys)
 }
 
+func (c *lockFailOnceCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	ok, tid, err := c.Lock(ctx, duration, lockKeys)
+	if !ok || err != nil {
+		return ok, tid, err
+	}
+	if locked, err := c.Cache.IsLocked(ctx, lockKeys); err != nil || !locked {
+		return false, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
+
 func Test_Phase1Commit_LockFailOnce_TriggersRefetchAndMerge(t *testing.T) {
 	ctx := context.Background()
 
@@ -699,7 +738,7 @@ func Test_Phase1Commit_LockFailOnce_TriggersRefetchAndMerge(t *testing.T) {
 		refetchAndMerge:                  func(context.Context) error { refetchCount++; return nil },
 	}}
 
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("begin err: %v", err)
 	}
 	if err := tx.Phase1Commit(ctx); err != nil {
@@ -732,7 +771,7 @@ func (e errUpdateRegistry) Replicate(ctx context.Context, a, b, c, d []sop.Regis
 	return e.inner.Replicate(ctx, a, b, c, d)
 }
 
-func Test_NodeRepository_RollbackRemovedNodes_Unlocked_UpdateError(t *testing.T) {
+func Test_NodeRepository_CommitUpdatedNodes_RegistryUpdateError(t *testing.T) {
 	ctx := context.Background()
 	baseReg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	reg := errUpdateRegistry{inner: baseReg}
@@ -794,6 +833,17 @@ func (c *isLockedErrOnceCache) IsLocked(ctx context.Context, lockKeys []*sop.Loc
 	return c.Cache.IsLocked(ctx, lockKeys)
 }
 
+func (c *isLockedErrOnceCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	ok, tid, err := c.Cache.Lock(ctx, duration, lockKeys)
+	if !ok || err != nil {
+		return ok, tid, err
+	}
+	if locked, err := c.IsLocked(ctx, lockKeys); err != nil || !locked {
+		return false, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
+
 func Test_Phase1Commit_IsLockedError_ThenSucceeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
@@ -824,7 +874,7 @@ func Test_Phase1Commit_IsLockedError_ThenSucceeds(t *testing.T) {
 		refetchAndMerge:                  func(context.Context) error { return nil },
 	}}
 
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("begin err: %v", err)
 	}
 	if err := tx.Phase1Commit(ctx); err != nil {
@@ -854,7 +904,7 @@ func (e errGetRegistry3) Replicate(ctx context.Context, a, b, c, d []sop.Registr
 	return e.inner.Replicate(ctx, a, b, c, d)
 }
 
-func Test_NodeRepository_RollbackRemovedNodes_GetError_EarlyGet(t *testing.T) {
+func Test_NodeRepository_CommitUpdatedNodes_RegistryGetError(t *testing.T) {
 	ctx := context.Background()
 	reg := errGetRegistry3{inner: mocks.NewMockRegistry(false)}
 	l2 := mocks.NewMockClient()

@@ -14,8 +14,8 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/cache"
+	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/common/mocks"
-	cas "github.com/sharedcode/sop/internal/cassandra"
 )
 
 // updErrRegistry wraps the mock registry and forces UpdateNoLocks to return an error.
@@ -48,8 +48,7 @@ func (noOpPrioLog) GetBatch(context.Context, int) ([]sop.KeyValuePair[sop.UUID, 
 func (noOpPrioLog) LogCommitChanges(context.Context, []sop.StoreInfo, []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (noOpPrioLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
-func (t *tlRecorder) PriorityLog() sop.TransactionPriorityLog        { return noOpPrioLog{} }
+func (t *tlRecorder) PriorityLog() sop.TransactionPriorityLog { return noOpPrioLog{} }
 func (t *tlRecorder) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
 	t.added = append(t.added, sop.KeyValuePair[int, []byte]{Key: commitFunction, Value: payload})
 	return nil
@@ -92,6 +91,14 @@ func (s *stubPriorityLog) Remove(ctx context.Context, tid sop.UUID) error {
 	if err, ok := s.removeErr[tid.String()]; ok {
 		return err
 	}
+	// Remove from batch to simulate actual removal
+	newBatch := make([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], 0, len(s.batch))
+	for _, kv := range s.batch {
+		if kv.Key.Compare(tid) != 0 {
+			newBatch = append(newBatch, kv)
+		}
+	}
+	s.batch = newBatch
 	return nil
 }
 func (s *stubPriorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[sop.Handle], error) {
@@ -108,7 +115,6 @@ func (s *stubPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.Ke
 func (s *stubPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (s *stubPriorityLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // stubTLog implements sop.TransactionLog and returns our stubPriorityLog.
 type stubTLog struct{ pl *stubPriorityLog }
@@ -211,7 +217,7 @@ func Test_TransactionLogger_PriorityRollback_NoOps(t *testing.T) {
 	ctx := context.Background()
 	txn := &Transaction{registry: mocks.NewMockRegistry(false)}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
-	if err := tl.priorityRollback(ctx, txn, sop.NewUUID()); err != nil {
+	if err := tl.priorityRollback(ctx, txn.registry, sop.NewUUID()); err != nil {
 		t.Fatalf("priorityRollback error: %v", err)
 	}
 }

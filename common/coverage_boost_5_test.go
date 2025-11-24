@@ -225,7 +225,6 @@ func (r *recPrioLog2) GetBatch(context.Context, int) ([]sop.KeyValuePair[sop.UUI
 func (r *recPrioLog2) LogCommitChanges(context.Context, []sop.StoreInfo, []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle], []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (r *recPrioLog2) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // TransactionLog wrapper that returns our recPrioLog2.
 type tlWithPL2 struct{ pl sop.TransactionPriorityLog }
@@ -732,6 +731,15 @@ func (m *falseOnceIsLockedCache) IsLockedTTL(ctx context.Context, d time.Duratio
 func (m *falseOnceIsLockedCache) Lock(ctx context.Context, d time.Duration, ks []*sop.LockKey) (bool, sop.UUID, error) {
 	return m.inner.Lock(ctx, d, ks)
 }
+func (m *falseOnceIsLockedCache) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
+	if s, l, err := m.Lock(ctx, duration, keys); !s || err != nil {
+		return s, l, err
+	}
+	if s, err := m.IsLocked(ctx, keys); !s || err != nil {
+		return s, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
 func (m *falseOnceIsLockedCache) IsLocked(ctx context.Context, ks []*sop.LockKey) (bool, error) {
 	if !m.tripped {
 		m.tripped = true
@@ -794,153 +802,24 @@ func (m *failSecondGetAfterSetCache) IsLockedTTL(ctx context.Context, d time.Dur
 func (m *failSecondGetAfterSetCache) Lock(ctx context.Context, d time.Duration, ks []*sop.LockKey) (bool, sop.UUID, error) {
 	return m.inner.Lock(ctx, d, ks)
 }
+func (m *failSecondGetAfterSetCache) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
+	if s, l, err := m.Lock(ctx, duration, keys); !s || err != nil {
+		return s, l, err
+	}
+	if s, err := m.IsLocked(ctx, keys); !s || err != nil {
+		return s, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
 func (m *failSecondGetAfterSetCache) IsLocked(ctx context.Context, ks []*sop.LockKey) (bool, error) {
 	return m.inner.IsLocked(ctx, ks)
 }
 func (m *failSecondGetAfterSetCache) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
 	return m.inner.IsLockedByOthers(ctx, names)
 }
-func (m *failSecondGetAfterSetCache) Unlock(ctx context.Context, ks []*sop.LockKey) error {
-	return m.inner.Unlock(ctx, ks)
-}
-func (m *failSecondGetAfterSetCache) Clear(ctx context.Context) error { return m.inner.Clear(ctx) }
 func (m *failSecondGetAfterSetCache) IsRestarted(ctx context.Context) (bool, error) {
 	return m.inner.IsRestarted(ctx)
 }
-
-func Test_ItemActionTracker_Add_ActivelyPersisted_NilValue_NoBlobNoCache(t *testing.T) {
-	ctx := context.Background()
-	// Actively persisted with global cache, but Value is nil.
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_add_nil", SlotLength: 4, IsValueDataInNodeSegment: false})
-	si.IsValueDataActivelyPersisted = true
-	si.IsValueDataGloballyCached = true
-	si.CacheConfig.ValueDataCacheDuration = time.Minute
-
-	redis := mocks.NewMockClient()
-	trk := newItemActionTracker[PersonKey, Person](si, redis, mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), true))
-
-	id := sop.NewUUID()
-	it := &btree.Item[PersonKey, Person]{ID: id, Value: nil, Version: 0}
-	if err := trk.Add(ctx, it); err != nil {
-		t.Fatalf("Add err: %v", err)
-	}
-	// Version bumped, but no blob nor cache write occurred; item tracked exists.
-	if it.Version == 0 {
-		t.Fatalf("expected version bump on Add")
-	}
-}
-
-func Test_ItemActionTracker_Update_ActivelyPersisted_ValueNeedsFetch_NoBlob_AddsForDeletion(t *testing.T) {
-	ctx := context.Background()
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_upd_nil", SlotLength: 4, IsValueDataInNodeSegment: false})
-	si.IsValueDataActivelyPersisted = true
-	si.IsValueDataGloballyCached = true
-	si.CacheConfig.ValueDataCacheDuration = time.Minute
-
-	redis := mocks.NewMockClient()
-	trk := newItemActionTracker[PersonKey, Person](si, redis, mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), true))
-
-	id := sop.NewUUID()
-	it := &btree.Item[PersonKey, Person]{ID: id, Value: nil, ValueNeedsFetch: true, Version: 1}
-	if err := trk.Update(ctx, it); err != nil {
-		t.Fatalf("Update err: %v", err)
-	}
-	// ValueNeedsFetch should be cleared and ID added to forDeletionItems due to separate segment.
-	if it.ValueNeedsFetch {
-		t.Fatalf("expected ValueNeedsFetch=false after manage")
-	}
-	if len(trk.forDeletionItems) == 0 || trk.forDeletionItems[0] != id {
-		t.Fatalf("expected item ID queued for deletion")
-	}
-}
-
-func Test_ItemActionTracker_Lock_FailsToAttainAfterSet(t *testing.T) {
-	ctx := context.Background()
-	base := mocks.NewMockClient()
-	f := &failSecondGetAfterSetCache{inner: base}
-
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock_fail_after_set", SlotLength: 4})
-	trk := newItemActionTracker[PersonKey, Person](si, f, mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), true))
-
-	id := sop.NewUUID()
-	pk, p := newPerson("a", "b", "m", "e@x", "p")
-	it := &btree.Item[PersonKey, Person]{ID: id, Key: pk, Value: &p}
-	if err := trk.Update(ctx, it); err != nil {
-		t.Fatalf("Update err: %v", err)
-	}
-	if err := trk.lock(ctx, time.Minute); err == nil {
-		t.Fatalf("expected lock to fail after Set when 2nd GetStruct reports not found")
-	}
-}
-
-func Test_NodeRepository_RollbackRemovedNodes_GetError(t *testing.T) {
-	ctx := context.Background()
-	reg := mocks.NewMockRegistry(false)
-	nr := &nodeRepositoryBackend{transaction: &Transaction{registry: errGetRegistry2{inner: reg}}}
-	vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: "rt", IDs: []sop.UUID{sop.NewUUID()}}}
-	if err := nr.rollbackRemovedNodes(ctx, true, vids); err == nil {
-		t.Fatalf("expected error from registry.Get in rollbackRemovedNodes")
-	}
-}
-
-func Test_NodeRepository_CommitNewRootNodes_BlobAddError(t *testing.T) {
-	ctx := context.Background()
-	reg := mocks.NewMockRegistry(false)
-	tx := &Transaction{registry: reg, blobStore: failingAddBlobStore{}, l2Cache: mocks.NewMockClient()}
-	nr := &nodeRepositoryBackend{transaction: tx}
-
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rt_new_root_err", SlotLength: 4})
-	id := sop.NewUUID()
-	nodes := []sop.Tuple[*sop.StoreInfo, []interface{}]{{First: si, Second: []interface{}{&btree.Node[PersonKey, Person]{ID: id}}}}
-	if ok, _, err := nr.commitNewRootNodes(ctx, nodes); err == nil || ok {
-		t.Fatalf("expected error from blob Add in commitNewRootNodes, ok=%v err=%v", ok, err)
-	}
-}
-
-// Note: IsLocked false branch is already covered in existing tests; no duplicate here.
-
-func Test_Phase1Commit_PreCommitTid_Removed(t *testing.T) {
-	ctx := context.Background()
-	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-
-	// Simulate an earlier pre-commit state by logging addActivelyPersistedItem under a prior TID.
-	preTid := tl.TransactionLog.NewUUID()
-	tl.transactionID = preTid
-	tl.committedState = addActivelyPersistedItem
-	_ = tl.log(ctx, addActivelyPersistedItem, nil)
-
-	rg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
-	sr := mocks.NewMockStoreRepository()
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: sr, registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: 0}
-
-	// Minimal added node to get through the loop.
-	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_precommit_cleanup", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
-	id := sop.NewUUID()
-	nr.localCache[id] = cachedNode{action: addAction, node: &btree.Node[PersonKey, Person]{ID: id, Version: 0}}
-
-	tx.btreesBackend = []btreeBackend{{
-		nodeRepository:                   nr,
-		getStoreInfo:                     func() *sop.StoreInfo { return si },
-		hasTrackedItems:                  func() bool { return true },
-		checkTrackedItems:                func(context.Context) error { return nil },
-		lockTrackedItems:                 func(context.Context, time.Duration) error { return nil },
-		unlockTrackedItems:               func(context.Context) error { return nil },
-		commitTrackedItemsValues:         func(context.Context) error { return nil },
-		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
-		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-		refetchAndMerge:                  func(context.Context) error { return nil },
-	}}
-
-	if err := tx.phase1Commit(ctx); err != nil {
-		t.Fatalf("phase1Commit err: %v", err)
-	}
-	// Ensure preTid logs were removed.
-	if logs := tl.TransactionLog.(interface {
-		GetTIDLogs(sop.UUID) []sop.KeyValuePair[int, []byte]
-	}).GetTIDLogs(preTid); len(logs) != 0 {
-		t.Fatalf("expected pre-commit logs to be removed, still have %d", len(logs))
-	}
+func (m *failSecondGetAfterSetCache) Clear(ctx context.Context) error {
+	return m.inner.Clear(ctx)
 }

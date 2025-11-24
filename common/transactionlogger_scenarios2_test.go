@@ -9,8 +9,8 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/cache"
+	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/common/mocks"
-	cas "github.com/sharedcode/sop/internal/cassandra"
 )
 
 // stubTLRemoveErr allows observing Remove calls and returning a configured error.
@@ -368,7 +368,7 @@ func Test_TransactionLogger_PriorityRollback_ErrorBranch(t *testing.T) {
 	pl := &stubPriorityLog{batch: []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: tid, Value: []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rt", IDs: []sop.Handle{sop.NewHandle(sop.NewUUID())}}}}}}
 	tl := newTransactionLogger(stubTLog{pl: pl}, true)
 
-	err := tl.priorityRollback(ctx, tx, tid)
+	err := tl.priorityRollback(ctx, tx.registry, tid)
 	if err == nil {
 		t.Fatalf("expected error from priorityRollback")
 	}

@@ -1,6 +1,8 @@
 package sop
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -40,11 +42,11 @@ func (e Error) Error() string {
 // ErrTimeout is returned when an operation exceeds its allowed time budget.
 //
 // Semantics:
-// - If a context cancellation or deadline triggered the timeout, Cause carries the
-//   original context error (context.Canceled or context.DeadlineExceeded). Unwrap()
-//   returns that Cause so errors.Is(err, context.DeadlineExceeded) works.
-// - If the operation-specific maximum duration triggered the timeout, Cause may be nil;
-//   MaxTime contains the configured bound for the operation.
+//   - If a context cancellation or deadline triggered the timeout, Cause carries the
+//     original context error (context.Canceled or context.DeadlineExceeded). Unwrap()
+//     returns that Cause so errors.Is(err, context.DeadlineExceeded) works.
+//   - If the operation-specific maximum duration triggered the timeout, Cause may be nil;
+//     MaxTime contains the configured bound for the operation.
 //
 // This enables callers to branch on timeouts consistently while preserving the
 // original context semantics when applicable.
@@ -66,3 +68,35 @@ func (e ErrTimeout) Error() string {
 
 // Unwrap exposes the underlying cause (e.g., context.DeadlineExceeded) for errors.Is/As.
 func (e ErrTimeout) Unwrap() error { return e.Cause }
+
+// HandleLockAcquisitionFailure checks if the error is a LockAcquisitionFailure and if so,
+// attempts to rollback the blocking transaction using the provided rollbackFunc.
+// If rollback succeeds, it takes over the lock and releases it using unlockFunc.
+// Returns nil if the failure was handled (lock taken over and released), otherwise returns the original error.
+func HandleLockAcquisitionFailure(ctx context.Context, err error,
+	rollbackFunc func(context.Context, UUID) error,
+	unlockFunc func(context.Context, []*LockKey) error) error {
+
+	var se Error
+	if errors.As(err, &se) && se.Code == LockAcquisitionFailure {
+		if lk, ok := se.UserData.(*LockKey); ok && !lk.LockID.IsNil() {
+			// Attempt to rollback the blocking transaction.
+			if rerr := rollbackFunc(ctx, lk.LockID); rerr == nil {
+				// Take over the lock and release it so we can acquire it in the retry.
+				lk.IsLockOwner = true
+				if uerr := unlockFunc(ctx, []*LockKey{lk}); uerr != nil {
+					// If unlock fails, we can't really do much but return the original error
+					// or maybe the unlock error. But returning original error keeps flow simple
+					// as the retry loop will likely fail again.
+					// However, since we successfully rolled back, we should probably return nil
+					// and let the retry happen, but the lock is still there.
+					// Let's return the unlock error if it happens, or nil if success.
+					return uerr
+				}
+				// Return nil to indicate successful handling (caller should retry).
+				return nil
+			}
+		}
+	}
+	return err
+}

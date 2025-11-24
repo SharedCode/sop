@@ -36,7 +36,7 @@ func init() {
 
 	inredfs.Initialize(redisConfig)
 
-	// cache := redis.NewClient()
+	// cache := sop.NewCacheClient()
 	// log.Info("about to issue cache.Clear")
 	// ctx := context.Background()
 	// if err := cache.Clear(ctx); err != nil {
@@ -91,7 +91,7 @@ func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	b3, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "norepltable",
 		SlotLength:               8,
@@ -124,7 +124,7 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	so := sop.StoreOptions{
 		Name:                     "repltable",
 		SlotLength:               8,
@@ -163,7 +163,7 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	if err = trans.Begin(); err != nil {
+	if err = trans.Begin(ctx); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
@@ -195,7 +195,7 @@ func TestOpenBtree_TransWithRepl_failed(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	_, err = inredfs.OpenBtree[int, string](ctx, "repltable", trans, nil)
 	if err == nil {
 		t.Error("expected to fail but succeeded")
@@ -213,7 +213,7 @@ func TestOpenBtreeWithRepl_succeeded(t *testing.T) {
 		t.Error(err)
 		t.FailNow()
 	}
-	trans.Begin()
+	trans.Begin(ctx)
 	_, err = inredfs.OpenBtreeWithReplication[int, string](ctx, "repltable", trans, nil)
 	if err != nil {
 		t.Errorf("expected to succeed but failed, details: %v", err)

@@ -12,6 +12,13 @@ import (
 	"github.com/sharedcode/sop/inmemory"
 )
 
+const (
+	priorityRollbackCheckIntervalSeconds      = 5 * 60
+	priorityRollbackQuickCheckIntervalSeconds = 60
+	cleanupCheckIntervalMinutes               = 4 * 60
+	cleanupQuickCheckIntervalMinutes          = 5
+)
+
 func (t *Transaction) cleanup(ctx context.Context) error {
 	// Cleanup resources not needed anymore.
 	if err := t.logger.log(ctx, deleteObsoleteEntries, nil); err != nil {
@@ -115,13 +122,13 @@ func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 	}
 	if t.logger.committedState > commitRemovedNodes {
 		vids := convertToRegistryRequestPayload(removedNodes)
-		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, t.areNodesKeysLocked(), vids); err != nil {
+		if err := t.btreesBackend[0].nodeRepository.rollbackRemovedNodes(ctx, t.nodesKeysExist(), vids); err != nil {
 			lastErr = err
 		}
 	}
 	if t.logger.committedState > commitUpdatedNodes {
 		vids := convertToRegistryRequestPayload(updatedNodes)
-		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, t.areNodesKeysLocked(), vids); err != nil {
+		if err := t.btreesBackend[0].nodeRepository.rollbackUpdatedNodes(ctx, t.nodesKeysExist(), vids); err != nil {
 			lastErr = err
 		}
 	}
@@ -360,8 +367,10 @@ func (t *Transaction) hasTrackedItems() bool {
 // Check Tracked items for conflict, this pass is to remove any race condition.
 func (t *Transaction) checkTrackedItems(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
-		if err := s.checkTrackedItems(ctx); err != nil {
-			return err
+		if s.hasTrackedItems() {
+			if err := s.checkTrackedItems(ctx); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -369,8 +378,10 @@ func (t *Transaction) checkTrackedItems(ctx context.Context) error {
 
 func (t *Transaction) lockTrackedItems(ctx context.Context) error {
 	for _, s := range t.btreesBackend {
-		if err := s.lockTrackedItems(ctx, t.maxTime); err != nil {
-			return err
+		if s.hasTrackedItems() {
+			if err := s.lockTrackedItems(ctx, t.maxTime); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -379,8 +390,10 @@ func (t *Transaction) lockTrackedItems(ctx context.Context) error {
 func (t *Transaction) unlockTrackedItems(ctx context.Context) error {
 	var lastErr error
 	for _, s := range t.btreesBackend {
-		if err := s.unlockTrackedItems(ctx); err != nil {
-			lastErr = err
+		if s.hasTrackedItems() {
+			if err := s.unlockTrackedItems(ctx); err != nil {
+				lastErr = err
+			}
 		}
 	}
 	return lastErr
@@ -423,8 +436,19 @@ func (t *Transaction) unlockNodesKeys(ctx context.Context) error {
 	return err
 }
 
-func (t *Transaction) areNodesKeysLocked() bool {
-	return t.nodesKeys != nil
+func (t *Transaction) nodesKeysExist() bool {
+	return len(t.nodesKeys) > 0
+}
+
+// Return true if nodesKeys is nil or all keys are still locked.
+func (t *Transaction) nodesKeysNilOrLocked(ctx context.Context) (bool, error) {
+	if len(t.nodesKeys) == 0 {
+		return true, nil
+	}
+	if ok, err := t.l2Cache.IsLocked(ctx, t.nodesKeys); !ok || err != nil {
+		return false, fmt.Errorf("node locks lost or expired during commit phase")
+	}
+	return true, nil
 }
 
 func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tuple[*sop.StoreInfo, []any], removedNodes []sop.Tuple[*sop.StoreInfo, []any]) {
@@ -486,9 +510,11 @@ var lastOnIdleRunTime int64
 var locker = sync.Mutex{}
 
 var lastPriorityOnIdleTime int64
-var prioritylocker = sync.Mutex{}
+var priorityLocker = sync.Mutex{}
 var priorityLogFound bool
 
+// Background task processing for dead transaction logs' restore & cleanup.
+// Elegant solution, not so elegant code but works.
 func (t *Transaction) onIdle(ctx context.Context) {
 	// Required to have a backend btree to do cleanup.
 	if len(t.btreesBackend) == 0 {
@@ -512,19 +538,21 @@ func (t *Transaction) onIdle(ctx context.Context) {
 
 	// Allow only one priority rollback processor.
 	// Check every 5 minutes if there are any pending rollbacks that "aged" (5min or older).
-	interval := 300
+	interval := priorityRollbackCheckIntervalSeconds
+	// If there is known pending priority log, do more frequent checks.
 	if priorityLogFound {
-		interval = 5
+		interval = priorityRollbackQuickCheckIntervalSeconds
 	}
+
 	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Second).UnixMilli()
 	if t.logger.PriorityLog().IsEnabled() && lastPriorityOnIdleTime < nextRunTime {
 		runTime := false
-		prioritylocker.Lock()
+		priorityLocker.Lock()
 		if lastPriorityOnIdleTime < nextRunTime {
 			lastPriorityOnIdleTime = sop.Now().UnixMilli()
 			runTime = true
 		}
-		prioritylocker.Unlock()
+		priorityLocker.Unlock()
 		if runTime {
 			if found, err := t.logger.doPriorityRollbacks(ctx, t); err != nil {
 				// Trigger a failover if a handler is registered; otherwise, just log path state.
@@ -541,9 +569,9 @@ func (t *Transaction) onIdle(ctx context.Context) {
 	// If it is known that there is nothing to clean up then do 4hr interval polling,
 	// otherwise do shorter interval of 5 minutes, to allow faster cleanup.
 	// Having "abandoned" commit is a very rare occurrence.
-	interval = 4 * 60
+	interval = cleanupCheckIntervalMinutes
 	if hourBeingProcessed != "" {
-		interval = 5
+		interval = cleanupQuickCheckIntervalMinutes
 	}
 	nextRunTime = sop.Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
 	if lastOnIdleRunTime < nextRunTime {

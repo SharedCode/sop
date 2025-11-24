@@ -39,7 +39,7 @@ func Test_Phase2Commit_Success_CleansUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newMockTransactionWithLogging error: %v", err)
 	}
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("Begin error: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func Test_Phase2Commit_Success_CleansUp(t *testing.T) {
 	}
 
 	tx2, _ := newMockTransaction(t, sop.ForReading, -1)
-	_ = tx2.Begin()
+	_ = tx2.Begin(ctx)
 	b3r, _ := OpenBtree[PersonKey, Person](ctx, so.Name, tx2, Compare)
 	if ok, err := b3r.Find(ctx, pk, false); !ok || err != nil {
 		t.Fatalf("Find after commit failed: ok=%v err=%v", ok, err)
@@ -81,7 +81,7 @@ func Test_Phase2Commit_Error_UpdateNoLocks_RollsBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newMockTransactionWithLogging error: %v", err)
 	}
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("Begin error: %v", err)
 	}
 	b3, err := NewBtree[PersonKey, Person](ctx, so, tx, Compare)
@@ -119,7 +119,7 @@ func Test_ReaderTransaction_Commit_Succeeds_NoConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newMockTransaction err: %v", err)
 	}
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("Begin err: %v", err)
 	}
 	b3, err := OpenBtree[PersonKey, Person](ctx, so.Name, tx, Compare)
@@ -147,7 +147,7 @@ func Test_Rollback_Error_From_PreCommitTrackedValues_Delete(t *testing.T) {
 	tx := &Transaction{blobStore: fb, l2Cache: mocks.NewMockClient()}
 	tx.phaseDone = -1
 	tx.logger = newTransactionLogger(mocks.NewMockTransactionLog(), true)
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("Begin err: %v", err)
 	}
 
@@ -407,7 +407,7 @@ func Test_TrackedItems_Check_Lock_Unlock_Errors_Table(t *testing.T) {
 		{name: "check", hs: true, ch: fmt.Errorf("x"), eCh: true},
 		{name: "lock", hs: true, lk: fmt.Errorf("x"), eLk: true},
 		{name: "unlock", hs: true, ul: fmt.Errorf("x"), eUl: true},
-		{name: "skip_hasTracked_false", hs: false, ch: fmt.Errorf("x"), lk: fmt.Errorf("x"), ul: fmt.Errorf("x"), eCh: true, eLk: true, eUl: true},
+		{name: "skip_hasTracked_false", hs: false, ch: fmt.Errorf("x"), lk: fmt.Errorf("x"), ul: fmt.Errorf("x"), eCh: false, eLk: false, eUl: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

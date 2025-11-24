@@ -49,25 +49,25 @@ func (dio directIO) Open(ctx context.Context, filename string, flag int, permiss
 // WriteAt writes a block at an aligned offset, retrying transient errors via SOP's retry helper.
 // The caller is responsible for providing an aligned buffer (e.g., via directio.AlignedBlock).
 func (dio directIO) WriteAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
-	var i int
-	err := retryIO(ctx, func(context.Context) error {
+	var n int
+	err := retryIO(ctx, func(ctx context.Context) error {
 		var e error
-		i, e = file.WriteAt(block, offset)
+		n, e = file.WriteAt(block, offset)
 		return e
 	}, sop.FileIOErrorFailoverQualified)
-	return i, err
+	return n, err
 }
 
 // ReadAt reads a block at an aligned offset, retrying transient errors via SOP's retry helper.
 // The caller is responsible for providing an aligned buffer (e.g., via directio.AlignedBlock).
 func (dio directIO) ReadAt(ctx context.Context, file *os.File, block []byte, offset int64) (int, error) {
-	var i int
-	err := retryIO(ctx, func(context.Context) error {
+	var n int
+	err := retryIO(ctx, func(ctx context.Context) error {
 		var e error
-		i, e = file.ReadAt(block, offset)
+		n, e = file.ReadAt(block, offset)
 		return e
 	}, sop.FileIOErrorFailoverQualified)
-	return i, err
+	return n, err
 }
 
 func (dio directIO) Close(file *os.File) error {

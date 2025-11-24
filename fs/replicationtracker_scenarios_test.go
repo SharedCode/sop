@@ -60,11 +60,11 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			}
 			ioErr := sop.Error{Code: sop.FailoverQualifiedError + 1, Err: errors.New("io fail")}
 			rt.HandleReplicationRelatedError(ctx, ioErr, nil, false)
-			if rt.getActiveBaseFolder() != b2 {
-				t.Fatalf("expected failover to b2")
+			if rt.getActiveBaseFolder() != b1 {
+				t.Fatalf("expected no failover to b2")
 			}
-			if !rt.FailedToReplicate {
-				t.Fatalf("expected FailedToReplicate true")
+			if rt.FailedToReplicate {
+				t.Fatalf("expected FailedToReplicate false")
 			}
 		}},
 		{name: "HandleFailedToReplicate_Idempotent", run: func(t *testing.T) {
@@ -461,8 +461,9 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			rtDo.ActiveFolderToggler = true
 			os.MkdirAll(a, 0o755)
 			_ = rtDo.writeReplicationStatus(ctx, rtDo.formatActiveFolderEntity(replicationStatusFilename))
-			ioErr := sop.Error{Code: sop.FailoverQualifiedError, Err: os.ErrInvalid}
-			rtDo.HandleReplicationRelatedError(ctx, ioErr, nil, false)
+			// ioErr := sop.Error{Code: sop.FailoverQualifiedError, Err: os.ErrInvalid}
+			// rtDo.HandleReplicationRelatedError(ctx, ioErr, nil, false)
+			rtDo.failover(ctx)
 			if !rtDo.FailedToReplicate {
 				t.Fatalf("expected failover failure")
 			}
@@ -606,7 +607,7 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(passive, replicationStatusFilename), []byte(`{"FailedToReplicate":false,"ActiveFolderToggler":false}`), 0o644); err != nil {
 				t.Fatalf("write passive status: %v", err)
 			}
-			if _, err := NewReplicationTracker(ctx, []string{active, passive}, true, nil); err != nil {
+			if _, err := NewReplicationTracker(ctx, []string{active, passive}, true, mocks.NewMockClient()); err != nil {
 				t.Fatalf("NewReplicationTracker: %v", err)
 			}
 		}},
@@ -626,7 +627,7 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			prev := GlobalReplicationDetails
 			GlobalReplicationDetails = nil
 			t.Cleanup(func() { GlobalReplicationDetails = prev })
-			if _, err := NewReplicationTracker(ctx, []string{active, passive}, true, nil); err != nil {
+			if _, err := NewReplicationTracker(ctx, []string{active, passive}, true, mocks.NewMockClient()); err != nil {
 				t.Fatalf("NewReplicationTracker: %v", err)
 			}
 		}},
@@ -661,7 +662,7 @@ func TestReplicationTracker_Scenarios(t *testing.T) {
 			past := time.Now().Add(-2 * time.Minute)
 			os.Chtimes(af, past, past)
 			time.Sleep(15 * time.Millisecond)
-			if _, err := NewReplicationTracker(ctx, []string{active, passive}, true, nil); err != nil {
+			if _, err := NewReplicationTracker(ctx, []string{active, passive}, true, mocks.NewMockClient()); err != nil {
 				t.Fatalf("NewReplicationTracker: %v", err)
 			}
 			_ = pf

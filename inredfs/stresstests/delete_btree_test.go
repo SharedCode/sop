@@ -1,7 +1,7 @@
 //go:build stress
 // +build stress
 
-package integrationtests
+package stresstests
 
 import (
 	"context"

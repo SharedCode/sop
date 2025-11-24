@@ -6,8 +6,8 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
+	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/common"
-	cas "github.com/sharedcode/sop/internal/cassandra"
 )
 
 // RemoveBtree removes the B-tree with the given name from backend storage.

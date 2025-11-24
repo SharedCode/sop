@@ -127,7 +127,7 @@ func Test_TransactionLogger_PriorityRollback_NoLogs_RemovesTid(t *testing.T) {
 	ctx := context.Background()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	// With dummy priority log returning nil and no registry work, expect nil
-	if err := tl.priorityRollback(ctx, &Transaction{registry: mocks.NewMockRegistry(false)}, sop.NewUUID()); err != nil {
+	if err := tl.priorityRollback(ctx, mocks.NewMockRegistry(false), sop.NewUUID()); err != nil {
 		t.Fatalf("priorityRollback with no logs expected nil, got: %v", err)
 	}
 }
@@ -495,7 +495,6 @@ func (t timeoutPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.
 func (t timeoutPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (t timeoutPriorityLog) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 // stubTLogTimeout wraps stubPriorityLog inside a TransactionLog implementation.
 type stubTLogTimeout struct{ pl timeoutPriorityLog }
@@ -796,7 +795,6 @@ func (p prioNoop) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePa
 func (p prioNoop) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
-func (p prioNoop) ClearRegistrySectorClaims(ctx context.Context) error { return nil }
 
 func Test_ItemActionTracker_Add_ActivelyPersisted_LogError_Propagates(t *testing.T) {
 	ctx := context.Background()
@@ -912,10 +910,10 @@ func Test_Phase1Commit_IsLockedFalse_ThenSucceeds(t *testing.T) {
 		commitTrackedItemsValues:         func(context.Context) error { return nil },
 		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
 		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
-		refetchAndMerge:                  func(ctx context.Context) error { return nil },
+		refetchAndMerge:                  func(context.Context) error { return nil },
 	}}
 
-	if err := tx.Begin(); err != nil {
+	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("begin err: %v", err)
 	}
 	if err := tx.Phase1Commit(ctx); err != nil {

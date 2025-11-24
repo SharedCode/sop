@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
+	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/common/mocks"
-	cas "github.com/sharedcode/sop/internal/cassandra"
 )
 
 func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
@@ -15,7 +15,7 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 
 	// Populate with good data.
 	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	so := sop.ConfigureStore("xyz", true, 8, "Streaming data", sop.BigData, "")
 	sds, _ := NewBtree[string, string](ctx, so, trans, nil)
@@ -25,7 +25,7 @@ func Test_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 
 	// Now, populate then rollback and validate TID logs are gone.
 	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 	sds, _ = OpenBtree[string, string](ctx, "xyz", trans, nil)
 	sds.Add(ctx, "fooVideo2", "video content")
 
@@ -59,7 +59,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	//Now = func() time.Time { return yesterday }
 
 	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	so := sop.ConfigureStore("xyz2", false, 8, "Streaming data", sop.BigData, "")
 	b3, _ := NewBtree[PersonKey, Person](ctx, so, trans, Compare)
@@ -70,7 +70,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	trans.Commit(ctx)
 
 	trans, _ = newMockTransactionWithLogging(t, sop.ForWriting, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "xyz2", trans, Compare)
 	pk, p = newPerson("joe", "shroeger", "male", "email2", "phone2")
@@ -106,7 +106,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 	}
 
 	trans, _ = newMockTransactionWithLogging(t, sop.ForReading, -1)
-	trans.Begin()
+	trans.Begin(ctx)
 
 	b3, _ = OpenBtree[PersonKey, Person](ctx, "xyz2", trans, Compare)
 

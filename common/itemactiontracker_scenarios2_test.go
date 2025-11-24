@@ -68,19 +68,28 @@ func (f *flakyCache) IsLockedTTL(ctx context.Context, duration time.Duration, lo
 func (f *flakyCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return f.base.Lock(ctx, duration, lockKeys)
 }
+func (f *flakyCache) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
+	if s, l, err := f.Lock(ctx, duration, keys); !s || err != nil {
+		return s, l, err
+	}
+	if s, err := f.IsLocked(ctx, keys); !s || err != nil {
+		return s, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
 func (f *flakyCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	return f.base.IsLocked(ctx, lockKeys)
 }
 func (f *flakyCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	return f.base.IsLockedByOthers(ctx, lockKeyNames)
 }
+func (f *flakyCache) IsRestarted(ctx context.Context) (bool, error) {
+	return f.base.IsRestarted(ctx)
+}
 func (f *flakyCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return f.base.Unlock(ctx, lockKeys)
 }
 func (f *flakyCache) Clear(ctx context.Context) error { return f.base.Clear(ctx) }
-func (f *flakyCache) IsRestarted(ctx context.Context) (bool, error) {
-	return f.base.IsRestarted(ctx)
-}
 
 func Test_ItemActionTracker_Lock_PostSetReadMiss_ReturnsError(t *testing.T) {
 	ctx := context.Background()
@@ -156,19 +165,28 @@ func (e *errLockCache) IsLockedTTL(ctx context.Context, duration time.Duration, 
 func (e *errLockCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return e.base.Lock(ctx, duration, lockKeys)
 }
+func (e *errLockCache) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
+	if s, l, err := e.Lock(ctx, duration, keys); !s || err != nil {
+		return s, l, err
+	}
+	if s, err := e.IsLocked(ctx, keys); !s || err != nil {
+		return s, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
 func (e *errLockCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	return e.base.IsLocked(ctx, lockKeys)
 }
 func (e *errLockCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	return e.base.IsLockedByOthers(ctx, lockKeyNames)
 }
+func (e *errLockCache) IsRestarted(ctx context.Context) (bool, error) {
+	return e.base.IsRestarted(ctx)
+}
 func (e *errLockCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return e.base.Unlock(ctx, lockKeys)
 }
 func (e *errLockCache) Clear(ctx context.Context) error { return e.base.Clear(ctx) }
-func (e *errLockCache) IsRestarted(ctx context.Context) (bool, error) {
-	return e.base.IsRestarted(ctx)
-}
 
 func Test_ItemActionTracker_Lock_EarlyGetStructError(t *testing.T) {
 	ctx := context.Background()
@@ -290,19 +308,28 @@ func (e *errCache) IsLockedTTL(ctx context.Context, duration time.Duration, lock
 func (e *errCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return e.base.Lock(ctx, duration, lockKeys)
 }
+func (e *errCache) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
+	if s, l, err := e.Lock(ctx, duration, keys); !s || err != nil {
+		return s, l, err
+	}
+	if s, err := e.IsLocked(ctx, keys); !s || err != nil {
+		return s, sop.NilUUID, err
+	}
+	return true, sop.NilUUID, nil
+}
 func (e *errCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	return e.base.IsLocked(ctx, lockKeys)
 }
 func (e *errCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	return e.base.IsLockedByOthers(ctx, lockKeyNames)
 }
+func (e *errCache) IsRestarted(ctx context.Context) (bool, error) {
+	return e.base.IsRestarted(ctx)
+}
 func (e *errCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return e.base.Unlock(ctx, lockKeys)
 }
 func (e *errCache) Clear(ctx context.Context) error { return e.base.Clear(ctx) }
-func (e *errCache) IsRestarted(ctx context.Context) (bool, error) {
-	return e.base.IsRestarted(ctx)
-}
 
 func Test_ItemActionTracker_Get_RedisErrors_UsesBlob_StillSucceeds(t *testing.T) {
 	ctx := context.Background()

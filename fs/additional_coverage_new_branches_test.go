@@ -78,7 +78,7 @@ func TestFileIOWithReplication_Replicate_UnsupportedActionType(t *testing.T) {
 	ctx := context.Background()
 	active := t.TempDir()
 	passive := t.TempDir()
-	rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, nil)
+	rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, mocks.NewMockClient())
 	ms := NewManageStoreFolder(NewFileIO())
 	fio := newFileIOWithReplication(rt, ms, true)
 	// Inject invalid action code 99.
@@ -93,7 +93,7 @@ func TestRegistry_Replicate_rmCloseOverrideError(t *testing.T) {
 	ctx := context.Background()
 	a := t.TempDir()
 	b := t.TempDir()
-	rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, nil)
+	rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, mocks.NewMockClient())
 	r := NewRegistry(true, MinimumModValue, rt, nil)
 	defer r.Close()
 	// Provide override returning error.
@@ -106,10 +106,6 @@ func TestRegistry_Replicate_rmCloseOverrideError(t *testing.T) {
 
 // Cache wrapper that forces SetStruct to return an error to exercise log.Warn paths in Add & Update.
 type setStructErrCache struct{ sop.Cache }
-
-func (c setStructErrCache) IsRestarted(ctx context.Context) (bool, error) {
-	return c.Cache.IsRestarted(ctx)
-}
 
 func (c setStructErrCache) SetStruct(ctx context.Context, key string, value interface{}, exp time.Duration) error {
 	return errors.New("induced setstruct error")
@@ -236,7 +232,7 @@ func TestFileIOWithReplication_Replicate_PassiveWriteError(t *testing.T) {
 	ctx := context.Background()
 	active := t.TempDir()
 	passive := t.TempDir()
-	rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, nil)
+	rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, mocks.NewMockClient())
 	ms := NewManageStoreFolder(NewFileIO())
 	fio := newFileIOWithReplicationInjected(rt, ms, true, replicateFailFileIO{FileIO: NewFileIO(), passiveRoot: passive})
 	// Record a write action to a .txt file so replicate attempts a passive write which fails.
@@ -379,11 +375,11 @@ func TestReplicationTracker_HandleReplicationRelatedError_Failover(t *testing.T)
 	// Induce failover qualified error with rollback succeeded true to exercise code path.
 	ioErr := sop.Error{Code: sop.FailoverQualifiedError, Err: errors.New("io failover qualified")}
 	rt.HandleReplicationRelatedError(ctx, ioErr, nil, false) // rollback not succeeded so failover proceeds
-	if rt.ActiveFolderToggler {
-		t.Fatalf("expected active folder toggled after failover")
+	if !rt.ActiveFolderToggler {
+		t.Fatalf("expected active folder NOT toggled after failover")
 	}
-	if !rt.FailedToReplicate {
-		t.Fatalf("expected FailedToReplicate true after failover")
+	if rt.FailedToReplicate {
+		t.Fatalf("expected FailedToReplicate false after failover")
 	}
 	// A second call should no-op.
 	rt.HandleReplicationRelatedError(ctx, ioErr, nil, true)

@@ -489,7 +489,16 @@ func Test_UnlockNodesKeys_NoNodes_NoError(t *testing.T) {
 
 // unlockTrackedItems aggregates last error across backends.
 func Test_UnlockTrackedItems_AggregatesError(t *testing.T) {
-	tx := &Transaction{btreesBackend: []btreeBackend{{unlockTrackedItems: func(context.Context) error { return nil }}, {unlockTrackedItems: func(context.Context) error { return fmt.Errorf("agg") }}}}
+	tx := &Transaction{btreesBackend: []btreeBackend{
+		{
+			unlockTrackedItems: func(context.Context) error { return nil },
+			hasTrackedItems:    func() bool { return true },
+		},
+		{
+			unlockTrackedItems: func(context.Context) error { return fmt.Errorf("agg") },
+			hasTrackedItems:    func() bool { return true },
+		},
+	}}
 	if err := tx.unlockTrackedItems(context.Background()); err == nil {
 		t.Fatalf("expected aggregated error")
 	}

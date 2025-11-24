@@ -7,7 +7,6 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/redis"
 )
 
 // NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
@@ -26,11 +25,8 @@ func NewTransaction(ctx context.Context, to TransationOptions) (sop.Transaction,
 // Locks use maxTime as TTL so they are bounded even if ctx is canceled. If you want replication/log
 // cleanup to finish under the same budget, set ctx.Deadline to at least maxTime plus a small grace period.
 func NewTwoPhaseCommitTransaction(ctx context.Context, to TransationOptions) (sop.TwoPhaseCommitTransaction, error) {
-	if !IsInitialized() {
-		return nil, fmt.Errorf("redis was not initialized")
-	}
 	if to.Cache == nil {
-		to.Cache = redis.NewClient()
+		to.Cache = sop.NewCacheClient()
 	}
 	fio := fs.NewFileIO()
 	replicationTracker, err := fs.NewReplicationTracker(ctx, []string{to.StoresBaseFolder}, false, to.Cache)
@@ -95,11 +91,7 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr Trans
 	}
 	mbsf := fs.NewManageStoreFolder(fio)
 	if towr.Cache == nil {
-		towr.Cache = redis.NewClient()
-	}
-
-	if !IsInitialized() {
-		return nil, fmt.Errorf("redis was not initialized")
+		towr.Cache = sop.NewCacheClient()
 	}
 	sr, err := fs.NewStoreRepository(ctx, replicationTracker, mbsf, towr.Cache, towr.RegistryHashModValue)
 	if err != nil {
