@@ -778,6 +778,15 @@ One thing to note, is that there is no resource locking in above code & it is ab
 Check out the integration test that demonstrate this, here: https://github.com/sharedcode/sop/blob/493fba2d6d1ed810bfb4edc9ce568a1c98e159ff/inredfs/integration_tests/transaction_edge_cases_test.go#L315C6-L315C41
 (the sample adds one record but it is not needed, empty Btree will work just fine)
 
+## Transaction Commit Merging & Swarm Computing
+SOP features a unique "commit merging" capability that acts as a technological moat—something not found in traditional RDBMS like SQL Server, Oracle, or Postgres.
+
+When multiple transactions across different machines or threads commit concurrently, SOP's storage engine automatically detects if they are compatible (non-conflicting). Instead of locking out or failing these concurrent operations, SOP **merges** them.
+
+*   **Swarm Intelligence**: This allows your cluster to operate like a swarm, with independent nodes working in parallel and the storage layer unifying their work.
+*   **Simplified Concurrency**: Developers don't need complex locking logic. SOP transactions are natively thread and machine safe. It rolls back only true conflicts and merges everything else.
+*   **Proven at Scale**: These capabilities are demonstrated in the `inredfs/stresstests`, simulating distributed parallel transaction commits.
+
 ## ACID Transactions vs. Big Data
 It is well known to the database world that data engines are written to support being transactional or not. Transactions work best for non-big data management. And Big Data support typically has no support for transactions, specifically, ACID type of transactions. These perception change with SOP V2+. That is, SOP V2 supports ACID transactions and Big Data, together with "partial updates". Yes, full fidelity Big Data management protected by ACID transactions.
 

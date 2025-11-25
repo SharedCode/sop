@@ -35,6 +35,11 @@ SOP V2 is uniquely positioned for the AI era.
 *   **Partitioned Vector Search**: Store high-dimensional vectors directly in B-Trees. By partitioning data (e.g., by UserID or DocumentID), SOP outperforms specialized vector stores for hybrid search workloads, eliminating the "random walk" overhead of graph indexes.
 *   **Streaming Data**: Handle multi-gigabyte objects (video, large models) with the `StreamingDataStore`, supporting chunked uploads, downloads, and partial updates within ACID transactions.
 
+### 5. The "Moat": Swarm Computing & Auto-Merge
+SOP introduces a capability unmatched by traditional RDBMS (SQL Server, Oracle, Postgres): **Automatic Transaction Commit Merging**.
+*   **Swarm Computing**: In a distributed cluster, multiple machines can commit transactions concurrently. SOP automatically detects non-conflicting changes and merges them into a single cohesive state, one after the other.
+*   **Native Parallelism**: This makes parallel programming trivial. Transactions are natively thread-safe and machine-safe. SOP handles the hard work of detecting conflicts (rolling back only when necessary) and merging compatible updates, enabling true "swarm" behavior at the storage layer.
+
 ## Use Cases
 
 *   **Embedded Database**: Perfect for Go applications that need rich indexing without the operational burden of a separate DB server.
