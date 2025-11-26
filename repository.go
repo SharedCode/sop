@@ -164,7 +164,7 @@ type Cache interface {
 
 	// IsRestarted reports whether the cache backend (e.g., Redis) has restarted since the last check.
 	// Implementations should return true once per backend restart event per-process and false otherwise.
-	IsRestarted(ctx context.Context) (bool, error)
+	IsRestarted(ctx context.Context) bool
 
 	// SetStruct upserts a struct value under a key.
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error

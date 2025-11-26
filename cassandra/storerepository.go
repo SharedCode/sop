@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	log "log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	retry "github.com/sethvargo/go-retry"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/inmemory"
 )
 
 type storeRepository struct {
@@ -88,25 +88,19 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
-	// Sort the stores info so we can commit them in same sort order across transactions,
-	// thus, reduced chance of deadlock.
-	b3 := inmemory.NewBtree[string, sop.StoreInfo](true)
-	for i := range stores {
-		b3.Add(stores[i].Name, stores[i])
-	}
-	b3.First()
-	keys := make([]string, len(stores))
-	i := 0
-	for {
-		keys[i] = b3.GetCurrentKey()
-		stores[i] = b3.GetCurrentValue()
-		if !b3.Next() {
-			break
-		}
-		i++
+	if len(stores) == 0 {
+		return stores, nil
 	}
 
+	// Sort the stores info so we can commit them in same sort order across transactions,
+	// thus, reduced chance of deadlock.
+	stores = sortStores(stores)
+
 	// Create lock IDs that we can use to logically lock and prevent other updates.
+	keys := make([]string, len(stores))
+	for i := range stores {
+		keys[i] = stores[i].Name
+	}
 	lockKeys := sr.cache.CreateLockKeys(keys)
 
 	// Lock all keys.
@@ -289,6 +283,10 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
 	}
 
+	if len(names) == 0 {
+		return nil
+	}
+
 	sis, err := sr.Get(ctx, names...)
 	if err != nil {
 		return err
@@ -369,4 +367,11 @@ func (sr *storeRepository) RemoveStore(ctx context.Context, blobStoreName string
 // Replicate is a no-op for Cassandra because replication is handled by Cassandra itself.
 func (sr *storeRepository) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) error {
 	return nil
+}
+
+func sortStores(stores []sop.StoreInfo) []sop.StoreInfo {
+	sort.Slice(stores, func(i, j int) bool {
+		return stores[i].Name < stores[j].Name
+	})
+	return stores
 }

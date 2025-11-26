@@ -132,7 +132,6 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 	}
 	defer t.l2Cache.Unlock(ctx, lk)
 
-	log.Info("Entering doPriorityRollbacks loop(restore).")
 	consumed := false
 	start := sop.Now()
 	for {

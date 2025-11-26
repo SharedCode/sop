@@ -10,7 +10,7 @@ import (
 // StoreInfo describes a B-Tree store configuration and runtime state persisted in the backend.
 type StoreInfo struct {
 	// Name is the short store name.
-	Name string `json:"name" minLength:"1" maxLength:"20"`
+	Name string `json:"name" minLength:"1" maxLength:"128"`
 	// SlotLength is the number of items per node.
 	SlotLength int `json:"slot_length" min:"2" max:"10000"`
 	// IsUnique enforces uniqueness on the key of key/value items.
@@ -18,7 +18,7 @@ type StoreInfo struct {
 	// Description optionally describes the store.
 	Description string `json:"description" maxLength:"500"`
 	// RegistryTable is the registry table name.
-	RegistryTable string `json:"registry_table" minLength:"1" maxLength:"20"`
+	RegistryTable string `json:"registry_table" minLength:"1" maxLength:"140"`
 	// BlobTable is the blob table name or base filesystem path.
 	BlobTable string `json:"blob_table" minLength:"1" maxLength:"300"`
 	// RootNodeID is the root B-Tree node identifier.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,7 +71,7 @@ func (m mockCacheWarn) Clear(ctx context.Context) error { return m.inner.Clear(c
 func (m mockCacheWarn) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
 }
-func (m mockCacheWarn) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (m mockCacheWarn) IsRestarted(ctx context.Context) bool { return false }
 
 type mockCacheDeleteWarn struct{ sop.Cache }
 
@@ -80,7 +81,7 @@ func (m mockCacheDeleteWarn) Delete(context.Context, []string) (bool, error) {
 func (m mockCacheDeleteWarn) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
 }
-func (m mockCacheDeleteWarn) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (m mockCacheDeleteWarn) IsRestarted(ctx context.Context) bool { return false }
 
 type mockCacheSetStructWarn struct{ sop.Cache }
 
@@ -90,7 +91,7 @@ func (m mockCacheSetStructWarn) SetStruct(context.Context, string, interface{}, 
 func (m mockCacheSetStructWarn) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
 }
-func (m mockCacheSetStructWarn) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (m mockCacheSetStructWarn) IsRestarted(ctx context.Context) bool { return false }
 
 // mockCacheAlwaysLocked forces Lock to report the key(s) are already locked, so Update's
 // retry path is exercised and ultimately returns an error.
@@ -105,7 +106,7 @@ func (m mockCacheAlwaysLocked) DualLock(ctx context.Context, d time.Duration, ks
 func (m mockCacheAlwaysLocked) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
 }
-func (m mockCacheAlwaysLocked) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (m mockCacheAlwaysLocked) IsRestarted(ctx context.Context) bool { return false }
 
 // failingRemoveAll triggers RemoveAll failure for passive replicated path ending with /x1.
 type failingRemoveAll struct {
@@ -550,7 +551,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 				t.Fatalf("GetStoresBaseFolder mismatch")
 			}
 			s1 := sop.NewStoreInfo(sop.StoreOptions{Name: "s1", SlotLength: 10})
-			cache.SetStruct(ctx, s1.Name, s1, 0)
+			cache.SetStruct(ctx, fmt.Sprintf("%s:%s", active, s1.Name), s1, 0)
 			res, err := sr.getFromCache(ctx, s1.Name, "missing")
 			if err != nil || len(res) != 1 || res[0].Name != s1.Name {
 				t.Fatalf("getFromCache mismatch %v %v", res, err)
@@ -624,7 +625,7 @@ func Test_StoreRepository_Add_LockConflict(t *testing.T) {
 	cache := mocks.NewMockClient()
 
 	// Pre-lock the store list key with a foreign owner.
-	_ = cache.Set(ctx, cache.FormatLockKey(lockStoreListKey), sop.NewUUID().String(), 0)
+	_ = cache.Set(ctx, cache.FormatLockKey(fmt.Sprintf("%s:%s", a, lockStoreListKey)), sop.NewUUID().String(), 0)
 
 	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, cache)
 	sr, _ := NewStoreRepository(ctx, rt, nil, cache, MinimumModValue)

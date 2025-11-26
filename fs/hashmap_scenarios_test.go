@@ -125,8 +125,8 @@ func (m *mockCacheHashmap) Clear(ctx context.Context) error { return m.base.Clea
 func (m *mockCacheHashmap) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
 }
-func (m *mockCacheHashmap) IsRestarted(ctx context.Context) (bool, error) {
-	return false, nil
+func (m *mockCacheHashmap) IsRestarted(ctx context.Context) bool {
+	return false
 }
 
 func contains(s, sub string) bool {

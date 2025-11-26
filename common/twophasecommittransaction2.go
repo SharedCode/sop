@@ -14,7 +14,7 @@ import (
 
 const (
 	priorityRollbackCheckIntervalSeconds      = 5 * 60
-	priorityRollbackQuickCheckIntervalSeconds = 60
+	priorityRollbackQuickCheckIntervalSeconds = 2 * 60
 	cleanupCheckIntervalMinutes               = 4 * 60
 	cleanupQuickCheckIntervalMinutes          = 5
 )
@@ -513,6 +513,21 @@ var lastPriorityOnIdleTime int64
 var priorityLocker = sync.Mutex{}
 var priorityLogFound bool
 
+var onStartUpFlag bool = true
+
+func onStartUp() bool {
+	if sop.GetCacheFactoryType() == sop.NoCache {
+		return false
+	}
+
+	r := onStartUpFlag
+	if r && sop.GetCacheFactoryType() == sop.InMemory {
+		onStartUpFlag = false
+		return r
+	}
+	return false
+}
+
 // Background task processing for dead transaction logs' restore & cleanup.
 // Elegant solution, not so elegant code but works.
 func (t *Transaction) onIdle(ctx context.Context) {
@@ -523,8 +538,9 @@ func (t *Transaction) onIdle(ctx context.Context) {
 
 	// If cache backend restarted, attempt a one-time priority rollback sweep immediately.
 	if t.l2Cache != nil && t.logger != nil && t.logger.PriorityLog().IsEnabled() {
-		if restarted, err := t.l2Cache.IsRestarted(ctx); err == nil && restarted {
+		if t.l2Cache.IsRestarted(ctx) || onStartUp() {
 			// On restart, sweep all priority logs (ignore age) once.
+			log.Info("onIdle: cache restarted or on startup, doing priority rollback check(sweep mode)...")
 			ctxAll := context.WithValue(ctx, sop.ContextPriorityLogIgnoreAge, true)
 			if _, err := t.logger.doPriorityRollbacks(ctxAll, t); err != nil {
 				if t.HandleReplicationRelatedError != nil {
@@ -533,6 +549,7 @@ func (t *Transaction) onIdle(ctx context.Context) {
 			}
 			// Reset the priority log found flag so interval will be at decent time (default).
 			priorityLogFound = false
+			lastPriorityOnIdleTime = sop.Now().UnixMilli()
 		}
 	}
 
@@ -554,6 +571,7 @@ func (t *Transaction) onIdle(ctx context.Context) {
 		}
 		priorityLocker.Unlock()
 		if runTime {
+			log.Info("onIdle: doing scheduled priority rollback check...")
 			if found, err := t.logger.doPriorityRollbacks(ctx, t); err != nil {
 				// Trigger a failover if a handler is registered; otherwise, just log path state.
 				if t.HandleReplicationRelatedError != nil {

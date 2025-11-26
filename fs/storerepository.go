@@ -89,7 +89,7 @@ func (sr *StoreRepository) GetRegistryHashModValue(ctx context.Context) (int, er
 // written for each added store. The store list is guarded by a cache-based lock.
 func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
 	// 1. Lock Store List.
-	lk := sr.cache.CreateLockKeys([]string{lockStoreListKey})
+	lk := sr.cache.CreateLockKeys([]string{sr.formatCacheKey(lockStoreListKey)})
 	defer sr.cache.Unlock(ctx, lk)
 	if ok, _, err := sr.cache.DualLock(ctx, lockStoreListDuration, lk); !ok || err != nil {
 		if err == nil {
@@ -159,7 +159,7 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 
 	// Cache each of the stores.
 	for _, store := range stores {
-		if err := sr.cache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
+		if err := sr.cache.SetStruct(ctx, sr.formatCacheKey(store.Name), &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository Add failed (redis setstruct), details: %v", err))
 		}
 	}
@@ -181,7 +181,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 	keys := make([]string, len(stores))
 	i := 0
 	for {
-		keys[i] = b3.GetCurrentKey()
+		keys[i] = sr.formatCacheKey(b3.GetCurrentKey())
 		stores[i] = b3.GetCurrentValue()
 		if !b3.Next() {
 			break
@@ -235,7 +235,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 				log.Error(fmt.Sprintf("StoreRepository Update Undo store %s failed write, details: %v", si.Name, err))
 				continue
 			}
-			if err := sr.cache.SetStruct(ctx, si.Name, &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
+			if err := sr.cache.SetStruct(ctx, sr.formatCacheKey(si.Name), &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("StoreRepository Update Undo (redis setstruct) store %s failed, details: %v", si.Name, err))
 			}
 		}
@@ -271,7 +271,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 		}
 
 		beforeUpdateStores = append(beforeUpdateStores, sis...)
-		if err := sr.cache.SetStruct(ctx, stores[i].Name, &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
+		if err := sr.cache.SetStruct(ctx, sr.formatCacheKey(stores[i].Name), &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) store %s failed, details: %v", stores[i].Name, err))
 		}
 	}
@@ -313,9 +313,9 @@ func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 		var err error
 		var found bool
 		if isCacheTTL {
-			found, err = sr.cache.GetStructEx(ctx, names[i], &store, cacheDuration)
+			found, err = sr.cache.GetStructEx(ctx, sr.formatCacheKey(names[i]), &store, cacheDuration)
 		} else {
-			found, err = sr.cache.GetStruct(ctx, names[i], &store)
+			found, err = sr.cache.GetStruct(ctx, sr.formatCacheKey(names[i]), &store)
 		}
 		if !found || err != nil {
 			if err != nil {
@@ -348,7 +348,7 @@ func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 			return nil, err
 		}
 
-		if err := sr.cache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
+		if err := sr.cache.SetStruct(ctx, sr.formatCacheKey(store.Name), &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository GetWithTTL (redis setstruct) failed, details: %v", err))
 		}
 
@@ -364,7 +364,7 @@ func (sr *StoreRepository) getFromCache(ctx context.Context, names ...string) ([
 		store := sop.StoreInfo{}
 		var err error
 		var found bool
-		found, err = sr.cache.GetStruct(ctx, names[i], &store)
+		found, err = sr.cache.GetStruct(ctx, sr.formatCacheKey(names[i]), &store)
 		if !found || err != nil {
 			continue
 		}
@@ -376,7 +376,7 @@ func (sr *StoreRepository) getFromCache(ctx context.Context, names ...string) ([
 // Remove deletes the specified stores and their metadata, updates the store list, and replicates
 // the removal when configured. Missing stores are tolerated with a warning.
 func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) error {
-	lk := sr.cache.CreateLockKeys([]string{lockStoreListKey})
+	lk := sr.cache.CreateLockKeys([]string{sr.formatCacheKey(lockStoreListKey)})
 	defer sr.cache.Unlock(ctx, lk)
 	if ok, _, err := sr.cache.DualLock(ctx, lockStoreListDuration, lk); !ok || err != nil {
 		if err == nil {
@@ -404,7 +404,7 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 		}
 
 		// Tolerate Redis cache failure.
-		if _, err := sr.cache.Delete(ctx, []string{storeName}); err != nil {
+		if _, err := sr.cache.Delete(ctx, []string{sr.formatCacheKey(storeName)}); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository Remove (redis Delete) failed, details: %v", err))
 		}
 		// Delete store folder (contains blobs, store config & registry data files).
@@ -472,4 +472,8 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 // GetStoresBaseFolder returns the currently active base folder path used for store files.
 func (sr *StoreRepository) GetStoresBaseFolder() string {
 	return sr.replicationTracker.getActiveBaseFolder()
+}
+
+func (sr *StoreRepository) formatCacheKey(name string) string {
+	return fmt.Sprintf("%s:%s", sr.GetStoresBaseFolder(), name)
 }

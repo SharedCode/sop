@@ -96,8 +96,8 @@ func (c *InMemoryCache) GetEx(ctx context.Context, key string, expiration time.D
 	return true, string(it.data), nil
 }
 
-func (c *InMemoryCache) IsRestarted(ctx context.Context) (bool, error) {
-	return false, nil
+func (c *InMemoryCache) IsRestarted(ctx context.Context) bool {
+	return false
 }
 
 func (c *InMemoryCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
@@ -264,5 +264,5 @@ func (c *InMemoryCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) err
 }
 
 func init() {
-	sop.RegisterCache(sop.InMemory, NewInMemoryCache)
+	sop.RegisterCacheFactory(sop.InMemory, NewInMemoryCache)
 }

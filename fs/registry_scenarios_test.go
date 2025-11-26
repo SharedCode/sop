@@ -27,7 +27,7 @@ func (lf testLockFail) DualLock(ctx context.Context, d time.Duration, lk []*sop.
 	return lf.Lock(ctx, d, lk)
 }
 func (lf testLockFail) Unlock(ctx context.Context, lk []*sop.LockKey) error { return nil }
-func (lf testLockFail) IsRestarted(ctx context.Context) (bool, error)       { return false, nil }
+func (lf testLockFail) IsRestarted(ctx context.Context) bool                { return false }
 
 type testAllLock struct{ sop.Cache }
 
@@ -38,7 +38,7 @@ func (al testAllLock) DualLock(ctx context.Context, d time.Duration, lk []*sop.L
 	return al.Lock(ctx, d, lk)
 }
 func (al testAllLock) Unlock(ctx context.Context, lk []*sop.LockKey) error { return nil }
-func (al testAllLock) IsRestarted(ctx context.Context) (bool, error)       { return false, nil }
+func (al testAllLock) IsRestarted(ctx context.Context) bool                { return false }
 
 // Shared test fixtures (were previously in registry_test.go) still needed by other *_test files.
 var uuid, _ = sop.ParseUUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
@@ -116,7 +116,7 @@ func (c *cacheGetError) Clear(ctx context.Context) error { return c.base.Clear(c
 func (c *cacheGetError) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
 }
-func (c *cacheGetError) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (c *cacheGetError) IsRestarted(ctx context.Context) bool { return false }
 
 // mockCacheImmediateLockFail forces Lock to fail to trigger UpdateNoLocks set error path.
 type mockCacheImmediateLockFail struct{ sop.Cache }
@@ -124,7 +124,7 @@ type mockCacheImmediateLockFail struct{ sop.Cache }
 func (m mockCacheImmediateLockFail) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
 }
-func (m mockCacheImmediateLockFail) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (m mockCacheImmediateLockFail) IsRestarted(ctx context.Context) bool { return false }
 
 func (m *mockCacheImmediateLockFail) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, errors.New("induced lock fail")
@@ -658,7 +658,7 @@ type lockFailCache struct{ sop.Cache }
 func (l lockFailCache) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
 }
-func (l lockFailCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (l lockFailCache) IsRestarted(ctx context.Context) bool { return false }
 
 func (c lockFailCache) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, nil
@@ -706,7 +706,7 @@ type setStructErrorCache struct{ sop.Cache }
 func (s setStructErrorCache) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
 }
-func (s setStructErrorCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (s setStructErrorCache) IsRestarted(ctx context.Context) bool { return false }
 
 func (c setStructErrorCache) SetStruct(ctx context.Context, key string, value interface{}, d time.Duration) error {
 	return errors.New("setstruct boom")
@@ -718,7 +718,7 @@ type deleteErrorCache struct{ sop.Cache }
 func (d deleteErrorCache) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
 }
-func (d deleteErrorCache) IsRestarted(ctx context.Context) (bool, error) { return false, nil }
+func (d deleteErrorCache) IsRestarted(ctx context.Context) bool { return false }
 
 func (c deleteErrorCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	return false, errors.New("delete boom")

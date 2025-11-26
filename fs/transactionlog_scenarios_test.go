@@ -266,7 +266,7 @@ func (c *cacheIsLockedFalse) Unlock(ctx context.Context, lk []*sop.LockKey) erro
 	return c.base.Unlock(ctx, lk)
 }
 func (c *cacheIsLockedFalse) Clear(ctx context.Context) error { return c.base.Clear(ctx) }
-func (c *cacheIsLockedFalse) IsRestarted(ctx context.Context) (bool, error) {
+func (c *cacheIsLockedFalse) IsRestarted(ctx context.Context) bool {
 	return c.base.IsRestarted(ctx)
 }
 func (c *cacheIsLockedFalse) Info(ctx context.Context, section string) (string, error) {

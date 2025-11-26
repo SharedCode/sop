@@ -742,7 +742,7 @@ func (m missAfterSetCache) IsLocked(ctx context.Context, lk []*sop.LockKey) (boo
 func (m missAfterSetCache) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
 	return m.base.IsLockedByOthers(ctx, names)
 }
-func (m missAfterSetCache) IsRestarted(ctx context.Context) (bool, error) {
+func (m missAfterSetCache) IsRestarted(ctx context.Context) bool {
 	return m.base.IsRestarted(ctx)
 }
 func (m missAfterSetCache) Unlock(ctx context.Context, lk []*sop.LockKey) error {

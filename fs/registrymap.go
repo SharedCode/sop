@@ -24,7 +24,7 @@ func (rm registryMap) add(ctx context.Context, storesHandles []sop.RegistryPaylo
 	for _, item := range storesHandles {
 		for _, h := range item.IDs {
 			if err := rm.hashmap.findAndAdd(ctx, item.RegistryTable, h); err != nil {
-				return err
+				return fmt.Errorf("registryMap.add failed, details: %w", err)
 			}
 		}
 	}

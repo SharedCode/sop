@@ -189,14 +189,14 @@ func (c client) Delete(ctx context.Context, keys []string) (bool, error) {
 
 // IsRestarted returns true if the Redis server run_id has changed since the previous call.
 // It uses the INFO server section to read run_id, caching it per client instance.
-func (c *client) IsRestarted(ctx context.Context) (bool, error) {
+func (c *client) IsRestarted(ctx context.Context) bool {
 	if atomic.SwapInt64(&hasRestarted, 0) == 1 {
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 func init() {
-	sop.RegisterCache(sop.Redis, NewClient)
+	sop.RegisterCacheFactory(sop.Redis, NewClient)
 	sop.SetCacheFactory(sop.Redis)
 }

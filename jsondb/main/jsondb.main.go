@@ -263,7 +263,7 @@ const (
 
 // BtreeOptions is used to package the Btree StoreInfo.
 type BtreeOptions struct {
-	Name                         string               `json:"name" minLength:"1" maxLength:"20"`
+	Name                         string               `json:"name" minLength:"1" maxLength:"128"`
 	SlotLength                   int                  `json:"slot_length" min:"2" max:"10000"`
 	IsUnique                     bool                 `json:"is_unique"`
 	Description                  string               `json:"description" maxLength:"500"`

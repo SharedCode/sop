@@ -70,6 +70,13 @@ SOP is designed to be versatile, powering everything from small embedded tools t
     *   **Hybrid Search**: Combine vector similarity with traditional B-Tree range queries (e.g., "Find vectors where date > 2024") in a single, ACID-compliant transaction.
     *   **Standalone Capable**: Run a full-featured vector store in your application with zero external dependencies (no Redis required) using SOP's in-memory caching and local filesystem storage.
 
+### 4. AI Agent with Local LLM (Ollama)
+*   **Scenario**: Privacy-focused or cost-sensitive AI agents that need to "understand" user input before searching.
+*   **Why SOP**:
+    *   **Embedder Agent Pattern**: SOP supports a dual-agent architecture where a specialized "Nurse" agent (powered by a local LLM like Llama 3 via Ollama) translates vague user queries (e.g., "my tummy hurts") into precise clinical terms (e.g., "abdominal pain") before the main "Doctor" agent searches the vector database.
+    *   **Zero Cost**: Run the entire stack (Vector DB + LLM + Application) on a single machine without any API fees.
+    *   **Factory Reset Kit**: SOP's "Fallback Config" pattern allows you to ship a self-contained "restore disk" (JSON with raw data) that automatically rebuilds the binary B-Tree database if it's ever corrupted or deleted.
+
 For a deeper dive into the system's design and package structure (including the Public vs. Internal split), please see the [Architecture Guide](ARCHITECTURE.md).
 
 For configuration options and performance tuning, see the [Configuration Guide](CONFIGURATION.md).

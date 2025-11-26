@@ -367,7 +367,7 @@ func (c *alwaysLockFailCache) IsLockedByOthers(ctx context.Context, ks []string)
 }
 func (c *alwaysLockFailCache) Unlock(ctx context.Context, lks []*sop.LockKey) error { return nil }
 func (c *alwaysLockFailCache) Clear(ctx context.Context) error                      { return c.mocksCache.Clear(ctx) }
-func (c *alwaysLockFailCache) IsRestarted(ctx context.Context) (bool, error) {
+func (c *alwaysLockFailCache) IsRestarted(ctx context.Context) bool {
 	return c.mocksCache.IsRestarted(ctx)
 }
 func (c *alwaysLockFailCache) Info(ctx context.Context, section string) (string, error) {

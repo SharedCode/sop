@@ -594,6 +594,10 @@ func (d deleteErrCache2) Delete(ctx context.Context, keys []string) (bool, error
 	return false, fmt.Errorf("delete failed")
 }
 
+func (d deleteErrCache2) IsRestarted(ctx context.Context) bool {
+	return d.Cache.IsRestarted(ctx)
+}
+
 func Test_ItemActionTracker_Lock_GetVsGet_Compatible_NoError(t *testing.T) {
 	ctx := context.Background()
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock_get_get", SlotLength: 2})
@@ -750,6 +754,9 @@ func (m *falseOnceIsLockedCache) IsLocked(ctx context.Context, ks []*sop.LockKey
 func (m *falseOnceIsLockedCache) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
 	return m.inner.IsLockedByOthers(ctx, names)
 }
+func (m *falseOnceIsLockedCache) IsRestarted(ctx context.Context) bool {
+	return m.inner.IsRestarted(ctx)
+}
 func (m *falseOnceIsLockedCache) Unlock(ctx context.Context, ks []*sop.LockKey) error {
 	return m.inner.Unlock(ctx, ks)
 }
@@ -817,7 +824,7 @@ func (m *failSecondGetAfterSetCache) IsLocked(ctx context.Context, ks []*sop.Loc
 func (m *failSecondGetAfterSetCache) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
 	return m.inner.IsLockedByOthers(ctx, names)
 }
-func (m *failSecondGetAfterSetCache) IsRestarted(ctx context.Context) (bool, error) {
+func (m *failSecondGetAfterSetCache) IsRestarted(ctx context.Context) bool {
 	return m.inner.IsRestarted(ctx)
 }
 func (m *failSecondGetAfterSetCache) Clear(ctx context.Context) error {

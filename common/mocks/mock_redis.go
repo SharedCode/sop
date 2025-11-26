@@ -23,12 +23,12 @@ func NewMockClient() sop.Cache {
 }
 
 // IsRestarted returns the internal flag once and then resets it to false.
-func (m *mockRedis) IsRestarted(ctx context.Context) (bool, error) {
+func (m *mockRedis) IsRestarted(ctx context.Context) bool {
 	if m.restarted {
 		m.restarted = false
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 // String operations used by locking implementation.

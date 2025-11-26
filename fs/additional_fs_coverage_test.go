@@ -215,8 +215,8 @@ func (m *lockFailingCache) Clear(ctx context.Context) error                     
 func (m *lockFailingCache) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
 }
-func (m *lockFailingCache) IsRestarted(ctx context.Context) (bool, error) {
-	return false, nil
+func (m *lockFailingCache) IsRestarted(ctx context.Context) bool {
+	return false
 }
 func Test_updateFileBlockRegion_LockTimeout(t *testing.T) {
 	// Short-deadline context forces the timeout branch on lock acquisition loop.

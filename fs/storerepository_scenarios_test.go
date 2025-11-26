@@ -407,14 +407,16 @@ func Test_StoreRepository_Update_MissingStoreEarlyReturn(t *testing.T) {
 func Test_StoreRepository_Add_Remove_LockFailures(t *testing.T) {
 	ctx := context.Background()
 	cache := mocks.NewMockClient()
+	active := t.TempDir()
+	passive := t.TempDir()
 	// Pre-hold the store list lock
-	lk := cache.CreateLockKeys([]string{"infs_sr"})
+	lk := cache.CreateLockKeys([]string{fmt.Sprintf("%s:%s", active, "infs_sr")})
 	ok, _, _ := cache.Lock(ctx, time.Hour, lk)
 	if !ok {
 		t.Fatalf("failed to pre-lock store list")
 	}
 
-	rt, _ := NewReplicationTracker(ctx, []string{t.TempDir(), t.TempDir()}, true, cache)
+	rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, cache)
 	sr, _ := NewStoreRepository(ctx, rt, nil, cache, 0)
 	if err := sr.Add(ctx, *sop.NewStoreInfo(sop.StoreOptions{Name: "s1", SlotLength: 2})); err == nil {
 		t.Fatalf("expected lock failure on Add")

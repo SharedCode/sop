@@ -190,3 +190,10 @@ _Pvt_Extensions/
 ModelManifest.xml
 .DS_Store
 test_output*.txt
+
+# Go Binaries
+sop-ai
+sop-etl
+demo_doctor
+ai/sop-ai
+ai/sop-etl

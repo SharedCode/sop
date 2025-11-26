@@ -504,7 +504,7 @@ func (c errIsLockedCache13) Unlock(ctx context.Context, lockKeys []*sop.LockKey)
 	return c.inner.Unlock(ctx, lockKeys)
 }
 func (c errIsLockedCache13) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
-func (c errIsLockedCache13) IsRestarted(ctx context.Context) (bool, error) {
+func (c errIsLockedCache13) IsRestarted(ctx context.Context) bool {
 	return c.inner.IsRestarted(ctx)
 }
 
@@ -568,7 +568,7 @@ func (c errGetExCache13) Unlock(ctx context.Context, lockKeys []*sop.LockKey) er
 	return c.inner.Unlock(ctx, lockKeys)
 }
 func (c errGetExCache13) Clear(ctx context.Context) error { return c.inner.Clear(ctx) }
-func (c errGetExCache13) IsRestarted(ctx context.Context) (bool, error) {
+func (c errGetExCache13) IsRestarted(ctx context.Context) bool {
 	return c.inner.IsRestarted(ctx)
 }
 

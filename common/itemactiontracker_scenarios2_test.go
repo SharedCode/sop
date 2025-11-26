@@ -83,7 +83,7 @@ func (f *flakyCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (boo
 func (f *flakyCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	return f.base.IsLockedByOthers(ctx, lockKeyNames)
 }
-func (f *flakyCache) IsRestarted(ctx context.Context) (bool, error) {
+func (f *flakyCache) IsRestarted(ctx context.Context) bool {
 	return f.base.IsRestarted(ctx)
 }
 func (f *flakyCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
@@ -180,7 +180,7 @@ func (e *errLockCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (b
 func (e *errLockCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	return e.base.IsLockedByOthers(ctx, lockKeyNames)
 }
-func (e *errLockCache) IsRestarted(ctx context.Context) (bool, error) {
+func (e *errLockCache) IsRestarted(ctx context.Context) bool {
 	return e.base.IsRestarted(ctx)
 }
 func (e *errLockCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
@@ -323,7 +323,7 @@ func (e *errCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool,
 func (e *errCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	return e.base.IsLockedByOthers(ctx, lockKeyNames)
 }
-func (e *errCache) IsRestarted(ctx context.Context) (bool, error) {
+func (e *errCache) IsRestarted(ctx context.Context) bool {
 	return e.base.IsRestarted(ctx)
 }
 func (e *errCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
