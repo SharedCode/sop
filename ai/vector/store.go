@@ -70,13 +70,14 @@ type domainIndex struct {
 // 3. Updating the Vector Index (Library).
 // 4. Updating the Content Store with metadata (including centroid info).
 func (di *domainIndex) Upsert(id string, vec []float32, meta map[string]any) error {
-	trans, err := di.db.beginTransaction(sop.ForWriting)
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
 	if err != nil {
 		return err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.db.storagePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
 	if err != nil {
 		return err
 	}
@@ -162,13 +163,14 @@ func (di *domainIndex) Upsert(id string, vec []float32, meta map[string]any) err
 // This is more efficient than individual Upserts as it loads centroids once
 // and commits all changes atomically.
 func (di *domainIndex) UpsertBatch(items []ai.Item) error {
-	trans, err := di.db.beginTransaction(sop.ForWriting)
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
 	if err != nil {
 		return err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.db.storagePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
 	if err != nil {
 		return err
 	}
@@ -257,13 +259,14 @@ func (di *domainIndex) UpsertBatch(items []ai.Item) error {
 
 // UpsertBatchWithLookup adds items and updates the integer lookup table for sampling.
 func (di *domainIndex) UpsertBatchWithLookup(items []ai.Item, startID int) error {
-	trans, err := di.db.beginTransaction(sop.ForWriting)
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
 	if err != nil {
 		return err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.db.storagePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
 	if err != nil {
 		return err
 	}
@@ -352,19 +355,20 @@ func (di *domainIndex) UpsertBatchWithLookup(items []ai.Item, startID int) error
 
 // UpsertContent adds items to the Content store and stages vectors in TempVectors.
 func (di *domainIndex) UpsertContent(items []ai.Item) error {
-	trans, err := di.db.beginTransaction(sop.ForWriting)
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
 	if err != nil {
 		return err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.db.storagePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
 	if err != nil {
 		return err
 	}
 
 	// Open TempVectors separately
-	tempVectors, err := openTempVectors(di.db.ctx, trans, di.db.storagePath)
+	tempVectors, err := openTempVectors(di.db.ctx, trans, storePath)
 	if err != nil {
 		return err
 	}
@@ -395,19 +399,20 @@ func (di *domainIndex) UpsertContent(items []ai.Item) error {
 // and populates the Vectors store. This is typically used after a bulk load of content.
 // It deletes the TempVectors store upon completion.
 func (di *domainIndex) IndexAll() error {
-	trans, err := di.db.beginTransaction(sop.ForWriting)
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
 	if err != nil {
 		return err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.db.storagePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
 	if err != nil {
 		return err
 	}
 
 	// Open TempVectors
-	tempVectors, err := openTempVectors(di.db.ctx, trans, di.db.storagePath)
+	tempVectors, err := openTempVectors(di.db.ctx, trans, storePath)
 	if err != nil {
 		return err
 	}
@@ -480,20 +485,21 @@ func (di *domainIndex) IndexAll() error {
 
 	// Cleanup: Delete TempVectors store
 	// We ignore errors here as it's just cleanup and doesn't affect data integrity.
-	_ = inredfs.RemoveBtree(di.db.ctx, di.db.storagePath, "temp_vectors")
+	_ = inredfs.RemoveBtree(di.db.ctx, storePath, "temp_vectors")
 
 	return nil
 }
 
 // Get retrieves a vector by ID.
 func (di *domainIndex) Get(id string) (*ai.Item, error) {
-	trans, err := di.db.beginTransaction(di.db.readMode)
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(di.db.readMode, storePath)
 	if err != nil {
 		return nil, err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.db.storagePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
 	if err != nil {
 		return nil, err
 	}
@@ -540,13 +546,14 @@ func (di *domainIndex) Get(id string) (*ai.Item, error) {
 
 // Delete removes a vector from the store.
 func (di *domainIndex) Delete(id string) error {
-	trans, err := di.db.beginTransaction(sop.ForWriting)
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
 	if err != nil {
 		return err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.db.storagePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
 	if err != nil {
 		return err
 	}
@@ -598,13 +605,14 @@ func (di *domainIndex) Delete(id string) error {
 // 3. Compute cosine similarity and sort candidates.
 // 4. Fetch full content for the top K results and apply metadata filters.
 func (di *domainIndex) Query(vec []float32, k int, filters map[string]any) ([]ai.Hit, error) {
-	trans, err := di.db.beginTransaction(di.db.readMode)
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(di.db.readMode, storePath)
 	if err != nil {
 		return nil, err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.db.storagePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
 	if err != nil {
 		return nil, err
 	}
@@ -712,8 +720,8 @@ func (di *domainIndex) Query(vec []float32, k int, filters map[string]any) ([]ai
 
 // --- Helpers ---
 
-func (d *Database) beginTransaction(mode sop.TransactionMode) (sop.Transaction, error) {
-	storeFolder := d.storagePath
+func (d *Database) beginTransaction(mode sop.TransactionMode, storePath string) (sop.Transaction, error) {
+	storeFolder := storePath
 	if err := os.MkdirAll(storeFolder, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create data folder %s: %w", storeFolder, err)
 	}
@@ -865,13 +873,14 @@ func euclideanDistance(a, b []float32) float32 {
 
 // SeedCentroids allows manual injection of centroids for testing or initialization.
 func (d *Database) SeedCentroids(domain string, centroids map[int][]float32) error {
-	trans, err := d.beginTransaction(sop.ForWriting)
+	storePath := filepath.Join(d.storagePath, domain)
+	trans, err := d.beginTransaction(sop.ForWriting, storePath)
 	if err != nil {
 		return err
 	}
 	defer trans.Rollback(d.ctx)
 
-	arch, err := OpenDomainStore(d.ctx, trans, d.storagePath)
+	arch, err := OpenDomainStore(d.ctx, trans, storePath)
 	if err != nil {
 		return err
 	}
@@ -893,19 +902,20 @@ func (di *domainIndex) SeedCentroids(centroids map[int][]float32) error {
 // IterateAll iterates over all items in the domain.
 // It uses TempVectors if available to get the vector, otherwise tries to find it in Vectors.
 func (di *domainIndex) IterateAll(cb func(item ai.Item) error) error {
-	trans, err := di.db.beginTransaction(di.db.readMode)
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(di.db.readMode, storePath)
 	if err != nil {
 		return err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.db.storagePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
 	if err != nil {
 		return err
 	}
 
 	// Try to open TempVectors (ignore error if not found, as it might be post-indexing)
-	tempVectors, _ := openTempVectors(di.db.ctx, trans, di.db.storagePath)
+	tempVectors, _ := openTempVectors(di.db.ctx, trans, storePath)
 
 	if ok, err := arch.Content.First(di.db.ctx); err != nil {
 		return err
@@ -976,13 +986,14 @@ func (di *domainIndex) IterateAll(cb func(item ai.Item) error) error {
 	return nil
 }
 func (di *domainIndex) Count() (int64, error) {
-	trans, err := di.db.beginTransaction(di.db.readMode)
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(di.db.readMode, storePath)
 	if err != nil {
 		return 0, err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.db.storagePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
 	if err != nil {
 		return 0, err
 	}
@@ -992,13 +1003,14 @@ func (di *domainIndex) Count() (int64, error) {
 
 // GetLookup retrieves the item ID for a given integer ID (used for sampling).
 func (di *domainIndex) GetLookup(id int) (string, error) {
-	trans, err := di.db.beginTransaction(di.db.readMode)
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(di.db.readMode, storePath)
 	if err != nil {
 		return "", err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.db.storagePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
 	if err != nil {
 		return "", err
 	}
@@ -1027,14 +1039,17 @@ func openTempVectors(ctx context.Context, trans sop.Transaction, rootPath string
 	}
 
 	var tempVectors btree.BtreeInterface[string, []float32]
+	var err error
 	tempVectorsName := "temp_vectors"
 	if _, errStat := os.Stat(filepath.Join(rootPath, tempVectorsName)); errStat == nil {
-		tempVectors, _ = inredfs.OpenBtree[string, []float32](ctx, tempVectorsName, trans, contentComparer)
+		tempVectors, err = inredfs.OpenBtree[string, []float32](ctx, tempVectorsName, trans, contentComparer)
 	} else {
-		tempVectors, _ = inredfs.NewBtree[string, []float32](ctx, sop.StoreOptions{
+		tempVectors, err = inredfs.NewBtree[string, []float32](ctx, sop.StoreOptions{
 			Name: tempVectorsName,
 		}, trans, contentComparer)
 	}
-	// Note: Error handling simplified for brevity, but in production check errors from Open/New
+	if err != nil {
+		return nil, err
+	}
 	return tempVectors, nil
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/encoding"
-	"github.com/sharedcode/sop/inmemory"
 )
 
 // StoreRepository is a filesystem-backed implementation of sop.StoreRepository.
@@ -88,6 +88,10 @@ func (sr *StoreRepository) GetRegistryHashModValue(ctx context.Context) (int, er
 // writing per-store metadata, and replicating the changes when configured. A cache entry is
 // written for each added store. The store list is guarded by a cache-based lock.
 func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
+	if len(stores) == 0 {
+		return nil
+	}
+
 	// 1. Lock Store List.
 	lk := sr.cache.CreateLockKeys([]string{sr.formatCacheKey(lockStoreListKey)})
 	defer sr.cache.Unlock(ctx, lk)
@@ -171,22 +175,19 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 // sorts store names and locks them in order using TTL-based cache locks with retry.
 // On any failure mid-flight, an undo routine best-effort restores the affected entries.
 func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) ([]sop.StoreInfo, error) {
+	if len(stores) == 0 {
+		return nil, nil
+	}
+
 	// Sort the stores info so we can commit them in same sort order across transactions,
 	// thus, reduced chance of deadlock.
-	b3 := inmemory.NewBtree[string, sop.StoreInfo](true)
-	for i := range stores {
-		b3.Add(stores[i].Name, stores[i])
-	}
-	b3.First()
+	sort.Slice(stores, func(i, j int) bool {
+		return stores[i].Name < stores[j].Name
+	})
+
 	keys := make([]string, len(stores))
-	i := 0
-	for {
-		keys[i] = sr.formatCacheKey(b3.GetCurrentKey())
-		stores[i] = b3.GetCurrentValue()
-		if !b3.Next() {
-			break
-		}
-		i++
+	for i := range stores {
+		keys[i] = sr.formatCacheKey(stores[i].Name)
 	}
 
 	// Create lock IDs that we can use to logically lock and prevent other updates.

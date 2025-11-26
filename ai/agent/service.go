@@ -117,6 +117,10 @@ func (s *Service) RunLoop(ctx context.Context, r io.Reader, w io.Writer) error {
 		if input == "exit" {
 			break
 		}
+		if input == "reset" {
+			fmt.Fprint(w, "\033[H\033[2J")
+			continue
+		}
 		if input == "" {
 			continue
 		}

@@ -3,6 +3,7 @@ package vector
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -23,11 +24,12 @@ func TestNProbeAndFiltering(t *testing.T) {
 	idx := db.Open("test_nprobe")
 
 	// Inject Centroids
-	trans, err := db.beginTransaction(sop.ForWriting)
+	storePath := filepath.Join(tmpDir, "test_nprobe")
+	trans, err := db.beginTransaction(sop.ForWriting, storePath)
 	if err != nil {
 		t.Fatalf("Failed to begin transaction: %v", err)
 	}
-	arch, err := OpenDomainStore(ctx, trans, tmpDir, "test_nprobe")
+	arch, err := OpenDomainStore(ctx, trans, storePath)
 	if err != nil {
 		t.Fatalf("Failed to open domain store: %v", err)
 	}
