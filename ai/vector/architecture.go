@@ -2,8 +2,6 @@ package vector
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/sharedcode/sop"
@@ -33,40 +31,22 @@ type Architecture struct {
 	// Key: ItemID (string) -> Value: Document/JSON (string)
 	// Name: "{domain}_content"
 	Content btree.BtreeInterface[string, string]
-
-	// Lookup maps integer IDs to item IDs for random sampling.
-	// Key: IntID (int) -> Value: ItemID (string)
-	// Name: "{domain}_lookup"
-	Lookup btree.BtreeInterface[int, string]
 }
 
 // OpenDomainStore initializes the 3 B-Trees for the vertical.
-func OpenDomainStore(ctx context.Context, trans sop.Transaction, rootPath string) (*Architecture, error) {
+func OpenDomainStore(ctx context.Context, trans sop.Transaction) (*Architecture, error) {
 	// 1. Open Centroids Store
-	var centroids btree.BtreeInterface[int, []float32]
-	var err error
-	centroidsName := "centroids"
-	if _, errStat := os.Stat(filepath.Join(rootPath, centroidsName)); errStat == nil {
-		centroids, err = inredfs.OpenBtree[int, []float32](ctx, centroidsName, trans, func(a, b int) int { return a - b })
-	} else {
-		centroids, err = inredfs.NewBtree[int, []float32](ctx, sop.StoreOptions{
-			Name: centroidsName,
-		}, trans, func(a, b int) int { return a - b })
-	}
+	centroids, err := inredfs.NewBtree[int, []float32](ctx, sop.StoreOptions{
+		Name: "centroids",
+	}, trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return nil, err
 	}
 
 	// 2. Open Vectors Store (The "Library")
-	var vectors btree.BtreeInterface[CompositeKey, []float32]
-	vectorsName := "vectors"
-	if _, errStat := os.Stat(filepath.Join(rootPath, vectorsName)); errStat == nil {
-		vectors, err = inredfs.OpenBtree[CompositeKey, []float32](ctx, vectorsName, trans, compositeKeyComparer)
-	} else {
-		vectors, err = inredfs.NewBtree[CompositeKey, []float32](ctx, sop.StoreOptions{
-			Name: vectorsName,
-		}, trans, compositeKeyComparer)
-	}
+	vectors, err := inredfs.NewBtree[CompositeKey, []float32](ctx, sop.StoreOptions{
+		Name: "vectors",
+	}, trans, compositeKeyComparer)
 	if err != nil {
 		return nil, err
 	}
@@ -81,30 +61,9 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, rootPath string
 		}
 		return 0
 	}
-	var content btree.BtreeInterface[string, string]
-	contentName := "content"
-	if _, errStat := os.Stat(filepath.Join(rootPath, contentName)); errStat == nil {
-		content, err = inredfs.OpenBtree[string, string](ctx, contentName, trans, contentComparer)
-	} else {
-		content, err = inredfs.NewBtree[string, string](ctx, sop.StoreOptions{
-			Name: contentName,
-		}, trans, contentComparer)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	// 4. Open Lookup Store
-	lookupComparer := func(a, b int) int { return a - b }
-	var lookup btree.BtreeInterface[int, string]
-	lookupName := "lookup"
-	if _, errStat := os.Stat(filepath.Join(rootPath, lookupName)); errStat == nil {
-		lookup, err = inredfs.OpenBtree[int, string](ctx, lookupName, trans, lookupComparer)
-	} else {
-		lookup, err = inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
-			Name: lookupName,
-		}, trans, lookupComparer)
-	}
+	content, err := inredfs.NewBtree[string, string](ctx, sop.StoreOptions{
+		Name: "content",
+	}, trans, contentComparer)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +72,6 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, rootPath string
 		Centroids: centroids,
 		Vectors:   vectors,
 		Content:   content,
-		Lookup:    lookup,
 	}, nil
 }
 

@@ -77,7 +77,7 @@ func (di *domainIndex) Upsert(id string, vec []float32, meta map[string]any) err
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans)
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func (di *domainIndex) UpsertBatch(items []ai.Item) error {
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans)
 	if err != nil {
 		return err
 	}
@@ -266,7 +266,13 @@ func (di *domainIndex) UpsertBatchWithLookup(items []ai.Item, startID int) error
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans)
+	if err != nil {
+		return err
+	}
+
+	// Open Lookup Store
+	lookup, err := openLookupStore(di.db.ctx, trans)
 	if err != nil {
 		return err
 	}
@@ -345,7 +351,7 @@ func (di *domainIndex) UpsertBatchWithLookup(items []ai.Item, startID int) error
 
 		// 4. Update Lookup Store
 		// We use startID + i as the integer key
-		if _, err := arch.Lookup.Add(di.db.ctx, startID+i, id); err != nil {
+		if _, err := lookup.Add(di.db.ctx, startID+i, id); err != nil {
 			return err
 		}
 	}
@@ -362,13 +368,13 @@ func (di *domainIndex) UpsertContent(items []ai.Item) error {
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans)
 	if err != nil {
 		return err
 	}
 
 	// Open TempVectors separately
-	tempVectors, err := openTempVectors(di.db.ctx, trans, storePath)
+	tempVectors, err := openTempVectors(di.db.ctx, trans)
 	if err != nil {
 		return err
 	}
@@ -406,13 +412,13 @@ func (di *domainIndex) IndexAll() error {
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans)
 	if err != nil {
 		return err
 	}
 
 	// Open TempVectors
-	tempVectors, err := openTempVectors(di.db.ctx, trans, storePath)
+	tempVectors, err := openTempVectors(di.db.ctx, trans)
 	if err != nil {
 		return err
 	}
@@ -499,7 +505,7 @@ func (di *domainIndex) Get(id string) (*ai.Item, error) {
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans)
 	if err != nil {
 		return nil, err
 	}
@@ -553,7 +559,7 @@ func (di *domainIndex) Delete(id string) error {
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans)
 	if err != nil {
 		return err
 	}
@@ -612,7 +618,7 @@ func (di *domainIndex) Query(vec []float32, k int, filters map[string]any) ([]ai
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans)
 	if err != nil {
 		return nil, err
 	}
@@ -880,7 +886,7 @@ func (d *Database) SeedCentroids(domain string, centroids map[int][]float32) err
 	}
 	defer trans.Rollback(d.ctx)
 
-	arch, err := OpenDomainStore(d.ctx, trans, storePath)
+	arch, err := OpenDomainStore(d.ctx, trans)
 	if err != nil {
 		return err
 	}
@@ -909,13 +915,13 @@ func (di *domainIndex) IterateAll(cb func(item ai.Item) error) error {
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans)
 	if err != nil {
 		return err
 	}
 
 	// Try to open TempVectors (ignore error if not found, as it might be post-indexing)
-	tempVectors, _ := openTempVectors(di.db.ctx, trans, storePath)
+	tempVectors, _ := openTempVectors(di.db.ctx, trans)
 
 	if ok, err := arch.Content.First(di.db.ctx); err != nil {
 		return err
@@ -993,7 +999,7 @@ func (di *domainIndex) Count() (int64, error) {
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
+	arch, err := OpenDomainStore(di.db.ctx, trans)
 	if err != nil {
 		return 0, err
 	}
@@ -1010,12 +1016,13 @@ func (di *domainIndex) GetLookup(id int) (string, error) {
 	}
 	defer trans.Rollback(di.db.ctx)
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, storePath)
+	// Open Lookup Store
+	lookup, err := openLookupStore(di.db.ctx, trans)
 	if err != nil {
 		return "", err
 	}
 
-	found, err := arch.Lookup.Find(di.db.ctx, id, false)
+	found, err := lookup.Find(di.db.ctx, id, false)
 	if err != nil {
 		return "", err
 	}
@@ -1023,11 +1030,11 @@ func (di *domainIndex) GetLookup(id int) (string, error) {
 		return "", fmt.Errorf("lookup id %d not found", id)
 	}
 
-	return arch.Lookup.GetCurrentValue(di.db.ctx)
+	return lookup.GetCurrentValue(di.db.ctx)
 }
 
 // openTempVectors opens or creates the temporary B-Tree for storing vectors during ingestion.
-func openTempVectors(ctx context.Context, trans sop.Transaction, rootPath string) (btree.BtreeInterface[string, []float32], error) {
+func openTempVectors(ctx context.Context, trans sop.Transaction) (btree.BtreeInterface[string, []float32], error) {
 	contentComparer := func(a, b string) int {
 		if a < b {
 			return -1
@@ -1038,18 +1045,15 @@ func openTempVectors(ctx context.Context, trans sop.Transaction, rootPath string
 		return 0
 	}
 
-	var tempVectors btree.BtreeInterface[string, []float32]
-	var err error
-	tempVectorsName := "temp_vectors"
-	if _, errStat := os.Stat(filepath.Join(rootPath, tempVectorsName)); errStat == nil {
-		tempVectors, err = inredfs.OpenBtree[string, []float32](ctx, tempVectorsName, trans, contentComparer)
-	} else {
-		tempVectors, err = inredfs.NewBtree[string, []float32](ctx, sop.StoreOptions{
-			Name: tempVectorsName,
-		}, trans, contentComparer)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return tempVectors, nil
+	return inredfs.NewBtree[string, []float32](ctx, sop.StoreOptions{
+		Name: "temp_vectors",
+	}, trans, contentComparer)
+}
+
+// openLookupStore opens or creates the lookup B-Tree for integer ID mapping.
+func openLookupStore(ctx context.Context, trans sop.Transaction) (btree.BtreeInterface[int, string], error) {
+	lookupComparer := func(a, b int) int { return a - b }
+	return inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name: "lookup",
+	}, trans, lookupComparer)
 }
