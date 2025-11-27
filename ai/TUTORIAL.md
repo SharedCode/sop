@@ -173,16 +173,210 @@ This triggers a background process that:
 
 This ensures your Expert System gets *smarter* and *faster* as it grows, rather than degrading like traditional vector stores.
 
-## Going Further: Hosting Other Experts
+## Step 6: Performance Tuning (Modes & Caching)
+
+SOP gives you two powerful knobs to tune your Expert System for its specific role.
+
+### 1. Usage Modes: Build-Once vs. Read-Write
+*   **`BuildOnceQueryMany`**: Ideal for static knowledge bases (e.g., a Law Library). SOP optimizes the index for pure read speed and discards temporary build artifacts.
+*   **`ReadWrite`**: Ideal for dynamic systems (e.g., User Logs). SOP maintains the auxiliary structures needed for continuous updates.
+
+```go
+db.SetUsageMode(vector.BuildOnceQueryMany) // or vector.ReadWrite
+```
+
+### 2. The "NoCheck" Speed Mode
+For the "Doctor" agent serving queries, you want raw speed. SOP supports a **`NoCheck`** transaction mode.
+*   **What it does**: It bypasses the heavy transactional isolation checks (conflict detection) during reads.
+*   **Result**: Reads become as fast as accessing a raw flat file, but with the structure of a B-Tree.
+*   **Bonus**: SOP includes a built-in **MRU (Most Recently Used) Cache**. Frequently accessed medical facts stay in RAM, making subsequent queries instant.
+
+```go
+// Configure the Doctor for maximum read speed
+db.SetReadMode(sop.NoCheck)
+```
+
+All of these enterprise-grade features—Transactional Integrity, Self-Healing Indexes, and In-Memory Caching—come **for free** just by using the SOP library.
+
+## Step 7: Zero-Code Agents (JSON Config & ETL)
+
+You don't always need to write Go code to build an agent. SOP includes a powerful configuration system that lets you define agents using simple JSON files. It is a prebuilt expert system, just needing your content! And has ability to delegate to LLM (Gemini, ChatGPT) or local heuristics right out of the box.
+
+### The Agent Configuration
+You can define your agent's personality, knowledge base, and policies in a file like `doctor.json`:
+
+```json
+{
+  "id": "doctor",
+  "name": "Dr. AI",
+  "description": "I am a medical assistant with knowledge of 5000+ disease records.",
+  "system_prompt": "You are a helpful medical assistant. Analyze the user's symptoms...",
+  "storage_path": "doctor",
+  "policies": [
+    { "type": "profanity", "max_strikes": 3 }
+  ],
+  "embedder": {
+    "type": "agent",
+    "agent_id": "nurse_local",
+    "instruction": "Find matching symptoms:"
+  },
+  "data": [
+    { "id": "flu", "text": "Influenza", "description": "Symptoms: fever, chills..." }
+  ]
+}
+```
+
+### Running the Configurable Agent
+SOP provides a standard runner that loads these configurations:
+
+```bash
+go run ai/cmd/agent/main.go -config ai/data/doctor.json
+```
+
+This command:
+1.  Loads the JSON config.
+2.  Initializes the Vector Store at the specified `storage_path`.
+3.  Connects to the "Nurse" (Embedder) agent defined in the config.
+4.  Starts the interactive chat loop.
+
+### ETL: Automating Knowledge Ingestion
+For real-world agents, you can't type thousands of records into the `data` array manually. This is where **ETL (Extract, Transform, Load)** comes in.
+
+You can write simple Go programs to fetch data from the web (CSV, JSON, APIs), format it into the `agent.Config` structure, and save it.
+
+**Example: The Medical Dataset Loader**
+See `ai/etl/doctor.go` for a complete example that:
+1.  **Extracts**: Downloads a raw CSV dataset of diseases and symptoms.
+2.  **Transforms**: Cleans the text and formats it into `agent.DataItem` objects.
+3.  **Loads**: Generates a `doctor.json` config file and uploads the processed vectors directly to the SOP IVF database.
+
+This approach allows you to rebuild your expert's brain daily with fresh data, completely automatically.
+
+## Step 8: The Developer's Toolkit (Go API)
+
+The `sop/ai` module is a modular kit. You can use the high-level `agent` package, or pick and choose the components you need.
+
+### 1. `ai/vector`: The Vector Database
+If you just want a high-performance, local vector store without the agent logic, use the `vector` package directly.
+
+```go
+import "github.com/sharedcode/sop/ai/vector"
+
+// Create a persistent store
+store := vector.NewDatabase()
+if err := store.Open("data/my_vectors"); err != nil {
+    panic(err)
+}
+defer store.Close()
+
+// Add a vector
+err := store.Upsert("item1", []float32{0.1, 0.2, 0.3}, map[string]any{"label": "test"})
+
+// Search
+hits, err := store.Query([]float32{0.1, 0.2, 0.3}, 5, nil)
+```
+
+### 2. `ai/policy`: Safety & Guardrails
+SOP includes a flexible policy engine designed to build **Responsible, Secured, and Safe AI systems**.
+
+The kit supports a hierarchical policy model:
+*   **Global Policies**: Enforced across all agents (e.g., "No Hate Speech", "GDPR Compliance").
+*   **Local Policies**: Specific to a single agent (e.g., "Medical Disclaimer" for the Doctor agent).
+
+This allows software teams to easily author and manage governance at the appropriate level.
+
+```go
+import "github.com/sharedcode/sop/ai/policy"
+
+// 1. Define a Global Policy (e.g., Corporate Safety Standards)
+globalPol, _ := policy.NewProfanityGuardrail(3)
+
+// 2. Define a Local Policy (e.g., Custom Business Logic)
+// You can implement the ai.PolicyEngine interface for custom rules
+localPol := &MyCustomPolicy{AllowedTopics: []string{"medical"}}
+
+// 3. Chain them together for enforcement
+// The chain evaluates policies in order; if any policy blocks, the action is blocked.
+finalPol := policy.NewChain(globalPol, localPol)
+
+// Evaluate content
+decision, err := finalPol.Evaluate("input", sample, labels)
+if decision.Action == "block" {
+    fmt.Println("Blocked by Policy:", decision.PolicyID)
+}
+```
+
+### 3. `ai/embed`: Embeddings
+The `embed` package provides a unified interface for turning text into vectors. It supports local heuristics and can wrap other agents.
+
+```go
+import "github.com/sharedcode/sop/ai/embed"
+
+// A simple embedder (e.g., for testing or simple keyword matching)
+embedder := embed.NewSimpleEmbedder()
+vectors, _ := embedder.EmbedTexts([]string{"Hello world"})
+```
+
+### 4. `ai/etl`: Data Pipelines
+The `etl` package helps you ingest data from various sources (CSV, Web, APIs) and prepare it for the Vector Store.
+
+```go
+import "github.com/sharedcode/sop/ai/etl"
+
+// Example: Fetching and cleaning data
+config, err := etl.PrepareDoctorDataset("https://example.com/data.csv")
+```
+
+### Putting It All Together: A Custom Agent
+You can mix these packages to build something unique. For example, a "Safe Search" agent:
+
+```go
+package main
+
+import (
+    "context"
+    "github.com/sharedcode/sop/ai/agent"
+    "github.com/sharedcode/sop/ai/generator"
+    "github.com/sharedcode/sop/ai/policy"
+)
+
+func main() {
+    // 1. Load Domain (Vector Store + Embedder)
+    domain := myCustomDomainLoader() 
+
+    // 2. Add Safety
+    pol, cls := policy.NewProfanityGuardrail(1)
+    domain.SetPolicy(pol)
+    domain.SetClassifier(cls)
+
+    // 3. Connect Brain
+    brain, _ := generator.NewGeminiClient("KEY", "gemini-pro")
+
+    // 4. Launch
+    svc := agent.NewService(domain, brain)
+    svc.RunLoop(context.Background(), os.Stdin, os.Stdout)
+}
 ```
 
 ## Going Further: Hosting Other Experts
+```
 
-The beauty of this system is that the **Architecture is Agnostic**. You can swap the data to build:
+## The Vision: Building "Smart Systems" of Any Scale
 
-*   **The Mechanic**: Feed it car manuals. Nurse translates "clunking sound" to "suspension strut failure".
-*   **The Lawyer**: Feed it case law. Nurse translates "my boss fired me" to "wrongful termination precedents".
-*   **The Chef**: Feed it recipes. Nurse translates "what do I do with these leftovers" to "ingredients list".
+The SOP AI Kit is designed to address the entire chain of building intelligent software, from simple automation to enterprise-class AI.
+
+### Lightweight "Automatons"
+Developers can build custom agents that act as very lightweight, super high-performance **modules** or **automatons**.
+*   **Reuse & Extend**: Start with prebuilt agents and layer new logic on top.
+*   **Hybrid Intelligence**: Seamlessly combine **Local Heuristics** (for speed and determinism) with **LLMs** like Gemini or ChatGPT (for reasoning and creativity).
+*   **Full Spectrum**: Whether you are building a smarter RESTful API or a complex expert system, the kit provides the foundational blocks.
+
+### Enterprise-Class Architecture
+By leveraging SOP's core **Clustered Database** features, software teams can build systems that are not just smart, but robust and scalable.
+*   **Collaborative AI**: The kit treats Gemini, ChatGPT, and Local Agents as interoperable components. They can reuse each other's capabilities to solve problems that no single model could handle alone.
+*   **Transactional Integrity**: Unlike simple vector libraries, SOP ensures your AI's memory is ACID-compliant, making it suitable for critical enterprise applications.
+
+*(Note: Advanced tutorials on clustered deployments and multi-agent orchestration will be covered in future documentation.)*
 
 ## Summary
 
@@ -191,5 +385,6 @@ By using SOP, you aren't just storing vectors; you are managing a **Transactiona
 1.  **Data Quality**: The `Lookup` B-Tree ensures your AI is trained on a mathematically perfect sample of your data.
 2.  **Deduping**: The B-Tree backend prevents knowledge pollution.
 3.  **Privacy**: Everything runs locally in `./data/doctor_brain`. No data leaves your machine.
+4.  **AI/LLM**: Wrappers/hooks are available to "talk" (delegate) to Gemini/ChatGPT/Ollama/etc... AI/LLM. Allowing their reuse and your application freedom to combine/take each one(s) strengths and plugin their "intelligence" to your application.
 
 Welcome to the future of Local AI.
