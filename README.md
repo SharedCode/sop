@@ -147,12 +147,15 @@ For planned maintenance, see Cluster reboot procedure: [Cluster reboot procedure
 Each write or read transaction opportunistically invokes an internal onIdle() path after key phases. This lightweight pass performs two independent maintenance tasks:
 
 1. Priority rollback sweeps: Recovers/rolls back interrupted higher-priority transactions by consulting per‑transaction priority log (.plg) files.
-	- Restart fast path: On detecting a Redis (L2 cache) restart (run_id change), SOP triggers a one‑time sweep of all priority logs immediately, ignoring age. This accelerates recovery of any half‑committed writes that were waiting for the periodic window.
-	- Periodic path: Absent a restart, one worker periodically processes aged logs. Base interval = (fs.LockFileRegionDuration + 2m). If the previous sweep found work, a shorter 30s backoff is used to drain backlog faster. Intervals are governed by two atomically updated globals: lastPriorityOnIdleTime (Unix ms) and priorityLogFound (0/1 flag).
+	- Cluster-wide coordination: This task is coordinated across the entire cluster (or all threads in standalone mode). Only one worker "wins" and performs the sweep at any given time, ensuring no redundant processing. This prevents unnecessary "swarm overload" on these onIdle services.
+	- Restart fast path: On detecting a Redis (L2 cache) restart (run_id change) or on application start (in embedded mode), SOP triggers a one‑time sweep of all priority logs immediately, ignoring age. This accelerates recovery of any half‑committed writes that were waiting for the periodic window.
+	- Periodic path: Absent a restart, one worker periodically processes aged logs. Base interval is 5 minutes. If the previous sweep found work, a shorter 2 minute backoff is used to drain backlog faster. Intervals are governed by two atomically updated globals: lastPriorityOnIdleTime (Unix ms) and priorityLogFound (0/1 flag).
 	- Concurrency: A mutex plus atomic timestamp prevents overlapping sweeps; only one goroutine performs a rollback batch at a time even under high Begin() concurrency.
 	- Rationale: Using onIdle piggybacks maintenance on natural transaction flow without a dedicated background goroutine, simplifying embedding into host applications that manage their own scheduling.
 
-2. Expired transaction log cleanup: Removes obsolete commit/rollback artifacts. If recent activity suggests potential pending cleanup (hourBeingProcessed != ""), a 5m cadence is used; otherwise a 4h cadence minimizes overhead during idle periods. Timing uses an atomic lastOnIdleRunTime.
+2. Expired transaction log cleanup: Removes obsolete commit/rollback artifacts.
+	- Cluster-wide coordination: Like priority sweeps, this task is coordinated cluster-wide. Only one worker wins the right to perform the cleanup for a given interval (regular or accelerated).
+	- If recent activity suggests potential pending cleanup (hourBeingProcessed != ""), a 5m cadence is used; otherwise a 4h cadence minimizes overhead during idle periods. Timing uses an atomic lastOnIdleRunTime.
 
 Thread safety: Earlier versions used unsynchronized globals; these now use atomic loads/stores (sync/atomic) to eliminate race detector warnings when tests force timer rewinds. Tests that manipulate timing (to speed up sweep scenarios) reset the atomic counters instead of writing plain globals.
 

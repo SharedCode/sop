@@ -2,7 +2,10 @@ package vector
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/sharedcode/sop"
 )
 
 func TestVectorStore(t *testing.T) {
@@ -119,5 +122,83 @@ func TestVectorStore(t *testing.T) {
 	}
 	if len(mechHits) != 1 || mechHits[0].ID != "engine" {
 		t.Errorf("Mechanic query expected 'engine', got %v", mechHits)
+	}
+}
+
+func TestDeleteUpdatesCentroidCount(t *testing.T) {
+	// Setup temporary directory
+	tmpDir, err := os.MkdirTemp("", "sop-ai-test-delete-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Initialize Database
+	db := NewDatabase()
+	db.SetStoragePath(tmpDir)
+
+	index := db.Open("test_delete_count")
+	// We need to cast to *domainIndex to access internal helpers
+	di := index.(*domainIndex)
+
+	id := "vec-1"
+	vec := []float32{1.0, 0.0, 0.0}
+	meta := map[string]any{"type": "A"}
+
+	// 1. Upsert
+	if err := index.Upsert(id, vec, meta); err != nil {
+		t.Fatalf("Upsert failed: %v", err)
+	}
+
+	// Helper to get centroid count
+	getCentroidCount := func(centroidID int) int {
+		storePath := filepath.Join(di.db.storagePath, di.name)
+		trans, err := di.db.beginTransaction(sop.ForReading, storePath)
+		if err != nil {
+			t.Fatalf("Failed to begin transaction: %v", err)
+		}
+		defer trans.Rollback(di.db.ctx)
+
+		version, err := di.getActiveVersion(di.db.ctx, trans)
+		if err != nil {
+			t.Fatalf("Failed to get active version: %v", err)
+		}
+
+		arch, err := OpenDomainStore(di.db.ctx, trans, version)
+		if err != nil {
+			t.Fatalf("Failed to open domain store: %v", err)
+		}
+
+		found, err := arch.Centroids.Find(di.db.ctx, centroidID, false)
+		if err != nil {
+			t.Fatalf("Failed to find centroid: %v", err)
+		}
+		if !found {
+			t.Fatalf("Centroid %d not found", centroidID)
+		}
+
+		c, err := arch.Centroids.GetCurrentValue(di.db.ctx)
+		if err != nil {
+			t.Fatalf("Failed to get centroid value: %v", err)
+		}
+		return c.VectorCount
+	}
+
+	// 2. Verify Count is 1
+	// The first centroid created is usually ID 1
+	count := getCentroidCount(1)
+	if count != 1 {
+		t.Errorf("Expected centroid count 1, got %d", count)
+	}
+
+	// 3. Delete
+	if err := index.Delete(id); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	// 4. Verify Count is 0
+	count = getCentroidCount(1)
+	if count != 0 {
+		t.Errorf("Expected centroid count 0, got %d", count)
 	}
 }
