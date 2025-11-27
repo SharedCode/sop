@@ -1,6 +1,6 @@
 # AI Package
 
-This package was developed with an AI copilot, I want to keep an open development approach(not finicky and narrow) in this package to keep efficient in "automaton" usage. Please note that this codebase will need to undergo refinements as time permits.
+This package was developed with an AI copilot, I want to keep an open development approach(not finicky and narrow) in this package to keep efficient in "automaton" usage. Please note that this package's codebase may undergo refinements as time permits.
 
 AI whisperer or "code whisperer" style. :)
 

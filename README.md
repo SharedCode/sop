@@ -20,6 +20,7 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 - Usability
 - SOP API discussions
 - SOP for Python (sop4py)
+- SOP AI Kit
 - Community & support
 - Contributing & license
  - Coordination model (OOA) and safety
@@ -211,6 +212,11 @@ See details here: https://github.com/sharedcode/sop/blob/master/README2.md#simpl
 
 # SOP for Python (sop4py)
 See details here: https://github.com/sharedcode/sop/tree/master/jsondb/python#readme
+
+# SOP AI Kit
+SOP includes a comprehensive AI toolkit for building local, privacy-first expert systems.
+- **AI Documentation**: [ai/README.md](ai/README.md) - Overview of the AI module, Vector Store, and Agent framework.
+- **AI Tutorial**: [ai/TUTORIAL.md](ai/TUTORIAL.md) - Step-by-step guide to building the "Doctor & Nurse" expert system.
 
 ## Timeouts and deadlines
 SOP commits are governed by two bounds:
