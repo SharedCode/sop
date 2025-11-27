@@ -667,6 +667,12 @@ func (di *domainIndex) Delete(id string) error {
 		if _, err := arch.Vectors.RemoveCurrentItem(di.db.ctx); err != nil {
 			return err
 		}
+		// Decrement count of the centroid
+		if foundC, _ := arch.Centroids.Find(di.db.ctx, cid, false); foundC {
+			c, _ := arch.Centroids.GetCurrentValue(di.db.ctx)
+			c.VectorCount--
+			arch.Centroids.UpdateCurrentItem(di.db.ctx, c)
+		}
 	} else {
 		// If not found in Vectors, it might be a consistency issue or already gone.
 		// We log nothing and proceed as Content is already cleaned.
