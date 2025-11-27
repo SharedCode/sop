@@ -65,9 +65,10 @@ SOP is designed to be versatile, powering everything from small embedded tools t
 ### 3. AI Vector Database
 *   **Scenario**: Storing and retrieving millions of vector embeddings for RAG (Retrieval-Augmented Generation) applications.
 *   **Why SOP**:
-    *   **Optimal Storage**: SOP B-Trees are uniquely suited for vector storage. You can store high-dimensional vectors (blobs) directly in the B-Tree values. By configuring `IsValueDataInNodeSegment=false`, SOP keeps the index structure compact (keys only) while offloading the heavy vector data to separate data segments. This ensures high-performance traversals and efficient memory usage.
-    *   **Partitioned Search**: SOP's architecture supports natural partitioning (e.g., by `PartitionID` + `VectorID`), enabling scalable, parallelized vector searches across massive datasets.
-    *   **Hybrid Search**: Combine vector similarity with traditional B-Tree range queries (e.g., "Find vectors where date > 2024") in a single, ACID-compliant transaction.
+    *   **Transactional & ACID**: Unlike eventual-consistency vector stores, SOP provides full ACID compliance for vector operations, ensuring no data loss or "ghost" vectors.
+    *   **Novel Storage Schema**: Uses a composite key strategy (`CentroidID` + `DistanceToCentroid`) to map high-dimensional vectors onto standard B-Trees, enabling efficient range scans and transactional integrity.
+    *   **Ideal Random Sampling**: Uses a novel "Lookup Tree" indexing algorithm to generate mathematically representative centroids, ensuring high-quality clustering even on sorted or skewed datasets.
+    *   **Self-Healing Index**: Automatically rebalances clusters and tracks distribution in real-time, maintaining optimal search speeds as data grows to terabytes.
     *   **Standalone Capable**: Run a full-featured vector store in your application with zero external dependencies (no Redis required) using SOP's in-memory caching and local filesystem storage.
 
 ### 4. AI Agent with Local LLM (Ollama)
