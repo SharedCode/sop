@@ -27,7 +27,7 @@ Every operation (`Upsert`, `Search`, `Delete`) is wrapped in a **SOP Transaction
 ### 3. The "Active Version" Pattern (A/B Swapping)
 To support heavy maintenance tasks like **Rebalancing** (K-Means retraining) without blocking readers or writers, we use a versioning system stored in SOP itself.
 
--   **State**: A configuration B-Tree stores the `active_version` (e.g., `1764209652794618000` - Unix Nano).
+-   **State**: The `sys_config` B-Tree stores the `active_version` (e.g., `1764209652794618000` - Unix Nano).
 -   **Readers**: Read `active_version` -> Open `vectors_{version}` -> Search.
 -   **Writers (Upsert)**: Read `active_version` -> Open `vectors_{version}` -> Write.
 -   **Rebalance**:
@@ -44,16 +44,19 @@ By removing local locks (like `sync.RWMutex`) and relying entirely on SOP's tran
 -   **Node C** can Search.
 ...simultaneously. If Node B swaps the version while Node A is writing, SOP's optimistic concurrency control will detect the conflict on the `active_version` or the underlying structures, ensuring data consistency.
 
-## Data Structures (The 3-Table Layout)
+## Data Structures (The 5-Table Layout)
 
 1.  **Centroids Store**: `Btree[int, Centroid]`
     -   Fast lookup of cluster centers.
+    -   `Centroid` contains `Vector` and `VectorCount`.
 2.  **Vectors Store**: `Btree[CompositeKey, Vector]`
     -   The core IVF index. Key includes CentroidID and Distance for scanning.
 3.  **Content Store**: `Btree[ItemID, JSON]`
     -   The source of truth. Shared across versions.
 4.  **Lookup Store**: `Btree[int, ItemID]`
     -   Dense integer sequence for random sampling.
+5.  **TempVectors Store**: `Btree[ItemID, Vector]`
+    -   Temporary storage for vectors during the build phase.
 
 ## Intended Workflow
 

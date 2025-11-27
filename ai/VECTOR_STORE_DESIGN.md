@@ -16,56 +16,40 @@ Instead of indexing raw vectors, we index **Clusters**.
 We utilize two separate SOP B-Trees to manage this structure efficiently and transactionally.
 
 ### B-Tree #1: The Directory (Centroids)
-*   **Purpose**: Maps `CentroidID` -> `CentroidVector`.
+*   **Purpose**: Maps `CentroidID` -> `Centroid` struct.
 *   **Size**: Small (e.g., 1k - 10k items). Fits in RAM.
 *   **Key**: `int` (Centroid ID).
-*   **Value**: `[]float32` (The vector coordinates of the center).
+*   **Value**: `Centroid` struct containing:
+    *   `Vector`: `[]float32` (The vector coordinates of the center).
+    *   `VectorCount`: `int` (Number of vectors assigned to this cluster).
 *   **Usage**: Used during Ingestion (to find where to insert) and Search (to find which buckets to scan).
 
-### B-Tree #2: The Library (Data)
-*   **Purpose**: Stores the actual user data, grouped by cluster AND ordered by distance-to-center.
+### B-Tree #2: The Library (Vectors)
+*   **Purpose**: Stores the actual item vectors, grouped by cluster AND ordered by distance-to-center.
 *   **Size**: Huge (Billions of items). Disk-based.
 *   **Key**: `CentroidID` (Primary) + `DistanceToCentroid` (Secondary) + `ItemID` (Tertiary).
     *   *Optimization*: By including `DistanceToCentroid` in the key, we can perform Range Scans within the bucket.
     *   *Triangle Inequality*: If `Query` is distance $D$ from `Centroid`, we only need to scan items with distance $[D-\epsilon, D+\epsilon]$ from `Centroid`.
-*   **Value**: `VectorItem` (The raw vector + metadata).
-
-## 4. The "SOP Advantage": Transactional Vector Store (OLTP)
-Most Vector DBs (FAISS, HNSW) are **OLAP** (Analytical):
-*   Optimized for raw read speed.
-*   **Weakness**: Updates/Deletes are slow or impossible without rebuilding. No ACID transactions.
-
-Our Design is **OLTP** (Transactional):
-*   **Built on SOP**: Inherits ACID properties.
-*   **Insert**: Atomic.
-*   **Delete**: Atomic (Standard B-Tree delete).
-*   **Update**: Atomic (Delete from Old Cluster -> Insert to New Cluster).
-*   **Rollback**: Fully supported.
-*   **Use Case**: Critical business data (Medical Records, User Profiles) where data integrity matches search capability.
-
-## 5. Search Algorithm
-1.  **Query**: User sends `QueryVector`.
-2.  **Coarse Search (Directory)**:
-    *   Scan `Centroids B-Tree` (or RAM Cache).
-    *   Find the top $N$ closest Centroids (e.g., closest 3 clusters).
-    *   Calculate `QueryDistToCentroid` for each.
-3.  **Fine Search (Library)**:
-    *   For each chosen Centroid ID:
-        *   Open `Data B-Tree`.
-        *   **Range Scan**: Search for keys where `CentroidID` matches AND `DistanceToCentroid` is in range `[QueryDistToCentroid - epsilon, QueryDistToCentroid + epsilon]`.
-        *   *Benefit*: Skips reading items that are in the correct cluster but "far away" on the other side of the ring.
-        *   Load candidates into memory.
-4.  **Ranking (In-Memory)**:
-    *   Calculate exact distance (`QueryVector` vs `ItemVector`).
-    *   Maintain a Max-Heap of the top $K$ results.
-5. **Result**: Return top $K$ items.
-
-## 6. Data Management & Addressing (The Two-Way Flow)
-A critical challenge in Vector Stores is addressing items by ID when they are physically stored by Cluster/Distance. We solve this using a **Content Store** (B-Tree #3) as a bridge.
+*   **Value**: `[]float32` (The raw vector).
+    *   *Note*: We do NOT store the full content here to keep the index compact and cache-friendly.
 
 ### B-Tree #3: The Content Store
+*   **Purpose**: Stores the full item data (JSON, Text, Metadata).
 *   **Key**: `ItemID` (e.g., "doc-101").
-*   **Value**: `Metadata` (JSON containing `_centroid_id` and `_distance`).
+*   **Value**: `string` (JSON blob).
+*   **Usage**: Retrieved only for the final top-K results.
+
+### B-Tree #4: The Lookup Store
+*   **Purpose**: Maps a dense integer sequence to Item IDs.
+*   **Key**: `SequenceID` (int).
+*   **Value**: `ItemID` (string).
+*   **Usage**: Enables efficient random sampling (e.g., for training K-Means) by picking random integers.
+
+### B-Tree #5: The TempVectors Store
+*   **Purpose**: Temporarily stores vectors during the initial build phase before they are assigned to centroids.
+*   **Key**: `ItemID` (string).
+*   **Value**: `[]float32` (Vector).
+*   **Usage**: Used in `BuildOnceQueryMany` mode to hold data until K-Means is trained.
 
 ### Flow A: The "Search" Flow (Query)
 *   **Goal**: Find similar items.

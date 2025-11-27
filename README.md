@@ -77,6 +77,14 @@ SOP is designed to be versatile, powering everything from small embedded tools t
     *   **Zero Cost**: Run the entire stack (Vector DB + LLM + Application) on a single machine without any API fees.
     *   **Factory Reset Kit**: SOP's "Fallback Config" pattern allows you to ship a self-contained "restore disk" (JSON with raw data) that automatically rebuilds the binary B-Tree database if it's ever corrupted or deleted.
 
+### 5. Blob Store (Media & Large Files)
+*   **Scenario**: Storing and streaming massive files like 4K video, high-fidelity audio, or large datasets (1TB+).
+*   **Why SOP**:
+    *   **Streaming Data Store**: SOP's `StreamingDataStore` breaks large values into manageable chunks (e.g., 20MB) automatically.
+    *   **Partial Updates**: You can update specific chunks of a large file (e.g., editing a video segment) without rewriting the entire file.
+    *   **ACID Transactions**: Even for multi-gigabyte files, SOP guarantees transactional integrity. You can upload or update massive blobs in a transaction; if it fails, it rolls back cleanly.
+    *   **Smart Resume**: Built-in support for seeking to specific chunks allows for "resume download" or "seek to timestamp" functionality out of the box.
+
 For a deeper dive into the system's design and package structure (including the Public vs. Internal split), please see the [Architecture Guide](ARCHITECTURE.md).
 
 For configuration options and performance tuning, see the [Configuration Guide](CONFIGURATION.md).
