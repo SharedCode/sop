@@ -52,7 +52,15 @@ func SetupInfrastructure(cfg Config, deps Dependencies) (ai.Embeddings, ai.Vecto
 		if absPath, err := filepath.Abs(cfg.StoragePath); err == nil {
 			cfg.StoragePath = absPath
 		}
-		db.SetStoragePath(cfg.StoragePath)
+
+		// Fix for double domain in path:
+		// If the storage path ends with the Agent ID, assume the user meant "this is my folder"
+		// and point the DB to the parent, so DB.Open(ID) reconstructs it correctly.
+		if filepath.Base(cfg.StoragePath) == cfg.ID {
+			db.SetStoragePath(filepath.Dir(cfg.StoragePath))
+		} else {
+			db.SetStoragePath(cfg.StoragePath)
+		}
 	}
 	idx := db.Open(cfg.ID)
 

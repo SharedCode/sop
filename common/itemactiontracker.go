@@ -38,13 +38,13 @@ type itemActionTracker[TK btree.Ordered, TV any] struct {
 	storeInfo        *sop.StoreInfo
 	items            map[sop.UUID]cacheItem[TK, TV]
 	forDeletionItems []sop.UUID
-	cache            sop.Cache
+	cache            sop.L2Cache
 	blobStore        sop.BlobStore
 	tlogger          *transactionLog
 }
 
 // Creates a new Item Action Tracker instance with frontend and backend interface/methods.
-func newItemActionTracker[TK btree.Ordered, TV any](storeInfo *sop.StoreInfo, redisCache sop.Cache, blobStore sop.BlobStore, tl *transactionLog) *itemActionTracker[TK, TV] {
+func newItemActionTracker[TK btree.Ordered, TV any](storeInfo *sop.StoreInfo, redisCache sop.L2Cache, blobStore sop.BlobStore, tl *transactionLog) *itemActionTracker[TK, TV] {
 	return &itemActionTracker[TK, TV]{
 		storeInfo: storeInfo,
 		items:     make(map[sop.UUID]cacheItem[TK, TV], 10),

@@ -21,7 +21,7 @@ import (
 type registryOnDisk struct {
 	hashmap            *registryMap
 	replicationTracker *replicationTracker
-	l2Cache            sop.Cache
+	l2Cache            sop.L2Cache
 	l1Cache            *cache.L1Cache
 	// rmCloseOverride, when set (tests), is invoked instead of rm.close() inside Replicate to
 	// simulate close errors without altering production behavior.
@@ -44,7 +44,7 @@ const (
 // NewRegistry creates a filesystem-backed Registry that manages handles on disk using a hashmap structure.
 // readWrite toggles direct write access to files; hashModValue controls file partitioning (fan-out) for the registry table.
 // rt provides active/passive routing for replication; l2Cache supplies cross-process caching and locking.
-func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, l2Cache sop.Cache) *registryOnDisk {
+func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, l2Cache sop.L2Cache) *registryOnDisk {
 	return &registryOnDisk{
 		hashmap:            newRegistryMap(readWrite, hashModValue, rt, l2Cache),
 		replicationTracker: rt,

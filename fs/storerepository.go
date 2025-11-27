@@ -18,7 +18,7 @@ import (
 // StoreRepository is a filesystem-backed implementation of sop.StoreRepository.
 // It manages store metadata and coordinates replication via a replicationTracker.
 type StoreRepository struct {
-	cache                sop.Cache
+	cache                sop.L2Cache
 	manageStore          sop.ManageStore
 	replicationTracker   *replicationTracker
 	registryHashModValue int
@@ -37,7 +37,7 @@ const (
 // NewStoreRepository creates a StoreRepository that persists store info to disk.
 // When replication is enabled, it validates base-folder configuration and writes
 // the global registry-hash-mod value once, replicating it to the passive drive.
-func NewStoreRepository(ctx context.Context, rt *replicationTracker, manageStore sop.ManageStore, cache sop.Cache, registryHashModVal int) (*StoreRepository, error) {
+func NewStoreRepository(ctx context.Context, rt *replicationTracker, manageStore sop.ManageStore, cache sop.L2Cache, registryHashModVal int) (*StoreRepository, error) {
 	if rt.replicate && len(rt.storesBaseFolders) != 2 {
 		return nil, fmt.Errorf("'storesBaseFolders' needs to be exactly two elements if 'replicate' parameter is true")
 	}

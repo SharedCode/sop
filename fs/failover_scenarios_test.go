@@ -87,7 +87,7 @@ func Test_Failover_PushL2Error_WarnsAndContinues(t *testing.T) {
 	p := t.TempDir()
 
 	// Cache: pull not found, push SetStruct error
-	rt, err := NewReplicationTracker(ctx, []string{a, p}, true, notFoundSetErrCache{Cache: mocks.NewMockClient()})
+	rt, err := NewReplicationTracker(ctx, []string{a, p}, true, notFoundSetErrCache{L2Cache: mocks.NewMockClient()})
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}

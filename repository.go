@@ -154,8 +154,8 @@ type KeyValueStore[TK any, TV any] interface {
 	Remove(context.Context, string, []TK) KeyValueStoreResponse[TK]
 }
 
-// Cache abstracts an out-of-process cache (e.g., Redis) and its locking facilities.
-type Cache interface {
+// L2Cache abstracts an out-of-process cache (e.g., Redis) and its locking facilities.
+type L2Cache interface {
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
 	// Get returns: found(bool), value(string), err(error from backend).
 	Get(ctx context.Context, key string) (bool, string, error)
@@ -213,7 +213,7 @@ const ContextPriorityLogIgnoreAge contextKey = "plg_ignore_age"
 
 // CloseableCache is a Cache that also implements io.Closer for explicit lifecycle control.
 type CloseableCache interface {
-	Cache
+	L2Cache
 	io.Closer
 }
 

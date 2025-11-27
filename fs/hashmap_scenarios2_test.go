@@ -14,7 +14,7 @@ import (
 )
 
 // lockFailOkFalse is a cache that returns ok=false with no error on Lock to simulate contention.
-type lockFailOkFalse struct{ sop.Cache }
+type lockFailOkFalse struct{ sop.L2Cache }
 
 func (m lockFailOkFalse) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, nil
@@ -36,7 +36,7 @@ func TestHashmap_setupNewFile_LockFailure_NoCreate(t *testing.T) {
 		t.Fatalf("tracker: %v", err)
 	}
 
-	hm := newHashmap(true, 8, rt, lockFailOkFalse{Cache: mocks.NewMockClient()})
+	hm := newHashmap(true, 8, rt, lockFailOkFalse{L2Cache: mocks.NewMockClient()})
 	dio := newFileDirectIO()
 
 	// Point directly to a would-be segment path; setupNewFile should fail before opening.

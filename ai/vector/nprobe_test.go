@@ -29,13 +29,13 @@ func TestNProbeAndFiltering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to begin transaction: %v", err)
 	}
-	arch, err := OpenDomainStore(ctx, trans)
+	arch, err := OpenDomainStore(ctx, trans, 0)
 	if err != nil {
 		t.Fatalf("Failed to open domain store: %v", err)
 	}
-	arch.Centroids.Add(ctx, 1, []float32{0, 0})
-	arch.Centroids.Add(ctx, 2, []float32{2, 2})   // Close to 1
-	arch.Centroids.Add(ctx, 3, []float32{10, 10}) // Far
+	arch.Centroids.Add(ctx, 1, Centroid{Vector: []float32{0, 0}})
+	arch.Centroids.Add(ctx, 2, Centroid{Vector: []float32{2, 2}})   // Close to 1
+	arch.Centroids.Add(ctx, 3, Centroid{Vector: []float32{10, 10}}) // Far
 	trans.Commit(ctx)
 
 	// 2. Upsert Vectors

@@ -588,14 +588,14 @@ func Test_Phase1Commit_CommitRemovedNodes_NonSopError_Propagates(t *testing.T) {
 }
 
 // deleteErrCache2 wraps a Cache and forces Delete to return an error.
-type deleteErrCache2 struct{ sop.Cache }
+type deleteErrCache2 struct{ sop.L2Cache }
 
 func (d deleteErrCache2) Delete(ctx context.Context, keys []string) (bool, error) {
 	return false, fmt.Errorf("delete failed")
 }
 
 func (d deleteErrCache2) IsRestarted(ctx context.Context) bool {
-	return d.Cache.IsRestarted(ctx)
+	return d.L2Cache.IsRestarted(ctx)
 }
 
 func Test_ItemActionTracker_Lock_GetVsGet_Compatible_NoError(t *testing.T) {
@@ -635,7 +635,7 @@ func Test_ItemActionTracker_Unlock_Collects_Delete_Error(t *testing.T) {
 	ctx := context.Background()
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_unlock_err", SlotLength: 2})
 	base := mocks.NewMockClient()
-	c := deleteErrCache2{Cache: base}
+	c := deleteErrCache2{L2Cache: base}
 	bs := mocks.NewMockBlobStore()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
 
@@ -696,7 +696,7 @@ func (e errGetRegistry2) Replicate(ctx context.Context, a, b, c, d []sop.Registr
 
 // falseOnceIsLockedCache returns IsLocked=false once (no error), then delegates.
 type falseOnceIsLockedCache struct {
-	inner   sop.Cache
+	inner   sop.L2Cache
 	tripped bool
 }
 
@@ -764,7 +764,7 @@ func (m *falseOnceIsLockedCache) Clear(ctx context.Context) error { return m.inn
 
 // failSecondGetAfterSetCache simulates lock() path where SetStruct succeeds but second GetStruct does not find the key.
 type failSecondGetAfterSetCache struct {
-	inner         sop.Cache
+	inner         sop.L2Cache
 	sawSet        bool
 	failedOnceGet bool
 }

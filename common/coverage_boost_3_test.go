@@ -136,7 +136,7 @@ func Test_TransactionLogger_DoPriorityRollbacks_IsLockedFalse(t *testing.T) {
 	ctx := context.Background()
 	// Wrap cache so IsLocked on coordinator key returns false even after lock
 	base := mocks.NewMockClient()
-	c := isLockedFalseCache{Cache: base}
+	c := isLockedFalseCache{L2Cache: base}
 	tnx := &Transaction{l2Cache: c}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	ok, err := tl.doPriorityRollbacks(ctx, tnx)
@@ -171,7 +171,7 @@ func Test_HandleRegistrySectorLockTimeout_IsLockedFalse_ReturnsOriginalErr(t *te
 	ctx := context.Background()
 	// IsLocked always false
 	base := mocks.NewMockClient()
-	c := isLockedFalseCache{Cache: base}
+	c := isLockedFalseCache{L2Cache: base}
 	tx := &Transaction{l2Cache: c, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
 	se := sop.Error{Err: fmt.Errorf("sector lock timeout"), UserData: &sop.LockKey{Key: c.FormatLockKey("X")}}
 	if err := tx.handleRegistrySectorLockTimeout(ctx, se); err == nil || err.Error() != se.Error() {
@@ -286,7 +286,7 @@ func Test_NodeRepository_Remove_ActionPaths(t *testing.T) {
 
 // errOnceIsLockedCache returns error on first IsLocked then delegates to base.
 type errOnceIsLockedCache struct {
-	sop.Cache
+	sop.L2Cache
 	tripped bool
 }
 
@@ -295,13 +295,13 @@ func (e *errOnceIsLockedCache) IsLocked(ctx context.Context, lockKeys []*sop.Loc
 		e.tripped = true
 		return false, fmt.Errorf("islocked once err")
 	}
-	return e.Cache.IsLocked(ctx, lockKeys)
+	return e.L2Cache.IsLocked(ctx, lockKeys)
 }
 
 func Test_Phase1Commit_IsLockedError_Then_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	c := &errOnceIsLockedCache{Cache: base}
+	c := &errOnceIsLockedCache{L2Cache: base}
 	cache.NewGlobalCache(c, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	rg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
@@ -533,7 +533,7 @@ func Test_TransactionLogger_DoPriorityRollbacks_Timeout(t *testing.T) {
 
 // isLockedFlap returns false once on IsLocked then delegates.
 type isLockedFlap struct {
-	sop.Cache
+	sop.L2Cache
 	seen bool
 }
 
@@ -542,7 +542,7 @@ func (f *isLockedFlap) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (b
 		f.seen = true
 		return false, nil
 	}
-	return f.Cache.IsLocked(ctx, lockKeys)
+	return f.L2Cache.IsLocked(ctx, lockKeys)
 }
 
 // Fetched items intact=false should trigger rollback+retry via needsRefetchAndMerge and then succeed.
@@ -600,7 +600,7 @@ func Test_Phase1Commit_FetchedItemsIntact_False_TriggersRetry(t *testing.T) {
 func Test_Phase1Commit_IsLockedFalseOnce_Retries(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &isLockedFlap{Cache: base}
+	l2 := &isLockedFlap{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
 	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
@@ -715,7 +715,7 @@ func Test_NodeRepository_RollbackUpdatedNodes_DeletesCacheError_ReturnsLastErr(t
 	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	base := mocks.NewMockClient()
 	// Use existing errDeleteCache type from coverage_boost_10_test.go which embeds sop.Cache and overrides Delete
-	ecc := errDeleteCache{Cache: base}
+	ecc := errDeleteCache{L2Cache: base}
 	bs := mocks.NewMockBlobStore()
 	nr := &nodeRepositoryBackend{transaction: &Transaction{registry: reg, l2Cache: ecc, blobStore: bs}, l2Cache: ecc}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_upd_cache_err", SlotLength: 2})
@@ -865,7 +865,7 @@ func Test_Phase1Commit_CommitTrackedItemsValues_Error_Propagates(t *testing.T) {
 // isLockedFalseOnceCache wraps a Cache and forces IsLocked to return false on first call
 // to exercise the phase1Commit loop's IsLocked-false branch.
 type isLockedFalseOnceCache struct {
-	sop.Cache
+	sop.L2Cache
 	flipped bool
 }
 
@@ -874,13 +874,13 @@ func (c *isLockedFalseOnceCache) IsLocked(ctx context.Context, lockKeys []*sop.L
 		c.flipped = true
 		return false, nil
 	}
-	return c.Cache.IsLocked(ctx, lockKeys)
+	return c.L2Cache.IsLocked(ctx, lockKeys)
 }
 
 func Test_Phase1Commit_IsLockedFalse_ThenSucceeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &isLockedFalseOnceCache{Cache: base}
+	l2 := &isLockedFalseOnceCache{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)

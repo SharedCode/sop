@@ -90,7 +90,7 @@ func Test_TransactionLogger_Rollback_CommitUpdated_RemoveNodes_Path(t *testing.T
 func Test_TransactionLogger_Rollback_CommitUpdated_RemoveNodes_DeleteErr_Propagates(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := deleteErrCache{Cache: base}
+	l2 := deleteErrCache{L2Cache: base}
 	cache.NewGlobalCache(base, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	bs := mocks.NewMockBlobStore()
 	rg := mocks.NewMockRegistry(false)
@@ -118,7 +118,7 @@ func Test_TransactionLogger_Rollback_CommitUpdated_RemoveNodes_DeleteErr_Propaga
 
 // Covers checkTrackedItems: (a) cache error path, (b) get-get compatibility with different LockIDs.
 // getErrCache wraps Cache and returns an error from GetStruct.
-type getErrCache struct{ sop.Cache }
+type getErrCache struct{ sop.L2Cache }
 
 func (g getErrCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, fmt.Errorf("getstruct err")
@@ -128,9 +128,9 @@ func Test_ItemActionTracker_CheckTrackedItems_Error_And_GetCompat(t *testing.T) 
 	ctx := context.Background()
 
 	// (a) error path
-	errCache := struct{ sop.Cache }{Cache: mocks.NewMockClient()}
+	errCache := struct{ sop.L2Cache }{L2Cache: mocks.NewMockClient()}
 	si1 := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_chk_err", SlotLength: 2})
-	trk1 := newItemActionTracker[PersonKey, Person](si1, getErrCache{Cache: errCache.Cache}, mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), false))
+	trk1 := newItemActionTracker[PersonKey, Person](si1, getErrCache{L2Cache: errCache.L2Cache}, mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), false))
 	id1 := sop.NewUUID()
 	pk1, p1 := newPerson("a", "b", "m", "a@x", "p")
 	it1 := &btree.Item[PersonKey, Person]{ID: id1, Key: pk1, Value: &p1, Version: 1}
@@ -446,7 +446,7 @@ func Test_ItemActionTracker_Add_NotActivelyPersisted_NoBlob(t *testing.T) {
 
 // errIsLockedCache13 wraps a cache and forces IsLocked to return an error to hit acquireLocks' error branch.
 type errIsLockedCache13 struct {
-	inner sop.Cache
+	inner sop.L2Cache
 	err   error
 }
 
@@ -510,7 +510,7 @@ func (c errIsLockedCache13) IsRestarted(ctx context.Context) bool {
 
 // errGetExCache13 wraps a cache and forces GetEx to error to hit acquireLocks' takeover GetEx error path.
 type errGetExCache13 struct {
-	inner sop.Cache
+	inner sop.L2Cache
 	err   error
 }
 

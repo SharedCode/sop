@@ -337,7 +337,7 @@ func Test_ItemActionTracker_Get_TTL_And_BlobError(t *testing.T) {
 
 // flapLockCache fails the first Lock call, then delegates to the inner cache.
 type flapLockCache struct {
-	sop.Cache
+	sop.L2Cache
 	calls int
 }
 
@@ -346,14 +346,14 @@ func (f *flapLockCache) Lock(ctx context.Context, duration time.Duration, lockKe
 	if f.calls == 1 {
 		return false, sop.NilUUID, nil
 	}
-	return f.Cache.Lock(ctx, duration, lockKeys)
+	return f.L2Cache.Lock(ctx, duration, lockKeys)
 }
 
 // Ensures phase1Commit takes the needsRefetchAndMerge path when lock first fails, then succeeds.
 func Test_Phase1Commit_LockFailsOnce_TriggersRefetchAndMerge(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &flapLockCache{Cache: base}
+	l2 := &flapLockCache{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
 	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
@@ -460,7 +460,7 @@ func Test_Phase2Commit_LogAddError_RemovesPriorityWithoutLocks(t *testing.T) {
 
 // isLockedFlapCache returns false on first IsLocked call then delegates to inner cache.
 type isLockedFlapCache struct {
-	sop.Cache
+	sop.L2Cache
 	calls int
 }
 
@@ -469,14 +469,14 @@ func (f *isLockedFlapCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKe
 	if f.calls == 1 {
 		return false, nil
 	}
-	return f.Cache.IsLocked(ctx, lockKeys)
+	return f.L2Cache.IsLocked(ctx, lockKeys)
 }
 
 // Exercises the branch where Lock succeeds but IsLocked reports false once; the loop should continue and eventually succeed.
 func Test_Phase1Commit_IsLockedFlaps_ContinuesThenSucceeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &isLockedFlapCache{Cache: base}
+	l2 := &isLockedFlapCache{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
 	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
@@ -590,7 +590,7 @@ func Test_PriorityRollback_NoTransactionOrRegistry_NoOp(t *testing.T) {
 }
 
 // lockThenIsLockedFalseCache wraps a cache and forces IsLocked to return false even after Lock succeeds.
-type lockThenIsLockedFalseCache struct{ inner sop.Cache }
+type lockThenIsLockedFalseCache struct{ inner sop.L2Cache }
 
 func (c lockThenIsLockedFalseCache) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	return c.inner.Set(ctx, key, value, expiration)
@@ -655,7 +655,7 @@ func (c lockThenIsLockedFalseCache) IsRestarted(ctx context.Context) bool {
 }
 
 // lockErrorCache forces Lock to return an error to trigger error propagation path in acquireLocks.
-type lockErrorCache struct{ inner sop.Cache }
+type lockErrorCache struct{ inner sop.L2Cache }
 
 func (c lockErrorCache) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	return c.inner.Set(ctx, key, value, expiration)

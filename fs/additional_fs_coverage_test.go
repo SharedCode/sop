@@ -164,7 +164,7 @@ func Test_fileIO_removeStore_and_replicate_Table(t *testing.T) {
 
 // lockFailingCache wraps a base mock cache to force lock acquisition to fail continuously
 // and simulate IsLocked returning false. Other methods delegate to base.
-type lockFailingCache struct{ base sop.Cache }
+type lockFailingCache struct{ base sop.L2Cache }
 
 func (m *lockFailingCache) Set(ctx context.Context, k, v string, d time.Duration) error {
 	return m.base.Set(ctx, k, v, d)

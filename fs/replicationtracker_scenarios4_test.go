@@ -436,7 +436,7 @@ func Test_HandleFailedToReplicate_PushL2Error_Warns(t *testing.T) {
 	})
 
 	// Use a cache that returns error on GetStructEx to force both pull and push error branches.
-	rt, err := NewReplicationTracker(ctx, []string{a, p}, true, getStructExErrCache{Cache: mocks.NewMockClient()})
+	rt, err := NewReplicationTracker(ctx, []string{a, p}, true, getStructExErrCache{L2Cache: mocks.NewMockClient()})
 	if err != nil {
 		t.Fatalf("new rt: %v", err)
 	}
@@ -471,7 +471,7 @@ func Test_HandleFailed_PullError_Proceeds_To_Write_And_Push(t *testing.T) {
 	p := t.TempDir()
 
 	// Use a cache that returns error on GetStructEx (pull) but allows SetStruct (push) to succeed.
-	rt, err := NewReplicationTracker(ctx, []string{a, p}, true, getStructExErrCache{Cache: mocks.NewMockClient()})
+	rt, err := NewReplicationTracker(ctx, []string{a, p}, true, getStructExErrCache{L2Cache: mocks.NewMockClient()})
 	if err != nil {
 		t.Fatalf("new rt: %v", err)
 	}
@@ -505,7 +505,7 @@ func Test_HandleFailed_PullError_Proceeds_To_Write_And_Push(t *testing.T) {
 
 // cache that flips rt.FailedToReplicate during GetStructEx (same goroutine, no race)
 type flippingCache struct {
-	sop.Cache
+	sop.L2Cache
 	rt *replicationTracker
 }
 
@@ -528,7 +528,7 @@ func Test_HandleFailed_SecondCheckAfterLock_NoOp(t *testing.T) {
 
 	// Ensure global says not failed; have GetStructEx flip local flag during sync to hit the recheck-under-lock path.
 	GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: rt.ActiveFolderToggler, FailedToReplicate: false}
-	rt.l2Cache = flippingCache{Cache: mocks.NewMockClient(), rt: rt}
+	rt.l2Cache = flippingCache{L2Cache: mocks.NewMockClient(), rt: rt}
 
 	rt.handleFailedToReplicate(ctx)
 
@@ -555,7 +555,7 @@ func Test_HandleFailed_PullError_And_GlobalFailed_EarlyReturn(t *testing.T) {
 	GlobalReplicationDetails = &ReplicationTrackedDetails{ActiveFolderToggler: true, FailedToReplicate: true}
 
 	// Use a cache that errors on GetStructEx so handleFailedToReplicate will log a warn on pull.
-	rt, err := NewReplicationTracker(ctx, []string{a, p}, true, getStructExErrCache{Cache: mocks.NewMockClient()})
+	rt, err := NewReplicationTracker(ctx, []string{a, p}, true, getStructExErrCache{L2Cache: mocks.NewMockClient()})
 	if err != nil {
 		t.Fatalf("rt: %v", err)
 	}

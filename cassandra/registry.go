@@ -17,7 +17,7 @@ import (
 // registry implements sop.Registry using Cassandra as the source of truth and
 // coordinates an in-process L1 cache with an external L2 cache (Redis).
 type registry struct {
-	l2Cache sop.Cache
+	l2Cache sop.L2Cache
 	l1Cache *cache.L1Cache
 }
 

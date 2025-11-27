@@ -22,7 +22,7 @@ type TransationOptions struct {
 	// Registry hash modulo value used for hashing.
 	RegistryHashModValue int
 	// Cache interface, will default to Redis if not specified.
-	Cache sop.Cache
+	Cache sop.L2Cache
 }
 
 // TransationOptionsWithReplication contains transaction parameters for replication-enabled setups.
@@ -40,7 +40,7 @@ type TransationOptionsWithReplication struct {
 	// Registry hash modulo value used for hashing.
 	RegistryHashModValue int `json:"registry_hash_mod"`
 	// Cache interface, will default to Redis if not specified.
-	Cache sop.Cache
+	Cache sop.L2Cache
 	// Erasure Config contains config data useful for Erasure Coding based file IO (& replication).
 	ErasureConfig map[string]fs.ErasureCodingConfig `json:"erasure_config"`
 }

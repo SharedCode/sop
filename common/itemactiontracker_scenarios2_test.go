@@ -15,12 +15,12 @@ import (
 // flakyCache wraps a base Cache and forces the second GetStruct after SetStruct to miss for a specific key.
 // This simulates the lock() branch where the post-set read fails: "can't attain a lock in Redis".
 type flakyCache struct {
-	base        sop.Cache
+	base        sop.L2Cache
 	targetKey   string
 	triggerOnce bool
 }
 
-func newFlakyCache(base sop.Cache, targetKey string) *flakyCache {
+func newFlakyCache(base sop.L2Cache, targetKey string) *flakyCache {
 	return &flakyCache{base: base, targetKey: targetKey, triggerOnce: false}
 }
 
@@ -123,7 +123,7 @@ func Test_ItemActionTracker_Lock_PostSetReadMiss_ReturnsError(t *testing.T) {
 // errLockCache forces GetStruct to return an error for a specific lock key,
 // simulating the early GetStruct failure path in lock().
 type errLockCache struct {
-	base      sop.Cache
+	base      sop.L2Cache
 	targetKey string
 }
 
@@ -257,11 +257,11 @@ func Test_CommitTrackedItemsValues_NoValue_NoBlob(t *testing.T) {
 // - GetStruct returns (false, err) for the target value key to trigger blob fallback and warn log.
 // - SetStruct returns err for the target value key to hit the warn log after successful blob fetch.
 type errCache struct {
-	base     sop.Cache
+	base     sop.L2Cache
 	valueKey string
 }
 
-func newErrCache(base sop.Cache, valueKey string) *errCache {
+func newErrCache(base sop.L2Cache, valueKey string) *errCache {
 	return &errCache{base: base, valueKey: valueKey}
 }
 

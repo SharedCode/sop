@@ -541,7 +541,7 @@ func Test_ItemActionTracker_Manage_Remove_AppendsForDeletion(t *testing.T) {
 }
 
 // errGetExCache wraps the mock cache to force Lock(false, owner=tid) and GetEx error during takeover.
-type errGetExCache struct{ sop.Cache }
+type errGetExCache struct{ sop.L2Cache }
 
 func (e errGetExCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	// Signal takeover path by returning owner tid equal to the transaction tid passed later.
@@ -556,7 +556,7 @@ func (e errGetExCache) GetEx(ctx context.Context, key string, expiration time.Du
 func Test_TransactionLogger_AcquireLocks_Takeover_GetEx_Error_ReturnsErr(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	ec := errGetExCache{Cache: base}
+	ec := errGetExCache{L2Cache: base}
 	tx := &Transaction{l2Cache: ec}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
@@ -587,7 +587,7 @@ func Test_TransactionLogger_Rollback_NoLogs_RemovesTid_NoError(t *testing.T) {
 }
 
 // isLockedErrCache forces Lock to succeed and IsLocked to return an error.
-type isLockedErrCache struct{ sop.Cache }
+type isLockedErrCache struct{ sop.L2Cache }
 
 func (c isLockedErrCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return true, sop.NilUUID, nil
@@ -609,7 +609,7 @@ func (c isLockedErrCache) DualLock(ctx context.Context, duration time.Duration, 
 
 func Test_TransactionLogger_AcquireLocks_IsLocked_Error_Propagates(t *testing.T) {
 	ctx := context.Background()
-	cache := isLockedErrCache{Cache: mocks.NewMockClient()}
+	cache := isLockedErrCache{L2Cache: mocks.NewMockClient()}
 	tx := &Transaction{l2Cache: cache}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
@@ -644,7 +644,7 @@ func Test_ItemActionTracker_Get_BlobStore_Error_Propagates(t *testing.T) {
 }
 
 // lockErrCache makes Lock return an explicit error to exercise the error path in acquireLocks.
-type lockErrCache2 struct{ sop.Cache }
+type lockErrCache2 struct{ sop.L2Cache }
 
 func (c lockErrCache2) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, fmt.Errorf("lock failed")
@@ -655,7 +655,7 @@ func (c lockErrCache2) DualLock(ctx context.Context, duration time.Duration, loc
 }
 
 // ownerMismatchCache makes Lock report a different non-nil ownerTID to trigger the owner mismatch branch.
-type ownerMismatchCache struct{ sop.Cache }
+type ownerMismatchCache struct{ sop.L2Cache }
 
 var _ownerMismatchTID = sop.NewUUID()
 
@@ -670,7 +670,7 @@ func (c ownerMismatchCache) DualLock(ctx context.Context, duration time.Duration
 func Test_TransactionLogger_AcquireLocks_Lock_Error_ReturnsErr(t *testing.T) {
 	ctx := context.Background()
 	// Embed mock to reuse CreateLockKeys/Unlock behavior.
-	l2 := lockErrCache2{Cache: mocks.NewMockClient()}
+	l2 := lockErrCache2{L2Cache: mocks.NewMockClient()}
 	tx := &Transaction{l2Cache: l2}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
@@ -685,7 +685,7 @@ func Test_TransactionLogger_AcquireLocks_Lock_Error_ReturnsErr(t *testing.T) {
 
 func Test_TransactionLogger_AcquireLocks_OwnerMismatch_ReturnsFailover(t *testing.T) {
 	ctx := context.Background()
-	l2 := ownerMismatchCache{Cache: mocks.NewMockClient()}
+	l2 := ownerMismatchCache{L2Cache: mocks.NewMockClient()}
 	tx := &Transaction{l2Cache: l2}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 

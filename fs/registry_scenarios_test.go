@@ -18,7 +18,7 @@ import (
 // TestRegistry_AllScenarios consolidates registry & registryMap behaviors into one table-driven suite.
 // It merges positive flows, error branches, replication edge cases, cache TTL paths, and helper coverage.
 // Local helper types for lock behavior.
-type testLockFail struct{ sop.Cache }
+type testLockFail struct{ sop.L2Cache }
 
 func (lf testLockFail) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.UUID{}, nil
@@ -29,7 +29,7 @@ func (lf testLockFail) DualLock(ctx context.Context, d time.Duration, lk []*sop.
 func (lf testLockFail) Unlock(ctx context.Context, lk []*sop.LockKey) error { return nil }
 func (lf testLockFail) IsRestarted(ctx context.Context) bool                { return false }
 
-type testAllLock struct{ sop.Cache }
+type testAllLock struct{ sop.L2Cache }
 
 func (al testAllLock) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	return true, sop.UUID{}, nil
@@ -52,7 +52,7 @@ func (sf *setFail) set(ctx context.Context, p []sop.RegistryPayload[sop.Handle])
 
 // cacheGetError induces an error on first GetStruct/GetStructEx to exercise registry.Get cache error path.
 type cacheGetError struct {
-	base    sop.Cache
+	base    sop.L2Cache
 	tripped bool
 }
 
@@ -119,7 +119,7 @@ func (c *cacheGetError) Info(ctx context.Context, section string) (string, error
 func (c *cacheGetError) IsRestarted(ctx context.Context) bool { return false }
 
 // mockCacheImmediateLockFail forces Lock to fail to trigger UpdateNoLocks set error path.
-type mockCacheImmediateLockFail struct{ sop.Cache }
+type mockCacheImmediateLockFail struct{ sop.L2Cache }
 
 func (m mockCacheImmediateLockFail) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
@@ -417,7 +417,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 		{name: "UpdateNoLocks_SetError", run: func(t *testing.T) {
 			ctx := context.Background()
 			base := t.TempDir()
-			lockFailCache := &mockCacheImmediateLockFail{Cache: mocks.NewMockClient()}
+			lockFailCache := &mockCacheImmediateLockFail{L2Cache: mocks.NewMockClient()}
 			rt, _ := NewReplicationTracker(ctx, []string{base}, false, lockFailCache)
 			r := NewRegistry(true, MinimumModValue, rt, lockFailCache)
 			defer r.Close()
@@ -438,7 +438,7 @@ func TestRegistry_AllScenarios(t *testing.T) {
 				t.Fatalf("add: %v", err)
 			}
 			// Force lock failure path (returns ok=false) and ensure Update returns error.
-			r.l2Cache = testLockFail{Cache: l2seed}
+			r.l2Cache = testLockFail{L2Cache: l2seed}
 			if err := r.Update(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "rg", IDs: []sop.Handle{h}}}); err == nil {
 				t.Fatalf("expected lock fail")
 			}
@@ -653,7 +653,7 @@ func Test_registryMap_remove_Errors_And_Replicate_CloseOverride_2(t *testing.T) 
 }
 
 // lockFailCache forces Lock to fail to exercise error path in UpdateNoLocks -> set -> updateFileBlockRegion.
-type lockFailCache struct{ sop.Cache }
+type lockFailCache struct{ sop.L2Cache }
 
 func (l lockFailCache) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
@@ -701,7 +701,7 @@ func Test_Registry_Remove_ItemMissing_Error(t *testing.T) {
 }
 
 // cache that forces SetStruct to fail to hit the warn path in UpdateNoLocks.
-type setStructErrorCache struct{ sop.Cache }
+type setStructErrorCache struct{ sop.L2Cache }
 
 func (s setStructErrorCache) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
@@ -713,7 +713,7 @@ func (c setStructErrorCache) SetStruct(ctx context.Context, key string, value in
 }
 
 // cache that forces Delete to return error to hit the warn path in Remove's deferred cache eviction.
-type deleteErrorCache struct{ sop.Cache }
+type deleteErrorCache struct{ sop.L2Cache }
 
 func (d deleteErrorCache) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil

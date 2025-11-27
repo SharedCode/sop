@@ -205,7 +205,7 @@ func Test_StoreRepository_Update_GetWithTTLError(t *testing.T) {
 func Test_StoreRepository_Update_SetStructWarnPaths(t *testing.T) {
 	ctx := context.Background()
 	base := t.TempDir()
-	cache := setStructErrCache{Cache: mocks.NewMockClient()}
+	cache := setStructErrCache{L2Cache: mocks.NewMockClient()}
 	rt, err := NewReplicationTracker(ctx, []string{base}, false, cache)
 	if err != nil {
 		t.Fatalf("rt: %v", err)

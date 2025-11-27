@@ -24,7 +24,7 @@ type hashmap struct {
 	readWrite          bool
 	// File handles of all known (traversed & opened) data segment file of the hash map.
 	fileHandles map[string]*fileDirectIO
-	cache       sop.Cache
+	cache       sop.L2Cache
 }
 
 // File reqion details is a response struct of 'findAndLock' function. It puts together
@@ -69,7 +69,7 @@ var (
 )
 
 // Hashmap constructor, hashModValue can't be negative nor beyond 10mil otherwise it will be reset to 250k.
-func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.Cache) *hashmap {
+func newHashmap(readWrite bool, hashModValue int, replicationTracker *replicationTracker, cache sop.L2Cache) *hashmap {
 	if hashModValue <= 0 {
 		hashModValue = MinimumModValue
 	}

@@ -37,7 +37,7 @@ type replicationTracker struct {
 	// Array so we can use in replication across two folders, if in replication mode.
 	storesBaseFolders []string
 	replicate         bool
-	l2Cache           sop.Cache
+	l2Cache           sop.L2Cache
 	tid               sop.UUID
 }
 
@@ -53,7 +53,7 @@ var globalReplicationDetailsLocker sync.Mutex = sync.Mutex{}
 
 // NewReplicationTracker instantiates a tracker for active/passive folders and replication status.
 // It reads persisted status, initializes global in-memory state, and optionally synchronizes with L2 cache.
-func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, replicate bool, l2Cache sop.Cache) (*replicationTracker, error) {
+func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, replicate bool, l2Cache sop.L2Cache) (*replicationTracker, error) {
 	if l2Cache == nil {
 		l2Cache = sop.NewCacheClient()
 	}
@@ -364,7 +364,7 @@ func (r *replicationTracker) syncWithL2Cache(ctx context.Context, pushValue bool
 }
 
 // TriggerFailover is a helper to manually trigger failover for testing purposes.
-func TriggerFailover(ctx context.Context, storesBaseFolders []string, replicate bool, l2Cache sop.Cache) error {
+func TriggerFailover(ctx context.Context, storesBaseFolders []string, replicate bool, l2Cache sop.L2Cache) error {
 	rt, err := NewReplicationTracker(ctx, storesBaseFolders, replicate, l2Cache)
 	if err != nil {
 		return err

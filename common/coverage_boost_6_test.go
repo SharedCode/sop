@@ -629,7 +629,7 @@ func Test_RefetchAndMerge_Add_InNode_DuplicateKey_ReturnsError(t *testing.T) {
 }
 
 // unlockErrCache wraps a cache to force Unlock errors.
-type unlockErrCache struct{ sop.Cache }
+type unlockErrCache struct{ sop.L2Cache }
 
 func (c unlockErrCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return fmt.Errorf("unlock error")
@@ -655,7 +655,7 @@ func Test_TransactionLogger_DoPriorityRollbacks_UnlockWarning_Path(t *testing.T)
 	}}}
 
 	// Wrap mock cache to force Unlock error, to hit the log.Warn branch.
-	l2 := unlockErrCache{Cache: mocks.NewMockClient()}
+	l2 := unlockErrCache{L2Cache: mocks.NewMockClient()}
 	tx := &Transaction{l2Cache: l2, registry: reg}
 	tl := newTransactionLogger(stubTLog{pl: pl}, true)
 

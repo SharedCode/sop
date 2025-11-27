@@ -17,7 +17,7 @@ import (
 // flipOnceNodesLock makes the first Lock call on nodes keys fail to force needsRefetchAndMerge=true,
 // then allows subsequent locks to succeed.
 type flipOnceNodesLock struct {
-	sop.Cache
+	sop.L2Cache
 	tripped bool
 }
 
@@ -26,7 +26,7 @@ func (f *flipOnceNodesLock) Lock(ctx context.Context, d time.Duration, keys []*s
 		f.tripped = true
 		return false, sop.NilUUID, nil
 	}
-	return f.Cache.Lock(ctx, d, keys)
+	return f.L2Cache.Lock(ctx, d, keys)
 }
 
 // Covers phase1Commit branch where initial nodes Lock fails (needsRefetchAndMerge set),
@@ -34,7 +34,7 @@ func (f *flipOnceNodesLock) Lock(ctx context.Context, d time.Duration, keys []*s
 func Test_Phase1Commit_RefetchThenContinue_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &flipOnceNodesLock{Cache: base}
+	l2 := &flipOnceNodesLock{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
 	sr := mocks.NewMockStoreRepository()
@@ -302,7 +302,7 @@ func Test_Phase1Commit_CommitRemovedNodes_Mismatch_Retry_Succeeds(t *testing.T) 
 
 // errOnceIsLocked wraps cache to return an error on the first IsLocked call, then behaves normally.
 type errOnceIsLocked struct {
-	sop.Cache
+	sop.L2Cache
 	tripped bool
 }
 
@@ -311,14 +311,14 @@ func (m *errOnceIsLocked) IsLocked(ctx context.Context, lockKeys []*sop.LockKey)
 		m.tripped = true
 		return false, fmt.Errorf("islocked err once")
 	}
-	return m.Cache.IsLocked(ctx, lockKeys)
+	return m.L2Cache.IsLocked(ctx, lockKeys)
 }
 
 // Covers phase1Commit branch where IsLocked returns an error: it should sleep and continue, then succeed.
 func Test_Phase1Commit_IsLockedErrorThenSucceed(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &errOnceIsLocked{Cache: base}
+	l2 := &errOnceIsLocked{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	sr := mocks.NewMockStoreRepository()
 	rg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
@@ -625,7 +625,7 @@ func Test_TransactionLogger_Rollback_Finalize_WithDeleteTrackedItemsValues_Propa
 
 // partialLockCache forces Lock to succeed but IsLocked to report false (no error),
 // to exercise acquireLocks partial-lock failover branch.
-type partialLockCache struct{ sop.Cache }
+type partialLockCache struct{ sop.L2Cache }
 
 func (p *partialLockCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return true, sop.NilUUID, nil
@@ -710,7 +710,7 @@ func Test_RefetchAndMerge_AddItem_SeparateSegment_DuplicateFalse_ReturnsError(t 
 func Test_TransactionLogger_AcquireLocks_PartialLock_FailoverError(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	plc := &partialLockCache{Cache: base}
+	plc := &partialLockCache{L2Cache: base}
 	cache.NewGlobalCache(plc, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
 	tx := &Transaction{l2Cache: plc, l1Cache: cache.GetGlobalCache(), registry: mocks.NewMockRegistry(false), StoreRepository: mocks.NewMockStoreRepository(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}

@@ -216,7 +216,7 @@ func Test_TransactionLog_GetOne_Success(t *testing.T) {
 }
 
 // cacheIsLockedFalse wraps a base cache and forces IsLocked to return false while delegating others.
-type cacheIsLockedFalse struct{ base sop.Cache }
+type cacheIsLockedFalse struct{ base sop.L2Cache }
 
 func (c *cacheIsLockedFalse) Set(ctx context.Context, key, value string, exp time.Duration) error {
 	return c.base.Set(ctx, key, value, exp)

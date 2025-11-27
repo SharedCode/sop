@@ -50,7 +50,7 @@ func (r *recPrioLog) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ 
 
 // wrapCache lets us override IsLocked once to simulate transient lock verification failure.
 type wrapCache struct {
-	sop.Cache
+	sop.L2Cache
 	flipOnce bool
 }
 
@@ -59,11 +59,11 @@ func (w *wrapCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool
 		w.flipOnce = false
 		return false, nil
 	}
-	return w.Cache.IsLocked(ctx, lockKeys)
+	return w.L2Cache.IsLocked(ctx, lockKeys)
 }
 
 func (w *wrapCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
-	ok, tid, err := w.Cache.Lock(ctx, duration, lockKeys)
+	ok, tid, err := w.L2Cache.Lock(ctx, duration, lockKeys)
 	if err != nil || !ok {
 		return ok, tid, err
 	}
@@ -78,7 +78,7 @@ func (w *wrapCache) DualLock(ctx context.Context, duration time.Duration, lockKe
 
 // flipLockCache forces the first Lock call to fail, succeeding thereafter.
 type flipLockCache struct {
-	sop.Cache
+	sop.L2Cache
 	failures int
 }
 
@@ -87,7 +87,7 @@ func (f *flipLockCache) Lock(ctx context.Context, duration time.Duration, lockKe
 		f.failures--
 		return false, sop.NilUUID, nil
 	}
-	return f.Cache.Lock(ctx, duration, lockKeys)
+	return f.L2Cache.Lock(ctx, duration, lockKeys)
 }
 
 func (f *flipLockCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
@@ -95,7 +95,7 @@ func (f *flipLockCache) DualLock(ctx context.Context, duration time.Duration, lo
 	if err != nil || !ok {
 		return ok, tid, err
 	}
-	if locked, err := f.Cache.IsLocked(ctx, lockKeys); err != nil || !locked {
+	if locked, err := f.L2Cache.IsLocked(ctx, lockKeys); err != nil || !locked {
 		return false, sop.NilUUID, err
 	}
 	return true, sop.NilUUID, nil
@@ -108,7 +108,7 @@ func Test_Phase1Commit_RefetchAndMerge_Path_Succeeds(t *testing.T) {
 
 	// Use mock redis for both L1 and L2; wrap L2 to fail first Lock then succeed.
 	base := mocks.NewMockClient()
-	redis := &flipLockCache{Cache: base, failures: 1}
+	redis := &flipLockCache{L2Cache: base, failures: 1}
 	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
 	// Transaction wiring with mocks.
@@ -300,7 +300,7 @@ func Test_ItemActionTracker_Lock_Compatibility_Cases(t *testing.T) {
 func Test_TransactionLogger_AcquireLocks_IsLocked_False_Path(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	wc := &wrapCache{Cache: base, flipOnce: true}
+	wc := &wrapCache{L2Cache: base, flipOnce: true}
 	txn := &Transaction{l2Cache: wc}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	ids := []sop.UUID{sop.NewUUID(), sop.NewUUID()}
@@ -691,7 +691,7 @@ func Test_TransactionLogger_DoPriorityRollbacks_Batch_Succeeds(t *testing.T) {
 // missAfterSetCache deletes the lock record immediately after SetStruct so that
 // the subsequent GetStruct in itemActionTracker.lock() returns not found, hitting
 // the "can't attain a lock in Redis" error branch.
-type missAfterSetCache struct{ base sop.Cache }
+type missAfterSetCache struct{ base sop.L2Cache }
 
 func (m missAfterSetCache) Set(ctx context.Context, k, v string, d time.Duration) error {
 	return m.base.Set(ctx, k, v, d)

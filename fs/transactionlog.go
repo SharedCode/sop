@@ -27,7 +27,7 @@ const (
 type TransactionLog struct {
 	priorityLog
 	hourLockKey *sop.LockKey
-	cache       sop.Cache
+	cache       sop.L2Cache
 	file        *os.File
 	encoder     *json.Encoder
 	writer      *bufio.Writer
@@ -36,7 +36,7 @@ type TransactionLog struct {
 var ageLimit float64 = 70
 
 // NewTransactionLog constructs a TransactionLog bound to the provided cache and replication tracker.
-func NewTransactionLog(cache sop.Cache, rt *replicationTracker) *TransactionLog {
+func NewTransactionLog(cache sop.L2Cache, rt *replicationTracker) *TransactionLog {
 	return &TransactionLog{
 		cache:       cache,
 		hourLockKey: cache.CreateLockKeys([]string{"HBP"})[0],

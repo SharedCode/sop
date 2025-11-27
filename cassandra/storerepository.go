@@ -15,7 +15,7 @@ import (
 )
 
 type storeRepository struct {
-	cache           sop.Cache
+	cache           sop.L2Cache
 	manageBlobStore sop.ManageStore
 }
 

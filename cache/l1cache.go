@@ -24,7 +24,7 @@ type l1CacheEntry struct {
 type L1Cache struct {
 	lookup       map[sop.UUID]*l1CacheEntry
 	mru          *l1_mru
-	l2CacheNodes sop.Cache
+	l2CacheNodes sop.L2Cache
 	locker       sync.Mutex
 	Handles      Cache[sop.UUID, sop.Handle]
 }
@@ -41,7 +41,7 @@ var Global *L1Cache
 
 // NewGlobalCache initializes or replaces the global L1 cache singleton.
 // It reuses the existing instance when capacities match; otherwise it creates a new one.
-func NewGlobalCache(l2CacheNodes sop.Cache, minCapacity, maxCapacity int) *L1Cache {
+func NewGlobalCache(l2CacheNodes sop.L2Cache, minCapacity, maxCapacity int) *L1Cache {
 	if Global == nil || Global.mru.minCapacity != minCapacity || Global.mru.maxCapacity != maxCapacity {
 		Global = NewL1Cache(l2CacheNodes, minCapacity, maxCapacity)
 	} else {
@@ -61,7 +61,7 @@ func GetGlobalCache() *L1Cache {
 }
 
 // NewL1Cache constructs a new L1Cache with the given L2 cache and capacity bounds.
-func NewL1Cache(l2cn sop.Cache, minCapacity, maxCapacity int) *L1Cache {
+func NewL1Cache(l2cn sop.L2Cache, minCapacity, maxCapacity int) *L1Cache {
 	l1c := &L1Cache{
 		lookup:       make(map[sop.UUID]*l1CacheEntry, maxCapacity),
 		l2CacheNodes: l2cn,

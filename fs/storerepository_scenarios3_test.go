@@ -17,7 +17,7 @@ import (
 )
 
 // Helper cache mocks consolidated from prior individual test files.
-type mockCacheWarn struct{ inner sop.Cache }
+type mockCacheWarn struct{ inner sop.L2Cache }
 
 func newMockCacheWarn() mockCacheWarn { return mockCacheWarn{inner: mocks.NewMockClient()} }
 func (m mockCacheWarn) Set(ctx context.Context, k, v string, d time.Duration) error {
@@ -73,7 +73,7 @@ func (m mockCacheWarn) Info(ctx context.Context, section string) (string, error)
 }
 func (m mockCacheWarn) IsRestarted(ctx context.Context) bool { return false }
 
-type mockCacheDeleteWarn struct{ sop.Cache }
+type mockCacheDeleteWarn struct{ sop.L2Cache }
 
 func (m mockCacheDeleteWarn) Delete(context.Context, []string) (bool, error) {
 	return false, errors.New("fail delete")
@@ -83,7 +83,7 @@ func (m mockCacheDeleteWarn) Info(ctx context.Context, section string) (string, 
 }
 func (m mockCacheDeleteWarn) IsRestarted(ctx context.Context) bool { return false }
 
-type mockCacheSetStructWarn struct{ sop.Cache }
+type mockCacheSetStructWarn struct{ sop.L2Cache }
 
 func (m mockCacheSetStructWarn) SetStruct(context.Context, string, interface{}, time.Duration) error {
 	return errors.New("fail setstruct")
@@ -95,7 +95,7 @@ func (m mockCacheSetStructWarn) IsRestarted(ctx context.Context) bool { return f
 
 // mockCacheAlwaysLocked forces Lock to report the key(s) are already locked, so Update's
 // retry path is exercised and ultimately returns an error.
-type mockCacheAlwaysLocked struct{ sop.Cache }
+type mockCacheAlwaysLocked struct{ sop.L2Cache }
 
 func (m mockCacheAlwaysLocked) Lock(ctx context.Context, d time.Duration, ks []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NewUUID(), nil
@@ -132,7 +132,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 		{"Update lock failure retries then errors", func(t *testing.T) {
 			base := t.TempDir()
 			rt, _ := NewReplicationTracker(context.Background(), []string{base}, false, mocks.NewMockClient())
-			cache := mockCacheAlwaysLocked{Cache: mocks.NewMockClient()}
+			cache := mockCacheAlwaysLocked{L2Cache: mocks.NewMockClient()}
 			sr, _ := NewStoreRepository(context.Background(), rt, nil, cache, 0)
 			// any update attempt should fail due to inability to acquire locks; use short timeout to avoid long backoff
 			s := *sop.NewStoreInfo(sop.StoreOptions{Name: "x", SlotLength: 4})
@@ -378,7 +378,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 		{"Remove cache delete warning path", func(t *testing.T) {
 			base := t.TempDir()
 			rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
-			cache := mockCacheDeleteWarn{Cache: mocks.NewMockClient()}
+			cache := mockCacheDeleteWarn{L2Cache: mocks.NewMockClient()}
 			sr, _ := NewStoreRepository(ctx, rt, nil, cache, 0)
 			s := *sop.NewStoreInfo(sop.StoreOptions{Name: "rmw", SlotLength: 10})
 			sr.Add(ctx, s)
@@ -392,7 +392,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 		{"Update cache SetStruct warning", func(t *testing.T) {
 			base := t.TempDir()
 			rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())
-			failingCache := mockCacheSetStructWarn{Cache: mocks.NewMockClient()}
+			failingCache := mockCacheSetStructWarn{L2Cache: mocks.NewMockClient()}
 			sr, _ := NewStoreRepository(ctx, rt, nil, failingCache, 0)
 			s := *sop.NewStoreInfo(sop.StoreOptions{Name: "cw", SlotLength: 10})
 			sr.Add(ctx, s)

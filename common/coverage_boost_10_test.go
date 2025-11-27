@@ -64,7 +64,7 @@ func Test_CommitTrackedItemsValues_NoItems_NoOp(t *testing.T) {
 }
 
 // secondGetMissCache stubs GetStruct to miss both before and after SetStruct to force the race/error branch in lock.
-type secondGetMissCache struct{ sop.Cache }
+type secondGetMissCache struct{ sop.L2Cache }
 
 func (c secondGetMissCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, nil
@@ -73,7 +73,7 @@ func (c secondGetMissCache) GetStruct(ctx context.Context, key string, target in
 func Test_ItemActionTracker_Lock_SecondGet_NotFound_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	c := secondGetMissCache{Cache: base}
+	c := secondGetMissCache{L2Cache: base}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock_race", SlotLength: 2})
 	bs := mocks.NewMockBlobStore()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
@@ -95,7 +95,7 @@ func Test_ItemActionTracker_Lock_SecondGet_NotFound_ReturnsError(t *testing.T) {
 }
 
 // lockBackendErrCache simulates a backend error during Lock (false, Nil owner, non-nil err).
-type lockBackendErrCache struct{ sop.Cache }
+type lockBackendErrCache struct{ sop.L2Cache }
 
 func (c lockBackendErrCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, fmt.Errorf("lock backend error")
@@ -107,7 +107,7 @@ func (m lockBackendErrCache) DualLock(ctx context.Context, duration time.Duratio
 
 func Test_TransactionLogger_AcquireLocks_Lock_Backend_Error_Propagates(t *testing.T) {
 	ctx := context.Background()
-	l2 := lockBackendErrCache{Cache: mocks.NewMockClient()}
+	l2 := lockBackendErrCache{L2Cache: mocks.NewMockClient()}
 	tx := &Transaction{l2Cache: l2}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
@@ -121,7 +121,7 @@ func Test_TransactionLogger_AcquireLocks_Lock_Backend_Error_Propagates(t *testin
 }
 
 // getStructErrCache returns an error from GetStruct to exercise checkTrackedItems error path.
-type getStructErrCache2 struct{ sop.Cache }
+type getStructErrCache2 struct{ sop.L2Cache }
 
 func (c getStructErrCache2) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, fmt.Errorf("cache get error")
@@ -130,7 +130,7 @@ func (c getStructErrCache2) GetStruct(ctx context.Context, key string, target in
 func Test_ItemActionTracker_CheckTrackedItems_Propagates_Error(t *testing.T) {
 	ctx := context.Background()
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_chk_err", SlotLength: 2})
-	c := getStructErrCache2{Cache: mocks.NewMockClient()}
+	c := getStructErrCache2{L2Cache: mocks.NewMockClient()}
 	bs := mocks.NewMockBlobStore()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
 
@@ -184,7 +184,7 @@ func Test_ItemActionTracker_Add_ActivelyPersisted_WritesBlob_And_Caches(t *testi
 
 // firstFailThenSucceedCache: first Lock returns false, subsequent Locks return true; IsLocked always true.
 type firstFailThenSucceedCache struct {
-	sop.Cache
+	sop.L2Cache
 	calls int
 }
 
@@ -217,7 +217,7 @@ func Test_Phase1Commit_RefetchAndMerge_Retry_Succeeds(t *testing.T) {
 	}
 
 	// Swap in our flipping lock cache
-	flipper := &firstFailThenSucceedCache{Cache: mocks.NewMockClient()}
+	flipper := &firstFailThenSucceedCache{L2Cache: mocks.NewMockClient()}
 	tr.l2Cache = flipper
 
 	// Provide a minimal backend with no nodes so commit steps are no-ops but paths execute.
@@ -244,7 +244,7 @@ func Test_Phase1Commit_RefetchAndMerge_Retry_Succeeds(t *testing.T) {
 }
 
 // takeoverCacheOK simulates a dead-owner takeover success.
-type takeoverCacheOK struct{ sop.Cache }
+type takeoverCacheOK struct{ sop.L2Cache }
 
 var takeoverTID = sop.NewUUID()
 
@@ -262,7 +262,7 @@ func (m takeoverCacheOK) GetEx(ctx context.Context, key string, duration time.Du
 
 func Test_TransactionLogger_AcquireLocks_Takeover_Succeeds(t *testing.T) {
 	ctx := context.Background()
-	l2 := takeoverCacheOK{Cache: mocks.NewMockClient()}
+	l2 := takeoverCacheOK{L2Cache: mocks.NewMockClient()}
 	tx := &Transaction{l2Cache: l2}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
@@ -444,7 +444,7 @@ func Test_TransactionLogger_Rollback_FinalizeCommit_DeletesObsoleteAndTracked(t 
 }
 
 // errDeleteCache wraps a Cache and forces Delete to return an error to cover error branch.
-type errDeleteCache struct{ sop.Cache }
+type errDeleteCache struct{ sop.L2Cache }
 
 func (e errDeleteCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	return false, fmt.Errorf("forced delete error")
@@ -466,7 +466,7 @@ func Test_DeleteTrackedItemsValues_PropagatesErrors(t *testing.T) {
 	}
 
 	// Case 1: both cache delete and blob remove error; expect a non-nil error returned.
-	tx1 := &Transaction{l2Cache: errDeleteCache{Cache: mocks.NewMockClient()}, blobStore: errBlobStore2{BlobStore: mocks.NewMockBlobStore()}}
+	tx1 := &Transaction{l2Cache: errDeleteCache{L2Cache: mocks.NewMockClient()}, blobStore: errBlobStore2{BlobStore: mocks.NewMockBlobStore()}}
 	if err := tx1.deleteTrackedItemsValues(ctx, payload); err == nil {
 		t.Fatalf("expected error when both cache delete and blob remove fail")
 	}
@@ -561,11 +561,11 @@ func Test_ReaderTxn_AreFetchedItemsIntact_Error(t *testing.T) {
 }
 
 // cacheIsLockedErr wraps the mock cache to return an error from IsLocked after a successful Lock.
-type cacheIsLockedErr struct{ sop.Cache }
+type cacheIsLockedErr struct{ sop.L2Cache }
 
 func (c cacheIsLockedErr) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	// Delegate to base cache to mark keys as locked by this owner
-	return c.Cache.Lock(ctx, duration, lockKeys)
+	return c.L2Cache.Lock(ctx, duration, lockKeys)
 }
 func (m cacheIsLockedErr) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
 	ok, tid, err := m.Lock(ctx, duration, keys)
@@ -583,7 +583,7 @@ func (m cacheIsLockedErr) IsLocked(ctx context.Context, keys []*sop.LockKey) (bo
 }
 
 // cacheLockFailNoOwner makes Lock fail with no owner and returns an error.
-type cacheLockFailNoOwner struct{ sop.Cache }
+type cacheLockFailNoOwner struct{ sop.L2Cache }
 
 func (c cacheLockFailNoOwner) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, fmt.Errorf("lock err")
@@ -596,7 +596,7 @@ func (m cacheLockFailNoOwner) DualLock(ctx context.Context, duration time.Durati
 func Test_AcquireLocks_IsLocked_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	wc := cacheIsLockedErr{Cache: base}
+	wc := cacheIsLockedErr{L2Cache: base}
 	tx := &Transaction{l2Cache: wc}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	ids := []sop.UUID{sop.NewUUID(), sop.NewUUID()}
@@ -611,7 +611,7 @@ func Test_AcquireLocks_IsLocked_ReturnsError(t *testing.T) {
 
 func Test_AcquireLocks_LockError_NoOwner(t *testing.T) {
 	ctx := context.Background()
-	wc := cacheLockFailNoOwner{Cache: mocks.NewMockClient()}
+	wc := cacheLockFailNoOwner{L2Cache: mocks.NewMockClient()}
 	tx := &Transaction{l2Cache: wc}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	ids := []sop.UUID{sop.NewUUID()}

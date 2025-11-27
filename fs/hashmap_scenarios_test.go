@@ -60,7 +60,7 @@ func (f *failingDirectIO) ReadAt(ctx context.Context, file *os.File, block []byt
 func (f *failingDirectIO) Close(file *os.File) error { return file.Close() }
 
 type mockCacheHashmap struct {
-	base           sop.Cache
+	base           sop.L2Cache
 	lockFail       bool
 	isLockedAlways bool
 }

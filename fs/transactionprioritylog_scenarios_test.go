@@ -315,7 +315,7 @@ func (f failingCloseDirectIO) ReadAt(ctx context.Context, file *os.File, block [
 // --- Additional consolidated micro-tests previously in separate small files ---
 
 // alwaysLockFailCache simulates a cache where Lock never succeeds.
-type alwaysLockFailCache struct{ mocksCache sop.Cache }
+type alwaysLockFailCache struct{ mocksCache sop.L2Cache }
 
 func newAlwaysLockFailCache() *alwaysLockFailCache {
 	return &alwaysLockFailCache{mocks.NewMockClient()}

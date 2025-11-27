@@ -35,7 +35,7 @@ func IsNil(id gocql.UUID) bool {
 type transactionLog struct {
 	dummy
 	hourLockKey *sop.LockKey
-	cache       sop.Cache
+	cache       sop.L2Cache
 }
 
 // NewTransactionLog returns a Cassandra-backed implementation of sop.TransactionLog.

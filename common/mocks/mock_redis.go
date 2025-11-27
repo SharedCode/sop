@@ -15,7 +15,7 @@ type mockRedis struct {
 }
 
 // Returns a new Redis mock client.
-func NewMockClient() sop.Cache {
+func NewMockClient() sop.L2Cache {
 	return &mockRedis{
 		lookup:      make(map[string][]byte),
 		stringStore: make(map[string]string),

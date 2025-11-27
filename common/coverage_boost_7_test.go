@@ -125,7 +125,7 @@ func Test_CommitTrackedItemsValues_ActivelyPersisted_NoOp(t *testing.T) {
 
 // flipLockRefetchCache fails first lock attempt to force needsRefetchAndMerge, then succeeds.
 type flipLockRefetchCache struct {
-	sop.Cache
+	sop.L2Cache
 	first bool
 }
 
@@ -134,7 +134,7 @@ func (f *flipLockRefetchCache) Lock(ctx context.Context, d time.Duration, keys [
 		f.first = true
 		return false, sop.NilUUID, nil
 	}
-	return f.Cache.Lock(ctx, d, keys)
+	return f.L2Cache.Lock(ctx, d, keys)
 }
 
 func (f *flipLockRefetchCache) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
@@ -151,7 +151,7 @@ func (f *flipLockRefetchCache) DualLock(ctx context.Context, duration time.Durat
 func Test_Phase1Commit_RefetchError_Propagates(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &flipLockRefetchCache{Cache: base}
+	l2 := &flipLockRefetchCache{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
@@ -650,7 +650,7 @@ func Test_Phase1Commit_PriorityLog_Add_Called_OnRemovedNodes(t *testing.T) {
 
 // flipOnceLock makes the first Lock call fail to set needsRefetchAndMerge flag.
 type flipOnceLock struct {
-	sop.Cache
+	sop.L2Cache
 	tripped bool
 }
 
@@ -659,7 +659,7 @@ func (f *flipOnceLock) Lock(ctx context.Context, d time.Duration, keys []*sop.Lo
 		f.tripped = true
 		return false, sop.NilUUID, nil
 	}
-	return f.Cache.Lock(ctx, d, keys)
+	return f.L2Cache.Lock(ctx, d, keys)
 }
 
 func (f *flipOnceLock) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
@@ -675,7 +675,7 @@ func (f *flipOnceLock) DualLock(ctx context.Context, duration time.Duration, key
 func Test_Phase1Commit_LockTrackedItems_Error_AfterRefetch_Propagates(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &flipOnceLock{Cache: base}
+	l2 := &flipOnceLock{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
 	sr := mocks.NewMockStoreRepository()
@@ -771,7 +771,7 @@ func Test_Phase1Commit_CommitStores_Update_Error_Propagates(t *testing.T) {
 
 // isLockedFalseOnce causes the first IsLocked to return false to cover the continue branch in phase1Commit.
 type isLockedFalseOnce struct {
-	sop.Cache
+	sop.L2Cache
 	tripped bool
 }
 
@@ -780,7 +780,7 @@ func (m *isLockedFalseOnce) IsLocked(ctx context.Context, lockKeys []*sop.LockKe
 		m.tripped = true
 		return false, nil
 	}
-	return m.Cache.IsLocked(ctx, lockKeys)
+	return m.L2Cache.IsLocked(ctx, lockKeys)
 }
 
 func (m *isLockedFalseOnce) DualLock(ctx context.Context, duration time.Duration, keys []*sop.LockKey) (bool, sop.UUID, error) {
@@ -796,7 +796,7 @@ func (m *isLockedFalseOnce) DualLock(ctx context.Context, duration time.Duration
 func Test_Phase1Commit_IsLockedFalseThenSucceed(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &isLockedFalseOnce{Cache: base}
+	l2 := &isLockedFalseOnce{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	sr := mocks.NewMockStoreRepository()
 	rg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)

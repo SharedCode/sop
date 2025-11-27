@@ -16,7 +16,7 @@ import (
 
 // --- ItemActionTracker lock/unlock additional error paths ---
 
-type setErrCache struct{ sop.Cache }
+type setErrCache struct{ sop.L2Cache }
 
 func (s setErrCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	return fmt.Errorf("setstruct fail")
@@ -25,20 +25,20 @@ func (s setErrCache) SetStruct(ctx context.Context, key string, value interface{
 // missAlwaysCache forces GetStruct to miss regardless of prior SetStruct calls;
 // used to simulate the second get after a set also missing, triggering the
 // "can't attain a lock" branch in itemActionTracker.lock.
-type missAlwaysCache struct{ sop.Cache }
+type missAlwaysCache struct{ sop.L2Cache }
 
 func (m missAlwaysCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, nil
 }
 
-type deleteErrCache struct{ sop.Cache }
+type deleteErrCache struct{ sop.L2Cache }
 
 func (d deleteErrCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	return false, fmt.Errorf("delete fail")
 }
 
 // errIsLockedCache returns an error from IsLocked after a successful Lock to hit the unlock+error branch.
-type errIsLockedCache struct{ sop.Cache }
+type errIsLockedCache struct{ sop.L2Cache }
 
 func (e errIsLockedCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	return false, fmt.Errorf("islocked err")
@@ -58,7 +58,7 @@ func (e errIsLockedCache) DualLock(ctx context.Context, duration time.Duration, 
 // (removed) errUpdateRegistry: use mocks.NewMockRegistry(true) to induce Update errors instead.
 
 // lockErrCache forces Lock to return an error to cover acquireLocks' error branch.
-type lockErrCache struct{ sop.Cache }
+type lockErrCache struct{ sop.L2Cache }
 
 func (l lockErrCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	return false, sop.NilUUID, fmt.Errorf("lock err")
@@ -115,13 +115,13 @@ func Test_ItemActionTracker_Lock_Error_Paths(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		cache           sop.Cache
+		cache           sop.L2Cache
 		expectErrSubstr string
 		unlock          bool
 	}{
-		{name: "setstruct_error", cache: setErrCache{Cache: mocks.NewMockClient()}, expectErrSubstr: "setstruct fail"},
-		{name: "post_set_get_miss", cache: missAlwaysCache{Cache: mocks.NewMockClient()}, expectErrSubstr: "can't attain a lock"},
-		{name: "unlock_delete_error", cache: deleteErrCache{Cache: mocks.NewMockClient()}, expectErrSubstr: "delete fail", unlock: true},
+		{name: "setstruct_error", cache: setErrCache{L2Cache: mocks.NewMockClient()}, expectErrSubstr: "setstruct fail"},
+		{name: "post_set_get_miss", cache: missAlwaysCache{L2Cache: mocks.NewMockClient()}, expectErrSubstr: "can't attain a lock"},
+		{name: "unlock_delete_error", cache: deleteErrCache{L2Cache: mocks.NewMockClient()}, expectErrSubstr: "delete fail", unlock: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -157,7 +157,7 @@ func Test_ItemActionTracker_Lock_Error_Paths(t *testing.T) {
 func Test_NodeRepository_RollbackUpdatedNodes_ErrorBranches(t *testing.T) {
 	ctx := context.Background()
 	// Case 1: nodesAreLocked=true uses UpdateNoLocks; blob remove and redis delete error captured.
-	l2 := deleteErrCache{Cache: mocks.NewMockClient()}
+	l2 := deleteErrCache{L2Cache: mocks.NewMockClient()}
 	bs := errBlobStore{err: fmt.Errorf("blob rm err")}
 	rg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	tx := &Transaction{l2Cache: l2, blobStore: bs, registry: rg}
@@ -194,7 +194,7 @@ func Test_NodeRepository_RollbackUpdatedNodes_ErrorBranches(t *testing.T) {
 func Test_NodeRepository_RollbackAddedNodes_ErrorPaths(t *testing.T) {
 	ctx := context.Background()
 	// Error on blob remove + registry remove + redis delete -> lastErr must be non-nil
-	l2 := deleteErrCache{Cache: mocks.NewMockClient()}
+	l2 := deleteErrCache{L2Cache: mocks.NewMockClient()}
 	rg := errRemoveRegistry{Mock_vid_registry: mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry), err: fmt.Errorf("reg rm err")}
 	bs := errBlobStore{err: fmt.Errorf("blob rm err")}
 	tx := &Transaction{l2Cache: l2, registry: rg, blobStore: bs}
@@ -211,7 +211,7 @@ func Test_NodeRepository_RollbackAddedNodes_ErrorPaths(t *testing.T) {
 
 func Test_NodeRepository_RemoveNodes_DeleteError_PropagatesLastErr(t *testing.T) {
 	ctx := context.Background()
-	l2 := deleteErrCache{Cache: mocks.NewMockClient()}
+	l2 := deleteErrCache{L2Cache: mocks.NewMockClient()}
 	tx := &Transaction{l2Cache: l2, blobStore: mocks.NewMockBlobStore()}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rm_nodes_del_err", SlotLength: 4})
 	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: cache.GetGlobalCache()}
@@ -281,7 +281,7 @@ func Test_Phase2Commit_WithUpdatedHandles_Warns_And_Cleans(t *testing.T) {
 
 func Test_TransactionLogger_AcquireLocks_LockError_ReturnsErr(t *testing.T) {
 	ctx := context.Background()
-	l2 := lockErrCache{Cache: mocks.NewMockClient()}
+	l2 := lockErrCache{L2Cache: mocks.NewMockClient()}
 	tnx := &Transaction{l2Cache: l2}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	tid := sop.NewUUID()
@@ -295,7 +295,7 @@ func Test_TransactionLogger_AcquireLocks_LockError_ReturnsErr(t *testing.T) {
 func Test_TransactionLogger_AcquireLocks_IsLocked_Error_ReturnsErr(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	ec := errIsLockedCache{Cache: base}
+	ec := errIsLockedCache{L2Cache: base}
 	txn := &Transaction{l2Cache: ec}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	tid := sop.NewUUID()
@@ -418,7 +418,7 @@ func Test_NodeRepository_Get_Paths(t *testing.T) {
 
 func Test_NodeRepository_RollbackNewRootNodes_ErrorPaths_NoUnregister(t *testing.T) {
 	ctx := context.Background()
-	l2 := deleteErrCache{Cache: mocks.NewMockClient()}
+	l2 := deleteErrCache{L2Cache: mocks.NewMockClient()}
 	bs := errBlobStore{err: fmt.Errorf("blob rm err")}
 	rg := mocks.NewMockRegistry(false)
 	tx := &Transaction{l2Cache: l2, blobStore: bs, registry: rg, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
@@ -438,7 +438,7 @@ func Test_NodeRepository_RollbackNewRootNodes_ErrorPaths_NoUnregister(t *testing
 func Test_DeleteObsoleteEntries_ErrorPrecedence(t *testing.T) {
 	ctx := context.Background()
 	// L1 with L2 delete error, blob remove error, and registry remove error
-	l2 := deleteErrCache{Cache: mocks.NewMockClient()}
+	l2 := deleteErrCache{L2Cache: mocks.NewMockClient()}
 	l1 := cache.NewL1Cache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	bs := errBlobStore{err: fmt.Errorf("blob rm err2")}
 	rg := errRemoveRegistry{Mock_vid_registry: mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry), err: fmt.Errorf("reg rm err2")}
@@ -453,7 +453,7 @@ func Test_DeleteObsoleteEntries_ErrorPrecedence(t *testing.T) {
 }
 
 // AcquireLocks should fail with RestoreRegistryFileSectorFailure when IsLocked returns false after a successful Lock.
-type isLockedFalseCache struct{ sop.Cache }
+type isLockedFalseCache struct{ sop.L2Cache }
 
 func (c isLockedFalseCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
 	return false, nil
@@ -476,7 +476,7 @@ func (c isLockedFalseCache) DualLock(ctx context.Context, duration time.Duration
 func Test_TransactionLogger_AcquireLocks_IsLockedFalse_RaisesFailover(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	c := isLockedFalseCache{Cache: base}
+	c := isLockedFalseCache{L2Cache: base}
 	txn := &Transaction{l2Cache: c}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	tid := sop.NewUUID()
@@ -549,21 +549,21 @@ func Test_Transaction_Cleanup_RemovesLogs(t *testing.T) {
 }
 
 // alterSetCache overrides SetStruct to store a different LockID to simulate a concurrent writer winning the lock.
-type alterSetCache struct{ sop.Cache }
+type alterSetCache struct{ sop.L2Cache }
 
 func (a alterSetCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	if lr, ok := value.(*lockRecord); ok {
 		// Change the LockID to a different UUID before delegating.
 		fake := &lockRecord{LockID: sop.NewUUID(), Action: lr.Action}
-		return a.Cache.SetStruct(ctx, key, fake, expiration)
+		return a.L2Cache.SetStruct(ctx, key, fake, expiration)
 	}
-	return a.Cache.SetStruct(ctx, key, value, expiration)
+	return a.L2Cache.SetStruct(ctx, key, value, expiration)
 }
 
 func Test_ItemActionTracker_Lock_SetThenGet_MismatchConflict(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	ac := alterSetCache{Cache: base}
+	ac := alterSetCache{L2Cache: base}
 	blobs := mocks.NewMockBlobStore()
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock_conflict", SlotLength: 4})
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), false)
@@ -678,7 +678,7 @@ func Test_TransactionLogger_DoPriorityRollbacks_VersionAdvance_TriggersFailover(
 
 // lockFailOnceCache fails Lock once to force the phase1Commit loop to set needsRefetchAndMerge.
 type lockFailOnceCache struct {
-	sop.Cache
+	sop.L2Cache
 	flipped bool
 }
 
@@ -687,7 +687,7 @@ func (c *lockFailOnceCache) Lock(ctx context.Context, duration time.Duration, lo
 		c.flipped = true
 		return false, sop.NilUUID, nil
 	}
-	return c.Cache.Lock(ctx, duration, lockKeys)
+	return c.L2Cache.Lock(ctx, duration, lockKeys)
 }
 
 func (c *lockFailOnceCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
@@ -695,7 +695,7 @@ func (c *lockFailOnceCache) DualLock(ctx context.Context, duration time.Duration
 	if !ok || err != nil {
 		return ok, tid, err
 	}
-	if locked, err := c.Cache.IsLocked(ctx, lockKeys); err != nil || !locked {
+	if locked, err := c.L2Cache.IsLocked(ctx, lockKeys); err != nil || !locked {
 		return false, sop.NilUUID, err
 	}
 	return true, sop.NilUUID, nil
@@ -706,7 +706,7 @@ func Test_Phase1Commit_LockFailOnce_TriggersRefetchAndMerge(t *testing.T) {
 
 	// L2 cache fails first Lock, then succeeds.
 	base := mocks.NewMockClient()
-	l2 := &lockFailOnceCache{Cache: base}
+	l2 := &lockFailOnceCache{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
@@ -821,7 +821,7 @@ func Test_Transaction_Cleanup_LogError_Propagates(t *testing.T) {
 
 // isLockedErrOnceCache makes IsLocked return an error the first time to cover the error branch in phase1Commit.
 type isLockedErrOnceCache struct {
-	sop.Cache
+	sop.L2Cache
 	flipped bool
 }
 
@@ -830,11 +830,11 @@ func (c *isLockedErrOnceCache) IsLocked(ctx context.Context, lockKeys []*sop.Loc
 		c.flipped = true
 		return false, errors.New("islocked err")
 	}
-	return c.Cache.IsLocked(ctx, lockKeys)
+	return c.L2Cache.IsLocked(ctx, lockKeys)
 }
 
 func (c *isLockedErrOnceCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
-	ok, tid, err := c.Cache.Lock(ctx, duration, lockKeys)
+	ok, tid, err := c.L2Cache.Lock(ctx, duration, lockKeys)
 	if !ok || err != nil {
 		return ok, tid, err
 	}
@@ -847,7 +847,7 @@ func (c *isLockedErrOnceCache) DualLock(ctx context.Context, duration time.Durat
 func Test_Phase1Commit_IsLockedError_ThenSucceeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &isLockedErrOnceCache{Cache: base}
+	l2 := &isLockedErrOnceCache{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)

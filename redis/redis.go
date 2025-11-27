@@ -19,7 +19,7 @@ type client struct {
 
 // NewClient returns a Cache backed by the default shared Redis connection.
 // The underlying connection must have been initialized via package-level setup.
-func NewClient() sop.Cache {
+func NewClient() sop.L2Cache {
 	return &client{
 		conn: connection,
 	}

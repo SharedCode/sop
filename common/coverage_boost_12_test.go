@@ -626,7 +626,7 @@ func Test_Phase1Commit_FetchedItems_NotIntact_Retry_Succeeds(t *testing.T) {
 func Test_Phase1Commit_IsLockedFalse_Continue_Retry_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &isLockedFalseOnceCache{Cache: base}
+	l2 := &isLockedFalseOnceCache{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	bs := mocks.NewMockBlobStore()
 	sr := mocks.NewMockStoreRepository()
@@ -666,7 +666,7 @@ func Test_Phase1Commit_IsLockedFalse_Continue_Retry_Succeeds(t *testing.T) {
 func Test_Phase1Commit_LockFailsOnce_RefetchAndMerge_Then_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &lockFailOnceCache{Cache: base}
+	l2 := &lockFailOnceCache{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	bs := mocks.NewMockBlobStore()
 	sr := mocks.NewMockStoreRepository()
@@ -1203,7 +1203,7 @@ func Test_NodeRepository_RollbackRemovedNodes_Locked_UpdateNoLocksError(t *testi
 func Test_Phase1Commit_IsLockedError_Continue_Retry_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	l2 := &isLockedErrOnceCache{Cache: base}
+	l2 := &isLockedErrOnceCache{L2Cache: base}
 	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	bs := mocks.NewMockBlobStore()
 	sr := mocks.NewMockStoreRepository()
@@ -1238,7 +1238,7 @@ func Test_Phase1Commit_IsLockedError_Continue_Retry_Succeeds(t *testing.T) {
 }
 
 // Cache wrapper that forces Lock to fail for the DTrollbk takeover key used by handleRegistrySectorLockTimeout.
-type dtLockFailCache struct{ sop.Cache }
+type dtLockFailCache struct{ sop.L2Cache }
 
 func (c dtLockFailCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	for _, k := range lockKeys {
@@ -1246,7 +1246,7 @@ func (c dtLockFailCache) Lock(ctx context.Context, duration time.Duration, lockK
 			return false, sop.NilUUID, nil
 		}
 	}
-	return c.Cache.Lock(ctx, duration, lockKeys)
+	return c.L2Cache.Lock(ctx, duration, lockKeys)
 }
 
 func (c dtLockFailCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
@@ -1254,7 +1254,7 @@ func (c dtLockFailCache) DualLock(ctx context.Context, duration time.Duration, l
 	if !ok || err != nil {
 		return ok, tid, err
 	}
-	if locked, err := c.Cache.IsLocked(ctx, lockKeys); err != nil || !locked {
+	if locked, err := c.L2Cache.IsLocked(ctx, lockKeys); err != nil || !locked {
 		return false, sop.NilUUID, err
 	}
 	return true, sop.NilUUID, nil

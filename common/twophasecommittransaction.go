@@ -38,7 +38,7 @@ type Transaction struct {
 	// Needed by NodeRepository & ValueDataRepository for Node/Value data merging to the backend storage systems.
 	blobStore       sop.BlobStore
 	l1Cache         *cache.L1Cache
-	l2Cache         sop.Cache
+	l2Cache         sop.L2Cache
 	StoreRepository sop.StoreRepository
 	// VirtualIDRegistry manages the virtual IDs, a.k.a. "handle".
 	registry sop.Registry
@@ -74,7 +74,7 @@ type Transaction struct {
 // commitMaxDuration limits commit duration; logging enables crash-safe recovery via a transaction log.
 // Note: commitMaxDuration is the internal safety cap for commit and lock TTLs; the effective limit is min(ctx deadline, commitMaxDuration).
 func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration time.Duration, logging bool,
-	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, l2Cache sop.Cache, transactionLog sop.TransactionLog) (*Transaction, error) {
+	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, l2Cache sop.L2Cache, transactionLog sop.TransactionLog) (*Transaction, error) {
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if commitMaxDuration <= 0 {
 		commitMaxDuration = time.Duration(15 * time.Minute)

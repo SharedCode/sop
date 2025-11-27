@@ -121,7 +121,7 @@ func Test_Phase1Commit_CommitTrackedValues_Error(t *testing.T) {
 func Test_Phase1Commit_IsLockedFalse_Then_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	wc := &wrapCache{Cache: base, flipOnce: true}
+	wc := &wrapCache{L2Cache: base, flipOnce: true}
 	cache.NewGlobalCache(wc, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	rg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: rg, l2Cache: wc, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
@@ -171,7 +171,7 @@ func Test_RollbackRemovedNodes_RegistryGetError(t *testing.T) {
 }
 
 // getStructErrCache forces GetStruct to return an error while indicating not found.
-type getStructErrCache struct{ sop.Cache }
+type getStructErrCache struct{ sop.L2Cache }
 
 func (g getStructErrCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, fmt.Errorf("getstruct err")
@@ -191,7 +191,7 @@ func Test_ItemActionTracker_Get_GlobalCache_ErrorAndHit(t *testing.T) {
 	_ = bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: "tb", Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: id1, Value: ba}}}})
 	si1 := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_get_err", SlotLength: 2})
 	si1.IsValueDataGloballyCached = true
-	trk1 := newItemActionTracker[PersonKey, Person](si1, getStructErrCache{Cache: mocks.NewMockClient()}, bs, newTransactionLogger(mocks.NewMockTransactionLog(), false))
+	trk1 := newItemActionTracker[PersonKey, Person](si1, getStructErrCache{L2Cache: mocks.NewMockClient()}, bs, newTransactionLogger(mocks.NewMockTransactionLog(), false))
 	it1 := &btree.Item[PersonKey, Person]{ID: id1, Key: PersonKey{Lastname: "k"}, Version: 1, ValueNeedsFetch: true}
 	if err := trk1.Get(ctx, it1); err != nil {
 		t.Fatalf("Get(global cache error) err: %v", err)
@@ -236,21 +236,21 @@ func Test_ItemActionTracker_CheckTrackedItems_Conflict(t *testing.T) {
 }
 
 // zeroSetCache stores a zero LockID in SetStruct to trigger the "can't attain a lock" path after re-get.
-type zeroSetCache struct{ sop.Cache }
+type zeroSetCache struct{ sop.L2Cache }
 
 func (z zeroSetCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	if lr, ok := value.(*lockRecord); ok {
 		// Store with zero UUID
 		v := &lockRecord{LockID: sop.NilUUID, Action: lr.Action}
-		return z.Cache.SetStruct(ctx, key, v, expiration)
+		return z.L2Cache.SetStruct(ctx, key, v, expiration)
 	}
-	return z.Cache.SetStruct(ctx, key, value, expiration)
+	return z.L2Cache.SetStruct(ctx, key, value, expiration)
 }
 
 func Test_ItemActionTracker_Lock_RegetNilLockID_Error(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	zc := zeroSetCache{Cache: base}
+	zc := zeroSetCache{L2Cache: base}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_nil", SlotLength: 2})
 	trk := newItemActionTracker[PersonKey, Person](si, zc, mocks.NewMockBlobStore(), newTransactionLogger(mocks.NewMockTransactionLog(), false))
 	id := sop.NewUUID()
@@ -600,7 +600,7 @@ func Test_Phase1Commit_CommitUpdatedNodes_SectorTimeout_Retry_Succeeds(t *testin
 }
 
 // cacheWarnOnSetStruct returns error on SetStruct to exercise warning paths in commitAddedNodes/commitNewRootNodes.
-type cacheWarnOnSetStruct struct{ sop.Cache }
+type cacheWarnOnSetStruct struct{ sop.L2Cache }
 
 func (c cacheWarnOnSetStruct) SetStruct(ctx context.Context, key string, value interface{}, d time.Duration) error {
 	return fmt.Errorf("setstruct err")
@@ -609,7 +609,7 @@ func (c cacheWarnOnSetStruct) SetStruct(ctx context.Context, key string, value i
 func Test_NodeRepository_CommitAddedNodes_SetStructWarn(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	cw := cacheWarnOnSetStruct{Cache: base}
+	cw := cacheWarnOnSetStruct{L2Cache: base}
 	cache.NewGlobalCache(cw, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
 	reg := mocks.NewMockRegistry(false)
 	tx := &Transaction{registry: reg, blobStore: mocks.NewMockBlobStore(), l2Cache: cw, l1Cache: cache.GetGlobalCache()}

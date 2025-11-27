@@ -48,7 +48,7 @@ type nodeRepositoryBackend struct {
 	localCache map[sop.UUID]cachedNode
 	// L2 Cache, e.g. - Redis. Used here primarily to allow nodes merging in L2. I.e. - capability to sense
 	// changes across different transactions on same or different machines and merge their changes in during transaction commits.
-	l2Cache sop.Cache
+	l2Cache sop.L2Cache
 	// L1 Cache is a virtualized in-memory & L2. Used as a global MRU cache of all
 	// B-trees (across transactions) running in this host computer.
 	l1Cache   *cache.L1Cache

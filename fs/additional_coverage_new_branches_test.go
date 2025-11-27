@@ -105,7 +105,7 @@ func TestRegistry_Replicate_rmCloseOverrideError(t *testing.T) {
 }
 
 // Cache wrapper that forces SetStruct to return an error to exercise log.Warn paths in Add & Update.
-type setStructErrCache struct{ sop.Cache }
+type setStructErrCache struct{ sop.L2Cache }
 
 func (c setStructErrCache) SetStruct(ctx context.Context, key string, value interface{}, exp time.Duration) error {
 	return errors.New("induced setstruct error")
@@ -120,7 +120,7 @@ func TestRegistry_AddUpdate_SetStructErrorTolerated(t *testing.T) {
 	rt, _ := NewReplicationTracker(ctx, []string{base}, false, realCache)
 	r := NewRegistry(true, MinimumModValue, rt, realCache)
 	defer r.Close()
-	r.l2Cache = setStructErrCache{Cache: realCache}
+	r.l2Cache = setStructErrCache{L2Cache: realCache}
 	h := sop.NewHandle(sop.NewUUID())
 	// Ensure table directory exists under active folder for registry writes
 	if err := os.MkdirAll(filepath.Join(rt.getActiveBaseFolder(), "rg"), 0o755); err != nil {

@@ -13,7 +13,7 @@ const (
 )
 
 // CacheFactory defines the function signature for creating a cache client.
-type CacheFactory func() Cache
+type CacheFactory func() L2Cache
 
 var globalCacheFactory CacheFactory
 var globalCacheFactoryType CacheType
@@ -44,7 +44,7 @@ func GetCacheFactoryType() CacheType {
 
 // NewCacheClient creates a new cache client using the registered factory.
 // It returns nil if no factory is registered.
-func NewCacheClient() Cache {
+func NewCacheClient() L2Cache {
 	if globalCacheFactory == nil {
 		return nil
 	}

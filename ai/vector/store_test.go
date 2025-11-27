@@ -3,8 +3,6 @@ package vector
 import (
 	"os"
 	"testing"
-
-	"github.com/sharedcode/sop"
 )
 
 func TestVectorStore(t *testing.T) {
@@ -18,7 +16,10 @@ func TestVectorStore(t *testing.T) {
 	// Initialize Database
 	db := NewDatabase()
 	db.SetStoragePath(tmpDir)
-	db.SetReadMode(sop.ForReading) // Default
+	// No need to set read mode explicitly, default is sop.NoCheck as once built, Vector DBs are read-only
+	// in this Doctor/Nurse use case. And NoCheck avoids unnecessary overhead appropriate for single-writer,
+	// write once, read forever scenarios.
+	//db.SetReadMode(sop.ForReading) // Default
 
 	index := db.Open("test_vectors")
 

@@ -13,7 +13,7 @@ import (
 	"github.com/sharedcode/sop/encoding"
 )
 
-type getStructExErrCache struct{ sop.Cache }
+type getStructExErrCache struct{ sop.L2Cache }
 
 func (c getStructExErrCache) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
@@ -39,7 +39,7 @@ func TestReplicationTracker_Failover_EarlyReturn_FailedToReplicate(t *testing.T)
 
 	a := t.TempDir()
 	b := t.TempDir()
-	rt, err := NewReplicationTracker(ctx, []string{a, b}, true, getStructExErrCache{Cache: mocks.NewMockClient()})
+	rt, err := NewReplicationTracker(ctx, []string{a, b}, true, getStructExErrCache{L2Cache: mocks.NewMockClient()})
 	if err != nil {
 		t.Fatalf("NewReplicationTracker: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestReplicationTracker_Failover_SyncL2ErrorStillFlips(t *testing.T) {
 	a := t.TempDir()
 	b := t.TempDir()
 	// Use a cache that errors on GetStructEx to exercise warn branch.
-	rt, err := NewReplicationTracker(ctx, []string{a, b}, true, getStructExErrCache{Cache: mocks.NewMockClient()})
+	rt, err := NewReplicationTracker(ctx, []string{a, b}, true, getStructExErrCache{L2Cache: mocks.NewMockClient()})
 	if err != nil {
 		t.Fatalf("NewReplicationTracker: %v", err)
 	}
@@ -561,7 +561,7 @@ func Test_ReadStatus_ActivePresent_InvalidJSON_ReturnsError(t *testing.T) {
 
 // --- helper mock caches for syncWithL2Cache ---
 
-type getStructExErrCache2 struct{ sop.Cache }
+type getStructExErrCache2 struct{ sop.L2Cache }
 
 func (c getStructExErrCache2) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
@@ -571,7 +571,7 @@ func (c getStructExErrCache2) GetStructEx(ctx context.Context, key string, v int
 	return false, errors.New("getstructex err2")
 }
 
-type getStructExNotFoundCache struct{ sop.Cache }
+type getStructExNotFoundCache struct{ sop.L2Cache }
 
 func (c getStructExNotFoundCache) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
@@ -582,7 +582,7 @@ func (c getStructExNotFoundCache) GetStructEx(ctx context.Context, key string, v
 }
 
 type getStructExFoundCache struct {
-	sop.Cache
+	sop.L2Cache
 	val ReplicationTrackedDetails
 }
 
@@ -594,7 +594,7 @@ func (c getStructExFoundCache) GetStructEx(ctx context.Context, key string, v in
 	return true, nil
 }
 
-type setStructErrCache2 struct{ sop.Cache }
+type setStructErrCache2 struct{ sop.L2Cache }
 
 func (c setStructErrCache2) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
@@ -605,7 +605,7 @@ func (c setStructErrCache2) SetStruct(ctx context.Context, key string, value int
 }
 
 // combined wrapper: GetStructEx returns not found, SetStruct returns error
-type notFoundSetErrCache struct{ sop.Cache }
+type notFoundSetErrCache struct{ sop.L2Cache }
 
 func (c notFoundSetErrCache) Info(ctx context.Context, section string) (string, error) {
 	return "# Server\nrun_id:mock\n", nil
@@ -702,7 +702,7 @@ func Test_SyncWithL2Cache_Push_NotFound_Sets(t *testing.T) {
 		globalReplicationDetailsLocker.Unlock()
 	})
 
-	rt := &replicationTracker{l2Cache: getStructExNotFoundCache{Cache: mocks.NewMockClient()}}
+	rt := &replicationTracker{l2Cache: getStructExNotFoundCache{L2Cache: mocks.NewMockClient()}}
 	if err := rt.syncWithL2Cache(ctx, true); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
@@ -721,7 +721,7 @@ func Test_SyncWithL2Cache_Push_FoundEqual_Returns(t *testing.T) {
 		globalReplicationDetailsLocker.Unlock()
 	})
 
-	rt := &replicationTracker{l2Cache: getStructExFoundCache{Cache: mocks.NewMockClient(), val: val}}
+	rt := &replicationTracker{l2Cache: getStructExFoundCache{L2Cache: mocks.NewMockClient(), val: val}}
 	if err := rt.syncWithL2Cache(ctx, true); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
@@ -740,7 +740,7 @@ func Test_SyncWithL2Cache_Push_FoundDifferent_Sets(t *testing.T) {
 		globalReplicationDetailsLocker.Unlock()
 	})
 
-	rt := &replicationTracker{l2Cache: getStructExFoundCache{Cache: mocks.NewMockClient(), val: val}}
+	rt := &replicationTracker{l2Cache: getStructExFoundCache{L2Cache: mocks.NewMockClient(), val: val}}
 	if err := rt.syncWithL2Cache(ctx, true); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
@@ -748,7 +748,7 @@ func Test_SyncWithL2Cache_Push_FoundDifferent_Sets(t *testing.T) {
 
 func Test_SyncWithL2Cache_Push_GetErr_ReturnsErr(t *testing.T) {
 	ctx := context.Background()
-	rt := &replicationTracker{l2Cache: getStructExErrCache2{Cache: mocks.NewMockClient()}}
+	rt := &replicationTracker{l2Cache: getStructExErrCache2{L2Cache: mocks.NewMockClient()}}
 	if err := rt.syncWithL2Cache(ctx, true); err == nil {
 		t.Fatalf("expected error")
 	}
@@ -769,7 +769,7 @@ func Test_SyncWithL2Cache_Push_NotFound_SetErr_ReturnsErr(t *testing.T) {
 	})
 
 	// Cache that reports not found on GetStructEx and errors on SetStruct
-	rt := &replicationTracker{l2Cache: notFoundSetErrCache{Cache: mocks.NewMockClient()}}
+	rt := &replicationTracker{l2Cache: notFoundSetErrCache{L2Cache: mocks.NewMockClient()}}
 	if err := rt.syncWithL2Cache(ctx, true); err == nil {
 		t.Fatalf("expected error on SetStruct")
 	}
@@ -777,7 +777,7 @@ func Test_SyncWithL2Cache_Push_NotFound_SetErr_ReturnsErr(t *testing.T) {
 
 func Test_SyncWithL2Cache_Pull_NotFound_NoChange(t *testing.T) {
 	ctx := context.Background()
-	rt := &replicationTracker{l2Cache: getStructExNotFoundCache{Cache: mocks.NewMockClient()}}
+	rt := &replicationTracker{l2Cache: getStructExNotFoundCache{L2Cache: mocks.NewMockClient()}}
 	if err := rt.syncWithL2Cache(ctx, false); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
@@ -802,7 +802,7 @@ func Test_HandleFailed_PushSetStructError_WarnsAfterWrite(t *testing.T) {
 	p := t.TempDir()
 
 	// Use cache that returns not found on pull and errors on push SetStruct.
-	rt, err := NewReplicationTracker(ctx, []string{a, p}, true, notFoundSetErrCache{Cache: mocks.NewMockClient()})
+	rt, err := NewReplicationTracker(ctx, []string{a, p}, true, notFoundSetErrCache{L2Cache: mocks.NewMockClient()})
 	if err != nil {
 		t.Fatalf("new rt: %v", err)
 	}
@@ -822,7 +822,7 @@ func Test_HandleFailed_PushSetStructError_WarnsAfterWrite(t *testing.T) {
 
 func Test_SyncWithL2Cache_Pull_GetErr_ReturnsErr(t *testing.T) {
 	ctx := context.Background()
-	rt := &replicationTracker{l2Cache: getStructExErrCache2{Cache: mocks.NewMockClient()}}
+	rt := &replicationTracker{l2Cache: getStructExErrCache2{L2Cache: mocks.NewMockClient()}}
 	if err := rt.syncWithL2Cache(ctx, false); err == nil {
 		t.Fatalf("expected error")
 	}
@@ -831,7 +831,7 @@ func Test_SyncWithL2Cache_Pull_GetErr_ReturnsErr(t *testing.T) {
 func Test_SyncWithL2Cache_Pull_Found_UpdatesGlobal(t *testing.T) {
 	ctx := context.Background()
 	val := ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: false}
-	rt := &replicationTracker{l2Cache: getStructExFoundCache{Cache: mocks.NewMockClient(), val: val}}
+	rt := &replicationTracker{l2Cache: getStructExFoundCache{L2Cache: mocks.NewMockClient(), val: val}}
 
 	// Snapshot and restore global
 	globalReplicationDetailsLocker.Lock()
