@@ -1,7 +1,7 @@
 {
   "id": "nurse_local",
   "name": "Nurse Joy (Local)",
-  "description": "I am a local heuristic translator. I map user symptoms to canonical medical terms using vector search.",
+  "description": "I am a local heuristic translator.",
   "synonyms": {
     "ache": "pain",
     "belly": "abdomen",
@@ -20,6 +20,9 @@
   },
   "system_prompt": "You are a search index. Return the matching canonical terms.",
   "storage_path": "nurse_local",
+  "embedder": {
+    "type": "simple"
+  },
   "data": [
     { "id": "sym_1", "text": "itching", "description": "Sensation that causes the desire or reflex to scratch." },
     { "id": "sym_2", "text": "skin rash", "description": "Change in the color or texture of the skin." },

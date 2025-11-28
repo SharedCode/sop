@@ -26,6 +26,9 @@ type VectorIndex interface {
 	Query(vec []float32, k int, filters map[string]any) ([]Hit, error)
 	// Count returns the total number of items in the index.
 	Count() (int64, error)
+	// AddCentroid adds a new centroid to the index dynamically.
+	// This allows for runtime expansion of the concept space without full rebalancing.
+	AddCentroid(vec []float32) (int, error)
 }
 
 // Item represents a vector item returned to the user.

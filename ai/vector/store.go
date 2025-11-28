@@ -84,6 +84,8 @@ type domainIndex struct {
 	db   *Database
 	name string
 	// centroidsCache caches the centroids to avoid reloading them from the B-Tree on every operation.
+	// Future Refactoring: To use SOP Store internal caching (MRU), remove this field and update
+	// searchClosestCentroid/getCentroids to iterate the B-Tree (arch.Centroids) directly.
 	centroidsCache map[int][]float32
 }
 
@@ -119,36 +121,39 @@ func (di *domainIndex) Upsert(id string, vec []float32, meta map[string]any) err
 	if found {
 		// Retrieve old metadata to find old vector location
 		oldJson, err := arch.Content.GetCurrentValue(di.db.ctx)
-		if err != nil {
+		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
-		var oldMeta map[string]any
-		if err := json.Unmarshal([]byte(oldJson), &oldMeta); err == nil {
-			oldCid := 1
-			oldDist := float32(0.0)
-			if v, ok := oldMeta["_centroid_id"].(float64); ok {
-				oldCid = int(v)
-			}
-			if v, ok := oldMeta["_distance"].(float64); ok {
-				oldDist = float32(v)
-			}
 
-			// Remove old vector
-			oldKey := CompositeKey{CentroidID: oldCid, DistanceToCentroid: oldDist, ItemID: id}
-			if foundVec, _ := arch.Vectors.Find(di.db.ctx, oldKey, false); foundVec {
-				if _, err := arch.Vectors.RemoveCurrentItem(di.db.ctx); err != nil {
-					return err
+		if err == nil {
+			var oldMeta map[string]any
+			if err := json.Unmarshal([]byte(oldJson), &oldMeta); err == nil {
+				oldCid := 1
+				oldDist := float32(0.0)
+				if v, ok := oldMeta["_centroid_id"].(float64); ok {
+					oldCid = int(v)
 				}
-				// Decrement count of old centroid
-				if foundC, _ := arch.Centroids.Find(di.db.ctx, oldCid, false); foundC {
-					c, _ := arch.Centroids.GetCurrentValue(di.db.ctx)
-					c.VectorCount--
-					arch.Centroids.UpdateCurrentItem(di.db.ctx, c)
+				if v, ok := oldMeta["_distance"].(float64); ok {
+					oldDist = float32(v)
+				}
+
+				// Remove old vector
+				oldKey := CompositeKey{CentroidID: oldCid, DistanceToCentroid: oldDist, ItemID: id}
+				if foundVec, _ := arch.Vectors.Find(di.db.ctx, oldKey, false); foundVec {
+					if _, err := arch.Vectors.RemoveCurrentItem(di.db.ctx); err != nil {
+						return err
+					}
+					// Decrement count of old centroid
+					if foundC, _ := arch.Centroids.Find(di.db.ctx, oldCid, false); foundC {
+						c, _ := arch.Centroids.GetCurrentValue(di.db.ctx)
+						c.VectorCount--
+						arch.Centroids.UpdateCurrentItem(di.db.ctx, c)
+					}
 				}
 			}
 		}
 		// Remove old content to ensure clean insert
-		if _, err := arch.Content.RemoveCurrentItem(di.db.ctx); err != nil {
+		if _, err := arch.Content.RemoveCurrentItem(di.db.ctx); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
@@ -170,10 +175,13 @@ func (di *domainIndex) Upsert(id string, vec []float32, meta map[string]any) err
 			return err
 		}
 		// Update cache
-		di.centroidsCache = centroids
+		di.updateCentroidsCache(centroids)
 	}
 
-	centroidID, dist := findClosestCentroid(vec, centroids)
+	centroidID, dist, err := di.searchClosestCentroid(di.db.ctx, arch, vec)
+	if err != nil {
+		return err
+	}
 
 	// Increment count
 	if foundC, _ := arch.Centroids.Find(di.db.ctx, centroidID, false); foundC {
@@ -250,7 +258,7 @@ func (di *domainIndex) UpsertBatch(items []ai.Item) error {
 			}
 		}
 		// Update cache
-		di.centroidsCache = centroids
+		di.updateCentroidsCache(centroids)
 	}
 
 	for _, item := range items {
@@ -266,42 +274,48 @@ func (di *domainIndex) UpsertBatch(items []ai.Item) error {
 		if found {
 			// Retrieve old metadata to find old vector location
 			oldJson, err := arch.Content.GetCurrentValue(di.db.ctx)
-			if err != nil {
+			if err != nil && !os.IsNotExist(err) {
 				return err
 			}
-			var oldMeta map[string]any
-			if err := json.Unmarshal([]byte(oldJson), &oldMeta); err == nil {
-				oldCid := 1
-				oldDist := float32(0.0)
-				if v, ok := oldMeta["_centroid_id"].(float64); ok {
-					oldCid = int(v)
-				}
-				if v, ok := oldMeta["_distance"].(float64); ok {
-					oldDist = float32(v)
-				}
 
-				// Remove old vector
-				oldKey := CompositeKey{CentroidID: oldCid, DistanceToCentroid: oldDist, ItemID: id}
-				if foundVec, _ := arch.Vectors.Find(di.db.ctx, oldKey, false); foundVec {
-					if _, err := arch.Vectors.RemoveCurrentItem(di.db.ctx); err != nil {
-						return err
+			if err == nil {
+				var oldMeta map[string]any
+				if err := json.Unmarshal([]byte(oldJson), &oldMeta); err == nil {
+					oldCid := 1
+					oldDist := float32(0.0)
+					if v, ok := oldMeta["_centroid_id"].(float64); ok {
+						oldCid = int(v)
 					}
-					// Decrement count
-					if foundC, _ := arch.Centroids.Find(di.db.ctx, oldCid, false); foundC {
-						c, _ := arch.Centroids.GetCurrentValue(di.db.ctx)
-						c.VectorCount--
-						arch.Centroids.UpdateCurrentItem(di.db.ctx, c)
+					if v, ok := oldMeta["_distance"].(float64); ok {
+						oldDist = float32(v)
+					}
+
+					// Remove old vector
+					oldKey := CompositeKey{CentroidID: oldCid, DistanceToCentroid: oldDist, ItemID: id}
+					if foundVec, _ := arch.Vectors.Find(di.db.ctx, oldKey, false); foundVec {
+						if _, err := arch.Vectors.RemoveCurrentItem(di.db.ctx); err != nil {
+							return err
+						}
+						// Decrement count
+						if foundC, _ := arch.Centroids.Find(di.db.ctx, oldCid, false); foundC {
+							c, _ := arch.Centroids.GetCurrentValue(di.db.ctx)
+							c.VectorCount--
+							arch.Centroids.UpdateCurrentItem(di.db.ctx, c)
+						}
 					}
 				}
 			}
 			// Remove old content to ensure clean insert
-			if _, err := arch.Content.RemoveCurrentItem(di.db.ctx); err != nil {
+			if _, err := arch.Content.RemoveCurrentItem(di.db.ctx); err != nil && !os.IsNotExist(err) {
 				return err
 			}
 		}
 
 		// 1. Assign Centroid
-		centroidID, dist := findClosestCentroid(vec, centroids)
+		centroidID, dist, err := di.searchClosestCentroid(di.db.ctx, arch, vec)
+		if err != nil {
+			return err
+		}
 
 		// Increment count
 		if foundC, _ := arch.Centroids.Find(di.db.ctx, centroidID, false); foundC {
@@ -447,7 +461,7 @@ func (di *domainIndex) IndexAll() error {
 				}
 			}
 			// Update cache
-			di.centroidsCache = centroids
+			di.updateCentroidsCache(centroids)
 		} else {
 			// No data to index
 			return nil
@@ -489,7 +503,10 @@ func (di *domainIndex) IndexAll() error {
 
 		if len(vec) > 0 {
 			// Assign Centroid
-			centroidID, dist := findClosestCentroid(vec, centroids)
+			centroidID, dist, err := di.searchClosestCentroid(di.db.ctx, arch, vec)
+			if err != nil {
+				return err
+			}
 
 			// Increment count
 			if foundC, _ := arch.Centroids.Find(di.db.ctx, centroidID, false); foundC {
@@ -706,22 +723,14 @@ func (di *domainIndex) Query(vec []float32, k int, filters map[string]any) ([]ai
 	}
 
 	// 1. Identify Target Centroids
-	centroids, err := di.getCentroids(di.db.ctx, arch)
+	// We use a default nprobe of 2 (or all if fewer) to ensure good recall.
+	targetCentroids, err := di.searchClosestCentroids(di.db.ctx, arch, vec, 2)
 	if err != nil {
 		return nil, err
 	}
-	if len(centroids) == 0 {
+	if len(targetCentroids) == 0 {
 		return nil, nil
 	}
-
-	// Find the closest centroids to the query vector (nprobe)
-	// We use a default nprobe of 2 (or all if fewer) to ensure good recall.
-	nprobe := 2
-	if len(centroids) < nprobe {
-		nprobe = len(centroids)
-	}
-
-	targetCentroids := findClosestCentroids(vec, centroids, nprobe)
 
 	var candidates []ai.Hit
 
@@ -737,6 +746,13 @@ func (di *domainIndex) Query(vec []float32, k int, filters map[string]any) ([]ai
 		for {
 			item, err := arch.Vectors.GetCurrentItem(di.db.ctx)
 			if err != nil {
+				if os.IsNotExist(err) {
+					// Skip missing vector
+					if ok, _ := arch.Vectors.Next(di.db.ctx); !ok {
+						break
+					}
+					continue
+				}
 				return nil, err
 			}
 
@@ -1087,6 +1103,53 @@ func (di *domainIndex) Count() (int64, error) {
 	return arch.Content.Count(), nil
 }
 
+// AddCentroid adds a new centroid to the index dynamically.
+// It finds the next available Centroid ID, adds the vector, and updates the cache.
+func (di *domainIndex) AddCentroid(vec []float32) (int, error) {
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
+	if err != nil {
+		return 0, err
+	}
+	defer trans.Rollback(di.db.ctx)
+
+	version, err := di.getActiveVersion(di.db.ctx, trans)
+	if err != nil {
+		return 0, err
+	}
+
+	arch, err := OpenDomainStore(di.db.ctx, trans, version)
+	if err != nil {
+		return 0, err
+	}
+
+	// 1. Determine new ID
+	newID := 1
+	if ok, err := arch.Centroids.Last(di.db.ctx); err != nil {
+		return 0, err
+	} else if ok {
+		item, err := arch.Centroids.GetCurrentItem(di.db.ctx)
+		if err != nil {
+			return 0, err
+		}
+		newID = item.Key + 1
+	}
+
+	// 2. Add to Store
+	if _, err := arch.Centroids.Add(di.db.ctx, newID, Centroid{Vector: vec, VectorCount: 0}); err != nil {
+		return 0, err
+	}
+
+	// 3. Update Cache (Optimistic)
+	di.addCentroidToCache(newID, vec)
+
+	if err := trans.Commit(di.db.ctx); err != nil {
+		return 0, err
+	}
+
+	return newID, nil
+}
+
 // getCentroids returns the centroids for the domain, loading them from the B-Tree if not cached.
 func (di *domainIndex) getCentroids(ctx context.Context, arch *Architecture) (map[int][]float32, error) {
 	if di.centroidsCache != nil {
@@ -1114,6 +1177,36 @@ func (di *domainIndex) getCentroids(ctx context.Context, arch *Architecture) (ma
 
 	di.centroidsCache = centroids
 	return centroids, nil
+}
+
+// searchClosestCentroid abstracts the centroid search strategy.
+// Currently uses the cached map, but can be refactored to iterate the B-Tree directly.
+func (di *domainIndex) searchClosestCentroid(ctx context.Context, arch *Architecture, vec []float32) (int, float32, error) {
+	centroids, err := di.getCentroids(ctx, arch)
+	if err != nil {
+		return 0, 0, err
+	}
+	id, dist := findClosestCentroid(vec, centroids)
+	return id, dist, nil
+}
+
+// searchClosestCentroids finds the N closest centroids.
+func (di *domainIndex) searchClosestCentroids(ctx context.Context, arch *Architecture, vec []float32, n int) ([]int, error) {
+	centroids, err := di.getCentroids(ctx, arch)
+	if err != nil {
+		return nil, err
+	}
+	return findClosestCentroids(vec, centroids, n), nil
+}
+
+func (di *domainIndex) updateCentroidsCache(centroids map[int][]float32) {
+	di.centroidsCache = centroids
+}
+
+func (di *domainIndex) addCentroidToCache(id int, vec []float32) {
+	if di.centroidsCache != nil {
+		di.centroidsCache[id] = vec
+	}
 }
 
 // Rebalance rebuilds the index by re-computing centroids based on the current data distribution.
@@ -1488,7 +1581,7 @@ func (di *domainIndex) Rebalance() error {
 		return err
 	}
 
-	di.centroidsCache = centroids
+	di.updateCentroidsCache(centroids)
 
 	if err := trans.Commit(di.db.ctx); err != nil {
 		return err

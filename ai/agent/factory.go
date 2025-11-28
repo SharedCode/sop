@@ -31,7 +31,8 @@ func SetupInfrastructure(cfg Config, deps Dependencies) (ai.Embeddings, ai.Vecto
 	// 1. Initialize Embedder
 	var emb ai.Embeddings
 
-	if cfg.Embedder.Type == "agent" {
+	switch cfg.Embedder.Type {
+	case "agent":
 		agent, ok := deps.AgentRegistry[cfg.Embedder.AgentID]
 		if !ok {
 			return nil, nil, fmt.Errorf("embedder agent '%s' not found in registry", cfg.Embedder.AgentID)
@@ -39,7 +40,13 @@ func SetupInfrastructure(cfg Config, deps Dependencies) (ai.Embeddings, ai.Vecto
 		// Use a simple base embedder for the vectors, but the agent will expand the text first
 		baseEmb := embed.NewSimple(cfg.ID+"-base-embed", 1024, nil)
 		emb = embed.NewAgentEmbedder(agent, baseEmb, cfg.Embedder.Instruction)
-	} else {
+
+	case "ollama":
+		baseURL, _ := cfg.Embedder.Options["base_url"].(string)
+		model, _ := cfg.Embedder.Options["model"].(string)
+		emb = embed.NewOllama(baseURL, model)
+
+	default:
 		// Default: Simple Embedder with domain-specific synonyms
 		// We use a higher dimensionality (1024) to reduce collisions in the simple hash embedder
 		emb = embed.NewSimple(cfg.ID+"-embed", 1024, cfg.Synonyms)
@@ -90,6 +97,9 @@ func NewFromConfig(cfg Config, deps Dependencies) (*Service, error) {
 	var pol ai.PolicyEngine
 	var class ai.Classifier
 
+	// Create a local registry for policy agents
+	policyRegistry := make(map[string]ai.Agent)
+
 	for _, pCfg := range cfg.Policies {
 		if pCfg.Type == "profanity" {
 			// Use configured max strikes, default to 3 if 0
@@ -97,8 +107,31 @@ func NewFromConfig(cfg Config, deps Dependencies) (*Service, error) {
 			if strikes <= 0 {
 				strikes = 3
 			}
-			pol, class = policy.NewProfanityGuardrail(strikes)
+			// Create the policy engine and classifier
+			pEngine, pClass := policy.NewProfanityGuardrail(strikes)
+
+			// If this is the "main" policy (no ID or first one), use it for the domain
+			if pol == nil {
+				pol = pEngine
+				class = pClass
+			}
+
+			// If an ID is provided, register it as a PolicyAgent
+			if pCfg.ID != "" {
+				policyAgent := NewPolicyAgent(pCfg.ID, pEngine, pClass)
+				policyRegistry[pCfg.ID] = policyAgent
+			}
 		}
+	}
+
+	// Merge policy registry into the main registry
+	// We create a new map to avoid modifying the passed dependencies
+	fullRegistry := make(map[string]ai.Agent)
+	for k, v := range deps.AgentRegistry {
+		fullRegistry[k] = v
+	}
+	for k, v := range policyRegistry {
+		fullRegistry[k] = v
 	}
 
 	// 2. Create Domain
@@ -144,6 +177,6 @@ func NewFromConfig(cfg Config, deps Dependencies) (*Service, error) {
 	}
 
 	// 4. Create Agent Service
-	svc := NewService(dom, gen)
+	svc := NewService(dom, gen, cfg.Pipeline, fullRegistry)
 	return svc, nil
 }

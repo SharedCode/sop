@@ -203,25 +203,47 @@ All of these enterprise-grade features—Transactional Integrity, Self-Healing I
 You don't always need to write Go code to build an agent. SOP includes a powerful configuration system that lets you define agents using simple JSON files. It is a prebuilt expert system, just needing your content! And has ability to delegate to LLM (Gemini, ChatGPT) or local heuristics right out of the box.
 
 ### The Agent Configuration
-You can define your agent's personality, knowledge base, and policies in a file like `doctor.json`:
+You can define your agent's personality, knowledge base, and policies in a file like `doctor_pipeline.json`:
 
 ```json
 {
-  "id": "doctor",
-  "name": "Dr. AI",
-  "description": "I am a medical assistant with knowledge of 5000+ disease records.",
-  "system_prompt": "You are a helpful medical assistant. Analyze the user's symptoms...",
-  "storage_path": "doctor",
-  "policies": [
-    { "type": "profanity", "max_strikes": 3 }
+  "id": "doctor_pipeline",
+  "name": "Dr. AI Pipeline",
+  "description": "Orchestrates the interaction between Nurse and Doctor.",
+  "agents": [
+    {
+      "id": "nurse_local",
+      "name": "Nurse Joy",
+      "description": "Translates symptoms to medical terms.",
+      "system_prompt": "You are a nurse. Translate user symptoms to medical terminology.",
+      "storage_path": "nurse_local",
+      "embedder": { "type": "simple" },
+      "data": [
+        { "id": "1", "text": "tummy hurt", "description": "abdominal pain" },
+        { "id": "2", "text": "hot", "description": "fever" }
+      ]
+    },
+    {
+      "id": "doctor_core",
+      "name": "Dr. House",
+      "description": "Medical specialist.",
+      "system_prompt": "Analyze the medical terms and provide a diagnosis.",
+      "storage_path": "doctor_core",
+      "embedder": {
+        "type": "agent",
+        "agent_id": "nurse_local",
+        "instruction": "Find matching symptoms:"
+      }
+    }
   ],
-  "embedder": {
-    "type": "agent",
-    "agent_id": "nurse_local",
-    "instruction": "Find matching symptoms:"
-  },
-  "data": [
-    { "id": "flu", "text": "Influenza", "description": "Symptoms: fever, chills..." }
+  "pipeline": [
+    {
+      "agent": "nurse_local",
+      "output_to": "context"
+    },
+    {
+      "agent": "doctor_core"
+    }
   ]
 }
 ```
@@ -230,27 +252,42 @@ You can define your agent's personality, knowledge base, and policies in a file 
 SOP provides a standard runner that loads these configurations:
 
 ```bash
-go run ai/cmd/agent/main.go -config ai/data/doctor.json
+go run ai/cmd/agent/main.go -config ai/data/doctor_pipeline.json
 ```
 
 This command:
 1.  Loads the JSON config.
-2.  Initializes the Vector Store at the specified `storage_path`.
-3.  Connects to the "Nurse" (Embedder) agent defined in the config.
-4.  Starts the interactive chat loop.
+2.  Initializes the pipeline and all referenced agents.
+3.  Starts the interactive chat loop.
 
-### ETL: Automating Knowledge Ingestion
+### ETL: Automating Knowledge Ingestion (Production Mode)
 For real-world agents, you can't type thousands of records into the `data` array manually. This is where **ETL (Extract, Transform, Load)** comes in.
 
-You can write simple Go programs to fetch data from the web (CSV, JSON, APIs), format it into the `agent.Config` structure, and save it.
+We provide a dedicated ETL tool to ingest massive datasets into the Vector Store efficiently.
 
-**Example: The Medical Dataset Loader**
-See `ai/etl/doctor.go` for a complete example that:
-1.  **Extracts**: Downloads a raw CSV dataset of diseases and symptoms.
-2.  **Transforms**: Cleans the text and formats it into `agent.DataItem` objects.
-3.  **Loads**: Generates a `doctor.json` config file and uploads the processed vectors directly to the SOP IVF database.
+**1. Prepare your Data**
+Create a JSON file (e.g., `doctor_data.json`) containing an array of items:
+```json
+[
+  { "id": "1", "text": "Gastritis", "description": "Stomach inflammation..." },
+  { "id": "2", "text": "Flu", "description": "Viral infection..." }
+]
+```
 
-This approach allows you to rebuild your expert's brain daily with fresh data, completely automatically.
+**2. Run the ETL Tool**
+This tool streams data from the file, generates embeddings in batches, and upserts them to the database. It is designed to handle millions of records with constant memory usage.
+
+You can target a specific agent within your pipeline config using the `-agent` flag.
+
+```bash
+go run ai/cmd/etl/main.go -config ai/data/doctor_pipeline.json -agent doctor_core -data ai/data/doctor_data.json
+```
+
+**3. Run the Agent**
+Now you can run your agent using the pre-populated database:
+```bash
+go run ai/cmd/agent/main.go -config ai/data/doctor_pipeline.json
+```
 
 ## Step 8: Running the Full Example
 
@@ -258,10 +295,10 @@ We have included a complete, working example in the repository. You can build th
 
 ### 1. Run the Rebuild Script
 The `rebuild_doctor.sh` script performs the following:
-1.  **Builds** the `sop-etl` and `sop-ai` binaries.
-2.  **Downloads** a sample medical dataset (CSV).
-3.  **Ingests** the data into the Vector Store (ETL).
-4.  **Trains** the "Nurse" agent (Embedder) and "Doctor" agent (Search).
+1.  **Builds** the `sop-prepare`, `sop-etl`, and `sop-ai` binaries.
+2.  **Downloads** a sample medical dataset (CSV) and converts it to JSON.
+3.  **Ingests** the data into the Vector Store (ETL) for both Nurse and Doctor.
+4.  **Runs** sanity tests.
 
 ```bash
 cd ai
@@ -272,7 +309,7 @@ cd ai
 Once the rebuild is complete, you can start the interactive agent loop:
 
 ```bash
-./sop-ai -config data/doctor.json
+./sop-ai -config data/doctor_pipeline.json
 ```
 
 **The script runs these sanity checks:**

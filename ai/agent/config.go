@@ -18,6 +18,44 @@ type Config struct {
 	Data              []DataItem        `json:"data"`                         // For seeding (MVP)
 	StoragePath       string            `json:"storage_path,omitempty"`       // Optional: Override default storage path. Will be converted to absolute path.
 	SkipDeduplication bool              `json:"skip_deduplication,omitempty"` // Optional: Skip deduplication phase
+	Agents            []Config          `json:"agents,omitempty"`             // Optional: Define agents locally to be referenced by ID
+	Pipeline          []PipelineStep    `json:"pipeline,omitempty"`           // Optional: Define a chain of agents
+}
+
+type PipelineStep struct {
+	Agent    PipelineAgent `json:"agent"`
+	OutputTo string        `json:"output_to,omitempty"` // "context", "next_step" (default)
+}
+
+type PipelineAgent struct {
+	ID     string
+	Config *Config
+}
+
+func (pa *PipelineAgent) UnmarshalJSON(data []byte) error {
+	// Try string
+	var id string
+	if err := json.Unmarshal(data, &id); err == nil {
+		pa.ID = id
+		return nil
+	}
+
+	// Try config object
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err == nil {
+		pa.Config = &cfg
+		pa.ID = cfg.ID
+		return nil
+	}
+
+	return nil // Or error if strict
+}
+
+func (pa PipelineAgent) MarshalJSON() ([]byte, error) {
+	if pa.Config != nil {
+		return json.Marshal(pa.Config)
+	}
+	return json.Marshal(pa.ID)
 }
 
 type GeneratorConfig struct {
@@ -26,14 +64,16 @@ type GeneratorConfig struct {
 }
 
 type EmbedderConfig struct {
-	Type        string `json:"type"`        // "simple" (default) or "agent"
-	AgentID     string `json:"agent_id"`    // For "agent" type: ID of the agent to use
-	Instruction string `json:"instruction"` // For "agent" type: Instruction for the agent
+	Type        string         `json:"type"`              // "simple" (default), "agent", or "ollama"
+	AgentID     string         `json:"agent_id"`          // For "agent" type: ID of the agent to use
+	Instruction string         `json:"instruction"`       // For "agent" type: Instruction for the agent
+	Options     map[string]any `json:"options,omitempty"` // For "ollama" type: model, base_url
 }
 
 type PolicyConfig struct {
-	Type       string `json:"type"`        // e.g. "profanity"
-	MaxStrikes int    `json:"max_strikes"` // e.g. 3
+	ID         string `json:"id,omitempty"` // Optional: ID for referencing in pipeline
+	Type       string `json:"type"`         // e.g. "profanity"
+	MaxStrikes int    `json:"max_strikes"`  // e.g. 3
 }
 
 type DataItem struct {

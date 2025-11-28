@@ -14,36 +14,48 @@ import (
 type Service struct {
 	domain    ai.Domain
 	generator ai.Generator // The LLM (Gemini, etc.)
+	pipeline  []PipelineStep
+	registry  map[string]ai.Agent
 }
 
 // NewService creates a new agent service for a specific domain.
-func NewService(domain ai.Domain, generator ai.Generator) *Service {
+func NewService(domain ai.Domain, generator ai.Generator, pipeline []PipelineStep, registry map[string]ai.Agent) *Service {
 	return &Service{
 		domain:    domain,
 		generator: generator,
+		pipeline:  pipeline,
+		registry:  registry,
 	}
+}
+
+// evaluateInputPolicy checks the input against the domain's policies.
+func (s *Service) evaluateInputPolicy(input string) error {
+	if pol := s.domain.Policies(); pol != nil {
+		classifier := s.domain.Classifier()
+		if classifier != nil {
+			sample := ai.ContentSample{Text: input}
+			labels, err := classifier.Classify(sample)
+			if err != nil {
+				return fmt.Errorf("classification failed: %w", err)
+			}
+			decision, err := pol.Evaluate("input", sample, labels)
+			if err != nil {
+				return fmt.Errorf("policy evaluation failed: %w", err)
+			}
+			if decision.Action == "block" {
+				return fmt.Errorf("request blocked by policy: %v", decision.Reasons)
+			}
+		}
+	}
+	return nil
 }
 
 // Search performs a semantic search in the domain's knowledge base.
 // It enforces policies and uses the domain's embedder.
 func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit, error) {
 	// 1. Policy Check (Input)
-	if pol := s.domain.Policies(); pol != nil {
-		classifier := s.domain.Classifier()
-		if classifier != nil {
-			sample := ai.ContentSample{Text: query}
-			labels, err := classifier.Classify(sample)
-			if err != nil {
-				return nil, fmt.Errorf("classification failed: %w", err)
-			}
-			decision, err := pol.Evaluate("input", sample, labels)
-			if err != nil {
-				return nil, fmt.Errorf("policy evaluation failed: %w", err)
-			}
-			if decision.Action == "block" {
-				return nil, fmt.Errorf("request blocked by policy: %v", decision.Reasons)
-			}
-		}
+	if err := s.evaluateInputPolicy(query); err != nil {
+		return nil, err
 	}
 
 	// 2. Embed
@@ -69,8 +81,43 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 	return hits, nil
 }
 
+// RunPipeline executes the configured chain of agents.
+func (s *Service) RunPipeline(ctx context.Context, input string) (string, error) {
+	// Note: We do NOT call evaluateInputPolicy here anymore.
+	// Policies should be explicitly added as steps in the pipeline if desired.
+	// This allows for more flexible policy application (e.g. input, output, intermediate).
+
+	currentInput := input
+
+	for _, step := range s.pipeline {
+		agent, ok := s.registry[step.Agent.ID]
+		if !ok {
+			return "", fmt.Errorf("pipeline agent '%s' not found in registry", step.Agent.ID)
+		}
+
+		output, err := agent.Ask(ctx, currentInput)
+		if err != nil {
+			return "", fmt.Errorf("pipeline step '%s' failed: %w", step.Agent.ID, err)
+		}
+
+		if step.OutputTo == "context" {
+			// Append context to the input for the next step so it's available
+			currentInput = fmt.Sprintf("%s\n\nContext from %s:\n%s", currentInput, step.Agent.ID, output)
+		} else {
+			// Default or "next_step": The output becomes the input for the next agent
+			currentInput = output
+		}
+	}
+	return currentInput, nil
+}
+
 // Ask performs a RAG (Retrieval-Augmented Generation) request.
 func (s *Service) Ask(ctx context.Context, query string) (string, error) {
+	// 0. Pipeline Execution (if configured)
+	if len(s.pipeline) > 0 {
+		return s.RunPipeline(ctx, query)
+	}
+
 	// 1. Search for context
 	hits, err := s.Search(ctx, query, 5)
 	if err != nil {
@@ -127,15 +174,20 @@ func (s *Service) RunLoop(ctx context.Context, r io.Reader, w io.Writer) error {
 
 		query := input
 
-		// If we have a generator, try to generate a response (RAG)
-		if s.generator != nil {
+		// If we have a generator or a pipeline, try to generate a response (RAG or Pipeline)
+		if s.generator != nil || len(s.pipeline) > 0 {
 			answer, err := s.Ask(ctx, query)
 			if err == nil {
 				fmt.Fprintf(w, "\nAI Doctor: %s\n", answer)
 				continue
 			}
-			// If generation fails, fall back to search results
+			// If generation/pipeline fails, fall back to search results
 			// We suppress the error to avoid confusing the user if the LLM is offline
+			// But for pipeline errors, we might want to show them?
+			// For now, let's print them if it's a pipeline error
+			if len(s.pipeline) > 0 {
+				fmt.Fprintf(w, "Pipeline Error: %v\n", err)
+			}
 		}
 
 		// Fallback to simple search if no generator is configured or if generation failed
@@ -176,9 +228,15 @@ func (s *Service) formatContext(hits []ai.Hit) string {
 	for i, hit := range hits {
 		// Generic handling of metadata
 		sb.WriteString(fmt.Sprintf("[%d] ", i+1))
-		if desc, ok := hit.Meta["description"].(string); ok {
+
+		text, hasText := hit.Meta["text"].(string)
+		desc, hasDesc := hit.Meta["description"].(string)
+
+		if hasText && hasDesc {
+			sb.WriteString(fmt.Sprintf("%s: %s", text, desc))
+		} else if hasDesc {
 			sb.WriteString(desc)
-		} else if text, ok := hit.Meta["text"].(string); ok {
+		} else if hasText {
 			sb.WriteString(text)
 		} else {
 			sb.WriteString(fmt.Sprintf("%v", hit.Meta))

@@ -43,10 +43,99 @@ func main() {
 	// 2. Initialize Agent Service
 	registry := make(map[string]ai.Agent)
 
+	// Helper to initialize an agent from a config
+	initAgent := func(agentCfg agent.Config) (ai.Agent, error) {
+		// Ensure absolute path for storage
+		if agentCfg.StoragePath != "" {
+			if !filepath.IsAbs(agentCfg.StoragePath) {
+				// Resolve relative to the main config file directory
+				configDir := filepath.Dir(*configPath)
+				agentCfg.StoragePath = filepath.Join(configDir, agentCfg.StoragePath)
+			}
+			if absPath, err := filepath.Abs(agentCfg.StoragePath); err == nil {
+				agentCfg.StoragePath = absPath
+			}
+		}
+
+		// Initialize the agent with the shared registry
+		return agent.NewFromConfig(agentCfg, agent.Dependencies{
+			AgentRegistry: registry,
+		})
+	}
+
+	// Pre-register internal policy agents so they aren't treated as external dependencies
+	for _, pCfg := range cfg.Policies {
+		if pCfg.ID != "" {
+			// We register a placeholder here. The actual agent will be created in NewFromConfig.
+			// This prevents the dependency loader from trying to find a file for it.
+			registry[pCfg.ID] = &agent.PolicyAgent{}
+		}
+	}
+
+	// Register locally defined agents (from "agents" block)
+	for _, localAgentCfg := range cfg.Agents {
+		if localAgentCfg.ID == "" {
+			continue
+		}
+		if _, exists := registry[localAgentCfg.ID]; exists {
+			continue
+		}
+		fmt.Printf("Initializing local agent: %s...\n", localAgentCfg.ID)
+		svc, err := initAgent(localAgentCfg)
+		if err != nil {
+			panic(fmt.Errorf("failed to initialize local agent %s: %w", localAgentCfg.ID, err))
+		}
+		registry[localAgentCfg.ID] = svc
+	}
+
 	// Check if this agent needs an embedder agent
 	if cfg.Embedder.Type == "agent" && cfg.Embedder.AgentID != "" {
 		agentID := cfg.Embedder.AgentID
-		fmt.Printf("Loading dependency agent: %s...\n", agentID)
+		if _, exists := registry[agentID]; !exists {
+			fmt.Printf("Loading dependency agent: %s...\n", agentID)
+
+			// Try to find the dependency config relative to the current config
+			configDir := filepath.Dir(*configPath)
+			depConfigPath := filepath.Join(configDir, fmt.Sprintf("%s.json", agentID))
+
+			// Fallback to default location if not found
+			if _, err := os.Stat(depConfigPath); os.IsNotExist(err) {
+				depConfigPath = fmt.Sprintf("ai/data/%s.json", agentID)
+			}
+
+			depCfg, err := agent.LoadConfigFromFile(depConfigPath)
+			if err != nil {
+				panic(fmt.Errorf("failed to load dependency agent %s: %w", agentID, err))
+			}
+
+			svc, err := initAgent(*depCfg)
+			if err != nil {
+				panic(fmt.Errorf("failed to initialize dependency agent %s: %w", agentID, err))
+			}
+			registry[agentID] = svc
+		}
+	}
+
+	// Check for pipeline dependencies
+	for _, step := range cfg.Pipeline {
+		agentID := step.Agent.ID
+		if _, exists := registry[agentID]; exists {
+			continue
+		}
+
+		// Case 1: Inline Config
+		if step.Agent.Config != nil {
+			fmt.Printf("Initializing inline pipeline agent: %s...\n", agentID)
+			svc, err := initAgent(*step.Agent.Config)
+			if err != nil {
+				panic(fmt.Errorf("failed to initialize inline pipeline agent %s: %w", agentID, err))
+			}
+			registry[agentID] = svc
+			continue
+		}
+
+		// Case 2: Load from file
+		fmt.Printf("Loading pipeline agent: %s...\n", agentID)
 
 		// Try to find the dependency config relative to the current config
 		configDir := filepath.Dir(*configPath)
@@ -59,28 +148,14 @@ func main() {
 
 		depCfg, err := agent.LoadConfigFromFile(depConfigPath)
 		if err != nil {
-			panic(fmt.Errorf("failed to load dependency agent %s: %w", agentID, err))
+			panic(fmt.Errorf("failed to load pipeline agent %s: %w", agentID, err))
 		}
 
-		// Ensure absolute path for storage in dependency
-		if depCfg.StoragePath != "" {
-			if !filepath.IsAbs(depCfg.StoragePath) {
-				depConfigDir := filepath.Dir(depConfigPath)
-				depCfg.StoragePath = filepath.Join(depConfigDir, depCfg.StoragePath)
-			}
-			if absPath, err := filepath.Abs(depCfg.StoragePath); err == nil {
-				depCfg.StoragePath = absPath
-			}
-		}
-
-		// Initialize the dependency agent (assuming it doesn't have further dependencies for now)
-		depSvc, err := agent.NewFromConfig(*depCfg, agent.Dependencies{
-			AgentRegistry: make(map[string]ai.Agent),
-		})
+		svc, err := initAgent(*depCfg)
 		if err != nil {
-			panic(fmt.Errorf("failed to initialize dependency agent %s: %w", agentID, err))
+			panic(fmt.Errorf("failed to initialize pipeline agent %s: %w", agentID, err))
 		}
-		registry[agentID] = depSvc
+		registry[agentID] = svc
 	}
 
 	deps := agent.Dependencies{
