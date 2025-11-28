@@ -252,7 +252,34 @@ See `ai/etl/doctor.go` for a complete example that:
 
 This approach allows you to rebuild your expert's brain daily with fresh data, completely automatically.
 
-## Step 8: The Developer's Toolkit (Go API)
+## Step 8: Running the Full Example
+
+We have included a complete, working example in the repository. You can build the tools, ingest the data, and run the "Doctor & Nurse" agents with a single script.
+
+### 1. Run the Rebuild Script
+The `rebuild_doctor.sh` script performs the following:
+1.  **Builds** the `sop-etl` and `sop-ai` binaries.
+2.  **Downloads** a sample medical dataset (CSV).
+3.  **Ingests** the data into the Vector Store (ETL).
+4.  **Trains** the "Nurse" agent (Embedder) and "Doctor" agent (Search).
+
+```bash
+cd ai
+./rebuild_doctor.sh
+```
+
+### 2. Chat with the Doctor
+Once the rebuild is complete, you can start the interactive agent loop:
+
+```bash
+./sop-ai -config data/doctor.json
+```
+
+**The script runs these sanity checks:**
+*   "I have a tummy hurt and feel hot" (Verifies "nurse" translation of "tummy hurt" -> "abdominal pain" and "hot" -> "fever")
+*   "I have a bad cough and a runny nose" (Verifies "doctor" detection of Common Cold symptoms)
+
+## Step 9: The Developer's Toolkit (Go API)
 
 The `sop/ai` module is a modular kit. You can use the high-level `agent` package, or pick and choose the components you need.
 
