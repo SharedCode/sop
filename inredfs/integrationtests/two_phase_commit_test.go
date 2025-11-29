@@ -15,12 +15,26 @@ import (
 func Test_TwoPhaseCommit_RolledBack_Short(t *testing.T) {
 	ctx := context.Background()
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+
+	// 1. Create store and commit.
+	t0, _ := inredfs.NewTransaction(ctx, to)
+	t0.Begin(ctx)
+	b3, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
+		Name: "twophase2_short", SlotLength: 8, IsValueDataInNodeSegment: true,
+	}, t0, nil)
+	if err != nil {
+		t.Fatalf("NewBtree failed: %v", err)
+	}
+	_ = t0.Commit(ctx)
+
+	// 2. Add items and rollback.
 	t1, _ := inredfs.NewTransaction(ctx, to)
 	t1.Begin(ctx)
 
-	b3, _ := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
-		Name: "twophase2_short", SlotLength: 8, IsValueDataInNodeSegment: true,
-	}, t1, nil)
+	b3, err = inredfs.OpenBtree[int, string](ctx, "twophase2_short", t1, nil)
+	if err != nil {
+		t.Fatalf("OpenBtree failed: %v", err)
+	}
 	orig := b3.Count()
 	b3.Add(ctx, 1, "a")
 	b3.Add(ctx, 2, "b")
@@ -36,10 +50,13 @@ func Test_TwoPhaseCommit_RolledBack_Short(t *testing.T) {
 		t.Fatalf("rollback: %v", err)
 	}
 
-	// Verify rolled back
+	// 3. Verify rolled back
 	t1, _ = inredfs.NewTransaction(ctx, to)
 	t1.Begin(ctx)
-	b3, _ = inredfs.OpenBtree[int, string](ctx, "twophase2_short", t1, nil)
+	b3, err = inredfs.OpenBtree[int, string](ctx, "twophase2_short", t1, nil)
+	if err != nil {
+		t.Fatalf("OpenBtree verification failed: %v", err)
+	}
 	if b3.Count() != orig {
 		t.Fatalf("after rollback count got %d want %d", b3.Count(), orig)
 	}
