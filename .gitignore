@@ -197,3 +197,9 @@ sop-etl
 demo_doctor
 ai/sop-ai
 ai/sop-etl
+
+# Generated Data
+ai/data/nurse_local/
+ai/data/doctor_core/
+ai/data/doctor/
+inredfs/integrationtests/store_*/
