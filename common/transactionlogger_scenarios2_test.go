@@ -139,17 +139,22 @@ func Test_ProcessExpiredTransactionLogs_ConsumesHourAndClears(t *testing.T) {
 	base := time.Date(2025, 1, 2, 15, 0, 0, 0, time.UTC)
 	cas.Now = func() time.Time { return base }
 	defer func() { cas.Now = origNow }()
-	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+
+	backend := mocks.NewMockTransactionLog()
+	tl := newTransactionLogger(backend, true)
 	if err := tl.log(ctx, finalizeCommit, nil); err != nil {
 		t.Fatalf("seed log error: %v", err)
 	}
 	cas.Now = func() time.Time { return base.Add(2 * time.Hour) }
+
+	// Use a different logger to simulate another transaction processing expired logs.
+	processorTL := newTransactionLogger(backend, true)
 	tx := &Transaction{}
 	hourBeingProcessed = ""
-	if err := tl.processExpiredTransactionLogs(ctx, tx); err != nil {
+	if err := processorTL.processExpiredTransactionLogs(ctx, tx); err != nil {
 		t.Fatalf("processExpiredTransactionLogs error: %v", err)
 	}
-	if err := tl.processExpiredTransactionLogs(ctx, tx); err != nil {
+	if err := processorTL.processExpiredTransactionLogs(ctx, tx); err != nil {
 		t.Fatalf("second process error: %v", err)
 	}
 	if hourBeingProcessed != "" {

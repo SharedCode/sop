@@ -1,7 +1,6 @@
 # AI Package
 
-This package was developed with an AI copilot, I want to keep an open development approach(not finicky and narrow) in this package to keep efficient in "automaton" usage. Please note that this package's codebase may undergo refinements as time permits. But it seems the way AI
-copilot modelled the constructs follow industry/golang community standards.
+This package was developed with an AI copilot, I want to keep an open development approach(not finicky and narrow) in this package to keep efficient in "automaton" cycles.
 
 # SOP AI Library
 

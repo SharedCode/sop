@@ -537,15 +537,22 @@ func Test_MixedOperations(t *testing.T) {
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	ctx := context.Background()
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := inredfs.NewTransaction(ctx, to)
-	t1.Begin(ctx)
 
+	// Pre-create the store in a separate transaction so it exists for the test.
+	t0, _ := inredfs.NewTransaction(ctx, to)
+	t0.Begin(ctx)
 	b3, _ := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     tableName2,
 		SlotLength:               8,
 		IsValueDataInNodeSegment: true,
 		LeafLoadBalancing:        true,
-	}, t1, nil)
+	}, t0, nil)
+	t0.Commit(ctx)
+
+	t1, _ := inredfs.NewTransaction(ctx, to)
+	t1.Begin(ctx)
+
+	b3, _ = inredfs.OpenBtree[int, string](ctx, tableName2, t1, nil)
 	originalCount := b3.Count()
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")

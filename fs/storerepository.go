@@ -94,13 +94,18 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 
 	// 1. Lock Store List.
 	lk := sr.cache.CreateLockKeys([]string{sr.formatCacheKey(lockStoreListKey)})
-	defer sr.cache.Unlock(ctx, lk)
-	if ok, _, err := sr.cache.DualLock(ctx, lockStoreListDuration, lk); !ok || err != nil {
-		if err == nil {
-			err = fmt.Errorf("lock failed, key %s already locked by another", lockStoreListKey)
+	if err := sop.Retry(ctx, func(ctx context.Context) error {
+		if ok, _, err := sr.cache.DualLock(ctx, lockStoreListDuration, lk); !ok || err != nil {
+			if err == nil {
+				err = fmt.Errorf("lock failed, key %s already locked by another", lockStoreListKey)
+			}
+			return retry.RetryableError(err)
 		}
+		return nil
+	}, nil); err != nil {
 		return err
 	}
+	defer sr.cache.Unlock(ctx, lk)
 
 	// 2. Get Store List & convert to a map for lookup.
 	sl, err := sr.GetAll(ctx)
@@ -378,13 +383,18 @@ func (sr *StoreRepository) getFromCache(ctx context.Context, names ...string) ([
 // the removal when configured. Missing stores are tolerated with a warning.
 func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) error {
 	lk := sr.cache.CreateLockKeys([]string{sr.formatCacheKey(lockStoreListKey)})
-	defer sr.cache.Unlock(ctx, lk)
-	if ok, _, err := sr.cache.DualLock(ctx, lockStoreListDuration, lk); !ok || err != nil {
-		if err == nil {
-			err = fmt.Errorf("lock failed, key %s already locked by another", lockStoreListKey)
+	if err := sop.Retry(ctx, func(ctx context.Context) error {
+		if ok, _, err := sr.cache.DualLock(ctx, lockStoreListDuration, lk); !ok || err != nil {
+			if err == nil {
+				err = fmt.Errorf("lock failed, key %s already locked by another", lockStoreListKey)
+			}
+			return retry.RetryableError(err)
 		}
+		return nil
+	}, nil); err != nil {
 		return err
 	}
+	defer sr.cache.Unlock(ctx, lk)
 
 	// Get Store List & convert to a map for lookup.
 	sl, err := sr.GetAll(ctx)

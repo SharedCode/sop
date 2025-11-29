@@ -3,7 +3,6 @@ package fs
 import (
 	"context"
 	"fmt"
-	log "log/slog"
 
 	"github.com/sharedcode/sop"
 )
@@ -49,9 +48,6 @@ func (rm registryMap) set(ctx context.Context, storesHandles []sop.RegistryPaylo
 			// Update the handle with incoming.
 			frds[i].handle = item.IDs[i]
 		}
-
-		// Do actual file region update.
-		log.Debug(fmt.Sprintf("updating file %s, sector offset %v, offset in block %v", frds[0].dio.filename, frds[0].blockOffset, frds[0].handleInBlockOffset))
 
 		if err := rm.hashmap.updateFileRegion(ctx, frds); err != nil {
 			return err

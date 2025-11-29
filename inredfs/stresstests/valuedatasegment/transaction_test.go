@@ -390,14 +390,30 @@ func MixedOperations(t *testing.T) {
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
-	t1, _ := inredfs.NewTransaction(ctx, to)
-	_ = t1.Begin(ctx)
 
-	b3, _ := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
+	// 1. Create the Btree in a separate transaction and commit it.
+	t0, _ := inredfs.NewTransaction(ctx, to)
+	t0.Begin(ctx)
+	_, err := inredfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:              "twophase",
 		SlotLength:        8,
 		LeafLoadBalancing: true,
-	}, t1, nil)
+	}, t0, nil)
+	if err != nil {
+		t.Fatalf("Setup NewBtree failed: %v", err)
+	}
+	if err := t0.Commit(ctx); err != nil {
+		t.Fatalf("Setup Commit failed: %v", err)
+	}
+
+	// 2. Start the transaction under test.
+	t1, _ := inredfs.NewTransaction(ctx, to)
+	_ = t1.Begin(ctx)
+
+	b3, err := inredfs.OpenBtree[int, string](ctx, "twophase", t1, nil)
+	if err != nil {
+		t.Fatalf("OpenBtree failed: %v", err)
+	}
 	originalCount := b3.Count()
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")

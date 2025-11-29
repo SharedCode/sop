@@ -285,6 +285,12 @@ func (nr *nodeRepositoryBackend) commitUpdatedNodes(ctx context.Context, nodes [
 	if err != nil {
 		return false, nil, err
 	}
+	for i := range handles {
+		if len(handles[i].IDs) != len(vids[i].IDs) {
+			log.Debug(fmt.Sprintf("commitUpdatedNodes: mismatch handles length for %d. Expected %d, got %d", i, len(vids[i].IDs), len(handles[i].IDs)))
+			return false, nil, nil
+		}
+	}
 
 	blobs := make([]sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]], len(nodes))
 	for i := range handles {
@@ -476,11 +482,39 @@ func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollb
 			}
 		}
 	}
+
+	// If we haven't committed the new root nodes (i.e. moved past the commitNewRootNodes state),
+	// then we shouldn't unregister them, as we might not have added them yet (or they might be from another transaction/pre-existing).
+	if nr.transaction.logger.committedState <= commitNewRootNodes {
+		return lastErr
+	}
+
 	// If we're able to commit roots in registry then they are "ours", we need to unregister.
-	if nr.transaction.logger.committedState > commitNewRootNodes {
-		if err := nr.transaction.registry.Remove(ctx, vids); err != nil {
-			lastErr = fmt.Errorf("unable to undo new root nodes registration, %v, error: %v", vids, err)
-			log.Error(lastErr.Error())
+	// We need to check if they exist first because crash can happen before they are registered.
+	handles, err := nr.transaction.registry.Get(ctx, vids)
+	if err != nil {
+		lastErr = fmt.Errorf("unable to check new root nodes existence, %v, error: %v", vids, err)
+		log.Error(lastErr.Error())
+	} else {
+		vidsToRemove := make([]sop.RegistryPayload[sop.UUID], 0, len(vids))
+		for i := range handles {
+			if len(handles[i].IDs) == 0 {
+				continue
+			}
+			ids := make([]sop.UUID, len(handles[i].IDs))
+			for ii := range handles[i].IDs {
+				ids[ii] = handles[i].IDs[ii].LogicalID
+			}
+			vidsToRemove = append(vidsToRemove, sop.RegistryPayload[sop.UUID]{
+				RegistryTable: handles[i].RegistryTable,
+				IDs:           ids,
+			})
+		}
+		if len(vidsToRemove) > 0 {
+			if err := nr.transaction.registry.Remove(ctx, vidsToRemove); err != nil {
+				lastErr = fmt.Errorf("unable to undo new root nodes registration, %v, error: %v", vidsToRemove, err)
+				log.Error(lastErr.Error())
+			}
 		}
 	}
 	return lastErr
