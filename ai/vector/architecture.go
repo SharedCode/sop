@@ -6,15 +6,10 @@ import (
 	"sort"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/inredfs"
 )
-
-// Centroid represents a cluster center and its metadata.
-type Centroid struct {
-	Vector      []float32
-	VectorCount int
-}
 
 // Architecture demonstrates the 3-B-Tree layout for optimal performance.
 // It uses three separate B-Trees to optimize for different access patterns:
@@ -25,13 +20,13 @@ type Architecture struct {
 	// Centroids stores the centroid vectors.
 	// Key: CentroidID (int) -> Value: Centroid struct
 	// Name: "{domain}_centroids"
-	Centroids btree.BtreeInterface[int, Centroid]
+	Centroids btree.BtreeInterface[int, ai.Centroid]
 
 	// Vectors stores the item vectors, indexed by centroid and distance.
-	// Key: CompositeKey{CentroidID, Distance, ItemID} -> Value: ItemVector ([]float32)
+	// Key: VectorKey{CentroidID, Distance, ItemID} -> Value: ItemVector ([]float32)
 	// Name: "{domain}_vectors"
 	// Optimization: Keeping this small allows more vectors to fit in CPU cache during scanning.
-	Vectors btree.BtreeInterface[CompositeKey, []float32]
+	Vectors btree.BtreeInterface[ai.VectorKey, []float32]
 
 	// Content stores the actual item data.
 	// Key: ItemID (string) -> Value: Document/JSON (string)
@@ -62,7 +57,7 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, version int64) 
 	}
 
 	// 1. Open Centroids Store (Versioned)
-	centroids, err := inredfs.NewBtree[int, Centroid](ctx, sop.StoreOptions{
+	centroids, err := inredfs.NewBtree[int, ai.Centroid](ctx, sop.StoreOptions{
 		Name: "centroids" + suffix,
 	}, trans, func(a, b int) int { return a - b })
 	if err != nil {
@@ -70,7 +65,7 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, version int64) 
 	}
 
 	// 2. Open Vectors Store (Versioned)
-	vectors, err := inredfs.NewBtree[CompositeKey, []float32](ctx, sop.StoreOptions{
+	vectors, err := inredfs.NewBtree[ai.VectorKey, []float32](ctx, sop.StoreOptions{
 		Name: "vectors" + suffix,
 	}, trans, compositeKeyComparer)
 	if err != nil {
@@ -127,7 +122,7 @@ func (a *Architecture) Add(ctx context.Context, id string, vector []float32, dat
 
 	// Step 2: Write to Vector Store (The Index)
 	// This is lightweight because we only store the vector, not the data.
-	vecKey := CompositeKey{CentroidID: centroidID, DistanceToCentroid: 0.0, ItemID: id}
+	vecKey := ai.VectorKey{CentroidID: centroidID, DistanceToCentroid: 0.0, ItemID: id}
 	if _, err := a.Vectors.Add(ctx, vecKey, vector); err != nil {
 		return err
 	}
@@ -147,7 +142,7 @@ func (a *Architecture) Search(ctx context.Context, query []float32, k int) ([]st
 
 	// Step 2: Scan ONLY the Vectors in that bucket
 	// We don't load the heavy content here, making this very fast.
-	startKey := CompositeKey{CentroidID: targetCentroid, DistanceToCentroid: -1.0, ItemID: ""}
+	startKey := ai.VectorKey{CentroidID: targetCentroid, DistanceToCentroid: -1.0, ItemID: ""}
 
 	type candidate struct {
 		ID    string

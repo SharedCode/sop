@@ -41,10 +41,10 @@ func main() {
 	fmt.Printf("Initializing AI Agent: %s (%s)...\n", cfg.Name, cfg.ID)
 
 	// 2. Initialize Agent Service
-	registry := make(map[string]ai.Agent)
+	registry := make(map[string]ai.Agent[map[string]any])
 
 	// Helper to initialize an agent from a config
-	initAgent := func(agentCfg agent.Config) (ai.Agent, error) {
+	initAgent := func(agentCfg agent.Config) (ai.Agent[map[string]any], error) {
 		// Ensure absolute path for storage
 		if agentCfg.StoragePath != "" {
 			if !filepath.IsAbs(agentCfg.StoragePath) {
@@ -68,7 +68,8 @@ func main() {
 		if pCfg.ID != "" {
 			// We register a placeholder here. The actual agent will be created in NewFromConfig.
 			// This prevents the dependency loader from trying to find a file for it.
-			registry[pCfg.ID] = &agent.PolicyAgent{}
+			// We use NewPolicyAgent with nil to create a valid placeholder
+			registry[pCfg.ID] = agent.NewPolicyAgent(pCfg.ID, nil, nil)
 		}
 	}
 

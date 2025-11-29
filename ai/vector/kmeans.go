@@ -10,7 +10,7 @@ import (
 // ComputeCentroids performs K-Means clustering on the given items to find k centroids.
 // It uses K-Means++ for initialization to improve convergence and cluster quality.
 // The function iterates up to a maximum number of times (20) or until convergence.
-func ComputeCentroids(items []ai.Item, k int) (map[int][]float32, error) {
+func ComputeCentroids[T any](items []ai.Item[T], k int) (map[int][]float32, error) {
 	if len(items) == 0 {
 		return nil, nil
 	}
@@ -74,7 +74,7 @@ func meanVector(vecs [][]float32) []float32 {
 	return sum
 }
 
-func initCentroidsKMeansPlusPlus(items []ai.Item, k int) map[int][]float32 {
+func initCentroidsKMeansPlusPlus[T any](items []ai.Item[T], k int) map[int][]float32 {
 	rand.Seed(time.Now().UnixNano())
 	centroids := make(map[int][]float32)
 	if len(items) == 0 {

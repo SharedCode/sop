@@ -12,20 +12,25 @@ import (
 
 // Service is a generic agent service that operates on any Domain.
 type Service struct {
-	domain    ai.Domain
+	domain    ai.Domain[map[string]any]
 	generator ai.Generator // The LLM (Gemini, etc.)
 	pipeline  []PipelineStep
-	registry  map[string]ai.Agent
+	registry  map[string]ai.Agent[map[string]any]
 }
 
 // NewService creates a new agent service for a specific domain.
-func NewService(domain ai.Domain, generator ai.Generator, pipeline []PipelineStep, registry map[string]ai.Agent) *Service {
+func NewService(domain ai.Domain[map[string]any], generator ai.Generator, pipeline []PipelineStep, registry map[string]ai.Agent[map[string]any]) *Service {
 	return &Service{
 		domain:    domain,
 		generator: generator,
 		pipeline:  pipeline,
 		registry:  registry,
 	}
+}
+
+// Domain returns the underlying domain of the service.
+func (s *Service) Domain() ai.Domain[map[string]any] {
+	return s.domain
 }
 
 // evaluateInputPolicy checks the input against the domain's policies.
@@ -52,7 +57,7 @@ func (s *Service) evaluateInputPolicy(input string) error {
 
 // Search performs a semantic search in the domain's knowledge base.
 // It enforces policies and uses the domain's embedder.
-func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit, error) {
+func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
 	// 1. Policy Check (Input)
 	if err := s.evaluateInputPolicy(query); err != nil {
 		return nil, err
@@ -119,7 +124,7 @@ func (s *Service) Ask(ctx context.Context, query string) (string, error) {
 	}
 
 	// 1. Search for context
-	hits, err := s.Search(ctx, query, 5)
+	hits, err := s.Search(ctx, query, 10)
 	if err != nil {
 		return "", fmt.Errorf("retrieval failed: %w", err)
 	}
@@ -203,8 +208,8 @@ func (s *Service) RunLoop(ctx context.Context, r io.Reader, w io.Writer) error {
 
 		fmt.Fprintf(w, "Found %d relevant entries for '%s':\n", len(hits), query)
 		for i, hit := range hits {
-			text, _ := hit.Meta["text"].(string)
-			desc, _ := hit.Meta["description"].(string)
+			text, _ := hit.Payload["text"].(string)
+			desc, _ := hit.Payload["description"].(string)
 
 			if text != "" && desc != "" {
 				// Apply display formatting: quote text if it contains spaces
@@ -223,23 +228,23 @@ func (s *Service) RunLoop(ctx context.Context, r io.Reader, w io.Writer) error {
 	return scanner.Err()
 }
 
-func (s *Service) formatContext(hits []ai.Hit) string {
+func (s *Service) formatContext(hits []ai.Hit[map[string]any]) string {
 	var sb strings.Builder
 	for i, hit := range hits {
 		// Generic handling of metadata
 		sb.WriteString(fmt.Sprintf("[%d] ", i+1))
 
-		text, hasText := hit.Meta["text"].(string)
-		desc, hasDesc := hit.Meta["description"].(string)
+		text, hasText := hit.Payload["text"].(string)
+		desc, hasDesc := hit.Payload["description"].(string)
 
 		if hasText && hasDesc {
-			sb.WriteString(fmt.Sprintf("%s: %s", text, desc))
+			sb.WriteString(fmt.Sprintf("%s: %s (Score: %.2f)", text, desc, hit.Score))
 		} else if hasDesc {
-			sb.WriteString(desc)
+			sb.WriteString(fmt.Sprintf("%s (Score: %.2f)", desc, hit.Score))
 		} else if hasText {
-			sb.WriteString(text)
+			sb.WriteString(fmt.Sprintf("%s (Score: %.2f)", text, hit.Score))
 		} else {
-			sb.WriteString(fmt.Sprintf("%v", hit.Meta))
+			sb.WriteString(fmt.Sprintf("%v (Score: %.2f)", hit.Payload, hit.Score))
 		}
 		sb.WriteString("\n")
 	}

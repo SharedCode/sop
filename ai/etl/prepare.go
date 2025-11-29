@@ -1,9 +1,8 @@
-package main
+package etl
 
 import (
 	"encoding/csv"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,20 +12,12 @@ import (
 	"github.com/sharedcode/sop/ai/agent"
 )
 
-func main() {
-	url := flag.String("url", "", "URL of the CSV dataset")
-	out := flag.String("out", "", "Output JSON file path")
-	flag.Parse()
-
-	if *url == "" || *out == "" {
-		fmt.Println("Usage: go run ai/cmd/prepare/main.go -url <csv_url> -out <output.json>")
-		os.Exit(1)
-	}
-
-	fmt.Printf("Downloading dataset from %s...\n", *url)
-	resp, err := http.Get(*url)
+// PrepareData downloads a CSV dataset and converts it to the agent DataItem JSON format.
+func PrepareData(url, out string, limit int) error {
+	fmt.Printf("Downloading dataset from %s...\n", url)
+	resp, err := http.Get(url)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to download dataset: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -35,19 +26,22 @@ func main() {
 	// Read header
 	_, err = reader.Read()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to read CSV header: %w", err)
 	}
 
 	var items []agent.DataItem
 	count := 0
 
 	for {
+		if limit > 0 && count >= limit {
+			break
+		}
 		record, err := reader.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("failed to read CSV record: %w", err)
 		}
 
 		// First column is Disease
@@ -61,6 +55,8 @@ func main() {
 		for i := 1; i < len(record); i++ {
 			s := strings.TrimSpace(record[i])
 			if s != "" {
+				s = strings.ReplaceAll(s, "_", " ")
+				s = strings.ReplaceAll(s, "cold hands", "freezing hands")
 				symptoms = append(symptoms, s)
 			}
 		}
@@ -81,17 +77,18 @@ func main() {
 	fmt.Printf("Processed %d records.\n", count)
 
 	// Write to JSON
-	f, err := os.Create(*out)
+	f, err := os.Create(out)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer f.Close()
 
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(items); err != nil {
-		panic(err)
+		return fmt.Errorf("failed to encode JSON: %w", err)
 	}
 
-	fmt.Printf("Saved to %s\n", *out)
+	fmt.Printf("Saved to %s\n", out)
+	return nil
 }

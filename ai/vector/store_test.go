@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
 )
 
 func TestVectorStore(t *testing.T) {
@@ -17,7 +18,7 @@ func TestVectorStore(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := NewDatabase()
+	db := NewDatabase[map[string]any]()
 	db.SetStoragePath(tmpDir)
 	// No need to set read mode explicitly, default is sop.NoCheck as once built, Vector DBs are read-only
 	// in this Doctor/Nurse use case. And NoCheck avoids unnecessary overhead appropriate for single-writer,
@@ -36,10 +37,10 @@ func TestVectorStore(t *testing.T) {
 	meta2 := map[string]any{"type": "B"}
 
 	// 1. Test Upsert
-	if err := index.Upsert(id1, vec1, meta1); err != nil {
+	if err := index.Upsert(ai.Item[map[string]any]{ID: id1, Vector: vec1, Payload: meta1}); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
 	}
-	if err := index.Upsert(id2, vec2, meta2); err != nil {
+	if err := index.Upsert(ai.Item[map[string]any]{ID: id2, Vector: vec2, Payload: meta2}); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
 	}
 
@@ -71,7 +72,9 @@ func TestVectorStore(t *testing.T) {
 	}
 
 	// 4. Test Query (Filter)
-	hits, err = index.Query(vec1, 10, map[string]any{"type": "B"})
+	hits, err = index.Query(vec1, 10, func(item map[string]any) bool {
+		return item["type"] == "B"
+	})
 	if err != nil {
 		t.Fatalf("Query with filter failed: %v", err)
 	}
@@ -97,12 +100,12 @@ func TestVectorStore(t *testing.T) {
 	mechanic := db.Open("mechanic")
 
 	// Upsert to doctor
-	if err := doctor.Upsert("flu", []float32{1.0, 0.0, 0.0}, map[string]any{"desc": "flu"}); err != nil {
+	if err := doctor.Upsert(ai.Item[map[string]any]{ID: "flu", Vector: []float32{1.0, 0.0, 0.0}, Payload: map[string]any{"desc": "flu"}}); err != nil {
 		t.Fatalf("Doctor upsert failed: %v", err)
 	}
 
 	// Upsert to mechanic
-	if err := mechanic.Upsert("engine", []float32{0.0, 1.0, 0.0}, map[string]any{"desc": "engine"}); err != nil {
+	if err := mechanic.Upsert(ai.Item[map[string]any]{ID: "engine", Vector: []float32{0.0, 1.0, 0.0}, Payload: map[string]any{"desc": "engine"}}); err != nil {
 		t.Fatalf("Mechanic upsert failed: %v", err)
 	}
 
@@ -134,19 +137,19 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := NewDatabase()
+	db := NewDatabase[map[string]any]()
 	db.SetStoragePath(tmpDir)
 
 	index := db.Open("test_delete_count")
 	// We need to cast to *domainIndex to access internal helpers
-	di := index.(*domainIndex)
+	di := index.(*domainIndex[map[string]any])
 
 	id := "vec-1"
 	vec := []float32{1.0, 0.0, 0.0}
 	meta := map[string]any{"type": "A"}
 
 	// 1. Upsert
-	if err := index.Upsert(id, vec, meta); err != nil {
+	if err := index.Upsert(ai.Item[map[string]any]{ID: id, Vector: vec, Payload: meta}); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
 	}
 

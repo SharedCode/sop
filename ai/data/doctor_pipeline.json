@@ -1,0 +1,57 @@
+{
+  "id": "doctor_pipeline",
+  "name": "Dr. Pipeline",
+  "description": "I am a pipeline-based medical assistant.",
+  "policies": [
+    {
+      "id": "profanity_filter",
+      "type": "profanity",
+      "max_strikes": 3
+    }
+  ],
+  "agents": [
+    {
+      "id": "nurse_local",
+      "name": "Nurse Joy (Pipeline)",
+      "description": "I am a local heuristic translator.",
+      "synonyms": {
+        "ache": "pain",
+        "belly": "abdomen",
+        "hot": "fever",
+        "hurt": "pain",
+        "puke": "vomiting",
+        "throbbing": "pulsating",
+        "throw up": "vomiting",
+        "tummy": "abdomen",
+        "gut": "stomach",
+        "sick": "nausea",
+        "spinning": "dizziness",
+        "poop": "stool",
+        "pee": "urine"
+      },
+      "system_prompt": "You are a search index. Return the matching canonical terms.",
+      "storage_path": "nurse_local",
+      "data": []
+    },
+    {
+      "id": "doctor_core",
+      "name": "Dr. Core",
+      "description": "I am the core medical knowledge base.",
+      "system_prompt": "You are a medical expert. Based on the provided canonical symptoms, diagnose the condition.",
+      "storage_path": "doctor_core",
+      "data": []
+    }
+  ],
+  "pipeline": [
+    {
+      "agent": "profanity_filter"
+    },
+    {
+      "agent": "nurse_local",
+      "output_to": "next_step"
+    },
+    {
+      "agent": "doctor_core"
+    }
+  ]
+}

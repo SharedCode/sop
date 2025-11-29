@@ -1,0 +1,30 @@
+{
+  "steps": [
+    {
+      "name": "Prepare Data",
+      "type": "prepare",
+      "params": {
+        "url": "https://raw.githubusercontent.com/itachi9604/healthcare-chatbot/master/Data/dataset.csv",
+        "out": "data/doctor_data.json",
+        "limit": 1000
+      }
+    },
+    {
+      "name": "Build Nurse Agent Database",
+      "type": "ingest",
+      "params": {
+        "config": "data/nurse_local.json",
+        "data": "data/nurse_data.json"
+      }
+    },
+    {
+      "name": "Build Doctor Agent Database",
+      "type": "ingest",
+      "params": {
+        "config": "data/doctor_pipeline.json",
+        "agent": "doctor_core",
+        "data": "data/doctor_data.json"
+      }
+    }
+  ]
+}

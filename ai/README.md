@@ -1,8 +1,7 @@
 # AI Package
 
-This package was developed with an AI copilot, I want to keep an open development approach(not finicky and narrow) in this package to keep efficient in "automaton" usage. Please note that this package's codebase may undergo refinements as time permits.
-
-AI whisperer or "code whisperer" style. :)
+This package was developed with an AI copilot, I want to keep an open development approach(not finicky and narrow) in this package to keep efficient in "automaton" usage. Please note that this package's codebase may undergo refinements as time permits. But it seems the way AI
+copilot modelled the constructs follow industry/golang community standards.
 
 # SOP AI Library
 
@@ -84,86 +83,64 @@ func main() {
 }
 ```
 
-# AI Agent Setup with Local LLM (Ollama)
+# The Doctor Demo: A Local RAG Pipeline
 
-This guide explains how to run the SOP AI Agent with a local LLM (Ollama) to enable the "Embedder Agent" pattern. This allows you to have a "Nurse" agent that translates user slang into clinical terms before searching the "Doctor" database, all running locally for free.
+This demo showcases a complete "Doctor-Nurse" AI pipeline running entirely locally. It demonstrates how to chain agents together using the SOP AI framework.
 
-## Prerequisites
+## Architecture
 
-1.  **Install Ollama**: Download and install Ollama from [ollama.com](https://ollama.com).
-2.  **Pull the Model**: Open your terminal and run:
+The system consists of two agents working in a pipeline:
+
+1.  **Nurse Agent (`nurse_local`)**:
+    *   **Role**: The "Translator".
+    *   **Task**: Takes colloquial patient symptoms (e.g., "tummy hurt", "hot") and translates them into standardized clinical terms (e.g., "abdominal pain", "fever").
+    *   **Mechanism**: Uses a local vector database to find the closest matching clinical terms.
+
+2.  **Doctor Agent (`doctor_pipeline`)**:
+    *   **Role**: The "Diagnostician".
+    *   **Task**: Takes the clinical terms from the Nurse and searches its medical knowledge base to suggest possible conditions.
+    *   **Mechanism**: Uses a separate local vector database populated with disease-symptom mappings.
+
+## ETL Workflow (Data Ingestion)
+
+Before the agents can run, we must build their knowledge bases. We use a dedicated ETL (Extract, Transform, Load) tool called `sop-etl`.
+
+The entire process is defined in `etl_workflow.json` and consists of three steps:
+
+1.  **Prepare**: Downloads a raw healthcare dataset (CSV) and converts it into JSON format (`doctor_data.json`).
+2.  **Build Nurse DB**: Ingests the data into the Nurse's vector store (`data/nurse_local`), indexing symptoms for semantic retrieval.
+3.  **Build Doctor DB**: Ingests the data into the Doctor's vector store (`data/doctor_core`), indexing diseases and their associated symptoms.
+
+## Quick Start
+
+We provide a script to build the tools, run the ETL pipeline, and verify the agents.
+
+1.  **Run the Rebuild Script**:
     ```bash
-    ollama pull llama3
+    ./rebuild_doctor.sh
     ```
-    (You can also use `mistral`, `gemma`, etc., but the config defaults to `llama3`).
-3.  **Go 1.24+**: Ensure you have Go installed.
+    This script will:
+    *   Build `sop-etl` and `sop-ai` binaries.
+    *   Clean up old data.
+    *   Run the ETL workflow defined in `etl_workflow.json`.
+    *   Run sanity tests.
 
-## Configuration Pattern
-
-The system uses two configuration files to achieve this:
-
-1.  **`doctor.json` (The Main Agent)**:
-    *   This is the agent the user talks to.
-    *   It has an `embedder` section pointing to the "Nurse" agent.
-    *   It has `data: []` because it relies on the pre-built SOP binary database.
-
-    ```json
-    {
-      "id": "doctor",
-      "name": "Dr. AI",
-      "embedder": {
-        "type": "agent",
-        "agent_id": "nurse_translator",
-        "instruction": "Translate the following patient description into these specific clinical terms..."
-      },
-      "storage_path": "doctor",
-      "data": []
-    }
-    ```
-
-2.  **`nurse_translator.json` (The Helper Agent)**:
-    *   This agent is never called directly by the user.
-    *   It uses the **Ollama Generator** to perform the translation.
-
-    ```json
-    {
-      "id": "nurse_translator",
-      "system_prompt": "You are a clinical terminology expert...",
-      "generator": {
-        "type": "ollama",
-        "options": {
-          "model": "llama3",
-          "base_url": "http://localhost:11434"
-        }
-      }
-    }
-    ```
-
-## Running the Agent
-
-1.  **Ensure Ollama is running**:
+2.  **Run the Agent Manually**:
+    Once the data is built, you can chat with the Doctor agent:
     ```bash
-    ollama serve
+    ./sop-ai -config data/doctor_pipeline.json
     ```
-2.  **Run the Agent**:
-    ```bash
-    echo "I have the runs and my tummy hurts" | go run ai/cmd/agent/main.go -config ai/data/doctor.json
+    **Example Interaction**:
+    ```text
+    Patient> I have a bad cough and a runny nose
+    AI Doctor: [1] Common Cold... (Score: 0.92)
     ```
 
-## The "Factory Reset" Kit
+## Configuration Files
 
-If you ever delete the `ai/data/doctor/` folder (the binary database), the agent will fail to start. To fix this, we provide a **Fallback Config** (`doctor_fallback.json`) that contains the raw source data.
-
-To rebuild the database:
-1.  Run the agent with the fallback config:
-    ```bash
-    go run ai/cmd/agent/main.go -config ai/data/doctor_fallback.json
-    ```
-    *This will detect the missing DB, read the 5,000 records from the JSON, and seed the B-Trees.*
-2.  Once initialized, switch back to the production config:
-    ```bash
-    go run ai/cmd/agent/main.go -config ai/data/doctor.json
-    ```
+*   **`etl_workflow.json`**: Defines the ETL pipeline steps and parameters (e.g., batch sizes, input/output paths).
+*   **`data/doctor_pipeline.json`**: Configuration for the main Doctor agent. It specifies that it should use the `nurse_local` agent as its "embedder" (translator).
+*   **`data/nurse_local.json`**: Configuration for the Nurse agent.
 
 ## Heuristic vs LLM Embedders
 
@@ -172,7 +149,7 @@ The system supports two types of "Nurse" agents for embedding/translation:
 1.  **Heuristic Agent (`nurse_local`)**:
     *   **How it works**: Uses a local dictionary and vector search with manually curated synonyms.
     *   **Performance**: Extremely fast and deterministic.
-    *   **Use Case**: We use this for the default "Doctor" demo. It has been tuned for high performance in specific areas, such as **lung-related diseases** (e.g., mapping "cough" to "Common Cold" or "Pneumonia") using specific heuristic mappings.
+    *   **Use Case**: Default for this demo. Tuned for high performance in specific areas (e.g., lung-related diseases).
     *   **Pros**: No external dependencies (no Ollama required), predictable.
     *   **Cons**: Requires manual tuning for new slang/terms.
 
@@ -183,4 +160,4 @@ The system supports two types of "Nurse" agents for embedding/translation:
     *   **Pros**: Understands context and nuance better out-of-the-box.
     *   **Cons**: Requires running Ollama, higher latency.
 
-To switch between them, update the `embedder.agent_id` in `doctor.json`.
+To switch between them, you would update the `embedder` configuration in the agent's JSON file.

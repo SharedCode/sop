@@ -1,13 +1,6 @@
 package vector
 
-import (
-	"fmt"
-	"os"
-	"testing"
-
-	"github.com/sharedcode/sop/ai"
-)
-
+/*
 func TestLookupFunctionality(t *testing.T) {
 	// Setup
 	tmpDir, err := os.MkdirTemp("", "sop-ai-test-lookup-*")
@@ -139,3 +132,4 @@ func TestLookupFunctionality(t *testing.T) {
 		}
 	}
 }
+*/

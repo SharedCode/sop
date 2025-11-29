@@ -11,18 +11,18 @@ import (
 // AgentEmbedder wraps an AI Agent to use its understanding for embedding.
 // It asks the agent to "summarize" or "extract concepts" from the text,
 // and then embeds those concepts using a base embedder (like Simple).
-type AgentEmbedder struct {
-	agent       ai.Agent      // The agent that "understands" the text
+type AgentEmbedder[T any] struct {
+	agent       ai.Agent[T]   // The agent that "understands" the text
 	base        ai.Embeddings // The embedder that turns concepts into vectors
 	instruction string        // e.g., "Extract the medical condition from this text:"
 }
 
 // NewAgentEmbedder creates a new embedder that uses an agent to preprocess text.
-func NewAgentEmbedder(agent ai.Agent, base ai.Embeddings, instruction string) *AgentEmbedder {
+func NewAgentEmbedder[T any](agent ai.Agent[T], base ai.Embeddings, instruction string) *AgentEmbedder[T] {
 	if instruction == "" {
 		instruction = "Extract the core concepts from this text:"
 	}
-	return &AgentEmbedder{
+	return &AgentEmbedder[T]{
 		agent:       agent,
 		base:        base,
 		instruction: instruction,
@@ -30,18 +30,23 @@ func NewAgentEmbedder(agent ai.Agent, base ai.Embeddings, instruction string) *A
 }
 
 // Name returns the name of the embedder.
-func (ae *AgentEmbedder) Name() string {
+func (ae *AgentEmbedder[T]) Name() string {
 	return fmt.Sprintf("agent-enhanced-%s", ae.base.Name())
 }
 
 // Dim returns the dimension of the embeddings.
-func (ae *AgentEmbedder) Dim() int {
+func (ae *AgentEmbedder[T]) Dim() int {
 	return ae.base.Dim()
+}
+
+// Agent returns the underlying agent used for embedding.
+func (ae *AgentEmbedder[T]) Agent() ai.Agent[T] {
+	return ae.agent
 }
 
 // EmbedTexts generates embeddings for the given texts.
 // It first enhances the texts using the agent, then embeds the enhanced texts using the base embedder.
-func (ae *AgentEmbedder) EmbedTexts(texts []string) ([][]float32, error) {
+func (ae *AgentEmbedder[T]) EmbedTexts(texts []string) ([][]float32, error) {
 	// 1. Preprocess texts using the Agent
 	enhancedTexts := make([]string, len(texts))
 	for i, text := range texts {
@@ -61,6 +66,7 @@ func (ae *AgentEmbedder) EmbedTexts(texts []string) ([][]float32, error) {
 			// or just use concepts depending on strategy.
 			// Here we append concepts to give them weight.
 			enhancedTexts[i] = fmt.Sprintf("%s %s", text, strings.TrimSpace(concept))
+			// fmt.Printf("DEBUG: AgentEmbedder enhanced '%s' -> '%s'\n", text, enhancedTexts[i])
 		}
 	}
 

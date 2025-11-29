@@ -113,6 +113,8 @@ var stopWords = map[string]bool{
 	"no": true, "nor": true, "not": true, "only": true, "own": true, "same": true, "so": true, "than": true,
 	"too": true, "very": true, "s": true, "t": true, "can": true, "will": true, "just": true, "don": true,
 	"should": true, "now": true, "case": true, "symptoms": true, "include": true, // Domain specific stops
+	"pain":  true, // "pain" is too common and dominates the bag-of-words matching
+	"score": true, // "score" appears in the context output and causes collisions
 }
 
 func isStopWord(w string) bool {

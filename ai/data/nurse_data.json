@@ -1,0 +1,222 @@
+[
+    {
+        "id": "sym_1",
+        "text": "itching",
+        "description": "Sensation that causes the desire or reflex to scratch."
+    },
+    {
+        "id": "sym_2",
+        "text": "skin rash",
+        "description": "Change in the color or texture of the skin."
+    },
+    {
+        "id": "sym_3",
+        "text": "nodal skin eruptions",
+        "description": "Bumps or nodules on the skin."
+    },
+    {
+        "id": "sym_4",
+        "text": "stomach pain",
+        "description": "Pain in the stomach or abdomen."
+    },
+    {
+        "id": "sym_5",
+        "text": "acidity",
+        "description": "Heartburn or acid reflux."
+    },
+    {
+        "id": "sym_6",
+        "text": "vomiting",
+        "description": "Ejecting matter from the stomach through the mouth."
+    },
+    {
+        "id": "sym_7",
+        "text": "cough",
+        "description": "Expelling air from the lungs with a sudden sharp sound."
+    },
+    {
+        "id": "sym_8",
+        "text": "chest pain",
+        "description": "Pain in the chest region."
+    },
+    {
+        "id": "sym_9",
+        "text": "yellowish skin",
+        "description": "Yellow discoloration of the skin (Jaundice)."
+    },
+    {
+        "id": "sym_10",
+        "text": "nausea",
+        "description": "A feeling of sickness with an inclination to vomit."
+    },
+    {
+        "id": "sym_11",
+        "text": "loss of appetite",
+        "description": "Reduced desire to eat."
+    },
+    {
+        "id": "sym_12",
+        "text": "abdominal pain",
+        "description": "Pain in the belly area."
+    },
+    {
+        "id": "sym_13",
+        "text": "burning micturition",
+        "description": "Burning sensation during urination."
+    },
+    {
+        "id": "sym_14",
+        "text": "spotting urination",
+        "description": "Small amounts of urine leakage."
+    },
+    {
+        "id": "sym_15",
+        "text": "high fever",
+        "description": "Elevated body temperature."
+    },
+    {
+        "id": "sym_16",
+        "text": "fatigue",
+        "description": "Extreme tiredness resulting from mental or physical exertion or illness."
+    },
+    {
+        "id": "sym_17",
+        "text": "weight loss",
+        "description": "Decrease in body weight."
+    },
+    {
+        "id": "sym_18",
+        "text": "restlessness",
+        "description": "Inability to rest or relax."
+    },
+    {
+        "id": "sym_19",
+        "text": "lethargy",
+        "description": "A lack of energy and enthusiasm."
+    },
+    {
+        "id": "sym_20",
+        "text": "irregular sugar level",
+        "description": "Fluctuating blood glucose levels."
+    },
+    {
+        "id": "sym_21",
+        "text": "blurred and distorted vision",
+        "description": "Unclear or warped sight."
+    },
+    {
+        "id": "sym_22",
+        "text": "obesity",
+        "description": "Excessive body fat."
+    },
+    {
+        "id": "sym_23",
+        "text": "excessive hunger",
+        "description": "Feeling unusually hungry."
+    },
+    {
+        "id": "sym_24",
+        "text": "diarrhoea",
+        "description": "Loose, watery stools."
+    },
+    {
+        "id": "sym_25",
+        "text": "breathlessness",
+        "description": "Difficulty breathing or shortness of breath."
+    },
+    {
+        "id": "sym_26",
+        "text": "headache",
+        "description": "Pain in the head."
+    },
+    {
+        "id": "sym_27",
+        "text": "dizziness",
+        "description": "Sensation of spinning or losing balance."
+    },
+    {
+        "id": "sym_28",
+        "text": "stiff neck",
+        "description": "Pain and difficulty moving the neck."
+    },
+    {
+        "id": "sym_29",
+        "text": "depression",
+        "description": "Persistent feeling of sadness and loss of interest."
+    },
+    {
+        "id": "sym_30",
+        "text": "irritability",
+        "description": "Feeling agitated or easily annoyed."
+    },
+    {
+        "id": "sym_31",
+        "text": "muscle pain",
+        "description": "Pain in the muscles."
+    },
+    {
+        "id": "sym_32",
+        "text": "joint pain",
+        "description": "Pain in the joints."
+    },
+    {
+        "id": "sym_33",
+        "text": "swelled lymph nodes",
+        "description": "Enlarged lymph nodes."
+    },
+    {
+        "id": "sym_34",
+        "text": "malaise",
+        "description": "General feeling of discomfort or illness."
+    },
+    {
+        "id": "sym_35",
+        "text": "red spots over body",
+        "description": "Red spots appearing on the skin."
+    },
+    {
+        "id": "sym_36",
+        "text": "runny nose",
+        "description": "Excess nasal drainage, often associated with the common cold."
+    },
+    {
+        "id": "sym_37",
+        "text": "congestion",
+        "description": "Blocked nasal passages, stuffy nose, common in cold."
+    },
+    {
+        "id": "sym_38",
+        "text": "sneezing",
+        "description": "Sudden expulsion of air from nose and mouth, common in cold."
+    },
+    {
+        "id": "sym_39",
+        "text": "chills",
+        "description": "Feeling of coldness and shivering, often with fever or cold."
+    },
+    {
+        "id": "sym_40",
+        "text": "throat irritation",
+        "description": "Sore, scratchy, or irritated throat, common in cold."
+    },
+    {
+        "id": "sym_41",
+        "text": "sinus pressure",
+        "description": "Pressure in the face and sinuses, common in cold."
+    },
+    {
+        "id": "sym_42",
+        "text": "phlegm",
+        "description": "Thick mucus in the throat, common in cold."
+    },
+    {
+        "id": "sym_43",
+        "text": "loss of smell",
+        "description": "Inability to smell, common in cold."
+    },
+    {
+        "id": "sym_44",
+        "text": "common cold",
+        "description": "Viral infection of the upper respiratory tract, also known as a cold."
+    }
+]

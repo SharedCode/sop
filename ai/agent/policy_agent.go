@@ -7,9 +7,8 @@ import (
 	"github.com/sharedcode/sop/ai"
 )
 
-// PolicyAgent wraps a PolicyEngine and Classifier into an Agent interface.
-// It evaluates the input against the policy. If allowed, it returns the input as is.
-// If blocked, it returns an error.
+// PolicyAgent is a specialized agent that enforces policies.
+// It implements the Agent interface but focuses on validation rather than generation.
 type PolicyAgent struct {
 	id         string
 	policy     ai.PolicyEngine
@@ -25,32 +24,38 @@ func NewPolicyAgent(id string, policy ai.PolicyEngine, classifier ai.Classifier)
 	}
 }
 
-// Search is not supported for PolicyAgent, but implemented to satisfy the interface.
-func (p *PolicyAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit, error) {
-	return nil, fmt.Errorf("PolicyAgent does not support Search")
-}
-
-// Ask evaluates the query against the policy.
+// Ask evaluates the input against the policy.
+// If the policy passes, it returns the input (or a transformed version).
+// If the policy fails, it returns an error.
 func (p *PolicyAgent) Ask(ctx context.Context, query string) (string, error) {
-	if p.policy == nil || p.classifier == nil {
+	if p.classifier == nil || p.policy == nil {
 		return query, nil
 	}
 
 	sample := ai.ContentSample{Text: query}
 	labels, err := p.classifier.Classify(sample)
 	if err != nil {
-		return "", fmt.Errorf("policy agent '%s' classification failed: %w", p.id, err)
+		return "", fmt.Errorf("policy classification failed: %w", err)
 	}
 
 	decision, err := p.policy.Evaluate("input", sample, labels)
 	if err != nil {
-		return "", fmt.Errorf("policy agent '%s' evaluation failed: %w", p.id, err)
+		return "", fmt.Errorf("policy evaluation failed: %w", err)
 	}
 
 	if decision.Action == "block" {
-		return "", fmt.Errorf("request blocked by policy '%s': %v", p.id, decision.Reasons)
+		return "", fmt.Errorf("policy violation: %v", decision.Reasons)
 	}
 
-	// Pass-through if allowed
 	return query, nil
+}
+
+// ID returns the agent ID.
+func (p *PolicyAgent) ID() string {
+	return p.id
+}
+
+// Search is not supported for PolicyAgent, but implemented to satisfy the interface.
+func (p *PolicyAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
+	return nil, fmt.Errorf("PolicyAgent does not support Search")
 }

@@ -177,12 +177,13 @@ This ensures your Expert System gets *smarter* and *faster* as it grows, rather 
 
 SOP gives you two powerful knobs to tune your Expert System for its specific role.
 
-### 1. Usage Modes: Build-Once vs. Read-Write
+### 1. Usage Modes: Build-Once vs. Dynamic
 *   **`BuildOnceQueryMany`**: Ideal for static knowledge bases (e.g., a Law Library). SOP optimizes the index for pure read speed and discards temporary build artifacts.
-*   **`ReadWrite`**: Ideal for dynamic systems (e.g., User Logs). SOP maintains the auxiliary structures needed for continuous updates.
+*   **`Dynamic`**: Ideal for dynamic systems (e.g., User Logs). SOP maintains the auxiliary structures needed for continuous updates.
+*   **`Static`**: Optimized for read-only or append-only datasets.
 
 ```go
-db.SetUsageMode(vector.BuildOnceQueryMany) // or vector.ReadWrite
+db.SetUsageMode(vector.BuildOnceQueryMany) // or vector.Dynamic
 ```
 
 ### 2. The "NoCheck" Speed Mode
@@ -263,30 +264,55 @@ This command:
 ### ETL: Automating Knowledge Ingestion (Production Mode)
 For real-world agents, you can't type thousands of records into the `data` array manually. This is where **ETL (Extract, Transform, Load)** comes in.
 
-We provide a dedicated ETL tool to ingest massive datasets into the Vector Store efficiently.
+We provide a dedicated ETL tool (`sop-etl`) to ingest massive datasets into the Vector Store efficiently.
 
-**1. Prepare your Data**
-Create a JSON file (e.g., `doctor_data.json`) containing an array of items:
+**1. Define the Workflow**
+Create a workflow file (e.g., `etl_workflow.json`) that defines the pipeline steps:
+
 ```json
-[
-  { "id": "1", "text": "Gastritis", "description": "Stomach inflammation..." },
-  { "id": "2", "text": "Flu", "description": "Viral infection..." }
-]
+{
+  "steps": [
+    {
+      "name": "Prepare Data",
+      "action": "prepare",
+      "params": {
+        "url": "https://example.com/data.csv",
+        "output": "data/doctor_data.json"
+      }
+    },
+    {
+      "name": "Build Nurse DB",
+      "action": "ingest",
+      "params": {
+        "agent_config": "data/nurse_local.json",
+        "source_data": "data/doctor_data.json"
+      }
+    },
+    {
+      "name": "Build Doctor DB",
+      "action": "ingest",
+      "params": {
+        "agent_config": "data/doctor_core.json",
+        "source_data": "data/doctor_data.json"
+      }
+    }
+  ]
+}
 ```
 
 **2. Run the ETL Tool**
-This tool streams data from the file, generates embeddings in batches, and upserts them to the database. It is designed to handle millions of records with constant memory usage.
-
-You can target a specific agent within your pipeline config using the `-agent` flag.
+Run the tool with the workflow flag:
 
 ```bash
-go run ai/cmd/etl/main.go -config ai/data/doctor_pipeline.json -agent doctor_core -data ai/data/doctor_data.json
+./sop-etl -workflow etl_workflow.json
 ```
+
+This will sequentially download the data, process it, and populate the vector databases for both agents.
 
 **3. Run the Agent**
 Now you can run your agent using the pre-populated database:
 ```bash
-go run ai/cmd/agent/main.go -config ai/data/doctor_pipeline.json
+./sop-ai -config data/doctor_pipeline.json
 ```
 
 ## Step 8: Running the Full Example
@@ -295,9 +321,9 @@ We have included a complete, working example in the repository. You can build th
 
 ### 1. Run the Rebuild Script
 The `rebuild_doctor.sh` script performs the following:
-1.  **Builds** the `sop-prepare`, `sop-etl`, and `sop-ai` binaries.
-2.  **Downloads** a sample medical dataset (CSV) and converts it to JSON.
-3.  **Ingests** the data into the Vector Store (ETL) for both Nurse and Doctor.
+1.  **Builds** the `sop-etl` and `sop-ai` binaries.
+2.  **Cleans** up old data.
+3.  **Runs** the ETL workflow defined in `etl_workflow.json`.
 4.  **Runs** sanity tests.
 
 ```bash
@@ -388,7 +414,7 @@ The `etl` package helps you ingest data from various sources (CSV, Web, APIs) an
 import "github.com/sharedcode/sop/ai/etl"
 
 // Example: Fetching and cleaning data
-config, err := etl.PrepareDoctorDataset("https://example.com/data.csv")
+err := etl.PrepareData("https://example.com/data.csv", "output.json", 1000)
 ```
 
 ### Putting It All Together: A Custom Agent

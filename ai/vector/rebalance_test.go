@@ -16,27 +16,27 @@ func TestRebalance(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase()
+	db := NewDatabase[map[string]any]()
 	db.SetStoragePath(tmpDir)
 	idx := db.Open("test_rebalance")
-	dIdx := idx.(*domainIndex)
+	dIdx := idx.(*domainIndex[map[string]any])
 
 	// 1. Initial Population (2 Clusters)
 	// Cluster 1: (0,0)
 	// Cluster 2: (10,10)
-	var items []ai.Item
+	var items []ai.Item[map[string]any]
 	for i := 0; i < 10; i++ {
-		items = append(items, ai.Item{
-			ID:     fmt.Sprintf("c1-%d", i),
-			Vector: []float32{0.1 * float32(i), 0.1 * float32(i)},
-			Meta:   map[string]any{"cluster": 1},
+		items = append(items, ai.Item[map[string]any]{
+			ID:      fmt.Sprintf("c1-%d", i),
+			Vector:  []float32{0.1 * float32(i), 0.1 * float32(i)},
+			Payload: map[string]any{"cluster": 1},
 		})
 	}
 	for i := 0; i < 10; i++ {
-		items = append(items, ai.Item{
-			ID:     fmt.Sprintf("c2-%d", i),
-			Vector: []float32{10.0 + 0.1*float32(i), 10.0 + 0.1*float32(i)},
-			Meta:   map[string]any{"cluster": 2},
+		items = append(items, ai.Item[map[string]any]{
+			ID:      fmt.Sprintf("c2-%d", i),
+			Vector:  []float32{10.0 + 0.1*float32(i), 10.0 + 0.1*float32(i)},
+			Payload: map[string]any{"cluster": 2},
 		})
 	}
 
@@ -51,7 +51,11 @@ func TestRebalance(t *testing.T) {
 	// 2. Add a NEW Cluster (20,20) via individual Upserts
 	// This simulates drift. The new items will be forced into existing centroids (likely Cluster 2's).
 	for i := 0; i < 10; i++ {
-		err := idx.Upsert(fmt.Sprintf("c3-%d", i), []float32{20.0 + 0.1*float32(i), 20.0 + 0.1*float32(i)}, map[string]any{"cluster": 3})
+		err := idx.Upsert(ai.Item[map[string]any]{
+			ID:      fmt.Sprintf("c3-%d", i),
+			Vector:  []float32{20.0 + 0.1*float32(i), 20.0 + 0.1*float32(i)},
+			Payload: map[string]any{"cluster": 3},
+		})
 		if err != nil {
 			t.Fatalf("Upsert failed: %v", err)
 		}
@@ -73,8 +77,17 @@ func TestRebalance(t *testing.T) {
 		t.Fatal("Query returned no hits")
 	}
 	// Should be from Cluster 3
-	if hits[0].Meta["cluster"].(float64) != 3 {
-		t.Errorf("Expected cluster 3, got %v", hits[0].Meta["cluster"])
+	clusterVal := hits[0].Payload["cluster"]
+	if v, ok := clusterVal.(float64); ok {
+		if int(v) != 3 {
+			t.Errorf("Expected cluster 3, got %v", clusterVal)
+		}
+	} else if v, ok := clusterVal.(int); ok {
+		if v != 3 {
+			t.Errorf("Expected cluster 3, got %v", clusterVal)
+		}
+	} else {
+		t.Errorf("Unexpected type for cluster: %T", clusterVal)
 	}
 
 	// Check if metadata was updated in Content store

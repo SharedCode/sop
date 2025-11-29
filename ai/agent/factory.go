@@ -16,7 +16,7 @@ import (
 
 // Dependencies holds external dependencies required for agent creation.
 type Dependencies struct {
-	AgentRegistry map[string]ai.Agent
+	AgentRegistry map[string]ai.Agent[map[string]any]
 }
 
 // HashString generates a deterministic hash for the given string.
@@ -27,7 +27,7 @@ func HashString(s string) string {
 }
 
 // SetupInfrastructure initializes the Embedder and Vector Index based on the configuration.
-func SetupInfrastructure(cfg Config, deps Dependencies) (ai.Embeddings, ai.VectorIndex, error) {
+func SetupInfrastructure(cfg Config, deps Dependencies) (ai.Embeddings, ai.VectorStore[map[string]any], error) {
 	// 1. Initialize Embedder
 	var emb ai.Embeddings
 
@@ -53,7 +53,7 @@ func SetupInfrastructure(cfg Config, deps Dependencies) (ai.Embeddings, ai.Vecto
 	}
 
 	// 2. Initialize Vector Database
-	db := vector.NewDatabase()
+	db := vector.NewDatabase[map[string]any]()
 	if cfg.StoragePath != "" {
 		// Ensure absolute path to avoid duplication issues with relative paths
 		if absPath, err := filepath.Abs(cfg.StoragePath); err == nil {
@@ -98,7 +98,7 @@ func NewFromConfig(cfg Config, deps Dependencies) (*Service, error) {
 	var class ai.Classifier
 
 	// Create a local registry for policy agents
-	policyRegistry := make(map[string]ai.Agent)
+	policyRegistry := make(map[string]ai.Agent[map[string]any])
 
 	for _, pCfg := range cfg.Policies {
 		if pCfg.Type == "profanity" {
@@ -126,7 +126,7 @@ func NewFromConfig(cfg Config, deps Dependencies) (*Service, error) {
 
 	// Merge policy registry into the main registry
 	// We create a new map to avoid modifying the passed dependencies
-	fullRegistry := make(map[string]ai.Agent)
+	fullRegistry := make(map[string]ai.Agent[map[string]any])
 	for k, v := range deps.AgentRegistry {
 		fullRegistry[k] = v
 	}
@@ -135,8 +135,9 @@ func NewFromConfig(cfg Config, deps Dependencies) (*Service, error) {
 	}
 
 	// 2. Create Domain
-	dom := domain.NewGenericDomain(domain.Config{
+	dom := domain.NewGenericDomain(domain.Config[map[string]any]{
 		ID:         cfg.ID,
+		Name:       cfg.Name,
 		Index:      idx,
 		Embedder:   emb,
 		Policy:     pol,
@@ -159,12 +160,12 @@ func NewFromConfig(cfg Config, deps Dependencies) (*Service, error) {
 			return nil, fmt.Errorf("failed to embed seed data: %w", err)
 		}
 
-		items := make([]ai.Item, len(cfg.Data))
+		items := make([]ai.Item[map[string]any], len(cfg.Data))
 		for i, item := range cfg.Data {
-			items[i] = ai.Item{
+			items[i] = ai.Item[map[string]any]{
 				ID:     item.ID,
 				Vector: vecs[i],
-				Meta: map[string]any{
+				Payload: map[string]any{
 					"text":        item.Text,
 					"description": item.Description,
 				},
