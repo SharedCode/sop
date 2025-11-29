@@ -1,1 +1,1 @@
-["lookup","vectors","centroids","content"]
+["vectors","content","lookup","temp_vectors","sys_config","centroids"]
