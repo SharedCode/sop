@@ -6,6 +6,7 @@ import (
 	"io"
 	"path/filepath"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/domain"
 	"github.com/sharedcode/sop/ai/embed"
@@ -54,6 +55,16 @@ func SetupInfrastructure(cfg Config, deps Dependencies) (ai.Embeddings, ai.Vecto
 
 	// 2. Initialize Vector Database
 	db := vector.NewDatabase[map[string]any]()
+	if cfg.ContentSize != "" {
+		switch cfg.ContentSize {
+		case "small":
+			db.SetContentSize(sop.SmallData)
+		case "medium":
+			db.SetContentSize(sop.MediumData)
+		case "big":
+			db.SetContentSize(sop.BigData)
+		}
+	}
 	if cfg.StoragePath != "" {
 		// Ensure absolute path to avoid duplication issues with relative paths
 		if absPath, err := filepath.Abs(cfg.StoragePath); err == nil {

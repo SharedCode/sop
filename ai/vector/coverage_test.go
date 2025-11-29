@@ -163,7 +163,7 @@ func TestArchitectureDirectMethods(t *testing.T) {
 	}
 	defer trans.Rollback(db.ctx)
 
-	arch, err := OpenDomainStore(db.ctx, trans, 1)
+	arch, err := OpenDomainStore(db.ctx, trans, 1, sop.MediumData)
 	if err != nil {
 		t.Fatalf("OpenDomainStore failed: %v", err)
 	}

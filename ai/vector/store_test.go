@@ -167,7 +167,7 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 			t.Fatalf("Failed to get active version: %v", err)
 		}
 
-		arch, err := OpenDomainStore(di.db.ctx, trans, version)
+		arch, err := OpenDomainStore(di.db.ctx, trans, version, sop.MediumData)
 		if err != nil {
 			t.Fatalf("Failed to open domain store: %v", err)
 		}

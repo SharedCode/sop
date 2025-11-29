@@ -17,6 +17,7 @@ type Config struct {
 	Generator         GeneratorConfig   `json:"generator,omitempty"`          // Configuration for the LLM generator
 	Data              []DataItem        `json:"data"`                         // For seeding (MVP)
 	StoragePath       string            `json:"storage_path,omitempty"`       // Optional: Override default storage path. Will be converted to absolute path.
+	ContentSize       string            `json:"content_size,omitempty"`       // Optional: "small", "medium", "big". Defaults to "medium".
 	SkipDeduplication bool              `json:"skip_deduplication,omitempty"` // Optional: Skip deduplication phase
 	Agents            []Config          `json:"agents,omitempty"`             // Optional: Define agents locally to be referenced by ID
 	Pipeline          []PipelineStep    `json:"pipeline,omitempty"`           // Optional: Define a chain of agents

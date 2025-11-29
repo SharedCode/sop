@@ -30,7 +30,7 @@ func TestNProbeAndFiltering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to begin transaction: %v", err)
 	}
-	arch, err := OpenDomainStore(ctx, trans, 0)
+	arch, err := OpenDomainStore(ctx, trans, 0, sop.MediumData)
 	if err != nil {
 		t.Fatalf("Failed to open domain store: %v", err)
 	}

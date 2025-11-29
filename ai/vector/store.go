@@ -27,6 +27,7 @@ type Database[T any] struct {
 	usageMode     ai.UsageMode
 	storagePath   string
 	rebalanceLock sync.Mutex
+	contentSize   sop.ValueDataSize
 }
 
 // NewDatabase creates a new vector database manager.
@@ -40,12 +41,18 @@ func NewDatabase[T any]() *Database[T] {
 		readMode:    sop.NoCheck,
 		usageMode:   ai.BuildOnceQueryMany, // Default to most common AI pattern
 		storagePath: "",
+		contentSize: sop.MediumData,
 	}
 }
 
 // SetUsageMode configures the usage pattern for the database.
 func (d *Database[T]) SetUsageMode(mode ai.UsageMode) {
 	d.usageMode = mode
+}
+
+// SetContentSize configures the value data size for the content store.
+func (d *Database[T]) SetContentSize(size sop.ValueDataSize) {
+	d.contentSize = size
 }
 
 // SetStoragePath configures the file system path for data persistence.
@@ -103,7 +110,7 @@ func (di *domainIndex[T]) Upsert(item ai.Item[T]) error {
 		return err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, version)
+	arch, err := OpenDomainStore(di.db.ctx, trans, version, di.db.contentSize)
 	if err != nil {
 		return err
 	}
@@ -240,7 +247,7 @@ func (di *domainIndex[T]) UpsertBatch(items []ai.Item[T]) error {
 		return err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, version)
+	arch, err := OpenDomainStore(di.db.ctx, trans, version, di.db.contentSize)
 	if err != nil {
 		return err
 	}
@@ -384,7 +391,7 @@ func (di *domainIndex[T]) Get(id string) (*ai.Item[T], error) {
 		return nil, err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, version)
+	arch, err := OpenDomainStore(di.db.ctx, trans, version, di.db.contentSize)
 	if err != nil {
 		return nil, err
 	}
@@ -442,7 +449,7 @@ func (di *domainIndex[T]) Delete(id string) error {
 		return err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, version)
+	arch, err := OpenDomainStore(di.db.ctx, trans, version, di.db.contentSize)
 	if err != nil {
 		return err
 	}
@@ -509,7 +516,7 @@ func (di *domainIndex[T]) Query(vec []float32, k int, filter func(T) bool) ([]ai
 		return nil, err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, version)
+	arch, err := OpenDomainStore(di.db.ctx, trans, version, di.db.contentSize)
 	if err != nil {
 		return nil, err
 	}
@@ -619,7 +626,7 @@ func (di *domainIndex[T]) Count() (int64, error) {
 		return 0, err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, version)
+	arch, err := OpenDomainStore(di.db.ctx, trans, version, di.db.contentSize)
 	if err != nil {
 		return 0, err
 	}
@@ -641,7 +648,7 @@ func (di *domainIndex[T]) AddCentroid(vec []float32) (int, error) {
 		return 0, err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, version)
+	arch, err := OpenDomainStore(di.db.ctx, trans, version, di.db.contentSize)
 	if err != nil {
 		return 0, err
 	}
@@ -676,7 +683,7 @@ func (di *domainIndex[T]) Centroids(ctx context.Context, trans sop.Transaction) 
 	if err != nil {
 		return nil, err
 	}
-	arch, err := OpenDomainStore(ctx, trans, version)
+	arch, err := OpenDomainStore(ctx, trans, version, di.db.contentSize)
 	if err != nil {
 		return nil, err
 	}
@@ -689,7 +696,7 @@ func (di *domainIndex[T]) Vectors(ctx context.Context, trans sop.Transaction) (b
 	if err != nil {
 		return nil, err
 	}
-	arch, err := OpenDomainStore(ctx, trans, version)
+	arch, err := OpenDomainStore(ctx, trans, version, di.db.contentSize)
 	if err != nil {
 		return nil, err
 	}
@@ -702,7 +709,7 @@ func (di *domainIndex[T]) Content(ctx context.Context, trans sop.Transaction) (b
 	if err != nil {
 		return nil, err
 	}
-	arch, err := OpenDomainStore(ctx, trans, version)
+	arch, err := OpenDomainStore(ctx, trans, version, di.db.contentSize)
 	if err != nil {
 		return nil, err
 	}
@@ -879,9 +886,7 @@ func (di *domainIndex[T]) addCentroidToCache(id int, vec []float32) {
 const sysConfigName = "sys_config"
 
 func (di *domainIndex[T]) getActiveVersion(ctx context.Context, trans sop.Transaction) (int64, error) {
-	store, err := inredfs.NewBtree[string, int64](ctx, sop.StoreOptions{
-		Name: sysConfigName,
-	}, trans, func(a, b string) int {
+	store, err := inredfs.NewBtree[string, int64](ctx, sop.ConfigureStore(sysConfigName, true, 1000, "System Config", sop.SmallData, ""), trans, func(a, b string) int {
 		if a < b {
 			return -1
 		}
@@ -919,9 +924,7 @@ func (di *domainIndex[T]) Rebalance() error {
 	defer trans.Rollback(di.db.ctx)
 
 	// Open Sys Store to get current version and keep it open for update later
-	sysStore, err := inredfs.NewBtree[string, int64](di.db.ctx, sop.StoreOptions{
-		Name: sysConfigName,
-	}, trans, func(a, b string) int {
+	sysStore, err := inredfs.NewBtree[string, int64](di.db.ctx, sop.ConfigureStore(sysConfigName, true, 1000, "System Config", sop.SmallData, ""), trans, func(a, b string) int {
 		if a < b {
 			return -1
 		}
@@ -944,7 +947,7 @@ func (di *domainIndex[T]) Rebalance() error {
 	}
 
 	// 1. Open Old Store
-	oldArch, err := OpenDomainStore(di.db.ctx, trans, currentVersion)
+	oldArch, err := OpenDomainStore(di.db.ctx, trans, currentVersion, di.db.contentSize)
 	if err != nil {
 		return err
 	}
@@ -998,23 +1001,17 @@ func (di *domainIndex[T]) Rebalance() error {
 
 	// Manually open new versioned stores to avoid re-opening shared stores (Content, TempVectors)
 	// which would cause a transaction conflict.
-	newCentroids, err := inredfs.NewBtree[int, ai.Centroid](di.db.ctx, sop.StoreOptions{
-		Name: "centroids" + suffix,
-	}, trans, func(a, b int) int { return a - b })
+	newCentroids, err := inredfs.NewBtree[int, ai.Centroid](di.db.ctx, sop.ConfigureStore("centroids"+suffix, true, 100, "Centroids", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return err
 	}
 
-	newVectors, err := inredfs.NewBtree[ai.VectorKey, []float32](di.db.ctx, sop.StoreOptions{
-		Name: "vectors" + suffix,
-	}, trans, compositeKeyComparer)
+	newVectors, err := inredfs.NewBtree[ai.VectorKey, []float32](di.db.ctx, sop.ConfigureStore("vectors"+suffix, true, 1000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
 	if err != nil {
 		return err
 	}
 
-	newLookup, err := inredfs.NewBtree[int, string](di.db.ctx, sop.StoreOptions{
-		Name: "lookup" + suffix,
-	}, trans, func(a, b int) int { return a - b })
+	newLookup, err := inredfs.NewBtree[int, string](di.db.ctx, sop.ConfigureStore("lookup"+suffix, true, 1000, "Lookup", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return err
 	}
