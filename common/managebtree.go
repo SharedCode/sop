@@ -34,11 +34,12 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 		trans.Rollback(ctx, err)
 		return nil, err
 	}
-	return newBtree[TK, TV](ctx, &stores[0], trans, comparer)
+	return newBtree[TK, TV](ctx, &stores[0], trans, comparer, false)
 }
 
 // NewBtree will create a new B-Tree instance with data persisted to backend storage upon commit.
 // If the store exists, it opens it and validates compatibility with the provided options.
+// The creation of the store is fully transactional; if the transaction rolls back, the store will not be created.
 // When creating a new store, a root node ID is preassigned for commit-time merging.
 func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if t == nil {
@@ -73,13 +74,17 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 			ns.RootNodeID = sop.NewUUID()
 			ns.Timestamp = sop.Now().UnixMilli()
 		}
+		if err := trans.logger.log(ctx, createStore, toByteArray(ns.Name)); err != nil {
+			trans.Rollback(ctx, err)
+			return nil, err
+		}
 		if err := trans.StoreRepository.Add(ctx, *ns); err != nil {
 			// Cleanup the store if there was anything added in backend.
 			trans.StoreRepository.Remove(ctx, ns.Name)
 			trans.Rollback(ctx, err)
 			return nil, err
 		}
-		return newBtree[TK, TV](ctx, ns, trans, comparer)
+		return newBtree[TK, TV](ctx, ns, trans, comparer, true)
 	}
 	// Check if store retrieved is empty or of non-compatible specification.
 	if !ns.IsCompatible(stores[0]) {
@@ -88,10 +93,10 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 		return nil, fmt.Errorf("b-tree '%s' exists & has different configuration, please use OpenBtree to open & create an instance of it", si.Name)
 	}
 	ns = &stores[0]
-	return newBtree[TK, TV](ctx, ns, trans, comparer)
+	return newBtree[TK, TV](ctx, ns, trans, comparer, false)
 }
 
-func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, trans *Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, trans *Transaction, comparer btree.ComparerFunc[TK], created bool) (btree.BtreeInterface[TK, TV], error) {
 	// Fail if b-tree with a given name is already in the transaction's list.
 	for i := range trans.btreesBackend {
 		if s.Name == trans.btreesBackend[i].getStoreInfo().Name {
@@ -137,6 +142,7 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 		checkTrackedItems:  iat.checkTrackedItems,
 		lockTrackedItems:   iat.lock,
 		unlockTrackedItems: iat.unlock,
+		created:            created,
 	}
 	trans.btreesBackend = append(trans.btreesBackend, b3b)
 
@@ -157,6 +163,9 @@ func refetchAndMergeClosure[TK btree.Ordered, TV any](si *StoreInterface[TK, TV]
 		storeInfo, err := sr.GetWithTTL(ctx, b3.StoreInfo.CacheConfig.IsStoreInfoCacheTTL, b3.StoreInfo.CacheConfig.StoreInfoCacheDuration, b3.StoreInfo.Name)
 		if err != nil {
 			return err
+		}
+		if len(storeInfo) == 0 {
+			return fmt.Errorf("store %s not found (maybe deleted by rollback?)", b3.StoreInfo.Name)
 		}
 
 		// Reset the internal variables with value from backend Store DB.

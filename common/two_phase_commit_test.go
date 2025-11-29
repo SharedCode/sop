@@ -117,7 +117,7 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 			t1.Begin(ctx)
 			twoPhase := t1.GetPhasedTransaction()
 
-			b3, _ := NewBtree[int, string](ctx, sop.StoreOptions{
+			b3, err := NewBtree[int, string](ctx, sop.StoreOptions{
 				Name:                     "twophase2",
 				SlotLength:               8,
 				IsUnique:                 true,
@@ -125,9 +125,16 @@ func Test_TwoPhaseCommitRolledbackThenCommitted(t *testing.T) {
 				LeafLoadBalancing:        true,
 				Description:              "",
 			}, t1, cmp.Compare)
+			if err != nil {
+				t.Fatalf("NewBtree failed: %v", err)
+			}
 
-			b3.Add(ctx, 5000, "I am the value with 5000 key.")
-			b3.Add(ctx, 5001, "I am the value with 5001 key.")
+			if ok, err := b3.Add(ctx, 5000, "I am the value with 5000 key."); !ok || err != nil {
+				t.Fatalf("Add(5000) failed: %v, %v", ok, err)
+			}
+			if ok, err := b3.Add(ctx, 5001, "I am the value with 5001 key."); !ok || err != nil {
+				t.Fatalf("Add(5001) failed: %v, %v", ok, err)
+			}
 
 			if ok, _ := b3.Find(ctx, 5000, true); !ok || b3.GetCurrentKey().Key != 5000 {
 				t.Errorf("FindOne(5000, true) failed, got = %v, want = 5000", b3.GetCurrentKey().Key)

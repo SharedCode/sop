@@ -28,6 +28,9 @@ type btreeBackend struct {
 	commitTrackedItemsValues         func(ctx context.Context) error
 	getForRollbackTrackedItemsValues func() *sop.BlobsPayload[sop.UUID]
 	getObsoleteTrackedItemsValues    func() *sop.BlobsPayload[sop.UUID]
+
+	// created is true if the store was created in this transaction.
+	created bool
 }
 
 // Transaction implements the sop's TwoPhaseTransaction interface.
@@ -83,7 +86,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration ti
 	if commitMaxDuration > time.Duration(1*time.Hour) {
 		commitMaxDuration = time.Duration(1 * time.Hour)
 	}
-	return &Transaction{
+	t := &Transaction{
 		mode:            mode,
 		maxTime:         commitMaxDuration,
 		StoreRepository: storeRepository,
@@ -94,7 +97,9 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration ti
 		logger:          newTransactionLogger(transactionLog, logging),
 		phaseDone:       -1,
 		id:              sop.NewUUID(),
-	}, nil
+	}
+	t.logger.transactionID = t.id
+	return t, nil
 }
 
 func (t *Transaction) Begin(ctx context.Context) error {

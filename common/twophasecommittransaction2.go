@@ -97,6 +97,16 @@ func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 		return fmt.Errorf("transaction got committed, 'can't rollback it")
 	}
 
+	if t.logger.committedState >= createStore {
+		for i := range t.btreesBackend {
+			if t.btreesBackend[i].created {
+				if err := t.StoreRepository.Remove(ctx, t.btreesBackend[i].getStoreInfo().Name); err != nil {
+					lastErr = err
+				}
+			}
+		}
+	}
+
 	if t.logger.committedState >= beforeFinalize {
 		// We just need to remove the priority log file in live rollback.
 		if err := t.logger.PriorityLog().Remove(ctx, t.GetID()); err != nil {
@@ -108,8 +118,16 @@ func (t *Transaction) rollback(ctx context.Context, rollbackTrackedItemsValues b
 
 	if t.logger.committedState > commitStoreInfo {
 		rollbackStoresInfo := t.getRollbackStoresInfo()
-		if _, err := t.StoreRepository.Update(ctx, rollbackStoresInfo); err != nil {
-			lastErr = err
+		var storesToUpdate []sop.StoreInfo
+		for i, s := range rollbackStoresInfo {
+			if !t.btreesBackend[i].created {
+				storesToUpdate = append(storesToUpdate, s)
+			}
+		}
+		if len(storesToUpdate) > 0 {
+			if _, err := t.StoreRepository.Update(ctx, storesToUpdate); err != nil {
+				lastErr = err
+			}
 		}
 	}
 	if t.logger.committedState > commitAddedNodes {

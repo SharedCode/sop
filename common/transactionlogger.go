@@ -16,6 +16,7 @@ type commitFunction int
 // Transaction commit functions.
 const (
 	unknown = iota
+	createStore
 	lockTrackedItems
 	commitTrackedItemsValues
 	commitNewRootNodes
@@ -103,6 +104,9 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 	}
 	if tid.IsNil() {
 		hourBeingProcessed = ""
+		return nil
+	}
+	if tid == tl.transactionID {
 		return nil
 	}
 	return tl.rollback(ctx, t, tid, committedFunctionLogs)
@@ -365,6 +369,15 @@ func (tl *transactionLog) rollback(ctx context.Context, t *Transaction, tid sop.
 		}
 
 		// Process commit log functions.
+		if committedFunctionLogs[i].Key == createStore {
+			if committedFunctionLogs[i].Value != nil {
+				storeName := toStruct[string](committedFunctionLogs[i].Value)
+				if err := t.StoreRepository.Remove(ctx, storeName); err != nil {
+					lastErr = err
+				}
+			}
+			continue
+		}
 		if committedFunctionLogs[i].Key == finalizeCommit {
 			if committedFunctionLogs[i].Value == nil {
 				if lastCommittedFunctionLog >= deleteObsoleteEntries {

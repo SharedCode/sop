@@ -550,9 +550,9 @@ func Test_TransactionLog_GetOne_BasicFlow(t *testing.T) {
 	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
 
 	// Make current files eligible by reducing ageLimit just for this test.
-	prevAge := ageLimit
-	ageLimit = 0
-	t.Cleanup(func() { ageLimit = prevAge })
+	prevAge := AgeLimit
+	AgeLimit = 0
+	t.Cleanup(func() { AgeLimit = prevAge })
 
 	tl := NewTransactionLog(mocks.NewMockClient(), rt)
 	tid := sop.NewUUID()

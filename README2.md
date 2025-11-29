@@ -722,7 +722,7 @@ If you are or you know of an investor, perhaps this is the time you dial that nu
 ## Concurrent or Parallel Commits
 SOP is designed to be friendly to transaction commits occurring concurrently or in parallel. In most cases, it will be able to "merge" properly the records from successful transaction commit(s), record or row level "locking". If not then it means your transaction has conflicting change with another transaction commit elsewhere in the  cluster, and thus, it will be rolled back, or the other one, depends on who got to the final commit step first. SOP uses a combination of algorithmic ingredients like "optimistic locking", intelligent "merging", etc... doing its magic with the B-tree and Redis.
 
-The magic will start to happen after you have created the Btree(s) (& transaction committed them) you will be using. Having such enables a lot of the "cool commits merging" features. Typically, you should have "initializer" code block or function somewhere in your app/microservice where you instantiate the B-Tree stores analogous to creating your tables in RDBMS. You run DDL scripts to create the tables before running your application logic that populates the tables, i.e. - DML scripts.
+The magic will start to happen after you have created the Btree(s) (& transaction committed them) you will be using. Having such enables a lot of the "cool commits merging" features. Typically, you should have "initializer" code block or function somewhere in your app/microservice where you instantiate the B-Tree stores analogous to creating your tables in RDBMS. You can run DDL scripts to create the tables, or create them dynamically within your application logic.
 
 Sample code to illustrate this:
 ```

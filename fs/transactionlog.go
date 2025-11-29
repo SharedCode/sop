@@ -33,7 +33,7 @@ type TransactionLog struct {
 	writer      *bufio.Writer
 }
 
-var ageLimit float64 = 70
+var AgeLimit float64 = 70
 
 // NewTransactionLog constructs a TransactionLog bound to the provided cache and replication tracker.
 func NewTransactionLog(cache sop.L2Cache, rt *replicationTracker) *TransactionLog {
@@ -176,7 +176,7 @@ func (tl *TransactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UU
 
 func (tl *TransactionLog) getOne(ctx context.Context) (string, sop.UUID, error) {
 	mh, _ := time.Parse(DateHourLayout, sop.Now().Format(DateHourLayout))
-	cappedHour := mh.Add(-time.Duration(time.Duration(ageLimit) * time.Minute))
+	cappedHour := mh.Add(-time.Duration(time.Duration(AgeLimit) * time.Minute))
 
 	f := func(de os.DirEntry) bool {
 		info, _ := de.Info()
@@ -188,7 +188,8 @@ func (tl *TransactionLog) getOne(ctx context.Context) (string, sop.UUID, error) 
 		if err != nil {
 			return false
 		}
-		return cappedHour.Compare(ft) >= 0
+		res := cappedHour.Compare(ft) >= 0
+		return res
 	}
 
 	fn := tl.replicationTracker.formatActiveFolderEntity(logFolder)
