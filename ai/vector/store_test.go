@@ -18,7 +18,7 @@ func TestVectorStore(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := NewDatabase[map[string]any]()
+	db := NewDatabase[map[string]any](ai.Standalone)
 	db.SetStoragePath(tmpDir)
 	// No need to set read mode explicitly, default is sop.NoCheck as once built, Vector DBs are read-only
 	// in this Doctor/Nurse use case. And NoCheck avoids unnecessary overhead appropriate for single-writer,
@@ -137,7 +137,7 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := NewDatabase[map[string]any]()
+	db := NewDatabase[map[string]any](ai.Standalone)
 	db.SetStoragePath(tmpDir)
 
 	index := db.Open("test_delete_count")

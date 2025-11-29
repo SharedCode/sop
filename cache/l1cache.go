@@ -74,6 +74,9 @@ func NewL1Cache(l2cn sop.L2Cache, minCapacity, maxCapacity int) *L1Cache {
 // SetNode caches the provided node in the L1 MRU and also in the L2 cache with the given duration.
 func (c *L1Cache) SetNode(ctx context.Context, nodeID sop.UUID, node any, nodeCacheDuration time.Duration) {
 	c.SetNodeToMRU(ctx, nodeID, node, nodeCacheDuration)
+	if c.l2CacheNodes == nil {
+		return
+	}
 	if err := c.l2CacheNodes.SetStruct(ctx, FormatNodeKey(nodeID.String()), node, nodeCacheDuration); err != nil {
 		log.Warn(fmt.Sprintf("failed to cache in Redis node with ID: %v, details: %v", nodeID.String(), err))
 	}
@@ -138,6 +141,10 @@ func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any
 	}
 	c.locker.Unlock()
 
+	if c.l2CacheNodes == nil {
+		return nil, nil
+	}
+
 	// Get node from L2 cache.
 	if isNodeCacheTTL {
 		if found, err := c.l2CacheNodes.GetStructEx(ctx, FormatNodeKey(nodeID.String()), nodeTarget, nodeCacheTTLDuration); !found || err != nil {
@@ -172,6 +179,10 @@ func (c *L1Cache) DeleteNodes(ctx context.Context, nodesIDs []sop.UUID) (bool, e
 		}
 	}
 	c.locker.Unlock()
+
+	if c.l2CacheNodes == nil {
+		return result, nil
+	}
 
 	// Delete from L2 cache if it is there.
 	for _, nodeID := range nodesIDs {

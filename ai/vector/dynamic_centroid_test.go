@@ -11,7 +11,7 @@ func TestAddCentroid(t *testing.T) {
 	os.RemoveAll("test_dynamic_centroids")
 	defer os.RemoveAll("test_dynamic_centroids")
 
-	db := NewDatabase[map[string]any]()
+	db := NewDatabase[map[string]any](ai.Standalone)
 	// db.Close() is not implemented/needed for in-memory test
 
 	idx := db.Open("test_dynamic_centroids")

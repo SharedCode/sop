@@ -16,7 +16,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase[map[string]any]()
+	db := NewDatabase[map[string]any](ai.Standalone)
 	db.SetStoragePath(tmpDir)
 	idx := db.Open("test_batch")
 
@@ -102,7 +102,7 @@ func TestIndexAllCentroidPopulation(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase[map[string]any]()
+	db := NewDatabase[map[string]any](Standalone)
 	db.SetStoragePath(tmpDir)
 	idx := db.Open("test_indexall")
 	dIdx := idx.(*domainIndex[map[string]any])

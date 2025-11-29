@@ -9,7 +9,7 @@ import (
 )
 
 func TestConfigurationMethods(t *testing.T) {
-	db := NewDatabase[any]()
+	db := NewDatabase[any](ai.Standalone)
 
 	// Test SetUsageMode
 	db.SetUsageMode(ai.Dynamic)
@@ -32,7 +32,7 @@ func TestUpsertBatchWithLookupAndGetLookup(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase()
+	db := NewDatabase[map[string]any](Standalone)
 	db.SetStoragePath(tmpDir)
 	idx := db.Open("test_lookup")
 
@@ -84,7 +84,7 @@ func TestSeedCentroidsAndIterateAll(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase()
+	db := NewDatabase[map[string]any](Standalone)
 	db.SetStoragePath(tmpDir)
 	idx := db.Open("test_seed")
 
@@ -149,7 +149,7 @@ func TestArchitectureDirectMethods(t *testing.T) {
 	// This is a bit involved because Architecture expects a transaction.
 	// We can reuse the Database helper to get a transaction.
 
-	db := NewDatabase[map[string]any]()
+	db := NewDatabase[map[string]any](ai.Standalone)
 	db.SetStoragePath(tmpDir)
 
 	// We need to access internal beginTransaction, but it's private.
@@ -199,7 +199,7 @@ func TestUpdateExistingItem(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase()
+	db := NewDatabase[map[string]any](Standalone)
 	db.SetStoragePath(tmpDir)
 	idx := db.Open("test_update")
 

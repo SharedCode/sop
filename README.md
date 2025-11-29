@@ -87,6 +87,12 @@ SOP is designed to be versatile, powering everything from small embedded tools t
     *   **ACID Transactions**: Even for multi-gigabyte files, SOP guarantees transactional integrity. You can upload or update massive blobs in a transaction; if it fails, it rolls back cleanly.
     *   **Smart Resume**: Built-in support for seeking to specific chunks allows for "resume download" or "seek to timestamp" functionality out of the box.
 
+### 6. AI Model Registry
+*   **Scenario**: Managing versions of local AI models (weights, configurations) alongside the data they process.
+*   **Why SOP**:
+    *   **Unified Storage**: Store your training data (Vectors), metadata (Registry), and model artifacts (Blobs/JSON) in one ACID-compliant system.
+    *   **Atomic Updates**: Update your model weights and the vector index they correspond to in a single transaction, preventing version mismatch.
+
 For a deeper dive into the system's design and package structure (including the Public vs. Internal split), please see the [Architecture Guide](ARCHITECTURE.md).
 
 For configuration options and performance tuning, see the [Configuration Guide](CONFIGURATION.md).
@@ -213,7 +219,7 @@ See details here: https://github.com/sharedcode/sop/blob/master/README2.md#simpl
 # SOP for Python (sop4py)
 See details here: https://github.com/sharedcode/sop/tree/master/jsondb/python#readme
 
-# SOP AI Kit
+# SOP for AI Kit
 SOP includes a comprehensive AI toolkit for building local, privacy-first expert systems.
 - **AI Documentation**: [ai/README.md](ai/README.md) - Overview of the AI module, Vector Store, and Agent framework.
 - **AI Tutorial**: [ai/TUTORIAL.md](ai/TUTORIAL.md) - Step-by-step guide to building the "Doctor & Nurse" expert system.

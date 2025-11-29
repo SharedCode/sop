@@ -92,7 +92,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration ti
 		StoreRepository: storeRepository,
 		registry:        registry,
 		l2Cache:         l2Cache,
-		l1Cache:         cache.GetGlobalCache(),
+		l1Cache:         cache.NewGlobalCache(l2Cache, cache.DefaultMinCapacity, cache.DefaultMaxCapacity),
 		blobStore:       blobStore,
 		logger:          newTransactionLogger(transactionLog, logging),
 		phaseDone:       -1,

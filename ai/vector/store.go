@@ -17,6 +17,8 @@ import (
 	"github.com/sharedcode/sop/inredfs"
 )
 
+
+
 // Database is a persistent vector database manager backed by SOP B-Trees.
 // It manages the storage and retrieval of vectors and their associated metadata.
 // It supports transactions and caching for performance.
@@ -28,13 +30,18 @@ type Database[T any] struct {
 	storagePath   string
 	rebalanceLock sync.Mutex
 	contentSize   sop.ValueDataSize
+	dbType        ai.DatabaseType
 }
 
 // NewDatabase creates a new vector database manager.
-// It initializes the cache (InMemory by default) and sets default transaction modes.
-func NewDatabase[T any]() *Database[T] {
-	// Use InMemoryCache by default for standalone AI apps
-	sop.SetCacheFactory(sop.InMemory)
+// It initializes the cache based on the provided type.
+// Currently, only Standalone mode is fully supported.
+func NewDatabase[T any](dbType ai.DatabaseType) *Database[T] {
+	if dbType != ai.Standalone {
+		// sop.SetCacheFactory(sop.InRedis) // Future support
+		panic("Clustered mode not yet supported")
+	}
+
 	return &Database[T]{
 		ctx:         context.Background(),
 		cache:       cache.NewInMemoryCache(),
@@ -42,6 +49,7 @@ func NewDatabase[T any]() *Database[T] {
 		usageMode:   ai.BuildOnceQueryMany, // Default to most common AI pattern
 		storagePath: "",
 		contentSize: sop.MediumData,
+		dbType:      dbType,
 	}
 }
 
@@ -66,12 +74,66 @@ func (d *Database[T]) SetReadMode(mode sop.TransactionMode) {
 }
 
 // Open returns an Index for the specified domain.
+// It verifies that the database configuration matches the persisted state.
 func (d *Database[T]) Open(domain string) ai.VectorStore[T] {
+	if err := d.ensureConfig(); err != nil {
+		// In a real app, we might want to return error, but Open signature is fixed by interface for now.
+		// We should probably panic or log fatal here as this is a critical configuration mismatch.
+		panic(fmt.Sprintf("Database configuration mismatch: %v", err))
+	}
+
 	return &domainIndex[T]{
 		db:                   d,
 		name:                 domain,
 		deduplicationEnabled: true,
 	}
+}
+
+type dbConfig struct {
+	Type string `json:"type"`
+}
+
+func (d *Database[T]) ensureConfig() error {
+	if d.storagePath == "" {
+		return nil // In-memory only or not yet configured
+	}
+
+	configPath := filepath.Join(d.storagePath, "sop_ai_config.json")
+	if err := os.MkdirAll(d.storagePath, 0755); err != nil {
+		return err
+	}
+
+	// Check if config exists
+	data, err := os.ReadFile(configPath)
+	if os.IsNotExist(err) {
+		// Create new config
+		typeStr := "Standalone"
+		if d.dbType == ai.Clustered {
+			typeStr = "Clustered"
+		}
+		cfg := dbConfig{Type: typeStr}
+		bytes, _ := json.MarshalIndent(cfg, "", "  ")
+		return os.WriteFile(configPath, bytes, 0644)
+	} else if err != nil {
+		return err
+	}
+
+	// Verify existing config
+	var cfg dbConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	currentType := "Standalone"
+	if d.dbType == ai.Clustered {
+		currentType = "Clustered"
+	}
+
+	if cfg.Type != currentType {
+		return fmt.Errorf("database was initialized as %s but opened as %s", cfg.Type, currentType)
+	}
+
+	return nil
 }
 
 // domainIndex implements the Index interface for a specific domain using the 3-table layout.
@@ -81,11 +143,32 @@ type domainIndex[T any] struct {
 	// centroidsCache caches the centroids to avoid reloading them from the B-Tree on every operation.
 	centroidsCache       map[int][]float32
 	deduplicationEnabled bool
+	externalTrans        sop.Transaction
 }
 
 // SetDeduplication enables or disables the internal deduplication check during Upsert.
 func (di *domainIndex[T]) SetDeduplication(enabled bool) {
 	di.deduplicationEnabled = enabled
+}
+
+// WithTransaction returns a new instance of the store bound to the provided transaction.
+func (di *domainIndex[T]) WithTransaction(trans sop.Transaction) ai.VectorStore[T] {
+	return &domainIndex[T]{
+		db:                   di.db,
+		name:                 di.name,
+		centroidsCache:       di.centroidsCache,
+		deduplicationEnabled: di.deduplicationEnabled,
+		externalTrans:        trans,
+	}
+}
+
+func (di *domainIndex[T]) getTransaction(mode sop.TransactionMode) (sop.Transaction, bool, error) {
+	if di.externalTrans != nil {
+		return di.externalTrans, false, nil
+	}
+	storePath := filepath.Join(di.db.storagePath, di.name)
+	trans, err := di.db.beginTransaction(mode, storePath)
+	return trans, true, err
 }
 
 // storedItem wraps the user payload with system metadata.
@@ -98,12 +181,13 @@ type storedItem[T any] struct {
 
 // Upsert adds or updates a vector in the store.
 func (di *domainIndex[T]) Upsert(item ai.Item[T]) error {
-	storePath := filepath.Join(di.db.storagePath, di.name)
-	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
+	trans, isOwn, err := di.getTransaction(sop.ForWriting)
 	if err != nil {
 		return err
 	}
-	defer trans.Rollback(di.db.ctx)
+	if isOwn {
+		defer trans.Rollback(di.db.ctx)
+	}
 
 	version, err := di.getActiveVersion(di.db.ctx, trans)
 	if err != nil {
@@ -230,17 +314,21 @@ func (di *domainIndex[T]) Upsert(item ai.Item[T]) error {
 		return err
 	}
 
-	return trans.Commit(di.db.ctx)
+	if isOwn {
+		return trans.Commit(di.db.ctx)
+	}
+	return nil
 }
 
 // UpsertBatch adds or updates multiple vectors in a single transaction.
 func (di *domainIndex[T]) UpsertBatch(items []ai.Item[T]) error {
-	storePath := filepath.Join(di.db.storagePath, di.name)
-	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
+	trans, isOwn, err := di.getTransaction(sop.ForWriting)
 	if err != nil {
 		return err
 	}
-	defer trans.Rollback(di.db.ctx)
+	if isOwn {
+		defer trans.Rollback(di.db.ctx)
+	}
 
 	version, err := di.getActiveVersion(di.db.ctx, trans)
 	if err != nil {
@@ -374,17 +462,21 @@ func (di *domainIndex[T]) UpsertBatch(items []ai.Item[T]) error {
 		}
 	}
 
-	return trans.Commit(di.db.ctx)
+	if isOwn {
+		return trans.Commit(di.db.ctx)
+	}
+	return nil
 }
 
 // Get retrieves a vector by ID.
 func (di *domainIndex[T]) Get(id string) (*ai.Item[T], error) {
-	storePath := filepath.Join(di.db.storagePath, di.name)
-	trans, err := di.db.beginTransaction(di.db.readMode, storePath)
+	trans, isOwn, err := di.getTransaction(di.db.readMode)
 	if err != nil {
 		return nil, err
 	}
-	defer trans.Rollback(di.db.ctx)
+	if isOwn {
+		defer trans.Rollback(di.db.ctx)
+	}
 
 	version, err := di.getActiveVersion(di.db.ctx, trans)
 	if err != nil {
@@ -437,12 +529,13 @@ func (di *domainIndex[T]) Get(id string) (*ai.Item[T], error) {
 
 // Delete removes a vector from the store.
 func (di *domainIndex[T]) Delete(id string) error {
-	storePath := filepath.Join(di.db.storagePath, di.name)
-	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
+	trans, isOwn, err := di.getTransaction(sop.ForWriting)
 	if err != nil {
 		return err
 	}
-	defer trans.Rollback(di.db.ctx)
+	if isOwn {
+		defer trans.Rollback(di.db.ctx)
+	}
 
 	version, err := di.getActiveVersion(di.db.ctx, trans)
 	if err != nil {
@@ -499,17 +592,21 @@ func (di *domainIndex[T]) Delete(id string) error {
 		}
 	}
 
-	return trans.Commit(di.db.ctx)
+	if isOwn {
+		return trans.Commit(di.db.ctx)
+	}
+	return nil
 }
 
 // Query searches for the nearest neighbors.
 func (di *domainIndex[T]) Query(vec []float32, k int, filter func(T) bool) ([]ai.Hit[T], error) {
-	storePath := filepath.Join(di.db.storagePath, di.name)
-	trans, err := di.db.beginTransaction(di.db.readMode, storePath)
+	trans, isOwn, err := di.getTransaction(di.db.readMode)
 	if err != nil {
 		return nil, err
 	}
-	defer trans.Rollback(di.db.ctx)
+	if isOwn {
+		defer trans.Rollback(di.db.ctx)
+	}
 
 	version, err := di.getActiveVersion(di.db.ctx, trans)
 	if err != nil {
@@ -614,12 +711,13 @@ func (di *domainIndex[T]) Query(vec []float32, k int, filter func(T) bool) ([]ai
 
 // Count returns the total number of items.
 func (di *domainIndex[T]) Count() (int64, error) {
-	storePath := filepath.Join(di.db.storagePath, di.name)
-	trans, err := di.db.beginTransaction(di.db.readMode, storePath)
+	trans, isOwn, err := di.getTransaction(di.db.readMode)
 	if err != nil {
 		return 0, err
 	}
-	defer trans.Rollback(di.db.ctx)
+	if isOwn {
+		defer trans.Rollback(di.db.ctx)
+	}
 
 	version, err := di.getActiveVersion(di.db.ctx, trans)
 	if err != nil {
@@ -636,12 +734,13 @@ func (di *domainIndex[T]) Count() (int64, error) {
 
 // AddCentroid adds a new centroid.
 func (di *domainIndex[T]) AddCentroid(vec []float32) (int, error) {
-	storePath := filepath.Join(di.db.storagePath, di.name)
-	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
+	trans, isOwn, err := di.getTransaction(sop.ForWriting)
 	if err != nil {
 		return 0, err
 	}
-	defer trans.Rollback(di.db.ctx)
+	if isOwn {
+		defer trans.Rollback(di.db.ctx)
+	}
 
 	version, err := di.getActiveVersion(di.db.ctx, trans)
 	if err != nil {
@@ -670,8 +769,10 @@ func (di *domainIndex[T]) AddCentroid(vec []float32) (int, error) {
 
 	di.addCentroidToCache(newID, vec)
 
-	if err := trans.Commit(di.db.ctx); err != nil {
-		return 0, err
+	if isOwn {
+		if err := trans.Commit(di.db.ctx); err != nil {
+			return 0, err
+		}
 	}
 
 	return newID, nil

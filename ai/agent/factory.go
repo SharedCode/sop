@@ -54,7 +54,7 @@ func SetupInfrastructure(cfg Config, deps Dependencies) (ai.Embeddings, ai.Vecto
 	}
 
 	// 2. Initialize Vector Database
-	db := vector.NewDatabase[map[string]any]()
+	db := vector.NewDatabase[map[string]any](ai.Standalone)
 	if cfg.ContentSize != "" {
 		switch cfg.ContentSize {
 		case "small":

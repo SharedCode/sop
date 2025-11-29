@@ -19,7 +19,7 @@ func TestNProbeAndFiltering(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase[map[string]any]()
+	db := NewDatabase[map[string]any](ai.Standalone)
 	db.SetStoragePath(tmpDir)
 	ctx := context.Background()
 	idx := db.Open("test_nprobe")

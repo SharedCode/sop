@@ -25,6 +25,15 @@ Interfaces for connecting to AI models:
 *   **Generators**: Connect to LLMs like OpenAI, Gemini, or local Ollama instances.
 *   **Embedders**: Convert text to vectors. Includes a "Simple" keyword-based embedder (for testing) and an "Agent Embedder" (for semantic understanding).
 
+### 4. Model Store (`ai/model_store.go`)
+A unified interface for persisting AI models, from small "Skills" (Perceptrons) to large "Brains" (Neural Nets).
+*   **Backends**: Supports both simple file-system storage (`FileModelStore`) and transactional B-Tree storage (`BTreeModelStore`).
+*   **Transactional**: The B-Tree backend allows model updates to be part of the same ACID transaction as vector data changes.
+
+## API Cookbook
+
+For detailed code examples and usage patterns, please see the [AI Cookbook](COOKBOOK.md).
+
 ## Usage as a Library
 
 You can use the `ai` package directly in your Go applications to build custom solutions.

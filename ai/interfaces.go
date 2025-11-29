@@ -53,6 +53,10 @@ type VectorStore[T any] interface {
 	// Disabling this can speed up ingestion for pristine data but may lead to ghost vectors if duplicates exist.
 	SetDeduplication(enabled bool)
 
+	// WithTransaction returns a new instance of the store bound to the provided transaction.
+	// Operations on this instance will participate in the transaction but will NOT commit/rollback it.
+	WithTransaction(trans sop.Transaction) VectorStore[T]
+
 	// Centroids returns the Centroids B-Tree for advanced manipulation.
 	Centroids(ctx context.Context, trans sop.Transaction) (btree.BtreeInterface[int, Centroid], error)
 	// Vectors returns the Vectors B-Tree for advanced manipulation.
@@ -60,6 +64,18 @@ type VectorStore[T any] interface {
 	// Content returns the Content B-Tree for advanced manipulation.
 	Content(ctx context.Context, trans sop.Transaction) (btree.BtreeInterface[string, string], error)
 }
+
+// DatabaseType defines the deployment mode of the vector database.
+type DatabaseType int
+
+const (
+	// Standalone mode uses in-memory caching and local file storage.
+	// Suitable for single-node deployments.
+	Standalone DatabaseType = iota
+	// Clustered mode uses distributed caching (e.g., Redis) and shared storage.
+	// Suitable for multi-node deployments.
+	Clustered
+)
 
 // UsageMode defines how the vector database is intended to be used.
 type UsageMode int
@@ -183,4 +199,22 @@ type Domain[T any] interface {
 type Agent[T any] interface {
 	Search(ctx context.Context, query string, limit int) ([]Hit[T], error)
 	Ask(ctx context.Context, query string) (string, error)
+}
+
+// ModelStore defines the interface for persisting and retrieving AI models.
+// It allows for the management of "Skills" (small models) and "Brains" (large models).
+type ModelStore interface {
+	// Save persists a model with the given name.
+	// The model can be any serializable object (e.g., Perceptron, NeuralNet).
+	Save(ctx context.Context, name string, model any) error
+
+	// Load retrieves a model by name and populates the provided object.
+	// The target parameter must be a pointer to the model struct.
+	Load(ctx context.Context, name string, target any) error
+
+	// List returns the names of all stored models.
+	List(ctx context.Context) ([]string, error)
+
+	// Delete removes a model from the store.
+	Delete(ctx context.Context, name string) error
 }

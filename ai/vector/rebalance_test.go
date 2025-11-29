@@ -16,7 +16,8 @@ func TestRebalance(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase[map[string]any]()
+	// Initialize Database
+	db := NewDatabase[map[string]any](ai.Standalone)
 	db.SetStoragePath(tmpDir)
 	idx := db.Open("test_rebalance")
 	dIdx := idx.(*domainIndex[map[string]any])

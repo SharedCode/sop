@@ -9,7 +9,7 @@ func TestLookupFunctionality(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase()
+	db := NewDatabase[map[string]any](Standalone)
 	db.SetStoragePath(tmpDir)
 	idx := db.Open("test_lookup")
 	dIdx := idx.(*domainIndex)
