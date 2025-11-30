@@ -2,6 +2,7 @@ import json
 from . import call_go
 import uuid
 from . import context
+from typing import List
 
 from enum import Enum
 from dataclasses import dataclass, asdict
@@ -51,7 +52,7 @@ class ErasureCodingConfig:
 
     data_shards_count: int
     parity_shards_count: int
-    base_folder_paths_across_drives: str
+    base_folder_paths_across_drives: List[str]
     repair_corrupted_shards: bool
 
     def __eq__(self, other):
@@ -75,7 +76,7 @@ class ErasureCodingConfig:
 
 
 @dataclass
-class TransationOptions:
+class TransactionOptions:
     mode: int
     # max_time in Python is in minutes, SOP in Golang will convert that to respective time.duration value.
     max_time: int
@@ -83,9 +84,11 @@ class TransationOptions:
     # At 250, 1MB segment file is generated. See comment about the equivalent in Golang side (for now).
     registry_hash_mod: int
     # Stores' base folder path (home folder).
-    stores_folders: str
+    stores_folders: List[str]
     # EC config.
     erasure_config: dict[str, ErasureCodingConfig]
+    # DB Type (0: Standalone, 1: Clustered)
+    db_type: int = 0
 
 
 class TransactionError(Exception):
@@ -106,7 +109,8 @@ class Transaction:
     Delegates API calls to the SOP library that does Direct IO to disk drives w/ built-in L1/L2 caching.
     """
 
-    def __init__(self, ctx: context.Context, options: TransationOptions):
+    def __init__(self, ctx: context.Context, options: TransactionOptions):
+        self.ctx = ctx
         self.options = options
         self.transaction_id = uuid.UUID(int=0)
 
@@ -119,6 +123,22 @@ class Transaction:
         except:
             # if res can't be converted to UUID, it is expected to be an error msg from SOP.
             raise TransactionError(res)
+
+    def __enter__(self):
+        self.begin()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            self.rollback(self.ctx)
+            return False # Propagate exception
+        try:
+            self.commit(self.ctx)
+        except Exception as e:
+            # If commit fails, we should probably try to rollback or just let the exception propagate
+            # But commit failure usually means transaction is done (failed).
+            raise e
+        return True
 
     def begin(self):
         if self.transaction_id == uuid.UUID(int=0):

@@ -10,7 +10,7 @@ The `vector.Database` struct is a lightweight, stateless handle. It does not mai
 
 ```go
 // Open a handle to the DB (Cluster-safe)
-db := vector.NewDatabase()
+db := vector.NewDatabase[map[string]any](ai.Standalone)
 db.SetStoragePath("/mnt/shared/sop_data")
 
 // Open an index (Domain)

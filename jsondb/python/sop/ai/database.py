@@ -1,68 +1,48 @@
-from sop import transaction
-from sop import btree
-from sop import context
-from sop import redis
+import json
+import uuid
+from dataclasses import dataclass, asdict
+from enum import Enum
 
-from dataclasses import dataclass
-
+from .. import call_go
+from .. import context
+from .model import ModelStore, ModelAction
+from .vector import VectorStore, UsageMode, DBType
 
 class Database:
-    
-    @classmethod
-    def set_environments(environments dict[str,transaction.TransactionOptions]):
-  
+    def __init__(self, storage_path: str = "", db_type: DBType = DBType.Standalone):
+        self.ctx = context.Context()
+        # We reuse ModelDBOptions structure on Go side which expects storage_path and db_type
+        opts = {
+            "storage_path": storage_path,
+            "db_type": db_type.value
+        }
+        payload = json.dumps(opts)
         
+        # Action NewModelDB (which is now NewDatabase)
+        # We use manage_model_store because that's where NewDatabase is handled
+        res = call_go.manage_model_store(self.ctx.id, ModelAction.NewModelDB.value, None, payload)
+        try:
+            self.id = uuid.UUID(res)
+        except:
+            raise Exception(res)
 
-# # Stores home folder(s). Replication requires two paths, one for active and the 2nd, the passive.
-# stores_folders = ("/Users/grecinto/sop_data/disk1", "/Users/grecinto/sop_data/disk2")
-# # EC configuration specifies the Erasure Coding parameters like:
-# # "data shards count" (2), "parity shards count" (1), folder paths (disk1, disk2, disk3) where the shards &
-# # parities data file will be stored. And a flag (True) whether to auto-repair any shard that failed to read.
-# ec = {
-#     # Erasure Config default entry(key="") will allow different B-tree(tables) to share same EC structure.
-#     "": transaction.ErasureCodingConfig(
-#         2,
-#         1,
-#         (
-#             "/Users/grecinto/sop_data/disk1",
-#             "/Users/grecinto/sop_data/disk2",
-#             "/Users/grecinto/sop_data/disk3",
-#         ),
-#         True,
-#     )
-# }
+    def open_model_store(self, name: str) -> ModelStore:
+        # Action OpenModelStore
+        res = call_go.manage_model_store(self.ctx.id, ModelAction.OpenModelStore.value, str(self.id), name)
+        try:
+            store_id = uuid.UUID(res)
+            return ModelStore(self.ctx, store_id)
+        except:
+            raise Exception(res)
 
-# # Transaction Options (to).
-# to = transaction.TransationOptions(
-#     transaction.TransactionMode.ForWriting.value,
-#     5,
-#     transaction.MIN_HASH_MOD_VALUE,
-#     stores_folders,
-#     ec,
-# )
-
-# # Context object.
-# ctx = context.Context()
-
-
-#         # initialize SOP global Redis connection
-#         ro = RedisOptions()
-#         Redis.open_connection(ro)
-
-#         # create the "barstoreec" b-tree store.
-#         t = transaction.Transaction(ctx, to)
-#         t.begin()
-
-#         cache = btree.CacheConfig()
-#         bo = btree.BtreeOptions("barstoreec", True, cache_config=cache)
-#         bo.set_value_data_size(btree.ValueDataSize.Small)
-
-#         b3 = btree.Btree.new(ctx, bo, t)
-#         l = [
-#             btree.Item(1, "foo"),
-#         ]
-#         b3.add(ctx, l)
-
-#         # commit the transaction to finalize the new store changes.
-#         t.commit(ctx)
-#         print("new B3 succeeded")
+    def open_vector_store(self, name: str) -> VectorStore:
+        # Action 2 is OpenVectorStore in VectorAction
+        # We use manage_vector_db because that's where OpenVectorStore is handled
+        # We pass self.id (Database ID) as targetID. 
+        # The Go side will check if it's a VectorDB or a Unified DB.
+        res = call_go.manage_vector_db(self.ctx.id, 2, str(self.id), name)
+        try:
+            store_id = uuid.UUID(res)
+            return VectorStore(store_id, self.ctx)
+        except:
+            raise Exception(res)

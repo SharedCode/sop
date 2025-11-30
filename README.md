@@ -70,7 +70,7 @@ SOP is designed to be versatile, powering everything from small embedded tools t
     *   **Novel Storage Schema**: Uses a composite key strategy (`CentroidID` + `DistanceToCentroid`) to map high-dimensional vectors onto standard B-Trees, enabling efficient range scans and transactional integrity.
     *   **Ideal Random Sampling**: Uses a novel "Lookup Tree" indexing algorithm to generate mathematically representative centroids, ensuring high-quality clustering even on sorted or skewed datasets.
     *   **Self-Healing Index**: Automatically rebalances clusters and tracks distribution in real-time, maintaining optimal search speeds as data grows to terabytes.
-    *   **Standalone Capable**: Run a full-featured vector store in your application with zero external dependencies (no Redis required) using SOP's in-memory caching and local filesystem storage.
+    *   **Flexible Deployment**: Run in **Standalone** mode (zero dependencies, in-memory cache) or **Clustered** mode (Redis-backed cache for distributed scale).
 
 ### 4. AI Agent with Local LLM (Ollama)
 *   **Scenario**: Privacy-focused or cost-sensitive AI agents that need to "understand" user input before searching.

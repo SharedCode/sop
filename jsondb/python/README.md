@@ -1,270 +1,204 @@
 # SOP for Python (sop4py)
 
-Python bindings for Scalable Objects Persistence (SOP). Use a high-performance B-tree storage engine with Redis-backed caching, ACID transactions, and optional erasure-coded replication.
+**Scalable Objects Persistence (SOP)** is a high-performance, transactional storage engine for Python, powered by a robust Go backend. It combines the raw speed of direct disk I/O with the reliability of ACID transactions and the flexibility of modern AI data management.
 
-## Table of contents
-- What is SOP?
-- Supported platforms
-- Dependencies
-- Install
-- Quick start
-- Index specification
-- Navigation and paging
-- Other management methods
-- Project links
+## Key Features
 
-## What is SOP?
-Scalable Objects Persistence (SOP) is a raw storage engine that bakes together a set of storage related features & algorithms in order to provide the most efficient & reliable (ACID attributes of transactions) technique (known) of storage management and rich search, as it brings to the application, the raw muscle of "raw storage", direct IO operations w/ disk drives. In a code library form factor.
+*   **Transactional B-Tree Store**: Unlimited, persistent B-Tree storage for key-value data.
+*   **Vector Database**: Built-in vector search (k-NN) for AI embeddings and similarity search.
+*   **AI Model Store**: Versioned storage for machine learning models (B-Tree backed).
+*   **ACID Compliance**: Full transaction support (Begin, Commit, Rollback) with isolation.
+*   **High Performance**: Written in Go with a lightweight Python wrapper (ctypes).
+*   **Caching**: Integrated Redis-backed L1/L2 caching for speed.
+*   **Replication**: Optional Erasure Coding (EC) for fault-tolerant storage across drives.
+*   **Flexible Deployment**: Supports both **Standalone** (local) and **Clustered** (distributed) modes.
 
-Other "key advances" in database technology available in this SOP release:
-* Serverless (or all servers!) operations mode in the cluster, i.e. - your applications that use SOP library are server-less
-* Uses a new storage & L1/L2 caching strategy that is ground breaking in performance & efficiency
-* New superfast realtime Orchestration engine fit for database transactions
-* Support for small, medium to large/very large (multi-GBs/TB) data management
-* Sports advanced/efficient/high tolerance software based (via Erasure Coding) replication
-* Horizontal & Vertical scaling in storage and cluster processes
-* New database storage strategy that uses segment files which avoids having to manage a huge file, resulting in higher IO efficiency & file system/disk drive friendly (medium sized) data files
-* Built-in data caching, your application data can be cached automatically via config setting. No need to write special code to cache certain data set in Redis, for example. SOP can provide that if configured
-* Host your applications across platforms, e.g. - microservice cluster running in Linux, another cluster or instance running in Windows, and all SOPs inter-operating with one another seamlessly and data stored in same set of disk drives. Freedom to use popular hardware architecture & OS of your choice(s)!
-* Unlimited B-trees, limited only by your hardware resources. Each B-tree store, as the name implies, is a B-tree serving super-fast, sorted by Key (Key & Value pair) data sets
+## Prerequisites
 
-## Supported platforms
-SOP supports popular architectures & Operating Systems such as Linux, Darwin & Microsoft Windows, in both ARM64 & AMD64 architectures. For Windows, only AMD64 is supported since it is the only architecture Windows is available in.
+*   **Redis**: Required for caching and transaction coordination (especially in Clustered mode).
+*   **Storage**: Local disk space (supports multiple drives/folders).
+*   **OS**: macOS (Darwin), Linux, or Windows (AMD64).
 
-## Dependencies
-* Redis, you will need to have one of the recent or latest version of Redis for use in SOP caching.
-* More than one Disk Drives(recommended is around four or more, for replication) with plenty of drive space available, for storage management. Example:
-```
-    /disk1
-    /disk2
-    /disk3
-    /disk4
+## Installation
+
+```bash
+pip install sop4py
 ```
 
-## Install
-- pip install sop4py
+*Note: Ensure the `libjsondb` shared library is available in your library path if building from source.*
 
-## Quick start
-Following steps outlines how to use the Scalable Objects Persistence code library for Python:
-* Follow standard Python package import and start coding to use the SOP for Python code library for data management. Import the sop package in your python code file.
-* Specify Home base folders where Store info & Registry data files will be stored.
-* Specify Erasure Coding (EC) configuration details which will be used by SOP's EC based replication.
-* Open the global Redis connection
-* Create a transaction
-* Begin a transaction
-* Create new B-tree(s), or Open existing B-tree(s)
-* Manage data, do some CRUD operations
-* Commit the transaction
+## Quick Start Guide
 
-Below is an example code block for illustrating the above steps. For other SOP B-tree examples, you can checkout the code in the unit tests test_btree.py & test_btree_idx.py files that comes w/ the SOP package you downloaded from pypi.
+### 1. Setup & Configuration
 
+First, import the necessary modules and configure your storage environment.
+
+```python
+from sop import Context, Transaction, TransactionOptions, TransactionMode
+
+# Initialize Context
+ctx = Context()
+
+# Configure Transaction Options
+opts = TransactionOptions(
+    mode=TransactionMode.ForWriting.value,
+    max_time=15,  # 15 minutes timeout
+    registry_hash_mod=250,
+    stores_folders=["/tmp/sop_data"],  # Path to store data
+    erasure_config={}  # Optional replication config
+)
 ```
-from sop import transaction
+
+### 2. Transactional Key-Value Store (B-Tree)
+
+SOP allows you to manage data using B-Trees within a transaction.
+
+```python
 from sop import btree
-from sop import context
-from sop import redis
 
-# Store info & Registry home base folders. Array of strings of two elements, one for Active & another, for passive folder.
-stores_folders = ("/disk1", "/disk2")
+# Use the Transaction Context Manager
+with Transaction(ctx, opts) as t:
+    # Create or Open a B-Tree
+    # "users" is the store name, True indicates native key type
+    bo = btree.BtreeOptions("users", True, cache_config=btree.CacheConfig())
+    store = btree.Btree.new(ctx, bo, t)
 
-ec = {
-    # Erasure Config default entry(key="") will allow different B-tree (data store) to share same EC structure.
-    # You can also specify a different one exclusive to a B-tree with the given name.
-    "": transaction.ErasureCodingConfig(
-        2,  # two data shards
-        2,  # two parity shards
-        (
-            # 4 disk drives paths
-            "/disk1",
-            "/disk2",
-            "/disk3",
-            "/disk4",
-        ),
-        # False means Auto repair of failed reads from (shards') disk drive will not get repaired.
-        False,
-    )
-}
+    # Add Items
+    store.add(ctx, [
+        btree.Item(key=1, value="Alice"),
+        btree.Item(key=2, value="Bob")
+    ])
 
-# Transaction Options (to).
-to = transaction.TransationOptions(
-    transaction.TransactionMode.ForWriting.value,
-    # commit timeout of 15mins
-    15,
-    # Min Registry hash mod value is 250, you can specify higher value like 1000. A 250 hashmod
-    # will use 1MB sized file segments. Good for demo, but for Prod, perhaps a bigger value is better.
-    transaction.MIN_HASH_MOD_VALUE,
-    # Store info & Registry home base folders. Array of strings of two elements, one for Active & another, for passive folder.
-    stores_folders,
-    # Erasure Coding config as shown above.
-    ec,
+    # Fetch Items
+    item = store.find_one(ctx, 1, False)
+    print(f"Found: {item.value}")
+
+# Transaction is automatically committed here
+```
+
+### 3. Vector Database (AI)
+
+Manage vector embeddings for semantic search. You can choose between **Standalone** (local) and **Clustered** (distributed) modes.
+
+```python
+from sop.ai import VectorDatabase, UsageMode, Item, DBType
+
+# Initialize Vector DB
+# DBType.Standalone: Uses in-memory caching (good for single node).
+# DBType.Clustered: Uses Redis for caching (good for distributed setups).
+vdb = VectorDatabase(
+    storage_path="/tmp/sop_vectors", 
+    usage_mode=UsageMode.Dynamic,
+    db_type=DBType.Standalone
+)
+vector_store = vdb.open("products")
+
+# Upsert Vectors
+vector_store.upsert(Item(
+    id="prod_101",
+    vector=[0.1, 0.5, 0.9],
+    payload={"name": "Laptop", "price": 999}
+))
+
+# Semantic Search (k-NN)
+hits = vector_store.query(
+    vector=[0.1, 0.5, 0.8],
+    k=5,
+    filter={"name": "Laptop"}
 )
 
-# Context object. Your code can call the "cancel" method of the context if you want to abort the operation & rollback the transaction.
-# Useful for example, if you have a concurrently running python code and wanted to abort the running SOP transaction.
-ctx = context.Context()
-
-# initialize/open SOP global Redis connection. You can specify your Redis cluster host address(es) & port, etc
-# but defaults to localhost and default Redis port # if none is specified.
-ro = redis.RedisOptions()
-redis.Redis.open_connection(ro)
-
-t = transaction.Transaction(ctx, to)
-t.begin()
-
-cache = btree.CacheConfig()
-
-# "barstoreec" is new b-tree name, 2nd parameter set to True specifies B-tree Key field to be native data type
-bo = btree.BtreeOptions("barstoreec", True, cache_config=cache)
-bo.set_value_data_size(btree.ValueDataSize.Small)
-
-# create the new "barstoreec" b-tree store. Once created, you can just use the "open" method. Perhaps
-# you can have a code set for creating B-trees like "admin only" script. Then all other app code uses
-# the "open" method.
-b3 = btree.Btree.new(ctx, bo, t)
-
-# Since we've specified Native data type = True in BtreeOptions, we can use "integer" values as Key.
-l = [
-    btree.Item(1, "foo"),
-]
-
-# Add Item to the B-tree.
-b3.add(ctx, l)
-
-# Commit the transaction to finalize the new B-tree (store) change.
-t.commit(ctx)
-print("ended.")
+for hit in hits:
+    print(f"Match: {hit.id}, Score: {hit.score}")
 ```
 
-## Index specification
-You can specify a Key structure that can be complex like a class and cherry pick the fields you want to affect the indexing and data organization in the B-tree. Like pick two fields from the Key class as comprised your index. And optionally specify the sort order, like 1st field is descending order and the 2nd field ascending.
+### 4. AI Model Store
 
-Here is a good example to illustrate this use-case.
-```
-import unittest
-from . import transaction
-from . import btree
-from . import context
+Version and manage your machine learning models using the B-Tree backend.
 
-from .redis import *
-from .test_btree import to
+```python
+from sop.ai import Database, Model
 
-from dataclasses import dataclass
+# Initialize the Database
+db = Database(storage_path="/tmp/sop_data")
 
-# Define your Key data class with two fields.
-@dataclass
-class Key:
-    address1: str
-    address2: str
+# Open the Model Store
+model_store = db.open_model_store("my_models")
 
-# Define your Value data class.
-@dataclass
-class Person:
-    first_name: str
-    last_name: str
+# Save a Model
+model = Model(
+    id="churn_v1",
+    algorithm="random_forest",
+    hyperparameters={"trees": 100},
+    parameters=[0.5, 0.1, 0.9],  # Serialized weights
+    metrics={"accuracy": 0.98},
+    is_active=True
+)
+model_store.save("classifiers", "churn_v1", model)
 
-# Create a context for use in Transaction & B-tree API calls.
-ctx = context.Context()
-
-class TestBtreeIndexSpecs(unittest.TestCase):
-    def setUpClass():
-        ro = RedisOptions()
-        Redis.open_connection(ro)
-
-        t = transaction.Transaction(ctx, to)
-        t.begin()
-
-        cache = btree.CacheConfig()
-        bo = btree.BtreeOptions("personidx", True, cache_config=cache)
-
-        # Specify Small size, meaning, both Key & Value object values will be stored in the B-tree node segment.
-        # This is very efficient/appropriate for small data structure sizes (of Key & Value pairs).
-        bo.set_value_data_size(btree.ValueDataSize.Small)
-
-        # Specify that the B-tree will host non-primitive Key data type, i.e. - it is a dataclass.
-        bo.is_primitive_key = False
-
-        btree.Btree.new(
-            ctx,
-            bo,
-            t,
-            # Specify the Index fields of the Key class. You control how many fields get included
-            # and each field's sort order (asc or desc).
-            btree.IndexSpecification(
-                index_fields=(
-                    # 1st field is "address1" in descending order.
-                    btree.IndexFieldSpecification(
-                        "address1", ascending_sort_order=False
-                    ),
-                    # 2nd field is "address2" in ascending order (default).
-                    btree.IndexFieldSpecification("address2"),
-                )
-            ),
-        )
-
-        # Commit the transaction to finalize it.
-        t.commit(ctx)
-
-    def test_add(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
-
-        b3 = btree.Btree.open(ctx, "personidx", t)
-
-        pk = Key(address1="123 main st", address2="Fremont, CA")
-        l = [btree.Item(pk, Person(first_name="joe", last_name="petit"))]
-
-        # Populate with some sample Key & Value pairs of data set.
-        for i in range(20):
-            pk = Key(address1=f"{i}123 main st", address2="Fremont, CA")
-            l.append(btree.Item(pk, Person(first_name=f"joe{i}", last_name="petit")))
-
-        # Submit the entire generated batch to be added to B-tree in one call.
-        b3.add_if_not_exists(ctx, l)
-
-        # Commit the changes.
-        t.commit(ctx)
-
-    def test_get_items_batch(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
-
-        b3 = btree.Btree.open(ctx, "personidx", t)
-
-        # Fetch the data starting with 1st record up to 10th.
-        # Paging info is:
-        # 0 page offset means the current record where the cursor is located, 0 skipped items, 10 items to fetch.
-        # In forward direction.
-        items = b3.get_items(
-            ctx,
-            btree.PagingInfo(0, 0, 10, direction=btree.PagingDirection.Forward.value),
-        )
-
-        print(f"read items from indexed keyed b-tree {items}")
-
-        # End the transaction by calling commit. Commit in this case will also double check that the fetched items
-        # did not change while in the transaction. If there is then it will return an error to denote this and
-        # thus, your code can treat it as failure if it needs to, like in a financial transaction.
-        t.commit(ctx)
-
+# Retrieve a Model
+loaded_model = model_store.get("classifiers", "churn_v1")
+print(f"Loaded Model: {loaded_model['model']['id']}")
 ```
 
-** Above is the same code of "sop/test_btree_idx.py" unit test file.
+## Examples
 
-## Navigation methods such as Find, First, Last then Fetch
-B-tree fetch operations are all cursor oriented. That is, you position the cursor to the item you want to fetch then fetch a batch. Each fetch (or getXx) call will move the cursor forward or backward to allow you to easily navigate and retrieve items (records) from a B-tree. There are the navigation set of methods to help in traversing the B-tree.
+The `examples/` directory contains complete, runnable demos showcasing various features of the library.
 
-The navigate then fetch batch (pattern) using "PagingInfo" as shown in above section is quite handy, specially when you are working on a UI that allows enduser(s) to browse through a series of data pages and needs to work out the B-tree, slice and dice the items (across thru data pages) and allows enduser operations/data entry-management.
+*   **`vector_demo.py`**: Basic usage of the Vector Store in Standalone mode. Demonstrates auto-commit vs. explicit transactions.
+*   **`vector_clustered_demo.py`**: Usage of the Vector Store in Clustered mode with Redis caching.
+*   **`modelstore_demo.py`**: Managing AI models (save, load, list, delete) using the B-Tree backend.
+*   **`langchain_demo.py`**: Integration with LangChain workflows (mocked adapter example).
+*   **`vector_replication_demo.py`**: Advanced usage showing how to configure Erasure Coding (RAID-like redundancy) for vector data.
 
-There are few navigation methods such as:
-* First - this will position the cursor to the first item of the B-tree, as per the "key sort order".
-* Last - this will position the cursor to the last item of the B-tree.
-* Find/FindWithID - allows you to find an item with a given Key, or at least, an item nearby. When there is no exact match found for the Key, B-tree will position the cursor to the item with a similar Key (one compare unit greater than the Key sought for). This is very handy, for example, you can issue a Find, or FindWithID if there are duplicates by key and you have ID of the one you are interested in. Then use the fetch methods (see get_keys, get_items, get_values) with paging info describing relative offset (from current or few pages forward or backward, & how many) to fetch the batch of items.
+To run an example (assuming you are in the root of the repo):
 
-## Other management methods
-And also, there are other methods of the B-tree you can use to manage the items such as: Update, Remove, Upsert. All of these accepts an array or a batch of items (key &/or value pairs as appropriate). See btree.py of the sop4py's "sop" package for complete list.
+```bash
+PYTHONPATH=jsondb/python python3 jsondb/python/examples/vector_demo.py
+```
 
-## Project links
-SOP open source project (MIT license) is in github. You can checkout the "...sop/jsondb/" package which contains the Go code enabling general purpose JSON data management & the Python wrapper, coding guideline of which, was described above.
+## AI Development Workflows
 
-Please feel free to join the SOP project if you have the bandwidth and participate/co-own/lead! the project engineering.
-SOP project links: https://github.com/sharedcode/sop & https://pypi.org/project/sop4py
+SOP is designed to support the full AI Software Development Life Cycle (SDLC), allowing you to transition seamlessly from local experimentation to distributed production.
+
+### Phase 1: Local Training & Development (Standalone)
+Data Scientists and ML Engineers can work in **Standalone Mode** on their local machines. This mode isolates the environment, requiring no external dependencies like Redis.
+
+*   **Action**: Train models and populate vector stores locally.
+*   **Configuration**: Use `DBType.Standalone`.
+*   **Benefit**: Fast iteration, zero infrastructure overhead, full isolation.
+
+```python
+# Local Development
+vdb = VectorDatabase(storage_path="./local_vectors", db_type=DBType.Standalone)
+# ... train model, generate embeddings, upsert to vdb ...
+```
+
+### Phase 2: Production Deployment (Clustered)
+Once the model and vector data are stabilized and validated, they can be "promoted" to the production environment.
+
+*   **Action**: Copy the storage directory (e.g., `./local_vectors`) to the production shared storage volume.
+*   **Configuration**: Switch the application to `DBType.Clustered`.
+*   **Benefit**: The production cluster (backed by Redis) now serves the pre-computed data with high availability and caching.
+
+```python
+# Production
+vdb = VectorDatabase(storage_path="/mnt/prod_vectors", db_type=DBType.Clustered)
+# ... serve queries ...
+```
+
+This workflow allows you to treat your AI data (models and vector indices) as artifacts that are built locally and released to production, ensuring consistency and simplifying the deployment pipeline.
+
+## Architecture
+
+SOP uses a split architecture:
+1.  **Core Engine (Go)**: Handles disk I/O, B-Tree algorithms, caching, and transactions. Compiled as a shared library (`.dylib`, `.so`, `.dll`).
+2.  **Python Wrapper**: Uses `ctypes` to interface with the Go engine, providing a Pythonic API (`sop` package).
+
+## Project Links
+
+*   **Source Code**: [GitHub - sharedcode/sop](https://github.com/sharedcode/sop)
+*   **PyPI**: [sop4py](https://pypi.org/project/sop4py)
+
+## Contributing
+
+Contributions are welcome! Please check the `CONTRIBUTING.md` file in the repository for guidelines.

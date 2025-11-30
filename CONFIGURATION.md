@@ -9,7 +9,7 @@ The `StoreOptions` struct is the primary way to configure a B-Tree store.
 | Field | Type | Description | Default / Recommendation |
 | :--- | :--- | :--- | :--- |
 | `Name` | `string` | Short name of the store. Must be unique within the repository. | Required. |
-| `SlotLength` | `int` | Number of items stored in a single B-Tree node. | **Default: 1000**. Higher values (e.g., 5000) improve read performance but increase write latency. |
+| `SlotLength` | `int` | Number of items stored in a single B-Tree node. | **Default: 1000**. **Max: 10,000**. Higher values (e.g., 5000) improve read performance but increase write latency. |
 | `IsUnique` | `bool` | Enforces uniqueness of keys. | `true` for primary keys, `false` for non-unique indexes. |
 | `IsValueDataInNodeSegment` | `bool` | Stores the Value directly inside the B-Tree node. | **Best for Small Data** (< 1KB). Improves locality. |
 | `IsValueDataActivelyPersisted` | `bool` | Stores Value in a separate file/blob. | **Best for Big Data**. Prevents large values from bloating the B-Tree structure. |
@@ -94,3 +94,48 @@ The `StoreCacheConfig` struct controls how data is cached *within* the chosen ba
 | `ValueDataCacheDuration` | `time.Duration` | TTL for value data (if stored separately). |
 | `IsNodeCacheTTL` | `bool` | If `true`, accessing a node extends its cache TTL (Sliding Window). |
 | `IsValueDataCacheTTL` | `bool` | If `true`, accessing a value extends its cache TTL. |
+
+## Registry Partitioning & Tuning
+
+SOP uses a "Registry" to map logical IDs (UUIDs) to physical file locations. This registry is partitioned into multiple "Segment Files" to manage file sizes and concurrency.
+
+### Registry Hash Mod
+
+The `RegistryHashModValue` determines the granularity of this partitioning. This value is configured **per database** (per `StoresBaseFolder`) via `TransactionOptions`.
+
+*   **Flexibility**: You can configure different databases with different hash mod values based on their expected size.
+    *   *Example*: Database A (User Profiles) uses `250` (Default) for efficiency.
+    *   *Example*: Database B (IoT Logs) uses `1000` or `5000` to handle billions of records with fewer files.
+
+*   **Formula**: `Segment File Size = RegistryHashModValue * 4096 bytes`
+*   **Default**: `250` (Minimum).
+    *   Segment Size: `250 * 4KB = 1MB` (approx).
+    *   Capacity: **~10.7 Million items** per segment file (assuming `SlotLength` of 1000 and 65% node utilization).
+        *   Calculation: `250 (Blocks) * 66 (Handles/Block) * 1000 (Items/Node) * 0.65 (Load) = 10,725,000`
+*   **Maximum**: `750,000` (Creates ~3GB segment files).
+
+**Scaling & File Handles**:
+SOP automatically allocates additional segment files (e.g., `registry-1.reg`, `registry-2.reg`) as needed.
+*   **Example**: Storing **1 Billion items** with the default hashmod (250) will result in approximately **100 segment files** (1B / 10.7M).
+*   **Optimization**: For very large datasets, increasing `RegistryHashModValue` reduces the total file count, conserving OS file handles and simplifying backup operations.
+
+### Alternative Optimization: Slot Length
+
+Instead of increasing `RegistryHashModValue`, you can also optimize for large datasets by increasing the B-Tree `SlotLength`.
+
+*   **Strategy**: Keep `RegistryHashModValue` at default (`250`) but increase `SlotLength` to `5000` (or up to the max of `10,000`).
+*   **Effect**: Each B-Tree node becomes larger (acting like a "mini-table" of 5,000 items), which drastically increases the number of items managed per registry handle.
+*   **Capacity Boost**:
+    *   Calculation: `250 * 66 * 5000 * 0.65 = ~53.6 Million items` per segment file.
+    *   **Result**: Storing **1 Billion items** would only require **~19 segment files** (vs 100 with `SlotLength` 1000).
+
+### Tuning Guidelines
+
+| Scenario | Recommendation | Rationale |
+| :--- | :--- | :--- |
+| **Small to Medium Datasets** (< 100M items) | **Default (250)** | Keeps segment files small (~1MB), minimizing I/O overhead for partial updates. |
+| **Large Datasets** (> 1B items) | **Increase (e.g., 1000 - 5000)** | Creates larger segment files (4MB - 20MB). Reduces the total number of files on disk, which is better for filesystem performance and backup operations. |
+| **High Concurrency** | **Moderate (500)** | Balances file size with lock contention (though SOP uses row-level locking, file handles are still a resource). |
+
+**Note**: Changing `RegistryHashModValue` after a store has been created is **not supported** and will result in data inaccessibility. This value must be set once during the initial creation of the repository.
+

@@ -8,10 +8,14 @@ import (
 )
 
 func TestAddCentroid(t *testing.T) {
-	os.RemoveAll("test_dynamic_centroids")
-	defer os.RemoveAll("test_dynamic_centroids")
+	tmpDir, err := os.MkdirTemp("", "sop-ai-test-dynamic-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
 
 	db := NewDatabase[map[string]any](ai.Standalone)
+	db.SetStoragePath(tmpDir)
 	// db.Close() is not implemented/needed for in-memory test
 
 	idx := db.Open("test_dynamic_centroids")

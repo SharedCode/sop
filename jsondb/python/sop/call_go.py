@@ -35,8 +35,6 @@ _open_redis_conn = lib.openRedisConnection
 # Call the 'open+_redis_connection' function with arguments and set argument/return types
 _open_redis_conn.argtypes = [
     ctypes.c_char_p,
-    ctypes.c_int,
-    ctypes.c_char_p,
 ]  # Specify argument types
 _open_redis_conn.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
@@ -124,6 +122,25 @@ _get_btree_item_count.argtypes = [
 _get_btree_item_count.restype = getBtreeCountResult  # Specify return type
 
 
+_manage_vector_db = lib.manageVectorDB
+_manage_vector_db.argtypes = [
+    ctypes.c_int64,
+    ctypes.c_int,
+    ctypes.c_char_p,
+    ctypes.c_char_p,
+]
+_manage_vector_db.restype = ctypes.POINTER(ctypes.c_char)
+
+_manage_model_store = lib.manageModelStore
+_manage_model_store.argtypes = [
+    ctypes.c_int64,
+    ctypes.c_int,
+    ctypes.c_char_p,
+    ctypes.c_char_p,
+]
+_manage_model_store.restype = ctypes.POINTER(ctypes.c_char)
+
+
 def create_context() -> int:
     return ctypes.c_int64(_create_context()).value
 
@@ -136,12 +153,12 @@ def cancel_context(ctxid: int):
     _cancel_context(ctypes.c_int64(ctxid).value)
 
 
-def open_redis_connection(host: str, port: int, password: str) -> str:
+def open_redis_connection(connection_string: str) -> str:
     """
     Open the Redis connection.
     """
 
-    res = _open_redis_conn(to_cstring(host), to_cint(port), to_cstring(password))
+    res = _open_redis_conn(to_cstring(connection_string))
     if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
         return None
 
@@ -304,3 +321,44 @@ def to_cstring(s: str) -> ctypes.c_char_p:
 
 def to_cint(i: int) -> ctypes.c_int:
     return ctypes.c_int(i)
+
+
+def manage_vector_db(ctxID: int, action: int, targetID: str, payload: str) -> str:
+    tID = None
+    if targetID is not None:
+        tID = to_cstring(targetID)
+    
+    p = None
+    if payload is not None:
+        p = to_cstring(payload)
+
+    res = _manage_vector_db(
+        ctypes.c_int64(ctxID).value, to_cint(action), tID, p
+    )
+    if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
+        return None
+
+    s = to_str(res)
+    _free_string(res)
+    return s
+
+
+def manage_model_store(ctxID: int, action: int, targetID: str, payload: str) -> str:
+    tID = None
+    if targetID is not None:
+        tID = to_cstring(targetID)
+    
+    p = None
+    if payload is not None:
+        p = to_cstring(payload)
+
+    res = _manage_model_store(
+        ctypes.c_int64(ctxID).value, to_cint(action), tID, p
+    )
+    if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
+        return None
+
+    s = to_str(res)
+    _free_string(res)
+    return s
+

@@ -11,6 +11,8 @@ The `sop/ai` package provides a complete toolkit for building local, privacy-fir
 ### 1. Vector Database (`ai/vector`)
 A persistent, ACID-compliant vector store that runs on your local filesystem.
 *   **Storage**: Uses SOP B-Trees to store vectors and metadata.
+*   **Architecture**: Uses a "Flat" directory structure where all B-Trees (Vectors, Centroids, Content) reside in a shared root folder, managed by a `sys_config` registry.
+*   **Modes**: Supports **Standalone** (In-Memory Cache) for local use and **Clustered** (Redis Cache) for distributed deployments.
 *   **Search**: Supports cosine similarity search with metadata filtering.
 *   **Partitioning**: Designed for massive scale via natural partitioning.
 
@@ -25,10 +27,48 @@ Interfaces for connecting to AI models:
 *   **Generators**: Connect to LLMs like OpenAI, Gemini, or local Ollama instances.
 *   **Embedders**: Convert text to vectors. Includes a "Simple" keyword-based embedder (for testing) and an "Agent Embedder" (for semantic understanding).
 
-### 4. Model Store (`ai/model_store.go`)
+### 4. Model Store (`ai/database/model_store.go`)
 A unified interface for persisting AI models, from small "Skills" (Perceptrons) to large "Brains" (Neural Nets).
-*   **Backends**: Supports both simple file-system storage (`FileModelStore`) and transactional B-Tree storage (`BTreeModelStore`).
+*   **Backend**: Uses transactional B-Tree storage (`BTreeModelStore`) for reliability and consistency.
+*   **Categorization**: Models are stored with a composite key `{Category, Name}`, allowing for organized grouping of model artifacts.
 *   **Transactional**: The B-Tree backend allows model updates to be part of the same ACID transaction as vector data changes.
+
+## Standards & Compatibility
+
+The SOP AI Kit is designed to play nicely with the broader AI ecosystem while adhering to strict software engineering standards.
+
+### Supported Interfaces
+*   **Generators (LLMs)**:
+    *   **OpenAI (ChatGPT)**: Native support for GPT-3.5/4.
+    *   **Google (Gemini)**: Native support for Gemini Pro.
+    *   **Ollama**: Native support for local models (Llama 3, Mistral, Gemma).
+    *   **Custom**: Implement the `ai.Generator` interface to connect any other provider.
+*   **Embedders**:
+    *   **Ollama**: Use local models for embeddings.
+    *   **Agent-as-Embedder**: Use another SOP Agent to "embed" (translate) text, enabling recursive agent architectures.
+*   **Vector Store**:
+    *   **LangChain**: The Python wrapper (`sop4py`) includes convenience methods for LangChain integration.
+    *   **Generic**: The Go API uses generics (`VectorStore[T]`), allowing you to store strongly-typed structs or dynamic `map[string]any` payloads.
+
+### Deployment Standards
+*   **ACID Compliance**: Full Two-Phase Commit (2PC) support for distributed transactions.
+*   **Storage**: Uses standard filesystem paths (no proprietary binary blobs hidden in OS folders).
+*   **Caching**: Supports standard Redis protocol for clustered caching.
+*   **Replication & High Availability**:
+    *   **General Purpose**: Supports full replication (Erasure Coding, Active/Passive) in all modes.
+    *   **AI Package**:
+        *   **Standalone Mode**: Supports replication if configured, though typically used for single-folder local storage.
+        *   **Clustered Mode**: Supports full replication. Configurable via `VectorDBOptions` (Python) or `Database` struct (Go). Replication is **optional** in both modes.
+
+## Unified Architecture
+
+The SOP AI package is built as a high-level abstraction layer on top of the General Purpose SOP engine. This design ensures that both use cases share the same robust foundation while offering appropriate interfaces for their respective domains.
+
+*   **Shared Engine**: Both packages use the same `inredfs` B-Tree storage engine, ensuring identical performance, reliability, and ACID compliance.
+*   **Separation of Concerns**:
+    *   **General Purpose (`sop`)**: Exposes low-level B-Tree primitives and explicit transaction management for building custom data structures (Key-Value stores, Registries).
+    *   **AI Package (`sop/ai`)**: Abstracts B-Trees into domain-specific "Vector Stores" and "Model Stores" with implicit transaction handling for ease of use.
+*   **The Bridge**: You can mix both worlds in a single atomic transaction. By creating a General Purpose transaction and "binding" an AI Store to it, you can update a User Profile (Key-Value) and their Embedding (Vector) simultaneously. See the [Tutorial](TUTORIAL.md#step-12-unified-architecture-the-bridge) for an example.
 
 ## API Cookbook
 

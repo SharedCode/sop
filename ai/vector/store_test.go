@@ -2,7 +2,6 @@ package vector
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -155,7 +154,7 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 
 	// Helper to get centroid count
 	getCentroidCount := func(centroidID int) int {
-		storePath := filepath.Join(di.db.storagePath, di.name)
+		storePath := di.db.storagePath
 		trans, err := di.db.beginTransaction(sop.ForReading, storePath)
 		if err != nil {
 			t.Fatalf("Failed to begin transaction: %v", err)
@@ -167,7 +166,7 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 			t.Fatalf("Failed to get active version: %v", err)
 		}
 
-		arch, err := OpenDomainStore(di.db.ctx, trans, version, sop.MediumData)
+		arch, err := OpenDomainStore(di.db.ctx, trans, di.name, version, sop.MediumData)
 		if err != nil {
 			t.Fatalf("Failed to open domain store: %v", err)
 		}

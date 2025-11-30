@@ -15,14 +15,13 @@ class RedisOptions:
 class Redis:
     """Redis Python wrapper. Delegates API calls to the SOP library that does Direct IO to disk drives w/ built-in L1/L2 caching."""
 
-    def open_connection(options: RedisOptions):
+    def open_connection(connection_string: str):
         """
-        Open the global Redis connection.
+        Open the global Redis connection using a connection string (URI).
+        Example: redis://:password@localhost:6379/0
         """
         print("inside OpenRedisConnection")
-        errMsg = call_go.open_redis_connection(
-            options.host, options.port, options.password
-        )
+        errMsg = call_go.open_redis_connection(connection_string)
         if errMsg == None:
             print("Redis connection was successfully opened")
         else:

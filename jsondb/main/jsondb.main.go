@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/encoding"
 	"github.com/sharedcode/sop/inredfs"
 	"github.com/sharedcode/sop/redis"
@@ -79,12 +80,8 @@ func getContext(ctxID C.longlong) context.Context {
 // Redis global connection management related.
 //
 //export openRedisConnection
-func openRedisConnection(host *C.char, port C.int, password *C.char) *C.char {
-	_, err := redis.OpenConnection(redis.Options{
-		Address:  fmt.Sprintf("%s:%d", C.GoString(host), int(port)),
-		DB:       0,
-		Password: C.GoString(password),
-	})
+func openRedisConnection(uri *C.char) *C.char {
+	_, err := redis.OpenConnectionWithURL(C.GoString(uri))
 	if err != nil {
 		errMsg := fmt.Sprintf("error encountered opening Redis connection, details: %v", err)
 		log.Error(errMsg)
@@ -155,19 +152,54 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 	}
 	switch int(action) {
 	case NewTransaction:
-		var to inredfs.TransationOptionsWithReplication
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &to); err != nil {
+		// Define a local struct to capture DBType from JSON, as it's not in the core options anymore.
+		type TransactionOptionsPayload struct {
+			inredfs.TransationOptionsWithReplication
+			DBType int `json:"db_type"`
+		}
+		var payload TransactionOptionsPayload
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &payload); err != nil {
 			// Rare for an error to occur, but do return an errMsg if it happens.
 			errMsg := fmt.Sprintf("error Unmarshal TransactionOptions, details: %v", err)
 			return C.CString(errMsg)
 		}
 
+		// Extract the core options.
+		to := payload.TransationOptionsWithReplication
+
 		// Convert Maxtime from minutes to Duration.
 		to.MaxTime = to.MaxTime * time.Minute
 
-		log.Debug(fmt.Sprintf("TransactionOptions: %v", to))
+		log.Debug(fmt.Sprintf("TransactionOptions: %v, DBType: %d", to, payload.DBType))
 		tid := sop.NewUUID()
-		t, err := inredfs.NewTransactionWithReplication(ctx, to)
+
+		var t sop.Transaction
+		var err error
+
+		// Instantiate the correct cache based on DBType if not already set.
+		if to.Cache == nil {
+			if payload.DBType == 0 {
+				to.Cache = cache.NewInMemoryCache()
+			} else {
+				to.Cache = sop.NewCacheClient()
+			}
+		}
+
+		// Check if we should use standard transaction (no replication)
+		// If StoresBaseFolders has 1 element and ErasureConfig is empty, assume Standalone.
+		if len(to.StoresBaseFolders) == 1 && len(to.ErasureConfig) == 0 {
+			stdOpts := inredfs.TransationOptions{
+				Mode:                 to.Mode,
+				MaxTime:              to.MaxTime,
+				RegistryHashModValue: to.RegistryHashModValue,
+				StoresBaseFolder:     to.StoresBaseFolders[0],
+				Cache:                to.Cache,
+			}
+			t, err = inredfs.NewTransaction(ctx, stdOpts)
+		} else {
+			t, err = inredfs.NewTransactionWithReplication(ctx, to)
+		}
+
 		if err != nil {
 			errMsg := fmt.Sprintf("error creating a Transaction, details: %v", err)
 			return C.CString(errMsg)

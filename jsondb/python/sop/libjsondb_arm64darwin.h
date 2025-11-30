@@ -19,6 +19,12 @@ typedef struct { const char *p; ptrdiff_t n; } _GoString_;
 /* Start of preamble from import "C" comments.  */
 
 
+#line 3 "jsondb.ai.go"
+
+#include <stdlib.h>
+
+#line 1 "cgo-generated-wrapper"
+
 
 #line 3 "jsondb.main.go"
 
@@ -87,6 +93,8 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
+extern char* manageVectorDB(long long ctxID, int action, char* targetID, char* payload);
+extern char* manageModelStore(long long ctxID, int action, char* targetID, char* payload);
 extern char* navigateBtree(long long ctxID, int action, char* payload, char* payload2);
 extern char* isUniqueBtree(char* payload);
 

@@ -66,23 +66,23 @@ import (
 
 func main() {
 	// 1. Initialize the Database (No Redis required for standalone!)
-	db := vector.NewDatabase()
+	db := vector.NewDatabase[map[string]any](ai.Standalone)
 	db.SetStoragePath("./data/doctor_brain")
 
 	// 2. Open the "Doctor" index
 	doctor := db.Open("doctor")
 
 	// 3. Create some knowledge (In reality, you'd load this from PDFs/Textbooks)
-	knowledge := []ai.Item{
+	knowledge := []ai.Item[map[string]any]{
 		{
 			ID:     "doc-101",
 			Vector: []float32{0.1, 0.2, 0.9}, // Simplified vector
-			Meta:   map[string]any{"text": "Appendicitis presents with pain in the lower right abdomen."},
+			Payload:   map[string]any{"text": "Appendicitis presents with pain in the lower right abdomen."},
 		},
 		{
 			ID:     "doc-102",
 			Vector: []float32{0.8, 0.1, 0.1},
-			Meta:   map[string]any{"text": "Migraines are often accompanied by sensitivity to light."},
+			Payload:   map[string]any{"text": "Migraines are often accompanied by sensitivity to light."},
 		},
 	}
 
@@ -138,7 +138,7 @@ func main() {
 	// 4. Diagnosis
 	if len(results) > 0 {
 		fmt.Printf("Doctor found match (Score: %.2f):\n", results[0].Score)
-		fmt.Printf("Reference: %s\n", results[0].Meta["text"])
+		fmt.Printf("Reference: %s\n", results[0].Payload["text"])
 	} else {
 		fmt.Println("Doctor: I need more information.")
 	}
@@ -466,7 +466,128 @@ By leveraging SOP's core **Clustered Database** features, software teams can bui
 *   **Collaborative AI**: The kit treats Gemini, ChatGPT, and Local Agents as interoperable components. They can reuse each other's capabilities to solve problems that no single model could handle alone.
 *   **Transactional Integrity**: Unlike simple vector libraries, SOP ensures your AI's memory is ACID-compliant, making it suitable for critical enterprise applications.
 
-*(Note: Advanced tutorials on clustered deployments and multi-agent orchestration will be covered in future documentation.)*
+## Step 10: Going Enterprise (Clustered Mode)
+
+While `ai.Standalone` is perfect for local development and single-node deployments, SOP AI also supports a **Clustered** mode for high availability and scale.
+
+### Switching to Clustered Mode
+To enable clustered mode, simply change the database type and ensure you have a Redis instance running (for the L2 Cache).
+
+```go
+// 1. Initialize the Database in Clustered Mode
+// This will automatically connect to a local Redis instance (localhost:6379) for caching.
+db := vector.NewDatabase[map[string]any](ai.Clustered)
+db.SetStoragePath("./data/doctor_brain_cluster")
+
+// 2. Open the "Doctor" index
+doctor := db.Open("doctor")
+```
+
+In Clustered mode:
+*   **L2 Cache**: SOP uses Redis to cache B-Tree nodes, enabling high-performance shared access across multiple application instances.
+*   **Storage**: Data is still persisted to the filesystem (or a shared volume), but the Redis cache ensures consistency and speed in a distributed environment.
+
+### Seamless Migration (SDLC)
+SOP is designed to support your Software Development Life Cycle (SDLC) from local dev to production.
+
+1.  **Develop Locally**: Build and test your agent on your laptop using `ai.Standalone`.
+2.  **Deploy to Prod**: When moving to a higher environment (QA/Prod), simply:
+    *   Copy your data folder (e.g., `./data/doctor_brain`) to the target server (or shared volume).
+    *   Flip the switch in your code (or config) to `ai.Clustered`.
+    *   Ensure Redis is running.
+
+**Note**: For the "easy flip" to work in a multi-node cluster, the storage path must be a **shared volume** (e.g., NFS, EFS, or a mounted SAN) accessible to all nodes. If running on a single node (just for caching benefits), a local path is fine.
+
+The next time your application runs, it will automatically pick up the existing data and start using the Redis cache for coordination. No data migration or export/import is required.
+
+## Step 11: Advanced - Atomic Updates (Transactional Integrity)
+
+One of SOP's unique superpowers is the ability to update **multiple** stores (e.g., the Vector DB and the Model Registry) in a single, atomic transaction.
+
+If your training process crashes halfway through, you don't want a "ghost" state where the vector index is updated but the model weights aren't.
+
+```go
+func AtomicTrainAndIndex(ctx context.Context, doc ai.Item[any], newWeights []float64) error {
+    // 1. Start a Transaction
+    // This transaction will span across both the Vector Store and the Model Store.
+    trans, _ := inredfs.NewTransaction(ctx, options)
+    if err := trans.Begin(ctx); err != nil {
+        return err
+    }
+
+    // 2. Open Transactional Views
+    // Bind the stores to this specific transaction.
+    vecStore := myVectorDB.Open("documents").WithTransaction(trans)
+    modelStore, _ := ai.NewBTreeModelStore(ctx, trans)
+
+    // 3. Perform Updates
+    // A. Update the Vector Index
+    if err := vecStore.Upsert(doc); err != nil {
+        trans.Rollback(ctx)
+        return err
+    }
+
+    // B. Update the Model Weights
+    if err := modelStore.Save(ctx, "classifiers", "sentiment_v2", newWeights); err != nil {
+        trans.Rollback(ctx)
+        return err
+    }
+
+    // 4. Commit
+    // Both updates are applied instantly and atomically.
+    // If this fails (e.g., power loss), NOTHING is saved.
+    return trans.Commit(ctx)
+}
+```
+
+This pattern is essential for building robust, enterprise-grade AI systems that can recover from failures without data corruption.
+
+## Step 12: Unified Architecture (The Bridge)
+
+SOP's architecture is "Layered". The AI package is a specialized layer built on top of the General Purpose engine. This means you can mix low-level Key-Value operations with high-level Vector operations in the **same atomic transaction**.
+
+This is powerful for scenarios like "User Registration", where you need to create a User Profile (KV) and index their Bio (Vector) simultaneously.
+
+```go
+func RegisterUser(ctx context.Context, userID string, bio string) error {
+    // 1. Start a General Purpose Transaction
+    // This gives us raw access to the storage engine.
+    trans, _ := inredfs.NewTransaction(ctx, options)
+    if err := trans.Begin(ctx); err != nil {
+        return err
+    }
+
+    // 2. General Purpose Work (Key-Value Store)
+    // Open a raw B-Tree to store user profiles.
+    userStore, _ := inredfs.NewBtree[string, UserProfile](ctx, sop.ConfigureStore("users", ...), trans, ...)
+    
+    profile := UserProfile{ID: userID, Bio: bio, CreatedAt: time.Now()}
+    if _, err := userStore.Add(ctx, userID, profile); err != nil {
+        trans.Rollback(ctx)
+        return err
+    }
+
+    // 3. AI Work (Vector Store)
+    // "Bind" the AI Vector Store to the SAME transaction.
+    // Now, the vector upsert participates in 'trans'.
+    vecStore := myVectorDB.Open("user_bios").WithTransaction(trans)
+    
+    // Generate embedding (mocked)
+    vector := embedder.Embed(bio)
+    
+    item := ai.Item[any]{ID: userID, Vector: vector, Payload: nil}
+    if err := vecStore.Upsert(item); err != nil {
+        trans.Rollback(ctx)
+        return err
+    }
+
+    // 4. Commit
+    // Both the User Profile and the Vector Index are saved atomically.
+    return trans.Commit(ctx)
+}
+```
+
+This unification allows you to build complex, data-intensive applications without needing separate databases for your structured data (SQL/KV) and your AI data (Vectors).
 
 ## Summary
 

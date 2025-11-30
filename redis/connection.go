@@ -63,6 +63,27 @@ func OpenConnection(options Options) (*Connection, error) {
 	return connection, nil
 }
 
+// OpenConnectionWithURL initializes and returns the package-level singleton connection using a Redis URI.
+func OpenConnectionWithURL(url string) (*Connection, error) {
+	if connection != nil {
+		return connection, nil
+	}
+	mux.Lock()
+	defer mux.Unlock()
+
+	if connection != nil {
+		return connection, nil
+	}
+
+	opts, err := redis.ParseURL(url)
+	if err != nil {
+		return nil, err
+	}
+
+	connection = openConnectionFromRedisOptions(opts)
+	return connection, nil
+}
+
 // CloseConnection closes the package-level singleton connection, if present.
 func CloseConnection() error {
 	if connection == nil {
@@ -83,55 +104,65 @@ var hasRestarted int64
 
 // openConnection creates a new redis client connection from options.
 func openConnection(options Options) *Connection {
-	client := redis.NewClient(&redis.Options{
+	return openConnectionFromRedisOptions(&redis.Options{
 		TLSConfig: options.TLSConfig,
 		Addr:      options.Address,
 		Password:  options.Password,
 		DB:        options.DB,
-		OnConnect: func(ctx context.Context, cn *redis.Conn) error {
-			// Use INFO server to get run_id which changes on restart.
-			info, err := cn.Info(ctx, "server").Result()
-			if err != nil {
-				return err
+	})
+}
+
+func openConnectionFromRedisOptions(opts *redis.Options) *Connection {
+	opts.OnConnect = func(ctx context.Context, cn *redis.Conn) error {
+		// Use INFO server to get run_id which changes on restart.
+		info, err := cn.Info(ctx, "server").Result()
+		if err != nil {
+			return err
+		}
+		// Parse run_id: lines are of the form key:value
+		runID := ""
+		lines := strings.Split(info, "\r\n")
+		for _, line := range lines {
+			if len(line) > 7 && line[:7] == "run_id:" {
+				runID = line[7:]
+				break
 			}
-			// Parse run_id: lines are of the form key:value
-			runID := ""
-			lines := strings.Split(info, "\r\n")
+		}
+		if runID == "" {
+			// Fallback for systems using \n only
+			lines = strings.Split(info, "\n")
 			for _, line := range lines {
 				if len(line) > 7 && line[:7] == "run_id:" {
 					runID = line[7:]
 					break
 				}
 			}
-			if runID == "" {
-				// Fallback for systems using \n only
-				lines = strings.Split(info, "\n")
-				for _, line := range lines {
-					if len(line) > 7 && line[:7] == "run_id:" {
-						runID = line[7:]
-						break
-					}
-				}
-			}
+		}
 
-			if runID != "" {
-				val := lastSeenRunID.Load()
-				var lastID string
-				if val != nil {
-					lastID = val.(string)
-				}
-				if lastID != "" && runID != lastID {
-					atomic.StoreInt64(&hasRestarted, 1)
-				}
-				lastSeenRunID.Store(runID)
+		if runID != "" {
+			val := lastSeenRunID.Load()
+			var lastID string
+			if val != nil {
+				lastID = val.(string)
 			}
-			return nil
-		},
-	})
+			if lastID != "" && runID != lastID {
+				atomic.StoreInt64(&hasRestarted, 1)
+			}
+			lastSeenRunID.Store(runID)
+		}
+		return nil
+	}
+
+	client := redis.NewClient(opts)
 
 	c := Connection{
-		Client:  client,
-		Options: options,
+		Client: client,
+		Options: Options{
+			Address:   opts.Addr,
+			Password:  opts.Password,
+			DB:        opts.DB,
+			TLSConfig: opts.TLSConfig,
+		},
 	}
 	return &c
 }

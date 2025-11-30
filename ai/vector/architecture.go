@@ -8,6 +8,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/inredfs"
 )
 
@@ -47,23 +48,38 @@ type Architecture struct {
 	Version int64
 }
 
+// newBtree is a helper to create a B-Tree that automatically selects between standard and replicated modes.
+func newBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		if ct.HandleReplicationRelatedError != nil {
+			return inredfs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)
+		}
+	}
+	return inredfs.NewBtree[TK, TV](ctx, so, t, comparer)
+}
+
 // OpenDomainStore initializes the B-Trees for the vertical.
 // version is applied ONLY to Centroids and Vectors (the Index).
 // Content, TempVectors, and Lookup are shared across versions.
-func OpenDomainStore(ctx context.Context, trans sop.Transaction, version int64, contentSize sop.ValueDataSize) (*Architecture, error) {
+func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, version int64, contentSize sop.ValueDataSize) (*Architecture, error) {
 	suffix := ""
 	if version > 0 {
 		suffix = fmt.Sprintf("_%d", version)
 	}
 
+	// Helper to prefix store names with domain
+	name := func(s string) string {
+		return fmt.Sprintf("%s_%s", domain, s)
+	}
+
 	// 1. Open Centroids Store (Versioned)
-	centroids, err := inredfs.NewBtree[int, ai.Centroid](ctx, sop.ConfigureStore("centroids"+suffix, true, 100, "Centroids", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
+	centroids, err := newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(name("centroids"+suffix), true, 100, "Centroids", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return nil, err
 	}
 
 	// 2. Open Vectors Store (Versioned)
-	vectors, err := inredfs.NewBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore("vectors"+suffix, true, 1000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
+	vectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(name("vectors"+suffix), true, 1000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
 	if err != nil {
 		return nil, err
 	}
@@ -78,19 +94,19 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, version int64, 
 		}
 		return 0
 	}
-	content, err := inredfs.NewBtree[string, string](ctx, sop.ConfigureStore("content", true, 1000, "Content", contentSize, ""), trans, contentComparer)
+	content, err := newBtree[string, string](ctx, sop.ConfigureStore(name("content"), true, 1000, "Content", contentSize, ""), trans, contentComparer)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Open Lookup Store (Versioned)
-	lookup, err := inredfs.NewBtree[int, string](ctx, sop.ConfigureStore("lookup"+suffix, true, 1000, "Lookup", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
+	lookup, err := newBtree[int, string](ctx, sop.ConfigureStore(name("lookup"+suffix), true, 1000, "Lookup", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return nil, err
 	}
 
 	// 5. Open TempVectors Store (Shared)
-	tempVectors, err := inredfs.NewBtree[string, []float32](ctx, sop.ConfigureStore("temp_vectors", true, 1000, "Temp Vectors", sop.SmallData, ""), trans, contentComparer)
+	tempVectors, err := newBtree[string, []float32](ctx, sop.ConfigureStore(name("temp_vectors"), true, 1000, "Temp Vectors", sop.SmallData, ""), trans, contentComparer)
 	if err != nil {
 		return nil, err
 	}

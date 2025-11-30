@@ -52,11 +52,14 @@ const (
 	registryFileExtension = ".reg"
 
 	// 250, should generate 1MB file segment. Formula: 250 X 4096 = 1MB
-	// Given a 50 slot size per node, should be able to manage 825,000 B-Tree items (key/value pairs).
+	// Given a 1000 slot size per node (default), should be able to manage ~10,725,000 B-Tree items (key/value pairs).
 	//
-	// Formula: 250 * 66 * 50 = 825,000
-	// Or if you use 100 slot size per node, 'will give you 1,650,000 items, or assuming you have about 65%
-	// b-tree utilization, 1,072,500 usable space.
+	// Formula: 250 * 66 * 1000 * 65% (utilization) = 10,725,000
+	// Or if you use 5000 slot size per node, 'will give you ~53,625,000 items.
+	//
+	// Note: This capacity is per segment file. SOP will allocate more segment files as needed.
+	// E.g. 1 Billion items @ 250 hashmod ~= 100 segment files (SlotLength 1000).
+	// E.g. 1 Billion items @ 250 hashmod ~= 19 segment files (SlotLength 5000).
 	MinimumModValue = 250
 	// 750k, should generate 3GB file segment.  Formula: 750k X 4096 = 3GB
 	MaximumModValue = 750000

@@ -50,6 +50,27 @@ func main() {
 }
 ```
 
+### Basic Setup (Clustered)
+
+Initialize a clustered vector database using Redis for caching.
+
+```go
+func main() {
+	// 1. Create the Database Manager
+	// Clustered mode = Local Filesystem (Shared) + Redis Cache
+	// Ensure Redis is running on localhost:6379
+	db := vector.NewDatabase[map[string]any](ai.Clustered)
+	
+	// 2. Configure Storage Path
+	db.SetStoragePath("./my_cluster_db")
+
+	// 3. Open a Domain (Index)
+	idx := db.Open("documents")
+	
+	fmt.Println("Clustered Vector Store opened successfully!")
+}
+```
+
 ### Ingesting Data
 
 Add items (vectors + metadata) to the store.
@@ -155,7 +176,11 @@ The Model Store allows you to persist AI model artifacts (weights, configs) alon
 Save a struct or any serializable object as a named model.
 
 ```go
-import "github.com/sharedcode/sop/ai"
+import (
+	"context"
+	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
+)
 
 type MyPerceptron struct {
 	Weights []float64
@@ -163,8 +188,9 @@ type MyPerceptron struct {
 }
 
 func saveModel() {
-	// Initialize File-based Store
-	store, _ := ai.NewFileModelStore("./my_models")
+	// Initialize Database
+	db := database.NewDatabase(ai.Standalone, "./my_models")
+	store, _ := db.OpenModelStore("default")
 
 	model := MyPerceptron{
 		Weights: []float64{0.5, -0.2, 1.0},
@@ -173,7 +199,7 @@ func saveModel() {
 
 	// Save
 	ctx := context.Background()
-	if err := store.Save(ctx, "perceptron_v1", model); err != nil {
+	if err := store.Save(ctx, "classifiers", "perceptron_v1", model); err != nil {
 		panic(err)
 	}
 }
@@ -185,11 +211,12 @@ Retrieve a model by name.
 
 ```go
 func loadModel() {
-	store, _ := ai.NewFileModelStore("./my_models")
+	db := database.NewDatabase(ai.Standalone, "./my_models")
+	store, _ := db.OpenModelStore("default")
 	ctx := context.Background()
 
 	var loadedModel MyPerceptron
-	if err := store.Load(ctx, "perceptron_v1", &loadedModel); err != nil {
+	if err := store.Load(ctx, "classifiers", "perceptron_v1", &loadedModel); err != nil {
 		panic(err)
 	}
 
@@ -203,8 +230,9 @@ See what's in the store.
 
 ```go
 func listModels() {
-	store, _ := ai.NewFileModelStore("./my_models")
-	names, _ := store.List(context.Background())
+	db := database.NewDatabase(ai.Standalone, "./my_models")
+	store, _ := db.OpenModelStore("default")
+	names, _ := store.List(context.Background(), "classifiers")
 	
 	for _, name := range names {
 		fmt.Println("Found model:", name)
@@ -220,6 +248,7 @@ Use `BTreeModelStore` to update models and vectors atomically. This ensures that
 import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/inredfs"
 )
 
@@ -234,7 +263,7 @@ func atomicUpdate() {
 	vecStore := myVectorDB.Open("documents").WithTransaction(trans)
 	
 	// Model Store (bound to transaction)
-	modelStore, _ := ai.NewBTreeModelStore(ctx, trans)
+	modelStore, _ := database.NewBTreeModelStore(ctx, trans)
 
 	// 3. Perform Updates
 	// Update Vector
@@ -242,7 +271,7 @@ func atomicUpdate() {
 
 	// Update Model
 	newWeights := trainOn(newVec)
-	modelStore.Save(ctx, "embedding_model", newWeights)
+	modelStore.Save(ctx, "classifiers", "embedding_model", newWeights)
 
 	// 4. Commit (All or Nothing)
 	// If this fails, neither the vector nor the model is updated.

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
 )
 
 func TestPerceptronPersistenceWithModelStore(t *testing.T) {
@@ -16,7 +17,8 @@ func TestPerceptronPersistenceWithModelStore(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	store, err := ai.NewFileModelStore(tmpDir)
+	db := database.NewDatabase(ai.Standalone, tmpDir)
+	store, err := db.OpenModelStore("test_store")
 	if err != nil {
 		t.Fatalf("Failed to create model store: %v", err)
 	}
@@ -47,13 +49,14 @@ func TestPerceptronPersistenceWithModelStore(t *testing.T) {
 
 	// 2. Save it using the ModelStore
 	modelName := "or_gate_skill"
-	if err := store.Save(ctx, modelName, p); err != nil {
+	category := "test_category"
+	if err := store.Save(ctx, category, modelName, p); err != nil {
 		t.Fatalf("Failed to save model: %v", err)
 	}
 
 	// 3. Load it back into a new instance
 	var loadedP Perceptron
-	if err := store.Load(ctx, modelName, &loadedP); err != nil {
+	if err := store.Load(ctx, category, modelName, &loadedP); err != nil {
 		t.Fatalf("Failed to load model: %v", err)
 	}
 
@@ -80,7 +83,7 @@ func TestPerceptronPersistenceWithModelStore(t *testing.T) {
 	}
 
 	// 5. Test List
-	names, err := store.List(ctx)
+	names, err := store.List(ctx, category)
 	if err != nil {
 		t.Fatalf("Failed to list models: %v", err)
 	}
@@ -89,10 +92,10 @@ func TestPerceptronPersistenceWithModelStore(t *testing.T) {
 	}
 
 	// 6. Test Delete
-	if err := store.Delete(ctx, modelName); err != nil {
+	if err := store.Delete(ctx, category, modelName); err != nil {
 		t.Fatalf("Failed to delete model: %v", err)
 	}
-	names, _ = store.List(ctx)
+	names, _ = store.List(ctx, category)
 	if len(names) != 0 {
 		t.Errorf("Delete failed. Expected empty list, got %v", names)
 	}

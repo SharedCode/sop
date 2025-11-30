@@ -204,17 +204,20 @@ type Agent[T any] interface {
 // ModelStore defines the interface for persisting and retrieving AI models.
 // It allows for the management of "Skills" (small models) and "Brains" (large models).
 type ModelStore interface {
-	// Save persists a model with the given name.
+	// Save persists a model with the given name and category.
 	// The model can be any serializable object (e.g., Perceptron, NeuralNet).
-	Save(ctx context.Context, name string, model any) error
+	Save(ctx context.Context, category string, name string, model any) error
 
-	// Load retrieves a model by name and populates the provided object.
+	// Load retrieves a model by name and category and populates the provided object.
 	// The target parameter must be a pointer to the model struct.
-	Load(ctx context.Context, name string, target any) error
+	Load(ctx context.Context, category string, name string, target any) error
 
-	// List returns the names of all stored models.
-	List(ctx context.Context) ([]string, error)
+	// List returns the names of all stored models in a given category.
+	List(ctx context.Context, category string) ([]string, error)
 
 	// Delete removes a model from the store.
-	Delete(ctx context.Context, name string) error
+	Delete(ctx context.Context, category string, name string) error
+
+	// WithTransaction returns a new instance of the store bound to the provided transaction.
+	WithTransaction(trans sop.Transaction) ModelStore
 }

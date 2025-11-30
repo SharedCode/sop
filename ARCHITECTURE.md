@@ -46,6 +46,7 @@ Designed for **distributed, high-scale environments** as well as single-node dep
 
 *   **Registry (Filesystem)**: Stores metadata and the registry in a specialized, memory-mapped hashmap file on disk.
     *   *Why*: **Superior Performance**. The proprietary registry hashmap on disk, combined with Redis coordination, has been proven to scale better than the Hybrid Cassandra model. In stress tests simulating heavy workloads across machines on commodity hardware, `inredfs` performed **25% faster** than `inredcfs`.
+    *   *Partitioning*: The registry is split into "Segment Files" (default 1MB) to manage concurrency and file sizes. See [Configuration Guide](CONFIGURATION.md#registry-partitioning--tuning) for tuning details.
 *   **Blob Store (Filesystem)**: Stores nodes/values as blobs.
 *   **Locking & Caching**:
     *   **Redis (Default)**: Uses Redis for distributed locking and caching.
