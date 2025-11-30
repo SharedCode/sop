@@ -11,8 +11,17 @@ The `StoreOptions` struct is the primary way to configure a B-Tree store.
 | `Name` | `string` | Short name of the store. Must be unique within the repository. | Required. |
 | `SlotLength` | `int` | Number of items stored in a single B-Tree node. | **Default: 1000**. **Max: 10,000**. Higher values (e.g., 5000) improve read performance but increase write latency. |
 | `IsUnique` | `bool` | Enforces uniqueness of keys. | `true` for primary keys, `false` for non-unique indexes. |
-| `IsValueDataInNodeSegment` | `bool` | Stores the Value directly inside the B-Tree node. | **Best for Small Data** (< 1KB). Improves locality. |
-| `IsValueDataActivelyPersisted` | `bool` | Stores Value in a separate file/blob. | **Best for Big Data**. Prevents large values from bloating the B-Tree structure. |
+| `IsValueDataInNodeSegment` | `bool` | Stores the Value directly inside the B-Tree node. | **Best for Small Data** (< 1KB). Improves locality. If `false`, stores Value in a separate file/blob. |
+| `IsValueDataActivelyPersisted` | `bool` | If `true`, persists the Value to a separate file immediately upon `Add`. | **Best for Big Data & Streaming**. Prevents large values from bloating the B-Tree structure. Makes commit faster as data is already persisted. |
+
+### Active Persistence Optimization
+
+SOP features a unique optimization for handling large data (e.g., media files, GBs/TBs of data) called **Active Persistence**.
+
+*   **Configuration**: Set `IsValueDataInNodeSegment = false` and `IsValueDataActivelyPersisted = true`.
+*   **Mechanism**: When an item is added to the B-Tree, the value (blob) is persisted to a separate file **immediately** during the `Add` call, rather than waiting for the transaction commit.
+*   **Benefit**: The final `Commit` operation becomes significantly faster because the heavy lifting of writing large data blobs is already complete. This is ideal for streaming scenarios where data chunks are saved incrementally.
+
 | `IsValueDataGloballyCached` | `bool` | Caches the Value in Redis. | `true` for read-heavy workloads. `false` for write-heavy or very large data. |
 | `LeafLoadBalancing` | `bool` | Checks siblings for space before splitting a node. | `false` (default). Set to `true` to save space at the cost of insert latency. |
 | `BlobStoreBaseFolderPath` | `string` | Base path for the filesystem blob store. | Required for `inredfs` / `inredcfs`. |
