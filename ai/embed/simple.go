@@ -1,6 +1,7 @@
 package embed
 
 import (
+	"context"
 	"hash/fnv"
 	"math"
 	"strings"
@@ -46,7 +47,7 @@ func (s *Simple) normalizeWord(w string) string {
 }
 
 // EmbedTexts generates embeddings for the given texts using a bag-of-words hashing approach.
-func (s *Simple) EmbedTexts(texts []string) ([][]float32, error) {
+func (s *Simple) EmbedTexts(ctx context.Context, texts []string) ([][]float32, error) {
 	out := make([][]float32, len(texts))
 	for i, t := range texts {
 		vec := make([]float32, s.dim)

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -28,7 +29,7 @@ func HashString(s string) string {
 }
 
 // SetupInfrastructure initializes the Embedder and Vector Index based on the configuration.
-func SetupInfrastructure(cfg Config, deps Dependencies) (ai.Embeddings, ai.VectorStore[map[string]any], error) {
+func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai.Embeddings, ai.VectorStore[map[string]any], error) {
 	// 1. Initialize Embedder
 	var emb ai.Embeddings
 
@@ -80,16 +81,16 @@ func SetupInfrastructure(cfg Config, deps Dependencies) (ai.Embeddings, ai.Vecto
 			db.SetStoragePath(cfg.StoragePath)
 		}
 	}
-	idx := db.Open(cfg.ID)
+	idx := db.Open(ctx, cfg.ID)
 
 	return emb, idx, nil
 }
 
 // NewFromConfig creates and initializes a new Agent Service based on the provided configuration.
 // It handles infrastructure setup (Embedder, VectorDB).
-func NewFromConfig(cfg Config, deps Dependencies) (*Service, error) {
+func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service, error) {
 	// 1. Initialize Infrastructure
-	emb, idx, err := SetupInfrastructure(cfg, deps)
+	emb, idx, err := SetupInfrastructure(ctx, cfg, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +167,7 @@ func NewFromConfig(cfg Config, deps Dependencies) (*Service, error) {
 			texts[i] = fmt.Sprintf("%s %s", item.Text, item.Description)
 		}
 
-		vecs, err := emb.EmbedTexts(texts)
+		vecs, err := emb.EmbedTexts(ctx, texts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to embed seed data: %w", err)
 		}
@@ -183,7 +184,7 @@ func NewFromConfig(cfg Config, deps Dependencies) (*Service, error) {
 			}
 		}
 
-		if err := idx.UpsertBatch(items); err != nil {
+		if err := idx.UpsertBatch(ctx, items); err != nil {
 			return nil, fmt.Errorf("failed to ingest seed data: %w", err)
 		}
 	}

@@ -14,7 +14,7 @@ db := vector.NewDatabase[map[string]any](ai.Standalone)
 db.SetStoragePath("/mnt/shared/sop_data")
 
 // Open an index (Domain)
-idx := db.Open("product_catalog")
+idx := db.Open(context.Background(), "product_catalog")
 ```
 
 ### 2. Transactional Operations
@@ -30,12 +30,10 @@ To support heavy maintenance tasks like **Rebalancing** (K-Means retraining) wit
 -   **State**: The `sys_config` B-Tree stores the `active_version` (e.g., `1764209652794618000` - Unix Nano).
 -   **Readers**: Read `active_version` -> Open `vectors_{version}` -> Search.
 -   **Writers (Upsert)**: Read `active_version` -> Open `vectors_{version}` -> Write.
--   **Rebalance**:
-    1.  Read `active_version`.
-    2.  Create `vectors_{new_version}` (Shadow Index).
-    3.  Populate `vectors_{new_version}` from data.
-    4.  **Atomic Swap**: Update `active_version` to `{new_version}` in a transaction.
-    5.  Commit.
+-   **Optimize**:
+    -   Uses K-Means clustering to partition vectors.
+    -   Can be run periodically to re-cluster data as distribution changes.
+    -   Uses a "Lookup + Sampling" strategy to scale to billions of records without loading all data into memory.
 
 ### 4. Cluster Safety
 By removing local locks (like `sync.RWMutex`) and relying entirely on SOP's transactional integrity, we ensure that:

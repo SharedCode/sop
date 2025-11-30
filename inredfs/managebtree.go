@@ -64,10 +64,12 @@ func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, nam
 
 // RemoveBtree removes the B-tree with the given name from backend storage.
 // This is destructive: it drops registry and node-blob data and cannot be rolled back.
-func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) error {
+func RemoveBtree(ctx context.Context, storesBaseFolder string, name string, cache sop.L2Cache) error {
 	log.Info(fmt.Sprintf("Btree %s%c%s is about to be deleted", storesBaseFolder, os.PathSeparator, name))
 
-	cache := sop.NewCacheClient()
+	if cache == nil {
+		cache = sop.NewCacheClient()
+	}
 	replicationTracker, err := fs.NewReplicationTracker(ctx, []string{storesBaseFolder}, false, cache)
 	if err != nil {
 		return err
@@ -82,12 +84,14 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string) erro
 
 // ReinstateFailedDrives asks the replication tracker to reinstate failed passive targets.
 // storesFolders must contain the active and passive stores' base folder paths.
-func ReinstateFailedDrives(ctx context.Context, storesFolders []string) error {
+func ReinstateFailedDrives(ctx context.Context, storesFolders []string, cache sop.L2Cache) error {
 	if len(storesFolders) != 2 {
 		return fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths)")
 	}
 
-	cache := sop.NewCacheClient()
+	if cache == nil {
+		cache = sop.NewCacheClient()
+	}
 	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, cache)
 	if err != nil {
 		log.Error(fmt.Sprintf("failed instantiating Replication Tracker, details: %v", err))

@@ -1,6 +1,7 @@
 package etl
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -13,9 +14,14 @@ import (
 )
 
 // PrepareData downloads a CSV dataset and converts it to the agent DataItem JSON format.
-func PrepareData(url, out string, limit int) error {
+func PrepareData(ctx context.Context, url, out string, limit int) error {
 	fmt.Printf("Downloading dataset from %s...\n", url)
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to download dataset: %w", err)
 	}

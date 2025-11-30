@@ -216,7 +216,7 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 	restoreRegistryPermissions(t, table)
 	restoreStoreInfoPermissions(t, table)
 	reinstateErr := make(chan error, 1)
-	go func() { reinstateErr <- inredfs.ReinstateFailedDrives(ctx, isolatedStores) }()
+	go func() { reinstateErr <- inredfs.ReinstateFailedDrives(ctx, isolatedStores, nil) }()
 
 	// Detect immediate reinstate failures (fail fast with clearer error).
 	select {
@@ -572,7 +572,7 @@ func cleanupECShards(name string) {
 func cleanupStoreRepository(name string, bases []string) {
 	for _, base := range bases {
 		// Ignore error; it will fail if the store doesn't exist which is fine for cleanup.
-		_ = inredfs.RemoveBtree(context.Background(), base, name)
+		_ = inredfs.RemoveBtree(context.Background(), base, name, nil)
 	}
 }
 

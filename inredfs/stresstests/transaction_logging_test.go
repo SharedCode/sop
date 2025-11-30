@@ -16,7 +16,7 @@ import (
 
 func MultipleExpiredTransCleanup(t *testing.T) {
 	ctx := context.Background()
-	inredfs.RemoveBtree(ctx, dataPath, "ztab1")
+	inredfs.RemoveBtree(ctx, dataPath, "ztab1", nil)
 
 	// Seed with good records.
 	yesterday := time.Now().Add(time.Duration(-48 * time.Hour))

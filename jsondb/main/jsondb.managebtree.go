@@ -69,11 +69,8 @@ func newBtree(ctx context.Context, ps string) *C.char {
 		return C.CString(errMsg)
 	}
 	log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
-	b3id := sop.NewUUID()
 
-	transactionLookupLocker.Lock()
-	tup, ok := transactionLookup[sop.UUID(b3o.TransactionID)]
-	transactionLookupLocker.Unlock()
+	item, ok := Transactions.GetItem(sop.UUID(b3o.TransactionID))
 
 	if !ok {
 		errMsg := fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String())
@@ -83,30 +80,25 @@ func newBtree(ctx context.Context, ps string) *C.char {
 
 	if b3o.IsPrimitiveKey {
 		log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
-		b3, err := jsondb.NewJsonBtree[any, any](ctx, *so, tup.First, nil)
+		b3, err := jsondb.NewJsonBtree[any, any](ctx, *so, item.Transaction, nil)
 		if err != nil {
 			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
 			return C.CString(errMsg)
 		}
 		// Add the B-tree to the transaction btree map so it can get lookedup.
-		tup.Second[b3id] = b3
+		b3id, _ := Transactions.AddBtree(sop.UUID(b3o.TransactionID), b3)
+		return C.CString(b3id.String())
 	} else {
 		log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
-		b3, err := jsondb.NewJsonBtreeMapKey(ctx, *so, tup.First, b3o.IndexSpecification)
+		b3, err := jsondb.NewJsonBtreeMapKey(ctx, *so, item.Transaction, b3o.IndexSpecification)
 		if err != nil {
 			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
 			return C.CString(errMsg)
 		}
 		// Add the B-tree to the transaction btree map so it can get lookedup.
-		tup.Second[b3id] = b3
+		b3id, _ := Transactions.AddBtree(sop.UUID(b3o.TransactionID), b3)
+		return C.CString(b3id.String())
 	}
-
-	transactionLookupLocker.Lock()
-	transactionLookup[tup.First.GetID()] = tup
-	transactionLookupLocker.Unlock()
-
-	// Return the Btree ID if succeeded.
-	return C.CString(b3id.String())
 }
 
 func openBtree(ctx context.Context, ps string) *C.char {
@@ -117,11 +109,8 @@ func openBtree(ctx context.Context, ps string) *C.char {
 		return C.CString(errMsg)
 	}
 	log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
-	b3id := sop.NewUUID()
 
-	transactionLookupLocker.Lock()
-	tup, ok := transactionLookup[sop.UUID(b3o.TransactionID)]
-	transactionLookupLocker.Unlock()
+	item, ok := Transactions.GetItem(sop.UUID(b3o.TransactionID))
 
 	if !ok {
 		errMsg := fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String())
@@ -130,7 +119,7 @@ func openBtree(ctx context.Context, ps string) *C.char {
 	so := convertTo(&b3o)
 
 	// Get StoreInfo from backend DB and determine if key is primitive or not.
-	intf := tup.First.(interface{})
+	intf := item.Transaction.(interface{})
 	t2 := intf.(*sop.SinglePhaseTransaction).SopPhaseCommitTransaction
 	intf = t2
 	t := intf.(*common.Transaction)
@@ -143,7 +132,7 @@ func openBtree(ctx context.Context, ps string) *C.char {
 	}
 
 	if isPrimitiveKey {
-		b3, err := jsondb.OpenJsonBtree[any, any](ctx, so.Name, tup.First, nil)
+		b3, err := jsondb.OpenJsonBtree[any, any](ctx, so.Name, item.Transaction, nil)
 		if err != nil {
 			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
 			return C.CString(errMsg)
@@ -154,22 +143,17 @@ func openBtree(ctx context.Context, ps string) *C.char {
 			log.Error(errMsg)
 			return C.CString(errMsg)
 		}
-		tup.Second[b3id] = b3
+		b3id, _ := Transactions.AddBtree(sop.UUID(b3o.TransactionID), b3)
+		return C.CString(b3id.String())
 	} else {
-		b3, err := jsondb.OpenJsonBtreeMapKey(ctx, so.Name, tup.First)
+		b3, err := jsondb.OpenJsonBtreeMapKey(ctx, so.Name, item.Transaction)
 		if err != nil {
 			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
 			return C.CString(errMsg)
 		}
-		tup.Second[b3id] = b3
+		b3id, _ := Transactions.AddBtree(sop.UUID(b3o.TransactionID), b3)
+		return C.CString(b3id.String())
 	}
-
-	transactionLookupLocker.Lock()
-	transactionLookup[tup.First.GetID()] = tup
-	transactionLookupLocker.Unlock()
-
-	// Return the Btree ID if succeeded.
-	return C.CString(b3id.String())
 }
 
 func manage(ctx context.Context, action int, payload, payload2 *C.char) *C.char {

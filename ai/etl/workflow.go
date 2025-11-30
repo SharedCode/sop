@@ -1,6 +1,7 @@
 package etl
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -19,7 +20,7 @@ type Workflow struct {
 }
 
 // RunWorkflow executes the steps defined in the workflow JSON file.
-func RunWorkflow(workflowPath string) error {
+func RunWorkflow(ctx context.Context, workflowPath string) error {
 	f, err := os.Open(workflowPath)
 	if err != nil {
 		return fmt.Errorf("failed to open workflow file: %w", err)
@@ -47,7 +48,7 @@ func RunWorkflow(workflowPath string) error {
 				return fmt.Errorf("step '%s': missing required params 'url' or 'out'", step.Name)
 			}
 
-			if err := PrepareData(url, out, limit); err != nil {
+			if err := PrepareData(ctx, url, out, limit); err != nil {
 				return fmt.Errorf("step '%s' failed: %w", step.Name, err)
 			}
 
@@ -60,7 +61,7 @@ func RunWorkflow(workflowPath string) error {
 				return fmt.Errorf("step '%s': missing required param 'config'", step.Name)
 			}
 
-			if err := IngestAgent(config, data, agentID); err != nil {
+			if err := IngestAgent(ctx, config, data, agentID); err != nil {
 				return fmt.Errorf("step '%s' failed: %w", step.Name, err)
 			}
 

@@ -1,6 +1,7 @@
 package vector
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -157,19 +158,20 @@ func TestArchitectureDirectMethods(t *testing.T) {
 	// Since we are in the same package `vector`, we can access private methods of Database if we were testing `store.go`,
 	// but we are in `additional_coverage_test.go` which is package `vector`, so we CAN access `beginTransaction`.
 
-	trans, err := db.beginTransaction(sop.ForWriting, tmpDir)
+	ctx := context.Background()
+	trans, err := db.beginTransaction(ctx, sop.ForWriting, tmpDir)
 	if err != nil {
 		t.Fatalf("beginTransaction failed: %v", err)
 	}
-	defer trans.Rollback(db.ctx)
+	defer trans.Rollback(ctx)
 
-	arch, err := OpenDomainStore(db.ctx, trans, "test_arch", 1, sop.MediumData)
+	arch, err := OpenDomainStore(ctx, trans, "test_arch", 1, sop.MediumData)
 	if err != nil {
 		t.Fatalf("OpenDomainStore failed: %v", err)
 	}
 
 	// Test Add
-	if err := arch.Add(db.ctx, "arch-item-1", []float32{1, 2}, `{"foo":"bar"}`); err != nil {
+	if err := arch.Add(ctx, "arch-item-1", []float32{1, 2}, `{"foo":"bar"}`); err != nil {
 		t.Fatalf("Architecture.Add failed: %v", err)
 	}
 
@@ -179,7 +181,7 @@ func TestArchitectureDirectMethods(t *testing.T) {
 	// The Search method hardcodes targetCentroid := 1.
 	// So it should work if we just Add then Search.
 
-	results, err := arch.Search(db.ctx, []float32{1, 2}, 1)
+	results, err := arch.Search(ctx, []float32{1, 2}, 1)
 	if err != nil {
 		t.Fatalf("Architecture.Search failed: %v", err)
 	}

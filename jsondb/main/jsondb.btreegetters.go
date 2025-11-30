@@ -1,5 +1,8 @@
 package main
 
+/*
+#include <stdlib.h>
+*/
 import "C"
 import (
 	"context"
@@ -329,14 +332,7 @@ func extractMetaData(payload *C.char) (*ManageBtreeMetaData, any, *C.char) {
 		return p, nil, C.CString(errMsg)
 	}
 
-	transactionLookupLocker.Lock()
-	tup, ok := transactionLookup[sop.UUID(p.TransactionID)]
-	transactionLookupLocker.Unlock()
-	if !ok {
-		errMsg := fmt.Sprintf("did not find Transaction(id=%v) from lookup", p.TransactionID)
-		return p, nil, C.CString(errMsg)
-	}
-	b32, ok := tup.Second[sop.UUID(p.BtreeID)]
+	b32, ok := Transactions.GetBtree(sop.UUID(p.TransactionID), sop.UUID(p.BtreeID))
 	if !ok {
 		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
 		return p, nil, C.CString(errMsg)

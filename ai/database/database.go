@@ -60,7 +60,7 @@ func (db *Database) OpenModelStore(name string) (ai.ModelStore, error) {
 
 // OpenVectorStore returns a VectorStore for the specified name.
 // T is the type of the payload stored with the vectors.
-func OpenVectorStore[T any](db *Database, name string) ai.VectorStore[T] {
+func OpenVectorStore[T any](ctx context.Context, db *Database, name string) ai.VectorStore[T] {
 	vdb := vector.NewDatabase[T](db.dbType)
 	vdb.SetStoragePath(db.storagePath)
 	if len(db.erasureConfig) > 0 || len(db.storesFolders) > 0 {
@@ -70,5 +70,5 @@ func OpenVectorStore[T any](db *Database, name string) ai.VectorStore[T] {
 	// Actually VectorDatabase has SetUsageMode.
 	// If we want to expose it, we might need to add it to Database or allow configuring vdb.
 	// For now, we use defaults.
-	return vdb.Open(name)
+	return vdb.Open(ctx, name)
 }

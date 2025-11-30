@@ -80,7 +80,7 @@ func TestLookupFunctionality(t *testing.T) {
 		}
 	}
 
-	// 3. Test Rebalance (Rebuilds Lookup)
+	// 3. Test Optimize (Rebuilds Lookup)
 	// Delete item-5 (Sequence 5)
 	// Note: Delete() removes from Content/Vectors but NOT Lookup (as per design)
 	if err := idx.Delete("item-5"); err != nil {
@@ -100,32 +100,32 @@ func TestLookupFunctionality(t *testing.T) {
 		t.Errorf("GetBySequenceID(6) returned %s", item.ID)
 	}
 
-	// Run Rebalance
+	// Run Optimize
 	// This should rebuild Lookup.
 	// The remaining items are 0..4, 6..14 (14 items total).
 	// New Lookup should be 0..13.
-	if err := dIdx.Rebalance(); err != nil {
-		t.Fatalf("Rebalance failed: %v", err)
+	if err := dIdx.Optimize(); err != nil {
+		t.Fatalf("Optimize failed: %v", err)
 	}
 
 	// Verify Count
 	// We don't have a Count() on Lookup exposed, but we can check bounds.
 	if _, err := dIdx.GetBySequenceID(13); err != nil {
-		t.Errorf("GetBySequenceID(13) failed after rebalance: %v", err)
+		t.Errorf("GetBySequenceID(13) failed after optimize: %v", err)
 	}
 	if _, err := dIdx.GetBySequenceID(14); err == nil {
-		t.Error("Expected GetBySequenceID(14) to fail after rebalance (should have shrunk)")
+		t.Error("Expected GetBySequenceID(14) to fail after optimize (should have shrunk)")
 	}
 
 	// Verify continuity
-	// The items should be re-packed. The order depends on how Rebalance iterates Vectors.
+	// The items should be re-packed. The order depends on how Optimize iterates Vectors.
 	// Vectors iteration order is by Centroid, then Distance, then ID.
 	// So the sequence ID mapping will change and follow the physical layout in Vectors store.
 	// We just verify that we can fetch *some* valid item for each index.
 	for i := 0; i < 14; i++ {
 		item, err := dIdx.GetBySequenceID(i)
 		if err != nil {
-			t.Errorf("GetBySequenceID(%d) failed after rebalance: %v", i, err)
+			t.Errorf("GetBySequenceID(%d) failed after optimize: %v", i, err)
 		}
 		if item == nil {
 			t.Errorf("GetBySequenceID(%d) returned nil item", i)

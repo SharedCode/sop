@@ -394,7 +394,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	// Needs a new context so our runs don't affect one another.
 	ctx := context.Background()
-	inredfs.RemoveBtree(ctx, dataPath, "twophase3")
+	inredfs.RemoveBtree(ctx, dataPath, "twophase3", nil)
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := inredfs.NewTransaction(ctx, to)
@@ -482,7 +482,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	// for {
 	ctx := context.Background()
-	inredfs.RemoveBtree(ctx, dataPath, "tablex")
+	inredfs.RemoveBtree(ctx, dataPath, "tablex", nil)
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := inredfs.NewTransaction(ctx, to)
@@ -595,7 +595,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 */
 func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	ctx := context.Background()
-	inredfs.RemoveBtree(ctx, dataPath, "tablex2")
+	inredfs.RemoveBtree(ctx, dataPath, "tablex2", nil)
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := inredfs.NewTransaction(ctx, to)
@@ -717,7 +717,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 */
 func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	ctx := context.Background()
-	inredfs.RemoveBtree(ctx, dataPath, "tabley")
+	inredfs.RemoveBtree(ctx, dataPath, "tabley", nil)
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := inredfs.NewTransaction(ctx, to)

@@ -1,6 +1,10 @@
 package policy
 
-import "github.com/sharedcode/sop/ai"
+import (
+	"context"
+
+	"github.com/sharedcode/sop/ai"
+)
 
 // AllowAll is a policy that allows everything.
 // It is useful as a default or fallback policy.
@@ -10,6 +14,6 @@ type AllowAll struct{ id string }
 func NewAllow(id string) *AllowAll { return &AllowAll{id: id} }
 
 // Evaluate always returns an "allow" decision.
-func (a *AllowAll) Evaluate(stage string, sample ai.ContentSample, labels []ai.Label) (ai.PolicyDecision, error) {
+func (a *AllowAll) Evaluate(ctx context.Context, stage string, sample ai.ContentSample, labels []ai.Label) (ai.PolicyDecision, error) {
 	return ai.PolicyDecision{Action: "allow", PolicyID: a.id}, nil
 }

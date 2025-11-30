@@ -46,7 +46,7 @@ func (ae *AgentEmbedder[T]) Agent() ai.Agent[T] {
 
 // EmbedTexts generates embeddings for the given texts.
 // It first enhances the texts using the agent, then embeds the enhanced texts using the base embedder.
-func (ae *AgentEmbedder[T]) EmbedTexts(texts []string) ([][]float32, error) {
+func (ae *AgentEmbedder[T]) EmbedTexts(ctx context.Context, texts []string) ([][]float32, error) {
 	// 1. Preprocess texts using the Agent
 	enhancedTexts := make([]string, len(texts))
 	for i, text := range texts {
@@ -54,10 +54,7 @@ func (ae *AgentEmbedder[T]) EmbedTexts(texts []string) ([][]float32, error) {
 		// Note: In a real high-throughput system, we'd want a batch API for the agent.
 		prompt := fmt.Sprintf("%s\n\nInput: %s", ae.instruction, text)
 
-		// We use a background context here, but ideally this should be passed in.
-		// Since EmbedTexts signature doesn't have context, we have to improvise or change the interface.
-		// For this MVP, we'll assume the agent is fast enough.
-		concept, err := ae.agent.Ask(context.Background(), prompt)
+		concept, err := ae.agent.Ask(ctx, prompt)
 		if err != nil {
 			// Fallback to original text if agent fails
 			enhancedTexts[i] = text
@@ -71,5 +68,5 @@ func (ae *AgentEmbedder[T]) EmbedTexts(texts []string) ([][]float32, error) {
 	}
 
 	// 2. Embed the enhanced texts using the base embedder
-	return ae.base.EmbedTexts(enhancedTexts)
+	return ae.base.EmbedTexts(ctx, enhancedTexts)
 }

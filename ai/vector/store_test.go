@@ -1,6 +1,7 @@
 package vector
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -24,7 +25,7 @@ func TestVectorStore(t *testing.T) {
 	// write once, read forever scenarios.
 	//db.SetReadMode(sop.ForReading) // Default
 
-	index := db.Open("test_vectors")
+	index := db.Open(context.Background(), "test_vectors")
 
 	// Test Data
 	id1 := "vec-1"
@@ -36,15 +37,15 @@ func TestVectorStore(t *testing.T) {
 	meta2 := map[string]any{"type": "B"}
 
 	// 1. Test Upsert
-	if err := index.Upsert(ai.Item[map[string]any]{ID: id1, Vector: vec1, Payload: meta1}); err != nil {
+	if err := index.Upsert(context.Background(), ai.Item[map[string]any]{ID: id1, Vector: vec1, Payload: meta1}); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
 	}
-	if err := index.Upsert(ai.Item[map[string]any]{ID: id2, Vector: vec2, Payload: meta2}); err != nil {
+	if err := index.Upsert(context.Background(), ai.Item[map[string]any]{ID: id2, Vector: vec2, Payload: meta2}); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
 	}
 
 	// 2. Test Get
-	item, err := index.Get(id1)
+	item, err := index.Get(context.Background(), id1)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
@@ -56,7 +57,7 @@ func TestVectorStore(t *testing.T) {
 	}
 
 	// 3. Test Query (Exact Match)
-	hits, err := index.Query(vec1, 1, nil)
+	hits, err := index.Query(context.Background(), vec1, 1, nil)
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}
@@ -71,7 +72,7 @@ func TestVectorStore(t *testing.T) {
 	}
 
 	// 4. Test Query (Filter)
-	hits, err = index.Query(vec1, 10, func(item map[string]any) bool {
+	hits, err = index.Query(context.Background(), vec1, 10, func(item map[string]any) bool {
 		return item["type"] == "B"
 	})
 	if err != nil {
@@ -85,31 +86,31 @@ func TestVectorStore(t *testing.T) {
 	}
 
 	// 5. Test Delete
-	if err := index.Delete(id1); err != nil {
+	if err := index.Delete(context.Background(), id1); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
 
-	_, err = index.Get(id1)
+	_, err = index.Get(context.Background(), id1)
 	if err == nil {
 		t.Error("Expected error after delete, got nil")
 	}
 
 	// 6. Test Domains Isolation
-	doctor := db.Open("doctor")
-	mechanic := db.Open("mechanic")
+	doctor := db.Open(context.Background(), "doctor")
+	mechanic := db.Open(context.Background(), "mechanic")
 
 	// Upsert to doctor
-	if err := doctor.Upsert(ai.Item[map[string]any]{ID: "flu", Vector: []float32{1.0, 0.0, 0.0}, Payload: map[string]any{"desc": "flu"}}); err != nil {
+	if err := doctor.Upsert(context.Background(), ai.Item[map[string]any]{ID: "flu", Vector: []float32{1.0, 0.0, 0.0}, Payload: map[string]any{"desc": "flu"}}); err != nil {
 		t.Fatalf("Doctor upsert failed: %v", err)
 	}
 
 	// Upsert to mechanic
-	if err := mechanic.Upsert(ai.Item[map[string]any]{ID: "engine", Vector: []float32{0.0, 1.0, 0.0}, Payload: map[string]any{"desc": "engine"}}); err != nil {
+	if err := mechanic.Upsert(context.Background(), ai.Item[map[string]any]{ID: "engine", Vector: []float32{0.0, 1.0, 0.0}, Payload: map[string]any{"desc": "engine"}}); err != nil {
 		t.Fatalf("Mechanic upsert failed: %v", err)
 	}
 
 	// Query doctor
-	docHits, err := doctor.Query([]float32{1.0, 0.0, 0.0}, 10, nil)
+	docHits, err := doctor.Query(context.Background(), []float32{1.0, 0.0, 0.0}, 10, nil)
 	if err != nil {
 		t.Fatalf("Doctor query failed: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestVectorStore(t *testing.T) {
 	}
 
 	// Query mechanic
-	mechHits, err := mechanic.Query([]float32{0.0, 1.0, 0.0}, 10, nil)
+	mechHits, err := mechanic.Query(context.Background(), []float32{0.0, 1.0, 0.0}, 10, nil)
 	if err != nil {
 		t.Fatalf("Mechanic query failed: %v", err)
 	}
@@ -138,8 +139,9 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	// Initialize Database
 	db := NewDatabase[map[string]any](ai.Standalone)
 	db.SetStoragePath(tmpDir)
+	db.SetUsageMode(ai.Dynamic)
 
-	index := db.Open("test_delete_count")
+	index := db.Open(context.Background(), "test_delete_count")
 	// We need to cast to *domainIndex to access internal helpers
 	di := index.(*domainIndex[map[string]any])
 
@@ -148,30 +150,31 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	meta := map[string]any{"type": "A"}
 
 	// 1. Upsert
-	if err := index.Upsert(ai.Item[map[string]any]{ID: id, Vector: vec, Payload: meta}); err != nil {
+	if err := index.Upsert(context.Background(), ai.Item[map[string]any]{ID: id, Vector: vec, Payload: meta}); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
 	}
 
 	// Helper to get centroid count
 	getCentroidCount := func(centroidID int) int {
 		storePath := di.db.storagePath
-		trans, err := di.db.beginTransaction(sop.ForReading, storePath)
+		ctx := context.Background()
+		trans, err := di.db.beginTransaction(ctx, sop.ForReading, storePath)
 		if err != nil {
 			t.Fatalf("Failed to begin transaction: %v", err)
 		}
-		defer trans.Rollback(di.db.ctx)
+		defer trans.Rollback(ctx)
 
-		version, err := di.getActiveVersion(di.db.ctx, trans)
+		version, err := di.getActiveVersion(ctx, trans)
 		if err != nil {
 			t.Fatalf("Failed to get active version: %v", err)
 		}
 
-		arch, err := OpenDomainStore(di.db.ctx, trans, di.name, version, sop.MediumData)
+		arch, err := OpenDomainStore(ctx, trans, di.name, version, sop.MediumData)
 		if err != nil {
 			t.Fatalf("Failed to open domain store: %v", err)
 		}
 
-		found, err := arch.Centroids.Find(di.db.ctx, centroidID, false)
+		found, err := arch.Centroids.Find(ctx, centroidID, false)
 		if err != nil {
 			t.Fatalf("Failed to find centroid: %v", err)
 		}
@@ -179,7 +182,7 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 			t.Fatalf("Centroid %d not found", centroidID)
 		}
 
-		c, err := arch.Centroids.GetCurrentValue(di.db.ctx)
+		c, err := arch.Centroids.GetCurrentValue(ctx)
 		if err != nil {
 			t.Fatalf("Failed to get centroid value: %v", err)
 		}
@@ -194,7 +197,7 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	}
 
 	// 3. Delete
-	if err := index.Delete(id); err != nil {
+	if err := index.Delete(context.Background(), id); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
 

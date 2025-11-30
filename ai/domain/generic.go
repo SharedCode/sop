@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/sharedcode/sop/ai"
@@ -66,7 +67,7 @@ func (d *GenericDomain[T]) Classifier() ai.Classifier {
 }
 
 // Prompt returns a prompt template for the specified kind (e.g., "system", "user").
-func (d *GenericDomain[T]) Prompt(kind string) (string, error) {
+func (d *GenericDomain[T]) Prompt(ctx context.Context, kind string) (string, error) {
 	if p, ok := d.cfg.Prompts[kind]; ok {
 		return p, nil
 	}

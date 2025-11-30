@@ -1,6 +1,7 @@
 package vector
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -16,9 +17,10 @@ func TestAddCentroid(t *testing.T) {
 
 	db := NewDatabase[map[string]any](ai.Standalone)
 	db.SetStoragePath(tmpDir)
+	db.SetUsageMode(ai.Dynamic)
 	// db.Close() is not implemented/needed for in-memory test
 
-	idx := db.Open("test_dynamic_centroids")
+	idx := db.Open(context.Background(), "test_dynamic_centroids")
 
 	// 1. Initial State
 	vec1 := []float32{0.1, 0.1}
@@ -27,13 +29,13 @@ func TestAddCentroid(t *testing.T) {
 		Vector:  vec1,
 		Payload: map[string]any{"label": "A"},
 	}
-	if err := idx.Upsert(item1); err != nil {
+	if err := idx.Upsert(context.Background(), item1); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
 	}
 
 	// Verify we have 1 centroid (auto-created)
 	// We can't check internal state easily, but we can check query behavior
-	hits, _ := idx.Query(vec1, 1, nil)
+	hits, _ := idx.Query(context.Background(), vec1, 1, nil)
 	if len(hits) != 1 {
 		t.Errorf("Expected 1 hit, got %d", len(hits))
 	}
@@ -42,7 +44,7 @@ func TestAddCentroid(t *testing.T) {
 	vec2 := []float32{0.9, 0.9}
 	// Cast to the interface that includes AddCentroid (since it's in the package, we can cast to domainIndex or just use the interface)
 	// But idx is ai.VectorIndex which now has AddCentroid
-	newID, err := idx.AddCentroid(vec2)
+	newID, err := idx.AddCentroid(context.Background(), vec2)
 	if err != nil {
 		t.Fatalf("AddCentroid failed: %v", err)
 	}
@@ -57,7 +59,7 @@ func TestAddCentroid(t *testing.T) {
 		Vector:  vec2,
 		Payload: map[string]any{"label": "B"},
 	}
-	if err := idx.Upsert(item2); err != nil {
+	if err := idx.Upsert(context.Background(), item2); err != nil {
 		t.Fatalf("Upsert item2 failed: %v", err)
 	}
 
@@ -65,7 +67,7 @@ func TestAddCentroid(t *testing.T) {
 	// We can check the metadata of the item to see which centroid it was assigned to
 	// But Get returns *ai.Item[T], which has CentroidID field?
 	// Let's check ai.Item definition.
-	if _, err := idx.Get("item2"); err != nil {
+	if _, err := idx.Get(context.Background(), "item2"); err != nil {
 		t.Fatalf("Get item2 failed: %v", err)
 	}
 }

@@ -34,16 +34,16 @@ func (s *Service) Domain() ai.Domain[map[string]any] {
 }
 
 // evaluateInputPolicy checks the input against the domain's policies.
-func (s *Service) evaluateInputPolicy(input string) error {
+func (s *Service) evaluateInputPolicy(ctx context.Context, input string) error {
 	if pol := s.domain.Policies(); pol != nil {
 		classifier := s.domain.Classifier()
 		if classifier != nil {
 			sample := ai.ContentSample{Text: input}
-			labels, err := classifier.Classify(sample)
+			labels, err := classifier.Classify(ctx, sample)
 			if err != nil {
 				return fmt.Errorf("classification failed: %w", err)
 			}
-			decision, err := pol.Evaluate("input", sample, labels)
+			decision, err := pol.Evaluate(ctx, "input", sample, labels)
 			if err != nil {
 				return fmt.Errorf("policy evaluation failed: %w", err)
 			}
@@ -59,7 +59,7 @@ func (s *Service) evaluateInputPolicy(input string) error {
 // It enforces policies and uses the domain's embedder.
 func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
 	// 1. Policy Check (Input)
-	if err := s.evaluateInputPolicy(query); err != nil {
+	if err := s.evaluateInputPolicy(ctx, query); err != nil {
 		return nil, err
 	}
 
@@ -68,7 +68,7 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 	if emb == nil {
 		return nil, fmt.Errorf("domain %s has no embedder configured", s.domain.ID())
 	}
-	vecs, err := emb.EmbedTexts([]string{query})
+	vecs, err := emb.EmbedTexts(ctx, []string{query})
 	if err != nil {
 		return nil, fmt.Errorf("embedding failed: %w", err)
 	}
@@ -78,7 +78,7 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 	if idx == nil {
 		return nil, fmt.Errorf("domain %s has no index configured", s.domain.ID())
 	}
-	hits, err := idx.Query(vecs[0], limit, nil)
+	hits, err := idx.Query(ctx, vecs[0], limit, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
@@ -131,7 +131,7 @@ func (s *Service) Ask(ctx context.Context, query string) (string, error) {
 
 	// 2. Construct Prompt
 	contextText := s.formatContext(hits)
-	systemPrompt, _ := s.domain.Prompt("system")
+	systemPrompt, _ := s.domain.Prompt(ctx, "system")
 
 	fullPrompt := fmt.Sprintf("%s\n\nContext:\n%s\n\nUser Query: %s", systemPrompt, contextText, query)
 

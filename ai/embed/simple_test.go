@@ -1,10 +1,13 @@
 package embed
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestSimpleEmbedBasic(t *testing.T) {
 	e := NewSimple("simple", 32, nil)
-	vecs, err := e.EmbedTexts([]string{"hello world", ""})
+	vecs, err := e.EmbedTexts(context.Background(), []string{"hello world", ""})
 	if err != nil {
 		t.Fatal(err)
 	}

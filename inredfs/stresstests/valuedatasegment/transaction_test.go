@@ -442,7 +442,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 func Test_StrangeBtreeStoreName(t *testing.T) {
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 
-	inredfs.RemoveBtree(ctx, dataPath, "2phase")
+	inredfs.RemoveBtree(ctx, dataPath, "2phase", nil)
 
 	t1, _ := inredfs.NewTransaction(ctx, to)
 	_ = t1.Begin(ctx)

@@ -379,7 +379,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 }
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
-	inredfs.RemoveBtree(ctx, dataPath, "twophase2")
+	inredfs.RemoveBtree(ctx, dataPath, "twophase2", nil)
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := inredfs.NewTransaction(ctx, to)

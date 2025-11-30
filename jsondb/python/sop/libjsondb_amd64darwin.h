@@ -25,6 +25,11 @@ typedef struct { const char *p; ptrdiff_t n; } _GoString_;
 
 #line 1 "cgo-generated-wrapper"
 
+#line 3 "jsondb.btreegetters.go"
+
+#include <stdlib.h>
+
+#line 1 "cgo-generated-wrapper"
 
 #line 3 "jsondb.main.go"
 
@@ -117,7 +122,7 @@ extern void removeContext(long long ctxID);
 
 // Redis global connection management related.
 //
-extern char* openRedisConnection(char* host, int port, char* password);
+extern char* openRedisConnection(char* uri);
 extern char* closeRedisConnection();
 extern char* manageTransaction(long long ctxID, int action, char* payload);
 extern void freeString(char* cString);

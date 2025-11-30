@@ -58,7 +58,7 @@ func main() {
 		}
 
 		// Initialize the agent with the shared registry
-		return agent.NewFromConfig(agentCfg, agent.Dependencies{
+		return agent.NewFromConfig(context.Background(), agentCfg, agent.Dependencies{
 			AgentRegistry: registry,
 		})
 	}
@@ -162,7 +162,7 @@ func main() {
 	deps := agent.Dependencies{
 		AgentRegistry: registry,
 	}
-	svc, err := agent.NewFromConfig(*cfg, deps)
+	svc, err := agent.NewFromConfig(context.Background(), *cfg, deps)
 	if err != nil {
 		panic(fmt.Errorf("failed to initialize agent: %w", err))
 	}

@@ -108,8 +108,7 @@ func closeRedisConnection() *C.char {
 // Transaction management related.
 
 // Transaction lookup table is comprised of the transaction & its related B-trees.
-var transactionLookup map[sop.UUID]sop.Tuple[sop.Transaction, map[sop.UUID]any] = make(map[sop.UUID]sop.Tuple[sop.Transaction, map[sop.UUID]any])
-var transactionLookupLocker sync.Mutex
+var Transactions = NewTransactionRegistry()
 
 type transactionAction int
 
@@ -125,22 +124,20 @@ const (
 func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char {
 	ps := C.GoString(payload)
 
-	extractTrans := func() (*sop.Tuple[sop.Transaction, map[sop.UUID]any], *C.char) {
+	extractTrans := func() (*TransactionItem, *C.char) {
 		uuid, err := sop.ParseUUID(ps)
 		if err != nil {
 			errMsg := fmt.Sprintf("error parsing UUID, details: %v", err)
 			return nil, C.CString(errMsg)
 		}
 
-		transactionLookupLocker.Lock()
-		tup, ok := transactionLookup[uuid]
-		transactionLookupLocker.Unlock()
+		item, ok := Transactions.GetItem(uuid)
 
 		if !ok {
 			errMsg := fmt.Sprintf("UUID %v not found", uuid.String())
 			return nil, C.CString(errMsg)
 		}
-		return &tup, nil
+		return item, nil
 	}
 
 	var ctx context.Context
@@ -171,7 +168,6 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 		to.MaxTime = to.MaxTime * time.Minute
 
 		log.Debug(fmt.Sprintf("TransactionOptions: %v, DBType: %d", to, payload.DBType))
-		tid := sop.NewUUID()
 
 		var t sop.Transaction
 		var err error
@@ -204,9 +200,7 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 			errMsg := fmt.Sprintf("error creating a Transaction, details: %v", err)
 			return C.CString(errMsg)
 		}
-		transactionLookupLocker.Lock()
-		transactionLookup[tid] = sop.Tuple[sop.Transaction, map[sop.UUID]any]{First: t, Second: map[sop.UUID]any{}}
-		transactionLookupLocker.Unlock()
+		tid := Transactions.Add(t)
 
 		// Return the transction ID if succeeded.
 		return C.CString(tid.String())
@@ -216,12 +210,10 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 		if err != nil {
 			return err
 		}
-		if err := t.First.Begin(ctx); err != nil {
-			errMsg := fmt.Sprintf("transaction %v Begin failed, details: %v", t.First.GetID().String(), err)
+		if err := t.Transaction.Begin(ctx); err != nil {
+			errMsg := fmt.Sprintf("transaction %v Begin failed, details: %v", t.Transaction.GetID().String(), err)
 
-			transactionLookupLocker.Lock()
-			delete(transactionLookup, t.First.GetID())
-			transactionLookupLocker.Unlock()
+			Transactions.Remove(t.Transaction.GetID())
 
 			return C.CString(errMsg)
 		}
@@ -231,17 +223,13 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 			return err
 		}
 
-		if err := t.First.Commit(ctx); err != nil {
-			errMsg := fmt.Sprintf("transaction %v Commit failed, details: %v", t.First.GetID().String(), err)
-			transactionLookupLocker.Lock()
-			delete(transactionLookup, t.First.GetID())
-			transactionLookupLocker.Unlock()
+		if err := t.Transaction.Commit(ctx); err != nil {
+			errMsg := fmt.Sprintf("transaction %v Commit failed, details: %v", t.Transaction.GetID().String(), err)
+			Transactions.Remove(t.Transaction.GetID())
 			return C.CString(errMsg)
 		}
 
-		transactionLookupLocker.Lock()
-		delete(transactionLookup, t.First.GetID())
-		transactionLookupLocker.Unlock()
+		Transactions.Remove(t.Transaction.GetID())
 
 	case Rollback:
 		t, err := extractTrans()
@@ -249,17 +237,13 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 			return err
 		}
 
-		if err := t.First.Rollback(ctx); err != nil {
-			errMsg := fmt.Sprintf("transaction %v Rollback failed, details: %v", t.First.GetID().String(), err)
-			transactionLookupLocker.Lock()
-			delete(transactionLookup, t.First.GetID())
-			transactionLookupLocker.Unlock()
+		if err := t.Transaction.Rollback(ctx); err != nil {
+			errMsg := fmt.Sprintf("transaction %v Rollback failed, details: %v", t.Transaction.GetID().String(), err)
+			Transactions.Remove(t.Transaction.GetID())
 			return C.CString(errMsg)
 		}
 
-		transactionLookupLocker.Lock()
-		delete(transactionLookup, t.First.GetID())
-		transactionLookupLocker.Unlock()
+		Transactions.Remove(t.Transaction.GetID())
 
 	default:
 		errMsg := fmt.Sprintf("unsupported action %d", int(action))

@@ -93,11 +93,11 @@ import (
 
 func main() {
     // 1. Initialize the Vector Database
-    db := vector.NewDatabase()
+    db := vector.NewDatabase[map[string]any](ai.Standalone)
     db.SetStoragePath("./my_knowledge_base")
     
     // Open an index for a specific domain (e.g., "documents")
-    idx := db.Open("documents")
+    idx := db.Open(context.Background(), "documents")
 
     // 2. Initialize an Embedder
     // (In production, use a real embedding model. Here we use the simple keyword hasher)
@@ -105,28 +105,29 @@ func main() {
 
     // 3. Add Data (Upsert)
     ctx := context.Background()
-    item := ai.Item{
+    item := ai.Item[map[string]any]{
         ID: "doc-1",
-        Meta: map[string]any{
+        Vector: nil, // Will be filled below
+        Payload: map[string]any{
             "text": "SOP is a high-performance Go library for storage.",
             "category": "tech",
         },
     }
     // Generate vector
-    vecs, _ := emb.EmbedTexts([]string{item.Meta["text"].(string)})
+    vecs, _ := emb.EmbedTexts(ctx, []string{item.Payload["text"].(string)})
     item.Vector = vecs[0]
 
     // Save to DB
-    idx.UpsertBatch([]ai.Item{item})
+    idx.UpsertBatch(ctx, []ai.Item[map[string]any]{item})
 
     // 4. Search (Retrieve)
     query := "storage library"
-    queryVecs, _ := emb.EmbedTexts([]string{query})
+    queryVecs, _ := emb.EmbedTexts(ctx, []string{query})
     
-    hits, _ := idx.Query(queryVecs[0], 5, nil)
+    hits, _ := idx.Query(ctx, queryVecs[0], 5, nil)
     
     for _, hit := range hits {
-        fmt.Printf("Found: %s (Score: %.2f)\n", hit.Meta["text"], hit.Score)
+        fmt.Printf("Found: %s (Score: %.2f)\n", hit.Payload["text"], hit.Score)
     }
 }
 ```

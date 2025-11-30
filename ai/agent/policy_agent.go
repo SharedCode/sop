@@ -33,12 +33,12 @@ func (p *PolicyAgent) Ask(ctx context.Context, query string) (string, error) {
 	}
 
 	sample := ai.ContentSample{Text: query}
-	labels, err := p.classifier.Classify(sample)
+	labels, err := p.classifier.Classify(ctx, sample)
 	if err != nil {
 		return "", fmt.Errorf("policy classification failed: %w", err)
 	}
 
-	decision, err := p.policy.Evaluate("input", sample, labels)
+	decision, err := p.policy.Evaluate(ctx, "input", sample, labels)
 	if err != nil {
 		return "", fmt.Errorf("policy evaluation failed: %w", err)
 	}

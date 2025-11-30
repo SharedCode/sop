@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -23,12 +25,11 @@ import (
 // It manages the storage and retrieval of vectors and their associated metadata.
 // It supports transactions and caching for performance.
 type Database[T any] struct {
-	ctx           context.Context
 	cache         sop.L2Cache
 	readMode      sop.TransactionMode
 	usageMode     ai.UsageMode
 	storagePath   string
-	rebalanceLock sync.Mutex
+	optimizeLock  sync.Mutex
 	contentSize   sop.ValueDataSize
 	dbType        ai.DatabaseType
 	erasureConfig map[string]fs.ErasureCodingConfig
@@ -42,11 +43,11 @@ func NewDatabase[T any](dbType ai.DatabaseType) *Database[T] {
 	if dbType == ai.Clustered {
 		c = redis.NewClient()
 	} else {
+		// Use InMemory cache for Standalone to support locking required by StoreRepository
 		c = cache.NewInMemoryCache()
 	}
 
 	return &Database[T]{
-		ctx:         context.Background(),
 		cache:       c,
 		readMode:    sop.NoCheck,
 		usageMode:   ai.BuildOnceQueryMany, // Default to most common AI pattern
@@ -84,7 +85,7 @@ func (d *Database[T]) SetReplicationConfig(ec map[string]fs.ErasureCodingConfig,
 
 // Open returns an Index for the specified domain.
 // It verifies that the database configuration matches the persisted state.
-func (d *Database[T]) Open(domain string) ai.VectorStore[T] {
+func (d *Database[T]) Open(ctx context.Context, domain string) ai.VectorStore[T] {
 	// We no longer enforce strict config matching to allow flexibility.
 	// We just ensure the config file exists for informational purposes.
 	_ = d.ensureConfig()
@@ -162,14 +163,14 @@ func (di *domainIndex[T]) WithTransaction(trans sop.Transaction) ai.VectorStore[
 	}
 }
 
-func (di *domainIndex[T]) getTransaction(mode sop.TransactionMode) (sop.Transaction, bool, error) {
+func (di *domainIndex[T]) getTransaction(ctx context.Context, mode sop.TransactionMode) (sop.Transaction, bool, error) {
 	if di.externalTrans != nil {
 		return di.externalTrans, false, nil
 	}
 	// Use the database root path for the transaction to allow global access (e.g. sys_config)
 	// and domain-specific sub-stores.
 	storePath := di.db.storagePath
-	trans, err := di.db.beginTransaction(mode, storePath)
+	trans, err := di.db.beginTransaction(ctx, mode, storePath)
 	return trans, true, err
 }
 
@@ -181,38 +182,19 @@ type storedItem[T any] struct {
 	Deleted    bool    `json:"_deleted,omitempty"`
 }
 
-// Upsert adds or updates a vector in the store.
-func (di *domainIndex[T]) Upsert(item ai.Item[T]) error {
-	trans, isOwn, err := di.getTransaction(sop.ForWriting)
-	if err != nil {
-		return err
-	}
-	if isOwn {
-		defer trans.Rollback(di.db.ctx)
-	}
-
-	version, err := di.getActiveVersion(di.db.ctx, trans)
-	if err != nil {
-		return err
-	}
-
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.name, version, di.db.contentSize)
-	if err != nil {
-		return err
-	}
-
+func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, item ai.Item[T], centroids map[int][]float32) error {
 	id := item.ID
 	vec := item.Vector
 
 	// 0. Cleanup Old Entry (if exists) to prevent "ghost" vectors
 	if di.deduplicationEnabled {
-		found, err := arch.Content.Find(di.db.ctx, id, false)
+		found, err := arch.Content.Find(ctx, id, false)
 		if err != nil {
 			return err
 		}
 		if found {
 			// Retrieve old metadata to find old vector location
-			oldJson, err := arch.Content.GetCurrentValue(di.db.ctx)
+			oldJson, err := arch.Content.GetCurrentValue(ctx)
 			if err != nil && !os.IsNotExist(err) {
 				return err
 			}
@@ -228,35 +210,50 @@ func (di *domainIndex[T]) Upsert(item ai.Item[T]) error {
 
 					// Remove old vector
 					oldKey := ai.VectorKey{CentroidID: oldCid, DistanceToCentroid: oldDist, ItemID: id}
-					if foundVec, _ := arch.Vectors.Find(di.db.ctx, oldKey, false); foundVec {
-						if _, err := arch.Vectors.RemoveCurrentItem(di.db.ctx); err != nil {
+					if foundVec, _ := arch.Vectors.Find(ctx, oldKey, false); foundVec {
+						if _, err := arch.Vectors.RemoveCurrentItem(ctx); err != nil {
 							return err
 						}
 						// Decrement count of old centroid
-						if foundC, _ := arch.Centroids.Find(di.db.ctx, oldCid, false); foundC {
-							c, _ := arch.Centroids.GetCurrentValue(di.db.ctx)
+						if foundC, _ := arch.Centroids.Find(ctx, oldCid, false); foundC {
+							c, _ := arch.Centroids.GetCurrentValue(ctx)
 							c.VectorCount--
-							arch.Centroids.UpdateCurrentItem(di.db.ctx, c)
+							arch.Centroids.UpdateCurrentItem(ctx, c)
 						}
 					}
 				}
 			}
 			// Remove old content to ensure clean insert
-			if _, err := arch.Content.RemoveCurrentItem(di.db.ctx); err != nil && !os.IsNotExist(err) {
+			if _, err := arch.Content.RemoveCurrentItem(ctx); err != nil && !os.IsNotExist(err) {
 				return err
 			}
 		}
 	}
 
+	// Optimization: In BuildOnceQueryMany mode, we stage vectors in TempVectors for faster ingestion.
+	if di.db.usageMode == ai.BuildOnceQueryMany {
+		if _, err := arch.TempVectors.Add(ctx, id, vec); err != nil {
+			return err
+		}
+
+		stored := storedItem[T]{
+			Payload:    item.Payload,
+			CentroidID: 0,
+			Distance:   0,
+		}
+		data, err := json.Marshal(stored)
+		if err != nil {
+			return fmt.Errorf("failed to marshal stored item: %w", err)
+		}
+		if _, err := arch.Content.Add(ctx, id, string(data)); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	// 1. Assign Centroid
 	var centroidID int
 	var dist float32
-
-	// Load centroids
-	centroids, err := di.getCentroids(di.db.ctx, arch)
-	if err != nil {
-		return err
-	}
 
 	// If explicit centroid ID is provided
 	if item.CentroidID > 0 {
@@ -265,7 +262,7 @@ func (di *domainIndex[T]) Upsert(item ai.Item[T]) error {
 		if _, exists := centroids[centroidID]; !exists {
 			// Create it using this vector
 			centroids[centroidID] = vec
-			if _, err := arch.Centroids.Add(di.db.ctx, centroidID, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
+			if _, err := arch.Centroids.Add(ctx, centroidID, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
 				return err
 			}
 			di.updateCentroidsCache(centroids)
@@ -274,31 +271,32 @@ func (di *domainIndex[T]) Upsert(item ai.Item[T]) error {
 		dist = euclideanDistance(vec, centroids[centroidID])
 	} else {
 		// Auto-assign
-		// If no centroids exist, create one
+		// If no centroids exist, create one (Fallback for single Upsert)
 		if len(centroids) == 0 {
 			centroids[1] = vec
-			if _, err := arch.Centroids.Add(di.db.ctx, 1, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
+			if _, err := arch.Centroids.Add(ctx, 1, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
 				return err
 			}
 			di.updateCentroidsCache(centroids)
 		}
 
-		centroidID, dist, err = di.searchClosestCentroid(di.db.ctx, arch, vec)
+		var err error
+		centroidID, dist, err = di.searchClosestCentroid(ctx, arch, vec)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Increment count
-	if foundC, _ := arch.Centroids.Find(di.db.ctx, centroidID, false); foundC {
-		c, _ := arch.Centroids.GetCurrentValue(di.db.ctx)
+	if foundC, _ := arch.Centroids.Find(ctx, centroidID, false); foundC {
+		c, _ := arch.Centroids.GetCurrentValue(ctx)
 		c.VectorCount++
-		arch.Centroids.UpdateCurrentItem(di.db.ctx, c)
+		arch.Centroids.UpdateCurrentItem(ctx, c)
 	}
 
 	// 2. Update Vector Index
 	key := ai.VectorKey{CentroidID: centroidID, DistanceToCentroid: dist, ItemID: id}
-	if _, err := arch.Vectors.Add(di.db.ctx, key, vec); err != nil {
+	if _, err := arch.Vectors.Add(ctx, key, vec); err != nil {
 		return err
 	}
 
@@ -312,185 +310,146 @@ func (di *domainIndex[T]) Upsert(item ai.Item[T]) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal stored item: %w", err)
 	}
-	if _, err := arch.Content.Add(di.db.ctx, id, string(data)); err != nil {
+	if _, err := arch.Content.Add(ctx, id, string(data)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Upsert adds or updates a vector in the store.
+func (di *domainIndex[T]) Upsert(ctx context.Context, item ai.Item[T]) error {
+	trans, isOwn, err := di.getTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return err
+	}
+	if isOwn {
+		defer trans.Rollback(ctx)
+	}
+
+	version, err := di.getActiveVersion(ctx, trans)
+	if err != nil {
+		return err
+	}
+
+	arch, err := OpenDomainStore(ctx, trans, di.name, version, di.db.contentSize)
+	if err != nil {
+		return err
+	}
+
+	var centroids map[int][]float32
+	if di.db.usageMode != ai.BuildOnceQueryMany {
+		centroids, err = di.getCentroids(ctx, arch)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := di.upsertItem(ctx, arch, item, centroids); err != nil {
 		return err
 	}
 
 	if isOwn {
-		return trans.Commit(di.db.ctx)
+		return trans.Commit(ctx)
 	}
 	return nil
 }
 
 // UpsertBatch adds or updates multiple vectors in a single transaction.
-func (di *domainIndex[T]) UpsertBatch(items []ai.Item[T]) error {
-	trans, isOwn, err := di.getTransaction(sop.ForWriting)
+func (di *domainIndex[T]) UpsertBatch(ctx context.Context, items []ai.Item[T]) error {
+	trans, isOwn, err := di.getTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		return err
 	}
 	if isOwn {
-		defer trans.Rollback(di.db.ctx)
+		defer trans.Rollback(ctx)
 	}
 
-	version, err := di.getActiveVersion(di.db.ctx, trans)
+	version, err := di.getActiveVersion(ctx, trans)
 	if err != nil {
 		return err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.name, version, di.db.contentSize)
+	arch, err := OpenDomainStore(ctx, trans, di.name, version, di.db.contentSize)
 	if err != nil {
 		return err
 	}
 
-	// Load centroids once
-	centroids, err := di.getCentroids(di.db.ctx, arch)
-	if err != nil {
-		return err
-	}
-
-	// Auto-init centroids if needed and no explicit IDs are used (or mixed)
-	// If we have items with CentroidID=0 and no centroids exist, we need to init.
-	needsInit := false
-	if len(centroids) == 0 {
-		for _, item := range items {
-			if item.CentroidID == 0 {
-				needsInit = true
-				break
-			}
-		}
-	}
-
-	if needsInit && len(items) > 0 {
-		k := int(math.Sqrt(float64(len(items))))
-		if k < 1 {
-			k = 1
-		}
-		if k > 256 {
-			k = 256
-		}
-		centroids, err = ComputeCentroids(items, k)
+	var centroids map[int][]float32
+	if di.db.usageMode != ai.BuildOnceQueryMany {
+		// Load centroids once
+		centroids, err = di.getCentroids(ctx, arch)
 		if err != nil {
 			return err
 		}
-		for id, vec := range centroids {
-			if _, err := arch.Centroids.Add(di.db.ctx, id, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
-				return err
+
+		// Auto-init centroids if needed and no explicit IDs are used (or mixed)
+		// If we have items with CentroidID=0 and no centroids exist, we need to init.
+		needsInit := false
+		if len(centroids) == 0 {
+			for _, item := range items {
+				if item.CentroidID == 0 {
+					needsInit = true
+					break
+				}
 			}
 		}
-		// Update cache
-		di.updateCentroidsCache(centroids)
+
+		if needsInit && len(items) > 0 {
+			k := int(math.Sqrt(float64(len(items))))
+			if k < 1 {
+				k = 1
+			}
+			if k > 256 {
+				k = 256
+			}
+			centroids, err = ComputeCentroids(items, k)
+			if err != nil {
+				return err
+			}
+			for id, vec := range centroids {
+				if _, err := arch.Centroids.Add(ctx, id, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
+					return err
+				}
+			}
+			// Update cache
+			di.updateCentroidsCache(centroids)
+		}
 	}
 
 	for _, item := range items {
-		id := item.ID
-		vec := item.Vector
-
-		// 0. Cleanup Old Entry
-		if di.deduplicationEnabled {
-			found, err := arch.Content.Find(di.db.ctx, id, false)
-			if err != nil {
-				return err
-			}
-			if found {
-				oldJson, err := arch.Content.GetCurrentValue(di.db.ctx)
-				if err == nil {
-					var oldStored storedItem[T]
-					if err := json.Unmarshal([]byte(oldJson), &oldStored); err == nil {
-						oldCid := oldStored.CentroidID
-						oldDist := oldStored.Distance
-						if oldCid == 0 {
-							oldCid = 1
-						}
-
-						oldKey := ai.VectorKey{CentroidID: oldCid, DistanceToCentroid: oldDist, ItemID: id}
-						if foundVec, _ := arch.Vectors.Find(di.db.ctx, oldKey, false); foundVec {
-							arch.Vectors.RemoveCurrentItem(di.db.ctx)
-							if foundC, _ := arch.Centroids.Find(di.db.ctx, oldCid, false); foundC {
-								c, _ := arch.Centroids.GetCurrentValue(di.db.ctx)
-								c.VectorCount--
-								arch.Centroids.UpdateCurrentItem(di.db.ctx, c)
-							}
-						}
-					}
-				}
-				arch.Content.RemoveCurrentItem(di.db.ctx)
-			}
-		}
-
-		// 1. Assign Centroid
-		var centroidID int
-		var dist float32
-
-		if item.CentroidID > 0 {
-			centroidID = item.CentroidID
-			if _, exists := centroids[centroidID]; !exists {
-				centroids[centroidID] = vec
-				arch.Centroids.Add(di.db.ctx, centroidID, ai.Centroid{Vector: vec, VectorCount: 0})
-				di.updateCentroidsCache(centroids)
-			}
-			dist = euclideanDistance(vec, centroids[centroidID])
-		} else {
-			centroidID, dist, err = di.searchClosestCentroid(di.db.ctx, arch, vec)
-			if err != nil {
-				return err
-			}
-		}
-
-		// Increment count
-		if foundC, _ := arch.Centroids.Find(di.db.ctx, centroidID, false); foundC {
-			c, _ := arch.Centroids.GetCurrentValue(di.db.ctx)
-			c.VectorCount++
-			arch.Centroids.UpdateCurrentItem(di.db.ctx, c)
-		}
-
-		// 2. Update Vector Index
-		key := ai.VectorKey{CentroidID: centroidID, DistanceToCentroid: dist, ItemID: id}
-		if _, err := arch.Vectors.Add(di.db.ctx, key, vec); err != nil {
-			return err
-		}
-
-		// 3. Update Content Store
-		stored := storedItem[T]{
-			Payload:    item.Payload,
-			CentroidID: centroidID,
-			Distance:   dist,
-		}
-		data, err := json.Marshal(stored)
-		if err != nil {
-			return err
-		}
-		if _, err := arch.Content.Add(di.db.ctx, id, string(data)); err != nil {
+		if err := di.upsertItem(ctx, arch, item, centroids); err != nil {
 			return err
 		}
 	}
 
 	if isOwn {
-		return trans.Commit(di.db.ctx)
+		return trans.Commit(ctx)
 	}
 	return nil
 }
 
 // Get retrieves a vector by ID.
-func (di *domainIndex[T]) Get(id string) (*ai.Item[T], error) {
-	trans, isOwn, err := di.getTransaction(di.db.readMode)
+func (di *domainIndex[T]) Get(ctx context.Context, id string) (*ai.Item[T], error) {
+	trans, isOwn, err := di.getTransaction(ctx, di.db.readMode)
 	if err != nil {
 		return nil, err
 	}
 	if isOwn {
-		defer trans.Rollback(di.db.ctx)
+		defer trans.Rollback(ctx)
 	}
 
-	version, err := di.getActiveVersion(di.db.ctx, trans)
+	version, err := di.getActiveVersion(ctx, trans)
 	if err != nil {
 		return nil, err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.name, version, di.db.contentSize)
+	arch, err := OpenDomainStore(ctx, trans, di.name, version, di.db.contentSize)
 	if err != nil {
 		return nil, err
 	}
 
-	found, err := arch.Content.Find(di.db.ctx, id, false)
+	found, err := arch.Content.Find(ctx, id, false)
 	if err != nil {
 		return nil, err
 	}
@@ -498,7 +457,7 @@ func (di *domainIndex[T]) Get(id string) (*ai.Item[T], error) {
 		return nil, fmt.Errorf("item not found")
 	}
 
-	jsonStr, err := arch.Content.GetCurrentValue(di.db.ctx)
+	jsonStr, err := arch.Content.GetCurrentValue(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -514,42 +473,51 @@ func (di *domainIndex[T]) Get(id string) (*ai.Item[T], error) {
 
 	// Fetch Vector
 	cid := stored.CentroidID
+	var vec []float32
+
 	if cid == 0 {
+		// Try TempVectors first for unoptimized items
+		if found, err := arch.TempVectors.Find(ctx, id, false); err != nil {
+			return nil, err
+		} else if found {
+			vec, _ = arch.TempVectors.GetCurrentValue(ctx)
+			return &ai.Item[T]{ID: id, Vector: vec, Payload: stored.Payload, CentroidID: 0}, nil
+		}
+		// Fallback: If not in TempVectors, assume it's in default centroid 1 (legacy behavior)
 		cid = 1
 	}
 	dist := stored.Distance
 
 	vecKey := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: id}
-	foundVec, err := arch.Vectors.Find(di.db.ctx, vecKey, false)
-	var vec []float32
+	foundVec, err := arch.Vectors.Find(ctx, vecKey, false)
 	if foundVec {
-		vec, _ = arch.Vectors.GetCurrentValue(di.db.ctx)
+		vec, _ = arch.Vectors.GetCurrentValue(ctx)
 	}
 
 	return &ai.Item[T]{ID: id, Vector: vec, Payload: stored.Payload, CentroidID: cid}, nil
 }
 
 // Delete removes a vector from the store.
-func (di *domainIndex[T]) Delete(id string) error {
-	trans, isOwn, err := di.getTransaction(sop.ForWriting)
+func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
+	trans, isOwn, err := di.getTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		return err
 	}
 	if isOwn {
-		defer trans.Rollback(di.db.ctx)
+		defer trans.Rollback(ctx)
 	}
 
-	version, err := di.getActiveVersion(di.db.ctx, trans)
+	version, err := di.getActiveVersion(ctx, trans)
 	if err != nil {
 		return err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.name, version, di.db.contentSize)
+	arch, err := OpenDomainStore(ctx, trans, di.name, version, di.db.contentSize)
 	if err != nil {
 		return err
 	}
 
-	found, err := arch.Content.Find(di.db.ctx, id, false)
+	found, err := arch.Content.Find(ctx, id, false)
 	if err != nil {
 		return err
 	}
@@ -557,7 +525,7 @@ func (di *domainIndex[T]) Delete(id string) error {
 		return nil
 	}
 
-	jsonStr, _ := arch.Content.GetCurrentValue(di.db.ctx)
+	jsonStr, _ := arch.Content.GetCurrentValue(ctx)
 	var stored storedItem[T]
 	if err := json.Unmarshal([]byte(jsonStr), &stored); err != nil {
 		return err
@@ -569,7 +537,7 @@ func (di *domainIndex[T]) Delete(id string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := arch.Content.UpdateCurrentItem(di.db.ctx, string(data)); err != nil {
+	if _, err := arch.Content.UpdateCurrentItem(ctx, string(data)); err != nil {
 		return err
 	}
 
@@ -581,102 +549,124 @@ func (di *domainIndex[T]) Delete(id string) error {
 	dist := stored.Distance
 
 	vecKey := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: id}
-	if found, err := arch.Vectors.Find(di.db.ctx, vecKey, false); err != nil {
+	if found, err := arch.Vectors.Find(ctx, vecKey, false); err != nil {
 		return err
 	} else if found {
-		if _, err := arch.Vectors.RemoveCurrentItem(di.db.ctx); err != nil {
+		if _, err := arch.Vectors.RemoveCurrentItem(ctx); err != nil {
 			return err
 		}
-		if foundC, _ := arch.Centroids.Find(di.db.ctx, cid, false); foundC {
-			c, _ := arch.Centroids.GetCurrentValue(di.db.ctx)
+		if foundC, _ := arch.Centroids.Find(ctx, cid, false); foundC {
+			c, _ := arch.Centroids.GetCurrentValue(ctx)
 			c.VectorCount--
-			arch.Centroids.UpdateCurrentItem(di.db.ctx, c)
+			arch.Centroids.UpdateCurrentItem(ctx, c)
 		}
 	}
 
 	if isOwn {
-		return trans.Commit(di.db.ctx)
+		return trans.Commit(ctx)
 	}
 	return nil
 }
 
 // Query searches for the nearest neighbors.
-func (di *domainIndex[T]) Query(vec []float32, k int, filter func(T) bool) ([]ai.Hit[T], error) {
-	trans, isOwn, err := di.getTransaction(di.db.readMode)
+func (di *domainIndex[T]) Query(ctx context.Context, vec []float32, k int, filter func(T) bool) ([]ai.Hit[T], error) {
+	trans, isOwn, err := di.getTransaction(ctx, di.db.readMode)
 	if err != nil {
 		return nil, err
 	}
 	if isOwn {
-		defer trans.Rollback(di.db.ctx)
+		defer trans.Rollback(ctx)
 	}
 
-	version, err := di.getActiveVersion(di.db.ctx, trans)
+	version, err := di.getActiveVersion(ctx, trans)
 	if err != nil {
 		return nil, err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.name, version, di.db.contentSize)
+	arch, err := OpenDomainStore(ctx, trans, di.name, version, di.db.contentSize)
 	if err != nil {
 		return nil, err
 	}
 
-	targetCentroids, err := di.searchClosestCentroids(di.db.ctx, arch, vec, 2)
+	targetCentroids, err := di.searchClosestCentroids(ctx, arch, vec, 2)
 	if err != nil {
 		return nil, err
-	}
-	if len(targetCentroids) == 0 {
-		return nil, nil
 	}
 
 	var candidates []ai.Hit[T]
 
-	for _, cid := range targetCentroids {
-		startKey := ai.VectorKey{CentroidID: cid, DistanceToCentroid: -1.0, ItemID: ""}
-		if _, err := arch.Vectors.Find(di.db.ctx, startKey, true); err != nil {
-			return nil, err
-		}
+	// 1. Search Indexed Vectors (if any centroids exist)
+	if len(targetCentroids) > 0 {
+		for _, cid := range targetCentroids {
+			startKey := ai.VectorKey{CentroidID: cid, DistanceToCentroid: -1.0, ItemID: ""}
+			if _, err := arch.Vectors.Find(ctx, startKey, true); err != nil {
+				return nil, err
+			}
 
-		for {
-			item, err := arch.Vectors.GetCurrentItem(di.db.ctx)
-			if err != nil {
-				if os.IsNotExist(err) {
-					if ok, _ := arch.Vectors.Next(di.db.ctx); !ok {
+			for {
+				item, err := arch.Vectors.GetCurrentItem(ctx)
+				if err != nil {
+					if os.IsNotExist(err) {
+						if ok, _ := arch.Vectors.Next(ctx); !ok {
+							break
+						}
+						continue
+					}
+					return nil, err
+				}
+
+				if item.Key.ItemID == "" && item.Key.CentroidID == 0 {
+					if item.ID.IsNil() {
+						break
+					}
+				}
+
+				key := item.Key
+				if compositeKeyComparer(key, startKey) < 0 {
+					if ok, err := arch.Vectors.Next(ctx); !ok || err != nil {
 						break
 					}
 					continue
 				}
+
+				if key.CentroidID != cid {
+					break
+				}
+
+				if item.Value == nil {
+					if ok, _ := arch.Vectors.Next(ctx); !ok {
+						break
+					}
+					continue
+				}
+				itemVec := *item.Value
+				score := cosine(vec, itemVec)
+				candidates = append(candidates, ai.Hit[T]{ID: key.ItemID, Score: score})
+
+				if ok, _ := arch.Vectors.Next(ctx); !ok {
+					break
+				}
+			}
+		}
+	}
+
+	// 2. Search TempVectors (Brute Force)
+	// This ensures we find items that are staged but not yet optimized.
+	if ok, err := arch.TempVectors.First(ctx); err != nil {
+		return nil, err
+	} else if ok {
+		for {
+			item, err := arch.TempVectors.GetCurrentItem(ctx)
+			if err != nil {
 				return nil, err
 			}
 
-			if item.Key.ItemID == "" && item.Key.CentroidID == 0 {
-				if item.ID.IsNil() {
-					break
-				}
-			}
+			score := cosine(vec, *item.Value)
+			candidates = append(candidates, ai.Hit[T]{ID: item.Key, Score: score})
 
-			key := item.Key
-			if compositeKeyComparer(key, startKey) < 0 {
-				if ok, err := arch.Vectors.Next(di.db.ctx); !ok || err != nil {
-					break
-				}
-				continue
-			}
-
-			if key.CentroidID != cid {
-				break
-			}
-
-			if item.Value == nil {
-				if ok, _ := arch.Vectors.Next(di.db.ctx); !ok {
-					break
-				}
-				continue
-			}
-			itemVec := *item.Value
-			score := cosine(vec, itemVec)
-			candidates = append(candidates, ai.Hit[T]{ID: key.ItemID, Score: score})
-
-			if ok, _ := arch.Vectors.Next(di.db.ctx); !ok {
+			if ok, err := arch.TempVectors.Next(ctx); err != nil {
+				return nil, err
+			} else if !ok {
 				break
 			}
 		}
@@ -690,12 +680,12 @@ func (di *domainIndex[T]) Query(vec []float32, k int, filter func(T) bool) ([]ai
 			break
 		}
 
-		found, err := arch.Content.Find(di.db.ctx, hit.ID, false)
+		found, err := arch.Content.Find(ctx, hit.ID, false)
 		if err != nil {
 			return nil, err
 		}
 		if found {
-			jsonStr, _ := arch.Content.GetCurrentValue(di.db.ctx)
+			jsonStr, _ := arch.Content.GetCurrentValue(ctx)
 			var stored storedItem[T]
 			if err := json.Unmarshal([]byte(jsonStr), &stored); err == nil {
 				if !stored.Deleted {
@@ -712,21 +702,21 @@ func (di *domainIndex[T]) Query(vec []float32, k int, filter func(T) bool) ([]ai
 }
 
 // Count returns the total number of items.
-func (di *domainIndex[T]) Count() (int64, error) {
-	trans, isOwn, err := di.getTransaction(di.db.readMode)
+func (di *domainIndex[T]) Count(ctx context.Context) (int64, error) {
+	trans, isOwn, err := di.getTransaction(ctx, di.db.readMode)
 	if err != nil {
 		return 0, err
 	}
 	if isOwn {
-		defer trans.Rollback(di.db.ctx)
+		defer trans.Rollback(ctx)
 	}
 
-	version, err := di.getActiveVersion(di.db.ctx, trans)
+	version, err := di.getActiveVersion(ctx, trans)
 	if err != nil {
 		return 0, err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.name, version, di.db.contentSize)
+	arch, err := OpenDomainStore(ctx, trans, di.name, version, di.db.contentSize)
 	if err != nil {
 		return 0, err
 	}
@@ -735,44 +725,44 @@ func (di *domainIndex[T]) Count() (int64, error) {
 }
 
 // AddCentroid adds a new centroid.
-func (di *domainIndex[T]) AddCentroid(vec []float32) (int, error) {
-	trans, isOwn, err := di.getTransaction(sop.ForWriting)
+func (di *domainIndex[T]) AddCentroid(ctx context.Context, vec []float32) (int, error) {
+	trans, isOwn, err := di.getTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		return 0, err
 	}
 	if isOwn {
-		defer trans.Rollback(di.db.ctx)
+		defer trans.Rollback(ctx)
 	}
 
-	version, err := di.getActiveVersion(di.db.ctx, trans)
+	version, err := di.getActiveVersion(ctx, trans)
 	if err != nil {
 		return 0, err
 	}
 
-	arch, err := OpenDomainStore(di.db.ctx, trans, di.name, version, di.db.contentSize)
+	arch, err := OpenDomainStore(ctx, trans, di.name, version, di.db.contentSize)
 	if err != nil {
 		return 0, err
 	}
 
 	newID := 1
-	if ok, err := arch.Centroids.Last(di.db.ctx); err != nil {
+	if ok, err := arch.Centroids.Last(ctx); err != nil {
 		return 0, err
 	} else if ok {
-		item, err := arch.Centroids.GetCurrentItem(di.db.ctx)
+		item, err := arch.Centroids.GetCurrentItem(ctx)
 		if err != nil {
 			return 0, err
 		}
 		newID = item.Key + 1
 	}
 
-	if _, err := arch.Centroids.Add(di.db.ctx, newID, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
+	if _, err := arch.Centroids.Add(ctx, newID, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
 		return 0, err
 	}
 
 	di.addCentroidToCache(newID, vec)
 
 	if isOwn {
-		if err := trans.Commit(di.db.ctx); err != nil {
+		if err := trans.Commit(ctx); err != nil {
 			return 0, err
 		}
 	}
@@ -821,10 +811,17 @@ func (di *domainIndex[T]) Content(ctx context.Context, trans sop.Transaction) (b
 
 // --- Helpers ---
 
-func (d *Database[T]) beginTransaction(mode sop.TransactionMode, storePath string) (sop.Transaction, error) {
+func (d *Database[T]) beginTransaction(ctx context.Context, mode sop.TransactionMode, storePath string) (sop.Transaction, error) {
 	storeFolder := storePath
 	if err := os.MkdirAll(storeFolder, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create data folder %s: %w", storeFolder, err)
+	}
+
+	var c sop.L2Cache
+	if d.dbType == ai.Clustered {
+		c = redis.NewClient()
+	} else {
+		c = cache.NewInMemoryCache()
 	}
 
 	if len(d.storesFolders) > 0 {
@@ -832,12 +829,12 @@ func (d *Database[T]) beginTransaction(mode sop.TransactionMode, storePath strin
 		if err != nil {
 			return nil, err
 		}
-		to.Cache = d.cache
-		trans, err := inredfs.NewTransactionWithReplication(d.ctx, to)
+		to.Cache = c
+		trans, err := inredfs.NewTransactionWithReplication(ctx, to)
 		if err != nil {
 			return nil, err
 		}
-		if err := trans.Begin(d.ctx); err != nil {
+		if err := trans.Begin(ctx); err != nil {
 			return nil, fmt.Errorf("transaction begin failed: %w", err)
 		}
 		return trans, nil
@@ -847,14 +844,14 @@ func (d *Database[T]) beginTransaction(mode sop.TransactionMode, storePath strin
 	if err != nil {
 		return nil, err
 	}
-	to.Cache = d.cache
+	to.Cache = c
 
-	trans, err := inredfs.NewTransaction(d.ctx, to)
+	trans, err := inredfs.NewTransaction(ctx, to)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := trans.Begin(d.ctx); err != nil {
+	if err := trans.Begin(ctx); err != nil {
 		return nil, fmt.Errorf("transaction begin failed: %w", err)
 	}
 
@@ -1002,7 +999,7 @@ func (di *domainIndex[T]) addCentroidToCache(id int, vec []float32) {
 	}
 }
 
-const sysConfigName = "sys_config"
+const sysConfigName = "vector_sys_config"
 
 func (di *domainIndex[T]) getActiveVersion(ctx context.Context, trans sop.Transaction) (int64, error) {
 	store, err := newBtree[string, int64](ctx, sop.ConfigureStore(sysConfigName, true, 1000, "System Config", sop.SmallData, ""), trans, func(a, b string) int {
@@ -1027,24 +1024,23 @@ func (di *domainIndex[T]) getActiveVersion(ctx context.Context, trans sop.Transa
 	return 0, nil
 }
 
-// Note: Rebalance, IndexAll, SeedCentroids, GetBySequenceID are omitted for brevity but should be updated similarly.
+// Note: Optimize, IndexAll, SeedCentroids, GetBySequenceID are omitted for brevity but should be updated similarly.
 // I will include them if space permits or if requested.
-// Given the size, I'll try to include Rebalance as it's critical.
 
-func (di *domainIndex[T]) Rebalance() error {
-	di.db.rebalanceLock.Lock()
-	defer di.db.rebalanceLock.Unlock()
+func (di *domainIndex[T]) Optimize(ctx context.Context) error {
+	di.db.optimizeLock.Lock()
+	defer di.db.optimizeLock.Unlock()
 
 	// Use the database root path for the transaction to allow global access
 	storePath := di.db.storagePath
-	trans, err := di.db.beginTransaction(sop.ForWriting, storePath)
+	trans, err := di.db.beginTransaction(ctx, sop.ForWriting, storePath)
 	if err != nil {
 		return err
 	}
-	defer trans.Rollback(di.db.ctx)
+	defer trans.Rollback(ctx)
 
 	// Open Sys Store to get current version and keep it open for update later
-	sysStore, err := newBtree[string, int64](di.db.ctx, sop.ConfigureStore(sysConfigName, true, 1000, "System Config", sop.SmallData, ""), trans, func(a, b string) int {
+	sysStore, err := newBtree[string, int64](ctx, sop.ConfigureStore(sysConfigName, true, 1000, "System Config", sop.SmallData, ""), trans, func(a, b string) int {
 		if a < b {
 			return -1
 		}
@@ -1058,78 +1054,35 @@ func (di *domainIndex[T]) Rebalance() error {
 	}
 
 	var currentVersion int64
-	found, err := sysStore.Find(di.db.ctx, di.name, false)
+	found, err := sysStore.Find(ctx, di.name, false)
 	if err != nil {
 		return err
 	}
 	if found {
-		currentVersion, _ = sysStore.GetCurrentValue(di.db.ctx)
-	} // 1. Open Old Store
-	oldArch, err := OpenDomainStore(di.db.ctx, trans, di.name, currentVersion, di.db.contentSize)
+		currentVersion, _ = sysStore.GetCurrentValue(ctx)
+	}
+
+	// 1. Open Old Store
+	oldArch, err := OpenDomainStore(ctx, trans, di.name, currentVersion, di.db.contentSize)
 	if err != nil {
 		return err
 	}
 
-	// 2. Collect All Vectors
-	var items []ai.Item[T]
-	if ok, err := oldArch.Vectors.First(di.db.ctx); err != nil {
-		return err
-	} else if ok {
-		for {
-			item, err := oldArch.Vectors.GetCurrentItem(di.db.ctx)
-			if err != nil {
-				return err
-			}
-			if item.Value != nil {
-				items = append(items, ai.Item[T]{
-					ID:     item.Key.ItemID,
-					Vector: *item.Value,
-				})
-			}
-
-			if ok, err := oldArch.Vectors.Next(di.db.ctx); err != nil {
-				return err
-			} else if !ok {
-				break
-			}
-		}
-	}
-
-	if len(items) == 0 {
-		return nil
-	}
-
-	// 3. Compute New Centroids
-	k := int(math.Sqrt(float64(len(items))))
-	if k < 1 {
-		k = 1
-	}
-	if k > 256 {
-		k = 256
-	}
-
-	newCentroidsMap, err := ComputeCentroids(items, k)
-	if err != nil {
-		return err
-	}
-
-	// 4. Open New Store (Version + 1)
+	// 2. Prepare New Stores (Version + 1)
 	newVersion := currentVersion + 1
 	suffix := fmt.Sprintf("_%d", newVersion)
 
-	// Manually open new versioned stores to avoid re-opening shared stores (Content, TempVectors)
-	// which would cause a transaction conflict.
-	newCentroids, err := newBtree[int, ai.Centroid](di.db.ctx, sop.ConfigureStore(di.name+"_centroids"+suffix, true, 100, "Centroids", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
+	newCentroids, err := newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+"_centroids"+suffix, true, 100, "Centroids", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return err
 	}
 
-	newVectors, err := newBtree[ai.VectorKey, []float32](di.db.ctx, sop.ConfigureStore(di.name+"_vectors"+suffix, true, 1000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
+	newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+"_vecs"+suffix, true, 1000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
 	if err != nil {
 		return err
 	}
 
-	newLookup, err := newBtree[int, string](di.db.ctx, sop.ConfigureStore(di.name+"_lookup"+suffix, true, 1000, "Lookup", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
+	newLookup, err := newBtree[int, string](ctx, sop.ConfigureStore(di.name+"_lku"+suffix, true, 1000, "Lookup", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return err
 	}
@@ -1143,65 +1096,332 @@ func (di *domainIndex[T]) Rebalance() error {
 		Version:     newVersion,
 	}
 
-	// 5. Write New Centroids
+	// 3. Pass 1: Build Lookup Table
+	// We iterate both TempVectors (staging) and Vectors (indexed) to build the sequence lookup.
+	var count int
+	var processedTempVectors bool
+
+	// 3a. Iterate Vectors
+	if ok, err := oldArch.Vectors.First(ctx); err != nil {
+		return err
+	} else if ok {
+		for {
+			item, err := oldArch.Vectors.GetCurrentItem(ctx)
+			if err != nil {
+				return err
+			}
+
+			// Add to Lookup (Sequence ID -> Item ID)
+			if _, err := newArch.Lookup.Add(ctx, count, item.Key.ItemID); err != nil {
+				return err
+			}
+			count++
+
+			if ok, err := oldArch.Vectors.Next(ctx); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+		}
+	}
+
+	// 3b. Iterate TempVectors (Only if Vectors was empty)
+	if count == 0 {
+		processedTempVectors = true
+		if ok, err := oldArch.TempVectors.First(ctx); err != nil {
+			return err
+		} else if ok {
+			for {
+				item, err := oldArch.TempVectors.GetCurrentItem(ctx)
+				if err != nil {
+					return err
+				}
+
+				// Check if item is already in Vectors (via Content) to avoid duplicates
+				shouldProcess := true
+				if found, err := oldArch.Content.Find(ctx, item.Key, false); err != nil {
+					return err
+				} else if found {
+					jsonStr, _ := oldArch.Content.GetCurrentValue(ctx)
+					var stored storedItem[T]
+					if err := json.Unmarshal([]byte(jsonStr), &stored); err == nil {
+						if stored.CentroidID != 0 {
+							shouldProcess = false
+						}
+					}
+				}
+
+				if shouldProcess {
+					// Add to Lookup (Sequence ID -> Item ID)
+					if _, err := newArch.Lookup.Add(ctx, count, item.Key); err != nil {
+						return err
+					}
+					count++
+				}
+
+				if ok, err := oldArch.TempVectors.Next(ctx); err != nil {
+					return err
+				} else if !ok {
+					break
+				}
+			}
+		}
+	}
+
+	if count == 0 {
+		return nil
+	}
+
+	// 4. Sampling using Lookup
+	// We use the Lookup table to fetch random samples for K-Means clustering.
+	const maxSamples = 50000
+	var samples []ai.Item[T]
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	// Determine how many samples to take
+	sampleCount := maxSamples
+	if count < maxSamples {
+		sampleCount = count
+	}
+
+	// Generate random indices
+	indices := make(map[int]struct{})
+	if count <= maxSamples {
+		for i := 0; i < count; i++ {
+			indices[i] = struct{}{}
+		}
+	} else {
+		for len(indices) < sampleCount {
+			idx := rng.Intn(count)
+			indices[idx] = struct{}{}
+		}
+	}
+
+	// Fetch samples
+	for idx := range indices {
+		// 4a. Get ItemID from Lookup
+		if found, err := newArch.Lookup.Find(ctx, idx, false); err != nil {
+			return err
+		} else if !found {
+			continue
+		}
+		itemID, err := newArch.Lookup.GetCurrentValue(ctx)
+		if err != nil {
+			return err
+		}
+
+		// 4b. Fetch Vector
+		// Priority 1: Try TempVectors (Fastest)
+		var vec []float32
+		foundInTemp, err := oldArch.TempVectors.Find(ctx, itemID, false)
+		if err != nil {
+			return err
+		}
+
+		if foundInTemp {
+			vec, err = oldArch.TempVectors.GetCurrentValue(ctx)
+			if err != nil {
+				return err
+			}
+		} else {
+			// Priority 2: Try Vectors (Requires Content Lookup)
+			if found, err := oldArch.Content.Find(ctx, itemID, false); err != nil {
+				return err
+			} else if !found {
+				continue
+			}
+
+			contentJson, err := oldArch.Content.GetCurrentValue(ctx)
+			if err != nil {
+				return err
+			}
+
+			var stored storedItem[T]
+			if err := json.Unmarshal([]byte(contentJson), &stored); err != nil {
+				return err
+			}
+
+			vecKey := ai.VectorKey{
+				CentroidID:         stored.CentroidID,
+				DistanceToCentroid: stored.Distance,
+				ItemID:             itemID,
+			}
+
+			if found, err := oldArch.Vectors.Find(ctx, vecKey, false); err != nil {
+				return err
+			} else if !found {
+				continue
+			}
+
+			vec, err = oldArch.Vectors.GetCurrentValue(ctx)
+			if err != nil {
+				return err
+			}
+		}
+
+		samples = append(samples, ai.Item[T]{
+			ID:     itemID,
+			Vector: vec,
+		})
+	}
+
+	// 5. Compute New Centroids using Samples
+	k := int(math.Sqrt(float64(count)))
+	if k < 1 {
+		k = 1
+	}
+	if k > 256 {
+		k = 256
+	}
+
+	// Use the samples as the training set
+	newCentroidsMap, err := ComputeCentroids(samples, k)
+	if err != nil {
+		return err
+	}
+
+	// 6. Write New Centroids
 	for id, vec := range newCentroidsMap {
-		if _, err := newArch.Centroids.Add(di.db.ctx, id, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
+		if _, err := newArch.Centroids.Add(ctx, id, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
 			return err
 		}
 	}
 
-	// 6. Re-assign Vectors and Update Content
+	// 7. Pass 2: Re-assign Vectors and Update Content (Streaming)
 	counts := make(map[int]int)
-	for _, item := range items {
-		cid, dist := findClosestCentroid(item.Vector, newCentroidsMap)
+
+	// Helper to process an item
+	processItem := func(id string, vec []float32) error {
+		cid, dist := findClosestCentroid(vec, newCentroidsMap)
 		counts[cid]++
 
 		// Add to New Vectors
-		key := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: item.ID}
-		if _, err := newArch.Vectors.Add(di.db.ctx, key, item.Vector); err != nil {
+		key := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: id}
+		if _, err := newArch.Vectors.Add(ctx, key, vec); err != nil {
 			return err
 		}
 
 		// Update Content
-		found, err := newArch.Content.Find(di.db.ctx, item.ID, false)
+		found, err := newArch.Content.Find(ctx, id, false)
 		if err != nil {
 			return err
 		}
 		if found {
-			jsonStr, _ := newArch.Content.GetCurrentValue(di.db.ctx)
+			jsonStr, _ := newArch.Content.GetCurrentValue(ctx)
 			var stored storedItem[T]
 			if err := json.Unmarshal([]byte(jsonStr), &stored); err == nil {
 				stored.CentroidID = cid
 				stored.Distance = dist
 				newData, _ := json.Marshal(stored)
-				newArch.Content.UpdateCurrentItem(di.db.ctx, string(newData))
+				newArch.Content.UpdateCurrentItem(ctx, string(newData))
+			}
+		}
+		return nil
+	}
+
+	// 7a. Stream Vectors
+	if ok, err := oldArch.Vectors.First(ctx); err != nil {
+		return err
+	} else if ok {
+		for {
+			item, err := oldArch.Vectors.GetCurrentItem(ctx)
+			if err != nil {
+				return err
+			}
+
+			if err := processItem(item.Key.ItemID, *item.Value); err != nil {
+				return err
+			}
+
+			if ok, err := oldArch.Vectors.Next(ctx); err != nil {
+				return err
+			} else if !ok {
+				break
 			}
 		}
 	}
 
-	// 7. Update Centroid Counts
-	for cid, count := range counts {
-		if found, _ := newArch.Centroids.Find(di.db.ctx, cid, false); found {
-			c, _ := newArch.Centroids.GetCurrentValue(di.db.ctx)
-			c.VectorCount = count
-			newArch.Centroids.UpdateCurrentItem(di.db.ctx, c)
+	// 7b. Stream TempVectors
+	if processedTempVectors {
+		if ok, err := oldArch.TempVectors.First(ctx); err != nil {
+			return err
+		} else if ok {
+			for {
+				item, err := oldArch.TempVectors.GetCurrentItem(ctx)
+				if err != nil {
+					return err
+				}
+
+				// Check if item is already in Vectors (via Content)
+				shouldProcess := true
+				if found, err := oldArch.Content.Find(ctx, item.Key, false); err != nil {
+					return err
+				} else if found {
+					jsonStr, _ := oldArch.Content.GetCurrentValue(ctx)
+					var stored storedItem[T]
+					if err := json.Unmarshal([]byte(jsonStr), &stored); err == nil {
+						if stored.CentroidID != 0 {
+							shouldProcess = false
+						}
+					}
+				}
+
+				if shouldProcess {
+					if err := processItem(item.Key, *item.Value); err != nil {
+						return err
+					}
+				}
+
+				if ok, err := oldArch.TempVectors.Next(ctx); err != nil {
+					return err
+				} else if !ok {
+					break
+				}
+			}
 		}
 	}
 
-	// 8. Update Active Version
+	// 8. Update Centroid Counts
+	if di.db.usageMode == ai.DynamicWithVectorCountTracking {
+		for cid, count := range counts {
+			if found, _ := newArch.Centroids.Find(ctx, cid, false); found {
+				c, _ := newArch.Centroids.GetCurrentValue(ctx)
+				c.VectorCount = count
+				newArch.Centroids.UpdateCurrentItem(ctx, c)
+			}
+		}
+	}
+
+	// 9. Update Active Version
 	// sysStore is already open from the beginning of the transaction
-	found, err = sysStore.Find(di.db.ctx, di.name, false)
+	found, err = sysStore.Find(ctx, di.name, false)
 	if err != nil {
 		return err
 	}
 	if found {
-		sysStore.UpdateCurrentItem(di.db.ctx, newVersion)
+		sysStore.UpdateCurrentItem(ctx, newVersion)
 	} else {
-		sysStore.Add(di.db.ctx, di.name, newVersion)
+		sysStore.Add(ctx, di.name, newVersion)
 	}
 
 	// Update cache
 	di.updateCentroidsCache(newCentroidsMap)
 
-	return trans.Commit(di.db.ctx)
+	if err := trans.Commit(ctx); err != nil {
+		return err
+	}
+
+	// 10. Cleanup TempVectors Store (File System)
+	// Since we have successfully migrated everything to Vectors, we can delete the TempVectors store.
+	// This avoids the expensive item-by-item deletion.
+	if processedTempVectors && di.db.storagePath != "" {
+		storeName := fmt.Sprintf("%s_temp_vectors", di.name)
+		if err := inredfs.RemoveBtree(ctx, di.db.storagePath, storeName, di.db.cache); err != nil {
+			fmt.Printf("Failed to remove TempVectors: %v\n", err)
+		} else {
+			fmt.Printf("Removed TempVectors %s\n", storeName)
+		}
+	}
+
+	return nil
 }

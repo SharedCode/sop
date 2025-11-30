@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"math"
 
@@ -13,7 +14,7 @@ import (
 // 1. Deduplication & Content Ingestion: Embeds and stores unique items.
 // 2. Centroid Computation: Samples data to compute K-Means centroids for IVFFlat indexing.
 // 3. Indexing: Assigns vectors to centroids to optimize search performance.
-func IngestData(cfg Config, idx ai.VectorStore[map[string]any], emb ai.Embeddings) error {
+func IngestData(ctx context.Context, cfg Config, idx ai.VectorStore[map[string]any], emb ai.Embeddings) error {
 	if len(cfg.Data) == 0 {
 		return nil
 	}
@@ -35,7 +36,7 @@ func IngestData(cfg Config, idx ai.VectorStore[map[string]any], emb ai.Embedding
 	var batchOriginals []DataItem
 
 	processBatch := func(texts []string, originals []DataItem) error {
-		vecs, err := emb.EmbedTexts(texts)
+		vecs, err := emb.EmbedTexts(ctx, texts)
 		if err != nil {
 			return fmt.Errorf("embedding failed: %w", err)
 		}
@@ -69,7 +70,7 @@ func IngestData(cfg Config, idx ai.VectorStore[map[string]any], emb ai.Embedding
 		seenInRun[id] = true
 
 		if !cfg.SkipDeduplication {
-			if _, err := idx.Get(id); err == nil {
+			if _, err := idx.Get(ctx, id); err == nil {
 				skippedCount++
 				continue
 			}
@@ -99,7 +100,7 @@ func IngestData(cfg Config, idx ai.VectorStore[map[string]any], emb ai.Embedding
 	}
 
 	// Initial Upsert
-	if err := idx.UpsertBatch(itemsToUpsert); err != nil {
+	if err := idx.UpsertBatch(ctx, itemsToUpsert); err != nil {
 		return fmt.Errorf("failed to upsert batch: %w", err)
 	}
 	fmt.Printf("Content Ingestion complete. Ingested: %d, Skipped: %d.\n", len(itemsToUpsert), skippedCount)
@@ -151,7 +152,7 @@ func IngestData(cfg Config, idx ai.VectorStore[map[string]any], emb ai.Embedding
 
 		// Re-Upsert with Centroid IDs
 		fmt.Println("Phase 3: Re-indexing with Centroids...")
-		if err := idx.UpsertBatch(itemsToUpsert); err != nil {
+		if err := idx.UpsertBatch(ctx, itemsToUpsert); err != nil {
 			return fmt.Errorf("failed to re-index with centroids: %w", err)
 		}
 	}

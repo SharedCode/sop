@@ -1,6 +1,10 @@
 package policy
 
-import "github.com/sharedcode/sop/ai"
+import (
+	"context"
+
+	"github.com/sharedcode/sop/ai"
+)
 
 // Chain combines multiple policy engines into one.
 // It evaluates them in order. If any policy returns "block", the chain returns "block" immediately.
@@ -12,9 +16,9 @@ func NewChain(policies ...ai.PolicyEngine) *Chain {
 	return &Chain{policies: policies}
 }
 
-func (c *Chain) Evaluate(stage string, sample ai.ContentSample, labels []ai.Label) (ai.PolicyDecision, error) {
+func (c *Chain) Evaluate(ctx context.Context, stage string, sample ai.ContentSample, labels []ai.Label) (ai.PolicyDecision, error) {
 	for _, p := range c.policies {
-		decision, err := p.Evaluate(stage, sample, labels)
+		decision, err := p.Evaluate(ctx, stage, sample, labels)
 		if err != nil {
 			return ai.PolicyDecision{}, err
 		}

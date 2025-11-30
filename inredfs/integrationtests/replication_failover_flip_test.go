@@ -109,7 +109,7 @@ func Test_ActiveSide_FailoverFlip_Then_Reinstate_FastForward(t *testing.T) {
 	// Disarm failures and run reinstate; write deltas during reinstate
 	ResetDirectIOSim()
 	reinstateErr := make(chan error, 1)
-	go func() { reinstateErr <- inredfs.ReinstateFailedDrives(ctx, isolatedStores) }()
+	go func() { reinstateErr <- inredfs.ReinstateFailedDrives(ctx, isolatedStores, nil) }()
 
 	// Write some deltas while reinstate runs
 	for i := 3; i <= 5; i++ {

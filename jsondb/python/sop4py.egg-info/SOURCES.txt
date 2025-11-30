@@ -19,6 +19,13 @@ sop/redis.py
 sop/test_btree.py
 sop/test_btree_idx.py
 sop/transaction.py
+sop/ai/README.md
+sop/ai/__init__.py
+sop/ai/database.py
+sop/ai/model.py
+sop/ai/sample.py
+sop/ai/test_btree.py
+sop/ai/vector.py
 sop4py.egg-info/PKG-INFO
 sop4py.egg-info/SOURCES.txt
 sop4py.egg-info/dependency_links.txt

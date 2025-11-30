@@ -2,6 +2,7 @@ package embed
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,7 +39,7 @@ type ollamaEmbedResponse struct {
 }
 
 // EmbedTexts generates embeddings for the given texts using the Ollama API.
-func (e *OllamaEmbedder) EmbedTexts(texts []string) ([][]float32, error) {
+func (e *OllamaEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]float32, error) {
 	out := make([][]float32, len(texts))
 	url := fmt.Sprintf("%s/api/embeddings", e.baseURL)
 
@@ -53,7 +54,13 @@ func (e *OllamaEmbedder) EmbedTexts(texts []string) ([][]float32, error) {
 			return nil, fmt.Errorf("failed to marshal request: %w", err)
 		}
 
-		resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonBody))
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("ollama api request failed: %w", err)
 		}

@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/sharedcode/sop/ai"
@@ -33,7 +34,7 @@ func NewConsecutiveViolationPolicy(id string, threshold float32, blockedLabels [
 
 // Evaluate checks if the content violates the policy.
 // If the violation count exceeds maxStrikes, the session is locked.
-func (p *ConsecutiveViolationPolicy) Evaluate(stage string, sample ai.ContentSample, labels []ai.Label) (ai.PolicyDecision, error) {
+func (p *ConsecutiveViolationPolicy) Evaluate(ctx context.Context, stage string, sample ai.ContentSample, labels []ai.Label) (ai.PolicyDecision, error) {
 	if p.locked {
 		return ai.PolicyDecision{
 			Action:   "block",

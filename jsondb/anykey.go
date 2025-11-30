@@ -57,7 +57,14 @@ type PagingInfo struct {
 func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
 	b3, err := inredfs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)
 	if err != nil {
-		return nil, err
+		if err.Error() == "failed in NewBtreeWithReplication as transaction has no replication, use NewBtree instead" {
+			b3, err = inredfs.NewBtree[TK, TV](ctx, so, t, comparer)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
 	return &JsonDBAnyKey[TK, TV]{
 		BtreeInterface: b3,
@@ -68,7 +75,14 @@ func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOpt
 func OpenJsonBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
 	b3, err := inredfs.OpenBtreeWithReplication[TK, TV](ctx, name, t, comparer)
 	if err != nil {
-		return nil, err
+		if err.Error() == "failed in OpenBtreeWithReplication as transaction has no replication, use OpenBtree instead" {
+			b3, err = inredfs.OpenBtree[TK, TV](ctx, name, t, comparer)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
 	return &JsonDBAnyKey[TK, TV]{
 		BtreeInterface: b3,

@@ -5,10 +5,8 @@ package main
 */
 import "C"
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -23,14 +21,12 @@ import (
 type PyVectorDB = *vector.Database[map[string]any]
 type PyVectorStore = ai.VectorStore[map[string]any]
 
-var vectorDBLookup = make(map[sop.UUID]PyVectorDB)
-var vectorStoreLookup = make(map[sop.UUID]PyVectorStore)
-var vectorLocker sync.Mutex
+var vectorDBRegistry = NewRegistry[PyVectorDB]()
+var vectorStoreRegistry = NewRegistry[PyVectorStore]()
 
 // Unified Database Lookup (replaces modelDBLookup)
-var dbLookup = make(map[sop.UUID]*database.Database)
-var modelStoreLookup = make(map[sop.UUID]ai.ModelStore)
-var modelLocker sync.Mutex
+var dbRegistry = NewRegistry[*database.Database]()
+var modelStoreRegistry = NewRegistry[ai.ModelStore]()
 
 const (
 	VectorActionUnknown = iota
@@ -43,6 +39,7 @@ const (
 	QueryVector
 	VectorCount
 	VectorWithTransaction
+	OptimizeVector
 )
 
 type VectorDBOptions struct {
@@ -63,8 +60,7 @@ type VectorQueryOptions struct {
 func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C.char) *C.char {
 	ctx := getContext(ctxID)
 	if ctx == nil {
-		// Fallback to background if not found (or handle error)
-		ctx = context.Background()
+		return C.CString(fmt.Sprintf("context with ID %v not found", int64(ctxID)))
 	}
 
 	targetUUID, _ := sop.ParseUUID(C.GoString(targetID))
@@ -88,32 +84,22 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			db.SetReplicationConfig(opts.ErasureConfig, opts.StoresFolders)
 		}
 
-		id := sop.NewUUID()
-		vectorLocker.Lock()
-		vectorDBLookup[id] = db
-		vectorLocker.Unlock()
+		id := vectorDBRegistry.Add(db)
 
 		return C.CString(id.String())
 
 	case OpenVectorStore:
 		// targetID is the DB UUID
-		vectorLocker.Lock()
-		db, ok := vectorDBLookup[targetUUID]
-		vectorLocker.Unlock()
+		db, ok := vectorDBRegistry.Get(targetUUID)
 		if !ok {
 			// Try finding in unified DB lookup
-			modelLocker.Lock()
-			unifiedDB, uOk := dbLookup[targetUUID]
-			modelLocker.Unlock()
+			unifiedDB, uOk := dbRegistry.Get(targetUUID)
 
 			if uOk {
 				storeName := jsonPayload
-				store := database.OpenVectorStore[map[string]any](unifiedDB, storeName)
+				store := database.OpenVectorStore[map[string]any](ctx, unifiedDB, storeName)
 
-				id := sop.NewUUID()
-				vectorLocker.Lock()
-				vectorStoreLookup[id] = store
-				vectorLocker.Unlock()
+				id := vectorStoreRegistry.Add(store)
 
 				return C.CString(id.String())
 			}
@@ -122,20 +108,15 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		}
 
 		storeName := jsonPayload // Payload is just the name
-		store := db.Open(storeName)
+		store := db.Open(ctx, storeName)
 
-		id := sop.NewUUID()
-		vectorLocker.Lock()
-		vectorStoreLookup[id] = store
-		vectorLocker.Unlock()
+		id := vectorStoreRegistry.Add(store)
 
 		return C.CString(id.String())
 
 	case UpsertVector:
 		// targetID is the Store UUID
-		vectorLocker.Lock()
-		store, ok := vectorStoreLookup[targetUUID]
-		vectorLocker.Unlock()
+		store, ok := vectorStoreRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Vector Store not found")
 		}
@@ -145,14 +126,12 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			return C.CString(fmt.Sprintf("invalid item: %v", err))
 		}
 
-		if err := store.Upsert(item); err != nil {
+		if err := store.Upsert(ctx, item); err != nil {
 			return C.CString(err.Error())
 		}
 
 	case UpsertBatchVector:
-		vectorLocker.Lock()
-		store, ok := vectorStoreLookup[targetUUID]
-		vectorLocker.Unlock()
+		store, ok := vectorStoreRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Vector Store not found")
 		}
@@ -162,20 +141,18 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			return C.CString(fmt.Sprintf("invalid items: %v", err))
 		}
 
-		if err := store.UpsertBatch(items); err != nil {
+		if err := store.UpsertBatch(ctx, items); err != nil {
 			return C.CString(err.Error())
 		}
 
 	case GetVector:
-		vectorLocker.Lock()
-		store, ok := vectorStoreLookup[targetUUID]
-		vectorLocker.Unlock()
+		store, ok := vectorStoreRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Vector Store not found")
 		}
 
 		itemID := jsonPayload
-		item, err := store.Get(itemID)
+		item, err := store.Get(ctx, itemID)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -184,22 +161,18 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		return C.CString(string(data))
 
 	case DeleteVector:
-		vectorLocker.Lock()
-		store, ok := vectorStoreLookup[targetUUID]
-		vectorLocker.Unlock()
+		store, ok := vectorStoreRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Vector Store not found")
 		}
 
 		itemID := jsonPayload
-		if err := store.Delete(itemID); err != nil {
+		if err := store.Delete(ctx, itemID); err != nil {
 			return C.CString(err.Error())
 		}
 
 	case QueryVector:
-		vectorLocker.Lock()
-		store, ok := vectorStoreLookup[targetUUID]
-		vectorLocker.Unlock()
+		store, ok := vectorStoreRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Vector Store not found")
 		}
@@ -222,7 +195,7 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			}
 		}
 
-		hits, err := store.Query(opts.Vector, opts.K, filterFunc)
+		hits, err := store.Query(ctx, opts.Vector, opts.K, filterFunc)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -231,23 +204,19 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		return C.CString(string(data))
 
 	case VectorCount:
-		vectorLocker.Lock()
-		store, ok := vectorStoreLookup[targetUUID]
-		vectorLocker.Unlock()
+		store, ok := vectorStoreRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Vector Store not found")
 		}
 
-		count, err := store.Count()
+		count, err := store.Count(ctx)
 		if err != nil {
 			return C.CString(err.Error())
 		}
 		return C.CString(fmt.Sprintf("%d", count))
 
 	case VectorWithTransaction:
-		vectorLocker.Lock()
-		store, ok := vectorStoreLookup[targetUUID]
-		vectorLocker.Unlock()
+		store, ok := vectorStoreRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Vector Store not found")
 		}
@@ -258,21 +227,25 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			return C.CString("Invalid transaction UUID")
 		}
 
-		transactionLookupLocker.Lock()
-		tup, ok := transactionLookup[transUUID]
-		transactionLookupLocker.Unlock()
+		item, ok := Transactions.GetItem(transUUID)
 		if !ok {
 			return C.CString("Transaction not found")
 		}
 
-		newStore := store.WithTransaction(tup.First)
-		id := sop.NewUUID()
-
-		vectorLocker.Lock()
-		vectorStoreLookup[id] = newStore
-		vectorLocker.Unlock()
+		newStore := store.WithTransaction(item.Transaction)
+		id := vectorStoreRegistry.Add(newStore)
 
 		return C.CString(id.String())
+
+	case OptimizeVector:
+		store, ok := vectorStoreRegistry.Get(targetUUID)
+		if !ok {
+			return C.CString("Vector Store not found")
+		}
+
+		if err := store.Optimize(ctx); err != nil {
+			return C.CString(err.Error())
+		}
 	}
 
 	return nil
@@ -313,7 +286,7 @@ type ModelItem struct {
 func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload *C.char) *C.char {
 	ctx := getContext(ctxID)
 	if ctx == nil {
-		ctx = context.Background()
+		return C.CString(fmt.Sprintf("context with ID %v not found", int64(ctxID)))
 	}
 
 	targetUUID, _ := sop.ParseUUID(C.GoString(targetID))
@@ -330,17 +303,12 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 		if len(opts.ErasureConfig) > 0 || len(opts.StoresFolders) > 0 {
 			db.SetReplicationConfig(opts.ErasureConfig, opts.StoresFolders)
 		}
-		id := sop.NewUUID()
-		modelLocker.Lock()
-		dbLookup[id] = db
-		modelLocker.Unlock()
+		id := dbRegistry.Add(db)
 
 		return C.CString(id.String())
 
 	case OpenModelStore:
-		modelLocker.Lock()
-		db, ok := dbLookup[targetUUID]
-		modelLocker.Unlock()
+		db, ok := dbRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Model DB not found")
 		}
@@ -351,10 +319,7 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 			return C.CString(err.Error())
 		}
 
-		id := sop.NewUUID()
-		modelLocker.Lock()
-		modelStoreLookup[id] = store
-		modelLocker.Unlock()
+		id := modelStoreRegistry.Add(store)
 
 		return C.CString(id.String())
 
@@ -369,29 +334,22 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 			return C.CString("Invalid transaction UUID")
 		}
 
-		transactionLookupLocker.Lock()
-		tup, ok := transactionLookup[transUUID]
-		transactionLookupLocker.Unlock()
+		item, ok := Transactions.GetItem(transUUID)
 		if !ok {
 			return C.CString("Transaction not found")
 		}
 
-		store, err := database.NewBTreeModelStore(ctx, tup.First)
+		store, err := database.NewBTreeModelStore(ctx, item.Transaction)
 		if err != nil {
 			return C.CString(err.Error())
 		}
 
-		id := sop.NewUUID()
-		modelLocker.Lock()
-		modelStoreLookup[id] = store
-		modelLocker.Unlock()
+		id := modelStoreRegistry.Add(store)
 
 		return C.CString(id.String())
 
 	case SaveModel:
-		modelLocker.Lock()
-		store, ok := modelStoreLookup[targetUUID]
-		modelLocker.Unlock()
+		store, ok := modelStoreRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Model Store not found")
 		}
@@ -406,9 +364,7 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 		}
 
 	case LoadModel:
-		modelLocker.Lock()
-		store, ok := modelStoreLookup[targetUUID]
-		modelLocker.Unlock()
+		store, ok := modelStoreRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Model Store not found")
 		}
@@ -427,9 +383,7 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 		return C.CString(string(data))
 
 	case ListModels:
-		modelLocker.Lock()
-		store, ok := modelStoreLookup[targetUUID]
-		modelLocker.Unlock()
+		store, ok := modelStoreRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Model Store not found")
 		}
@@ -445,9 +399,7 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 		return C.CString(string(data))
 
 	case DeleteModel:
-		modelLocker.Lock()
-		store, ok := modelStoreLookup[targetUUID]
-		modelLocker.Unlock()
+		store, ok := modelStoreRegistry.Get(targetUUID)
 		if !ok {
 			return C.CString("Model Store not found")
 		}

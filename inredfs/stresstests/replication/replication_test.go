@@ -300,7 +300,7 @@ var storesFolders = []string{
 // FailedToReplicate = true.
 func reinstateDrive(t *testing.T) {
 	ctx := context.Background()
-	if err := inredfs.ReinstateFailedDrives(ctx, storesFolders); err != nil {
+	if err := inredfs.ReinstateFailedDrives(ctx, storesFolders, nil); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}

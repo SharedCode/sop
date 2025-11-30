@@ -113,7 +113,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 }
 
 func Test_ByteArrayValue(t *testing.T) {
-	inredfs.RemoveBtree(ctx, dataPath, "baStore")
+	inredfs.RemoveBtree(ctx, dataPath, "baStore", nil)
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	trans, err := inredfs.NewTransaction(ctx, to)
 	if err != nil {

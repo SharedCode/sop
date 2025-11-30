@@ -1,6 +1,7 @@
 package etl
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,7 +12,7 @@ import (
 )
 
 // IngestAgent performs the ETL process for a specific agent configuration.
-func IngestAgent(configPath, dataFile, targetAgentID string) error {
+func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string) error {
 	// 1. Load Configuration
 	rootCfg, err := agent.LoadConfigFromFile(configPath)
 	if err != nil {
@@ -81,7 +82,7 @@ func IngestAgent(configPath, dataFile, targetAgentID string) error {
 			if depCfg.StoragePath != "" && !filepath.IsAbs(depCfg.StoragePath) {
 				depCfg.StoragePath = filepath.Join(filepath.Dir(configPath), depCfg.StoragePath)
 			}
-			depSvc, depErr = agent.NewFromConfig(*depCfg, agent.Dependencies{AgentRegistry: make(map[string]ai.Agent[map[string]any])})
+			depSvc, depErr = agent.NewFromConfig(ctx, *depCfg, agent.Dependencies{AgentRegistry: make(map[string]ai.Agent[map[string]any])})
 		} else {
 			// 2. Fallback to looking for a separate file
 			configDir := filepath.Dir(configPath)
@@ -98,11 +99,11 @@ func IngestAgent(configPath, dataFile, targetAgentID string) error {
 				if depCfgFromFile.StoragePath != "" && !filepath.IsAbs(depCfgFromFile.StoragePath) {
 					depCfgFromFile.StoragePath = filepath.Join(filepath.Dir(depConfigPath), depCfgFromFile.StoragePath)
 				}
-				depSvc, depErr = agent.NewFromConfig(*depCfgFromFile, agent.Dependencies{AgentRegistry: make(map[string]ai.Agent[map[string]any])})
+				depSvc, depErr = agent.NewFromConfig(ctx, *depCfgFromFile, agent.Dependencies{AgentRegistry: make(map[string]ai.Agent[map[string]any])})
 			} else {
 				// 3. Check if it's the root config itself
 				if rootCfg.ID == targetID {
-					depSvc, depErr = agent.NewFromConfig(*rootCfg, agent.Dependencies{AgentRegistry: make(map[string]ai.Agent[map[string]any])})
+					depSvc, depErr = agent.NewFromConfig(ctx, *rootCfg, agent.Dependencies{AgentRegistry: make(map[string]ai.Agent[map[string]any])})
 				} else {
 					return fmt.Errorf("dependency agent '%s' not found in inline agents or as a file", targetID)
 				}
@@ -115,7 +116,7 @@ func IngestAgent(configPath, dataFile, targetAgentID string) error {
 		deps.AgentRegistry[targetID] = depSvc
 	}
 
-	emb, idx, err := agent.SetupInfrastructure(*cfg, deps)
+	emb, idx, err := agent.SetupInfrastructure(ctx, *cfg, deps)
 	if err != nil {
 		return fmt.Errorf("failed to setup infrastructure: %w", err)
 	}
@@ -135,7 +136,7 @@ func IngestAgent(configPath, dataFile, targetAgentID string) error {
 			texts[i] = fmt.Sprintf("%s %s", item.Text, item.Description)
 		}
 
-		vecs, err := emb.EmbedTexts(texts)
+		vecs, err := emb.EmbedTexts(ctx, texts)
 		if err != nil {
 			return fmt.Errorf("failed to generate embeddings: %w", err)
 		}
@@ -152,7 +153,7 @@ func IngestAgent(configPath, dataFile, targetAgentID string) error {
 			}
 		}
 
-		if err := idx.UpsertBatch(items); err != nil {
+		if err := idx.UpsertBatch(ctx, items); err != nil {
 			return fmt.Errorf("failed to upsert batch: %w", err)
 		}
 		totalProcessed += len(batch)
@@ -227,7 +228,7 @@ func IngestAgent(configPath, dataFile, targetAgentID string) error {
 	}
 
 	// 5. Verify
-	count, _ := idx.Count()
+	count, _ := idx.Count(ctx)
 	fmt.Printf("ETL Complete. Total items in DB: %d\n", count)
 	return nil
 }

@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"context"
 	"regexp"
 
 	"github.com/sharedcode/sop/ai"
@@ -29,7 +30,7 @@ func NewRegexClassifier(name string, patterns map[string]string) *RegexClassifie
 func (rc *RegexClassifier) Name() string { return rc.name }
 
 // Classify checks the sample text against the regex patterns and returns matching labels.
-func (rc *RegexClassifier) Classify(sample ai.ContentSample) ([]ai.Label, error) {
+func (rc *RegexClassifier) Classify(ctx context.Context, sample ai.ContentSample) ([]ai.Label, error) {
 	var labels []ai.Label
 	for label, re := range rc.patterns {
 		if re.MatchString(sample.Text) {

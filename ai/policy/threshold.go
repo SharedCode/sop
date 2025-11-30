@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/sharedcode/sop/ai"
@@ -23,7 +24,7 @@ func NewThresholdPolicy(id string, threshold float32, blockedLabels []string) *T
 }
 
 // Evaluate checks if the content violates the policy.
-func (p *ThresholdPolicy) Evaluate(stage string, sample ai.ContentSample, labels []ai.Label) (ai.PolicyDecision, error) {
+func (p *ThresholdPolicy) Evaluate(ctx context.Context, stage string, sample ai.ContentSample, labels []ai.Label) (ai.PolicyDecision, error) {
 	for _, l := range labels {
 		if p.blocked[l.Name] && l.Score >= p.threshold {
 			return ai.PolicyDecision{

@@ -18,6 +18,7 @@ class VectorAction(Enum):
     QueryVector = 7
     VectorCount = 8
     VectorWithTransaction = 9
+    OptimizeVector = 10
 
 class UsageMode(Enum):
     BuildOnceQueryMany = 0
@@ -131,6 +132,11 @@ class VectorStore:
             new_id = uuid.UUID(res)
             return VectorStore(new_id, self.ctx)
         except:
+            raise Exception(res)
+
+    def optimize(self) -> None:
+        res = call_go.manage_vector_db(self.ctx.id, VectorAction.OptimizeVector.value, str(self.id), "")
+        if res is not None:
             raise Exception(res)
 
     # Convenience method for LangChain compatibility

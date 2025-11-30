@@ -79,7 +79,7 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, 
 	}
 
 	// 2. Open Vectors Store (Versioned)
-	vectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(name("vectors"+suffix), true, 1000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
+	vectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(name("vecs"+suffix), true, 1000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
 	if err != nil {
 		return nil, err
 	}
@@ -94,19 +94,19 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, 
 		}
 		return 0
 	}
-	content, err := newBtree[string, string](ctx, sop.ConfigureStore(name("content"), true, 1000, "Content", contentSize, ""), trans, contentComparer)
+	content, err := newBtree[string, string](ctx, sop.ConfigureStore(name("data"), true, 1000, "Content", contentSize, ""), trans, contentComparer)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Open Lookup Store (Versioned)
-	lookup, err := newBtree[int, string](ctx, sop.ConfigureStore(name("lookup"+suffix), true, 1000, "Lookup", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
+	lookup, err := newBtree[int, string](ctx, sop.ConfigureStore(name("lku"+suffix), true, 1000, "Lookup", sop.SmallData, ""), trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return nil, err
 	}
 
 	// 5. Open TempVectors Store (Shared)
-	tempVectors, err := newBtree[string, []float32](ctx, sop.ConfigureStore(name("temp_vectors"), true, 1000, "Temp Vectors", sop.SmallData, ""), trans, contentComparer)
+	tempVectors, err := newBtree[string, []float32](ctx, sop.ConfigureStore(name("tmp_vecs"), true, 1000, "Temp Vectors", sop.SmallData, ""), trans, contentComparer)
 	if err != nil {
 		return nil, err
 	}

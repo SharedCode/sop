@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -16,7 +17,7 @@ func main() {
 	flag.Parse()
 
 	if *workflowPath != "" {
-		if err := etl.RunWorkflow(*workflowPath); err != nil {
+		if err := etl.RunWorkflow(context.Background(), *workflowPath); err != nil {
 			fmt.Printf("Workflow failed: %v\n", err)
 			os.Exit(1)
 		}
@@ -24,7 +25,7 @@ func main() {
 	}
 
 	if *configPath != "" {
-		if err := etl.IngestAgent(*configPath, *dataFile, *targetAgentID); err != nil {
+		if err := etl.IngestAgent(context.Background(), *configPath, *dataFile, *targetAgentID); err != nil {
 			fmt.Printf("ETL failed: %v\n", err)
 			os.Exit(1)
 		}

@@ -17,8 +17,12 @@ go build -o sop-ai ./cmd/agent
 echo "---------------------------------------------------"
 echo "0. Cleaning up old data"
 echo "---------------------------------------------------"
-rm -rf data/nurse_local
-rm -rf data/doctor_core
+rm -rf data/nurse_local_*
+rm -rf data/doctor_core_*
+rm -rf data/vector_sys_config
+rm -rf data/storelist.txt
+rm -rf data/reghashmod.txt
+rm -rf data/translogs
 
 echo "---------------------------------------------------"
 echo "1. Running ETL Workflow"

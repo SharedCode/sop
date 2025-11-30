@@ -6,7 +6,7 @@ from . import context
 
 logger = logging.getLogger(__name__)
 
-from typing import TypeVar, Generic, Type
+from typing import TypeVar, Generic, Type, List
 from dataclasses import dataclass, asdict
 
 from . import transaction
@@ -139,7 +139,7 @@ class ManageBtreeMetaData(Generic[TK, TV]):
 
 @dataclass
 class ManageBtreePayload(Generic[TK, TV]):
-    items: Item[TK, TV]
+    items: List[Item[TK, TV]]
 
 
 class BtreeAction(Enum):
@@ -273,11 +273,25 @@ class Btree(Generic[TK, TV]):
             btree_id=str(self.id),
             transaction_id=str(self.transaction_id),
         )
+        
+        payload = keys
+        if isinstance(keys, list):
+             # If list of dataclasses (Items), convert to dicts
+             if len(keys) > 0 and hasattr(keys[0], "__dataclass_fields__"):
+                 payload = [asdict(k) for k in keys]
+        elif hasattr(keys, "__dataclass_fields__"):
+             # Single dataclass
+             payload = [asdict(keys)]
+        else:
+             # Single primitive or list of primitives (already handled by first if)
+             if not isinstance(keys, list):
+                 payload = [keys]
+
         res = call_go.manage_btree(
             ctx.id,
             BtreeAction.Remove.value,
             json.dumps(asdict(metadata)),
-            json.dumps(asdict(keys)),
+            json.dumps(payload),
         )
         if res == None:
             raise BtreeError(
@@ -551,7 +565,9 @@ class Btree(Generic[TK, TV]):
             btree_id=str(self.id),
             transaction_id=str(self.transaction_id),
         )
-        payload: ManageBtreePayload = ManageBtreePayload(items=items)
+        # Ensure items is a list
+        items_list = [items] if not isinstance(items, list) else items
+        payload: ManageBtreePayload = ManageBtreePayload(items=items_list)
         res = call_go.manage_btree(
             ctx.id,
             action,

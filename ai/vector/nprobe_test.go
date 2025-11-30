@@ -22,11 +22,11 @@ func TestNProbeAndFiltering(t *testing.T) {
 	db := NewDatabase[map[string]any](ai.Standalone)
 	db.SetStoragePath(tmpDir)
 	ctx := context.Background()
-	idx := db.Open("test_nprobe")
+	idx := db.Open(ctx, "test_nprobe")
 
 	// Inject Centroids
 	storePath := filepath.Join(tmpDir, "test_nprobe")
-	trans, err := db.beginTransaction(sop.ForWriting, storePath)
+	trans, err := db.beginTransaction(ctx, sop.ForWriting, storePath)
 	if err != nil {
 		t.Fatalf("Failed to begin transaction: %v", err)
 	}
@@ -41,18 +41,18 @@ func TestNProbeAndFiltering(t *testing.T) {
 
 	// 2. Upsert Vectors
 	// Vec A: Near Centroid 1
-	idx.Upsert(ai.Item[map[string]any]{ID: "vecA", Vector: []float32{0.1, 0.1}, Payload: map[string]any{"type": "fruit", "name": "apple"}})
+	idx.Upsert(ctx, ai.Item[map[string]any]{ID: "vecA", Vector: []float32{0.1, 0.1}, Payload: map[string]any{"type": "fruit", "name": "apple"}})
 	// Vec B: Near Centroid 2
-	idx.Upsert(ai.Item[map[string]any]{ID: "vecB", Vector: []float32{2.1, 2.1}, Payload: map[string]any{"type": "fruit", "name": "banana"}})
+	idx.Upsert(ctx, ai.Item[map[string]any]{ID: "vecB", Vector: []float32{2.1, 2.1}, Payload: map[string]any{"type": "fruit", "name": "banana"}})
 	// Vec C: Near Centroid 2 but different type
-	idx.Upsert(ai.Item[map[string]any]{ID: "vecC", Vector: []float32{2.2, 2.2}, Payload: map[string]any{"type": "vegetable", "name": "carrot"}})
+	idx.Upsert(ctx, ai.Item[map[string]any]{ID: "vecC", Vector: []float32{2.2, 2.2}, Payload: map[string]any{"type": "vegetable", "name": "carrot"}})
 
 	// 3. Test nprobe
 	// Query at [1, 1]. Dist to C1 ~1.4, Dist to C2 ~1.4.
 	// With nprobe=2, it should scan both C1 and C2.
 	// We expect to find vecA and vecB.
 
-	results, err := idx.Query([]float32{1, 1}, 5, nil)
+	results, err := idx.Query(ctx, []float32{1, 1}, 5, nil)
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestNProbeAndFiltering(t *testing.T) {
 	filters := func(item map[string]any) bool {
 		return item["type"] == "fruit"
 	}
-	results2, err := idx.Query([]float32{2, 2}, 5, filters)
+	results2, err := idx.Query(ctx, []float32{2, 2}, 5, filters)
 	if err != nil {
 		t.Fatalf("Filtered Query failed: %v", err)
 	}

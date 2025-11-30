@@ -14,7 +14,7 @@ type Embeddings interface {
 	// Dim returns the dimension of the embeddings.
 	Dim() int
 	// EmbedTexts generates embeddings for a batch of texts.
-	EmbedTexts(texts []string) ([][]float32, error)
+	EmbedTexts(ctx context.Context, texts []string) ([][]float32, error)
 }
 
 // Centroid represents a cluster center and its metadata.
@@ -34,21 +34,27 @@ type VectorKey struct {
 type VectorStore[T any] interface {
 	// Upsert adds or updates a single item in the store.
 	// It now accepts an Item[T] which includes the Vector, Payload, and optional CentroidID.
-	Upsert(item Item[T]) error
+	Upsert(ctx context.Context, item Item[T]) error
 	// UpsertBatch adds or updates multiple items in the store efficiently.
-	UpsertBatch(items []Item[T]) error
+	UpsertBatch(ctx context.Context, items []Item[T]) error
 	// Get retrieves an item by its ID.
-	Get(id string) (*Item[T], error)
+	Get(ctx context.Context, id string) (*Item[T], error)
 	// Delete removes an item by its ID.
-	Delete(id string) error
+	Delete(ctx context.Context, id string) error
 	// Query searches for the nearest neighbors to the given vector.
 	// filters is a function that returns true if the item should be included.
-	Query(vec []float32, k int, filter func(T) bool) ([]Hit[T], error)
+	Query(ctx context.Context, vec []float32, k int, filter func(T) bool) ([]Hit[T], error)
 	// Count returns the total number of items in the store.
-	Count() (int64, error)
+	Count(ctx context.Context) (int64, error)
 	// AddCentroid adds a new centroid to the store dynamically.
 	// This allows for runtime expansion of the concept space without full rebalancing.
-	AddCentroid(vec []float32) (int, error)
+	AddCentroid(ctx context.Context, vec []float32) (int, error)
+
+	// Optimize reorganizes the index to improve query performance.
+	// It re-calculates centroids based on the full dataset and re-distributes vectors.
+	// This is recommended after a large batch ingestion (BuildOnceQueryMany mode) to "Seal" the index.
+	Optimize(ctx context.Context) error
+
 	// SetDeduplication enables or disables the internal deduplication check during Upsert.
 	// Disabling this can speed up ingestion for pristine data but may lead to ghost vectors if duplicates exist.
 	SetDeduplication(enabled bool)
@@ -106,7 +112,7 @@ type VectorDatabase[T any] interface {
 	// We use int here to avoid dependency on sop package, but it corresponds to sop.TransactionMode.
 	SetReadMode(mode int)
 	// Open returns a VectorStore for the specified domain (e.g., "doctor", "nurse").
-	Open(domain string) VectorStore[T]
+	Open(ctx context.Context, domain string) VectorStore[T]
 }
 
 // Item represents a vector item returned to the user.
@@ -152,7 +158,7 @@ type GenOutput struct {
 // PolicyEngine defines the interface for evaluating content against safety policies.
 type PolicyEngine interface {
 	// Evaluate checks the content against the policy rules.
-	Evaluate(stage string, sample ContentSample, labels []Label) (PolicyDecision, error)
+	Evaluate(ctx context.Context, stage string, sample ContentSample, labels []Label) (PolicyDecision, error)
 }
 
 // Classifier defines the interface for content classification models.
@@ -160,7 +166,7 @@ type Classifier interface {
 	// Name returns the name of the classifier.
 	Name() string
 	// Classify analyzes the content and returns a list of labels.
-	Classify(sample ContentSample) ([]Label, error)
+	Classify(ctx context.Context, sample ContentSample) ([]Label, error)
 }
 
 // ContentSample represents the content being evaluated for safety.
@@ -191,7 +197,7 @@ type Domain[T any] interface {
 	Index() VectorStore[T]
 	Policies() PolicyEngine
 	Classifier() Classifier
-	Prompt(kind string) (string, error)
+	Prompt(ctx context.Context, kind string) (string, error)
 	DataPath() string
 }
 

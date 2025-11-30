@@ -25,7 +25,7 @@ func DeleteBTree(t *testing.T) {
 	}
 
 	for _, tn := range tableList {
-		if err := inredfs.RemoveBtree(ctx, dataPath, tn); err != nil {
+		if err := inredfs.RemoveBtree(ctx, dataPath, tn, nil); err != nil {
 			t.Error(err)
 		}
 	}

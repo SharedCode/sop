@@ -70,7 +70,7 @@ func main() {
 	db.SetStoragePath("./data/doctor_brain")
 
 	// 2. Open the "Doctor" index
-	doctor := db.Open("doctor")
+	doctor := db.Open(context.Background(), "doctor")
 
 	// 3. Create some knowledge (In reality, you'd load this from PDFs/Textbooks)
 	knowledge := []ai.Item[map[string]any]{
@@ -88,7 +88,7 @@ func main() {
 
 	// 4. Upsert (Transactional!)
 	// SOP automatically handles the "Lookup" tree updates and Centroid assignment here.
-	if err := doctor.UpsertBatch(knowledge); err != nil {
+	if err := doctor.UpsertBatch(context.Background(), knowledge); err != nil {
 		panic(err)
 	}
 
@@ -123,7 +123,7 @@ Now we put it together. The user speaks to the Nurse, the Nurse speaks to the Do
 ```go
 func main() {
 	// ... (Open DB as before) ...
-	doctor := db.Open("doctor")
+	doctor := db.Open(context.Background(), "doctor")
 
 	// 1. User Input
 	userComplaint := "my tummy hurts"
@@ -133,7 +133,7 @@ func main() {
 
 	// 3. Doctor Action (The Search)
 	// SOP performs a partitioned search using the high-quality Centroids.
-	results, _ := doctor.Query(searchVector, 1, nil)
+	results, _ := doctor.Query(context.Background(), searchVector, 1, nil)
 
 	// 4. Diagnosis
 	if len(results) > 0 {
@@ -148,19 +148,19 @@ func main() {
 
 A Vector Database is a living organism. As you add more knowledge, your initial clusters (Centroids) might become unbalanced—one topic might get too huge while others remain empty.
 
-SOP includes a built-in **Rebalance** feature that uses its self-generated statistics to heal itself.
+SOP includes a built-in **Optimize** feature that uses its self-generated statistics to heal itself.
 
 ### The "Self-Aware" Index
 Remember the `Centroid` struct? It tracks its own `VectorCount`.
 *   **Real-time Stats**: Every time you add or delete a document, SOP updates the count on the affected Centroid.
 *   **Smart Management**: The system knows exactly which clusters are "heavy" and which are "light" without expensive scans.
 
-### The Rebalance Protocol
+### The Optimize Protocol
 When your Doctor's knowledge grows significantly, you simply call:
 
 ```go
 // Re-trains the index using the current data distribution
-if err := doctor.Rebalance(); err != nil {
+if err := doctor.Optimize(context.Background()); err != nil {
     panic(err)
 }
 ```
@@ -353,17 +353,21 @@ If you just want a high-performance, local vector store without the agent logic,
 import "github.com/sharedcode/sop/ai/vector"
 
 // Create a persistent store
-store := vector.NewDatabase()
-if err := store.Open("data/my_vectors"); err != nil {
+store := vector.NewDatabase[map[string]any](ai.Standalone)
+if err := store.Open(context.Background(), "data/my_vectors"); err != nil {
     panic(err)
 }
 defer store.Close()
 
 // Add a vector
-err := store.Upsert("item1", []float32{0.1, 0.2, 0.3}, map[string]any{"label": "test"})
+err := store.Upsert(context.Background(), ai.Item[map[string]any]{
+    ID: "item1", 
+    Vector: []float32{0.1, 0.2, 0.3}, 
+    Payload: map[string]any{"label": "test"},
+})
 
 // Search
-hits, err := store.Query([]float32{0.1, 0.2, 0.3}, 5, nil)
+hits, err := store.Query(context.Background(), []float32{0.1, 0.2, 0.3}, 5, nil)
 ```
 
 ### 2. `ai/policy`: Safety & Guardrails
@@ -390,7 +394,7 @@ localPol := &MyCustomPolicy{AllowedTopics: []string{"medical"}}
 finalPol := policy.NewChain(globalPol, localPol)
 
 // Evaluate content
-decision, err := finalPol.Evaluate("input", sample, labels)
+decision, err := finalPol.Evaluate(context.Background(), "input", sample, labels)
 if decision.Action == "block" {
     fmt.Println("Blocked by Policy:", decision.PolicyID)
 }
@@ -403,8 +407,8 @@ The `embed` package provides a unified interface for turning text into vectors. 
 import "github.com/sharedcode/sop/ai/embed"
 
 // A simple embedder (e.g., for testing or simple keyword matching)
-embedder := embed.NewSimpleEmbedder()
-vectors, _ := embedder.EmbedTexts([]string{"Hello world"})
+embedder := embed.NewSimple("simple-embedder", 64, nil)
+vectors, _ := embedder.EmbedTexts(context.Background(), []string{"Hello world"})
 ```
 
 ### 4. `ai/etl`: Data Pipelines
@@ -480,7 +484,7 @@ db := vector.NewDatabase[map[string]any](ai.Clustered)
 db.SetStoragePath("./data/doctor_brain_cluster")
 
 // 2. Open the "Doctor" index
-doctor := db.Open("doctor")
+doctor := db.Open(context.Background(), "doctor")
 ```
 
 In Clustered mode:
@@ -522,7 +526,7 @@ func AtomicTrainAndIndex(ctx context.Context, doc ai.Item[any], newWeights []flo
 
     // 3. Perform Updates
     // A. Update the Vector Index
-    if err := vecStore.Upsert(doc); err != nil {
+    if err := vecStore.Upsert(ctx, doc); err != nil {
         trans.Rollback(ctx)
         return err
     }
@@ -576,7 +580,7 @@ func RegisterUser(ctx context.Context, userID string, bio string) error {
     vector := embedder.Embed(bio)
     
     item := ai.Item[any]{ID: userID, Vector: vector, Payload: nil}
-    if err := vecStore.Upsert(item); err != nil {
+    if err := vecStore.Upsert(ctx, item); err != nil {
         trans.Rollback(ctx)
         return err
     }

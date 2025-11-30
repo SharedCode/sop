@@ -52,8 +52,8 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 	tables := []string{"reinstate_stress_t1", "reinstate_stress_t2", "reinstate_stress_t3"}
 	for _, tb := range tables {
 		// Best-effort cleanup of store repository entries to avoid flakiness across runs.
-		_ = inredfs.RemoveBtree(ctx, stores[0], tb)
-		_ = inredfs.RemoveBtree(ctx, stores[1], tb)
+		_ = inredfs.RemoveBtree(ctx, stores[0], tb, nil)
+		_ = inredfs.RemoveBtree(ctx, stores[1], tb, nil)
 		for _, base := range append(stores, fmt.Sprintf("%s%cdisk10", dataPath, os.PathSeparator), fmt.Sprintf("%s%cdisk11", dataPath, os.PathSeparator), fmt.Sprintf("%s%cdisk12", dataPath, os.PathSeparator), fmt.Sprintf("%s%cdisk13", dataPath, os.PathSeparator)) {
 			_ = os.RemoveAll(filepath.Join(base, tb))
 		}
@@ -82,7 +82,7 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 	// Restore permissions and start reinstate while hammering writes concurrently on all tables.
 	restoreRegistryDirs(t, stores, tables)
 	reinstateErr := make(chan error, 1)
-	go func() { reinstateErr <- inredfs.ReinstateFailedDrives(ctx, stores) }()
+	go func() { reinstateErr <- inredfs.ReinstateFailedDrives(ctx, stores, nil) }()
 
 	// Writer pool
 	var wg sync.WaitGroup

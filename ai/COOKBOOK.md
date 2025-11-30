@@ -44,7 +44,7 @@ func main() {
 
 	// 3. Open a Domain (Index)
 	// This creates/opens a specific "table" or "collection" named "documents"
-	idx := db.Open("documents")
+	idx := db.Open(context.Background(), "documents")
 	
 	fmt.Println("Vector Store opened successfully!")
 }
@@ -65,7 +65,7 @@ func main() {
 	db.SetStoragePath("./my_cluster_db")
 
 	// 3. Open a Domain (Index)
-	idx := db.Open("documents")
+	idx := db.Open(context.Background(), "documents")
 	
 	fmt.Println("Clustered Vector Store opened successfully!")
 }
@@ -76,7 +76,7 @@ func main() {
 Add items (vectors + metadata) to the store.
 
 ```go
-func ingestData(idx ai.VectorStore[map[string]any]) {
+func ingestData(ctx context.Context, idx ai.VectorStore[map[string]any]) {
 	// Define an item
 	item := ai.Item[map[string]any]{
 		ID:     "doc-101",
@@ -88,7 +88,7 @@ func ingestData(idx ai.VectorStore[map[string]any]) {
 	}
 
 	// Upsert (Insert or Update)
-	if err := idx.Upsert(item); err != nil {
+	if err := idx.Upsert(ctx, item); err != nil {
 		panic(err)
 	}
 
@@ -97,7 +97,7 @@ func ingestData(idx ai.VectorStore[map[string]any]) {
 		{ID: "doc-102", Vector: []float32{0.5, 0.5, 0.5, 0.5}, Payload: map[string]any{"title": "AI Agents"}},
 		{ID: "doc-103", Vector: []float32{0.9, 0.1, 0.1, 0.9}, Payload: map[string]any{"title": "Vector Search"}},
 	}
-	if err := idx.UpsertBatch(items); err != nil {
+	if err := idx.UpsertBatch(ctx, items); err != nil {
 		panic(err)
 	}
 }
@@ -113,7 +113,7 @@ func search(idx ai.VectorStore[map[string]any]) {
 	k := 5 // Number of results
 
 	// Perform Search
-	hits, err := idx.Query(queryVec, k, nil)
+	hits, err := idx.Query(context.Background(), queryVec, k, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -148,7 +148,7 @@ func searchWithFilter(idx ai.VectorStore[map[string]any]) {
 		return false
 	}
 
-	hits, _ := idx.Query(queryVec, 5, filter)
+	hits, _ := idx.Query(context.Background(), queryVec, 5, filter)
 	// ... process hits
 }
 ```
@@ -159,7 +159,7 @@ Remove items by ID.
 
 ```go
 func deleteItem(idx ai.VectorStore[map[string]any]) {
-	if err := idx.Delete("doc-101"); err != nil {
+	if err := idx.Delete(context.Background(), "doc-101"); err != nil {
 		panic(err)
 	}
 }
@@ -267,7 +267,7 @@ func atomicUpdate() {
 
 	// 3. Perform Updates
 	// Update Vector
-	vecStore.Upsert(ai.Item[any]{ID: "doc-1", Vector: newVec, Payload: "updated"})
+	vecStore.Upsert(ctx, ai.Item[any]{ID: "doc-1", Vector: newVec, Payload: "updated"})
 
 	// Update Model
 	newWeights := trainOn(newVec)

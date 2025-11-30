@@ -1,6 +1,7 @@
 package vector
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -18,7 +19,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 
 	db := NewDatabase[map[string]any](ai.Standalone)
 	db.SetStoragePath(tmpDir)
-	idx := db.Open("test_batch")
+	idx := db.Open(context.Background(), "test_batch")
 
 	// Create a batch of items that form 2 clusters
 	var items []ai.Item[map[string]any]
@@ -40,7 +41,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	}
 
 	// UpsertBatch should trigger K-Means (k ~ sqrt(20) = 4)
-	if err := idx.UpsertBatch(items); err != nil {
+	if err := idx.UpsertBatch(context.Background(), items); err != nil {
 		t.Fatalf("UpsertBatch failed: %v", err)
 	}
 
@@ -49,7 +50,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	// but we can check if Query works effectively.
 
 	// Query near Cluster 1
-	hits, err := idx.Query([]float32{0, 0}, 5, nil)
+	hits, err := idx.Query(context.Background(), []float32{0, 0}, 5, nil)
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}
@@ -71,7 +72,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	}
 
 	// Query near Cluster 2
-	hits2, err := idx.Query([]float32{10, 10}, 5, nil)
+	hits2, err := idx.Query(context.Background(), []float32{10, 10}, 5, nil)
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}
