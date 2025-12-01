@@ -7,6 +7,15 @@ from enum import Enum
 from .. import call_go
 from .. import context
 from .. import transaction
+from ..transaction import DBType
+
+KEY_ID = "ID"
+KEY_VECTOR = "Vector"
+KEY_PAYLOAD = "Payload"
+KEY_CENTROID_ID = "CentroidID"
+KEY_SCORE = "Score"
+KEY_META_ID = "id"
+KEY_META_TRANSACTION_ID = "transaction_id"
 
 class VectorAction(Enum):
     NewVectorDB = 1
@@ -17,17 +26,14 @@ class VectorAction(Enum):
     DeleteVector = 6
     QueryVector = 7
     VectorCount = 8
-    VectorWithTransaction = 9
+    BeginTransaction = 9
     OptimizeVector = 10
+    CloseVectorDB = 11
 
 class UsageMode(Enum):
     BuildOnceQueryMany = 0
     DynamicWithVectorCountTracking = 1
     Dynamic = 2
-
-class DBType(Enum):
-    Standalone = 0
-    Clustered = 1
 
 @dataclass
 class Item:
@@ -56,55 +62,66 @@ class VectorQueryOptions:
     k: int
     filter: Dict[str, Any]
 
+@dataclass
+class VectorStoreConfig:
+    usage_mode: int
+    content_size: int
+
+@dataclass
+class VectorStoreTransportOptions:
+    transaction_id: str
+    name: str
+    config: VectorStoreConfig
+    storage_path: str = ""
+
 class VectorStore:
-    def __init__(self, id: uuid.UUID, ctx: context.Context):
+    def __init__(self, id: uuid.UUID, transaction_id: uuid.UUID):
         self.id = id
-        self.ctx = ctx
+        self.transaction_id = transaction_id
 
-    def upsert(self, item: Item) -> None:
+    def _get_target_id(self) -> str:
+        return json.dumps({
+            KEY_META_ID: str(self.id),
+            KEY_META_TRANSACTION_ID: str(self.transaction_id)
+        })
+
+    def upsert(self, ctx: context.Context, item: Item) -> None:
         payload = json.dumps(asdict(item))
-        res = call_go.manage_vector_db(self.ctx.id, VectorAction.UpsertVector.value, str(self.id), payload)
+        res = call_go.manage_vector_db(ctx.id, VectorAction.UpsertVector.value, self._get_target_id(), payload)
         if res is not None:
             raise Exception(res)
 
-    def upsert_batch(self, items: List[Item]) -> None:
+    def upsert_batch(self, ctx: context.Context, items: List[Item]) -> None:
         payload = json.dumps([asdict(item) for item in items])
-        res = call_go.manage_vector_db(self.ctx.id, VectorAction.UpsertBatchVector.value, str(self.id), payload)
+        res = call_go.manage_vector_db(ctx.id, VectorAction.UpsertBatchVector.value, self._get_target_id(), payload)
         if res is not None:
             raise Exception(res)
 
-    def get(self, id: str) -> Item:
-        res = call_go.manage_vector_db(self.ctx.id, VectorAction.GetVector.value, str(self.id), id)
+    def get(self, ctx: context.Context, id: str) -> Item:
+        res = call_go.manage_vector_db(ctx.id, VectorAction.GetVector.value, self._get_target_id(), id)
         if res is None:
             raise Exception("Item not found or error occurred")
         
-        # Check if res is an error message (simple heuristic: if it doesn't look like JSON)
-        # But call_go returns None on error usually, or error string.
-        # Wait, manageVectorDB returns error string if error, or JSON string if success.
-        # How to distinguish?
-        # In Go: return C.CString(err.Error()) OR return C.CString(string(data))
-        # This is ambiguous. I should have returned a struct or used a prefix.
-        # However, JSON usually starts with '{'. Error message usually doesn't.
         if not res.strip().startswith("{"):
              raise Exception(res)
 
         data = json.loads(res)
         return Item(
-            id=data["ID"],
-            vector=data["Vector"],
-            payload=data["Payload"],
-            centroid_id=data.get("CentroidID", 0)
+            id=data[KEY_ID],
+            vector=data[KEY_VECTOR],
+            payload=data[KEY_PAYLOAD],
+            centroid_id=data.get(KEY_CENTROID_ID, 0)
         )
 
-    def delete(self, id: str) -> None:
-        res = call_go.manage_vector_db(self.ctx.id, VectorAction.DeleteVector.value, str(self.id), id)
+    def delete(self, ctx: context.Context, id: str) -> None:
+        res = call_go.manage_vector_db(ctx.id, VectorAction.DeleteVector.value, self._get_target_id(), id)
         if res is not None:
             raise Exception(res)
 
-    def query(self, vector: List[float], k: int = 10, filter: Dict[str, Any] = None) -> List[Hit]:
+    def query(self, ctx: context.Context, vector: List[float], k: int = 10, filter: Dict[str, Any] = None) -> List[Hit]:
         opts = VectorQueryOptions(vector=vector, k=k, filter=filter or {})
         payload = json.dumps(asdict(opts))
-        res = call_go.manage_vector_db(self.ctx.id, VectorAction.QueryVector.value, str(self.id), payload)
+        res = call_go.manage_vector_db(ctx.id, VectorAction.QueryVector.value, self._get_target_id(), payload)
         
         if not res.strip().startswith("["):
              raise Exception(res)
@@ -113,67 +130,21 @@ class VectorStore:
         hits = []
         for h in data:
             hits.append(Hit(
-                id=h["ID"],
-                score=h["Score"],
-                payload=h["Payload"]
+                id=h[KEY_ID],
+                score=h[KEY_SCORE],
+                payload=h[KEY_PAYLOAD]
             ))
         return hits
 
-    def count(self) -> int:
-        res = call_go.manage_vector_db(self.ctx.id, VectorAction.VectorCount.value, str(self.id), "")
+    def count(self, ctx: context.Context) -> int:
+        res = call_go.manage_vector_db(ctx.id, VectorAction.VectorCount.value, self._get_target_id(), "")
         try:
             return int(res)
         except:
             raise Exception(res)
 
-    def with_transaction(self, trans: transaction.Transaction) -> 'VectorStore':
-        res = call_go.manage_vector_db(self.ctx.id, VectorAction.VectorWithTransaction.value, str(self.id), str(trans.transaction_id))
-        try:
-            new_id = uuid.UUID(res)
-            return VectorStore(new_id, self.ctx)
-        except:
-            raise Exception(res)
-
-    def optimize(self) -> None:
-        res = call_go.manage_vector_db(self.ctx.id, VectorAction.OptimizeVector.value, str(self.id), "")
+    def optimize(self, ctx: context.Context) -> None:
+        res = call_go.manage_vector_db(ctx.id, VectorAction.OptimizeVector.value, self._get_target_id(), "")
         if res is not None:
             raise Exception(res)
 
-    # Convenience method for LangChain compatibility
-    def add_documents(self, texts: List[str], metadatas: List[Dict[str, Any]] = None, ids: List[str] = None) -> None:
-        # This requires an embedder. Since we don't have one bound here, we can't implement this fully 
-        # without the user providing vectors.
-        # So we might skip this or require vectors.
-        pass
-
-class VectorDatabase:
-    def __init__(self, storage_path: str = "", usage_mode: UsageMode = UsageMode.BuildOnceQueryMany, db_type: DBType = DBType.Standalone, erasure_config: transaction.ErasureCodingConfig = None, stores_folders: List[str] = None):
-        self.ctx = context.Context()
-        
-        # Wrap single config into a map for the backend
-        ec_map = None
-        if erasure_config is not None:
-            ec_map = {"": erasure_config}
-
-        opts = VectorDBOptions(
-            storage_path=storage_path, 
-            usage_mode=usage_mode.value, 
-            db_type=db_type.value,
-            erasure_config=ec_map,
-            stores_folders=stores_folders
-        )
-        payload = json.dumps(asdict(opts))
-        
-        res = call_go.manage_vector_db(self.ctx.id, VectorAction.NewVectorDB.value, None, payload)
-        try:
-            self.id = uuid.UUID(res)
-        except:
-            raise Exception(res)
-
-    def open(self, name: str) -> VectorStore:
-        res = call_go.manage_vector_db(self.ctx.id, VectorAction.OpenVectorStore.value, str(self.id), name)
-        try:
-            store_id = uuid.UUID(res)
-            return VectorStore(store_id, self.ctx)
-        except:
-            raise Exception(res)

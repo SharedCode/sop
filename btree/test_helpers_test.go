@@ -47,12 +47,13 @@ func (m *mockTx) Rollback(ctx context.Context, err error) error {
 	m.begun = false
 	return nil
 }
-func (m *mockTx) HasBegun() bool                                  { return m.begun }
-func (m *mockTx) GetMode() sop.TransactionMode                    { return m.mode }
-func (m *mockTx) GetStores(ctx context.Context) ([]string, error) { return nil, nil }
-func (m *mockTx) Close() error                                    { return nil }
-func (m *mockTx) GetID() sop.UUID                                 { return sop.NewUUID() }
-func (m *mockTx) CommitMaxDuration() time.Duration                { return time.Minute }
+func (m *mockTx) HasBegun() bool                                    { return m.begun }
+func (m *mockTx) GetMode() sop.TransactionMode                      { return m.mode }
+func (m *mockTx) GetStores(ctx context.Context) ([]string, error)   { return nil, nil }
+func (m *mockTx) Close() error                                      { return nil }
+func (m *mockTx) GetID() sop.UUID                                   { return sop.NewUUID() }
+func (m *mockTx) CommitMaxDuration() time.Duration                  { return time.Minute }
+func (m *mockTx) OnCommit(callback func(ctx context.Context) error) {}
 
 // iatErr induces an error on Add to exercise rollback path in the wrapper.
 type iatErr[TK Ordered, TV any] struct{}

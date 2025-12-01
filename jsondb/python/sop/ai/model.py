@@ -16,6 +16,7 @@ class ModelAction(Enum):
     LoadModel = 5
     ListModels = 6
     DeleteModel = 7
+    CloseModelDB = 8
 
 @dataclass
 class Model:
@@ -27,23 +28,28 @@ class Model:
     is_active: bool
 
 class ModelStore:
-    def __init__(self, ctx: context.Context, id: uuid.UUID):
-        self.ctx = ctx
+    def __init__(self, id: uuid.UUID, transaction_id: uuid.UUID):
         self.id = id
+        self.transaction_id = transaction_id
+
+    def _get_target_id(self) -> str:
+        return json.dumps({
+            "id": str(self.id),
+            "transaction_id": str(self.transaction_id)
+        })
 
     @staticmethod
-    def open_btree_store(trans: transaction.Transaction) -> 'ModelStore':
-        ctx = context.Context()
+    def open_btree_store(ctx: context.Context, trans: transaction.Transaction) -> 'ModelStore':
         opts = {"transaction_id": str(trans.transaction_id)}
         payload = json.dumps(opts)
         res = call_go.manage_model_store(ctx.id, ModelAction.NewBTreeModelStore.value, None, payload)
         try:
             id = uuid.UUID(res)
-            return ModelStore(ctx, id)
+            return ModelStore(id, trans.transaction_id)
         except:
             raise Exception(res)
 
-    def save(self, category: str, name: str, model: Any) -> None:
+    def save(self, ctx: context.Context, category: str, name: str, model: Any) -> None:
         if hasattr(model, "__dataclass_fields__"):
             model_data = asdict(model)
         else:
@@ -55,17 +61,17 @@ class ModelStore:
             "model": model_data
         }
         payload = json.dumps(item)
-        res = call_go.manage_model_store(self.ctx.id, ModelAction.SaveModel.value, str(self.id), payload)
+        res = call_go.manage_model_store(ctx.id, ModelAction.SaveModel.value, self._get_target_id(), payload)
         if res is not None:
             raise Exception(res)
 
-    def get(self, category: str, name: str) -> Any:
+    def get(self, ctx: context.Context, category: str, name: str) -> Any:
         item = {
             "category": category,
             "name": name
         }
         payload = json.dumps(item)
-        res = call_go.manage_model_store(self.ctx.id, ModelAction.LoadModel.value, str(self.id), payload)
+        res = call_go.manage_model_store(ctx.id, ModelAction.LoadModel.value, self._get_target_id(), payload)
         if res is None:
              raise Exception("Model not found or error occurred")
         
@@ -82,18 +88,18 @@ class ModelStore:
         except:
             raise Exception(res)
 
-    def delete(self, category: str, name: str) -> None:
+    def delete(self, ctx: context.Context, category: str, name: str) -> None:
         item = {
             "category": category,
             "name": name
         }
         payload = json.dumps(item)
-        res = call_go.manage_model_store(self.ctx.id, ModelAction.DeleteModel.value, str(self.id), payload)
+        res = call_go.manage_model_store(ctx.id, ModelAction.DeleteModel.value, self._get_target_id(), payload)
         if res is not None:
             raise Exception(res)
 
-    def list(self, category: str) -> List[str]:
-        res = call_go.manage_model_store(self.ctx.id, ModelAction.ListModels.value, str(self.id), category)
+    def list(self, ctx: context.Context, category: str) -> List[str]:
+        res = call_go.manage_model_store(ctx.id, ModelAction.ListModels.value, self._get_target_id(), category)
         if res.strip() == "null":
             return []
         if not res.strip().startswith("["):

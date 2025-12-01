@@ -333,7 +333,9 @@ class Btree(Generic[TK, TV]):
             btree_id=str(self.id),
             transaction_id=str(self.transaction_id),
         )
-        payload: ManageBtreePayload = ManageBtreePayload(items=keys)
+        # Ensure keys is a list
+        keys_list = [keys] if not isinstance(keys, list) else keys
+        payload: ManageBtreePayload = ManageBtreePayload(items=keys_list)
         result, error = call_go.get_from_btree(
             ctx.id,
             BtreeAction.GetValues.value,

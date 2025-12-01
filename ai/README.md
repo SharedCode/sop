@@ -15,6 +15,15 @@ A persistent, ACID-compliant vector store that runs on your local filesystem.
 *   **Modes**: Supports **Standalone** (In-Memory Cache) for local use and **Clustered** (Redis Cache) for distributed deployments.
 *   **Search**: Supports cosine similarity search with metadata filtering.
 *   **Partitioning**: Designed for massive scale via natural partitioning.
+*   **Optimization**: Built-in `Optimize()` method to rebalance clusters (Centroids) and ensure optimal search performance as data grows.
+    *   **Scalability**: The optimization process is batched (commits every 200 items), allowing it to scale to millions of records without hitting transaction timeouts.
+    *   **Operational Constraint**: To ensure data consistency and simplicity, the Vector Store enters a **Read-Only** mode during optimization. Any attempts to `Upsert` or `Delete` will return an error until `Optimize` completes.
+    *   **Crash Recovery**: If the process crashes during optimization, simply restart it. The next call to `Optimize` will automatically detect and clean up any stale artifacts before starting fresh.
+*   **Deduplication**: Optional deduplication check during ingestion. Can be disabled (`SetDeduplication(false)`) for maximum write performance when data is known to be unique.
+*   **Usage Modes**:
+    *   **BuildOnceQueryMany**: Optimized for static datasets. Ingest data -> Call `Optimize()` -> Serve queries. Discards temporary build artifacts for efficiency.
+    *   **Dynamic**: For systems with continuous updates. Maintains auxiliary structures to handle frequent inserts/deletes.
+    *   **DynamicWithVectorCountTracking**: Specialized mode for external centroid management (e.g., Agents). It tracks vector counts per centroid to help you decide when to trigger `Optimize()`.
 
 ### 2. Agent Framework (`ai/agent`)
 A flexible framework for defining AI agents with:
@@ -53,7 +62,7 @@ The SOP AI Kit is designed to play nicely with the broader AI ecosystem while ad
 ### Deployment Standards
 *   **ACID Compliance**: Full Two-Phase Commit (2PC) support for distributed transactions.
 *   **Storage**: Uses standard filesystem paths (no proprietary binary blobs hidden in OS folders).
-*   **Caching**: Supports standard Redis protocol for clustered caching.
+*   **Caching**: Supports standard Redis protocol for clustered caching. **Note**: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
 *   **Replication & High Availability**:
     *   **General Purpose**: Supports full replication (Erasure Coding, Active/Passive) in all modes.
     *   **AI Package**:
@@ -74,6 +83,10 @@ The SOP AI package is built as a high-level abstraction layer on top of the Gene
 
 For detailed code examples and usage patterns, please see the [AI Cookbook](COOKBOOK.md).
 
+## Model Store Tutorial
+
+For a deep dive into persisting AI models, configurations, and weights, see the [Model Store Tutorial](MODEL_STORE_TUTORIAL.md).
+
 ## Usage as a Library
 
 You can use the `ai` package directly in your Go applications to build custom solutions.
@@ -87,24 +100,27 @@ import (
     "context"
     "fmt"
     "github.com/sharedcode/sop/ai"
-    "github.com/sharedcode/sop/ai/vector"
+    "github.com/sharedcode/sop/database"
     "github.com/sharedcode/sop/ai/embed"
 )
 
 func main() {
     // 1. Initialize the Vector Database
-    db := vector.NewDatabase[map[string]any](ai.Standalone)
-    db.SetStoragePath("./my_knowledge_base")
+    db := database.NewDatabase(database.Standalone, "./my_knowledge_base")
     
-    // Open an index for a specific domain (e.g., "documents")
-    idx := db.Open(context.Background(), "documents")
+    // 2. Start a Transaction
+    ctx := context.Background()
+    trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
+    defer trans.Rollback(ctx) // Safety rollback
 
-    // 2. Initialize an Embedder
+    // 3. Open an index for a specific domain (e.g., "documents")
+    idx, _ := db.OpenVectorStore(ctx, "documents", trans, vector.Config{})
+
+    // 4. Initialize an Embedder
     // (In production, use a real embedding model. Here we use the simple keyword hasher)
     emb := embed.NewSimple("simple-embedder", 64, nil)
 
-    // 3. Add Data (Upsert)
-    ctx := context.Background()
+    // 5. Add Data (Upsert)
     item := ai.Item[map[string]any]{
         ID: "doc-1",
         Vector: nil, // Will be filled below
@@ -119,8 +135,14 @@ func main() {
 
     // Save to DB
     idx.UpsertBatch(ctx, []ai.Item[map[string]any]{item})
+    
+    // Commit the transaction
+    trans.Commit(ctx)
 
-    // 4. Search (Retrieve)
+    // 6. Search (Retrieve) - New Read Transaction
+    trans, _ = db.BeginTransaction(ctx, sop.ForReading)
+    idx, _ = db.OpenVectorStore(ctx, "documents", trans, vector.Config{})
+    
     query := "storage library"
     queryVecs, _ := emb.EmbedTexts(ctx, []string{query})
     
@@ -129,6 +151,7 @@ func main() {
     for _, hit := range hits {
         fmt.Printf("Found: %s (Score: %.2f)\n", hit.Payload["text"], hit.Score)
     }
+    trans.Commit(ctx)
 }
 ```
 

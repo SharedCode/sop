@@ -1,11 +1,14 @@
-package vector
+package vector_test
 
 import (
 	"context"
 	"os"
 	"testing"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/database"
 )
 
 func TestAddCentroid(t *testing.T) {
@@ -15,12 +18,19 @@ func TestAddCentroid(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase[map[string]any](ai.Standalone)
-	db.SetStoragePath(tmpDir)
-	db.SetUsageMode(ai.Dynamic)
-	// db.Close() is not implemented/needed for in-memory test
+	db := database.NewDatabase(database.Standalone, tmpDir)
+	ctx := context.Background()
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
 
-	idx := db.Open(context.Background(), "test_dynamic_centroids")
+	idx, err := db.OpenVectorStore(ctx, "test_dynamic_centroids", tx, vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
 
 	// 1. Initial State
 	vec1 := []float32{0.1, 0.1}
@@ -29,25 +39,46 @@ func TestAddCentroid(t *testing.T) {
 		Vector:  vec1,
 		Payload: map[string]any{"label": "A"},
 	}
-	if err := idx.Upsert(context.Background(), item1); err != nil {
+	if err := idx.Upsert(ctx, item1); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
 	}
 
 	// Verify we have 1 centroid (auto-created)
-	// We can't check internal state easily, but we can check query behavior
-	hits, _ := idx.Query(context.Background(), vec1, 1, nil)
-	if len(hits) != 1 {
-		t.Errorf("Expected 1 hit, got %d", len(hits))
+	// NOTE: In V0, Upsert goes to TempVectors, so NO centroids are created yet.
+	// We must Optimize to transition to V1 where centroids exist.
+	if err := idx.Optimize(ctx); err != nil {
+		t.Fatalf("Optimize failed: %v", err)
+	}
+
+	// Start new transaction for V1 operations
+	tx, err = db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction 2 failed: %v", err)
+	}
+	idx, err = db.OpenVectorStore(ctx, "test_dynamic_centroids", tx, vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open 2 failed: %v", err)
+	}
+
+	// Verify we have 1 centroid (created by Optimize)
+	// We can't easily check count, but we can check if item1 is in Vectors (implied by Get)
+	item1Got, err := idx.Get(ctx, "item1")
+	if err != nil {
+		t.Fatalf("Get item1 failed: %v", err)
+	}
+	if item1Got.CentroidID == 0 {
+		t.Fatal("Item1 should have assigned CentroidID after Optimize")
 	}
 
 	// 2. Add New Centroid
 	vec2 := []float32{0.9, 0.9}
-	// Cast to the interface that includes AddCentroid (since it's in the package, we can cast to domainIndex or just use the interface)
-	// But idx is ai.VectorIndex which now has AddCentroid
-	newID, err := idx.AddCentroid(context.Background(), vec2)
+	newID, err := idx.AddCentroid(ctx, vec2)
 	if err != nil {
 		t.Fatalf("AddCentroid failed: %v", err)
 	}
+	// Optimize created 1 centroid (ID 1). So next should be 2.
 	if newID != 2 {
 		t.Errorf("Expected new centroid ID 2, got %d", newID)
 	}
@@ -59,15 +90,29 @@ func TestAddCentroid(t *testing.T) {
 		Vector:  vec2,
 		Payload: map[string]any{"label": "B"},
 	}
-	if err := idx.Upsert(context.Background(), item2); err != nil {
+	if err := idx.Upsert(ctx, item2); err != nil {
 		t.Fatalf("Upsert item2 failed: %v", err)
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
 	// 4. Verify Assignment
-	// We can check the metadata of the item to see which centroid it was assigned to
-	// But Get returns *ai.Item[T], which has CentroidID field?
-	// Let's check ai.Item definition.
-	if _, err := idx.Get(context.Background(), "item2"); err != nil {
+	tx, err = db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	idx, err = vector.Open[map[string]any](ctx, tx, "test_dynamic_centroids", vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	if _, err := idx.Get(ctx, "item2"); err != nil {
 		t.Fatalf("Get item2 failed: %v", err)
 	}
 }

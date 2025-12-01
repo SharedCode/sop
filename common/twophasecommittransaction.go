@@ -71,6 +71,9 @@ type Transaction struct {
 
 	// Used for transaction level locking.
 	nodesKeys []*sop.LockKey
+
+	// onCommitHooks is a list of callbacks to be executed after a successful commit.
+	onCommitHooks []func(ctx context.Context) error
 }
 
 // NewTwoPhaseCommitTransaction creates a new two-phase commit controller.
@@ -269,6 +272,11 @@ func (t *Transaction) GetID() sop.UUID {
 // CommitMaxDuration returns the configured maximum commit duration for this transaction.
 // This is used as the internal cap and lock TTL; the effective runtime cap is min(ctx deadline, this duration).
 func (t *Transaction) CommitMaxDuration() time.Duration { return t.maxTime }
+
+// OnCommit registers a callback to be executed after a successful commit.
+func (t *Transaction) OnCommit(callback func(ctx context.Context) error) {
+	t.onCommitHooks = append(t.onCommitHooks, callback)
+}
 
 // phase1Commit coordinates locking, conflict checks, value writes, and
 // classifies node mutations, retrying when needed until success or timeout.
@@ -591,6 +599,12 @@ func (t *Transaction) phase2Commit(ctx context.Context) error {
 	t.cleanup(ctx)
 
 	log.Debug(fmt.Sprintf("phase 2 commit ends, tid: %v", t.GetID()))
+
+	for _, hook := range t.onCommitHooks {
+		if err := hook(ctx); err != nil {
+			log.Warn(fmt.Sprintf("onCommit hook failed, details: %v", err))
+		}
+	}
 
 	return nil
 }

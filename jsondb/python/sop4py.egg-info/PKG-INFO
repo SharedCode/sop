@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: sop4py
-Version: 2.0.16
+Version: 2.0.17
 Summary: Scalable Objects Persistence (SOP) V2 for Python. General Public Availability (GPA) Release
 Author-email: Gerardo Recinto <gerardorecinto@yahoo.com>
 Classifier: Programming Language :: Python :: 3
@@ -24,9 +24,14 @@ Description-Content-Type: text/markdown
 *   **Replication**: Optional Erasure Coding (EC) for fault-tolerant storage across drives.
 *   **Flexible Deployment**: Supports both **Standalone** (local) and **Clustered** (distributed) modes.
 
+## Documentation
+
+*   **[API Cookbook](COOKBOOK.md)**: Common recipes and patterns (Key-Value, Transactions, AI).
+*   **[Examples](examples/)**: Complete runnable scripts.
+
 ## Prerequisites
 
-*   **Redis**: Required for caching and transaction coordination (especially in Clustered mode).
+*   **Redis**: Required for caching and transaction coordination (especially in Clustered mode). **Note**: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
 *   **Storage**: Local disk space (supports multiple drives/folders).
 *   **OS**: macOS (Darwin), Linux, or Windows (AMD64).
 
@@ -92,27 +97,38 @@ with Transaction(ctx, opts) as t:
 Manage vector embeddings for semantic search. You can choose between **Standalone** (local) and **Clustered** (distributed) modes.
 
 ```python
+from sop import Context
 from sop.ai import VectorDatabase, UsageMode, Item, DBType
+
+# Initialize Context
+ctx = Context()
 
 # Initialize Vector DB
 # DBType.Standalone: Uses in-memory caching (good for single node).
 # DBType.Clustered: Uses Redis for caching (good for distributed setups).
 vdb = VectorDatabase(
+    ctx,
     storage_path="/tmp/sop_vectors", 
     usage_mode=UsageMode.Dynamic,
     db_type=DBType.Standalone
 )
-vector_store = vdb.open("products")
+vector_store = vdb.open(ctx, "products")
 
 # Upsert Vectors
-vector_store.upsert(Item(
+vector_store.upsert(ctx, Item(
     id="prod_101",
     vector=[0.1, 0.5, 0.9],
     payload={"name": "Laptop", "price": 999}
 ))
 
+# Optimize (Optional but recommended after bulk loads)
+# Rebalances the index for optimal search performance.
+# Note: This performs a full index rebuild. Schedule periodically based on data drift.
+vector_store.optimize(ctx)
+
 # Semantic Search (k-NN)
 hits = vector_store.query(
+    ctx,
     vector=[0.1, 0.5, 0.8],
     k=5,
     filter={"name": "Laptop"}
@@ -120,6 +136,32 @@ hits = vector_store.query(
 
 for hit in hits:
     print(f"Match: {hit.id}, Score: {hit.score}")
+
+### 4. Vector Store Usage Modes
+
+SOP provides different modes to optimize for your specific use case:
+
+*   **`UsageMode.BuildOnceQueryMany`**: Best for static datasets (e.g., Wikipedia dump).
+    *   **Workflow**: Ingest Data -> Call `optimize()` -> Serve Queries.
+    *   **Benefit**: Discards temporary build artifacts to save space and maximize read performance.
+*   **`UsageMode.Dynamic`**: Best for general-purpose, changing datasets. Maintains structures for frequent updates.
+*   **`UsageMode.DynamicWithVectorCountTracking`**: Advanced mode for Agents.
+    *   **Benefit**: Tracks vector counts per cluster, allowing your application to calculate density skew and intelligently decide *when* to trigger optimization (e.g., "only if skew > 5x").
+
+### 5. Explicit Centroid Management
+
+You can bypass automatic clustering by providing a `centroid_id` during upsert. This is useful if your data already has logical groupings (e.g., User ID, Category).
+
+```python
+vector_store.upsert(ctx, Item(
+    id="prod_102",
+    vector=[0.2, 0.6, 0.1],
+    payload={"name": "Phone"},
+    centroid_id=500  # Explicitly assign to cluster 500
+))
+```
+
+### 6. AI Model Store
 ```
 
 ### 4. AI Model Store
@@ -127,13 +169,17 @@ for hit in hits:
 Version and manage your machine learning models using the B-Tree backend.
 
 ```python
+from sop import Context
 from sop.ai import Database, Model
 
+# Initialize Context
+ctx = Context()
+
 # Initialize the Database
-db = Database(storage_path="/tmp/sop_data")
+db = Database(ctx, storage_path="/tmp/sop_data")
 
 # Open the Model Store
-model_store = db.open_model_store("my_models")
+model_store = db.open_model_store(ctx, "my_models")
 
 # Save a Model
 model = Model(
@@ -144,10 +190,10 @@ model = Model(
     metrics={"accuracy": 0.98},
     is_active=True
 )
-model_store.save("classifiers", "churn_v1", model)
+model_store.save(ctx, "classifiers", "churn_v1", model)
 
 # Retrieve a Model
-loaded_model = model_store.get("classifiers", "churn_v1")
+loaded_model = model_store.get(ctx, "classifiers", "churn_v1")
 print(f"Loaded Model: {loaded_model['model']['id']}")
 ```
 
@@ -180,20 +226,22 @@ Data Scientists and ML Engineers can work in **Standalone Mode** on their local 
 
 ```python
 # Local Development
-vdb = VectorDatabase(storage_path="./local_vectors", db_type=DBType.Standalone)
+ctx = Context()
+vdb = VectorDatabase(ctx, storage_path="./local_vectors", db_type=DBType.Standalone)
 # ... train model, generate embeddings, upsert to vdb ...
 ```
 
 ### Phase 2: Production Deployment (Clustered)
 Once the model and vector data are stabilized and validated, they can be "promoted" to the production environment.
 
-*   **Action**: Copy the storage directory (e.g., `./local_vectors`) to the production shared storage volume.
+*   **Action**: Ensure the storage directory (e.g., `./local_vectors`) is accessible to production nodes. You can copy it to a shared volume, or if it's already on a network share, just use it in-place.
 *   **Configuration**: Switch the application to `DBType.Clustered`.
-*   **Benefit**: The production cluster (backed by Redis) now serves the pre-computed data with high availability and caching.
+*   **Benefit**: The production cluster (using Redis for caching & coordination) now serves the pre-computed data with high availability. **Note**: Data remains on disk (B-Trees) for massive scalability; Redis is NOT used for primary storage.
 
 ```python
 # Production
-vdb = VectorDatabase(storage_path="/mnt/prod_vectors", db_type=DBType.Clustered)
+ctx = Context()
+vdb = VectorDatabase(ctx, storage_path="/mnt/prod_vectors", db_type=DBType.Clustered)
 # ... serve queries ...
 ```
 

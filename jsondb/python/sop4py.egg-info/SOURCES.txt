@@ -5,6 +5,7 @@ sop/__init__.py
 sop/btree.py
 sop/call_go.py
 sop/context.py
+sop/database.py
 sop/libjsondb_amd64darwin.dylib
 sop/libjsondb_amd64darwin.h
 sop/libjsondb_amd64linux.h
@@ -21,7 +22,6 @@ sop/test_btree_idx.py
 sop/transaction.py
 sop/ai/README.md
 sop/ai/__init__.py
-sop/ai/database.py
 sop/ai/model.py
 sop/ai/sample.py
 sop/ai/test_btree.py

@@ -124,17 +124,50 @@ print(f"Input: [1.0, 1.0], Predicted: {binary_predictions[3].item()}")
 
 # 6. Save and Load the Model (Optional)
 
-
-
-
-
-
-
-
+from sop.ai import ModelStore, Model
+from sop import Context, Transaction, TransactionOptions, TransactionMode, DBType
 
 # Save the entire model (architecture + learned parameters)
 torch.save(model.state_dict(), 'simple_nn_model.pth')
 print("\nModel saved to simple_nn_model.pth")
+
+# Save to SOP Model Store
+ctx = Context()
+opts = TransactionOptions(
+    mode=TransactionMode.ForWriting.value,
+    max_time=15,
+    registry_hash_mod=250,
+    stores_folders=["/tmp/sop_models"],
+    erasure_config={},
+    db_type=DBType.Standalone.value
+)
+
+with Transaction(ctx, opts) as t:
+    store = ModelStore.open_btree_store(ctx, t)
+    
+    # Convert PyTorch model state dict to a serializable format (list of floats)
+    # This is a simplification. In reality, you'd serialize the tensors properly.
+    params = []
+    for key, value in model.state_dict().items():
+        params.extend(value.flatten().tolist())
+
+    sop_model = Model(
+        id="simple_nn_v1",
+        algorithm="SimpleNN",
+        hyperparameters={"in": 2, "hidden": 4, "out": 1},
+        parameters=params,
+        metrics={"loss": loss.item()},
+        is_active=True
+    )
+    
+    store.save(ctx, "classifiers", "xor_model", sop_model)
+    print("Model saved to SOP Model Store")
+
+# Load from SOP Model Store
+with Transaction(ctx, opts) as t:
+    store = ModelStore.open_btree_store(ctx, t)
+    loaded_sop_model = store.get(ctx, "classifiers", "xor_model")
+    print(f"Loaded from SOP: {loaded_sop_model['model']['id']}, Loss: {loaded_sop_model['model']['metrics']['loss']:.4f}")
 
 # To load the model:
 # First, create an instance of the model architecture

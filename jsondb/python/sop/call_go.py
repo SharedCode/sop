@@ -56,6 +56,10 @@ _cancel_context = lib.cancelContext
 _cancel_context.argtypes = [ctypes.c_int64]  # Specify return type
 _cancel_context.restype = None
 
+_context_error = lib.contextError
+_context_error.argtypes = [ctypes.c_int64]
+_context_error.restype = ctypes.POINTER(ctypes.c_char)
+
 _manage_transaction = lib.manageTransaction
 
 _manage_transaction.argtypes = [
@@ -151,6 +155,15 @@ def remove_context(ctxid: int):
 
 def cancel_context(ctxid: int):
     _cancel_context(ctypes.c_int64(ctxid).value)
+
+
+def context_error(ctxid: int) -> str:
+    res = _context_error(ctypes.c_int64(ctxid).value)
+    if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
+        return None
+    s = to_str(res)
+    _free_string(res)
+    return s
 
 
 def open_redis_connection(connection_string: str) -> str:

@@ -40,6 +40,18 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 	return common.OpenBtree[TK, TV](ctx, name, t, comparer)
 }
 
+// IsStoreExists checks if a B-tree store with the given name exists in the backend.
+func IsStoreExists(ctx context.Context, t sop.Transaction, name string) (bool, error) {
+	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		stores, err := ct.StoreRepository.Get(ctx, name)
+		if err != nil {
+			return false, err
+		}
+		return len(stores) > 0, nil
+	}
+	return false, fmt.Errorf("transaction is not a valid SOP transaction")
+}
+
 // NewBtreeWithReplication creates a B-tree that uses SOP's filesystem-based replication feature.
 func NewBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
 	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {

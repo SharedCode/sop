@@ -1,13 +1,14 @@
-package vector
+package vector_test
 
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/database"
 )
 
 func TestNProbeAndFiltering(t *testing.T) {
@@ -19,25 +20,25 @@ func TestNProbeAndFiltering(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase[map[string]any](ai.Standalone)
-	db.SetStoragePath(tmpDir)
+	db := database.NewDatabase(database.Standalone, tmpDir)
 	ctx := context.Background()
-	idx := db.Open(ctx, "test_nprobe")
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	idx, err := vector.Open[map[string]any](ctx, tx, "test_nprobe", vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
 
 	// Inject Centroids
-	storePath := filepath.Join(tmpDir, "test_nprobe")
-	trans, err := db.beginTransaction(ctx, sop.ForWriting, storePath)
-	if err != nil {
-		t.Fatalf("Failed to begin transaction: %v", err)
-	}
-	arch, err := OpenDomainStore(ctx, trans, "test_nprobe", 0, sop.MediumData)
-	if err != nil {
-		t.Fatalf("Failed to open domain store: %v", err)
-	}
-	arch.Centroids.Add(ctx, 1, ai.Centroid{Vector: []float32{0, 0}})
-	arch.Centroids.Add(ctx, 2, ai.Centroid{Vector: []float32{2, 2}})   // Close to 1
-	arch.Centroids.Add(ctx, 3, ai.Centroid{Vector: []float32{10, 10}}) // Far
-	trans.Commit(ctx)
+	// We can use AddCentroid instead of accessing internals
+	idx.AddCentroid(ctx, []float32{0, 0})
+	idx.AddCentroid(ctx, []float32{2, 2})   // Close to 1
+	idx.AddCentroid(ctx, []float32{10, 10}) // Far
 
 	// 2. Upsert Vectors
 	// Vec A: Near Centroid 1
@@ -47,7 +48,24 @@ func TestNProbeAndFiltering(t *testing.T) {
 	// Vec C: Near Centroid 2 but different type
 	idx.Upsert(ctx, ai.Item[map[string]any]{ID: "vecC", Vector: []float32{2.2, 2.2}, Payload: map[string]any{"type": "vegetable", "name": "carrot"}})
 
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
 	// 3. Test nprobe
+	tx, err = db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	idx, err = vector.Open[map[string]any](ctx, tx, "test_nprobe", vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
 	// Query at [1, 1]. Dist to C1 ~1.4, Dist to C2 ~1.4.
 	// With nprobe=2, it should scan both C1 and C2.
 	// We expect to find vecA and vecB.

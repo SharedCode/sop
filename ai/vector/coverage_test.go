@@ -1,4 +1,4 @@
-package vector
+package vector_test
 
 import (
 	"context"
@@ -7,21 +7,17 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/database"
 )
 
 func TestConfigurationMethods(t *testing.T) {
-	db := NewDatabase[any](ai.Standalone)
-
-	// Test SetUsageMode
-	db.SetUsageMode(ai.Dynamic)
-	if db.usageMode != ai.Dynamic {
-		t.Errorf("Expected usageMode to be Dynamic, got %v", db.usageMode)
+	// Test Config struct
+	cfg := vector.Config{
+		UsageMode: ai.Dynamic,
 	}
-
-	// Test SetReadMode
-	db.SetReadMode(sop.ForWriting)
-	if db.readMode != sop.ForWriting {
-		t.Errorf("Expected readMode to be ForWriting, got %v", db.readMode)
+	if cfg.UsageMode != ai.Dynamic {
+		t.Errorf("Expected UsageMode to be Dynamic, got %v", cfg.UsageMode)
 	}
 }
 
@@ -150,22 +146,16 @@ func TestArchitectureDirectMethods(t *testing.T) {
 	// This is a bit involved because Architecture expects a transaction.
 	// We can reuse the Database helper to get a transaction.
 
-	db := NewDatabase[map[string]any](ai.Standalone)
-	db.SetStoragePath(tmpDir)
-
-	// We need to access internal beginTransaction, but it's private.
-	// However, we can use OpenDomainStore if we can get a transaction.
-	// Since we are in the same package `vector`, we can access private methods of Database if we were testing `store.go`,
-	// but we are in `additional_coverage_test.go` which is package `vector`, so we CAN access `beginTransaction`.
+	db := database.NewDatabase(database.Standalone, tmpDir)
 
 	ctx := context.Background()
-	trans, err := db.beginTransaction(ctx, sop.ForWriting, tmpDir)
+	trans, err := db.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
-		t.Fatalf("beginTransaction failed: %v", err)
+		t.Fatalf("BeginTransaction failed: %v", err)
 	}
 	defer trans.Rollback(ctx)
 
-	arch, err := OpenDomainStore(ctx, trans, "test_arch", 1, sop.MediumData)
+	arch, err := vector.OpenDomainStore(ctx, trans, "test_arch", 1, sop.MediumData, false)
 	if err != nil {
 		t.Fatalf("OpenDomainStore failed: %v", err)
 	}

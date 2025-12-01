@@ -7,13 +7,20 @@ from dataclasses import asdict
 # Add the parent directory to sys.path to import sop
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from sop import call_go
-from sop.ai import VectorDatabase, Item, UsageMode, DBType
+from sop import call_go, Context
+from sop.ai import Database, Item, UsageMode, DBType
 from sop.transaction import Transaction, TransactionOptions, TransactionMode, ErasureCodingConfig
+from sop.redis import Redis
 
 def main():
     # Open Redis Connection (Required for Replication/Locking)
-    call_go.open_redis_connection("redis://localhost:6379")
+    print("Attempting to connect to Redis (localhost:6379)...")
+    try:
+        Redis.open_connection("redis://localhost:6379")
+    except Exception as e:
+        print(f"Skipping Replication Demo: Could not connect to Redis. Error: {e}")
+        return
+
     # Define paths for Active/Passive replication
     active_path = "vector_repl_active_db"
     passive_path = "vector_repl_passive_db"
@@ -41,18 +48,17 @@ def main():
         repair_corrupted_shards=False
     )
 
+    ctx = Context()
     # Initialize Database with Replication Config
     # Note: We pass the Active path as the primary storage path, but also provide the full config.
-    db = VectorDatabase(
+    db = Database(
+        ctx,
         storage_path=active_path, 
-        usage_mode=UsageMode.Dynamic, 
         db_type=DBType.Standalone,
-        erasure_config=ec_config,
+        erasure_config={"": ec_config}, # Default config
         stores_folders=[active_path, passive_path]
     )
     
-    store = db.open("demo_store_repl")
-
     # --- 1. Explicit Transaction with Replication ---
     print("\n--- 1. Explicit Transaction (Replicated) ---")
     
@@ -64,19 +70,21 @@ def main():
         erasure_config={"": ec_config} # Default config
     )
 
-    with Transaction(store.ctx, trans_opts) as trans:
+    with db.begin_transaction(ctx, options=trans_opts) as trans:
         print("Transaction Started.")
-        tx_store = store.with_transaction(trans)
+        store = db.open_vector_store(ctx, trans, "demo_store_repl")
         
         item1 = Item(id=str(uuid.uuid4()), vector=[0.1, 0.2, 0.3], payload={"name": "Item 1 (Replicated)"})
         print(f"Adding Item 1: {item1.payload['name']}")
-        tx_store.upsert(item1)
+        store.upsert(ctx, item1)
         
         print("Committing...")
     
     # Verify
-    fetched = store.get(item1.id)
-    print(f"Verified Item 1: {fetched.payload['name']}")
+    with db.begin_transaction(ctx, options=trans_opts) as trans_read:
+        store_read = db.open_vector_store(ctx, trans_read, "demo_store_repl")
+        fetched = store_read.get(ctx, item1.id)
+        print(f"Verified Item 1: {fetched.payload['name']}")
     
     # Check if files exist in both Active and Passive folders (Basic verification)
     if os.path.exists(active_path) and os.path.exists(passive_path):

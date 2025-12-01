@@ -70,3 +70,24 @@ We utilize two separate SOP B-Trees to manage this structure efficiently and tra
 *   Define `DataStore` struct (wraps B-Tree #2).
 *   Implement `Ingest(vector)`: Find Centroid -> Insert to Data.
 *   Implement `Search(vector)`: Find Centroids -> Scan Data -> Heap Sort.
+
+## 8. Scalability & Optimization Process
+
+To handle massive datasets (millions of vectors), the `Optimize` process (K-Means clustering and rebalancing) is designed for scalability and crash recovery.
+
+### Batched Transactions
+Instead of running the entire optimization in a single massive transaction (which would time out or consume excessive RAM), the process is broken down into small batches:
+1.  **Batch Size**: Commits changes every 200 items.
+2.  **Effect**: Keeps memory usage low and transaction duration short.
+
+### Operational Constraints (Read-Only Mode)
+To maintain data consistency without complex locking schemes, the Vector Store enforces a **Read-Only** mode during optimization.
+*   **Mechanism**: An in-memory lock (`sync.Map`) tracks which domains are currently optimizing.
+*   **Impact**: `Upsert` and `Delete` operations will fail with a specific error if called while `Optimize` is running. `Query` (Read) operations remain available.
+*   **Trade-off**: We trade write availability for unlimited scalability and implementation simplicity.
+
+### Crash Recovery
+Since the lock is in-memory, if the process crashes, the lock is automatically released.
+*   **Cleanup**: On the next start (or next `Optimize` call), the system detects if a previous run failed by checking for temporary artifacts (`_lku`, `_vecs`, `_centroids` stores).
+*   **Action**: It automatically deletes these stale stores before starting a fresh optimization run.
+

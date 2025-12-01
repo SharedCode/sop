@@ -1,4 +1,4 @@
-package vector
+package vector_test
 
 import (
 	"context"
@@ -6,7 +6,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/database"
 )
 
 func TestOptimize(t *testing.T) {
@@ -18,10 +21,19 @@ func TestOptimize(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := NewDatabase[map[string]any](ai.Standalone)
-	db.SetStoragePath(tmpDir)
-	idx := db.Open(context.Background(), "test_optimize")
-	dIdx := idx.(*domainIndex[map[string]any])
+	db := database.NewDatabase(database.Standalone, tmpDir)
+	tx, err := db.BeginTransaction(context.Background(), sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	idx, err := db.OpenVectorStore(context.Background(), "test_optimize", tx, vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	// dIdx := idx.(*domainIndex[map[string]any])
 
 	// 1. Initial Population (2 Clusters)
 	// Cluster 1: (0,0)
@@ -65,13 +77,25 @@ func TestOptimize(t *testing.T) {
 
 	// 3. Optimize
 	// This should detect the new cluster and create a centroid for it.
-	if err := dIdx.Optimize(context.Background()); err != nil {
+	if err := idx.Optimize(context.Background()); err != nil {
 		t.Fatalf("Optimize failed: %v", err)
+	}
+
+	// Start new transaction for verification
+	tx2, err := db.BeginTransaction(context.Background(), sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction 2 failed: %v", err)
+	}
+	idx2, err := db.OpenVectorStore(context.Background(), "test_optimize", tx2, vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open 2 failed: %v", err)
 	}
 
 	// 4. Verify
 	// Query near the new cluster (20,20)
-	hits, err := idx.Query(context.Background(), []float32{20, 20}, 5, nil)
+	hits, err := idx2.Query(context.Background(), []float32{20, 20}, 5, nil)
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}
@@ -97,11 +121,15 @@ func TestOptimize(t *testing.T) {
 	// but Get() returns clean meta.
 	// However, if Optimize failed to update Content, Delete might fail or leave ghosts?
 	// Let's try to delete an item from the new cluster.
-	if err := idx.Delete(context.Background(), "c3-0"); err != nil {
+	if err := idx2.Delete(context.Background(), "c3-0"); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
 	// Verify it's gone
-	if _, err := idx.Get(context.Background(), "c3-0"); err == nil {
+	if _, err := idx2.Get(context.Background(), "c3-0"); err == nil {
 		t.Error("Expected error after delete, got nil")
+	}
+
+	if err := tx2.Commit(context.Background()); err != nil {
+		t.Fatalf("Commit failed: %v", err)
 	}
 }

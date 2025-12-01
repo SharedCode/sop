@@ -24,6 +24,11 @@ class TransactionMode(Enum):
     ForReading = 2
 
 
+class DBType(Enum):
+    Standalone = 0
+    Clustered = 1
+
+
 # 250, should generate 1MB file segment. Formula: 250 X 4096 = 1MB
 # Given a 50 slot size per node, should be able to manage 825,000 B-Tree items (key/value pairs).
 #
@@ -69,7 +74,7 @@ class ErasureCodingConfig:
             (
                 self.data_shards_count,
                 self.parity_shards_count,
-                self.base_folder_paths_across_drives,
+                tuple(self.base_folder_paths_across_drives),
                 self.repair_corrupted_shards,
             )
         )
@@ -84,9 +89,9 @@ class TransactionOptions:
     # At 250, 1MB segment file is generated. See comment about the equivalent in Golang side (for now).
     registry_hash_mod: int
     # Stores' base folder path (home folder).
-    stores_folders: List[str]
+    stores_folders: List[str] = None
     # EC config.
-    erasure_config: dict[str, ErasureCodingConfig]
+    erasure_config: dict[str, ErasureCodingConfig] = None
     # DB Type (0: Standalone, 1: Clustered)
     db_type: int = 0
 
@@ -109,20 +114,17 @@ class Transaction:
     Delegates API calls to the SOP library that does Direct IO to disk drives w/ built-in L1/L2 caching.
     """
 
-    def __init__(self, ctx: context.Context, options: TransactionOptions):
+    def __init__(self, ctx: context.Context, options: TransactionOptions = None, id: uuid.UUID = None, begun: bool = False):
         self.ctx = ctx
         self.options = options
         self.transaction_id = uuid.UUID(int=0)
+        self.begun = begun
 
-        res = call_go.manage_transaction(ctx.id, 1, json.dumps(asdict(options)))
+        if id is not None:
+            self.transaction_id = id
+            return
 
-        if res == None:
-            raise TransactionError("unable to create a Tranasaction object in SOP")
-        try:
-            self.transaction_id = uuid.UUID(res)
-        except:
-            # if res can't be converted to UUID, it is expected to be an error msg from SOP.
-            raise TransactionError(res)
+        raise TransactionError("Direct Transaction creation is deprecated. Use Database.begin_transaction() instead.")
 
     def __enter__(self):
         self.begin()
@@ -141,11 +143,14 @@ class Transaction:
         return True
 
     def begin(self):
+        if self.begun:
+            return
         if self.transaction_id == uuid.UUID(int=0):
             raise InvalidTransactionStateError("transaction_id is missing")
         res = call_go.manage_transaction(0, 2, str(self.transaction_id))
         if res != None:
             raise TransactionError(f"Transaction begin failed, details {res}")
+        self.begun = True
 
     def commit(
         self,

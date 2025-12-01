@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
+	"github.com/sharedcode/sop/ai/vector"
 )
 
 // IngestAgent performs the ETL process for a specific agent configuration.
@@ -116,9 +118,21 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 		deps.AgentRegistry[targetID] = depSvc
 	}
 
-	emb, idx, err := agent.SetupInfrastructure(ctx, *cfg, deps)
+	emb, db, storeName, vCfg, err := agent.SetupInfrastructure(ctx, *cfg, deps)
 	if err != nil {
 		return fmt.Errorf("failed to setup infrastructure: %w", err)
+	}
+
+	// Start Transaction
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	idx, err := vector.Open[map[string]any](ctx, tx, storeName, vCfg)
+	if err != nil {
+		return fmt.Errorf("failed to open index: %w", err)
 	}
 
 	// 3. Load Data & Process in Batches
@@ -212,23 +226,71 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 		fmt.Println("Using data from configuration file...")
 		if len(cfg.Data) == 0 {
 			fmt.Println("No data to ingest.")
-			return nil
-		}
-
-		// Process config data in batches too
-		for i := 0; i < len(cfg.Data); i += batchSize {
-			end := i + batchSize
-			if end > len(cfg.Data) {
-				end = len(cfg.Data)
-			}
-			if err := processBatch(cfg.Data[i:end]); err != nil {
-				return err
+			// We still commit if we opened a transaction, though it's empty.
+		} else {
+			// Process config data in batches too
+			for i := 0; i < len(cfg.Data); i += batchSize {
+				end := i + batchSize
+				if end > len(cfg.Data) {
+					end = len(cfg.Data)
+				}
+				if err := processBatch(cfg.Data[i:end]); err != nil {
+					return err
+				}
 			}
 		}
 	}
 
-	// 5. Verify
-	count, _ := idx.Count(ctx)
+	// Commit
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// 4. Auto-Optimize (if enabled)
+	if cfg.AutoOptimize {
+		fmt.Println("Auto-Optimize enabled. Running optimization...")
+		// Optimization requires its own transaction management (it commits internally)
+		// We need to open the store again in a new transaction context just to call Optimize.
+		// Note: Optimize() takes a context and handles transactions internally, but we need an instance.
+
+		txOpt, err := db.BeginTransaction(ctx, sop.ForWriting)
+		if err != nil {
+			return fmt.Errorf("failed to begin optimization transaction: %w", err)
+		}
+		// We don't defer rollback here because Optimize commits.
+		// If Optimize fails, we might need to rollback manually if it didn't commit.
+
+		idxOpt, err := vector.Open[map[string]any](ctx, txOpt, storeName, vCfg)
+		if err != nil {
+			txOpt.Rollback(ctx)
+			return fmt.Errorf("failed to open index for optimization: %w", err)
+		}
+
+		if err := idxOpt.Optimize(ctx); err != nil {
+			// Optimize might have committed or not depending on where it failed.
+			// Attempt rollback just in case (safe to call if already committed/rolled back? SOP handles it?)
+			// SOP transactions are usually safe to rollback if already committed (no-op).
+			txOpt.Rollback(ctx)
+			return fmt.Errorf("optimization failed: %w", err)
+		}
+		fmt.Println("Optimization complete.")
+	}
+
+	// 5. Verify (New Transaction)
+	tx2, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		fmt.Printf("Warning: Failed to verify count (transaction error): %v\n", err)
+		return nil
+	}
+	defer tx2.Rollback(ctx)
+
+	idx2, err := vector.Open[map[string]any](ctx, tx2, storeName, vCfg)
+	if err != nil {
+		fmt.Printf("Warning: Failed to verify count (open error): %v\n", err)
+		return nil
+	}
+
+	count, _ := idx2.Count(ctx)
 	fmt.Printf("ETL Complete. Total items in DB: %d\n", count)
 	return nil
 }

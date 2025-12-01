@@ -6,7 +6,9 @@ from dataclasses import dataclass, asdict
 # Add the parent directory to sys.path to import sop
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
+from sop import Context
 from sop.ai import Database, DBType
+from sop.transaction import Transaction, TransactionOptions, TransactionMode
 
 @dataclass
 class MyModel:
@@ -23,51 +25,67 @@ def main():
         shutil.rmtree(db_path)
 
     print(f"Initializing SOP Database at '{db_path}'...")
+    ctx = Context()
     # Initialize the Database (Unified Mode)
-    db = Database(storage_path=db_path, db_type=DBType.Standalone)
+    db = Database(ctx, storage_path=db_path, db_type=DBType.Standalone)
 
-    # Open a Model Store
-    print("Opening Model Store 'experiment_1'...")
-    store = db.open_model_store("experiment_1")
-
-    # Create a sample model object
-    model = MyModel(
-        name="gpt-4-mini",
-        version="1.0.0",
-        parameters={"layers": 12, "heads": 8},
-        accuracy=0.95
+    # Create Transaction Options
+    trans_opts = TransactionOptions(
+        mode=TransactionMode.ForWriting.value,
+        max_time=15,
+        registry_hash_mod=250,
+        stores_folders=[db_path],
+        erasure_config={}
     )
 
-    # Save the model
-    print(f"Saving model '{model.name}' to category 'llm'...")
-    store.save(category="llm", name=model.name, model=model)
+    # Start Transaction
+    with db.begin_transaction(ctx, options=trans_opts) as trans:
+        print("Transaction Started.")
 
-    # List models in the category
-    print("Listing models in category 'llm'...")
-    models = store.list(category="llm")
-    print(f"Found models: {models}")
+        # Open a Model Store
+        print("Opening Model Store 'experiment_1'...")
+        store = db.open_model_store(ctx, trans, "experiment_1")
 
-    # Load the model back
-    print(f"Loading model '{model.name}'...")
-    loaded_data = store.get(category="llm", name=model.name)
-    print(f"Loaded data: {loaded_data}")
+        # Create a sample model object
+        model = MyModel(
+            name="gpt-4-mini",
+            version="1.0.0",
+            parameters={"layers": 12, "heads": 8},
+            accuracy=0.95
+        )
 
-    # Verify data
-    if loaded_data['name'] == model.name and loaded_data['accuracy'] == model.accuracy:
-        print("Verification Successful: Model data matches.")
-    else:
-        print("Verification Failed!")
+        # Save the model
+        print(f"Saving model '{model.name}' to category 'llm'...")
+        store.save(ctx, category="llm", name=model.name, model=model)
 
-    # Delete the model
-    print(f"Deleting model '{model.name}'...")
-    store.delete(category="llm", name=model.name)
+        # List models in the category
+        print("Listing models in category 'llm'...")
+        models = store.list(ctx, category="llm")
+        print(f"Found models: {models}")
 
-    # Verify deletion
-    models_after = store.list(category="llm")
-    print(f"Models after deletion: {models_after}")
+        # Load the model back
+        print(f"Loading model '{model.name}'...")
+        loaded_data = store.get(ctx, category="llm", name=model.name)
+        print(f"Loaded data: {loaded_data}")
 
-    if not models_after:
-        print("Deletion Successful.")
+        # Verify data
+        if loaded_data['name'] == model.name and loaded_data['accuracy'] == model.accuracy:
+            print("Verification Successful: Model data matches.")
+        else:
+            print("Verification Failed!")
+
+        # Delete the model
+        print(f"Deleting model '{model.name}'...")
+        store.delete(ctx, category="llm", name=model.name)
+
+        # Verify deletion
+        models_after = store.list(ctx, category="llm")
+        print(f"Models after deletion: {models_after}")
+
+        if not models_after:
+            print("Deletion Successful.")
+        
+        print("Committing Transaction...")
 
     # Clean up
     if os.path.exists(db_path):

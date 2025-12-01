@@ -16,8 +16,9 @@ class TestSOPAI(unittest.TestCase):
     def setUpClass(cls):
         # Open Redis connection globally for the tests
         try:
-            ro = RedisOptions()
-            Redis.open_connection(ro)
+            # ro = RedisOptions()
+            # Redis.open_connection(ro)
+            Redis.open_connection("redis://localhost:6379")
         except Exception as e:
             print(f"Warning: Failed to connect to Redis: {e}")
             # We continue, but clustered tests might fail
@@ -46,58 +47,67 @@ class TestSOPAI(unittest.TestCase):
         print("\n--- Testing Vector DB (Standalone) ---")
         path = self.create_temp_dir("vec_standalone")
         
-        vdb = VectorDatabase(storage_path=path, usage_mode=UsageMode.Dynamic, db_type=DBType.Standalone)
-        store = vdb.open("products")
+        ctx = Context()
+        vdb = VectorDatabase(ctx, storage_path=path, db_type=DBType.Standalone)
+        
+        # Transaction 1: Upsert
+        tx1 = vdb.begin_transaction(ctx)
+        store = vdb.open_vector_store(ctx, tx1, "products")
 
         # Upsert
         item = Item(id="p1", vector=[0.1, 0.1, 0.1], payload={"cat": "A"})
-        store.upsert(item)
+        store.upsert(ctx, item)
+        
+        tx1.commit(ctx)
+
+        # Transaction 2: Read
+        tx2 = vdb.begin_transaction(ctx)
+        store = vdb.open_vector_store(ctx, tx2, "products")
 
         # Get
-        fetched = store.get("p1")
+        fetched = store.get(ctx, "p1")
         self.assertEqual(fetched.id, "p1")
         self.assertEqual(fetched.payload["cat"], "A")
 
         # Query
-        hits = store.query(vector=[0.1, 0.1, 0.1], k=1)
+        hits = store.query(ctx, vector=[0.1, 0.1, 0.1], k=1)
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0].id, "p1")
+        
+        tx2.commit(ctx)
 
     def test_vector_db_clustered(self):
         print("\n--- Testing Vector DB (Clustered) ---")
         # This requires Redis. We assume it's running based on previous check.
         path = self.create_temp_dir("vec_clustered")
         
-        vdb = VectorDatabase(storage_path=path, usage_mode=UsageMode.Dynamic, db_type=DBType.Clustered)
-        store = vdb.open("products_cluster")
+        ctx = Context()
+        vdb = VectorDatabase(ctx, storage_path=path, db_type=DBType.Clustered)
+        
+        # Transaction 1: Upsert
+        tx1 = vdb.begin_transaction(ctx)
+        store = vdb.open_vector_store(ctx, tx1, "products_cluster")
 
         # Upsert
         item = Item(id="c1", vector=[0.9, 0.9, 0.9], payload={"cat": "C"})
-        store.upsert(item)
+        store.upsert(ctx, item)
+        
+        tx1.commit(ctx)
+
+        # Transaction 2: Read
+        tx2 = vdb.begin_transaction(ctx)
+        store = vdb.open_vector_store(ctx, tx2, "products_cluster")
 
         # Get
-        fetched = store.get("c1")
+        fetched = store.get(ctx, "c1")
         self.assertEqual(fetched.id, "c1")
 
         # Query
-        hits = store.query(vector=[0.9, 0.9, 0.9], k=1)
+        hits = store.query(ctx, vector=[0.9, 0.9, 0.9], k=1)
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0].id, "c1")
-
-    def test_model_store_file(self):
-        print("\n--- Testing Model Store (File) ---")
-        path = self.create_temp_dir("model_file")
         
-        store = ModelStore.open_file_store(path)
-        
-        model = Model(id="m1", algorithm="test", hyperparameters={}, parameters=[], metrics={}, is_active=True)
-        store.save("m1", model)
-        
-        fetched = store.get("m1")
-        self.assertEqual(fetched.id, "m1")
-        
-        names = store.list()
-        self.assertIn("m1", names)
+        tx2.commit(ctx)
 
     def test_model_store_btree(self):
         print("\n--- Testing Model Store (B-Tree) ---")
@@ -117,6 +127,52 @@ class TestSOPAI(unittest.TestCase):
         )
         
         ctx = Context()
+        
+        db = VectorDatabase(ctx, storage_path=path, db_type=DBType.Standalone, 
+                            erasure_config={"": ec_config},
+                            stores_folders=[path, path_passive])
+
+        opts = TransactionOptions(
+            mode=TransactionMode.ForWriting.value,
+            max_time=15,
+            registry_hash_mod=250
+        )
+
+        with db.begin_transaction(ctx, options=opts) as t:
+            store = db.open_model_store(ctx, t, "default")
+            
+            model = Model(id="bm1", algorithm="tree", hyperparameters={}, parameters=[], metrics={}, is_active=True)
+            store.save(ctx, "default", "bm1", model)
+            
+            fetched = store.get(ctx, "default", "bm1")
+            # fetched is a dict, not Model object because get returns Any (JSON)
+            self.assertEqual(fetched["id"], "bm1")
+            
+            names = store.list(ctx, "default")
+            self.assertIn("bm1", names)
+
+    def test_vector_db_clustered_replication(self):
+        print("\n--- Testing Vector DB (Clustered + Replication) ---")
+        # This requires Redis.
+        path = self.create_temp_dir("vec_clus_repl_active")
+        path_passive = self.create_temp_dir("vec_clus_repl_passive")
+        
+        # Create 2 "drives" for EC
+        drive1 = self.create_temp_dir("drive1")
+        drive2 = self.create_temp_dir("drive2")
+
+        ec_config = ErasureCodingConfig(
+            data_shards_count=1,
+            parity_shards_count=1,
+            base_folder_paths_across_drives=[drive1, drive2],
+            repair_corrupted_shards=False
+        )
+        
+        ctx = Context()
+        vdb = VectorDatabase(ctx, storage_path=path, db_type=DBType.Clustered,
+                             erasure_config={"": ec_config},
+                             stores_folders=[path, path_passive])
+        
         opts = TransactionOptions(
             mode=TransactionMode.ForWriting.value,
             max_time=15,
@@ -125,17 +181,21 @@ class TestSOPAI(unittest.TestCase):
             erasure_config={"": ec_config}
         )
 
-        with Transaction(ctx, opts) as t:
-            store = ModelStore.open_btree_store(t)
+        # Transaction 1: Upsert
+        with vdb.begin_transaction(ctx, options=opts) as tx1:
+            store = vdb.open_vector_store(ctx, tx1, "products_cluster_repl")
+            item = Item(id="cr1", vector=[0.5, 0.5, 0.5], payload={"cat": "CR"})
+            store.upsert(ctx, item)
+        
+        # Transaction 2: Read
+        with vdb.begin_transaction(ctx, options=opts) as tx2:
+            store = vdb.open_vector_store(ctx, tx2, "products_cluster_repl")
+            fetched = store.get(ctx, "cr1")
+            self.assertEqual(fetched.id, "cr1")
             
-            model = Model(id="bm1", algorithm="tree", hyperparameters={}, parameters=[], metrics={}, is_active=True)
-            store.save("bm1", model)
-            
-            fetched = store.get("bm1")
-            self.assertEqual(fetched.id, "bm1")
-            
-            names = store.list()
-            self.assertIn("bm1", names)
+            hits = store.query(ctx, vector=[0.5, 0.5, 0.5], k=1)
+            self.assertEqual(len(hits), 1)
+            self.assertEqual(hits[0].id, "cr1")
 
 if __name__ == '__main__':
     unittest.main()

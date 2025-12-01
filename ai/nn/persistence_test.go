@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/database"
 )
 
 func TestPerceptronPersistenceWithModelStore(t *testing.T) {
@@ -17,12 +17,7 @@ func TestPerceptronPersistenceWithModelStore(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := database.NewDatabase(ai.Standalone, tmpDir)
-	store, err := db.OpenModelStore("test_store")
-	if err != nil {
-		t.Fatalf("Failed to create model store: %v", err)
-	}
-
+	db := database.NewDatabase(database.Standalone, tmpDir)
 	ctx := context.Background()
 
 	// 1. Create and Train a Perceptron (OR gate)
@@ -50,13 +45,39 @@ func TestPerceptronPersistenceWithModelStore(t *testing.T) {
 	// 2. Save it using the ModelStore
 	modelName := "or_gate_skill"
 	category := "test_category"
-	if err := store.Save(ctx, category, modelName, p); err != nil {
+
+	// Transaction 1: Save
+	t1, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("Failed to begin transaction 1: %v", err)
+	}
+	store1, err := db.OpenModelStore(ctx, "test_store", t1)
+	if err != nil {
+		t.Fatalf("Failed to create model store 1: %v", err)
+	}
+
+	if err := store1.Save(ctx, category, modelName, p); err != nil {
 		t.Fatalf("Failed to save model: %v", err)
+	}
+	if err := t1.Commit(ctx); err != nil {
+		t.Fatalf("Failed to commit transaction 1: %v", err)
 	}
 
 	// 3. Load it back into a new instance
+	// Transaction 2: Load
+	t2, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("Failed to begin transaction 2: %v", err)
+	}
+	defer t2.Rollback(ctx)
+
+	store2, err := db.OpenModelStore(ctx, "test_store", t2)
+	if err != nil {
+		t.Fatalf("Failed to create model store 2: %v", err)
+	}
+
 	var loadedP Perceptron
-	if err := store.Load(ctx, category, modelName, &loadedP); err != nil {
+	if err := store2.Load(ctx, category, modelName, &loadedP); err != nil {
 		t.Fatalf("Failed to load model: %v", err)
 	}
 
@@ -83,7 +104,7 @@ func TestPerceptronPersistenceWithModelStore(t *testing.T) {
 	}
 
 	// 5. Test List
-	names, err := store.List(ctx, category)
+	names, err := store2.List(ctx, category)
 	if err != nil {
 		t.Fatalf("Failed to list models: %v", err)
 	}
@@ -91,12 +112,26 @@ func TestPerceptronPersistenceWithModelStore(t *testing.T) {
 		t.Errorf("List failed. Expected [%s], got %v", modelName, names)
 	}
 
-	// 6. Test Delete
-	if err := store.Delete(ctx, category, modelName); err != nil {
+	// 6. Test Delete (Need Write Transaction)
+	t2.Rollback(ctx) // End Read Trans
+
+	t3, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("Failed to begin transaction 3: %v", err)
+	}
+	store3, err := db.OpenModelStore(ctx, "test_store", t3)
+	if err != nil {
+		t.Fatalf("Failed to create model store 3: %v", err)
+	}
+
+	if err := store3.Delete(ctx, category, modelName); err != nil {
 		t.Fatalf("Failed to delete model: %v", err)
 	}
-	names, _ = store.List(ctx, category)
+
+	// Verify Delete
+	names, _ = store3.List(ctx, category)
 	if len(names) != 0 {
 		t.Errorf("Delete failed. Expected empty list, got %v", names)
 	}
+	t3.Commit(ctx)
 }

@@ -1,4 +1,4 @@
-package vector
+package vector_test
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/database"
 )
 
 func TestVectorStore(t *testing.T) {
@@ -18,14 +20,21 @@ func TestVectorStore(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := NewDatabase[map[string]any](ai.Standalone)
-	db.SetStoragePath(tmpDir)
-	// No need to set read mode explicitly, default is sop.NoCheck as once built, Vector DBs are read-only
-	// in this Doctor/Nurse use case. And NoCheck avoids unnecessary overhead appropriate for single-writer,
-	// write once, read forever scenarios.
-	//db.SetReadMode(sop.ForReading) // Default
+	db := database.NewDatabase(database.Standalone, tmpDir)
 
-	index := db.Open(context.Background(), "test_vectors")
+	// 1. Test Upsert
+	ctx := context.Background()
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	index, err := db.OpenVectorStore(ctx, "test_vectors", tx, vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
 
 	// Test Data
 	id1 := "vec-1"
@@ -36,16 +45,32 @@ func TestVectorStore(t *testing.T) {
 	vec2 := []float32{0.0, 1.0, 0.0}
 	meta2 := map[string]any{"type": "B"}
 
-	// 1. Test Upsert
-	if err := index.Upsert(context.Background(), ai.Item[map[string]any]{ID: id1, Vector: vec1, Payload: meta1}); err != nil {
+	if err := index.Upsert(ctx, ai.Item[map[string]any]{ID: id1, Vector: vec1, Payload: meta1}); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
 	}
-	if err := index.Upsert(context.Background(), ai.Item[map[string]any]{ID: id2, Vector: vec2, Payload: meta2}); err != nil {
+	if err := index.Upsert(ctx, ai.Item[map[string]any]{ID: id2, Vector: vec2, Payload: meta2}); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
 	}
 
-	// 2. Test Get
-	item, err := index.Get(context.Background(), id1)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	// 2. Test Get & Query (Read Transaction)
+	tx, err = db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	index, err = db.OpenVectorStore(ctx, "test_vectors", tx, vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	item, err := index.Get(ctx, id1)
 	if err != nil {
 		t.Fatalf("Get failed: %v", err)
 	}
@@ -57,7 +82,7 @@ func TestVectorStore(t *testing.T) {
 	}
 
 	// 3. Test Query (Exact Match)
-	hits, err := index.Query(context.Background(), vec1, 1, nil)
+	hits, err := index.Query(ctx, vec1, 1, nil)
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}
@@ -72,7 +97,7 @@ func TestVectorStore(t *testing.T) {
 	}
 
 	// 4. Test Query (Filter)
-	hits, err = index.Query(context.Background(), vec1, 10, func(item map[string]any) bool {
+	hits, err = index.Query(ctx, vec1, 10, func(item map[string]any) bool {
 		return item["type"] == "B"
 	})
 	if err != nil {
@@ -85,32 +110,116 @@ func TestVectorStore(t *testing.T) {
 		t.Errorf("Expected filtered hit %s, got %s", id2, hits[0].ID)
 	}
 
-	// 5. Test Delete
-	if err := index.Delete(context.Background(), id1); err != nil {
+	// 5. Test Delete (Write Transaction)
+	tx.Rollback(ctx) // End read transaction
+
+	tx, err = db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	index, err = db.OpenVectorStore(ctx, "test_vectors", tx, vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	if err := index.Delete(ctx, id1); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
 
-	_, err = index.Get(context.Background(), id1)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	// Verify Delete
+	tx, err = db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	index, err = db.OpenVectorStore(ctx, "test_vectors", tx, vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	_, err = index.Get(ctx, id1)
 	if err == nil {
 		t.Error("Expected error after delete, got nil")
 	}
 
+	// End read transaction
+	tx.Rollback(ctx)
+
 	// 6. Test Domains Isolation
-	doctor := db.Open(context.Background(), "doctor")
-	mechanic := db.Open(context.Background(), "mechanic")
+	// We need a write transaction to create new stores
+	tx, err = db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	doctor, err := db.OpenVectorStore(ctx, "doctor", tx, vector.Config{UsageMode: ai.Dynamic})
+	if err != nil {
+		t.Fatalf("Open doctor failed: %v", err)
+	}
+	mechanic, err := db.OpenVectorStore(ctx, "mechanic", tx, vector.Config{UsageMode: ai.Dynamic})
+	if err != nil {
+		t.Fatalf("Open mechanic failed: %v", err)
+	}
+
+	// We need a write transaction for upsert
+	tx.Rollback(ctx)
+	tx, err = db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	doctor, err = db.OpenVectorStore(ctx, "doctor", tx, vector.Config{UsageMode: ai.Dynamic})
+	if err != nil {
+		t.Fatalf("Open doctor failed: %v", err)
+	}
+	mechanic, err = db.OpenVectorStore(ctx, "mechanic", tx, vector.Config{UsageMode: ai.Dynamic})
+	if err != nil {
+		t.Fatalf("Open mechanic failed: %v", err)
+	}
 
 	// Upsert to doctor
-	if err := doctor.Upsert(context.Background(), ai.Item[map[string]any]{ID: "flu", Vector: []float32{1.0, 0.0, 0.0}, Payload: map[string]any{"desc": "flu"}}); err != nil {
+	if err := doctor.Upsert(ctx, ai.Item[map[string]any]{ID: "flu", Vector: []float32{1.0, 0.0, 0.0}, Payload: map[string]any{"desc": "flu"}}); err != nil {
 		t.Fatalf("Doctor upsert failed: %v", err)
 	}
 
 	// Upsert to mechanic
-	if err := mechanic.Upsert(context.Background(), ai.Item[map[string]any]{ID: "engine", Vector: []float32{0.0, 1.0, 0.0}, Payload: map[string]any{"desc": "engine"}}); err != nil {
+	if err := mechanic.Upsert(ctx, ai.Item[map[string]any]{ID: "engine", Vector: []float32{0.0, 1.0, 0.0}, Payload: map[string]any{"desc": "engine"}}); err != nil {
 		t.Fatalf("Mechanic upsert failed: %v", err)
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	// Query (Read Transaction)
+	tx, err = db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	doctor, err = db.OpenVectorStore(ctx, "doctor", tx, vector.Config{UsageMode: ai.Dynamic})
+	if err != nil {
+		t.Fatalf("Open doctor failed: %v", err)
+	}
+	mechanic, err = db.OpenVectorStore(ctx, "mechanic", tx, vector.Config{UsageMode: ai.Dynamic})
+	if err != nil {
+		t.Fatalf("Open mechanic failed: %v", err)
+	}
+
 	// Query doctor
-	docHits, err := doctor.Query(context.Background(), []float32{1.0, 0.0, 0.0}, 10, nil)
+	docHits, err := doctor.Query(ctx, []float32{1.0, 0.0, 0.0}, 10, nil)
 	if err != nil {
 		t.Fatalf("Doctor query failed: %v", err)
 	}
@@ -119,7 +228,7 @@ func TestVectorStore(t *testing.T) {
 	}
 
 	// Query mechanic
-	mechHits, err := mechanic.Query(context.Background(), []float32{0.0, 1.0, 0.0}, 10, nil)
+	mechHits, err := mechanic.Query(ctx, []float32{0.0, 1.0, 0.0}, 10, nil)
 	if err != nil {
 		t.Fatalf("Mechanic query failed: %v", err)
 	}
@@ -137,44 +246,57 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := NewDatabase[map[string]any](ai.Standalone)
-	db.SetStoragePath(tmpDir)
-	db.SetUsageMode(ai.Dynamic)
+	db := database.NewDatabase(database.Standalone, tmpDir)
 
-	index := db.Open(context.Background(), "test_delete_count")
-	// We need to cast to *domainIndex to access internal helpers
-	di := index.(*domainIndex[map[string]any])
+	ctx := context.Background()
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	index, err := db.OpenVectorStore(ctx, "test_delete_count", tx, vector.Config{
+		UsageMode:   ai.DynamicWithVectorCountTracking,
+		StoragePath: tmpDir,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
 
 	id := "vec-1"
 	vec := []float32{1.0, 0.0, 0.0}
 	meta := map[string]any{"type": "A"}
 
 	// 1. Upsert
-	if err := index.Upsert(context.Background(), ai.Item[map[string]any]{ID: id, Vector: vec, Payload: meta}); err != nil {
+	if err := index.Upsert(ctx, ai.Item[map[string]any]{ID: id, Vector: vec, Payload: meta}); err != nil {
 		t.Fatalf("Upsert failed: %v", err)
+	}
+
+	// Optimize to move to Vectors (Version 1) so we have Centroids
+	if err := index.Optimize(ctx); err != nil {
+		t.Fatalf("Optimize failed: %v", err)
+	}
+
+	// Optimize commits the transaction, so we need a new one
+	tx, err = db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction 2 failed: %v", err)
+	}
+
+	index, err = db.OpenVectorStore(ctx, "test_delete_count", tx, vector.Config{
+		UsageMode: ai.DynamicWithVectorCountTracking,
+	})
+	if err != nil {
+		t.Fatalf("Open 2 failed: %v", err)
 	}
 
 	// Helper to get centroid count
 	getCentroidCount := func(centroidID int) int {
-		storePath := di.db.storagePath
-		ctx := context.Background()
-		trans, err := di.db.beginTransaction(ctx, sop.ForReading, storePath)
+		centroidsStore, err := index.Centroids(ctx)
 		if err != nil {
-			t.Fatalf("Failed to begin transaction: %v", err)
-		}
-		defer trans.Rollback(ctx)
-
-		version, err := di.getActiveVersion(ctx, trans)
-		if err != nil {
-			t.Fatalf("Failed to get active version: %v", err)
+			t.Fatalf("Failed to get centroids store: %v", err)
 		}
 
-		arch, err := OpenDomainStore(ctx, trans, di.name, version, sop.MediumData)
-		if err != nil {
-			t.Fatalf("Failed to open domain store: %v", err)
-		}
-
-		found, err := arch.Centroids.Find(ctx, centroidID, false)
+		found, err := centroidsStore.Find(ctx, centroidID, false)
 		if err != nil {
 			t.Fatalf("Failed to find centroid: %v", err)
 		}
@@ -182,7 +304,7 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 			t.Fatalf("Centroid %d not found", centroidID)
 		}
 
-		c, err := arch.Centroids.GetCurrentValue(ctx)
+		c, err := centroidsStore.GetCurrentValue(ctx)
 		if err != nil {
 			t.Fatalf("Failed to get centroid value: %v", err)
 		}
@@ -197,7 +319,7 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	}
 
 	// 3. Delete
-	if err := index.Delete(context.Background(), id); err != nil {
+	if err := index.Delete(ctx, id); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
 
@@ -205,5 +327,9 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	count = getCentroidCount(1)
 	if count != 0 {
 		t.Errorf("Expected centroid count 0, got %d", count)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
 	}
 }

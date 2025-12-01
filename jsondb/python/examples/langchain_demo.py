@@ -1,28 +1,18 @@
 import uuid
+import os
+import sys
 from typing import List, Any, Iterable, Optional, Dict, Tuple
 from dataclasses import asdict
 
-# In a real scenario, you would import these from langchain
-# from langchain.vectorstores.base import VectorStore
-# from langchain.schema import Document
-# from langchain.embeddings.base import Embeddings
+# Add the parent directory to sys.path to import sop
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from sop.ai.vector import VectorDatabase, DBType, Item
-
-# --- Mocking LangChain Interfaces for this Demo ---
-class Document:
-    def __init__(self, page_content: str, metadata: dict = None):
-        self.page_content = page_content
-        self.metadata = metadata or {}
-
-class Embeddings:
-    def embed_query(self, text: str) -> List[float]:
-        raise NotImplementedError
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        raise NotImplementedError
+from sop import Context
+from sop.ai import Database, DBType, Item, SOPVectorStore
+from sop.transaction import Transaction, TransactionOptions, TransactionMode
 
 # --- Simple Deterministic Embedder for Demo ---
-class SimpleHashEmbedder(Embeddings):
+class SimpleHashEmbedder:
     """
     A toy embedder that converts text to a fixed-size vector using hashing.
     In production, use OpenAIEmbeddings or HuggingFaceEmbeddings.
@@ -43,78 +33,26 @@ class SimpleHashEmbedder(Embeddings):
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         return [self._hash_text(t) for t in texts]
 
-# --- The SOP Adapter ---
-class SOPVectorStore:
-    """
-    A LangChain-compatible wrapper for SOP Vector Database.
-    """
-    def __init__(self, sop_store, embedding: Embeddings):
-        self.store = sop_store
-        self.embedding = embedding
-
-    def add_texts(
-        self,
-        texts: Iterable[str],
-        metadatas: Optional[List[dict]] = None,
-        ids: Optional[List[str]] = None,
-        **kwargs: Any,
-    ) -> List[str]:
-        """Run more texts through the embeddings and add to the vectorstore."""
-        # 1. Generate Embeddings
-        vectors = self.embedding.embed_documents(list(texts))
-        
-        # 2. Prepare Items for SOP
-        items = []
-        if ids is None:
-            ids = [str(uuid.uuid4()) for _ in texts]
-        
-        for i, text in enumerate(texts):
-            metadata = metadatas[i] if metadatas else {}
-            # Store the text in metadata so we can retrieve it later
-            metadata["text"] = text
-            
-            item = Item(
-                id=ids[i],
-                vector=vectors[i],
-                payload=metadata
-            )
-            items.append(item)
-
-        # 3. Upsert to SOP
-        self.store.upsert_batch(items)
-        return ids
-
-    def similarity_search(
-        self, query: str, k: int = 4, **kwargs: Any
-    ) -> List[Document]:
-        """Return docs most similar to query."""
-        # 1. Embed Query
-        vector = self.embedding.embed_query(query)
-
-        # 2. Search SOP
-        hits = self.store.query(vector=vector, k=k)
-
-        # 3. Convert Hits to Documents
-        docs = []
-        for hit in hits:
-            # We stored the original text in the payload/metadata
-            content = hit.payload.pop("text", "")
-            docs.append(Document(page_content=content, metadata=hit.payload))
-        
-        return docs
-
 # --- Hello World Demo ---
 def main():
     print("Initializing SOP Vector Database (Standalone Mode)...")
+    db_path = "./data/langchain_demo"
+    
+    # Clean up
+    import shutil
+    if os.path.exists(db_path):
+        shutil.rmtree(db_path)
+
+    ctx = Context()
     # 1. Setup SOP
-    db = VectorDatabase(storage_path="./data/langchain_demo", db_type=DBType.Standalone)
-    raw_store = db.open("demo_collection")
+    db = Database(ctx, storage_path=db_path, db_type=DBType.Standalone)
 
     # 2. Setup Embedder
     embedder = SimpleHashEmbedder(dim=3)
 
     # 3. Create the LangChain Wrapper
-    vectorstore = SOPVectorStore(raw_store, embedder)
+    # We use the SOPVectorStore class from the library (sop.ai)
+    vectorstore = SOPVectorStore(ctx, db, "demo_collection", embedder)
 
     # 4. Add Documents
     print("Adding documents...")
@@ -137,6 +75,10 @@ def main():
     print("\nResults:")
     for i, doc in enumerate(results):
         print(f"{i+1}. {doc.page_content} (Metadata: {doc.metadata})")
+
+    # Clean up
+    if os.path.exists(db_path):
+        shutil.rmtree(db_path)
 
 if __name__ == "__main__":
     main()

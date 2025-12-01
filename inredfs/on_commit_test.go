@@ -1,0 +1,83 @@
+package inredfs
+
+import (
+	"context"
+	"os"
+	"testing"
+
+	"github.com/sharedcode/sop"
+)
+
+func TestOnCommit_FiresOnCommit(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sop-test-oncommit-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ctx := context.Background()
+	opts, err := NewTransactionOptions(tmpDir, sop.ForWriting, -1, 0)
+	if err != nil {
+		t.Fatalf("NewTransactionOptions failed: %v", err)
+	}
+
+	trans, err := NewTransaction(ctx, opts)
+	if err != nil {
+		t.Fatalf("NewTransaction failed: %v", err)
+	}
+
+	if err := trans.Begin(ctx); err != nil {
+		t.Fatalf("Begin failed: %v", err)
+	}
+
+	fired := false
+	trans.OnCommit(func(ctx context.Context) error {
+		fired = true
+		return nil
+	})
+
+	if err := trans.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	if !fired {
+		t.Error("OnCommit hook was not fired after Commit")
+	}
+}
+
+func TestOnCommit_DoesNotFireOnRollback(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sop-test-oncommit-rollback-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ctx := context.Background()
+	opts, err := NewTransactionOptions(tmpDir, sop.ForWriting, -1, 0)
+	if err != nil {
+		t.Fatalf("NewTransactionOptions failed: %v", err)
+	}
+
+	trans, err := NewTransaction(ctx, opts)
+	if err != nil {
+		t.Fatalf("NewTransaction failed: %v", err)
+	}
+
+	if err := trans.Begin(ctx); err != nil {
+		t.Fatalf("Begin failed: %v", err)
+	}
+
+	fired := false
+	trans.OnCommit(func(ctx context.Context) error {
+		fired = true
+		return nil
+	})
+
+	if err := trans.Rollback(ctx); err != nil {
+		t.Fatalf("Rollback failed: %v", err)
+	}
+
+	if fired {
+		t.Error("OnCommit hook was fired after Rollback, expected it not to")
+	}
+}

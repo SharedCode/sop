@@ -31,3 +31,16 @@ class Context:
         """
         call_go.cancel_context(self.id)
         self._removed = True
+
+    def error(self) -> str:
+        """
+        Returns the error message if the context has encountered an error (e.g. timeout or canceled),
+        otherwise returns None.
+        """
+        return call_go.context_error(self.id)
+
+    def is_valid(self) -> bool:
+        """
+        Returns True if the context is still valid (no error), False otherwise.
+        """
+        return self.error() is None

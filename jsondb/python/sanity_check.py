@@ -9,7 +9,8 @@ import logging
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from sop import context, transaction, btree
-from sop.ai import vector, model, database
+from sop.ai import Database, DBType, Item as VectorItem
+from sop.redis import Redis
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,53 +19,52 @@ logger = logging.getLogger(__name__)
 def main():
     logger.info("Starting Sanity Check...")
 
+    # Initialize Redis (required for SOP)
+    Redis.open_connection("redis://localhost:6379")
+
     # 1. Initialize Context
     ctx = context.Context()
     logger.info(f"Context initialized: {ctx.id}")
 
-    # 2. Initialize Transaction
-    # We need a directory for the stores
+    # 2. Initialize Database
     store_path = "/tmp/sop_sanity_check"
+    if os.path.exists(store_path):
+        import shutil
+        shutil.rmtree(store_path)
     if not os.path.exists(store_path):
         os.makedirs(store_path)
+    
+    db = Database(ctx, storage_path=store_path, db_type=DBType.Standalone)
 
     trans_options = transaction.TransactionOptions(
         mode=transaction.TransactionMode.ForWriting.value,
         max_time=15,
         registry_hash_mod=250,
         stores_folders=[store_path],
-        erasure_config=None,
-        db_type=0 # Standalone
+        erasure_config={}
     )
 
     logger.info("Initializing Transaction...")
     try:
-        with transaction.Transaction(ctx, trans_options) as trans:
+        with db.begin_transaction(ctx, options=trans_options) as trans:
             logger.info(f"Transaction started: {trans.transaction_id}")
 
             # 3. Create B-Trees
             # 3a. Generic B-Trees (e.g. User Data)
             logger.info("Creating Generic B-Trees...")
             user_btree_opts = btree.BtreeOptions(name="Users", slot_length=100)
-            user_btree = btree.Btree[str, str].new(ctx, user_btree_opts, trans)
+            user_btree = btree.Btree.new(ctx, user_btree_opts, trans)
             
             log_btree_opts = btree.BtreeOptions(name="Logs", slot_length=100)
-            log_btree = btree.Btree[str, str].new(ctx, log_btree_opts, trans)
+            log_btree = btree.Btree.new(ctx, log_btree_opts, trans)
 
             # 3b. Model Stores
             logger.info("Creating Model Stores...")
-            # ModelStore.open_btree_store creates a store that uses the transaction
-            # We use one store instance for all categories as they map to the same underlying B-Tree
-            model_store = model.ModelStore.open_btree_store(trans)
+            model_store = db.open_model_store(ctx, trans, "default")
 
             # 3c. Vector Store
             logger.info("Creating Vector Store...")
-            # Vector DB needs to be created first
-            vec_db = vector.VectorDatabase(storage_path=store_path)
-            # Open a store (this is non-transactional initially)
-            vec_store_base = vec_db.open("Embeddings")
-            # Wrap in transaction
-            vec_store = vec_store_base.with_transaction(trans)
+            vec_store = db.open_vector_store(ctx, trans, "Embeddings")
 
             # 4. Perform CRUD Operations (50-100 items)
             num_items = 60
@@ -74,20 +74,20 @@ def main():
             for i in range(num_items):
                 user_id = f"user_{i}"
                 user_data = json.dumps({"name": f"User {i}", "age": 20 + (i % 50)})
-                user_btree.add(ctx, btree.Item(key=user_id, value=user_data))
+                user_btree.add(ctx, [btree.Item(key=user_id, value=user_data)])
             
             # Logs
             for i in range(num_items):
                 log_id = f"log_{i}"
                 log_data = f"Log entry {i} at {uuid.uuid4()}"
-                log_btree.add(ctx, btree.Item(key=log_id, value=log_data))
+                log_btree.add(ctx, [btree.Item(key=log_id, value=log_data)])
 
             # Models
             for i in range(num_items):
                 model_name = f"model_{i}"
                 model_data = {"weights": [random.random() for _ in range(10)], "bias": random.random()}
-                model_store.save("recommendation", model_name, model_data)
-                model_store.save("classification", model_name, model_data)
+                model_store.save(ctx, "recommendation", model_name, model_data)
+                model_store.save(ctx, "classification", model_name, model_data)
 
             # Vectors
             vec_items = []
@@ -95,9 +95,9 @@ def main():
                 vec_id = uuid.uuid4()
                 vec_vector = [random.random() for _ in range(128)]
                 vec_payload = {"source": f"doc_{i}", "tag": "test"}
-                vec_items.append(vector.Item(id=str(vec_id), vector=vec_vector, payload=vec_payload))
+                vec_items.append(VectorItem(id=str(vec_id), vector=vec_vector, payload=vec_payload))
             
-            vec_store.upsert_batch(vec_items)
+            vec_store.upsert_batch(ctx, vec_items)
 
             logger.info("All items added. Committing transaction...")
         
@@ -119,12 +119,12 @@ def main():
         max_time=15,
         registry_hash_mod=250,
         stores_folders=[store_path],
-        erasure_config=None
+        erasure_config={}
     )
 
-    with transaction.Transaction(ctx, read_opts) as trans:
+    with db.begin_transaction(ctx, options=read_opts) as trans:
         # Open existing B-Trees
-        user_btree = btree.Btree[str, str].open(ctx, "Users", trans)
+        user_btree = btree.Btree.open(ctx, "Users", trans)
         count = user_btree.count()
         logger.info(f"Users B-Tree count: {count}")
         if count != num_items:
@@ -132,30 +132,38 @@ def main():
 
         # Check a random user
         if user_btree.find(ctx, "user_10"):
-            item = user_btree.get_items(ctx, btree.PagingInfo(fetch_count=1))
-            logger.info(f"Found user_10: {item[0].value}")
+            # get_items takes PagingInfo
+            # But get_values takes keys.
+            # Let's use get_values for specific key
+            items = user_btree.get_values(ctx, [btree.Item(key="user_10")])
+            logger.info(f"Found user_10: {items[0].value}")
         else:
             logger.error("Could not find user_10")
 
         # Vector Store Verification
-        # We need to re-open the vector store and wrap it in the new transaction
-        vec_db = vector.VectorDatabase(storage_path=store_path)
-        vec_store_base = vec_db.open("Embeddings")
-        vec_store = vec_store_base.with_transaction(trans)
+        vec_store = db.open_vector_store(ctx, trans, "Embeddings")
         
-        vec_count = vec_store.count()
+        vec_count = vec_store.count(ctx)
         logger.info(f"Vector Store count: {vec_count}")
         if vec_count != num_items:
              logger.error(f"Expected {num_items} vectors, got {vec_count}")
 
-        # 6. Optimize Vector Store
-        # Optimize might not need a transaction, or it might. 
-        # Usually optimize is a maintenance task.
-        # Let's call it on the base store (non-transactional) or the transactional one?
-        # The implementation in Go uses the store lookup.
-        logger.info("Optimizing Vector Store...")
-        vec_store.optimize()
-        logger.info("Vector Store optimized.")
+    # 6. Optimize Vector Store
+    logger.info("Optimizing Vector Store...")
+    
+    optimize_opts = transaction.TransactionOptions(
+        mode=transaction.TransactionMode.ForWriting.value,
+        max_time=15,
+        registry_hash_mod=250,
+        stores_folders=[store_path],
+        erasure_config={}
+    )
+    
+    # Optimize commits the transaction internally, so we don't use 'with' block which tries to commit again
+    trans = db.begin_transaction(ctx, options=optimize_opts)
+    vec_store = db.open_vector_store(ctx, trans, "Embeddings")
+    vec_store.optimize(ctx)
+    logger.info("Vector Store optimized.")
 
     logger.info("Sanity Check Complete!")
 

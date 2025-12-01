@@ -108,6 +108,15 @@ Before I go, I would like to say, SOP is a green field, totally new. What is bei
 ## High level features/usability articles about SOP
 See the entire list & details here: https://github.com/sharedcode/sop/blob/master/README2.md#high-level-features-articles-about-sop
 
+## The Database Abstraction
+SOP provides a high-level `database` package that simplifies configuration and management of your storage artifacts.
+
+- **Unified Entry Point**: Manage B-Trees, Vector Stores, and Model Registries from a single `Database` instance.
+- **Deployment Modes**:
+    - **Standalone**: Uses in-memory caching and local storage. Ideal for single-node apps or development.
+    - **Clustered**: Uses Redis for distributed caching and coordination. Ideal for production clusters.
+- **Simplified Transactions**: `db.BeginTransaction` handles the complexity of configuring caching and replication for you.
+
 ## Quick start
 SOP is a NoSQL-like key/value storage engine with built-in indexing and transactions. You only need Go to start (Redis is optional for distributed setups).
 
@@ -116,19 +125,35 @@ SOP is a NoSQL-like key/value storage engine with built-in indexing and transact
 
 2) Prerequisites
 - Go 1.24.3 or later (module requires go 1.24.3)
-- (Optional) Redis (recent version) - required only for distributed/cluster mode or if using Redis-backed caching.
+- (Optional) Redis (recent version) - required only for distributed/cluster mode or if using Redis-backed caching. **Note**: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
 
 3) Install and run Redis (Optional)
 - If using distributed features, install Redis locally or point to your cluster.
 
 4) Add SOP to your Go app
 - Import package:
-  - `github.com/sharedcode/sop/inredfs` (Recommended: lean, storage on filesystem, supports both in-memory and Redis-backed caching)
-  - `github.com/sharedcode/sop/inredcfs` (Hybrid: Cassandra for metadata/registry, Filesystem for data, Redis-backed caching)
+  - `github.com/sharedcode/sop/database` (Recommended: Unified entry point for B-Trees, Vector Stores, and AI Models)
+  - `github.com/sharedcode/sop/inredfs` (Low-level: Direct access to filesystem-backed B-Trees)
 - Repo path: https://github.com/sharedcode/sop
 
-5) Initialize Redis and start coding
-- Initialize Redis connection, open a transaction, create/open a B-tree, then use CRUD and search (FindOne, First/Last/Next/Previous, paging APIs). See API links below.
+5) Initialize and start coding
+- Use the `database` package to initialize your environment.
+  ```go
+  // Initialize (Standalone or Clustered)
+  db := database.NewDatabase(database.Standalone, "/var/lib/sop")
+
+  // Start a Transaction
+  tx, _ := db.BeginTransaction(ctx, sop.ForWriting)
+
+  // Open a Store (B-Tree, Vector, or Model)
+  users, _ := db.NewBtree(ctx, "users", tx)
+
+  // Perform Operations
+  users.Add(ctx, "user1", "John Doe")
+
+  // Commit
+  tx.Commit(ctx)
+  ```
 
 6) Deploy
 - Ship your app and SOP along your usual release flow (binary or container). If you expose SOP via a microservice, choose REST/gRPC as needed.
@@ -218,6 +243,7 @@ See details here: https://github.com/sharedcode/sop/blob/master/README2.md#simpl
 
 # SOP for Python (sop4py)
 See details here: https://github.com/sharedcode/sop/tree/master/jsondb/python#readme
+Check out the [Python Cookbook](jsondb/python/COOKBOOK.md) for code recipes.
 
 # SOP for AI Kit
 SOP includes a comprehensive AI toolkit for building local, privacy-first expert systems.
@@ -232,6 +258,27 @@ SOP commits are governed by two bounds:
 The commit ends when the earlier of these two is reached. Internal lock TTLs use maxTime to ensure locks are bounded even if the caller cancels early.
 
 Recommendation: If you want replication/log cleanup to complete under the same budget, set your context deadline to at least maxTime plus a small grace period.
+
+## Reliability & Integrity
+SOP implements a "Rock Solid" storage strategy ensuring data integrity and consistency across failures.
+
+### Checksums (CRC32)
+Every data block written to disk is protected by a CRC32 checksum.
+- **Implementation**: `fs/marshaldata.go`
+- **Mechanism**: The `marshalData` function appends a `crc32.ChecksumIEEE` to every block. `unmarshalData` validates this checksum on read, returning an error if data corruption (bit rot) is detected.
+- **Zero-Copy Optimization**: Sparse (all-zero) blocks are optimized to skip checksum calculation while maintaining validity.
+
+### Rollbacks (COW & Priority Logs)
+SOP uses a robust rollback mechanism to recover from crashes or power failures during a transaction.
+- **Implementation**: `fs/hashmap.cow.go`
+- **Copy-On-Write (COW)**: Before modifying a registry sector, SOP creates a `.cow` backup file (`createCow`). If a crash occurs, the next accessor detects the COW file, verifies its integrity (using the embedded CRC32), and restores the original state (`restoreFromCow`).
+- **Priority Logs**: Transaction logs (`.plg`) track in-flight transactions. The `onIdle` maintenance process scans these logs to identify and roll back abandoned or expired transactions, ensuring the system returns to a consistent state.
+
+### Unified Locking (Cross-Platform)
+SOP employs a "Redis-assisted, Storage-anchored" locking model that works consistently across operating systems (Linux, Windows, macOS).
+- **Storage Anchors**: Exclusive access to storage sectors is enforced via claim markers on the disk itself, using standard filesystem APIs with 4096-byte sector alignment (DirectIO). This ensures that even if Redis (the coordination layer) is lost, the physical data remains protected by the filesystem's atomic guarantees.
+- **Redis Coordination**: Redis is used for high-speed, ephemeral locking to reduce contention.
+- **Cross-Platform Consistency**: By relying on standard file I/O and sector alignment rather than OS-specific locking primitives (like `flock` vs `LockFile`), SOP guarantees identical locking behavior on all supported platforms.
 
 ## Coordination model (OOA) and safety
 

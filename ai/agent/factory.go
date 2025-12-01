@@ -14,6 +14,7 @@ import (
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/policy"
 	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/database"
 )
 
 // Dependencies holds external dependencies required for agent creation.
@@ -29,7 +30,7 @@ func HashString(s string) string {
 }
 
 // SetupInfrastructure initializes the Embedder and Vector Index based on the configuration.
-func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai.Embeddings, ai.VectorStore[map[string]any], error) {
+func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai.Embeddings, *database.Database, string, vector.Config, error) {
 	// 1. Initialize Embedder
 	var emb ai.Embeddings
 
@@ -37,7 +38,7 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 	case "agent":
 		agent, ok := deps.AgentRegistry[cfg.Embedder.AgentID]
 		if !ok {
-			return nil, nil, fmt.Errorf("embedder agent '%s' not found in registry", cfg.Embedder.AgentID)
+			return nil, nil, "", vector.Config{}, fmt.Errorf("embedder agent '%s' not found in registry", cfg.Embedder.AgentID)
 		}
 		// Use a simple base embedder for the vectors, but the agent will expand the text first
 		baseEmb := embed.NewSimple(cfg.ID+"-base-embed", 1024, nil)
@@ -55,42 +56,49 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 	}
 
 	// 2. Initialize Vector Database
-	db := vector.NewDatabase[map[string]any](ai.Standalone)
-	if cfg.ContentSize != "" {
-		switch cfg.ContentSize {
-		case "small":
-			db.SetContentSize(sop.SmallData)
-		case "medium":
-			db.SetContentSize(sop.MediumData)
-		case "big":
-			db.SetContentSize(sop.BigData)
-		}
-	}
-	if cfg.StoragePath != "" {
+	storagePath := cfg.StoragePath
+	if storagePath != "" {
 		// Ensure absolute path to avoid duplication issues with relative paths
-		if absPath, err := filepath.Abs(cfg.StoragePath); err == nil {
-			cfg.StoragePath = absPath
+		if absPath, err := filepath.Abs(storagePath); err == nil {
+			storagePath = absPath
 		}
 
 		// Fix for double domain in path:
 		// If the storage path ends with the Agent ID, assume the user meant "this is my folder"
 		// and point the DB to the parent, so DB.Open(ID) reconstructs it correctly.
-		if filepath.Base(cfg.StoragePath) == cfg.ID {
-			db.SetStoragePath(filepath.Dir(cfg.StoragePath))
-		} else {
-			db.SetStoragePath(cfg.StoragePath)
+		if filepath.Base(storagePath) == cfg.ID {
+			storagePath = filepath.Dir(storagePath)
 		}
 	}
-	idx := db.Open(ctx, cfg.ID)
 
-	return emb, idx, nil
+	db := database.NewDatabase(database.Standalone, storagePath)
+
+	vCfg := vector.Config{
+		UsageMode:             ai.BuildOnceQueryMany, // Default
+		EnableIngestionBuffer: cfg.EnableIngestionBuffer,
+		StoragePath:           storagePath,
+		Cache:                 db.Cache(),
+	}
+
+	if cfg.ContentSize != "" {
+		switch cfg.ContentSize {
+		case "small":
+			vCfg.ContentSize = sop.SmallData
+		case "medium":
+			vCfg.ContentSize = sop.MediumData
+		case "big":
+			vCfg.ContentSize = sop.BigData
+		}
+	}
+
+	return emb, db, cfg.ID, vCfg, nil
 }
 
 // NewFromConfig creates and initializes a new Agent Service based on the provided configuration.
 // It handles infrastructure setup (Embedder, VectorDB).
 func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service, error) {
 	// 1. Initialize Infrastructure
-	emb, idx, err := SetupInfrastructure(ctx, cfg, deps)
+	emb, db, storeName, vCfg, err := SetupInfrastructure(ctx, cfg, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +158,9 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service
 	dom := domain.NewGenericDomain(domain.Config[map[string]any]{
 		ID:         cfg.ID,
 		Name:       cfg.Name,
-		Index:      idx,
+		DB:         db,
+		StoreName:  storeName,
+		StoreCfg:   vCfg,
 		Embedder:   emb,
 		Policy:     pol,
 		Classifier: class,
@@ -184,8 +194,25 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service
 			}
 		}
 
+		// Start Transaction for Ingestion
+		tx, err := dom.BeginTransaction(ctx, sop.ForWriting)
+		if err != nil {
+			return nil, fmt.Errorf("failed to begin transaction: %w", err)
+		}
+		// Ensure rollback on error, but commit on success
+		defer tx.Rollback(ctx)
+
+		idx, err := dom.Index(ctx, tx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open index: %w", err)
+		}
+
 		if err := idx.UpsertBatch(ctx, items); err != nil {
 			return nil, fmt.Errorf("failed to ingest seed data: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("failed to commit ingestion: %w", err)
 		}
 	}
 

@@ -1,0 +1,104 @@
+import os
+import shutil
+import sys
+import uuid
+from dataclasses import asdict
+
+# Add the parent directory to sys.path to import sop
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from sop import Context, Transaction, TransactionOptions, TransactionMode, Btree, BtreeOptions, Item
+from sop.ai import Database, DBType, Item as VectorItem
+
+def main():
+    # Define paths
+    general_db_path = "unified_general_db"
+    vector_db_path = "unified_vector_db"
+    
+    # Clean up
+    for p in [general_db_path, vector_db_path]:
+        if os.path.exists(p):
+            shutil.rmtree(p)
+
+    print("Initializing Unified Demo...")
+    ctx = Context()
+
+    # 1. Initialize AI Database handle
+    # We don't need to "create" the folder structure explicitly for AI DB, 
+    # but we need the Database object to open stores.
+    ai_db = Database(ctx, storage_path=vector_db_path, db_type=DBType.Standalone)
+
+    # 2. Create a Transaction
+    # We use a single storage path for simplicity in this demo.
+    # To use multiple paths (replication), see vector_replication_demo.py
+    trans_opts = TransactionOptions(
+        mode=TransactionMode.ForWriting.value,
+        max_time=15,
+        registry_hash_mod=250,
+        stores_folders=[vector_db_path], 
+        erasure_config={}
+    )
+
+    print("\n--- Starting Unified Transaction ---")
+    with ai_db.begin_transaction(ctx, options=trans_opts) as trans:
+        print("Transaction Started.")
+
+        # --- A. General Purpose B-Tree Operation ---
+        print("Opening General B-Tree 'users'...")
+        # Note: Btree.new creates a new store. Btree.open opens existing.
+        # For demo, we use new.
+        btree_opts = BtreeOptions(name="users")
+        users_store = Btree.new(ctx, btree_opts, trans)
+        
+        user_id = uuid.uuid4()
+        print(f"Adding User to B-Tree: {user_id}")
+        users_store.add(ctx, Item(key=str(user_id), value={"name": "Alice", "role": "Engineer"}))
+
+        # --- B. AI Vector Store Operation ---
+        print("Opening Vector Store 'user_vectors'...")
+        vec_store = ai_db.open_vector_store(ctx, trans, "user_vectors")
+        
+        print(f"Adding Vector for User: {user_id}")
+        vec_item = VectorItem(
+            id=str(user_id), 
+            vector=[0.1, 0.9, 0.5], 
+            payload={"user_id": str(user_id)}
+        )
+        vec_store.upsert(ctx, vec_item)
+
+        print("Committing Unified Transaction...")
+
+    # 3. Verify Data (Read back)
+    print("\n--- Verifying Data ---")
+    with ai_db.begin_transaction(ctx, options=trans_opts) as trans:
+        # Open B-Tree
+        users_store = Btree.open(ctx, "users", trans)
+        found = users_store.find(ctx, str(user_id))
+        if found:
+            # Fetch value
+            # Btree.get_values takes an Item with key populated
+            kv = users_store.get_values(ctx, Item(key=str(user_id)))
+            # get_values returns a list of Items
+            if kv and kv[0].value:
+                print(f"Found User in B-Tree: {kv[0].value}")
+            else:
+                print("User found but value missing!")
+        else:
+            print("User NOT found in B-Tree!")
+
+        # Open Vector Store
+        vec_store = ai_db.open_vector_store(ctx, trans, "user_vectors")
+        try:
+            vec = vec_store.get(ctx, str(user_id))
+            print(f"Found Vector in AI Store: {vec.payload}")
+        except Exception as e:
+            print(f"Vector NOT found: {e}")
+
+    # Clean up
+    for p in [general_db_path, vector_db_path]:
+        if os.path.exists(p):
+            shutil.rmtree(p)
+    print("Unified Demo completed successfully.")
+
+if __name__ == "__main__":
+    main()

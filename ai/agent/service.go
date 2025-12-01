@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 )
 
@@ -74,9 +75,15 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 	}
 
 	// 3. Query Index
-	idx := s.domain.Index()
-	if idx == nil {
-		return nil, fmt.Errorf("domain %s has no index configured", s.domain.ID())
+	tx, err := s.domain.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	idx, err := s.domain.Index(ctx, tx)
+	if err != nil {
+		return nil, fmt.Errorf("domain %s has no index configured: %w", s.domain.ID(), err)
 	}
 	hits, err := idx.Query(ctx, vecs[0], limit, nil)
 	if err != nil {

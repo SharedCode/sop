@@ -1,8 +1,8 @@
-import pytest
 import unittest
 from . import transaction
 from . import btree
 from . import context
+from .ai import Database, DBType
 
 from datetime import timedelta
 from .redis import *
@@ -44,7 +44,7 @@ class Person:
 
 
 # Transaction Options (to).
-to = transaction.TransationOptions(
+to = transaction.TransactionOptions(
     transaction.TransactionMode.ForWriting.value,
     5,
     transaction.MIN_HASH_MOD_VALUE,
@@ -57,15 +57,19 @@ ctx = context.Context()
 
 
 class TestBtree(unittest.TestCase):
-    def setUpClass():
+    @classmethod
+    def setUpClass(cls):
 
         # initialize SOP global Redis connection
-        ro = RedisOptions()
-        Redis.open_connection(ro)
+        # ro = RedisOptions()
+        Redis.open_connection("redis://localhost:6379")
+
+        # Initialize DB
+        cls.db = Database(ctx, storage_path=stores_folders[0], db_type=DBType.Standalone, stores_folders=list(stores_folders))
 
         # create the "barstoreec" b-tree store.
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = cls.db.begin_transaction(ctx, options=to)
+        # t.begin()
 
         cache = btree.CacheConfig()
         bo = btree.BtreeOptions("barstoreec", True, cache_config=cache)
@@ -82,8 +86,7 @@ class TestBtree(unittest.TestCase):
         print("new B3 succeeded")
 
     def test_add_if_not_exists(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "barstoreec", t)
         l = [
@@ -96,8 +99,7 @@ class TestBtree(unittest.TestCase):
         print("test add_if_not_exists")
 
     def test_add_if_not_exists_mapkey(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         cache = btree.CacheConfig()
         bo = btree.BtreeOptions("barstoreec_mk", True, cache_config=cache)
@@ -117,8 +119,7 @@ class TestBtree(unittest.TestCase):
         print("test add_if_not_exists")
 
     def test_add_if_not_exists_mapkey_fail(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         cache = btree.CacheConfig()
         bo = btree.BtreeOptions("barstoreec_mk2", True, cache_config=cache)
@@ -133,7 +134,7 @@ class TestBtree(unittest.TestCase):
         try:
             if b3.add_if_not_exists(ctx, l) == False:
                 print("addIfNotExistsMapkey should fail.")
-            pytest.fail("SHOULD NOT REACH THIS.")
+            self.fail("SHOULD NOT REACH THIS.")
         except:
             pass
 
@@ -141,8 +142,7 @@ class TestBtree(unittest.TestCase):
         print("test add_if_not_exists mapkey fail case")
 
     def test_get_items(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "barstoreec", t)
         res = b3.get_items(
@@ -153,8 +153,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_keys(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "barstoreec", t)
         res = b3.get_keys(
@@ -165,8 +164,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_values(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "barstoreec", t)
         keys = b3.get_keys(
@@ -179,8 +177,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_find(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "barstoreec", t)
         res = b3.find(ctx, 1)
@@ -190,8 +187,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_find_with_id(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "barstoreec", t)
         keys = b3.get_keys(
@@ -204,8 +200,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_goto_first(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "barstoreec", t)
         res = b3.first(ctx)
@@ -214,8 +209,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_goto_last(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "barstoreec", t)
         res = b3.last(ctx)
@@ -224,8 +218,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_is_unique(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "barstoreec", t)
         res = b3.is_unique()
@@ -234,8 +227,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_count(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "barstoreec", t)
         res = b3.count()
@@ -244,8 +236,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_store_info(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "barstoreec", t)
         res = b3.get_store_info()
@@ -255,12 +246,15 @@ class TestBtree(unittest.TestCase):
 
 
 class TestBtreeMapKey(unittest.TestCase):
-    def setUpClass():
-        ro = RedisOptions()
-        Redis.open_connection(ro)
+    @classmethod
+    def setUpClass(cls):
+        # ro = RedisOptions()
+        Redis.open_connection("redis://localhost:6379")
 
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        # Initialize DB
+        cls.db = Database(ctx, storage_path=stores_folders[0], db_type=DBType.Standalone, stores_folders=list(stores_folders))
+
+        t = cls.db.begin_transaction(ctx, options=to)
 
         cache = btree.CacheConfig()
         bo = btree.BtreeOptions("foobar", True, cache_config=cache)
@@ -284,8 +278,7 @@ class TestBtreeMapKey(unittest.TestCase):
         print("new B3 succeeded")
 
     def test_add_if_not_exists(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "foobar", t)
         l = [
@@ -298,8 +291,7 @@ class TestBtreeMapKey(unittest.TestCase):
         print("test add_if_not_exists")
 
     def test_get_items(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "foobar", t)
         res = b3.get_items(
@@ -310,8 +302,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_keys(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "foobar", t)
         res = b3.get_keys(
@@ -322,8 +313,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_values(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "foobar", t)
         keys = b3.get_keys(
@@ -336,8 +326,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_find(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "foobar", t)
         res = b3.find(ctx, pKey(key="123"))
@@ -347,8 +336,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_find_with_id(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "foobar", t)
         keys = b3.get_keys(
@@ -361,8 +349,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_goto_first(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "foobar", t)
         res = b3.first(ctx)
@@ -371,8 +358,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_goto_last(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "foobar", t)
         res = b3.last(ctx)
@@ -381,8 +367,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_is_unique(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "foobar", t)
         res = b3.is_unique()
@@ -391,8 +376,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_count(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "foobar", t)
         res = b3.count()
@@ -401,8 +385,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_store_info(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "foobar", t)
         res = b3.get_store_info()
@@ -411,8 +394,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_add_people(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "person", t)
 
@@ -428,8 +410,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_keys_get_values(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "person", t)
         b3.first(ctx)
@@ -443,8 +424,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_keys_backwards_get_values(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "person", t)
         # Position cursor to the last item.
@@ -461,8 +441,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_keys_over_the_edge_get_values(self):
-        t = transaction.Transaction(ctx, to)
-        t.begin()
+        t = self.db.begin_transaction(ctx, options=to)
 
         b3 = btree.Btree.open(ctx, "person", t)
         b3.first(ctx)

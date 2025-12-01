@@ -30,23 +30,29 @@ package main
 
 import (
 	"fmt"
+	"context"
 	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/database"
 )
 
 func main() {
 	// 1. Create the Database Manager
 	// Standalone mode = Local Filesystem + In-Memory Cache
-	db := vector.NewDatabase[map[string]any](ai.Standalone)
+	db := database.NewDatabase(database.Standalone, "./my_vector_db")
 	
 	// 2. Configure Storage Path
-	db.SetStoragePath("./my_vector_db")
+	// db.SetStoragePath("./my_vector_db") // Done in NewDatabase
 
 	// 3. Open a Domain (Index)
 	// This creates/opens a specific "table" or "collection" named "documents"
-	idx := db.Open(context.Background(), "documents")
+	ctx := context.Background()
+	trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	idx, _ := db.OpenVectorStore(ctx, "documents", trans, vector.Config{})
 	
 	fmt.Println("Vector Store opened successfully!")
+	
+	// Don't forget to commit if you made changes (though Open just initializes)
+	trans.Commit(ctx)
 }
 ```
 
@@ -58,16 +64,20 @@ Initialize a clustered vector database using Redis for caching.
 func main() {
 	// 1. Create the Database Manager
 	// Clustered mode = Local Filesystem (Shared) + Redis Cache
+	// Note: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
 	// Ensure Redis is running on localhost:6379
-	db := vector.NewDatabase[map[string]any](ai.Clustered)
+	db := database.NewDatabase(database.Clustered, "./my_cluster_db")
 	
 	// 2. Configure Storage Path
-	db.SetStoragePath("./my_cluster_db")
+	// db.SetStoragePath("./my_cluster_db") // Done in NewDatabase
 
 	// 3. Open a Domain (Index)
-	idx := db.Open(context.Background(), "documents")
+	ctx := context.Background()
+	trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	idx, _ := db.OpenVectorStore(ctx, "documents", trans, vector.Config{})
 	
 	fmt.Println("Clustered Vector Store opened successfully!")
+	trans.Commit(ctx)
 }
 ```
 
@@ -101,6 +111,48 @@ func ingestData(ctx context.Context, idx ai.VectorStore[map[string]any]) {
 		panic(err)
 	}
 }
+
+### Performance Tuning: Deduplication
+
+By default, the Vector Store checks if an item ID already exists before inserting (to prevent duplicates). If you know your data is unique (e.g., during initial bulk load), you can disable this check to improve ingestion speed.
+
+```go
+func fastIngest(ctx context.Context, idx ai.VectorStore[map[string]any]) {
+    // Disable deduplication check for raw speed
+    // WARNING: Only do this if you are certain IDs are unique!
+    if store, ok := idx.(interface{ SetDeduplication(bool) }); ok {
+        store.SetDeduplication(false)
+    }
+
+    // ... perform bulk upsert ...
+}
+```
+
+### Optimizing the Index
+
+Rebalance the vector clusters for optimal search performance. This is especially important after bulk ingestion or significant updates.
+
+**Note:** The `Optimize` process puts the store into a **Read-Only** mode. Any `Upsert` or `Delete` calls during this time will fail.
+
+```go
+func optimizeIndex(ctx context.Context, idx ai.VectorStore[map[string]any]) {
+    // Triggers a rebalancing of the centroids.
+    // This runs in batches and can handle millions of records.
+    if err := idx.Optimize(ctx); err != nil {
+        panic(err)
+    }
+    fmt.Println("Index optimized successfully.")
+}
+
+func handleReadOnlyError(err error) {
+    // If you try to write during optimization, you'll get an error.
+    if err != nil && err.Error() == "Vector Store is currently optimizing (Read-Only mode)" {
+        fmt.Println("Store is busy optimizing. Please try again later.")
+    }
+}
+```
+
+### Searching (Query)
 ```
 
 ### Searching (Query)
@@ -189,8 +241,10 @@ type MyPerceptron struct {
 
 func saveModel() {
 	// Initialize Database
-	db := database.NewDatabase(ai.Standalone, "./my_models")
-	store, _ := db.OpenModelStore("default")
+	db := database.NewDatabase(database.Standalone, "./my_models")
+	ctx := context.Background()
+	trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	store, _ := db.OpenModelStore(ctx, "default", trans)
 
 	model := MyPerceptron{
 		Weights: []float64{0.5, -0.2, 1.0},
@@ -198,10 +252,10 @@ func saveModel() {
 	}
 
 	// Save
-	ctx := context.Background()
 	if err := store.Save(ctx, "classifiers", "perceptron_v1", model); err != nil {
 		panic(err)
 	}
+	trans.Commit(ctx)
 }
 ```
 
@@ -211,14 +265,16 @@ Retrieve a model by name.
 
 ```go
 func loadModel() {
-	db := database.NewDatabase(ai.Standalone, "./my_models")
-	store, _ := db.OpenModelStore("default")
+	db := database.NewDatabase(database.Standalone, "./my_models")
 	ctx := context.Background()
+	trans, _ := db.BeginTransaction(ctx, sop.ForReading)
+	store, _ := db.OpenModelStore(ctx, "default", trans)
 
 	var loadedModel MyPerceptron
 	if err := store.Load(ctx, "classifiers", "perceptron_v1", &loadedModel); err != nil {
 		panic(err)
 	}
+	trans.Commit(ctx)
 
 	fmt.Printf("Loaded Bias: %f\n", loadedModel.Bias)
 }
@@ -230,9 +286,12 @@ See what's in the store.
 
 ```go
 func listModels() {
-	db := database.NewDatabase(ai.Standalone, "./my_models")
-	store, _ := db.OpenModelStore("default")
-	names, _ := store.List(context.Background(), "classifiers")
+	db := database.NewDatabase(database.Standalone, "./my_models")
+	ctx := context.Background()
+	trans, _ := db.BeginTransaction(ctx, sop.ForReading)
+	store, _ := db.OpenModelStore(ctx, "default", trans)
+	names, _ := store.List(ctx, "classifiers")
+	trans.Commit(ctx)
 	
 	for _, name := range names {
 		fmt.Println("Found model:", name)
@@ -248,22 +307,21 @@ Use `BTreeModelStore` to update models and vectors atomically. This ensures that
 import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/ai/vector"
 )
 
 func atomicUpdate() {
 	// 1. Start a Transaction
 	// (Assuming we have a transaction factory or manager set up)
-	trans, _ := inredfs.NewTransaction(ctx, options)
-	trans.Begin(ctx)
+	trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
 
 	// 2. Open Transactional Stores
 	// Vector Store (bound to transaction)
-	vecStore := myVectorDB.Open("documents").WithTransaction(trans)
+	vecStore, _ := db.OpenVectorStore(ctx, "documents", trans, vector.Config{})
 	
 	// Model Store (bound to transaction)
-	modelStore, _ := database.NewBTreeModelStore(ctx, trans)
+	modelStore, _ := db.OpenModelStore(ctx, "default", trans)
 
 	// 3. Perform Updates
 	// Update Vector
@@ -277,4 +335,29 @@ func atomicUpdate() {
 	// If this fails, neither the vector nor the model is updated.
 	trans.Commit(ctx)
 }
+
+### Transaction Hooks (OnCommit)
+
+You can register callbacks to be executed only after a successful commit. This is useful for cleaning up temporary resources or triggering side effects (like notifications) that should only happen if the data is safely persisted.
+
+```go
+func transactionWithHook(ctx context.Context, trans sop.Transaction) {
+    trans.Begin(ctx)
+
+    // Perform updates...
+    // ...
+
+    // Register a hook
+    trans.OnCommit(func(ctx context.Context) error {
+        fmt.Println("Transaction committed successfully! Sending notification...")
+        // sendNotification()
+        return nil
+    })
+
+    // If Commit fails, the hook is NOT executed.
+    if err := trans.Commit(ctx); err != nil {
+        fmt.Println("Commit failed, hook skipped.")
+    }
+}
+```
 ```

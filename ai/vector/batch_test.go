@@ -1,4 +1,4 @@
-package vector
+package vector_test
 
 import (
 	"context"
@@ -6,7 +6,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/database"
 )
 
 func TestUpsertBatchCentroidPopulation(t *testing.T) {
@@ -17,9 +20,19 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase[map[string]any](ai.Standalone)
-	db.SetStoragePath(tmpDir)
-	idx := db.Open(context.Background(), "test_batch")
+	db := database.NewDatabase(database.Standalone, tmpDir)
+	ctx := context.Background()
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	idx, err := vector.Open[map[string]any](ctx, tx, "test_batch", vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
 
 	// Create a batch of items that form 2 clusters
 	var items []ai.Item[map[string]any]
@@ -41,16 +54,33 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	}
 
 	// UpsertBatch should trigger K-Means (k ~ sqrt(20) = 4)
-	if err := idx.UpsertBatch(context.Background(), items); err != nil {
+	if err := idx.UpsertBatch(ctx, items); err != nil {
 		t.Fatalf("UpsertBatch failed: %v", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
 	}
 
 	// Verify Centroids were created
 	// We can't easily access centroids directly from here without opening the store manually,
 	// but we can check if Query works effectively.
 
+	tx, err = db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	idx, err = vector.Open[map[string]any](ctx, tx, "test_batch", vector.Config{
+		UsageMode: ai.Dynamic,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
 	// Query near Cluster 1
-	hits, err := idx.Query(context.Background(), []float32{0, 0}, 5, nil)
+	hits, err := idx.Query(ctx, []float32{0, 0}, 5, nil)
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}
@@ -72,7 +102,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	}
 
 	// Query near Cluster 2
-	hits2, err := idx.Query(context.Background(), []float32{10, 10}, 5, nil)
+	hits2, err := idx.Query(ctx, []float32{10, 10}, 5, nil)
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}

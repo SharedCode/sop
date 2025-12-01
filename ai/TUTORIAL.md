@@ -61,18 +61,22 @@ package main
 import (
 	"fmt"
 	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/database"
 )
 
 func main() {
 	// 1. Initialize the Database (No Redis required for standalone!)
-	db := vector.NewDatabase[map[string]any](ai.Standalone)
-	db.SetStoragePath("./data/doctor_brain")
+	db := database.NewDatabase(database.Standalone, "./data/doctor_brain")
 
-	// 2. Open the "Doctor" index
-	doctor := db.Open(context.Background(), "doctor")
+	// 2. Start Transaction
+	ctx := context.Background()
+	trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	defer trans.Rollback(ctx)
 
-	// 3. Create some knowledge (In reality, you'd load this from PDFs/Textbooks)
+	// 3. Open the "Doctor" index
+	doctor, _ := db.OpenVectorStore(ctx, "doctor", trans, vector.Config{})
+
+	// 4. Create some knowledge (In reality, you'd load this from PDFs/Textbooks)
 	knowledge := []ai.Item[map[string]any]{
 		{
 			ID:     "doc-101",
@@ -86,11 +90,14 @@ func main() {
 		},
 	}
 
-	// 4. Upsert (Transactional!)
+	// 5. Upsert (Transactional!)
 	// SOP automatically handles the "Lookup" tree updates and Centroid assignment here.
-	if err := doctor.UpsertBatch(context.Background(), knowledge); err != nil {
+	if err := doctor.UpsertBatch(ctx, knowledge); err != nil {
 		panic(err)
 	}
+	
+	// 6. Commit
+	trans.Commit(ctx)
 
 	fmt.Println("The Doctor has studied the material.")
 }
@@ -123,7 +130,9 @@ Now we put it together. The user speaks to the Nurse, the Nurse speaks to the Do
 ```go
 func main() {
 	// ... (Open DB as before) ...
-	doctor := db.Open(context.Background(), "doctor")
+	ctx := context.Background()
+	trans, _ := db.BeginTransaction(ctx, sop.ForReading)
+	doctor, _ := db.OpenVectorStore(ctx, "doctor", trans, vector.Config{})
 
 	// 1. User Input
 	userComplaint := "my tummy hurts"
@@ -133,7 +142,9 @@ func main() {
 
 	// 3. Doctor Action (The Search)
 	// SOP performs a partitioned search using the high-quality Centroids.
-	results, _ := doctor.Query(context.Background(), searchVector, 1, nil)
+	results, _ := doctor.Query(ctx, searchVector, 1, nil)
+	
+	trans.Commit(ctx)
 
 	// 4. Diagnosis
 	if len(results) > 0 {
@@ -160,16 +171,19 @@ When your Doctor's knowledge grows significantly, you simply call:
 
 ```go
 // Re-trains the index using the current data distribution
+// Note: Optimize commits the transaction internally.
 if err := doctor.Optimize(context.Background()); err != nil {
     panic(err)
 }
 ```
 
-This triggers a background process that:
+This triggers a process that:
 1.  Uses the **Lookup Tree** to pull a perfect random sample of the *current* data.
 2.  Calculates new, optimal Centroids.
-3.  Re-assigns vectors to these new homes.
-4.  Swaps the index atomically (Zero downtime for searches!).
+3.  Re-assigns vectors to these new homes in **batches** (to handle millions of records).
+4.  Swaps the index atomically.
+
+**Note**: During this process, the "Doctor" enters a **Read-Only** mode. You can still ask questions (Search), but you cannot teach it new things (Upsert) until optimization finishes.
 
 This ensures your Expert System gets *smarter* and *faster* as it grows, rather than degrading like traditional vector stores.
 
@@ -178,12 +192,19 @@ This ensures your Expert System gets *smarter* and *faster* as it grows, rather 
 SOP gives you two powerful knobs to tune your Expert System for its specific role.
 
 ### 1. Usage Modes: Build-Once vs. Dynamic
-*   **`BuildOnceQueryMany`**: Ideal for static knowledge bases (e.g., a Law Library). SOP optimizes the index for pure read speed and discards temporary build artifacts.
+*   **`BuildOnceQueryMany`**: Ideal for static knowledge bases (e.g., a Law Library).
+    *   **Workflow**: Ingest all data -> Call `Optimize()` -> Serve queries.
+    *   **Benefit**: SOP optimizes the index for pure read speed and discards temporary build artifacts, saving space and improving query performance.
 *   **`Dynamic`**: Ideal for dynamic systems (e.g., User Logs). SOP maintains the auxiliary structures needed for continuous updates.
-*   **`Static`**: Optimized for read-only or append-only datasets.
+*   **`DynamicWithVectorCountTracking`**: Advanced mode for external management.
+    *   **Benefit**: Tracks the number of vectors per centroid. You can use this metric to programmatically decide *when* to call `Optimize()` (e.g., "Optimize if any cluster grows by > 20%"). This is useful for Agents that manage their own memory maintenance.
 
 ```go
-db.SetUsageMode(vector.BuildOnceQueryMany) // or vector.Dynamic
+// Configure via Config struct
+cfg := vector.Config{
+    UsageMode: ai.BuildOnceQueryMany,
+}
+store, _ := db.OpenVectorStore(ctx, "doctor", trans, cfg)
 ```
 
 ### 2. The "NoCheck" Speed Mode
@@ -194,7 +215,18 @@ For the "Doctor" agent serving queries, you want raw speed. SOP supports a **`No
 
 ```go
 // Configure the Doctor for maximum read speed
-db.SetReadMode(sop.NoCheck)
+trans, _ := db.BeginTransaction(ctx, sop.NoCheck)
+```
+
+### 3. Deduplication Flag
+By default, SOP checks for existing IDs before every insert to ensure data integrity.
+*   **On (Default)**: Safe. Prevents duplicate records.
+*   **Off**: Fast. Skips the read-before-write check.
+*   **Use Case**: Initial bulk load of a fresh dataset where you know IDs are unique.
+
+```go
+// Disable deduplication for faster ingestion
+store.SetDeduplication(false)
 ```
 
 All of these enterprise-grade features—Transactional Integrity, Self-Healing Indexes, and In-Memory Caching—come **for free** just by using the SOP library.
@@ -350,24 +382,27 @@ The `sop/ai` module is a modular kit. You can use the high-level `agent` package
 If you just want a high-performance, local vector store without the agent logic, use the `vector` package directly.
 
 ```go
-import "github.com/sharedcode/sop/ai/vector"
+import "github.com/sharedcode/sop/database"
 
 // Create a persistent store
-store := vector.NewDatabase[map[string]any](ai.Standalone)
-if err := store.Open(context.Background(), "data/my_vectors"); err != nil {
-    panic(err)
-}
-defer store.Close()
+db := database.NewDatabase(database.Standalone, "data/my_vectors")
+ctx := context.Background()
+trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
+store, _ := db.OpenVectorStore(ctx, "my_vectors", trans, vector.Config{})
 
 // Add a vector
-err := store.Upsert(context.Background(), ai.Item[map[string]any]{
+err := store.Upsert(ctx, ai.Item[map[string]any]{
     ID: "item1", 
     Vector: []float32{0.1, 0.2, 0.3}, 
     Payload: map[string]any{"label": "test"},
 })
+trans.Commit(ctx)
 
 // Search
-hits, err := store.Query(context.Background(), []float32{0.1, 0.2, 0.3}, 5, nil)
+trans, _ = db.BeginTransaction(ctx, sop.ForReading)
+store, _ = db.OpenVectorStore(ctx, "my_vectors", trans, vector.Config{})
+hits, err := store.Query(ctx, []float32{0.1, 0.2, 0.3}, 5, nil)
+trans.Commit(ctx)
 ```
 
 ### 2. `ai/policy`: Safety & Guardrails
@@ -418,7 +453,7 @@ The `etl` package helps you ingest data from various sources (CSV, Web, APIs) an
 import "github.com/sharedcode/sop/ai/etl"
 
 // Example: Fetching and cleaning data
-err := etl.PrepareData("https://example.com/data.csv", "output.json", 1000)
+err := etl.PrepareData("https://example.com/data.csv", "output.json", 5000)
 ```
 
 ### Putting It All Together: A Custom Agent
@@ -472,7 +507,7 @@ By leveraging SOP's core **Clustered Database** features, software teams can bui
 
 ## Step 10: Going Enterprise (Clustered Mode)
 
-While `ai.Standalone` is perfect for local development and single-node deployments, SOP AI also supports a **Clustered** mode for high availability and scale.
+While `database.Standalone` is perfect for local development and single-node deployments, SOP AI also supports a **Clustered** mode for high availability and scale.
 
 ### Switching to Clustered Mode
 To enable clustered mode, simply change the database type and ensure you have a Redis instance running (for the L2 Cache).
@@ -480,25 +515,26 @@ To enable clustered mode, simply change the database type and ensure you have a 
 ```go
 // 1. Initialize the Database in Clustered Mode
 // This will automatically connect to a local Redis instance (localhost:6379) for caching.
-db := vector.NewDatabase[map[string]any](ai.Clustered)
-db.SetStoragePath("./data/doctor_brain_cluster")
+db := database.NewDatabase(database.Clustered, "./data/doctor_brain_cluster")
 
 // 2. Open the "Doctor" index
-doctor := db.Open(context.Background(), "doctor")
+ctx := context.Background()
+trans, _ := db.BeginTransaction(ctx, sop.ForReading)
+doctor, _ := db.OpenVectorStore(ctx, "doctor", trans, vector.Config{})
 ```
 
 In Clustered mode:
 *   **L2 Cache**: SOP uses Redis to cache B-Tree nodes, enabling high-performance shared access across multiple application instances.
-*   **Storage**: Data is still persisted to the filesystem (or a shared volume), but the Redis cache ensures consistency and speed in a distributed environment.
+*   **Storage**: Data is still persisted to the filesystem (or a shared volume), but the Redis cache ensures consistency and speed in a distributed environment. **Note**: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
 
 ### Seamless Migration (SDLC)
 SOP is designed to support your Software Development Life Cycle (SDLC) from local dev to production.
 
-1.  **Develop Locally**: Build and test your agent on your laptop using `ai.Standalone`.
+1.  **Develop Locally**: Build and test your agent on your laptop using `database.Standalone`.
 2.  **Deploy to Prod**: When moving to a higher environment (QA/Prod), simply:
-    *   Copy your data folder (e.g., `./data/doctor_brain`) to the target server (or shared volume).
-    *   Flip the switch in your code (or config) to `ai.Clustered`.
-    *   Ensure Redis is running.
+    *   **Data Availability**: Ensure your data folder (e.g., `./data/doctor_brain`) is accessible to the production nodes. You can copy it to a shared volume, or if it's already on a network share, just use it in-place.
+    *   **Flip the Switch**: Change the database type from `Standalone` to `Clustered`. If you are using a configuration file, just update the config. If hardcoded, update the code and rebuild.
+    *   **Restart**: Restart your application. Ensure Redis is running.
 
 **Note**: For the "easy flip" to work in a multi-node cluster, the storage path must be a **shared volume** (e.g., NFS, EFS, or a mounted SAN) accessible to all nodes. If running on a single node (just for caching benefits), a local path is fine.
 
@@ -514,15 +550,12 @@ If your training process crashes halfway through, you don't want a "ghost" state
 func AtomicTrainAndIndex(ctx context.Context, doc ai.Item[any], newWeights []float64) error {
     // 1. Start a Transaction
     // This transaction will span across both the Vector Store and the Model Store.
-    trans, _ := inredfs.NewTransaction(ctx, options)
-    if err := trans.Begin(ctx); err != nil {
-        return err
-    }
+    trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
 
     // 2. Open Transactional Views
     // Bind the stores to this specific transaction.
-    vecStore := myVectorDB.Open("documents").WithTransaction(trans)
-    modelStore, _ := ai.NewBTreeModelStore(ctx, trans)
+    vecStore, _ := db.OpenVectorStore(ctx, "documents", trans, vector.Config{})
+    modelStore, _ := db.OpenModelStore(ctx, "classifiers", trans)
 
     // 3. Perform Updates
     // A. Update the Vector Index
@@ -532,7 +565,7 @@ func AtomicTrainAndIndex(ctx context.Context, doc ai.Item[any], newWeights []flo
     }
 
     // B. Update the Model Weights
-    if err := modelStore.Save(ctx, "classifiers", "sentiment_v2", newWeights); err != nil {
+    if err := modelStore.Save(ctx, "sentiment_v2", newWeights); err != nil {
         trans.Rollback(ctx)
         return err
     }
@@ -556,14 +589,11 @@ This is powerful for scenarios like "User Registration", where you need to creat
 func RegisterUser(ctx context.Context, userID string, bio string) error {
     // 1. Start a General Purpose Transaction
     // This gives us raw access to the storage engine.
-    trans, _ := inredfs.NewTransaction(ctx, options)
-    if err := trans.Begin(ctx); err != nil {
-        return err
-    }
+    trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
 
     // 2. General Purpose Work (Key-Value Store)
     // Open a raw B-Tree to store user profiles.
-    userStore, _ := inredfs.NewBtree[string, UserProfile](ctx, sop.ConfigureStore("users", ...), trans, ...)
+    userStore, _ := db.NewBtree(ctx, "users", trans)
     
     profile := UserProfile{ID: userID, Bio: bio, CreatedAt: time.Now()}
     if _, err := userStore.Add(ctx, userID, profile); err != nil {
@@ -574,7 +604,7 @@ func RegisterUser(ctx context.Context, userID string, bio string) error {
     // 3. AI Work (Vector Store)
     // "Bind" the AI Vector Store to the SAME transaction.
     // Now, the vector upsert participates in 'trans'.
-    vecStore := myVectorDB.Open("user_bios").WithTransaction(trans)
+    vecStore, _ := db.OpenVectorStore(ctx, "user_bios", trans, vector.Config{})
     
     // Generate embedding (mocked)
     vector := embedder.Embed(bio)

@@ -1,4 +1,4 @@
-package vector
+package vector_test
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/database"
 )
 
 func TestOptimizeWithTempVectors(t *testing.T) {
@@ -20,20 +22,20 @@ func TestOptimizeWithTempVectors(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := NewDatabase[map[string]any](ai.Standalone)
-	db.SetStoragePath(tmpDir)
-	idx := db.Open(context.Background(), "test_temp")
-	dIdx := idx.(*domainIndex[map[string]any])
+	// Initialize Database
+	db := database.NewDatabase(database.Standalone, tmpDir)
+
+	ctx := context.Background()
 
 	// 1. Manually populate TempVectors
 	// We need to open a transaction and get the architecture
-	trans, err := db.beginTransaction(context.Background(), sop.ForWriting, tmpDir)
+	trans, err := db.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
-		t.Fatalf("Failed to begin transaction: %v", err)
+		t.Fatalf("Failed to create transaction: %v", err)
 	}
 
 	// Open Store (Version 0)
-	arch, err := OpenDomainStore(context.Background(), trans, "test_temp", 0, sop.MediumData)
+	arch, err := vector.OpenDomainStore(ctx, trans, "test_temp", 0, sop.MediumData, false)
 	if err != nil {
 		t.Fatalf("Failed to open domain store: %v", err)
 	}
@@ -42,34 +44,69 @@ func TestOptimizeWithTempVectors(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		id := fmt.Sprintf("item-%d", i)
 		vec := []float32{float32(i), float32(i)}
-		if _, err := arch.TempVectors.Add(context.Background(), id, vec); err != nil {
+		if _, err := arch.TempVectors.Add(ctx, id, vec); err != nil {
 			t.Fatalf("Failed to add to TempVectors: %v", err)
 		}
 
-		stored := storedItem[map[string]any]{
+		stored := vector.StoredItem[map[string]any]{
 			Payload: map[string]any{"val": i},
 			// CentroidID/Distance are 0/0 initially
 		}
 		data, _ := json.Marshal(stored)
-		if _, err := arch.Content.Add(context.Background(), id, string(data)); err != nil {
+		if _, err := arch.Content.Add(ctx, id, string(data)); err != nil {
 			t.Fatalf("Failed to add to Content: %v", err)
 		}
 	}
 
-	if err := trans.Commit(context.Background()); err != nil {
+	if err := trans.Commit(ctx); err != nil {
 		t.Fatalf("Failed to commit setup: %v", err)
 	}
 
 	// 2. Run Optimize
-	if err := dIdx.Optimize(context.Background()); err != nil {
+	trans2, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("Failed to create transaction 2: %v", err)
+	}
+
+	idx, err := db.OpenVectorStore(ctx, "test_temp", trans2, vector.Config{
+		UsageMode:             ai.Dynamic,
+		ContentSize:           sop.MediumData,
+		EnableIngestionBuffer: true,
+	})
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+
+	if err := idx.Optimize(ctx); err != nil {
 		t.Fatalf("Optimize failed: %v", err)
 	}
 
+	// Transaction is committed by Optimize, so we don't need to commit here.
+
+	// Verify TempVectors folder is gone immediately after Optimize commit
+	tempVectorsPath := filepath.Join(tmpDir, "test_temp_tmp_vecs")
+	if _, err := os.Stat(tempVectorsPath); !os.IsNotExist(err) {
+		t.Errorf("TempVectors folder still exists at %s after Optimize", tempVectorsPath)
+	}
+
 	// 3. Verify Vectors are populated
+	trans3, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("Failed to create transaction 3: %v", err)
+	}
+
+	idx3, err := db.OpenVectorStore(ctx, "test_temp", trans3, vector.Config{
+		UsageMode:   ai.Dynamic,
+		ContentSize: sop.MediumData,
+	})
+	if err != nil {
+		t.Fatalf("Open 3 failed: %v", err)
+	}
+
 	// We can use Query or Get
 	for i := 0; i < 10; i++ {
 		id := fmt.Sprintf("item-%d", i)
-		item, err := dIdx.Get(context.Background(), id)
+		item, err := idx3.Get(ctx, id)
 		if err != nil {
 			t.Errorf("Get(%s) failed: %v", id, err)
 		} else {
@@ -81,12 +118,5 @@ func TestOptimizeWithTempVectors(t *testing.T) {
 			}
 		}
 	}
-
-	// 4. Verify TempVectors folder is gone
-	// Since we performed a hard delete of the files, we verify the folder is missing.
-	// Note: The B-Tree metadata (Registry) might still be stale (Count > 0), but the data is gone.
-	tempVectorsPath := filepath.Join(tmpDir, "test_temp_temp_vectors")
-	if _, err := os.Stat(tempVectorsPath); !os.IsNotExist(err) {
-		t.Errorf("TempVectors folder still exists at %s", tempVectorsPath)
-	}
+	trans3.Commit(ctx)
 }

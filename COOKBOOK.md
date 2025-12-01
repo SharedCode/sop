@@ -2,9 +2,11 @@
 
 Simple, copy-pasteable examples for common SOP scenarios.
 
-## 1. Storing 100k User Profiles (`inredcfs`)
+> **Note**: This cookbook focuses on the Go API. For Python examples, see the [Python Cookbook](jsondb/python/COOKBOOK.md).
 
-This example demonstrates how to store structured data using the Hybrid backend.
+## 1. Storing 100k User Profiles (`database`)
+
+This example demonstrates how to store structured data using the high-level `database` package.
 
 ```go
 package main
@@ -13,7 +15,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/inredcfs"
+	"github.com/sharedcode/sop/database"
 )
 
 type UserProfile struct {
@@ -23,42 +25,45 @@ type UserProfile struct {
 }
 
 func main() {
-	// 1. Initialize (Cassandra + Redis)
-	// Assume config structs are populated
-	if err := inredcfs.Initialize(cassandraConfig, redisConfig); err != nil {
-		panic(err)
-	}
-	defer inredcfs.Shutdown()
+	// 1. Initialize Database (Standalone or Clustered)
+	// Standalone uses in-memory caching; Clustered uses Redis.
+	db := database.NewDatabase(database.Standalone, "/tmp/sop_data")
 
-	// 2. Open/Create Store
-	trans, err := inredcfs.NewTransaction(true, -1)
+	// 2. Start Transaction
+	ctx := context.Background()
+	trans, err := db.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		panic(err)
 	}
-	
-	// Configure: Medium data size, cached in Redis
+
+	// 3. Open/Create Store
+	// Configure: Medium data size
 	opts := sop.ConfigureStore("users", true, 1000, "User Profiles", sop.MediumData, "")
-	store, err := inredcfs.NewBtree[string, UserProfile](context.Background(), opts, trans)
+	store, err := db.NewBtree(ctx, "users", trans, opts)
 	if err != nil {
 		panic(err)
 	}
 
-	// 3. Add Data in a Transaction
-	trans.Begin()
-	
+	// 4. Add Data
 	for i := 0; i < 100000; i++ {
 		id := fmt.Sprintf("user_%d", i)
 		profile := UserProfile{ID: id, Name: "John Doe", Email: "john@example.com"}
-		store.Add(context.Background(), id, profile)
+		// Note: In a real app, you might want to serialize 'profile' to JSON string if using generic store,
+		// or use the generic B-Tree directly if you want type safety.
+		// The Database wrapper currently returns BtreeInterface[string, any].
+		store.Add(ctx, id, profile)
 		
 		// Commit every 1000 items to keep memory usage low
 		if i%1000 == 0 {
-			trans.Commit(context.Background())
-			trans.Begin()
+			trans.Commit(ctx)
+			// Start new transaction
+			trans, _ = db.BeginTransaction(ctx, sop.ForWriting)
+			// Re-open store in new transaction
+			store, _ = db.OpenBtree(ctx, "users", trans)
 		}
 	}
 	
-	trans.Commit(context.Background())
+	trans.Commit(ctx)
 	fmt.Println("Done!")
 }
 ```
@@ -68,31 +73,37 @@ func main() {
 Atomically update a "Bank Account" and a "Transaction Log" in the same transaction.
 
 ```go
-func TransferFunds(ctx context.Context, fromID, toID string, amount float64) error {
-	trans, _ := inredcfs.NewTransaction(true, -1)
-	trans.Begin()
+func TransferFunds(ctx context.Context, db *database.Database, fromID, toID string, amount float64) error {
+	// 1. Start Transaction
+	trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
 
-	accounts, _ := inredcfs.NewBtree[string, Account](ctx, accountOpts, trans)
-	logs, _ := inredcfs.NewBtree[string, LogEntry](ctx, logOpts, trans)
+	// 2. Open Stores
+	accounts, _ := db.OpenBtree(ctx, "accounts", trans)
+	logs, _ := db.OpenBtree(ctx, "logs", trans)
 
-	// 1. Deduct
+	// 3. Deduct
 	var fromAccount Account
-	accounts.FindOne(ctx, fromID, true)
-	accounts.GetCurrentValue(ctx, &fromAccount)
-	fromAccount.Balance -= amount
-	accounts.UpdateCurrentItem(ctx, fromAccount)
+	if found, _ := accounts.FindOne(ctx, fromID, true); found {
+		val, _ := accounts.GetCurrentValue(ctx)
+		// Cast/Unmarshal val to Account...
+		fromAccount = val.(Account)
+		fromAccount.Balance -= amount
+		accounts.UpdateCurrentItem(ctx, fromAccount)
+	}
 
-	// 2. Add
+	// 4. Add
 	var toAccount Account
-	accounts.FindOne(ctx, toID, true)
-	accounts.GetCurrentValue(ctx, &toAccount)
-	toAccount.Balance += amount
-	accounts.UpdateCurrentItem(ctx, toAccount)
+	if found, _ := accounts.FindOne(ctx, toID, true); found {
+		val, _ := accounts.GetCurrentValue(ctx)
+		toAccount = val.(Account)
+		toAccount.Balance += amount
+		accounts.UpdateCurrentItem(ctx, toAccount)
+	}
 
-	// 3. Log
+	// 5. Log
 	logs.Add(ctx, uuid.NewString(), LogEntry{Action: "Transfer", Amount: amount})
 
-	// 4. Commit (All or Nothing)
+	// 6. Commit (All or Nothing)
 	return trans.Commit(ctx)
 }
 ```
@@ -135,16 +146,26 @@ type VectorItem struct {
     Content   string
 }
 
-// 2. Open a Store (using inredfs for local file storage)
-store, _ := inredfs.OpenStore[uuid.UUID, VectorItem](ctx, "vector_store")
+// 2. Initialize Database
+db := database.NewDatabase(database.Standalone, "/tmp/sop_vectors")
 
-// 3. Insert Vectors
-trans, _ := inredfs.NewTransaction(ctx, true, -1)
-trans.Begin()
-store.Add(ctx, item.ID, item)
+// 3. Start Transaction
+trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
+
+// 4. Open Vector Store
+// Note: VectorStore expects map[string]any payload by default in Database wrapper
+store, _ := db.OpenVectorStore(ctx, "vector_store", trans, vector.Config{
+    UsageMode: ai.Dynamic,
+})
+
+// 5. Insert Vectors
+item := ai.Item[map[string]any]{
+    ID:     uuid.NewString(),
+    Vector: []float32{0.1, 0.2, 0.3},
+    Payload: map[string]any{"content": "hello world"},
+}
+store.Upsert(ctx, item)
+
+// 6. Commit
 trans.Commit(ctx)
-
-// 4. Retrieve and Search (Conceptual)
-// In a real app, you would load vectors into an HNSW index for similarity search,
-// using SOP as the durable storage for the actual data.
 ```

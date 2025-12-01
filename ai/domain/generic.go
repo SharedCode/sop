@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/database"
 )
 
 // Config holds the configuration for a generic domain (Agent).
@@ -14,7 +17,9 @@ type Config[T any] struct {
 	Name       string
 	DataPath   string
 	Embedder   ai.Embeddings
-	Index      ai.VectorStore[T]
+	DB         *database.Database
+	StoreName  string
+	StoreCfg   vector.Config
 	Policy     ai.PolicyEngine
 	Classifier ai.Classifier
 	Prompts    map[string]string
@@ -52,8 +57,13 @@ func (d *GenericDomain[T]) Embedder() ai.Embeddings {
 }
 
 // Index returns the vector index used for retrieval.
-func (d *GenericDomain[T]) Index() ai.VectorStore[T] {
-	return d.cfg.Index
+func (d *GenericDomain[T]) Index(ctx context.Context, tx sop.Transaction) (ai.VectorStore[T], error) {
+	return vector.Open[T](ctx, tx, d.cfg.StoreName, d.cfg.StoreCfg)
+}
+
+// BeginTransaction starts a new transaction for the domain's underlying storage.
+func (d *GenericDomain[T]) BeginTransaction(ctx context.Context, mode sop.TransactionMode) (sop.Transaction, error) {
+	return d.cfg.DB.BeginTransaction(ctx, mode)
 }
 
 // Policies returns the policy engine that enforces safety and compliance rules.

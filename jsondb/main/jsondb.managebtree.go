@@ -127,8 +127,11 @@ func openBtree(ctx context.Context, ps string) *C.char {
 	sr := t.StoreRepository
 	si, err := sr.Get(ctx, so.Name)
 	isPrimitiveKey := false
-	if err == nil {
+	if err == nil && len(si) > 0 {
 		isPrimitiveKey = si[0].IsPrimitiveKey
+	} else if err == nil && len(si) == 0 {
+		errMsg := fmt.Sprintf("error opening Btree (%s), store not found", so.Name)
+		return C.CString(errMsg)
 	}
 
 	if isPrimitiveKey {

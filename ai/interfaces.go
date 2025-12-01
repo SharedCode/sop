@@ -59,29 +59,15 @@ type VectorStore[T any] interface {
 	// Disabling this can speed up ingestion for pristine data but may lead to ghost vectors if duplicates exist.
 	SetDeduplication(enabled bool)
 
-	// WithTransaction returns a new instance of the store bound to the provided transaction.
-	// Operations on this instance will participate in the transaction but will NOT commit/rollback it.
-	WithTransaction(trans sop.Transaction) VectorStore[T]
-
 	// Centroids returns the Centroids B-Tree for advanced manipulation.
-	Centroids(ctx context.Context, trans sop.Transaction) (btree.BtreeInterface[int, Centroid], error)
+	Centroids(ctx context.Context) (btree.BtreeInterface[int, Centroid], error)
 	// Vectors returns the Vectors B-Tree for advanced manipulation.
-	Vectors(ctx context.Context, trans sop.Transaction) (btree.BtreeInterface[VectorKey, []float32], error)
+	Vectors(ctx context.Context) (btree.BtreeInterface[VectorKey, []float32], error)
 	// Content returns the Content B-Tree for advanced manipulation.
-	Content(ctx context.Context, trans sop.Transaction) (btree.BtreeInterface[string, string], error)
+	Content(ctx context.Context) (btree.BtreeInterface[string, string], error)
+	// Lookup returns the Sequence Lookup B-Tree for advanced manipulation (e.g. random sampling).
+	Lookup(ctx context.Context) (btree.BtreeInterface[int, string], error)
 }
-
-// DatabaseType defines the deployment mode of the vector database.
-type DatabaseType int
-
-const (
-	// Standalone mode uses in-memory caching and local file storage.
-	// Suitable for single-node deployments.
-	Standalone DatabaseType = iota
-	// Clustered mode uses distributed caching (e.g., Redis) and shared storage.
-	// Suitable for multi-node deployments.
-	Clustered
-)
 
 // UsageMode defines how the vector database is intended to be used.
 type UsageMode int
@@ -100,20 +86,6 @@ const (
 	// Useful for scenarios where the Agent explicitly manages the Centroids & Vector assignments.
 	Dynamic
 )
-
-// VectorDatabase defines the interface for a vector database manager.
-// It handles configuration and the creation of domain-specific stores (VectorStore).
-type VectorDatabase[T any] interface {
-	// SetUsageMode configures the usage pattern (e.g., BuildOnceQueryMany, Dynamic).
-	SetUsageMode(mode UsageMode)
-	// SetStoragePath configures the root file system path for data persistence.
-	SetStoragePath(path string)
-	// SetReadMode configures the transaction mode (e.g., NoCheck for speed) for Query operations.
-	// We use int here to avoid dependency on sop package, but it corresponds to sop.TransactionMode.
-	SetReadMode(mode int)
-	// Open returns a VectorStore for the specified domain (e.g., "doctor", "nurse").
-	Open(ctx context.Context, domain string) VectorStore[T]
-}
 
 // Item represents a vector item returned to the user.
 type Item[T any] struct {
@@ -194,7 +166,11 @@ type Domain[T any] interface {
 	ID() string
 	Name() string
 	Embedder() Embeddings
-	Index() VectorStore[T]
+	// Index returns the vector index used for retrieval.
+	// It requires a transaction to be passed in.
+	Index(ctx context.Context, tx sop.Transaction) (VectorStore[T], error)
+	// BeginTransaction starts a new transaction for the domain's underlying storage.
+	BeginTransaction(ctx context.Context, mode sop.TransactionMode) (sop.Transaction, error)
 	Policies() PolicyEngine
 	Classifier() Classifier
 	Prompt(ctx context.Context, kind string) (string, error)
@@ -223,7 +199,4 @@ type ModelStore interface {
 
 	// Delete removes a model from the store.
 	Delete(ctx context.Context, category string, name string) error
-
-	// WithTransaction returns a new instance of the store bound to the provided transaction.
-	WithTransaction(trans sop.Transaction) ModelStore
 }

@@ -33,19 +33,20 @@ class TestCUDBatch(unittest.TestCase):
         
         # Setup Transaction Context
         ctx = Context()
+        
+        # Create Database instance
+        db = VectorDatabase(ctx, storage_path=path, db_type=DBType.Standalone)
+
         # Simple config for standalone test
         opts = TransactionOptions(
             mode=TransactionMode.ForWriting.value,
             max_time=15,
-            registry_hash_mod=250,
-            stores_folders=[path],
-            erasure_config={},
-            db_type=DBType.Standalone.value
+            registry_hash_mod=250
         )
 
         # 1. Create (Insert)
         print("Creating 100 users...")
-        with Transaction(ctx, opts) as t:
+        with db.begin_transaction(ctx, options=opts) as t:
             cache = CacheConfig()
             bo = BtreeOptions("users", True, cache_config=cache)
             bo.set_value_data_size(ValueDataSize.Small)
@@ -60,7 +61,7 @@ class TestCUDBatch(unittest.TestCase):
             # t.commit(ctx) - handled by context manager
 
         # Verify Insert
-        with Transaction(ctx, opts) as t:
+        with db.begin_transaction(ctx, options=opts) as t:
             b3 = Btree.open(ctx, "users", t)
             count = b3.count()
             self.assertEqual(count, 100)
@@ -74,7 +75,7 @@ class TestCUDBatch(unittest.TestCase):
 
         # 2. Update
         print("Updating 100 users...")
-        with Transaction(ctx, opts) as t:
+        with db.begin_transaction(ctx, options=opts) as t:
             b3 = Btree.open(ctx, "users", t)
             
             items = []
@@ -85,7 +86,7 @@ class TestCUDBatch(unittest.TestCase):
             # t.commit(ctx)
 
         # Verify Update
-        with Transaction(ctx, opts) as t:
+        with db.begin_transaction(ctx, options=opts) as t:
             b3 = Btree.open(ctx, "users", t)
             items = b3.get_values(ctx, [BtreeItem(key="user_50")])
             self.assertEqual(len(items), 1)
@@ -93,7 +94,7 @@ class TestCUDBatch(unittest.TestCase):
 
         # 3. Delete
         print("Deleting 100 users...")
-        with Transaction(ctx, opts) as t:
+        with db.begin_transaction(ctx, options=opts) as t:
             b3 = Btree.open(ctx, "users", t)
             
             keys = [f"user_{i}" for i in range(100)]
@@ -101,7 +102,7 @@ class TestCUDBatch(unittest.TestCase):
             # t.commit(ctx)
 
         # Verify Delete
-        with Transaction(ctx, opts) as t:
+        with db.begin_transaction(ctx, options=opts) as t:
             b3 = Btree.open(ctx, "users", t)
             count = b3.count()
             self.assertEqual(count, 0)
@@ -112,63 +113,63 @@ class TestCUDBatch(unittest.TestCase):
         
         # Setup Transaction Context for B-Tree Store
         ctx = Context()
+        
+        db = VectorDatabase(ctx, storage_path=path, db_type=DBType.Standalone)
+
         opts = TransactionOptions(
             mode=TransactionMode.ForWriting.value,
             max_time=15,
-            registry_hash_mod=250,
-            stores_folders=[path],
-            erasure_config={}, # Empty map if no EC
-            db_type=DBType.Standalone.value
+            registry_hash_mod=250
         )
 
         # 1. Create
         print("Creating 50 models...")
-        with Transaction(ctx, opts) as t:
-            store = ModelStore.open_btree_store(t)
+        with db.begin_transaction(ctx, options=opts) as t:
+            store = db.open_model_store(ctx, t, "default")
             for i in range(50):
                 model = Model(id=f"model_{i}", algorithm="algo", hyperparameters={"k": i}, parameters=[], metrics={}, is_active=True)
-                store.save("default", f"model_{i}", model)
+                store.save(ctx, "default", f"model_{i}", model)
             # t.commit(ctx)
             
         # Verify Create
-        with Transaction(ctx, opts) as t:
-            store = ModelStore.open_btree_store(t)
-            models = store.list("default")
+        with db.begin_transaction(ctx, options=opts) as t:
+            store = db.open_model_store(ctx, t, "default")
+            models = store.list(ctx, "default")
             self.assertEqual(len(models), 50)
-            fetched = store.get("default", "model_25")
+            fetched = store.get(ctx, "default", "model_25")
             # fetched is a dict because get returns Any (json decoded)
             self.assertEqual(fetched["hyperparameters"]["k"], 25)
             # t.commit(ctx)
 
         # 2. Update
         print("Updating 50 models...")
-        with Transaction(ctx, opts) as t:
-            store = ModelStore.open_btree_store(t)
+        with db.begin_transaction(ctx, options=opts) as t:
+            store = db.open_model_store(ctx, t, "default")
             for i in range(50):
-                model_dict = store.get("default", f"model_{i}")
+                model_dict = store.get(ctx, "default", f"model_{i}")
                 model_dict["hyperparameters"]["k"] = i * 10
-                store.save("default", f"model_{i}", model_dict)
+                store.save(ctx, "default", f"model_{i}", model_dict)
             # t.commit(ctx)
 
         # Verify Update
-        with Transaction(ctx, opts) as t:
-            store = ModelStore.open_btree_store(t)
-            fetched = store.get("default", "model_25")
+        with db.begin_transaction(ctx, options=opts) as t:
+            store = db.open_model_store(ctx, t, "default")
+            fetched = store.get(ctx, "default", "model_25")
             self.assertEqual(fetched["hyperparameters"]["k"], 250)
             # t.commit(ctx)
 
         # 3. Delete
         print("Deleting 50 models...")
-        with Transaction(ctx, opts) as t:
-            store = ModelStore.open_btree_store(t)
+        with db.begin_transaction(ctx, options=opts) as t:
+            store = db.open_model_store(ctx, t, "default")
             for i in range(50):
-                store.delete("default", f"model_{i}")
+                store.delete(ctx, "default", f"model_{i}")
             # t.commit(ctx)
 
         # Verify Delete
-        with Transaction(ctx, opts) as t:
-            store = ModelStore.open_btree_store(t)
-            models = store.list("default")
+        with db.begin_transaction(ctx, options=opts) as t:
+            store = db.open_model_store(ctx, t, "default")
+            models = store.list(ctx, "default")
             self.assertEqual(len(models), 0)
             # t.commit(ctx)
 
@@ -176,58 +177,66 @@ class TestCUDBatch(unittest.TestCase):
         print("\n--- Testing Vector Store CUD (Batch 50) ---")
         path = self.create_temp_dir("vector_store")
         
-        vdb = VectorDatabase(storage_path=path, usage_mode=UsageMode.Dynamic, db_type=DBType.Standalone)
-        store = vdb.open("vectors_test")
-
+        ctx = Context()
+        vdb = VectorDatabase(ctx, storage_path=path, db_type=DBType.Standalone)
+        
         # 1. Create
         print("Creating 50 vectors...")
+        tx1 = vdb.begin_transaction(ctx)
+        store = vdb.open_vector_store(ctx, tx1, "vectors_test")
+
         for i in range(50):
             # Simple 2D vector
             vec = [float(i), float(i)]
             item = Item(id=f"vec_{i}", vector=vec, payload={"val": i})
-            store.upsert(item)
+            store.upsert(ctx, item)
+        
+        tx1.commit(ctx)
 
         # Verify Create
+        tx2 = vdb.begin_transaction(ctx)
+        store = vdb.open_vector_store(ctx, tx2, "vectors_test")
+
         # Note: Vector store count might not be directly exposed easily without iterating or internal check, 
         # but we can check existence via get
-        fetched = store.get("vec_25")
+        fetched = store.get(ctx, "vec_25")
         self.assertEqual(fetched.id, "vec_25")
         self.assertEqual(fetched.payload["val"], 25)
 
         # NEW: Optimize and Validate Internals
         print("Optimizing Vector Store...")
-        store.optimize()
+        store.optimize(ctx)
+        
+        # tx2.commit(ctx) - Optimize already commits the transaction
 
         print("Validating Internal B-Trees...")
         # We need a transaction to open B-Trees
-        ctx = Context()
+        # ctx = Context() # Reuse context
         opts = TransactionOptions(
             mode=TransactionMode.ForReading.value,
             max_time=15,
-            registry_hash_mod=250,
-            stores_folders=[path],
-            erasure_config={},
-            db_type=DBType.Standalone.value
+            registry_hash_mod=250
         )
         
-        with Transaction(ctx, opts) as t:
+        with vdb.begin_transaction(ctx, options=opts) as t:
             # 1. Centroids
             # Note: For small dataset, we might only have 1 centroid or 0 if not partitioned yet?
             # But usually there is at least one or the system initializes them.
             # Let's check if we can open it.
-            b_centroids = Btree.open(ctx, "vectors_test_centroids", t)
+            # After optimize, version is 1, so store name has _1 suffix
+            b_centroids = Btree.open(ctx, "vectors_test_centroids_1", t)
             c_count = b_centroids.count()
             print(f"Centroids count: {c_count}")
             # With 50 items, it might be small, but should be accessible.
             
             # 2. Vectors
-            b_vectors = Btree.open(ctx, "vectors_test_vectors", t)
+            b_vectors = Btree.open(ctx, "vectors_test_vecs_1", t)
             v_count = b_vectors.count()
             print(f"Vectors count: {v_count}")
             self.assertEqual(v_count, 50)
 
             # 3. Content (Payloads)
-            b_content = Btree.open(ctx, "vectors_test_content", t)
+            b_content = Btree.open(ctx, "vectors_test_data", t)
             d_count = b_content.count()
             print(f"Content count: {d_count}")
             self.assertEqual(d_count, 50)
@@ -236,27 +245,47 @@ class TestCUDBatch(unittest.TestCase):
 
         # 2. Update
         print("Updating 50 vectors...")
+        tx3 = vdb.begin_transaction(ctx)
+        store = vdb.open_vector_store(ctx, tx3, "vectors_test")
+
         for i in range(50):
             vec = [float(i*2), float(i*2)]
             item = Item(id=f"vec_{i}", vector=vec, payload={"val": i*100})
-            store.upsert(item)
+            store.upsert(ctx, item)
+        
+        tx3.commit(ctx)
 
         # Verify Update
-        fetched = store.get("vec_25")
+        tx4 = vdb.begin_transaction(ctx)
+        store = vdb.open_vector_store(ctx, tx4, "vectors_test")
+
+        fetched = store.get(ctx, "vec_25")
         self.assertEqual(fetched.payload["val"], 2500)
         self.assertEqual(fetched.vector, [50.0, 50.0])
+        
+        tx4.commit(ctx)
 
         # 3. Delete
         print("Deleting 50 vectors...")
+        tx5 = vdb.begin_transaction(ctx)
+        store = vdb.open_vector_store(ctx, tx5, "vectors_test")
+
         for i in range(50):
-            store.delete(f"vec_{i}")
+            store.delete(ctx, f"vec_{i}")
+        
+        tx5.commit(ctx)
 
         # Verify Delete
+        tx6 = vdb.begin_transaction(ctx)
+        store = vdb.open_vector_store(ctx, tx6, "vectors_test")
+
         try:
-            fetched = store.get("vec_25")
+            fetched = store.get(ctx, "vec_25")
             self.fail("Should have raised exception for deleted item")
         except Exception as e:
             pass
+        
+        tx6.commit(ctx)
 
 if __name__ == '__main__':
     unittest.main()

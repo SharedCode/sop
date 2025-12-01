@@ -6,7 +6,7 @@
       "params": {
         "url": "https://raw.githubusercontent.com/itachi9604/healthcare-chatbot/master/Data/dataset.csv",
         "out": "data/doctor_data.json",
-        "limit": 1000
+        "limit": 5000
       }
     },
     {

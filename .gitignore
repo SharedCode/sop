@@ -205,3 +205,5 @@ ai/data/doctor/
 inredfs/integrationtests/store_*/
 ai/doctor_pipeline/
 ai/data/sop_ai_config.json
+ai/data/doctor_data.json
+ai/data/nurse_data.json

@@ -25,6 +25,11 @@ typedef struct { const char *p; ptrdiff_t n; } _GoString_;
 
 #line 1 "cgo-generated-wrapper"
 
+#line 3 "jsondb.btreegetters.go"
+
+#include <stdlib.h>
+
+#line 1 "cgo-generated-wrapper"
 
 #line 3 "jsondb.main.go"
 
@@ -114,12 +119,14 @@ extern __declspec(dllexport) struct getBtreeItemCount_return getBtreeItemCount(c
 extern __declspec(dllexport) long long int createContext();
 extern __declspec(dllexport) void cancelContext(long long int ctxID);
 extern __declspec(dllexport) void removeContext(long long int ctxID);
+extern __declspec(dllexport) char* contextError(long long int ctxID);
 
 // Redis global connection management related.
 //
-extern __declspec(dllexport) char* openRedisConnection(char* host, int port, char* password);
+extern __declspec(dllexport) char* openRedisConnection(char* uri);
 extern __declspec(dllexport) char* closeRedisConnection();
 extern __declspec(dllexport) char* manageTransaction(long long int ctxID, int action, char* payload);
+extern __declspec(dllexport) char* manageDatabase(long long int ctxID, int action, char* targetID, char* payload);
 extern __declspec(dllexport) void freeString(char* cString);
 extern __declspec(dllexport) char* manageBtree(long long int ctxID, int action, char* payload, char* payload2);
 

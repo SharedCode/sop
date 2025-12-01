@@ -17,8 +17,9 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/cache"
+	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/inredfs"
 	"github.com/sharedcode/sop/redis"
 )
@@ -77,6 +78,18 @@ func getContext(ctxID C.longlong) context.Context {
 	return ctx
 }
 
+//export contextError
+func contextError(ctxID C.longlong) *C.char {
+	ctx := getContext(ctxID)
+	if ctx == nil {
+		return C.CString("context not found")
+	}
+	if ctx.Err() == nil {
+		return nil
+	}
+	return C.CString(ctx.Err().Error())
+}
+
 // Redis global connection management related.
 //
 //export openRedisConnection
@@ -109,6 +122,9 @@ func closeRedisConnection() *C.char {
 
 // Transaction lookup table is comprised of the transaction & its related B-trees.
 var Transactions = NewTransactionRegistry()
+
+// Unified Database Lookup
+var dbRegistry = NewRegistry[*database.Database]()
 
 type transactionAction int
 
@@ -149,74 +165,10 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 	}
 	switch int(action) {
 	case NewTransaction:
-		// Define a local struct to capture DBType from JSON, as it's not in the core options anymore.
-		type TransactionOptionsPayload struct {
-			inredfs.TransationOptionsWithReplication
-			DBType int `json:"db_type"`
-		}
-		var payload TransactionOptionsPayload
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &payload); err != nil {
-			// Rare for an error to occur, but do return an errMsg if it happens.
-			errMsg := fmt.Sprintf("error Unmarshal TransactionOptions, details: %v", err)
-			return C.CString(errMsg)
-		}
-
-		// Extract the core options.
-		to := payload.TransationOptionsWithReplication
-
-		// Convert Maxtime from minutes to Duration.
-		to.MaxTime = to.MaxTime * time.Minute
-
-		log.Debug(fmt.Sprintf("TransactionOptions: %v, DBType: %d", to, payload.DBType))
-
-		var t sop.Transaction
-		var err error
-
-		// Instantiate the correct cache based on DBType if not already set.
-		if to.Cache == nil {
-			if payload.DBType == 0 {
-				to.Cache = cache.NewInMemoryCache()
-			} else {
-				to.Cache = sop.NewCacheClient()
-			}
-		}
-
-		// Check if we should use standard transaction (no replication)
-		// If StoresBaseFolders has 1 element and ErasureConfig is empty, assume Standalone.
-		if len(to.StoresBaseFolders) == 1 && len(to.ErasureConfig) == 0 {
-			stdOpts := inredfs.TransationOptions{
-				Mode:                 to.Mode,
-				MaxTime:              to.MaxTime,
-				RegistryHashModValue: to.RegistryHashModValue,
-				StoresBaseFolder:     to.StoresBaseFolders[0],
-				Cache:                to.Cache,
-			}
-			t, err = inredfs.NewTransaction(ctx, stdOpts)
-		} else {
-			t, err = inredfs.NewTransactionWithReplication(ctx, to)
-		}
-
-		if err != nil {
-			errMsg := fmt.Sprintf("error creating a Transaction, details: %v", err)
-			return C.CString(errMsg)
-		}
-		tid := Transactions.Add(t)
-
-		// Return the transction ID if succeeded.
-		return C.CString(tid.String())
+		return C.CString("NewTransaction is deprecated. Please use manageDatabase with BeginTransaction action.")
 
 	case Begin:
-		t, err := extractTrans()
-		if err != nil {
-			return err
-		}
-		if err := t.Transaction.Begin(ctx); err != nil {
-			errMsg := fmt.Sprintf("transaction %v Begin failed, details: %v", t.Transaction.GetID().String(), err)
-
-			Transactions.Remove(t.Transaction.GetID())
-
-			return C.CString(errMsg)
-		}
+		return C.CString("Begin is deprecated. Transaction is already begun when created via manageDatabase.")
 	case Commit:
 		t, err := extractTrans()
 		if err != nil {
@@ -248,6 +200,92 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 	default:
 		errMsg := fmt.Sprintf("unsupported action %d", int(action))
 		return C.CString(errMsg)
+	}
+	return nil
+}
+
+// Database management related.
+
+type DatabaseAction int
+
+const (
+	DatabaseActionUnknown = iota
+	NewDatabase
+	BeginTransaction
+	CloseDatabase
+)
+
+type DatabaseOptions struct {
+	StoragePath   string                            `json:"storage_path"`
+	DBType        int                               `json:"db_type"` // 0: Standalone, 1: Clustered
+	ErasureConfig map[string]fs.ErasureCodingConfig `json:"erasure_config,omitempty"`
+	StoresFolders []string                          `json:"stores_folders,omitempty"`
+}
+
+//export manageDatabase
+func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C.char) *C.char {
+	ctx := getContext(ctxID)
+	if ctx == nil {
+		return C.CString(fmt.Sprintf("context with ID %v not found", int64(ctxID)))
+	}
+
+	targetIDStr := C.GoString(targetID)
+	jsonPayload := C.GoString(payload)
+
+	switch int(action) {
+	case NewDatabase:
+		var opts DatabaseOptions
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &opts); err != nil {
+			return C.CString(fmt.Sprintf("invalid options: %v", err))
+		}
+
+		db := database.NewDatabase(database.DatabaseType(opts.DBType), opts.StoragePath)
+		if len(opts.ErasureConfig) > 0 || len(opts.StoresFolders) > 0 {
+			db.SetReplicationConfig(opts.ErasureConfig, opts.StoresFolders)
+		}
+
+		id := dbRegistry.Add(db)
+		return C.CString(id.String())
+
+	case BeginTransaction:
+		targetUUID, err := sop.ParseUUID(targetIDStr)
+		if err != nil {
+			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
+		}
+		db, ok := dbRegistry.Get(targetUUID)
+		if !ok {
+			return C.CString("Database not found")
+		}
+
+		mode := sop.ForWriting
+		var opts inredfs.TransationOptionsWithReplication
+		if jsonPayload != "" {
+			if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &opts); err == nil {
+				mode = opts.Mode
+				// Adjust MaxTime from minutes to Duration.
+				opts.MaxTime = opts.MaxTime * time.Minute
+			} else {
+				var m int
+				if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &m); err == nil {
+					mode = sop.TransactionMode(m)
+				}
+			}
+		}
+
+		tx, err := db.BeginTransaction(ctx, mode, opts)
+		if err != nil {
+			return C.CString(err.Error())
+		}
+
+		id := Transactions.Add(tx)
+		return C.CString(id.String())
+
+	case CloseDatabase:
+		targetUUID, err := sop.ParseUUID(targetIDStr)
+		if err != nil {
+			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
+		}
+		dbRegistry.Remove(targetUUID)
 	}
 	return nil
 }
