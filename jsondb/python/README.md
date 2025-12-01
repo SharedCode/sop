@@ -15,8 +15,8 @@
 
 ## Documentation
 
-*   **[API Cookbook](COOKBOOK.md)**: Common recipes and patterns (Key-Value, Transactions, AI).
-*   **[Examples](examples/)**: Complete runnable scripts.
+*   **[API Cookbook](https://github.com/SharedCode/sop/blob/master/jsondb/python/COOKBOOK.md)**: Common recipes and patterns (Key-Value, Transactions, AI).
+*   **[Examples](https://github.com/SharedCode/sop/tree/master/jsondb/python/examples)**: Complete runnable scripts.
 
 ## Prerequisites
 
