@@ -65,6 +65,22 @@ func (b3 b3WithInducedErrors[TK, TV]) UpdateCurrentKey(ctx context.Context, newK
 	return true, nil
 }
 
+func (b3 b3WithInducedErrors[TK, TV]) UpdateKey(ctx context.Context, key TK) (bool, error) {
+	b3.t.Helper()
+	if b3.induceErrorOnMethod == 18 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV]) UpdateCurrentItem(ctx context.Context, key TK, value TV) (bool, error) {
+	b3.t.Helper()
+	if b3.induceErrorOnMethod == 17 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+
 func (b3 b3WithInducedErrors[TK, TV]) Remove(ctx context.Context, key TK) (bool, error) {
 	b3.t.Helper()
 	if b3.induceErrorOnMethod == 5 {

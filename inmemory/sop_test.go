@@ -105,15 +105,15 @@ func TestFunctionalityTests(t *testing.T) {
 		t.Errorf("Next() on EOF failed, got = true, want = false")
 	}
 
-	// Test UpdateCurrentItem.
+	// Test UpdateCurrentValue.
 	b3.Find(5000, true)
 	newVal := "Updated with new Value."
-	if !b3.UpdateCurrentItem(newVal) || b3.GetCurrentValue() != newVal {
-		t.Errorf("UpdateCurrentItem() failed, got = %s, want = %s", b3.GetCurrentValue(), newVal)
+	if !b3.UpdateCurrentValue(newVal) || b3.GetCurrentValue() != newVal {
+		t.Errorf("UpdateCurrentValue() failed, got = %s, want = %s", b3.GetCurrentValue(), newVal)
 	}
 
 	if !b3.Find(5000, true) || b3.GetCurrentValue() != newVal {
-		t.Errorf("UpdateCurrentItem(<k>) succeeded but Find(<k>, true) failed, got = %s, want = %s", b3.GetCurrentValue(), newVal)
+		t.Errorf("UpdateCurrentValue(<k>) succeeded but Find(<k>, true) failed, got = %s, want = %s", b3.GetCurrentValue(), newVal)
 	}
 
 	// Test RemoveCurrentItem

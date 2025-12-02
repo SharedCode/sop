@@ -71,7 +71,8 @@ func newItemActionTracker[TK btree.Ordered, TV any](storeInfo *sop.StoreInfo, re
 // Get			Update		ForUpdate
 
 func (t *itemActionTracker[TK, TV]) Get(ctx context.Context, item *btree.Item[TK, TV]) error {
-	if val, ok := t.items[item.ID]; !ok || val.item.ValueNeedsFetch {
+	val, ok := t.items[item.ID]
+	if !ok || val.item == nil || val.item.ValueNeedsFetch {
 		if item.Value == nil && item.ValueNeedsFetch {
 			var v TV
 			if t.storeInfo.IsValueDataGloballyCached {

@@ -52,20 +52,25 @@ func (t *itemActionTracker[TK, TV]) manage(uuid sop.UUID, cachedItem cacheItem[T
 		return nil, nil
 	}
 	var r *sop.KeyValuePair[sop.UUID, []byte]
-	if cachedItem.Action == updateAction || cachedItem.Action == removeAction {
+	switch cachedItem.Action {
+	case removeAction:
 		if cachedItem.item.ValueNeedsFetch {
 			// If there is value data on another segment, mark it for delete.
 			t.forDeletionItems = append(t.forDeletionItems, cachedItem.item.ID)
 		}
 		cachedItem.item.ValueNeedsFetch = false
-		if cachedItem.Action == updateAction {
-			// Replace the Item ID so we can persist a new one and not touching current one that
-			// could be fetched in other transactions.
+	case updateAction:
+		if cachedItem.item.ValueNeedsFetch {
 			if cachedItem.item.Value != nil {
+				// If there is value data on another segment, mark it for delete.
+				t.forDeletionItems = append(t.forDeletionItems, cachedItem.item.ID)
+				cachedItem.item.ValueNeedsFetch = false
+				// Replace the Item ID so we can persist a new one and not touching current one that
+				// could be fetched in other transactions.
 				cachedItem.item.ID = sop.NewUUID()
 			}
-			t.items[uuid] = cachedItem
 		}
+		t.items[uuid] = cachedItem
 	}
 	if cachedItem.Action == addAction || cachedItem.Action == updateAction {
 		if cachedItem.item.Value != nil {

@@ -105,11 +105,6 @@ func (di *domainIndex[T]) getArchitecture(ctx context.Context, version int64) (*
 	return arch, nil
 }
 
-// StoredItem holds the payload. Metadata is now in ContentKey.
-type StoredItem[T any] struct {
-	Payload T `json:"p"`
-}
-
 func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, item ai.Item[T], centroids map[int][]float32) error {
 	id := item.ID
 	vec := item.Vector
@@ -125,7 +120,7 @@ func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, it
 			ItemID: id,
 		}
 		// Payload is stored as JSON string in Value.
-		data, err := json.Marshal(StoredItem[T]{Payload: item.Payload})
+		data, err := json.Marshal(item.Payload)
 		if err != nil {
 			return fmt.Errorf("failed to marshal payload: %w", err)
 		}
@@ -244,7 +239,7 @@ func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, it
 		// Next fields are zeroed out
 	}
 
-	data, err := json.Marshal(StoredItem[T]{Payload: item.Payload})
+	data, err := json.Marshal(item.Payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
@@ -380,7 +375,7 @@ func (di *domainIndex[T]) Get(ctx context.Context, id string) (*ai.Item[T], erro
 		return nil, fmt.Errorf("item not found")
 	}
 
-	jsonStr, err := arch.Content.GetCurrentValue(ctx)
+	jsonString, err := arch.Content.GetCurrentValue(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -389,8 +384,8 @@ func (di *domainIndex[T]) Get(ctx context.Context, id string) (*ai.Item[T], erro
 	currentItem := arch.Content.GetCurrentKey()
 	currentKey := currentItem.Key
 
-	var stored StoredItem[T]
-	if err := json.Unmarshal([]byte(jsonStr), &stored); err != nil {
+	var payload T
+	if err := json.Unmarshal([]byte(jsonString), &payload); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal stored item: %w", err)
 	}
 
@@ -432,7 +427,7 @@ func (di *domainIndex[T]) Get(ctx context.Context, id string) (*ai.Item[T], erro
 			return nil, err
 		} else if found {
 			vec, _ = arch.TempVectors.GetCurrentValue(ctx)
-			return &ai.Item[T]{ID: id, Vector: vec, Payload: stored.Payload, CentroidID: 0}, nil
+			return &ai.Item[T]{ID: id, Vector: vec, Payload: payload, CentroidID: 0}, nil
 		}
 		return nil, fmt.Errorf("item vector not found in TempVectors")
 	}
@@ -454,7 +449,7 @@ func (di *domainIndex[T]) Get(ctx context.Context, id string) (*ai.Item[T], erro
 		return nil, fmt.Errorf("item vector not found in Vectors (cid=%d)", cid)
 	}
 
-	return &ai.Item[T]{ID: id, Vector: vec, Payload: stored.Payload, CentroidID: cid}, nil
+	return &ai.Item[T]{ID: id, Vector: vec, Payload: payload, CentroidID: cid}, nil
 }
 
 // Delete removes a vector from the store.
@@ -486,7 +481,7 @@ func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
 	// Retrieve current key and value
 	currentItem := arch.Content.GetCurrentKey()
 	currentKey := currentItem.Key
-	jsonStr, _ := arch.Content.GetCurrentValue(ctx)
+	// jsonStr, _ := arch.Content.GetCurrentValue(ctx)
 
 	// Soft Delete: Update Key
 	currentKey.Deleted = true
@@ -652,10 +647,10 @@ func (di *domainIndex[T]) Query(ctx context.Context, vec []float32, k int, filte
 			currentItem := arch.Content.GetCurrentKey()
 			if !currentItem.Key.Deleted {
 				jsonStr, _ := arch.Content.GetCurrentValue(ctx)
-				var stored StoredItem[T]
-				if err := json.Unmarshal([]byte(jsonStr), &stored); err == nil {
-					if filter == nil || filter(stored.Payload) {
-						hit.Payload = stored.Payload
+				var payload T
+				if err := json.Unmarshal([]byte(jsonStr), &payload); err == nil {
+					if filter == nil || filter(payload) {
+						hit.Payload = payload
 						finalHits = append(finalHits, hit)
 					}
 				}

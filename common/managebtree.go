@@ -242,7 +242,7 @@ func refetchAndMergeClosure[TK btree.Ordered, TV any](si *StoreInterface[TK, TV]
 					}
 					continue
 				}
-				if ok, err := b3.UpdateCurrentValue(ctx, *ci.item.Value); !ok || err != nil {
+				if ok, err := b3.UpdateCurrentItem(ctx, ci.item.Key, *ci.item.Value); !ok || err != nil {
 					if err != nil {
 						return err
 					}

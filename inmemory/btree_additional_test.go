@@ -196,12 +196,12 @@ func TestUpdateAndCursorEdgeCases(t *testing.T) {
 		t.Fatalf("Find after Update failed: got %q", b3.GetCurrentValue())
 	}
 
-	// UpdateCurrentItem
-	if !b3.UpdateCurrentItem("v5b") {
-		t.Fatalf("UpdateCurrentItem failed")
+	// UpdateCurrentValue
+	if !b3.UpdateCurrentValue("v5b") {
+		t.Fatalf("UpdateCurrentValue failed")
 	}
 	if !b3.Find(5, true) || b3.GetCurrentValue() != "v5b" {
-		t.Fatalf("Verify UpdateCurrentItem failed got %q", b3.GetCurrentValue())
+		t.Fatalf("Verify UpdateCurrentValue failed got %q", b3.GetCurrentValue())
 	}
 
 	// RemoveCurrentItem and verify cursor advances

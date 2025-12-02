@@ -427,12 +427,20 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 					continue
 				}
 				currentKey := oldArch.Content.GetCurrentKey().Key
-				vecKey := ai.VectorKey{CentroidID: currentKey.CentroidID, DistanceToCentroid: currentKey.Distance, ItemID: itemID}
+				cid := currentKey.CentroidID
+				dist := currentKey.Distance
+				if currentKey.Version != int64(currentVersion) && currentKey.NextVersion == int64(currentVersion) {
+					cid = currentKey.NextCentroidID
+					dist = currentKey.NextDistance
+				}
+				vecKey := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: itemID}
 				if found, _ := oldArch.Vectors.Find(ctx, vecKey, false); found {
 					vec, _ = oldArch.Vectors.GetCurrentValue(ctx)
 				}
 			}
-			samples = append(samples, ai.Item[T]{ID: itemID, Vector: vec})
+			if len(vec) > 0 {
+				samples = append(samples, ai.Item[T]{ID: itemID, Vector: vec})
+			}
 		}
 
 		// Compute Centroids

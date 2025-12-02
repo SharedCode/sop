@@ -249,12 +249,21 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	} else {
 		// Register to local cache the "item get" for submit/resolution on Commit.
 		vnf := item.ValueNeedsFetch
+		if btree.storeInterface == nil {
+			return zero, fmt.Errorf("storeInterface is nil")
+		}
+		if btree.storeInterface.ItemActionTracker == nil {
+			return zero, fmt.Errorf("ItemActionTracker is nil")
+		}
 		if err := btree.storeInterface.ItemActionTracker.Get(ctx, item); err != nil {
 			return zero, err
 		}
 		btree.storeInterface.NodeRepository.Fetched(btree.currentItemRef.nodeID)
 		if vnf && !item.ValueNeedsFetch && item.Value != nil {
 			item.valueWasFetched = true
+		}
+		if item.Value == nil {
+			return zero, nil
 		}
 		return *item.Value, nil
 	}

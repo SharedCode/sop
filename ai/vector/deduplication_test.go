@@ -69,11 +69,15 @@ func TestDeduplicationDisabled_Optimize(t *testing.T) {
 		t.Fatalf("Item A not found in Content")
 	}
 	jsonStr, _ := arch.Content.GetCurrentValue(ctx)
-	var stored vector.StoredItem[map[string]any]
+	var stored map[string]any
 	json.Unmarshal([]byte(jsonStr), &stored)
 
 	currentKey := arch.Content.GetCurrentKey().Key
-	if currentKey.CentroidID == 0 {
+	cid := currentKey.CentroidID
+	if currentKey.NextVersion == 1 {
+		cid = currentKey.NextCentroidID
+	}
+	if cid == 0 {
 		t.Fatalf("Expected Item A to be optimized (CentroidID != 0), got 0")
 	}
 

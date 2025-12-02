@@ -297,7 +297,15 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 			currentItem := arch2.Content.GetCurrentKey()
 			currentKey := currentItem.Key
 
-			vecKey := ai.VectorKey{CentroidID: currentKey.CentroidID, DistanceToCentroid: currentKey.Distance, ItemID: id}
+			cid := currentKey.CentroidID
+			dist := currentKey.Distance
+			// Handle Lazy Migration (Next fields)
+			if currentKey.Version != 2 && currentKey.NextVersion == 2 {
+				cid = currentKey.NextCentroidID
+				dist = currentKey.NextDistance
+			}
+
+			vecKey := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: id}
 			foundVec, _ := arch2.Vectors.Find(ctx, vecKey, false)
 			if !foundVec {
 				t.Errorf("Vector for %s not found in Vectors V2", id)

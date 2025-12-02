@@ -114,16 +114,23 @@ func TestVectorStoreLifecycle(t *testing.T) {
 		t.Fatal("Item A not found in Content V1")
 	}
 	jsonStr, _ := arch1.Content.GetCurrentValue(ctx)
-	var storedA vector.StoredItem[map[string]any]
+	var storedA map[string]any
 	json.Unmarshal([]byte(jsonStr), &storedA)
 
 	currentKeyA := arch1.Content.GetCurrentKey().Key
-	if currentKeyA.CentroidID == 0 {
+	cid := currentKeyA.CentroidID
+	dist := currentKeyA.Distance
+	if currentKeyA.NextVersion == 1 {
+		cid = currentKeyA.NextCentroidID
+		dist = currentKeyA.NextDistance
+	}
+
+	if cid == 0 {
 		t.Fatal("Item A should have assigned CentroidID in V1")
 	}
 
 	// Check Vectors
-	vecKeyA := ai.VectorKey{CentroidID: currentKeyA.CentroidID, DistanceToCentroid: currentKeyA.Distance, ItemID: "item-A"}
+	vecKeyA := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: "item-A"}
 	foundVec, err := arch1.Vectors.Find(ctx, vecKeyA, false)
 	if !foundVec {
 		t.Fatal("Item A should be in Vectors V1")
@@ -211,7 +218,13 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	json.Unmarshal([]byte(jsonStr), &storedA)
 
 	currentKeyA = arch2.Content.GetCurrentKey().Key
-	vecKeyA = ai.VectorKey{CentroidID: currentKeyA.CentroidID, DistanceToCentroid: currentKeyA.Distance, ItemID: "item-A"}
+	cid = currentKeyA.CentroidID
+	dist = currentKeyA.Distance
+	if currentKeyA.NextVersion == 2 {
+		cid = currentKeyA.NextCentroidID
+		dist = currentKeyA.NextDistance
+	}
+	vecKeyA = ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: "item-A"}
 	foundVec, err = arch2.Vectors.Find(ctx, vecKeyA, false)
 	if !foundVec {
 		t.Fatal("Item A should be in Vectors V2")
@@ -223,11 +236,17 @@ func TestVectorStoreLifecycle(t *testing.T) {
 		t.Fatal("Item B not found in Content V2")
 	}
 	jsonStr, _ = arch2.Content.GetCurrentValue(ctx)
-	var storedB vector.StoredItem[map[string]any]
+	var storedB map[string]any
 	json.Unmarshal([]byte(jsonStr), &storedB)
 
 	currentKeyB := arch2.Content.GetCurrentKey().Key
-	vecKeyB := ai.VectorKey{CentroidID: currentKeyB.CentroidID, DistanceToCentroid: currentKeyB.Distance, ItemID: "item-B"}
+	cidB := currentKeyB.CentroidID
+	distB := currentKeyB.Distance
+	if currentKeyB.NextVersion == 2 {
+		cidB = currentKeyB.NextCentroidID
+		distB = currentKeyB.NextDistance
+	}
+	vecKeyB := ai.VectorKey{CentroidID: cidB, DistanceToCentroid: distB, ItemID: "item-B"}
 	foundVec, err = arch2.Vectors.Find(ctx, vecKeyB, false)
 	if !foundVec {
 		t.Fatal("Item B should be in Vectors V2")

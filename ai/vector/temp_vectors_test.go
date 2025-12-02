@@ -48,11 +48,10 @@ func TestOptimizeWithTempVectors(t *testing.T) {
 			t.Fatalf("Failed to add to TempVectors: %v", err)
 		}
 
-		stored := vector.StoredItem[map[string]any]{
-			Payload: map[string]any{"val": i},
-			// CentroidID/Distance are 0/0 initially
-		}
-		data, _ := json.Marshal(stored)
+		payload := map[string]any{"val": i}
+		// CentroidID/Distance are 0/0 initially
+
+		data, _ := json.Marshal(payload)
 		if _, err := arch.Content.Add(ctx, ai.ContentKey{ItemID: id}, string(data)); err != nil {
 			t.Fatalf("Failed to add to Content: %v", err)
 		}

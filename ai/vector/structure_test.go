@@ -172,14 +172,14 @@ func TestVectorStoreStructure(t *testing.T) {
 		t.Error("Content for item-0-0 not found")
 	} else {
 		jsonStr, _ := contentTree.GetCurrentValue(ctx)
-		var stored vector.StoredItem[map[string]any]
-		if err := json.Unmarshal([]byte(jsonStr), &stored); err != nil {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(jsonStr), &payload); err != nil {
 			t.Errorf("Failed to unmarshal content: %v", err)
 		}
 
 		// Check Payload
-		if stored.Payload["cluster"] != float64(0) && stored.Payload["cluster"] != 0 {
-			t.Errorf("Payload mismatch. Expected cluster 0, got %v", stored.Payload["cluster"])
+		if payload["cluster"] != float64(0) && payload["cluster"] != 0 {
+			t.Errorf("Payload mismatch. Expected cluster 0, got %v", payload["cluster"])
 		}
 
 		// Check Linkage (CentroidID in Content should match a valid centroid)
