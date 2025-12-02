@@ -91,3 +91,29 @@ Since the lock is in-memory, if the process crashes, the lock is automatically r
 *   **Cleanup**: On the next start (or next `Optimize` call), the system detects if a previous run failed by checking for temporary artifacts (`_lku`, `_vecs`, `_centroids` stores).
 *   **Action**: It automatically deletes these stale stores before starting a fresh optimization run.
 
+## 9. Deletion & Garbage Collection
+
+To support high-throughput deletions without immediate expensive rebalancing, we employ a **Tombstone** strategy combined with a **Garbage Collection** phase during optimization.
+
+### The "Ghost Data" Problem
+In a standard B-Tree, deleting an item is straightforward. However, in our dual-tree system:
+1.  **Vectors Tree**: Stores the index key `{CentroidID, Distance, ItemID}`.
+2.  **Content Tree**: Stores the actual data.
+
+If we simply remove the entry from the `Vectors` tree during a `Delete` operation, the `Optimize` process (which iterates over the `Vectors` tree to rebuild the index) will never see that item again. Consequently, the item remains "orphaned" in the `Content` tree forever, leading to storage leaks.
+
+### The Solution: Tombstones
+Instead of physically removing the entry from the `Vectors` tree immediately:
+1.  **Soft Delete**: The `Delete(id)` operation marks the item as deleted in the `Content` tree (`Deleted=true`).
+2.  **Tombstone**: It also updates the corresponding key in the `Vectors` tree, setting a flag `IsDeleted=true`.
+    *   *Note*: Since the key structure changes, this is technically a Remove + Add operation in the B-Tree, but it preserves the "pointer" to the data.
+
+### Garbage Collection (The Reaper)
+The `Optimize()` process acts as the Garbage Collector:
+1.  **Scan**: It iterates through the `Vectors` tree to gather items for re-clustering.
+2.  **Detect**: When it encounters a key with `IsDeleted=true`, it knows this item is dead.
+3.  **Reap**: It performs a **Physical Delete** on the `Content` tree, permanently removing the data blob.
+4.  **Skip**: The dead item is excluded from the new index being built.
+
+This ensures that storage is reclaimed efficiently in batches during the maintenance window, keeping the runtime `Delete` operation fast and transactional.
+

@@ -15,7 +15,13 @@ import (
 	"github.com/sharedcode/sop/inredfs"
 )
 
+const batchSize = 200
+
 // Optimize reorganizes the index to improve query performance by rebuilding the vector structures.
+//
+// It performs two main functions:
+// 1. Re-Clustering: Uses K-Means to calculate new centroids and re-distribute vectors for optimal search.
+// 2. Garbage Collection: Physically removes items marked as "Soft Deleted" (Tombstones) from the Content store.
 //
 // This operation uses a batched approach to handle large datasets without hitting transaction limits.
 // It commits the current transaction immediately to persist pending changes, then manages its own
@@ -158,7 +164,6 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 
 	// State for iteration
 	var count int
-	const batchSize = 200 // As requested
 
 	// We need to iterate the OLD stores.
 	// Problem: We can't easily "pause" a B-Tree iterator across transactions.
@@ -355,15 +360,15 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 		}
 	}
 
-	if count == 0 {
-		log.Println("DEBUG: No items to optimize")
-		return nil
-	}
+	// if count == 0 {
+	// 	log.Println("DEBUG: No items to optimize")
+	// 	return nil
+	// }
 
 	// --- Phase 2: Sampling & Centroids (Single Batch) ---
 	log.Println("DEBUG: Phase 2: Sampling & Centroids")
-	// We assume sampling fits in one TX (read-only mostly) + writing centroids (small).
-	{
+	if count > 0 {
+		// We assume sampling fits in one TX (read-only mostly) + writing centroids (small).
 		tx, err := di.beginTransaction(ctx)
 		if err != nil {
 			return err
@@ -476,6 +481,12 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 		if err := tx.Commit(ctx); err != nil {
 			return err
 		}
+	} else {
+		// If count is 0, we still need to create the empty centroids store for the new version
+		// because Phase 3 might try to open it (or Phase 4 cleanup might expect it).
+		// Actually, Phase 3 creates it if needed.
+		// But we need to clear the cache.
+		di.updateCentroidsCache(make(map[int][]float32))
 	}
 
 	// --- Phase 3: Migration (Batched) ---
@@ -548,7 +559,18 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 						currentKey := oldArch.Content.GetCurrentKey().Key
 						if !currentKey.Deleted {
 							shouldMigrate = true
+						} else {
+							// Physical Delete: Item is marked deleted in Content
+							// We can now safely remove it from Content since we are rebuilding the index
+							// and this item will not be in the new index.
+							if _, err := oldArch.Content.RemoveCurrentItem(ctx); err != nil {
+								tx.Rollback(ctx)
+								return err
+							}
 						}
+					} else {
+						// Ghost vector (not in Content) - skip migration
+						shouldMigrate = false
 					}
 
 					if shouldMigrate {
@@ -679,6 +701,11 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 							currentKey := oldArch.Content.GetCurrentKey().Key
 							if currentKey.Deleted {
 								shouldProcess = false
+								// Physical Delete for TempVectors items
+								if _, err := oldArch.Content.RemoveCurrentItem(ctx); err != nil {
+									tx.Rollback(ctx)
+									return err
+								}
 							} else if currentKey.CentroidID != 0 {
 								shouldProcess = false
 							}

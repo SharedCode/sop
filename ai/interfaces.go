@@ -28,6 +28,10 @@ type VectorKey struct {
 	CentroidID         int
 	DistanceToCentroid float32
 	ItemID             string
+	// IsDeleted marks this key as a Tombstone.
+	// It ensures the Optimize process can find this entry and physically delete
+	// the corresponding data from the Content store.
+	IsDeleted bool
 }
 
 // ContentKey is the key for the Content B-Tree.

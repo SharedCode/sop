@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -31,6 +32,12 @@ func ComparePersonKeyWithMeta(x PersonKeyWithMeta, y PersonKeyWithMeta) int {
 
 func Test_ConcurrentKeyUpdates_DifferentItems(t *testing.T) {
 	ctx := context.Background()
+	dataPath, err := os.MkdirTemp("", "sop_stress_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dataPath)
+
 	// Use a separate table name for this test
 	tableName := fmt.Sprintf("person_key_update_test_%d", time.Now().UnixNano())
 
@@ -137,6 +144,12 @@ func Test_ConcurrentKeyUpdates_DifferentItems(t *testing.T) {
 
 func Test_ConcurrentKeyUpdates_SameItem_Conflict(t *testing.T) {
 	ctx := context.Background()
+	dataPath, err := os.MkdirTemp("", "sop_stress_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dataPath)
+
 	tableName := fmt.Sprintf("person_key_update_conflict_test_%d", time.Now().UnixNano())
 
 	// 1. Setup
@@ -209,6 +222,12 @@ func Test_ConcurrentKeyUpdates_SameItem_Conflict(t *testing.T) {
 
 func Test_ConcurrentValueUpdates_SameItem_Conflict(t *testing.T) {
 	ctx := context.Background()
+	dataPath, err := os.MkdirTemp("", "sop_stress_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dataPath)
+
 	tableName := fmt.Sprintf("person_value_update_conflict_test_%d", time.Now().UnixNano())
 
 	// 1. Setup
@@ -281,6 +300,12 @@ func Test_ConcurrentValueUpdates_SameItem_Conflict(t *testing.T) {
 
 func Test_ConcurrentKeyAndValueUpdates_SameItem_Conflict(t *testing.T) {
 	ctx := context.Background()
+	dataPath, err := os.MkdirTemp("", "sop_stress_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dataPath)
+
 	tableName := fmt.Sprintf("person_key_value_update_conflict_test_%d", time.Now().UnixNano())
 
 	// 1. Setup

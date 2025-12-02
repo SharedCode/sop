@@ -5,6 +5,7 @@ package stresstests
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -23,8 +24,11 @@ func compareKeyStruct(a, b KeyStruct) int {
 
 func Test_KeyUpdate_Bundled(t *testing.T) {
 	ctx := context.Background()
-	// Clean up previous run
-	inredfs.RemoveBtree(ctx, dataPath, "key_update_bundled", nil)
+	dataPath, err := os.MkdirTemp("", "sop_stress_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dataPath)
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 	t1, _ := inredfs.NewTransaction(ctx, to)
@@ -76,7 +80,11 @@ func Test_KeyUpdate_Bundled(t *testing.T) {
 
 func Test_KeyUpdate_Separate(t *testing.T) {
 	ctx := context.Background()
-	inredfs.RemoveBtree(ctx, dataPath, "key_update_separate", nil)
+	dataPath, err := os.MkdirTemp("", "sop_stress_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dataPath)
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 
@@ -134,7 +142,11 @@ func Test_KeyUpdate_Separate(t *testing.T) {
 
 func Test_KeyUpdate_WithFetch(t *testing.T) {
 	ctx := context.Background()
-	inredfs.RemoveBtree(ctx, dataPath, "key_update_fetch", nil)
+	dataPath, err := os.MkdirTemp("", "sop_stress_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dataPath)
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 
@@ -187,7 +199,11 @@ func Test_KeyUpdate_WithFetch(t *testing.T) {
 
 func Test_Remove_Lazy(t *testing.T) {
 	ctx := context.Background()
-	inredfs.RemoveBtree(ctx, dataPath, "remove_lazy", nil)
+	dataPath, err := os.MkdirTemp("", "sop_stress_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dataPath)
 
 	to, _ := inredfs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
 

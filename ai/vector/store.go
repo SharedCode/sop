@@ -111,7 +111,7 @@ func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, it
 
 	// Optimization: Stage vectors in TempVectors for faster ingestion during initial pass (Version 0).
 	if arch.TempVectors != nil {
-		if _, err := arch.TempVectors.Add(ctx, id, vec); err != nil {
+		if _, err := arch.TempVectors.Upsert(ctx, id, vec); err != nil {
 			return err
 		}
 
@@ -124,7 +124,7 @@ func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, it
 		if err != nil {
 			return fmt.Errorf("failed to marshal payload: %w", err)
 		}
-		if _, err := arch.Content.Add(ctx, key, string(data)); err != nil {
+		if _, err := arch.Content.Upsert(ctx, key, string(data)); err != nil {
 			return err
 		}
 		return nil
@@ -453,6 +453,13 @@ func (di *domainIndex[T]) Get(ctx context.Context, id string) (*ai.Item[T], erro
 }
 
 // Delete removes a vector from the store.
+//
+// This operation performs a "Soft Delete" (Tombstone):
+// 1. Marks the item as deleted in the Content store.
+// 2. Updates the Vector index key with IsDeleted=true.
+//
+// The actual physical removal of data occurs during the next Optimize() call,
+// which acts as a Garbage Collector.
 func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
 	if locked, err := di.isOptimizing(ctx); err != nil {
 		return err
@@ -496,12 +503,9 @@ func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
 
 	// Explicitly handle TempVectors OR Vectors based on Version
 	if arch.TempVectors != nil {
-		if found, err := arch.TempVectors.Find(ctx, id, false); err != nil {
+		// Set to nil to indicate deletion
+		if _, err := arch.TempVectors.Update(ctx, id, nil); err != nil {
 			return err
-		} else if found {
-			if _, err := arch.TempVectors.RemoveCurrentItem(ctx); err != nil {
-				return err
-			}
 		}
 		return nil
 	}
@@ -513,13 +517,13 @@ func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
 	}
 	dist := currentKey.Distance
 
-	vecKey := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: id}
-	if found, err := arch.Vectors.Find(ctx, vecKey, false); err != nil {
+	// Tombstone: Update Key to set IsDeleted=true
+	// Since IsDeleted is part of the key and affects ordering, we must Remove and Add.
+	vecKey := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: id, IsDeleted: true}
+	if found, err := arch.Vectors.UpdateKey(ctx, vecKey); err != nil {
 		return err
 	} else if found {
-		if _, err := arch.Vectors.RemoveCurrentItem(ctx); err != nil {
-			return err
-		}
+
 		if di.config.UsageMode == ai.DynamicWithVectorCountTracking {
 			if foundC, _ := arch.Centroids.Find(ctx, cid, false); foundC {
 				c, _ := arch.Centroids.GetCurrentValue(ctx)
@@ -557,6 +561,16 @@ func (di *domainIndex[T]) Query(ctx context.Context, vec []float32, k int, filte
 				item, err := arch.TempVectors.GetCurrentItem(ctx)
 				if err != nil {
 					return nil, err
+				}
+
+				// Skip deleted items (nil value)
+				if item.Value == nil {
+					if ok, err := arch.TempVectors.Next(ctx); err != nil {
+						return nil, err
+					} else if !ok {
+						break
+					}
+					continue
 				}
 
 				score := cosine(vec, *item.Value)
@@ -611,6 +625,14 @@ func (di *domainIndex[T]) Query(ctx context.Context, vec []float32, k int, filte
 
 					if key.CentroidID != cid {
 						break
+					}
+
+					// Skip deleted items
+					if key.IsDeleted {
+						if ok, _ := arch.Vectors.Next(ctx); !ok {
+							break
+						}
+						continue
 					}
 
 					if item.Value == nil {

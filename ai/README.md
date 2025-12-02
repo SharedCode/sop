@@ -1,6 +1,6 @@
 # AI Package
 
-This package was developed with an AI copilot, I want to keep an open development approach(not finicky and narrow) in this package to keep efficient in "automaton" cycles.
+This package was developed with an AI copilot, I want to keep an open development approach(not finicky and narrow) in this package to keep efficient in "automaton" cycles. Thus, source codes here may be subject to refactor because of AI first philosophy.
 
 # SOP AI Library
 
@@ -19,6 +19,9 @@ A persistent, ACID-compliant vector store that runs on your local filesystem.
     *   **Scalability**: The optimization process is batched (commits every 200 items), allowing it to scale to millions of records without hitting transaction timeouts.
     *   **Operational Constraint**: To ensure data consistency and simplicity, the Vector Store enters a **Read-Only** mode during optimization. Any attempts to `Upsert` or `Delete` will return an error until `Optimize` completes.
     *   **Crash Recovery**: If the process crashes during optimization, simply restart it. The next call to `Optimize` will automatically detect and clean up any stale artifacts before starting fresh.
+*   **Deletion & Cleanup**: Implements a **Tombstone** mechanism for efficient deletions.
+    *   **Soft Delete**: `Delete()` marks items as deleted in both the Index and Content stores, ensuring they are immediately hidden from search results.
+    *   **Garbage Collection**: The `Optimize()` process acts as a Garbage Collector. It detects these tombstones and performs a physical delete on the underlying data, reclaiming storage space during the maintenance cycle.
 *   **Deduplication**: Optional deduplication check during ingestion. Can be disabled (`SetDeduplication(false)`) for maximum write performance when data is known to be unique.
 *   **Rich Key Structure**: The Vector Store uses a specialized `ContentKey` struct as the B-Tree key.
     *   **Metadata Carrier**: Stores `CentroidID`, `Distance`, `Version`, and `Deleted` status directly in the key.

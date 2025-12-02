@@ -319,6 +319,8 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	}
 
 	// 3. Delete
+	// Note: Delete marks the item as deleted (Tombstone) and decrements the centroid count immediately.
+	// The physical removal of the item happens during the next Optimize call.
 	if err := index.Delete(ctx, id); err != nil {
 		t.Fatalf("Delete failed: %v", err)
 	}
