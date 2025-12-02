@@ -93,6 +93,14 @@ SOP is designed to be versatile, powering everything from small embedded tools t
     *   **Unified Storage**: Store your training data (Vectors), metadata (Registry), and model artifacts (Blobs/JSON) in one ACID-compliant system.
     *   **Atomic Updates**: Update your model weights and the vector index they correspond to in a single transaction, preventing version mismatch.
 
+## Core Innovations
+
+### Rich Key Structures (Metadata-Carrying Keys)
+SOP's B-Tree implementation supports complex structs as Keys, not just simple primitives. This allows applications to "ride" data in the Key itself, acting as a persistent metadata layer that is available during index traversal without fetching the Value.
+*   **Benefit**: Critical state (like `Version`, `Deleted` flags, or `CentroidID` for vectors) is stored in the B-Tree node itself.
+*   **Performance**: Operations like "List all non-deleted items" or "Find items in Centroid X" can be performed by scanning the Keys only, avoiding expensive I/O to fetch the full JSON payload (Value).
+*   **Consistency**: This metadata participates in the same ACID transaction as the Value, ensuring the index structure and the data payload are always in sync.
+
 For a deeper dive into the system's design and package structure (including the Public vs. Internal split), please see the [Architecture Guide](ARCHITECTURE.md).
 
 For configuration options and performance tuning, see the [Configuration Guide](CONFIGURATION.md).

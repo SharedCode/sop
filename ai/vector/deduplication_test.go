@@ -64,14 +64,16 @@ func TestDeduplicationDisabled_Optimize(t *testing.T) {
 	}
 
 	// Verify Content points to a Centroid (not 0)
-	found, _ := arch.Content.Find(ctx, "item-A", false)
+	found, _ := arch.Content.Find(ctx, ai.ContentKey{ItemID: "item-A"}, false)
 	if !found {
 		t.Fatalf("Item A not found in Content")
 	}
 	jsonStr, _ := arch.Content.GetCurrentValue(ctx)
 	var stored vector.StoredItem[map[string]any]
 	json.Unmarshal([]byte(jsonStr), &stored)
-	if stored.CentroidID == 0 {
+
+	currentKey := arch.Content.GetCurrentKey().Key
+	if currentKey.CentroidID == 0 {
 		t.Fatalf("Expected Item A to be optimized (CentroidID != 0), got 0")
 	}
 

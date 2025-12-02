@@ -87,21 +87,21 @@ func Test_FunctionalityTests(t *testing.T) {
 		t.Errorf("Next() on EOF failed, got = true, want = false")
 	}
 
-	// Test UpdateCurrentItem.
+	// Test UpdateCurrentValue.
 	b3.Find(ctx, 5000, true)
 	newVal := "Updated with new Value."
-	if ok, _ := b3.UpdateCurrentItem(ctx, newVal); !ok {
-		t.Errorf("UpdateCurrentItem() failed, got = false, want = true")
+	if ok, _ := b3.UpdateCurrentValue(ctx, newVal); !ok {
+		t.Errorf("UpdateCurrentValue() failed, got = false, want = true")
 	}
 	if v, _ := b3.GetCurrentValue(ctx); v != newVal {
-		t.Errorf("UpdateCurrentItem() failed, got = %s, want = %s", v, newVal)
+		t.Errorf("UpdateCurrentValue() failed, got = %s, want = %s", v, newVal)
 	}
 
 	if ok, _ := b3.Find(ctx, 5000, true); !ok {
-		t.Errorf("UpdateCurrentItem(<k>) succeeded but FindOne(<k>, true) failed, got = false, want = true")
+		t.Errorf("UpdateCurrentValue(<k>) succeeded but FindOne(<k>, true) failed, got = false, want = true")
 	}
 	if v, _ := b3.GetCurrentValue(ctx); v != newVal {
-		t.Errorf("UpdateCurrentItem(<k>) succeeded but FindOne(<k>, true) failed, got = %s, want = %s", v, newVal)
+		t.Errorf("UpdateCurrentValue(<k>) succeeded but FindOne(<k>, true) failed, got = %s, want = %s", v, newVal)
 	}
 
 	// Test RemoveCurrentItem

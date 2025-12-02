@@ -30,9 +30,9 @@ type Architecture struct {
 	Vectors btree.BtreeInterface[ai.VectorKey, []float32]
 
 	// Content stores the actual item data.
-	// Key: ItemID (string) -> Value: Document/JSON (string)
+	// Key: ContentKey (Metadata) -> Value: Document/JSON (string)
 	// Name: "{domain}_content"
-	Content btree.BtreeInterface[string, string]
+	Content btree.BtreeInterface[ai.ContentKey, string]
 
 	// Lookup (Int -> ID): Maps integer IDs to string IDs, enabling efficient random sampling.
 	// Key: SequenceID (int) -> Value: ItemID (string)
@@ -103,16 +103,16 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, 
 	}
 
 	// 3. Open Content Store (Shared)
-	contentComparer := func(a, b string) int {
-		if a < b {
+	contentComparer := func(a, b ai.ContentKey) int {
+		if a.ItemID < b.ItemID {
 			return -1
 		}
-		if a > b {
+		if a.ItemID > b.ItemID {
 			return 1
 		}
 		return 0
 	}
-	content, err := newBtree[string, string](ctx, sop.ConfigureStore(name(dataSuffix), true, 1000, dataDesc, contentSize, ""), trans, contentComparer)
+	content, err := newBtree[ai.ContentKey, string](ctx, sop.ConfigureStore(name(dataSuffix), true, 1000, dataDesc, contentSize, ""), trans, contentComparer)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,15 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, 
 	// Once optimized (version > 0), TempVectors is retired.
 	var tempVectors btree.BtreeInterface[string, []float32]
 	if version == 0 && !skipTempVectors {
-		tempVectors, err = newBtree[string, []float32](ctx, sop.ConfigureStore(name(tempVectorsSuffix), true, 1000, tempVectorsDesc, sop.SmallData, ""), trans, contentComparer)
+		tempVectors, err = newBtree[string, []float32](ctx, sop.ConfigureStore(name(tempVectorsSuffix), true, 1000, tempVectorsDesc, sop.SmallData, ""), trans, func(a, b string) int {
+			if a < b {
+				return -1
+			}
+			if a > b {
+				return 1
+			}
+			return 0
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -157,7 +165,9 @@ func (a *Architecture) Add(ctx context.Context, id string, vector []float32, dat
 	}
 
 	// Step 3: Write to Content Store (The Data)
-	if _, err := a.Content.Add(ctx, id, data); err != nil {
+	// We use a default key for the demo.
+	key := ai.ContentKey{ItemID: id, CentroidID: centroidID}
+	if _, err := a.Content.Add(ctx, key, data); err != nil {
 		return err
 	}
 
@@ -227,7 +237,8 @@ func (a *Architecture) Search(ctx context.Context, query []float32, k int) ([]st
 	// Step 3: Fetch Content ONLY for the winners
 	var results []string
 	for _, c := range candidates {
-		found, err := a.Content.Find(ctx, c.ID, false)
+		searchKey := ai.ContentKey{ItemID: c.ID}
+		found, err := a.Content.Find(ctx, searchKey, false)
 		if err != nil {
 			return nil, err
 		}

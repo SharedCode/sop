@@ -53,7 +53,7 @@ func TestOptimizeWithTempVectors(t *testing.T) {
 			// CentroidID/Distance are 0/0 initially
 		}
 		data, _ := json.Marshal(stored)
-		if _, err := arch.Content.Add(ctx, id, string(data)); err != nil {
+		if _, err := arch.Content.Add(ctx, ai.ContentKey{ItemID: id}, string(data)); err != nil {
 			t.Fatalf("Failed to add to Content: %v", err)
 		}
 	}

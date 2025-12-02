@@ -13,7 +13,7 @@ from sop.transaction import Transaction, TransactionOptions, TransactionMode
 from sop.redis import Redis, RedisOptions
 
 def main():
-    db_path = "vector_clustered_demo_db"
+    db_path = os.path.abspath("vector_clustered_demo_db")
     
     # Clean up previous run
     if os.path.exists(db_path):

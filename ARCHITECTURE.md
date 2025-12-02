@@ -111,6 +111,7 @@ The flow is identical to the above, except **Cassandra** is replaced by the **Fi
 ### Key Concepts
 
 *   **Virtual IDs**: Every item and node in SOP is identified by a UUID. The Registry maps this UUID to its current physical location (e.g., a file path or blob ID). This allows us to move data (Copy-On-Write) without breaking references.
+*   **Metadata-Carrying Keys**: SOP allows complex structs to be used as B-Tree keys. This enables the Key to act as a "Covering Index," storing essential state (like `Version`, `Deleted` flags, or `CentroidID`) directly in the B-Tree node. This allows structural operations to be performed by scanning Keys only, avoiding the I/O cost of fetching large Data Blobs (Values).
 *   **Two-Phase Commit & The "Commit Point"**:
     *   **`inredcfs`**: The commit point is the atomic update of the Registry in **Cassandra**. Once the registry row is updated to point to the new blob location, the transaction is durable.
     *   **`inredfs`**: The commit point is the atomic update of the Registry hashmap on the **Filesystem**.

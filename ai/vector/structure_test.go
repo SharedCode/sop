@@ -167,7 +167,7 @@ func TestVectorStoreStructure(t *testing.T) {
 	}
 
 	// Check a sample content
-	found, err := contentTree.Find(ctx, "item-0-0", false)
+	found, err := contentTree.Find(ctx, ai.ContentKey{ItemID: "item-0-0"}, false)
 	if !found {
 		t.Error("Content for item-0-0 not found")
 	} else {
@@ -183,8 +183,9 @@ func TestVectorStoreStructure(t *testing.T) {
 		}
 
 		// Check Linkage (CentroidID in Content should match a valid centroid)
-		if !validCentroids[stored.CentroidID] {
-			t.Errorf("Content points to invalid centroid %d", stored.CentroidID)
+		currentItem := contentTree.GetCurrentKey()
+		if !validCentroids[currentItem.Key.CentroidID] {
+			t.Errorf("Content points to invalid centroid %d", currentItem.Key.CentroidID)
 		}
 	}
 

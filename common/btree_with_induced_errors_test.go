@@ -49,9 +49,17 @@ func (b3 b3WithInducedErrors[TK, TV]) Update(ctx context.Context, key TK, value 
 	}
 	return true, nil
 }
-func (b3 b3WithInducedErrors[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) (bool, error) {
+func (b3 b3WithInducedErrors[TK, TV]) UpdateCurrentValue(ctx context.Context, newValue TV) (bool, error) {
 	b3.t.Helper()
 	if b3.induceErrorOnMethod == 4 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV]) UpdateCurrentKey(ctx context.Context, newKey TK) (bool, error) {
+	b3.t.Helper()
+	if b3.induceErrorOnMethod == 16 {
 		return false, fmt.Errorf("foobar")
 	}
 	return true, nil

@@ -30,6 +30,24 @@ type VectorKey struct {
 	ItemID             string
 }
 
+// ContentKey is the key for the Content B-Tree.
+// It includes metadata to allow updates without modifying the Value segment (Payload).
+//
+// SOP's key structure handling allows apps to ride data in it that acts as persistent space
+// as well without affecting the overall key/value pair behaviour and BTree ness.
+// This means critical metadata (like Version, CentroidID, Deleted flag) is available
+// during key traversal (e.g. Range scans) without needing to fetch the potentially large Value payload.
+type ContentKey struct {
+	ItemID         string  `json:"id"`
+	CentroidID     int     `json:"cid"`
+	Distance       float32 `json:"dist"`
+	Version        int64   `json:"ver"`
+	Deleted        bool    `json:"del"`
+	NextCentroidID int     `json:"ncid"`
+	NextDistance   float32 `json:"ndist"`
+	NextVersion    int64   `json:"nver"`
+}
+
 // VectorStore defines the interface for a vector database domain (like a table).
 type VectorStore[T any] interface {
 	// Upsert adds or updates a single item in the store.
@@ -64,7 +82,7 @@ type VectorStore[T any] interface {
 	// Vectors returns the Vectors B-Tree for advanced manipulation.
 	Vectors(ctx context.Context) (btree.BtreeInterface[VectorKey, []float32], error)
 	// Content returns the Content B-Tree for advanced manipulation.
-	Content(ctx context.Context) (btree.BtreeInterface[string, string], error)
+	Content(ctx context.Context) (btree.BtreeInterface[ContentKey, string], error)
 	// Lookup returns the Sequence Lookup B-Tree for advanced manipulation (e.g. random sampling).
 	Lookup(ctx context.Context) (btree.BtreeInterface[int, string], error)
 }

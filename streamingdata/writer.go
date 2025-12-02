@@ -58,7 +58,7 @@ func (w *writer[TK]) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	if ok {
-		if ok, err := w.btree.UpdateCurrentItem(w.ctx, p); err != nil || !ok {
+		if ok, err := w.btree.UpdateCurrentValue(w.ctx, p); err != nil || !ok {
 			if err != nil {
 				return 0, err
 			}

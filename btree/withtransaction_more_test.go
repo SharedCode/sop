@@ -333,7 +333,7 @@ func TestWithTransaction_FirstLastNextPrevious_DelegatedErrors(t *testing.T) {
 	}
 }
 
-func TestWithTransaction_UpdateCurrentItem_ModesAndError(t *testing.T) {
+func TestWithTransaction_UpdateCurrentValue_ModesAndError(t *testing.T) {
 	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true})
 	// Base tree to select an item
 	fnr := &fakeNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}
@@ -351,18 +351,18 @@ func TestWithTransaction_UpdateCurrentItem_ModesAndError(t *testing.T) {
 	// Not begun
 	tx1 := &mockTx{begun: false, mode: sop.ForWriting}
 	w1 := NewBtreeWithTransaction[int, string](tx1, b)
-	if _, err := w1.UpdateCurrentItem(context.Background(), "x"); !errors.Is(err, errTransHasNotBegunMsg) {
+	if _, err := w1.UpdateCurrentValue(context.Background(), "x"); !errors.Is(err, errTransHasNotBegunMsg) {
 		t.Fatalf("not-begun expected err, got %v", err)
 	}
 
 	// Non-writer
 	tx2 := &mockTx{begun: true, mode: sop.ForReading}
 	w2 := NewBtreeWithTransaction[int, string](tx2, b)
-	if _, err := w2.UpdateCurrentItem(context.Background(), "x"); err == nil {
-		t.Fatalf("expected error on non-writer UpdateCurrentItem")
+	if _, err := w2.UpdateCurrentValue(context.Background(), "x"); err == nil {
+		t.Fatalf("expected error on non-writer UpdateCurrentValue")
 	}
 	if tx2.rollbackCount != 1 {
-		t.Fatalf("expected rollback on non-writer UpdateCurrentItem")
+		t.Fatalf("expected rollback on non-writer UpdateCurrentValue")
 	}
 
 	// Delegated error via ItemActionTracker.Update
@@ -379,11 +379,11 @@ func TestWithTransaction_UpdateCurrentItem_ModesAndError(t *testing.T) {
 	b3.setCurrentItemID(r3.ID, 0)
 	tx3 := &mockTx{begun: true, mode: sop.ForWriting}
 	w3 := NewBtreeWithTransaction[int, string](tx3, b3)
-	if _, err := w3.UpdateCurrentItem(context.Background(), "x"); err == nil {
-		t.Fatalf("expected delegated UpdateCurrentItem error")
+	if _, err := w3.UpdateCurrentValue(context.Background(), "x"); err == nil {
+		t.Fatalf("expected delegated UpdateCurrentValue error")
 	}
 	if tx3.rollbackCount != 1 {
-		t.Fatalf("expected rollback on delegated UpdateCurrentItem error")
+		t.Fatalf("expected rollback on delegated UpdateCurrentValue error")
 	}
 }
 

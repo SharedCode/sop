@@ -144,11 +144,11 @@ func (s *StreamingDataStore[TK]) Update(ctx context.Context, key TK) (*Encoder[T
 	if found, err := s.FindOne(ctx, key); err != nil || !found {
 		return nil, err
 	}
-	return s.UpdateCurrentItem(ctx)
+	return s.UpdateCurrentValue(ctx)
 }
 
-// UpdateCurrentItem returns an Encoder for updating chunks of the current item.
-func (s *StreamingDataStore[TK]) UpdateCurrentItem(ctx context.Context) (*Encoder[TK], error) {
+// UpdateCurrentValue returns an Encoder for updating chunks of the current item.
+func (s *StreamingDataStore[TK]) UpdateCurrentValue(ctx context.Context) (*Encoder[TK], error) {
 	if s.BtreeInterface.Count() == 0 {
 		return nil, fmt.Errorf("failed to update current item, store is empty")
 	}

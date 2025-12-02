@@ -20,7 +20,7 @@ func newEncoder[TK btree.Ordered](w *writer[TK]) *Encoder[TK] {
 	}
 }
 
-// Close finalizes Update/UpdateCurrentItem by deleting any remaining old chunks.
+// Close finalizes Update/UpdateCurrentValue by deleting any remaining old chunks.
 // It is a no-op for Add/AddIfNotExist.
 func (e *Encoder[TK]) Close() error {
 	// Don't do anything if in add mode.

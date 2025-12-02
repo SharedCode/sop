@@ -89,10 +89,16 @@ func (b3 BtreeInterface[TK, TV]) Upsert(key TK, value TV) bool {
 	return ok
 }
 
-// UpdateCurrentItem will update the Value of the current item.
+// UpdateCurrentValue will update the Value of the current item.
 // Key is read-only, thus, no argument for the key.
-func (b3 BtreeInterface[TK, TV]) UpdateCurrentItem(newValue TV) bool {
-	ok, _ := b3.Btree.UpdateCurrentItem(nil, newValue)
+func (b3 BtreeInterface[TK, TV]) UpdateCurrentValue(newValue TV) bool {
+	ok, _ := b3.Btree.UpdateCurrentValue(nil, newValue)
+	return ok
+}
+
+// UpdateCurrentKey will update the current item's key.
+func (b3 BtreeInterface[TK, TV]) UpdateCurrentKey(key TK) bool {
+	ok, _ := b3.Btree.UpdateCurrentKey(nil, key)
 	return ok
 }
 

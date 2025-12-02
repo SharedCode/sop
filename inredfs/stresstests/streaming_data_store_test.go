@@ -27,8 +27,8 @@ func Test_StreamingDataStoreInvalidCases(t *testing.T) {
 	if _, err := sds.GetCurrentValue(ctx); err == nil {
 		t.Errorf("GetCurrentValue on empty btree failed, got nil want err")
 	}
-	if _, err := sds.UpdateCurrentItem(ctx); err == nil {
-		t.Errorf("UpdateCurrentItem on empty btree failed, got nil want err")
+	if _, err := sds.UpdateCurrentValue(ctx); err == nil {
+		t.Errorf("UpdateCurrentValue on empty btree failed, got nil want err")
 	}
 	if _, err := sds.RemoveCurrentItem(ctx); err == nil {
 		t.Errorf("RemoveCurrentItem on empty btree failed, got nil want err")

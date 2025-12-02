@@ -389,6 +389,12 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 		Description:              "",
 		BlobStoreBaseFolderPath:  dataPath,
 	}, t1, nil)
+	_ = t1.Commit(ctx)
+
+	t1, _ = inredcfs.NewTransaction(sop.ForWriting, -1, false)
+	t1.Begin(ctx)
+
+	b3, _ = inredcfs.OpenBtree[int, string](ctx, tableName2, t1, nil)
 	originalCount := b3.Count()
 	b3.Add(ctx, 5000, "I am the value with 5000 key.")
 	b3.Add(ctx, 5001, "I am the value with 5001 key.")

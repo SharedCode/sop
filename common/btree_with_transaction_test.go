@@ -106,7 +106,7 @@ func Test_TransactionWithInducedErrorOnUpdate(t *testing.T) {
 	}
 }
 
-func Test_TransactionWithInducedErrorOnUpdateCurrentItem(t *testing.T) {
+func Test_TransactionWithInducedErrorOnUpdateCurrentValue(t *testing.T) {
 	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
 	t2.Begin(ctx)
 
@@ -116,7 +116,23 @@ func Test_TransactionWithInducedErrorOnUpdateCurrentItem(t *testing.T) {
 	b3 := newBTreeWithInducedErrors[int, string](t)
 	b3t := btree.NewBtreeWithTransaction(trans, b3)
 	b3.induceErrorOnMethod = 4
-	b3t.UpdateCurrentItem(ctx, "foo")
+	b3t.UpdateCurrentValue(ctx, "foo")
+	if trans.HasBegun() {
+		t.Error("Transaction is not rolled back.")
+	}
+}
+
+func Test_TransactionWithInducedErrorOnUpdateCurrentKey(t *testing.T) {
+	t2, _ := newMockTransaction(t, sop.ForWriting, -1)
+	t2.Begin(ctx)
+
+	var t3 interface{} = t2.GetPhasedTransaction()
+	trans := t3.(*Transaction)
+
+	b3 := newBTreeWithInducedErrors[int, string](t)
+	b3t := btree.NewBtreeWithTransaction(trans, b3)
+	b3.induceErrorOnMethod = 16
+	b3t.UpdateCurrentKey(ctx, 1)
 	if trans.HasBegun() {
 		t.Error("Transaction is not rolled back.")
 	}

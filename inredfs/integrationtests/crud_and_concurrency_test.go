@@ -111,7 +111,7 @@ func Test_ShortConcurrentCollision(t *testing.T) {
 			return err
 		}
 		v.SSN = "a"
-		if _, err := b1.UpdateCurrentItem(ctx2, v); err != nil {
+		if _, err := b1.UpdateCurrentValue(ctx2, v); err != nil {
 			return err
 		}
 		return t1.Commit(ctx2)
@@ -136,7 +136,7 @@ func Test_ShortConcurrentCollision(t *testing.T) {
 			return err
 		}
 		v.SSN = "b"
-		if _, err := b2.UpdateCurrentItem(ctx2, v); err != nil {
+		if _, err := b2.UpdateCurrentValue(ctx2, v); err != nil {
 			return err
 		}
 		return t2.Commit(ctx2)

@@ -95,6 +95,16 @@ Master less cluster wide distributed locking (RSRR algorithm) :https://www.linke
 
 RSRR as compared to DynamoDB's distributed locking: https://www.linkedin.com/posts/coolguru_i-just-found-out-thanks-to-my-eldest-that-activity-7325255314474250241-f07g?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
 
+## Rich Key Structures (Metadata Carrier)
+SOP allows you to use complex structs as B-Tree keys, enabling a powerful pattern where the Key itself acts as a persistent metadata carrier.
+
+*   **Concept**: Instead of just an ID, your Key can contain `Version`, `Status`, `Category`, or other metadata.
+*   **Benefit**: You can perform complex filtering and structural operations (e.g., "Find all active items in Category X") by scanning only the B-Tree nodes (Keys).
+*   **Efficiency**: This avoids the I/O cost of fetching the Value (which might be a large JSON blob or vector) until you actually need it.
+*   **ACID**: The Key and Value are updated atomically in the same transaction.
+
+This is heavily used in the **AI Vector Database** module, where the `ContentKey` stores `CentroidID`, `Distance`, and `Version` information, allowing the system to manage clustering and migrations purely via key traversal.
+
 # Simple Usage
 In this tutorial, we will be showing how to configure and code with a transaction & a B-tree that has replication feature.
 a. setup the Erasure Coding (EC) config in the module "init" function so it can be made available in all of the functions/code blocks

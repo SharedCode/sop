@@ -20,6 +20,9 @@ A persistent, ACID-compliant vector store that runs on your local filesystem.
     *   **Operational Constraint**: To ensure data consistency and simplicity, the Vector Store enters a **Read-Only** mode during optimization. Any attempts to `Upsert` or `Delete` will return an error until `Optimize` completes.
     *   **Crash Recovery**: If the process crashes during optimization, simply restart it. The next call to `Optimize` will automatically detect and clean up any stale artifacts before starting fresh.
 *   **Deduplication**: Optional deduplication check during ingestion. Can be disabled (`SetDeduplication(false)`) for maximum write performance when data is known to be unique.
+*   **Rich Key Structure**: The Vector Store uses a specialized `ContentKey` struct as the B-Tree key.
+    *   **Metadata Carrier**: Stores `CentroidID`, `Distance`, `Version`, and `Deleted` status directly in the key.
+    *   **Efficiency**: Allows the system to perform structural operations (like filtering deleted items or finding vectors in a specific cluster) by scanning only the keys, without fetching the potentially large vector payload.
 *   **Usage Modes**:
     *   **BuildOnceQueryMany**: Optimized for static datasets. Ingest data -> Call `Optimize()` -> Serve queries. Discards temporary build artifacts for efficiency.
     *   **Dynamic**: For systems with continuous updates. Maintains auxiliary structures to handle frequent inserts/deletes.

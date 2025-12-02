@@ -16,11 +16,21 @@ type BtreeInterface[TK Ordered, TV any] interface {
 	// This is useful when adding an item without creating a duplicate entry.
 	AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error)
 
-	// Update finds the item with key and updates its value to the incoming value argument.
+	// Update finds the item with key and calls UpdateCurrentValue to update it.
 	Update(ctx context.Context, key TK, value TV) (bool, error)
-	// UpdateCurrentItem updates the Value of the current item.
-	// Key is read-only.
-	UpdateCurrentItem(ctx context.Context, newValue TV) (bool, error)
+
+	// UpdateKey finds the item with key and updates its Key to the incoming key argument.
+	UpdateKey(ctx context.Context, key TK) (bool, error)
+
+	// UpdateCurrentKey updates the Key of the current item but only allows if key does not affect ordering.
+	UpdateCurrentKey(ctx context.Context, key TK) (bool, error)
+	// UpdateCurrentValue updates the Value of the current item.
+	UpdateCurrentValue(ctx context.Context, newValue TV) (bool, error)
+
+	// UpdateCurrentItem updates the current item with the incoming key & value.
+	// This is a convenience method that combines UpdateCurrentKey and UpdateCurrentValue but
+	// only allows if key does not affect ordering.
+	UpdateCurrentItem(ctx context.Context, key TK, value TV) (bool, error)
 
 	// Upsert adds the item if it does not exist or updates it if it does.
 	Upsert(ctx context.Context, key TK, value TV) (bool, error)

@@ -18,6 +18,10 @@ import (
 )
 
 // Btree manages items using a B-tree data structure and algorithm.
+// TK (Key Type) can be any comparable type, including complex structs.
+// Using a struct as TK allows the B-Tree to act as a "Covering Index",
+// where metadata is stored directly in the key and available during traversal
+// without fetching the Value (TV).
 type Btree[TK Ordered, TV any] struct {
 	StoreInfo          *sop.StoreInfo
 	storeInterface     *StoreInterface[TK, TV]
@@ -349,7 +353,7 @@ func (btree *Btree[TK, TV]) Previous(ctx context.Context) (bool, error) {
 	return r, err
 }
 
-// Update finds the item with matching key and updates its value.
+// Update finds the item with matching key and calls UpdateCurrentItem to update it.
 func (btree *Btree[TK, TV]) Update(ctx context.Context, key TK, newValue TV) (bool, error) {
 	ok, err := btree.Find(ctx, key, false)
 	if err != nil {
@@ -358,11 +362,55 @@ func (btree *Btree[TK, TV]) Update(ctx context.Context, key TK, newValue TV) (bo
 	if !ok {
 		return false, nil
 	}
-	return btree.UpdateCurrentItem(ctx, newValue)
+	return btree.UpdateCurrentItem(ctx, key, newValue)
 }
 
-// UpdateCurrentItem updates the value of the current item.
-func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) (bool, error) {
+// UpdateKey finds the item with matching key and updates its key.
+func (btree *Btree[TK, TV]) UpdateKey(ctx context.Context, key TK) (bool, error) {
+	ok, err := btree.Find(ctx, key, false)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+	return btree.UpdateCurrentKey(ctx, key)
+}
+
+// UpdateCurrentItem updates the current item with the incoming key & value.
+func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, key TK, value TV) (bool, error) {
+	if btree.currentItemRef.getNodeID() == sop.NilUUID {
+		return false, nil
+	}
+	node, err := btree.getNode(ctx, btree.currentItemRef.getNodeID())
+	if err != nil {
+		return false, err
+	}
+	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+		return false, nil
+	}
+
+	item := node.Slots[btree.currentItemRef.getNodeItemIndex()]
+
+	if btree.compare(item.Key, key) != 0 {
+		// This Key change instance may affect ordering, so we prevent it.
+		return false,
+			fmt.Errorf("updating key(%v) with fields involved in comparer may affect ordering, thus is not allowed", btree.currentItem.Key)
+	}
+
+	item.Key = key
+	item.Value = &value
+	// Register to local cache the "item update" for submit/resolution on Commit.
+	if err := btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
+		return false, err
+	}
+	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
+	btree.saveNode(node)
+	return true, nil
+}
+
+// UpdateCurrentValue updates the value of the current item.
+func (btree *Btree[TK, TV]) UpdateCurrentValue(ctx context.Context, newValue TV) (bool, error) {
 	if btree.currentItemRef.getNodeID() == sop.NilUUID {
 		return false, nil
 	}
@@ -375,6 +423,38 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, newValue TV) 
 	}
 	item := node.Slots[btree.currentItemRef.getNodeItemIndex()]
 	item.Value = &newValue
+	// Register to local cache the "item update" for submit/resolution on Commit.
+	if err := btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
+		return false, err
+	}
+	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
+	btree.saveNode(node)
+	return true, nil
+}
+
+// UpdateCurrentKey updates the current item with the provided key.
+func (btree *Btree[TK, TV]) UpdateCurrentKey(ctx context.Context, key TK) (bool, error) {
+	if btree.currentItemRef.getNodeID() == sop.NilUUID {
+		return false, nil
+	}
+	node, err := btree.getNode(ctx, btree.currentItemRef.getNodeID())
+	if err != nil {
+		return false, err
+	}
+	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+		return false, nil
+	}
+	item := node.Slots[btree.currentItemRef.getNodeItemIndex()]
+
+	if btree.compare(item.Key, key) != 0 {
+		// This Key change instance may affect ordering, so we prevent it.
+		return false,
+			fmt.Errorf("updating key(%v) with fields involved in comparer may affect ordering, thus is not allowed", btree.currentItem.Key)
+	}
+
+	// Merge incoming key into current item
+	item.Key = key
+
 	// Register to local cache the "item update" for submit/resolution on Commit.
 	if err := btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
 		return false, err

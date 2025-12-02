@@ -190,7 +190,7 @@ func addItem(c *gin.Context) {
 		return
 	}
 
-	ok, err := b3.UpdateCurrentItem(c, []byte(itemValue))
+	ok, err := b3.UpdateCurrentValue(c, []byte(itemValue))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": fmt.Sprintf("update value of item with key %s failed, error: %v", itemKey, err)})
 		trans.Rollback(c)

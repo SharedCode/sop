@@ -76,7 +76,7 @@ func TestDirectIngestion(t *testing.T) {
 	// Assertion 2: Item should be in Vectors B-Tree
 	// We need to find it. Since we didn't specify CentroidID, it was auto-assigned (likely 1).
 	// We can check Content first to get the assigned CentroidID.
-	found, err := arch.Content.Find(ctx, "item-direct", false)
+	found, err := arch.Content.Find(ctx, ai.ContentKey{ItemID: "item-direct"}, false)
 	if !found {
 		t.Fatal("Item not found in Content store")
 	}

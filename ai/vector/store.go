@@ -105,12 +105,9 @@ func (di *domainIndex[T]) getArchitecture(ctx context.Context, version int64) (*
 	return arch, nil
 }
 
-// StoredItem wraps the user payload with system metadata.
+// StoredItem holds the payload. Metadata is now in ContentKey.
 type StoredItem[T any] struct {
-	Payload    T       `json:"payload"`
-	CentroidID int     `json:"_centroid_id"`
-	Distance   float32 `json:"_distance"`
-	Deleted    bool    `json:"_deleted,omitempty"`
+	Payload T `json:"p"`
 }
 
 func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, item ai.Item[T], centroids map[int][]float32) error {
@@ -123,16 +120,16 @@ func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, it
 			return err
 		}
 
-		stored := StoredItem[T]{
-			Payload:    item.Payload,
-			CentroidID: 0,
-			Distance:   0,
+		// For TempVectors, we use a default key.
+		key := ai.ContentKey{
+			ItemID: id,
 		}
-		data, err := json.Marshal(stored)
+		// Payload is stored as JSON string in Value.
+		data, err := json.Marshal(StoredItem[T]{Payload: item.Payload})
 		if err != nil {
-			return fmt.Errorf("failed to marshal stored item: %w", err)
+			return fmt.Errorf("failed to marshal payload: %w", err)
 		}
-		if _, err := arch.Content.Add(ctx, id, string(data)); err != nil {
+		if _, err := arch.Content.Add(ctx, key, string(data)); err != nil {
 			return err
 		}
 		return nil
@@ -178,51 +175,46 @@ func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, it
 
 	// 0. Cleanup Old Entry (if exists) to prevent "ghost" vectors
 	if di.deduplicationEnabled {
-		found, err := arch.Content.Find(ctx, id, false)
+		// Construct a search key (only ItemID matters for search)
+		searchKey := ai.ContentKey{ItemID: id}
+		found, err := arch.Content.Find(ctx, searchKey, false)
 		if err != nil {
 			return err
 		}
 		if found {
-			// Retrieve old metadata to find old vector location
-			oldJson, err := arch.Content.GetCurrentValue(ctx)
-			if err != nil && !os.IsNotExist(err) {
-				return err
+			// Retrieve old metadata from Key
+			oldItem := arch.Content.GetCurrentKey()
+			oldKey := oldItem.Key
+
+			oldCid := oldKey.CentroidID
+			oldDist := oldKey.Distance
+			if oldCid == 0 {
+				oldCid = 1
 			}
 
-			if err == nil {
-				var oldStored StoredItem[T]
-				if err := json.Unmarshal([]byte(oldJson), &oldStored); err == nil {
-					oldCid := oldStored.CentroidID
-					oldDist := oldStored.Distance
-					if oldCid == 0 {
-						oldCid = 1
-					}
-
-					// Remove old vector
-					oldKey := ai.VectorKey{CentroidID: oldCid, DistanceToCentroid: oldDist, ItemID: id}
-					if foundVec, _ := arch.Vectors.Find(ctx, oldKey, false); foundVec {
-						if _, err := arch.Vectors.RemoveCurrentItem(ctx); err != nil {
-							return err
-						}
-						// Decrement count of old centroid
-						if di.config.UsageMode == ai.DynamicWithVectorCountTracking {
-							if oldCid == centroidID {
-								shouldIncrement = false
-							} else {
-								if foundC, _ := arch.Centroids.Find(ctx, oldCid, false); foundC {
-									c, _ := arch.Centroids.GetCurrentValue(ctx)
-									c.VectorCount--
-									arch.Centroids.UpdateCurrentItem(ctx, c)
-								}
-							}
+			// Remove old vector
+			oldVecKey := ai.VectorKey{CentroidID: oldCid, DistanceToCentroid: oldDist, ItemID: id}
+			if foundVec, _ := arch.Vectors.Find(ctx, oldVecKey, false); foundVec {
+				if _, err := arch.Vectors.RemoveCurrentItem(ctx); err != nil {
+					return err
+				}
+				// Decrement count of old centroid
+				if di.config.UsageMode == ai.DynamicWithVectorCountTracking {
+					if oldCid == centroidID {
+						shouldIncrement = false
+					} else {
+						if foundC, _ := arch.Centroids.Find(ctx, oldCid, false); foundC {
+							c, _ := arch.Centroids.GetCurrentValue(ctx)
+							c.VectorCount--
+							arch.Centroids.UpdateCurrentValue(ctx, c)
 						}
 					}
 				}
 			}
-			// Remove old content to ensure clean insert
-			if _, err := arch.Content.RemoveCurrentItem(ctx); err != nil && !os.IsNotExist(err) {
-				return err
-			}
+
+			// We don't remove content here because we will overwrite it (Upsert)
+			// But we need to be careful if Upsert doesn't replace Key.
+			// Actually, we should use Upsert with the new Key.
 		}
 	}
 
@@ -231,7 +223,7 @@ func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, it
 		if foundC, _ := arch.Centroids.Find(ctx, centroidID, false); foundC {
 			c, _ := arch.Centroids.GetCurrentValue(ctx)
 			c.VectorCount++
-			arch.Centroids.UpdateCurrentItem(ctx, c)
+			arch.Centroids.UpdateCurrentValue(ctx, c)
 		}
 	}
 
@@ -242,16 +234,24 @@ func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, it
 	}
 
 	// 3. Update Content Store
-	stored := StoredItem[T]{
-		Payload:    item.Payload,
+	// We use the new Key struct with metadata.
+	// We assume Upsert will update the Key in the B-Tree node if it exists.
+	contentKey := ai.ContentKey{
+		ItemID:     id,
 		CentroidID: centroidID,
 		Distance:   dist,
+		Version:    arch.Version, // Use current version
+		// Next fields are zeroed out
 	}
-	data, err := json.Marshal(stored)
+
+	data, err := json.Marshal(StoredItem[T]{Payload: item.Payload})
 	if err != nil {
-		return fmt.Errorf("failed to marshal stored item: %w", err)
+		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
-	if _, err := arch.Content.Add(ctx, id, string(data)); err != nil {
+
+	// Use Upsert to update Key and Value.
+	// Upsert now updates the Key (metadata) as well if the item exists.
+	if _, err := arch.Content.Upsert(ctx, contentKey, string(data)); err != nil {
 		return err
 	}
 
@@ -372,7 +372,7 @@ func (di *domainIndex[T]) Get(ctx context.Context, id string) (*ai.Item[T], erro
 		return nil, err
 	}
 
-	found, err := arch.Content.Find(ctx, id, false)
+	found, err := arch.Content.Find(ctx, ai.ContentKey{ItemID: id}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -385,17 +385,45 @@ func (di *domainIndex[T]) Get(ctx context.Context, id string) (*ai.Item[T], erro
 		return nil, err
 	}
 
+	// Retrieve metadata from Key
+	currentItem := arch.Content.GetCurrentKey()
+	currentKey := currentItem.Key
+
 	var stored StoredItem[T]
 	if err := json.Unmarshal([]byte(jsonStr), &stored); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal stored item: %w", err)
 	}
 
-	if stored.Deleted {
+	if currentKey.Deleted {
 		return nil, fmt.Errorf("item not found")
 	}
 
 	// Fetch Vector
-	cid := stored.CentroidID
+	cid := currentKey.CentroidID
+	dist := currentKey.Distance
+
+	// Check if we need to use the "Next" version (Lazy Migration)
+	// If the stored version matches the active version, use standard fields.
+	// If the stored NextVersion matches the active version, use Next fields.
+	if currentKey.Version != version {
+		if currentKey.NextVersion == version {
+			cid = currentKey.NextCentroidID
+			dist = currentKey.NextDistance
+			// Note: We don't update the record here (lazy update) to avoid write-on-read penalty.
+			// The cleanup can happen during the next Upsert or a background job.
+		} else if version == 0 && currentKey.Version == 0 {
+			// Legacy/Initial case: Version 0 matches.
+		} else {
+			// Version mismatch and Next doesn't match either.
+			// This implies the item belongs to an old version that is no longer active,
+			// OR the item was added during a migration that failed/switched.
+			// However, if we are here, it means we found the item in Content.
+			// If Content is shared, we should try to find the vector in the active version's Vectors store.
+			// But we don't know the CentroidID for the active version if it's not recorded.
+			// Fallback: If Version 0 is active, we might be in TempVectors mode.
+		}
+	}
+
 	var vec []float32
 
 	// Explicitly handle TempVectors OR Vectors based on Version (TempVectors existence)
@@ -413,7 +441,6 @@ func (di *domainIndex[T]) Get(ctx context.Context, id string) (*ai.Item[T], erro
 	if cid == 0 {
 		return nil, fmt.Errorf("item has invalid centroid ID (0) for Vectors mode")
 	}
-	dist := stored.Distance
 
 	vecKey := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: id}
 	foundVec, err := arch.Vectors.Find(ctx, vecKey, false)
@@ -423,7 +450,8 @@ func (di *domainIndex[T]) Get(ctx context.Context, id string) (*ai.Item[T], erro
 	if foundVec {
 		vec, _ = arch.Vectors.GetCurrentValue(ctx)
 	} else {
-		return nil, fmt.Errorf("item vector not found in Vectors")
+		// Fallback: If not found, it might be that the item was deleted or the version logic is off.
+		return nil, fmt.Errorf("item vector not found in Vectors (cid=%d)", cid)
 	}
 
 	return &ai.Item[T]{ID: id, Vector: vec, Payload: stored.Payload, CentroidID: cid}, nil
@@ -447,7 +475,7 @@ func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	found, err := arch.Content.Find(ctx, id, false)
+	found, err := arch.Content.Find(ctx, ai.ContentKey{ItemID: id}, false)
 	if err != nil {
 		return err
 	}
@@ -455,24 +483,21 @@ func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
 		return nil
 	}
 
+	// Retrieve current key and value
+	currentItem := arch.Content.GetCurrentKey()
+	currentKey := currentItem.Key
 	jsonStr, _ := arch.Content.GetCurrentValue(ctx)
-	var stored StoredItem[T]
-	if err := json.Unmarshal([]byte(jsonStr), &stored); err != nil {
-		return err
-	}
 
-	// Soft Delete
-	stored.Deleted = true
-	data, err := json.Marshal(stored)
-	if err != nil {
-		return err
-	}
-	if _, err := arch.Content.UpdateCurrentItem(ctx, string(data)); err != nil {
+	// Soft Delete: Update Key
+	currentKey.Deleted = true
+
+	// Update the Key to reflect the deleted status.
+	if _, err := arch.Content.UpdateCurrentKey(ctx, currentKey); err != nil {
 		return err
 	}
 
 	// Remove from Vectors
-	cid := stored.CentroidID
+	cid := currentKey.CentroidID
 
 	// Explicitly handle TempVectors OR Vectors based on Version
 	if arch.TempVectors != nil {
@@ -491,7 +516,7 @@ func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
 		// Invalid for Vectors mode, cannot delete from Vectors if we don't know the key
 		return nil
 	}
-	dist := stored.Distance
+	dist := currentKey.Distance
 
 	vecKey := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: id}
 	if found, err := arch.Vectors.Find(ctx, vecKey, false); err != nil {
@@ -504,7 +529,7 @@ func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
 			if foundC, _ := arch.Centroids.Find(ctx, cid, false); foundC {
 				c, _ := arch.Centroids.GetCurrentValue(ctx)
 				c.VectorCount--
-				arch.Centroids.UpdateCurrentItem(ctx, c)
+				arch.Centroids.UpdateCurrentValue(ctx, c)
 			}
 		}
 	}
@@ -619,15 +644,16 @@ func (di *domainIndex[T]) Query(ctx context.Context, vec []float32, k int, filte
 			break
 		}
 
-		found, err := arch.Content.Find(ctx, hit.ID, false)
+		found, err := arch.Content.Find(ctx, ai.ContentKey{ItemID: hit.ID}, false)
 		if err != nil {
 			return nil, err
 		}
 		if found {
-			jsonStr, _ := arch.Content.GetCurrentValue(ctx)
-			var stored StoredItem[T]
-			if err := json.Unmarshal([]byte(jsonStr), &stored); err == nil {
-				if !stored.Deleted {
+			currentItem := arch.Content.GetCurrentKey()
+			if !currentItem.Key.Deleted {
+				jsonStr, _ := arch.Content.GetCurrentValue(ctx)
+				var stored StoredItem[T]
+				if err := json.Unmarshal([]byte(jsonStr), &stored); err == nil {
 					if filter == nil || filter(stored.Payload) {
 						hit.Payload = stored.Payload
 						finalHits = append(finalHits, hit)
@@ -714,7 +740,7 @@ func (di *domainIndex[T]) Vectors(ctx context.Context) (btree.BtreeInterface[ai.
 }
 
 // Content returns the Content B-Tree for advanced manipulation.
-func (di *domainIndex[T]) Content(ctx context.Context) (btree.BtreeInterface[string, string], error) {
+func (di *domainIndex[T]) Content(ctx context.Context) (btree.BtreeInterface[ai.ContentKey, string], error) {
 	version, err := di.getActiveVersion(ctx, di.trans)
 	if err != nil {
 		return nil, err

@@ -88,7 +88,7 @@ func TransferFunds(ctx context.Context, db *database.Database, fromID, toID stri
 		// Cast/Unmarshal val to Account...
 		fromAccount = val.(Account)
 		fromAccount.Balance -= amount
-		accounts.UpdateCurrentItem(ctx, fromAccount)
+		accounts.UpdateCurrentValue(ctx, fromAccount)
 	}
 
 	// 4. Add
@@ -97,7 +97,7 @@ func TransferFunds(ctx context.Context, db *database.Database, fromID, toID stri
 		val, _ := accounts.GetCurrentValue(ctx)
 		toAccount = val.(Account)
 		toAccount.Balance += amount
-		accounts.UpdateCurrentItem(ctx, toAccount)
+		accounts.UpdateCurrentValue(ctx, toAccount)
 	}
 
 	// 5. Log

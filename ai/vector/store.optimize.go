@@ -2,7 +2,6 @@ package vector
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -265,16 +264,15 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 					// Check Content for duplicates (logic from original Optimize)
 					shouldProcess := true
 					if di.deduplicationEnabled {
-						if found, err := oldArch.Content.Find(ctx, item.Key, false); err != nil {
+						if found, err := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key}, false); err != nil {
 							tx.Rollback(ctx)
 							return err
 						} else if found {
-							jsonStr, _ := oldArch.Content.GetCurrentValue(ctx)
-							var stored StoredItem[T]
-							if err := json.Unmarshal([]byte(jsonStr), &stored); err == nil {
-								if stored.CentroidID != 0 {
-									shouldProcess = false
-								}
+							currentKey := oldArch.Content.GetCurrentKey().Key
+							if currentKey.Deleted {
+								shouldProcess = false
+							} else if currentKey.CentroidID != 0 {
+								shouldProcess = false
 							}
 						}
 					}
@@ -295,11 +293,28 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 					itemID = item.Key.ItemID
 					key = item.Key
 
-					if _, err := newLookup.Add(ctx, count, itemID); err != nil {
+					// Check Content for Deleted status
+					shouldProcess := true
+					if found, err := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: itemID}, false); err != nil {
 						tx.Rollback(ctx)
 						return err
+					} else if found {
+						currentKey := oldArch.Content.GetCurrentKey().Key
+						if currentKey.Deleted {
+							shouldProcess = false
+						}
+					} else {
+						// If not found in Content, it's a ghost vector. Skip it.
+						shouldProcess = false
 					}
-					count++
+
+					if shouldProcess {
+						if _, err := newLookup.Add(ctx, count, itemID); err != nil {
+							tx.Rollback(ctx)
+							return err
+						}
+						count++
+					}
 				}
 
 				processed++
@@ -405,16 +420,14 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 					vec, _ = oldArch.TempVectors.GetCurrentValue(ctx)
 				}
 			} else {
-				if found, err := oldArch.Content.Find(ctx, itemID, false); err != nil {
+				if found, err := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: itemID}, false); err != nil {
 					tx.Rollback(ctx)
 					return err
 				} else if !found {
 					continue
 				}
-				contentJson, _ := oldArch.Content.GetCurrentValue(ctx)
-				var stored StoredItem[T]
-				json.Unmarshal([]byte(contentJson), &stored)
-				vecKey := ai.VectorKey{CentroidID: stored.CentroidID, DistanceToCentroid: stored.Distance, ItemID: itemID}
+				currentKey := oldArch.Content.GetCurrentKey().Key
+				vecKey := ai.VectorKey{CentroidID: currentKey.CentroidID, DistanceToCentroid: currentKey.Distance, ItemID: itemID}
 				if found, _ := oldArch.Vectors.Find(ctx, vecKey, false); found {
 					vec, _ = oldArch.Vectors.GetCurrentValue(ctx)
 				}
@@ -520,32 +533,47 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 
 					// Process Item
 					vec := *item.Value
-					cid, dist := findClosestCentroid(vec, newCentroidsMap)
 
-					// Add to New Vectors
-					key := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: item.Key.ItemID}
-					if _, err := newVectors.Add(ctx, key, vec); err != nil {
-						tx.Rollback(ctx)
-						return err
-					}
-
-					if newCentroids != nil {
-						if found, _ := newCentroids.Find(ctx, cid, false); found {
-							c, _ := newCentroids.GetCurrentValue(ctx)
-							c.VectorCount++
-							newCentroids.UpdateCurrentItem(ctx, c)
+					// Check Content FIRST
+					shouldMigrate := false
+					if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key.ItemID}, false); found {
+						currentKey := oldArch.Content.GetCurrentKey().Key
+						if !currentKey.Deleted {
+							shouldMigrate = true
 						}
 					}
 
-					// Update Content
-					if found, _ := oldArch.Content.Find(ctx, item.Key.ItemID, false); found {
-						jsonStr, _ := oldArch.Content.GetCurrentValue(ctx)
-						var stored StoredItem[T]
-						if err := json.Unmarshal([]byte(jsonStr), &stored); err == nil {
-							stored.CentroidID = cid
-							stored.Distance = dist
-							newData, _ := json.Marshal(stored)
-							oldArch.Content.UpdateCurrentItem(ctx, string(newData))
+					if shouldMigrate {
+						cid, dist := findClosestCentroid(vec, newCentroidsMap)
+
+						// Add to New Vectors
+						key := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: item.Key.ItemID}
+						if _, err := newVectors.Add(ctx, key, vec); err != nil {
+							tx.Rollback(ctx)
+							return err
+						}
+
+						if newCentroids != nil {
+							if found, _ := newCentroids.Find(ctx, cid, false); found {
+								c, _ := newCentroids.GetCurrentValue(ctx)
+								c.VectorCount++
+								newCentroids.UpdateCurrentValue(ctx, c)
+							}
+						}
+
+						// Update Content
+						if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key.ItemID}, false); found {
+							// Update Key to point to new version using Next fields (Safe Migration)
+							currentKey := oldArch.Content.GetCurrentKey().Key
+							currentKey.NextCentroidID = cid
+							currentKey.NextDistance = dist
+							currentKey.NextVersion = int64(newVersion)
+
+							// Update Key in place using UpdateCurrentKey
+							if _, err := oldArch.Content.UpdateCurrentKey(ctx, currentKey); err != nil {
+								tx.Rollback(ctx)
+								return err
+							}
 						}
 					}
 
@@ -639,13 +667,12 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 					// Check Duplicates
 					shouldProcess := true
 					if di.deduplicationEnabled {
-						if found, _ := oldArch.Content.Find(ctx, item.Key, false); found {
-							jsonStr, _ := oldArch.Content.GetCurrentValue(ctx)
-							var stored StoredItem[T]
-							if err := json.Unmarshal([]byte(jsonStr), &stored); err == nil {
-								if stored.CentroidID != 0 {
-									shouldProcess = false
-								}
+						if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key}, false); found {
+							currentKey := oldArch.Content.GetCurrentKey().Key
+							if currentKey.Deleted {
+								shouldProcess = false
+							} else if currentKey.CentroidID != 0 {
+								shouldProcess = false
 							}
 						}
 					}
@@ -664,18 +691,21 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 							if found, _ := newCentroids.Find(ctx, cid, false); found {
 								c, _ := newCentroids.GetCurrentValue(ctx)
 								c.VectorCount++
-								newCentroids.UpdateCurrentItem(ctx, c)
+								newCentroids.UpdateCurrentValue(ctx, c)
 							}
 						}
 
-						if found, _ := oldArch.Content.Find(ctx, item.Key, false); found {
-							jsonStr, _ := oldArch.Content.GetCurrentValue(ctx)
-							var stored StoredItem[T]
-							if err := json.Unmarshal([]byte(jsonStr), &stored); err == nil {
-								stored.CentroidID = cid
-								stored.Distance = dist
-								newData, _ := json.Marshal(stored)
-								oldArch.Content.UpdateCurrentItem(ctx, string(newData))
+						if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key}, false); found {
+							// Update Key to point to new version using Next fields (Safe Migration)
+							currentKey := oldArch.Content.GetCurrentKey().Key
+							currentKey.NextCentroidID = cid
+							currentKey.NextDistance = dist
+							currentKey.NextVersion = int64(newVersion)
+
+							// Update Key in place using UpdateCurrentKey
+							if _, err := oldArch.Content.UpdateCurrentKey(ctx, currentKey); err != nil {
+								tx.Rollback(ctx)
+								return err
 							}
 						}
 					}
@@ -725,7 +755,7 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 
 		// Update Version
 		if found, _ := sysStore.Find(ctx, di.name, false); found {
-			sysStore.UpdateCurrentItem(ctx, newVersion)
+			sysStore.UpdateCurrentValue(ctx, newVersion)
 		} else {
 			sysStore.Add(ctx, di.name, newVersion)
 		}

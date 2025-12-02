@@ -109,19 +109,21 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	}
 
 	// Verify Item A is in Vectors (V1)
-	found, err := arch1.Content.Find(ctx, "item-A", false)
+	found, err := arch1.Content.Find(ctx, ai.ContentKey{ItemID: "item-A"}, false)
 	if !found {
 		t.Fatal("Item A not found in Content V1")
 	}
 	jsonStr, _ := arch1.Content.GetCurrentValue(ctx)
 	var storedA vector.StoredItem[map[string]any]
 	json.Unmarshal([]byte(jsonStr), &storedA)
-	if storedA.CentroidID == 0 {
+
+	currentKeyA := arch1.Content.GetCurrentKey().Key
+	if currentKeyA.CentroidID == 0 {
 		t.Fatal("Item A should have assigned CentroidID in V1")
 	}
 
 	// Check Vectors
-	vecKeyA := ai.VectorKey{CentroidID: storedA.CentroidID, DistanceToCentroid: storedA.Distance, ItemID: "item-A"}
+	vecKeyA := ai.VectorKey{CentroidID: currentKeyA.CentroidID, DistanceToCentroid: currentKeyA.Distance, ItemID: "item-A"}
 	foundVec, err := arch1.Vectors.Find(ctx, vecKeyA, false)
 	if !foundVec {
 		t.Fatal("Item A should be in Vectors V1")
@@ -201,21 +203,22 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	}
 
 	// Verify Item A is in Vectors V2
-	found, err = arch2.Content.Find(ctx, "item-A", false)
+	found, err = arch2.Content.Find(ctx, ai.ContentKey{ItemID: "item-A"}, false)
 	if !found {
 		t.Fatal("Item A not found in Content V2")
 	}
 	jsonStr, _ = arch2.Content.GetCurrentValue(ctx)
 	json.Unmarshal([]byte(jsonStr), &storedA)
 
-	vecKeyA = ai.VectorKey{CentroidID: storedA.CentroidID, DistanceToCentroid: storedA.Distance, ItemID: "item-A"}
+	currentKeyA = arch2.Content.GetCurrentKey().Key
+	vecKeyA = ai.VectorKey{CentroidID: currentKeyA.CentroidID, DistanceToCentroid: currentKeyA.Distance, ItemID: "item-A"}
 	foundVec, err = arch2.Vectors.Find(ctx, vecKeyA, false)
 	if !foundVec {
 		t.Fatal("Item A should be in Vectors V2")
 	}
 
 	// Verify Item B is in Vectors V2
-	found, err = arch2.Content.Find(ctx, "item-B", false)
+	found, err = arch2.Content.Find(ctx, ai.ContentKey{ItemID: "item-B"}, false)
 	if !found {
 		t.Fatal("Item B not found in Content V2")
 	}
@@ -223,7 +226,8 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	var storedB vector.StoredItem[map[string]any]
 	json.Unmarshal([]byte(jsonStr), &storedB)
 
-	vecKeyB := ai.VectorKey{CentroidID: storedB.CentroidID, DistanceToCentroid: storedB.Distance, ItemID: "item-B"}
+	currentKeyB := arch2.Content.GetCurrentKey().Key
+	vecKeyB := ai.VectorKey{CentroidID: currentKeyB.CentroidID, DistanceToCentroid: currentKeyB.Distance, ItemID: "item-B"}
 	foundVec, err = arch2.Vectors.Find(ctx, vecKeyB, false)
 	if !foundVec {
 		t.Fatal("Item B should be in Vectors V2")

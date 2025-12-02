@@ -82,7 +82,7 @@ func TestCRUD_AndNavigation_Basic(t *testing.T) {
 	}
 
 	// Update current
-	if ok, _ := b.UpdateCurrentItem(nil, "bb"); !ok {
+	if ok, _ := b.UpdateCurrentValue(nil, "bb"); !ok {
 		t.Fatal("update current")
 	}
 	if it, _ := b.GetCurrentItem(nil); *it.Value != "bb" {
@@ -126,5 +126,33 @@ func TestGetRootNode_CreateReuse(t *testing.T) {
 	}
 	if root2.ID != root.ID {
 		t.Fatalf("expected to retrieve same root")
+	}
+}
+
+func TestUpdateCurrentItem(t *testing.T) {
+	b, _ := newTestBtree[string]()
+	b.Add(nil, 1, "a")
+	b.Add(nil, 2, "b")
+
+	// Position on 2
+	b.Find(nil, 2, false)
+
+	// Update both key and value
+	// Note: Key update must not affect ordering.
+	// Since 2 is > 1, updating 2 to 3 (if 3 doesn't exist and is > 1) might be allowed if it doesn't cross boundaries?
+	// Wait, UpdateCurrentItem checks:
+	// if btree.compare(item.Key, key) != 0 { return false, error }
+	// So it ONLY allows updating key if it compares EQUAL.
+	// This means it's for updating metadata within the key that doesn't affect the sort order (like ContentKey in vector store).
+	// For int key, 2 == 2. So we can't change 2 to 3.
+
+	// So let's try updating with same key but different value, just to test the method call.
+	if ok, err := b.UpdateCurrentItem(nil, 2, "bb"); !ok || err != nil {
+		t.Fatalf("UpdateCurrentItem failed: %v", err)
+	}
+
+	item, _ := b.GetCurrentItem(nil)
+	if item.Key != 2 || *item.Value != "bb" {
+		t.Fatalf("UpdateCurrentItem did not update value")
 	}
 }

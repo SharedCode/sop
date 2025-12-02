@@ -115,8 +115,8 @@ func (b3 *btreeWithTransaction[TK, TV]) Update(ctx context.Context, key TK, valu
 	return r, err
 }
 
-// UpdateCurrentItem updates the current item; requires writer transaction.
-func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, value TV) (bool, error) {
+// UpdateKey finds by key and updates key; requires writer transaction.
+func (b3 *btreeWithTransaction[TK, TV]) UpdateKey(ctx context.Context, key TK) (bool, error) {
 	if !b3.transaction.HasBegun() {
 		return false, errTransHasNotBegunMsg
 	}
@@ -124,7 +124,55 @@ func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, v
 		b3.transaction.Rollback(ctx, nil)
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
-	r, err := b3.BtreeInterface.UpdateCurrentItem(ctx, value)
+	r, err := b3.BtreeInterface.UpdateKey(ctx, key)
+	if err != nil {
+		b3.transaction.Rollback(ctx, err)
+	}
+	return r, err
+}
+
+// UpdateCurrentValue updates the current item; requires writer transaction.
+func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentValue(ctx context.Context, value TV) (bool, error) {
+	if !b3.transaction.HasBegun() {
+		return false, errTransHasNotBegunMsg
+	}
+	if b3.transaction.GetMode() != sop.ForWriting {
+		b3.transaction.Rollback(ctx, nil)
+		return false, fmt.Errorf("can't update item, transaction is not for writing")
+	}
+	r, err := b3.BtreeInterface.UpdateCurrentValue(ctx, value)
+	if err != nil {
+		b3.transaction.Rollback(ctx, err)
+	}
+	return r, err
+}
+
+// UpdateCurrentItem updates the current item; requires writer transaction.
+func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, key TK, value TV) (bool, error) {
+	if !b3.transaction.HasBegun() {
+		return false, errTransHasNotBegunMsg
+	}
+	if b3.transaction.GetMode() != sop.ForWriting {
+		b3.transaction.Rollback(ctx, nil)
+		return false, fmt.Errorf("can't update item, transaction is not for writing")
+	}
+	r, err := b3.BtreeInterface.UpdateCurrentItem(ctx, key, value)
+	if err != nil {
+		b3.transaction.Rollback(ctx, err)
+	}
+	return r, err
+}
+
+// UpdateCurrentKey updates the current item's key; requires writer transaction.
+func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentKey(ctx context.Context, key TK) (bool, error) {
+	if !b3.transaction.HasBegun() {
+		return false, errTransHasNotBegunMsg
+	}
+	if b3.transaction.GetMode() != sop.ForWriting {
+		b3.transaction.Rollback(ctx, nil)
+		return false, fmt.Errorf("can't update item, transaction is not for writing")
+	}
+	r, err := b3.BtreeInterface.UpdateCurrentKey(ctx, key)
 	if err != nil {
 		b3.transaction.Rollback(ctx, err)
 	}

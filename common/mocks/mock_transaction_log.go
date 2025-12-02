@@ -95,7 +95,7 @@ func (tl *MockTransactionLog) Add(ctx context.Context, tid sop.UUID, commitFunct
 		Value: payload,
 	})
 	if found {
-		tl.datesLogs.UpdateCurrentItem(dayLogs)
+		tl.datesLogs.UpdateCurrentValue(dayLogs)
 	} else {
 		tl.datesLogs.Add(date, dayLogs)
 	}
@@ -114,7 +114,7 @@ func (tl *MockTransactionLog) Remove(ctx context.Context, tid sop.UUID) error {
 				if len(dayLogs) == 0 {
 					tl.datesLogs.RemoveCurrentItem()
 				} else {
-					tl.datesLogs.UpdateCurrentItem(dayLogs)
+					tl.datesLogs.UpdateCurrentValue(dayLogs)
 				}
 				return nil
 			}

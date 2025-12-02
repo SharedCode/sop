@@ -242,8 +242,8 @@ func TestWithTransaction_PreconditionsAndErrors(t *testing.T) {
 	}
 }
 
-// Cover UpdateCurrentItem path in withtransaction wrapper (was 0%).
-func TestWithTransaction_UpdateCurrentItem(t *testing.T) {
+// Cover UpdateCurrentValue path in withtransaction wrapper (was 0%).
+func TestWithTransaction_UpdateCurrentValue(t *testing.T) {
 	b, _ := newTestBtree[string]()
 	tx := &mockTx{mode: sop.ForWriting}
 	w := NewBtreeWithTransaction[int, string](tx, b)
@@ -256,8 +256,8 @@ func TestWithTransaction_UpdateCurrentItem(t *testing.T) {
 	if ok, err := w.Find(nil, 9, false); !ok || err != nil {
 		t.Fatalf("find err=%v", err)
 	}
-	if ok, err := w.UpdateCurrentItem(nil, "vv"); !ok || err != nil {
-		t.Fatalf("UpdateCurrentItem err=%v", err)
+	if ok, err := w.UpdateCurrentValue(nil, "vv"); !ok || err != nil {
+		t.Fatalf("UpdateCurrentValue err=%v", err)
 	}
 	if it, _ := w.GetCurrentItem(nil); *it.Value != "vv" {
 		t.Fatalf("value not updated")
@@ -434,10 +434,10 @@ func TestUpdateCurrentNodeItem_Guards(t *testing.T) {
 	}
 }
 
-func TestUpdateCurrentItem_Guards(t *testing.T) {
+func TestUpdateCurrentValue_Guards(t *testing.T) {
 	b, fnr := newTestBtree[string]()
 	// Nil selection
-	if ok, err := b.UpdateCurrentItem(nil, "x"); err != nil || ok {
+	if ok, err := b.UpdateCurrentValue(nil, "x"); err != nil || ok {
 		t.Fatalf("expected false,nil on nil selection")
 	}
 	// Selection points to nil slot
@@ -447,7 +447,7 @@ func TestUpdateCurrentItem_Guards(t *testing.T) {
 	b.StoreInfo.RootNodeID = root.ID
 	b.StoreInfo.Count = 1
 	b.setCurrentItemID(root.ID, 0)
-	if ok, err := b.UpdateCurrentItem(nil, "y"); err != nil || ok {
+	if ok, err := b.UpdateCurrentValue(nil, "y"); err != nil || ok {
 		t.Fatalf("expected false,nil on nil slot selection")
 	}
 }

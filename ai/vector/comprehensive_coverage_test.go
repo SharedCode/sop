@@ -2,7 +2,6 @@ package vector_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -288,18 +287,17 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 		for {
 			id, _ := arch2.Lookup.GetCurrentValue(ctx)
 			// Check if ID exists in Content
-			found, _ := arch2.Content.Find(ctx, id, false)
+			found, _ := arch2.Content.Find(ctx, ai.ContentKey{ItemID: id}, false)
 			if !found {
 				t.Errorf("Lookup ID %s not found in Content", id)
 			}
 
 			// Check if ID exists in Vectors
 			// Need to get CentroidID from Content first
-			jsonStr, _ := arch2.Content.GetCurrentValue(ctx)
-			var stored vector.StoredItem[map[string]any]
-			json.Unmarshal([]byte(jsonStr), &stored)
+			currentItem := arch2.Content.GetCurrentKey()
+			currentKey := currentItem.Key
 
-			vecKey := ai.VectorKey{CentroidID: stored.CentroidID, DistanceToCentroid: stored.Distance, ItemID: id}
+			vecKey := ai.VectorKey{CentroidID: currentKey.CentroidID, DistanceToCentroid: currentKey.Distance, ItemID: id}
 			foundVec, _ := arch2.Vectors.Find(ctx, vecKey, false)
 			if !foundVec {
 				t.Errorf("Vector for %s not found in Vectors V2", id)

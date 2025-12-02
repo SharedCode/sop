@@ -60,11 +60,11 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	b3.Add(ctx, pk3, p3)
 	b3.Find(ctx, pk2, false)
 	p2.SSN = "789"
-	b3.UpdateCurrentItem(ctx, p2)
+	b3.UpdateCurrentValue(ctx, p2)
 
 	b32.Find(ctx, pk2, false)
 	p2.SSN = "xyz"
-	b32.UpdateCurrentItem(ctx, p2)
+	b32.UpdateCurrentValue(ctx, p2)
 
 	// Commit t1 & t2.
 	err1 := t1.Commit(ctx)
@@ -148,11 +148,11 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	// edit both "pirellis" in both btrees, one each.
 	b3.Find(ctx, pk, false)
 	p.SSN = "789"
-	b3.UpdateCurrentItem(ctx, p)
+	b3.UpdateCurrentValue(ctx, p)
 
 	b32.Find(ctx, pk2, false)
 	p2.SSN = "abc"
-	b32.UpdateCurrentItem(ctx, p2)
+	b32.UpdateCurrentValue(ctx, p2)
 
 	// Commit t1 & t2.
 	err1 := t1.Commit(ctx)
@@ -218,7 +218,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	// update one of the two records read on the reader transaction.
 	b3.Find(ctx, pk, false)
 	p.SSN = "789"
-	b3.UpdateCurrentItem(ctx, p)
+	b3.UpdateCurrentValue(ctx, p)
 
 	// Commit t1 & t2.
 	if err := t1.Commit(ctx); err != nil {
@@ -285,7 +285,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	// update item #3 that should be on same node.
 	b3.Find(ctx, pk3, false)
 	p.SSN = "789"
-	b3.UpdateCurrentItem(ctx, p)
+	b3.UpdateCurrentValue(ctx, p)
 
 	// Commit t1 & t2.
 	if err := t1.Commit(ctx); err != nil {
@@ -349,12 +349,12 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	ci, _ := b3.GetCurrentItem(ctx)
 	itemID := ci.ID
 	p.SSN = "789"
-	b3.UpdateCurrentItem(ctx, p)
+	b3.UpdateCurrentValue(ctx, p)
 
 	// Cause an update to "joe zoeyb" on t2, 'should generate conflict!
 	b32.FindWithID(ctx, pk, itemID)
 	p.SSN = "555"
-	b32.UpdateCurrentItem(ctx, p)
+	b32.UpdateCurrentValue(ctx, p)
 
 	b3.Find(ctx, pk2, false)
 	b3.GetCurrentValue(ctx)
@@ -367,7 +367,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 
 	b32.Find(ctx, pk5, false)
 	p.SSN = "789"
-	b32.UpdateCurrentItem(ctx, p)
+	b32.UpdateCurrentValue(ctx, p)
 
 	b32.Find(ctx, pk4, false)
 	b32.GetCurrentValue(ctx)
