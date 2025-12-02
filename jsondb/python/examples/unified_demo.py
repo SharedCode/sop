@@ -48,7 +48,7 @@ def main():
         # Note: Btree.new creates a new store. Btree.open opens existing.
         # For demo, we use new.
         btree_opts = BtreeOptions(name="users")
-        users_store = Btree.new(ctx, btree_opts, trans)
+        users_store = Btree.new(ctx, "users", trans, options=btree_opts)
         
         user_id = uuid.uuid4()
         print(f"Adding User to B-Tree: {user_id}")

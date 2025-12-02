@@ -17,10 +17,14 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
 	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/jsondb"
 	"github.com/sharedcode/sop/redis"
 )
 
@@ -121,10 +125,10 @@ func closeRedisConnection() *C.char {
 // Transaction management related.
 
 // Transaction lookup table is comprised of the transaction & its related B-trees.
-var Transactions = NewTransactionRegistry()
+var transRegistry = newTransactionRegistry()
 
 // Unified Database Lookup
-var dbRegistry = NewRegistry[*database.Database]()
+var dbRegistry = newRegistry[*database.Database]()
 
 type transactionAction int
 
@@ -140,14 +144,14 @@ const (
 func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char {
 	ps := C.GoString(payload)
 
-	extractTrans := func() (*TransactionItem, *C.char) {
+	extractTrans := func() (*transactionItem, *C.char) {
 		uuid, err := sop.ParseUUID(ps)
 		if err != nil {
 			errMsg := fmt.Sprintf("error parsing UUID, details: %v", err)
 			return nil, C.CString(errMsg)
 		}
 
-		item, ok := Transactions.GetItem(uuid)
+		item, ok := transRegistry.GetItem(uuid)
 
 		if !ok {
 			errMsg := fmt.Sprintf("UUID %v not found", uuid.String())
@@ -177,11 +181,11 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 
 		if err := t.Transaction.Commit(ctx); err != nil {
 			errMsg := fmt.Sprintf("transaction %v Commit failed, details: %v", t.Transaction.GetID().String(), err)
-			Transactions.Remove(t.Transaction.GetID())
+			transRegistry.Remove(t.Transaction.GetID())
 			return C.CString(errMsg)
 		}
 
-		Transactions.Remove(t.Transaction.GetID())
+		transRegistry.Remove(t.Transaction.GetID())
 
 	case Rollback:
 		t, err := extractTrans()
@@ -191,11 +195,11 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 
 		if err := t.Transaction.Rollback(ctx); err != nil {
 			errMsg := fmt.Sprintf("transaction %v Rollback failed, details: %v", t.Transaction.GetID().String(), err)
-			Transactions.Remove(t.Transaction.GetID())
+			transRegistry.Remove(t.Transaction.GetID())
 			return C.CString(errMsg)
 		}
 
-		Transactions.Remove(t.Transaction.GetID())
+		transRegistry.Remove(t.Transaction.GetID())
 
 	default:
 		errMsg := fmt.Sprintf("unsupported action %d", int(action))
@@ -212,7 +216,11 @@ const (
 	DatabaseActionUnknown = iota
 	NewDatabase
 	BeginTransaction
-	CloseDatabase
+	_ // CloseDatabase
+	NewBtree
+	OpenBtree
+	OpenModelStore
+	OpenVectorStore
 )
 
 type DatabaseOptions struct {
@@ -277,43 +285,201 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			return C.CString(err.Error())
 		}
 
-		id := Transactions.Add(tx)
+		id := transRegistry.Add(tx)
 		return C.CString(id.String())
 
-	case CloseDatabase:
+	case NewBtree:
+		var b3o BtreeOptions
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &b3o); err != nil {
+			return C.CString(fmt.Sprintf("error Unmarshal BtreeOptions, details: %v", err))
+		}
+		log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
+
+		// Validate Database exists
 		targetUUID, err := sop.ParseUUID(targetIDStr)
 		if err != nil {
 			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
 		}
-		dbRegistry.Remove(targetUUID)
+		if _, ok := dbRegistry.Get(targetUUID); !ok {
+			return C.CString("Database not found")
+		}
+
+		item, ok := transRegistry.GetItem(sop.UUID(b3o.TransactionID))
+		if !ok {
+			return C.CString(fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String()))
+		}
+		so := convertTo(&b3o)
+
+		if b3o.IsPrimitiveKey {
+			log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
+			b3, err := jsondb.NewJsonBtree[any, any](ctx, *so, item.Transaction, nil)
+			if err != nil {
+				return C.CString(fmt.Sprintf("error creating Btree, details: %v", err))
+			}
+			b3id, _ := transRegistry.AddBtree(sop.UUID(b3o.TransactionID), b3)
+			return C.CString(b3id.String())
+		} else {
+			log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
+			b3, err := jsondb.NewJsonBtreeMapKey(ctx, *so, item.Transaction, b3o.IndexSpecification)
+			if err != nil {
+				return C.CString(fmt.Sprintf("error creating Btree, details: %v", err))
+			}
+			b3id, _ := transRegistry.AddBtree(sop.UUID(b3o.TransactionID), b3)
+			return C.CString(b3id.String())
+		}
+
+	case OpenBtree:
+		var b3o BtreeOptions
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &b3o); err != nil {
+			return C.CString(fmt.Sprintf("error Unmarshal BtreeOptions, details: %v", err))
+		}
+		log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
+
+		// Validate Database exists
+		targetUUID, err := sop.ParseUUID(targetIDStr)
+		if err != nil {
+			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
+		}
+		if _, ok := dbRegistry.Get(targetUUID); !ok {
+			return C.CString("Database not found")
+		}
+
+		item, ok := transRegistry.GetItem(sop.UUID(b3o.TransactionID))
+		if !ok {
+			return C.CString(fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String()))
+		}
+		so := convertTo(&b3o)
+
+		// Get StoreInfo from backend DB and determine if key is primitive or not.
+		intf := item.Transaction.(interface{})
+		t2 := intf.(*sop.SinglePhaseTransaction).SopPhaseCommitTransaction
+		intf = t2
+		t := intf.(*common.Transaction)
+
+		sr := t.StoreRepository
+		si, err := sr.Get(ctx, so.Name)
+		isPrimitiveKey := false
+		if err == nil && len(si) > 0 {
+			isPrimitiveKey = si[0].IsPrimitiveKey
+		} else if err == nil && len(si) == 0 {
+			return C.CString(fmt.Sprintf("error opening Btree (%s), store not found", so.Name))
+		}
+
+		if isPrimitiveKey {
+			b3, err := jsondb.OpenJsonBtree[any, any](ctx, so.Name, item.Transaction, nil)
+			if err != nil {
+				return C.CString(fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err))
+			}
+			ce := b3.GetStoreInfo().MapKeyIndexSpecification
+			if ce != "" {
+				errMsg := fmt.Sprintf("error opening for 'Primitive Type' Btree (%s), CELexpression %s is restricted for class type Key", so.Name, ce)
+				log.Error(errMsg)
+				return C.CString(errMsg)
+			}
+			b3id, _ := transRegistry.AddBtree(sop.UUID(b3o.TransactionID), b3)
+			return C.CString(b3id.String())
+		} else {
+			b3, err := jsondb.OpenJsonBtreeMapKey(ctx, so.Name, item.Transaction)
+			if err != nil {
+				return C.CString(fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err))
+			}
+			b3id, _ := transRegistry.AddBtree(sop.UUID(b3o.TransactionID), b3)
+			return C.CString(b3id.String())
+		}
+
+	case OpenModelStore:
+		var opts ModelStoreOptions
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &opts); err != nil {
+			return C.CString(fmt.Sprintf("invalid options: %v", err))
+		}
+
+		// targetID is the DB UUID
+		targetUUID, err := sop.ParseUUID(targetIDStr)
+		if err != nil {
+			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
+		}
+		db, ok := dbRegistry.Get(targetUUID)
+		if !ok {
+			return C.CString("Database not found")
+		}
+
+		transUUID, err := sop.ParseUUID(opts.TransactionID)
+		if err != nil {
+			return C.CString("Invalid transaction UUID")
+		}
+
+		item, ok := transRegistry.GetItem(transUUID)
+		if !ok {
+			return C.CString("Transaction not found")
+		}
+
+		store, err := db.OpenModelStore(ctx, opts.Path, item.Transaction)
+		if err != nil {
+			return C.CString(err.Error())
+		}
+
+		id, err := transRegistry.AddBtree(transUUID, store)
+		if err != nil {
+			return C.CString(err.Error())
+		}
+		if id.IsNil() {
+			return C.CString("Transaction not found during registration")
+		}
+
+		return C.CString(id.String())
+
+	case OpenVectorStore:
+		var opts VectorStoreTransportOptions
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &opts); err != nil {
+			return C.CString(fmt.Sprintf("invalid options: %v", err))
+		}
+		log.Debug(fmt.Sprintf("OpenVectorStore StoragePath='%s' Payload='%s'", opts.StoragePath, jsonPayload))
+
+		// targetID is the DB UUID
+		targetUUID, err := sop.ParseUUID(targetIDStr)
+		if err != nil {
+			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
+		}
+		db, ok := dbRegistry.Get(targetUUID)
+		if !ok {
+			return C.CString("Database not found")
+		}
+
+		transUUID, err := sop.ParseUUID(opts.TransactionID)
+		if err != nil {
+			return C.CString("Invalid transaction UUID")
+		}
+
+		item, ok := transRegistry.GetItem(transUUID)
+		if !ok {
+			return C.CString("Transaction not found")
+		}
+
+		cfg := vector.Config{
+			UsageMode:   ai.UsageMode(opts.Config.UsageMode),
+			ContentSize: sop.ValueDataSize(opts.Config.ContentSize),
+			StoragePath: opts.StoragePath,
+		}
+
+		store, err := db.OpenVectorStore(ctx, opts.Name, item.Transaction, cfg)
+		if err != nil {
+			return C.CString(err.Error())
+		}
+
+		id, err := transRegistry.AddBtree(transUUID, store)
+		if err != nil {
+			return C.CString(err.Error())
+		}
+		if id.IsNil() {
+			return C.CString("Transaction not found during registration")
+		}
+
+		return C.CString(id.String())
 	}
 	return nil
 }
 
 // Some B-tree related artifacts.
-
-type btreeAction int
-
-const (
-	BtreeActionUnknown = iota
-	NewBtree
-	OpenBtree
-	Add
-	AddIfNotExist
-	Update
-	Upsert
-	Remove
-	Find
-	FindWithID
-	GetItems
-	GetValues
-	GetKeys
-	First
-	Last
-	IsUnique
-	Count
-	GetStoreInfo
-)
 
 // BtreeOptions is used to package the Btree StoreInfo.
 type BtreeOptions struct {
