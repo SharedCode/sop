@@ -157,12 +157,18 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 
 		items := make([]ai.Item[map[string]any], len(batch))
 		for i, item := range batch {
+			// Generate deterministic ID based on content if not provided or if we want to enforce it
+			// We use the same hashing logic as in agent/ingest.go to ensure consistency
+			contentToEmbed := fmt.Sprintf("%s %s", item.Text, item.Description)
+			id := agent.HashString(contentToEmbed)
+
 			items[i] = ai.Item[map[string]any]{
-				ID:     item.ID,
+				ID:     id,
 				Vector: vecs[i],
 				Payload: map[string]any{
 					"text":        item.Text,
 					"description": item.Description,
+					"original_id": item.ID, // Keep original ID in payload
 				},
 			}
 		}

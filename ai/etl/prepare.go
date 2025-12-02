@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net/http"
 	"os"
@@ -69,7 +70,15 @@ func PrepareData(ctx context.Context, url, out string, limit int) error {
 
 		// Create item
 		baseID := strings.ToLower(strings.ReplaceAll(disease, " ", "_"))
-		id := fmt.Sprintf("%s_%d", baseID, count)
+		
+		// Generate deterministic ID based on content
+		h := fnv.New32a()
+		h.Write([]byte(disease))
+		for _, s := range symptoms {
+			h.Write([]byte(s))
+		}
+		id := fmt.Sprintf("%s_%x", baseID, h.Sum32())
+		
 		desc := fmt.Sprintf("Symptoms: %s", strings.Join(symptoms, ", "))
 
 		items = append(items, agent.DataItem{
