@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: sop4py
-Version: 2.0.21
+Version: 2.0.22
 Summary: Scalable Objects Persistence (SOP) V2 for Python. General Public Availability (GPA) Release
 Author-email: Gerardo Recinto <gerardorecinto@yahoo.com>
 Classifier: Programming Language :: Python :: 3
@@ -79,9 +79,9 @@ db = Database(ctx, storage_path="data/my_db", db_type=DBType.Standalone)
 All data operations (Create, Read, Update, Delete) must happen within a transaction.
 
 ```python
-# Begin a transaction (Read-Write by default)
+# Begin a transaction (Read-Write)
 # You can use 'with' block for auto-commit/rollback, or manage manually.
-with db.begin_transaction(ctx) as tx:
+with db.begin_transaction(ctx, mode=TransactionMode.ForWriting.value) as tx:
     
     # --- 3. Vector Store (AI) ---
     # Open a Vector Store named "products"
@@ -122,7 +122,7 @@ You can perform queries in a separate transaction (e.g., Read-Only).
 
 ```python
 # Begin a Read-Only transaction (optional optimization)
-with db.begin_transaction(ctx) as tx:
+with db.begin_transaction(ctx, mode=TransactionMode.ForReading.value) as tx:
     
     # --- Vector Search ---
     vs = db.open_vector_store(ctx, tx, "products")
@@ -143,7 +143,30 @@ with db.begin_transaction(ctx) as tx:
         print(f"User Found: {item.value}")
 ```
 
+**Performance Tip**: For **Vector Search** workloads that are "Build-Once-Query-Many", use `TransactionMode.NoCheck`. This bypasses transaction overhead for maximum query throughput.
+
+```python
+# High-performance Vector Search (No ACID checks)
+with db.begin_transaction(ctx, mode=TransactionMode.NoCheck.value) as tx:
+    vs = db.open_vector_store(ctx, tx, "products")
+    hits = vs.query(ctx, vector=[0.1, 0.5, 0.8], k=5)
+```
+
 ## Advanced Configuration
+
+### Logging
+
+You can configure the internal logging of the SOP engine (Go backend) to output to a file or standard error, and control the verbosity.
+
+```python
+from sop import Logger, LogLevel
+
+# Configure logging to a file with Debug level
+Logger.configure(LogLevel.Debug, "sop_engine.log")
+
+# Or configure logging to stderr (default) with Info level
+Logger.configure(LogLevel.Info)
+```
 
 ### Transaction Options
 

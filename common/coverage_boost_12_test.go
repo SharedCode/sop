@@ -336,7 +336,7 @@ func Test_Phase1Commit_CommitUpdatedNodes_PlainError_Returns(t *testing.T) {
 		refetchAndMerge:                  func(context.Context) error { return nil },
 	}}
 
-	if err := tx.phase1Commit(ctx); err == nil || err.Error() != "upd nolocks plain err" {
+	if err := tx.phase1Commit(ctx); err == nil || !strings.Contains(err.Error(), "upd nolocks plain err") {
 		t.Fatalf("expected plain UpdateNoLocks error, got: %v", err)
 	}
 }

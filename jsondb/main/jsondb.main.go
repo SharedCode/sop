@@ -8,6 +8,8 @@ import "C"
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"sync"
 	"time"
 	"unsafe"
@@ -101,7 +103,7 @@ func openRedisConnection(uri *C.char) *C.char {
 	_, err := redis.OpenConnectionWithURL(C.GoString(uri))
 	if err != nil {
 		errMsg := fmt.Sprintf("error encountered opening Redis connection, details: %v", err)
-		log.Error(errMsg)
+		log.Warn(errMsg)
 
 		// Remember to deallocate errInfo.message!
 		return C.CString(errMsg)
@@ -114,11 +116,49 @@ func closeRedisConnection() *C.char {
 	err := redis.CloseConnection()
 	if err != nil {
 		errMsg := fmt.Sprintf("error encountered closing Redis connection, details: %v", err)
-		log.Error(errMsg)
+		log.Warn(errMsg)
 
 		// Remember to deallocate errMsg!
 		return C.CString(errMsg)
 	}
+	return nil
+}
+
+// Logging related.
+
+//export manageLogging
+func manageLogging(level C.int, logPath *C.char) *C.char {
+	var l log.Level
+	switch int(level) {
+	case 0:
+		l = log.LevelDebug
+	case 1:
+		l = log.LevelInfo
+	case 2:
+		l = log.LevelWarn
+	case 3:
+		l = log.LevelError
+	default:
+		l = log.LevelInfo
+	}
+
+	var w io.Writer = os.Stderr
+	if logPath != nil {
+		p := C.GoString(logPath)
+		if p != "" {
+			f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				return C.CString(fmt.Sprintf("failed to open log file: %v", err))
+			}
+			w = f
+		}
+	}
+
+	opts := &log.HandlerOptions{
+		Level: l,
+	}
+	logger := log.New(log.NewTextHandler(w, opts))
+	log.SetDefault(logger)
 	return nil
 }
 
@@ -372,7 +412,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			ce := b3.GetStoreInfo().MapKeyIndexSpecification
 			if ce != "" {
 				errMsg := fmt.Sprintf("error opening for 'Primitive Type' Btree (%s), CELexpression %s is restricted for class type Key", so.Name, ce)
-				log.Error(errMsg)
+				log.Warn(errMsg)
 				return C.CString(errMsg)
 			}
 			b3id, _ := transRegistry.AddBtree(sop.UUID(b3o.TransactionID), b3)

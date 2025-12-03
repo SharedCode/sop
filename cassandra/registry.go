@@ -50,13 +50,13 @@ func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[
 
 			// Add a new store record.
 			if err := qry.Exec(); err != nil {
-				return err
+				return fmt.Errorf("cassandra registry add failed: %w", err)
 			}
 			// Update in-process cache.
 			v.l1Cache.Handles.Set(convertToKvp([]sop.Handle{h}))
 			// Tolerate Redis cache failure.
 			if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
-				log.Warn(fmt.Sprintf("Registry Add (redis setstruct) failed, details: %v", err))
+				log.Warn("Registry Add (redis setstruct) failed", "error", err)
 			}
 		}
 	}
@@ -80,7 +80,7 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 				if err == nil {
 					err = fmt.Errorf("lock failed, key %v is already locked by another", lk[0].Key)
 				}
-				return err
+				return fmt.Errorf("cassandra registry update lock failed: %w", err)
 			}
 
 			qry := connection.Session.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
@@ -95,17 +95,17 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 				v.l2Cache.Delete(ctx, []string{h.LogicalID.String()})
 				// Unlock the object Keys before return.
 				v.l2Cache.Unlock(ctx, lk)
-				return err
+				return fmt.Errorf("cassandra registry update failed: %w", err)
 			}
 
 			// Update Redis to sync it since storage update succeeded.
 			if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
-				log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
+				log.Warn("Registry Update (redis setstruct) failed", "error", err)
 			}
 
 			// Unlock the object Keys.
 			if err := v.l2Cache.Unlock(ctx, lk); err != nil {
-				return err
+				return fmt.Errorf("cassandra registry update unlock failed: %w", err)
 			}
 		}
 		v.l1Cache.Handles.Set(convertToKvp(sh.IDs))
@@ -140,14 +140,14 @@ func (v *registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesH
 		// Execute the batch query, all or nothing.
 		if err := connection.Session.ExecuteBatch(batch); err != nil {
 			// Failed update all, thus, return err to cause rollback.
-			return err
+			return fmt.Errorf("cassandra registry update no locks (batch) failed: %w", err)
 		}
 
 		// Update redis cache.
 		for _, sh := range storesHandles {
 			for _, h := range sh.IDs {
 				if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
-					log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
+					log.Warn("Registry Update (redis setstruct) failed", "error", err)
 				}
 				v.l1Cache.Handles.Set(convertToKvp([]sop.Handle{h}))
 			}
@@ -166,11 +166,11 @@ func (v *registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesH
 
 				// Update registry record.
 				if err := qry.Exec(); err != nil {
-					return err
+					return fmt.Errorf("cassandra registry update no locks failed: %w", err)
 				}
 
 				if err := v.l2Cache.SetStruct(ctx, h.LogicalID.String(), &h, sh.CacheDuration); err != nil {
-					log.Warn(fmt.Sprintf("Registry Update (redis setstruct) failed, details: %v", err))
+					log.Warn("Registry Update (redis setstruct) failed", "error", err)
 				}
 				v.l1Cache.Handles.Set(convertToKvp([]sop.Handle{h}))
 			}
@@ -201,7 +201,7 @@ func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop
 				found, err = v.l2Cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
 			}
 			if err != nil {
-				log.Warn(fmt.Sprintf("Registry Get (redis getstruct) failed, details: %v", err))
+				log.Warn("Registry Get (redis getstruct) failed", "error", err)
 			}
 			if !found || err != nil {
 				paramQ = append(paramQ, "?")
@@ -239,12 +239,12 @@ func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop
 			handles = append(handles, handle)
 
 			if err := v.l2Cache.SetStruct(ctx, handle.LogicalID.String(), &handle, storeLids.CacheDuration); err != nil {
-				log.Warn(fmt.Sprintf("Registry Set (redis setstruct) failed, details: %v", err))
+				log.Warn("Registry Set (redis setstruct) failed", "error", err)
 			}
 			handle = sop.Handle{}
 		}
 		if err := iter.Close(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("cassandra registry get failed: %w", err)
 		}
 		storesHandles = append(storesHandles, sop.RegistryPayload[sop.Handle]{
 			RegistryTable: storeLids.RegistryTable,
@@ -277,7 +277,7 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
 			for _, id := range storeLids.IDs {
 				if _, err := v.l2Cache.Delete(ctx, []string{id.String()}); err != nil {
-					log.Warn(fmt.Sprintf("Registry Delete (redis delete) failed, details: %v", err))
+					log.Warn("Registry Delete (redis delete) failed", "error", err)
 				}
 			}
 		}
@@ -290,7 +290,7 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 		v.l1Cache.Handles.Delete(storeLids.IDs)
 		if err := qry.Exec(); err != nil {
 			deleteFromCache(storeLids)
-			return err
+			return fmt.Errorf("cassandra registry remove failed: %w", err)
 		}
 		deleteFromCache(storeLids)
 	}

@@ -130,21 +130,27 @@ func (t *SinglePhaseTransaction) Commit(ctx context.Context) error {
 	// maxTime to ensure bounded lock lifetimes independent of caller cancellation.
 	// Phase 1 commit.
 	if err := t.SopPhaseCommitTransaction.Phase1Commit(ctx); err != nil {
-		t.Rollback(ctx)
+		if rbErr := t.Rollback(ctx); rbErr != nil {
+			return fmt.Errorf("Phase1Commit failed: %w, rollback failed: %v", err, rbErr)
+		}
 		return err
 	}
 	// Call phase 1 commit of other non-SOP transactions.
 	for _, ot := range t.otherTransactions {
 		if err := ot.Phase1Commit(ctx); err != nil {
-			t.Rollback(ctx)
+			if rbErr := t.Rollback(ctx); rbErr != nil {
+				return fmt.Errorf("Phase1Commit failed: %w, rollback failed: %v", err, rbErr)
+			}
 			return err
 		}
 	}
 
 	// Phase 2 commit.
 	if err := t.SopPhaseCommitTransaction.Phase2Commit(ctx); err != nil {
-		log.Debug(fmt.Sprintf("Phase2Commit error: %v", err))
-		t.Rollback(ctx)
+		log.Debug("Phase2Commit error", "error", err)
+		if rbErr := t.Rollback(ctx); rbErr != nil {
+			return fmt.Errorf("Phase2Commit failed: %w, rollback failed: %v", err, rbErr)
+		}
 		return err
 	}
 	// If SOP phase 2 commit succeeds, then all other transactions phase 2 commit are

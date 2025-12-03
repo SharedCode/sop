@@ -240,24 +240,24 @@ func (r *registryOnDisk) Replicate(ctx context.Context, newRootNodesHandles, add
 	var lastErr error
 
 	if err := rm.add(ctx, newRootNodesHandles); err != nil {
-		log.Error(fmt.Sprintf("error replicating new root nodes, details: %v", err))
+		log.Debug(fmt.Sprintf("error replicating new root nodes, details: %v", err))
 		r.replicationTracker.handleFailedToReplicate(ctx)
 		lastErr = err
 	}
 	if err := rm.add(ctx, addedNodesHandles); err != nil {
-		log.Error(fmt.Sprintf("error replicating new nodes, details: %v", err))
+		log.Debug(fmt.Sprintf("error replicating added nodes, details: %v", err))
 		r.replicationTracker.handleFailedToReplicate(ctx)
 		lastErr = err
 	}
 
 	if err := rm.set(ctx, updatedNodesHandles); err != nil {
-		log.Error(fmt.Sprintf("error replicating updated nodes, details: %v", err))
+		log.Debug(fmt.Sprintf("error replicating updated nodes, details: %v", err))
 		r.replicationTracker.handleFailedToReplicate(ctx)
 		lastErr = err
 	}
 
 	if err := rm.remove(ctx, sop.ExtractLogicalIDs(removedNodesHandles)); err != nil {
-		log.Error(fmt.Sprintf("error replicating removed nodes, details: %v", err))
+		log.Debug(fmt.Sprintf("error replicating removed nodes, details: %v", err))
 		r.replicationTracker.handleFailedToReplicate(ctx)
 		lastErr = err
 	}

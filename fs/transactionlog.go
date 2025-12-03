@@ -223,8 +223,8 @@ func (tl *TransactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, 
 
 		err := encoding.DefaultMarshaler.Unmarshal([]byte(line), &data)
 		if err != nil {
-			log.Error(fmt.Sprintf("error unmarshaling JSON: %v", err))
-			continue // Skip to the next line if there's an error
+			log.Warn("error unmarshaling JSON", "error", err)
+			continue
 		}
 		r = append(r, data)
 	}

@@ -4,9 +4,12 @@ package redis
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	log "log/slog"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -59,6 +62,7 @@ func OpenConnection(options Options) (*Connection, error) {
 		return connection, nil
 	}
 
+	log.Info("Opening Redis connection", "address", options.Address, "db", options.DB)
 	connection = openConnection(options)
 	return connection, nil
 }
@@ -75,9 +79,10 @@ func OpenConnectionWithURL(url string) (*Connection, error) {
 		return connection, nil
 	}
 
+	log.Info("Opening Redis connection with URL")
 	opts, err := redis.ParseURL(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse redis url: %w", err)
 	}
 
 	connection = openConnectionFromRedisOptions(opts)
@@ -94,6 +99,7 @@ func CloseConnection() error {
 	if connection == nil {
 		return nil
 	}
+	log.Info("Closing Redis connection")
 	err := closeConnection(connection)
 	connection = nil
 	return err
@@ -114,6 +120,7 @@ func openConnection(options Options) *Connection {
 
 func openConnectionFromRedisOptions(opts *redis.Options) *Connection {
 	opts.OnConnect = func(ctx context.Context, cn *redis.Conn) error {
+		log.Debug("Redis connected")
 		// Use INFO server to get run_id which changes on restart.
 		info, err := cn.Info(ctx, "server").Result()
 		if err != nil {
@@ -146,6 +153,7 @@ func openConnectionFromRedisOptions(opts *redis.Options) *Connection {
 				lastID = val.(string)
 			}
 			if lastID != "" && runID != lastID {
+				log.Warn("Redis server restarted", "old_run_id", lastID, "new_run_id", runID)
 				atomic.StoreInt64(&hasRestarted, 1)
 			}
 			lastSeenRunID.Store(runID)
@@ -172,6 +180,7 @@ func closeConnection(c *Connection) error {
 	if c == nil || c.Client == nil {
 		return nil
 	}
+	log.Debug("Closing underlying Redis client")
 	err := c.Client.Close()
 	c.Client = nil
 	return err

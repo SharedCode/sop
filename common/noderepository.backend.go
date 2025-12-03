@@ -333,14 +333,12 @@ func (nr *nodeRepositoryBackend) commitUpdatedNodes(ctx context.Context, nodes [
 
 	// Reserve/record the new inactive IDs back in the registry as part of the update pre-commit.
 	if err := nr.transaction.registry.UpdateNoLocks(ctx, false, handles); err != nil {
-		log.Debug(fmt.Sprintf("commitUpdatedNodes failed registry.Update, details: %v", err))
-		return false, nil, err
+		return false, nil, fmt.Errorf("commitUpdatedNodes failed registry.Update: %w", err)
 	}
 
 	// 2nd pass, persist the nodes blobs to blob store and redis cache.
 	if err := nr.transaction.blobStore.Add(ctx, blobs); err != nil {
-		log.Debug(fmt.Sprintf("commitUpdatedNodes failed blobStore.Add, details: %v", err))
-		return false, nil, err
+		return false, nil, fmt.Errorf("commitUpdatedNodes failed blobStore.Add: %w", err)
 	}
 	for i := range nodes {
 		for ii := range nodes[i].Second {
@@ -468,17 +466,15 @@ func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollb
 	var lastErr error
 	// Undo on blob store & redis.
 	if err := nr.transaction.blobStore.Remove(ctx, bibs); err != nil {
-		lastErr = fmt.Errorf("unable to undo new root nodes, %v, error: %v", bibs, err)
-		log.Error(lastErr.Error())
+		lastErr = fmt.Errorf("unable to undo new root nodes, %v: %w", bibs, err)
 	}
 	for i := range vids {
 		for ii := range vids[i].IDs {
 			if _, err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil {
-				err = fmt.Errorf("unable to undo new root nodes in redis, error: %v", err)
 				if lastErr == nil {
-					lastErr = err
+					lastErr = fmt.Errorf("unable to undo new root nodes in redis: %w", err)
 				}
-				log.Warn(err.Error())
+				log.Warn(fmt.Sprintf("unable to undo new root nodes in redis: %v", err))
 			}
 		}
 	}
@@ -493,8 +489,7 @@ func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollb
 	// We need to check if they exist first because crash can happen before they are registered.
 	handles, err := nr.transaction.registry.Get(ctx, vids)
 	if err != nil {
-		lastErr = fmt.Errorf("unable to check new root nodes existence, %v, error: %v", vids, err)
-		log.Error(lastErr.Error())
+		lastErr = fmt.Errorf("unable to check new root nodes existence, %v: %w", vids, err)
 	} else {
 		vidsToRemove := make([]sop.RegistryPayload[sop.UUID], 0, len(vids))
 		for i := range handles {
@@ -512,8 +507,7 @@ func (nr *nodeRepositoryBackend) rollbackNewRootNodes(ctx context.Context, rollb
 		}
 		if len(vidsToRemove) > 0 {
 			if err := nr.transaction.registry.Remove(ctx, vidsToRemove); err != nil {
-				lastErr = fmt.Errorf("unable to undo new root nodes registration, %v, error: %v", vidsToRemove, err)
-				log.Error(lastErr.Error())
+				lastErr = fmt.Errorf("unable to undo new root nodes registration, %v: %w", vidsToRemove, err)
 			}
 		}
 	}
@@ -529,23 +523,24 @@ func (nr *nodeRepositoryBackend) rollbackAddedNodes(ctx context.Context, rollbac
 	}
 	var lastErr error
 	if err := nr.transaction.blobStore.Remove(ctx, bibs); err != nil {
-		lastErr = fmt.Errorf("unable to undo added nodes, %v, error: %v", bibs, err)
-		log.Error(lastErr.Error())
+		lastErr = fmt.Errorf("unable to undo added nodes, %v: %w", bibs, err)
 	}
 	// Unregister nodes IDs.
 	if err := nr.transaction.registry.Remove(ctx, vids); err != nil {
-		lastErr = fmt.Errorf("unable to undo added nodes registration, %v, error: %v", vids, err)
-		log.Error(lastErr.Error())
+		if lastErr != nil {
+			lastErr = fmt.Errorf("unable to undo added nodes registration, %v: %w\n%w", vids, err, lastErr)
+		} else {
+			lastErr = fmt.Errorf("unable to undo added nodes registration, %v: %w", vids, err)
+		}
 	}
 	// Remove nodes from Redis cache.
 	for i := range vids {
 		for ii := range vids[i].IDs {
 			if _, err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(vids[i].IDs[ii].String())}); err != nil {
-				err = fmt.Errorf("unable to undo added nodes in redis, error: %v", err)
 				if lastErr == nil {
-					lastErr = err
+					lastErr = fmt.Errorf("unable to undo added nodes in redis: %w", err)
 				}
-				log.Warn(err.Error())
+				log.Warn(fmt.Sprintf("unable to undo added nodes in redis: %v", err))
 			}
 		}
 	}
@@ -581,30 +576,34 @@ func (nr *nodeRepositoryBackend) rollbackUpdatedNodes(ctx context.Context, nodes
 	var lastErr error
 	// Undo the nodes blobs to blob store.
 	if err = nr.transaction.blobStore.Remove(ctx, blobsIDs); err != nil {
-		lastErr = fmt.Errorf("unable to undo updated nodes, %v, error: %v", blobsIDs, err)
-		log.Error(lastErr.Error())
+		lastErr = fmt.Errorf("unable to undo updated nodes, %v: %w", blobsIDs, err)
 	}
 	// Undo changes in virtual ID registry.
 	if nodesAreLocked {
 		if err = nr.transaction.registry.UpdateNoLocks(ctx, false, handles); err != nil {
-			lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
-			log.Error(lastErr.Error())
+			if lastErr != nil {
+				lastErr = fmt.Errorf("unable to undo updated nodes registration, %v: %w\n%w", handles, err, lastErr)
+			} else {
+				lastErr = fmt.Errorf("unable to undo updated nodes registration, %v: %w", handles, err)
+			}
 		}
 	} else {
 		if err = nr.transaction.registry.Update(ctx, handles); err != nil {
-			lastErr = fmt.Errorf("unable to undo updated nodes registration, %v, error: %v", handles, err)
-			log.Error(lastErr.Error())
+			if lastErr != nil {
+				lastErr = fmt.Errorf("unable to undo updated nodes registration, %v: %w\n%w", handles, err, lastErr)
+			} else {
+				lastErr = fmt.Errorf("unable to undo updated nodes registration, %v: %w", handles, err)
+			}
 		}
 	}
 	// Undo changes in redis.
 	for i := range blobsIDs {
 		for ii := range blobsIDs[i].Blobs {
 			if _, err = nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil {
-				err = fmt.Errorf("unable to undo updated nodes in redis, error: %v", err)
 				if lastErr == nil {
-					lastErr = err
+					lastErr = fmt.Errorf("unable to undo updated nodes in redis: %w", err)
 				}
-				log.Warn(err.Error())
+				log.Warn(fmt.Sprintf("unable to undo updated nodes in redis: %v", err))
 			}
 		}
 	}
@@ -619,18 +618,16 @@ func (nr *nodeRepositoryBackend) removeNodes(ctx context.Context, blobsIDs []sop
 	var lastErr error
 	// Undo the nodes blobs to blob store.
 	if err := nr.transaction.blobStore.Remove(ctx, blobsIDs); err != nil {
-		lastErr = fmt.Errorf("unable to undo updated nodes, %v, error: %v", blobsIDs, err)
-		log.Error(lastErr.Error())
+		lastErr = fmt.Errorf("unable to undo updated nodes, %v: %w", blobsIDs, err)
 	}
 	// Undo changes in redis.
 	for i := range blobsIDs {
 		for ii := range blobsIDs[i].Blobs {
 			if _, err := nr.transaction.l2Cache.Delete(ctx, []string{nr.formatKey(blobsIDs[i].Blobs[ii].String())}); err != nil {
-				err = fmt.Errorf("unable to undo updated nodes in redis, error: %v", err)
 				if lastErr == nil {
-					lastErr = err
+					lastErr = fmt.Errorf("unable to undo updated nodes in redis: %w", err)
 				}
-				log.Warn(err.Error())
+				log.Warn(fmt.Sprintf("unable to undo updated nodes in redis: %v", err))
 			}
 		}
 	}
@@ -644,9 +641,7 @@ func (nr *nodeRepositoryBackend) rollbackRemovedNodes(ctx context.Context, nodes
 	}
 	handles, err := nr.transaction.registry.Get(ctx, vids)
 	if err != nil {
-		err = fmt.Errorf("unable to fetch removed nodes from registry, %v, error: %v", vids, err)
-		log.Error(err.Error())
-		return err
+		return fmt.Errorf("unable to fetch removed nodes from registry, %v: %w", vids, err)
 	}
 	handlesForRollback := make([]sop.RegistryPayload[sop.Handle], len(handles))
 	for i := range handles {
@@ -667,15 +662,11 @@ func (nr *nodeRepositoryBackend) rollbackRemovedNodes(ctx context.Context, nodes
 	// Persist the handles changes.
 	if nodesAreLocked {
 		if err := nr.transaction.registry.UpdateNoLocks(ctx, false, handlesForRollback); err != nil {
-			err = fmt.Errorf("unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
-			log.Error(err.Error())
-			return err
+			return fmt.Errorf("unable to undo removed nodes in registry, %v: %w", handlesForRollback, err)
 		}
 	} else {
 		if err := nr.transaction.registry.Update(ctx, handlesForRollback); err != nil {
-			err = fmt.Errorf("unable to undo removed nodes in registry, %v, error: %v", handlesForRollback, err)
-			log.Error(err.Error())
-			return err
+			return fmt.Errorf("unable to undo removed nodes in registry, %v: %w", handlesForRollback, err)
 		}
 	}
 	return nil

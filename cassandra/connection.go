@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	log "log/slog"
+
 	"github.com/gocql/gocql"
 )
 
@@ -72,6 +74,7 @@ func OpenConnection(config Config) (*Connection, error) {
 	if connection != nil {
 		return connection, nil
 	}
+	log.Info("Opening Cassandra connection", "hosts", config.ClusterHosts, "keyspace", config.Keyspace)
 	if config.Keyspace == "" {
 		// default keyspace
 		config.Keyspace = "btree"
@@ -99,18 +102,18 @@ func OpenConnection(config Config) (*Connection, error) {
 	}
 	s, err := cluster.CreateSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create cassandra session: %w", err)
 	}
 
 	if err := s.Query(fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH REPLICATION = %s;", config.Keyspace, config.ReplicationClause)).Exec(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create keyspace %s: %w", config.Keyspace, err)
 	}
 	// Auto create the "store" table if not yet.
 	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.store (name text PRIMARY KEY, root_id UUID, slot_count int, count bigint, unique boolean, des text, reg_tbl text, blob_tbl text, ts bigint, vdins boolean, vdap boolean, vdgc boolean, llb boolean, rcd bigint, rc_ttl boolean, ncd bigint, nc_ttl boolean, vdcd bigint, vdc_ttl boolean, scd bigint, sc_ttl boolean);", config.Keyspace)).Exec(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create store table: %w", err)
 	}
 	if err := s.Query(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s.t_log (id UUID, c_f int, c_f_p blob, PRIMARY KEY(id, c_f));", config.Keyspace)).Exec(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create t_log table: %w", err)
 	}
 
 	c.Session = s
@@ -126,6 +129,7 @@ func CloseConnection() {
 		if connection == nil {
 			return
 		}
+		log.Info("Closing Cassandra connection")
 		connection.Session.Close()
 		connection = nil
 	}

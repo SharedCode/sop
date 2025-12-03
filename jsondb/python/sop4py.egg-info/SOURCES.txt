@@ -16,9 +16,11 @@ sop/libjsondb_arm64darwin.dylib
 sop/libjsondb_arm64darwin.h
 sop/libjsondb_arm64linux.h
 sop/libjsondb_arm64linux.so
+sop/logger.py
 sop/redis.py
 sop/test_btree.py
 sop/test_btree_idx.py
+sop/test_logging.py
 sop/transaction.py
 sop/ai/README.md
 sop4py.egg-info/PKG-INFO

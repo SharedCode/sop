@@ -15,11 +15,10 @@ from .ai.vector import VectorStore, UsageMode, VectorStoreTransportOptions, Vect
 class DatabaseAction(Enum):
     NewDatabase = 1
     BeginTransaction = 2
-    # CloseDatabase = 3
-    NewBtree = 4
-    OpenBtree = 5
-    OpenModelStore = 6
-    OpenVectorStore = 7
+    NewBtree = 3
+    OpenBtree = 4
+    OpenModelStore = 5
+    OpenVectorStore = 6
 
 class Database:
     def __init__(self, ctx: context.Context, storage_path: str = "", db_type: DBType = DBType.Standalone, 

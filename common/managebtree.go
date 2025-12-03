@@ -28,10 +28,14 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 	stores, err := trans.StoreRepository.Get(ctx, name)
 	if len(stores) == 0 || stores[0].IsEmpty() || err != nil {
 		if err == nil {
-			trans.Rollback(ctx, nil)
+			if rbErr := trans.Rollback(ctx, nil); rbErr != nil {
+				return nil, fmt.Errorf("b-tree '%s' does not exist, please use NewBtree to create an instance of it, rollback failed: %v", name, rbErr)
+			}
 			return nil, fmt.Errorf("b-tree '%s' does not exist, please use NewBtree to create an instance of it", name)
 		}
-		trans.Rollback(ctx, err)
+		if rbErr := trans.Rollback(ctx, err); rbErr != nil {
+			return nil, fmt.Errorf("Get store failed: %w, rollback failed: %v", err, rbErr)
+		}
 		return nil, err
 	}
 	return newBtree[TK, TV](ctx, &stores[0], trans, comparer, false)
@@ -63,7 +67,9 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 		stores, err = trans.StoreRepository.Get(ctx, si.Name)
 	}
 	if err != nil {
-		trans.Rollback(ctx, err)
+		if rbErr := trans.Rollback(ctx, err); rbErr != nil {
+			return nil, fmt.Errorf("GetWithTTL failed: %w, rollback failed: %v", err, rbErr)
+		}
 		return nil, err
 	}
 	ns := sop.NewStoreInfo(si)
@@ -75,20 +81,26 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 			ns.Timestamp = sop.Now().UnixMilli()
 		}
 		if err := trans.logger.log(ctx, createStore, toByteArray(ns.Name)); err != nil {
-			trans.Rollback(ctx, err)
+			if rbErr := trans.Rollback(ctx, err); rbErr != nil {
+				return nil, fmt.Errorf("log createStore failed: %w, rollback failed: %v", err, rbErr)
+			}
 			return nil, err
 		}
 		if err := trans.StoreRepository.Add(ctx, *ns); err != nil {
 			// Cleanup the store if there was anything added in backend.
 			trans.StoreRepository.Remove(ctx, ns.Name)
-			trans.Rollback(ctx, err)
+			if rbErr := trans.Rollback(ctx, err); rbErr != nil {
+				return nil, fmt.Errorf("StoreRepository Add failed: %w, rollback failed: %v", err, rbErr)
+			}
 			return nil, err
 		}
 		return newBtree[TK, TV](ctx, ns, trans, comparer, true)
 	}
 	// Check if store retrieved is empty or of non-compatible specification.
 	if !ns.IsCompatible(stores[0]) {
-		trans.Rollback(ctx, nil)
+		if rbErr := trans.Rollback(ctx, nil); rbErr != nil {
+			return nil, fmt.Errorf("b-tree '%s' exists & has different configuration, please use OpenBtree to open & create an instance of it, rollback failed: %v", si.Name, rbErr)
+		}
 		// Recommend to use the OpenBtree function to open it.
 		return nil, fmt.Errorf("b-tree '%s' exists & has different configuration, please use OpenBtree to open & create an instance of it", si.Name)
 	}
@@ -101,7 +113,9 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 	for i := range trans.btreesBackend {
 		if s.Name == trans.btreesBackend[i].getStoreInfo().Name {
 			err := fmt.Errorf("b-tree '%s' is already in the transaction's b-tree instances list", s.Name)
-			trans.Rollback(ctx, err)
+			if rbErr := trans.Rollback(ctx, err); rbErr != nil {
+				return nil, fmt.Errorf("b-tree '%s' is already in the transaction's b-tree instances list, rollback failed: %v", s.Name, rbErr)
+			}
 			return nil, err
 		}
 	}
@@ -120,7 +134,9 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 	// Wire up the B-tree & the backend bits required by the transaction.
 	b3, err := btree.New(s, &si.StoreInterface, comparer)
 	if err != nil {
-		trans.Rollback(ctx, err)
+		if rbErr := trans.Rollback(ctx, err); rbErr != nil {
+			return nil, fmt.Errorf("btree.New failed: %w, rollback failed: %v", err, rbErr)
+		}
 		return nil, err
 	}
 

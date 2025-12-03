@@ -268,7 +268,9 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 
 		idxOpt, err := vector.Open[map[string]any](ctx, txOpt, storeName, vCfg)
 		if err != nil {
-			txOpt.Rollback(ctx)
+			if rbErr := txOpt.Rollback(ctx); rbErr != nil {
+				return fmt.Errorf("failed to open index for optimization: %w, rollback failed: %v", err, rbErr)
+			}
 			return fmt.Errorf("failed to open index for optimization: %w", err)
 		}
 
@@ -276,7 +278,9 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 			// Optimize might have committed or not depending on where it failed.
 			// Attempt rollback just in case (safe to call if already committed/rolled back? SOP handles it?)
 			// SOP transactions are usually safe to rollback if already committed (no-op).
-			txOpt.Rollback(ctx)
+			if rbErr := txOpt.Rollback(ctx); rbErr != nil {
+				return fmt.Errorf("optimization failed: %w, rollback failed: %v", err, rbErr)
+			}
 			return fmt.Errorf("optimization failed: %w", err)
 		}
 		fmt.Println("Optimization complete.")

@@ -52,7 +52,7 @@ func init() {
 	log.Info("about to issue cache.Clear")
 	ctx := context.Background()
 	if err := cache.Clear(ctx); err != nil {
-		log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
+		log.Warn(fmt.Sprintf("cache.Clear failed, details: %v", err))
 	}
 
 	testDefaultCacheConfig = sop.GetDefaulCacheConfig()

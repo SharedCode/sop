@@ -174,31 +174,41 @@ func addItem(c *gin.Context) {
 	b3, err := inredcfs.OpenBtree[string, []byte](c, objectsStore, trans, cmp.Compare)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("opening store %s failed, error: %v", objectsStore, err)})
-		trans.Rollback(c)
+		if rbErr := trans.Rollback(c); rbErr != nil {
+			log.Printf("Rollback failed: %v", rbErr)
+		}
 		return
 	}
 
 	var found bool
 	if found, err = b3.Find(c, itemKey, false); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("fetching item %s failed, error: %v", itemKey, err)})
-		trans.Rollback(c)
+		if rbErr := trans.Rollback(c); rbErr != nil {
+			log.Printf("Rollback failed: %v", rbErr)
+		}
 		return
 	}
 	if !found {
 		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("item with key %s not found", itemKey)})
-		trans.Rollback(c)
+		if rbErr := trans.Rollback(c); rbErr != nil {
+			log.Printf("Rollback failed: %v", rbErr)
+		}
 		return
 	}
 
 	ok, err := b3.UpdateCurrentValue(c, []byte(itemValue))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": fmt.Sprintf("update value of item with key %s failed, error: %v", itemKey, err)})
-		trans.Rollback(c)
+		if rbErr := trans.Rollback(c); rbErr != nil {
+			log.Printf("Rollback failed: %v", rbErr)
+		}
 		return
 	}
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": fmt.Sprintf("update value of item with key %s failed", itemKey)})
-		trans.Rollback(c)
+		if rbErr := trans.Rollback(c); rbErr != nil {
+			log.Printf("Rollback failed: %v", rbErr)
+		}
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("update value of item with key %s succeeded", itemKey)})

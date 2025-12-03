@@ -87,7 +87,7 @@ func TestMain(t *testing.T) {
 	cache := sop.NewCacheClient()
 	ctx := context.Background()
 	if err := cache.Clear(ctx); err != nil {
-		log.Error(fmt.Sprintf("cache.Clear failed, details: %v", err))
+		log.Warn(fmt.Sprintf("cache.Clear failed, details: %v", err))
 	}
 
 	// Optionally, simulate read issue by making registry temporarily unreadable, then restore.

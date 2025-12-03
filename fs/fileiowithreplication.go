@@ -127,7 +127,7 @@ func (fio *fileIO) replicate(ctx context.Context) error {
 			}
 
 		default:
-			log.Error("unsupported action type 3")
+			log.Warn(fmt.Sprintf("unsupported action type %d", fio.actionsDone[i].First))
 		}
 	}
 

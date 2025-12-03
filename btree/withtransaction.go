@@ -57,14 +57,19 @@ func (b3 *btreeWithTransaction[TK, TV]) Add(ctx context.Context, key TK, value T
 		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("can't add item, transaction is not for writing, rollback failed: %w", err)
+		}
 		return false, fmt.Errorf("can't add item, transaction is not for writing")
 	}
 	r, err := b3.BtreeInterface.Add(ctx, key, value)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree add failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree add failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // AddIfNotExist adds only when no duplicate key exists; requires writer transaction.
@@ -73,14 +78,19 @@ func (b3 *btreeWithTransaction[TK, TV]) AddIfNotExist(ctx context.Context, key T
 		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("can't add item, transaction is not for writing, rollback failed: %w", err)
+		}
 		return false, fmt.Errorf("can't add item, transaction is not for writing")
 	}
 	r, err := b3.BtreeInterface.AddIfNotExist(ctx, key, value)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree add if not exist failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree add if not exist failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // Upsert inserts or updates depending on existence; requires writer transaction.
@@ -89,14 +99,19 @@ func (b3 *btreeWithTransaction[TK, TV]) Upsert(ctx context.Context, key TK, valu
 		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("can't update item, transaction is not for writing, rollback failed: %w", err)
+		}
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
 	r, err := b3.BtreeInterface.Upsert(ctx, key, value)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree upsert failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree upsert failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // Update finds by key and updates value; requires writer transaction.
@@ -105,14 +120,19 @@ func (b3 *btreeWithTransaction[TK, TV]) Update(ctx context.Context, key TK, valu
 		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("can't update item, transaction is not for writing, rollback failed: %w", err)
+		}
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
 	r, err := b3.BtreeInterface.Update(ctx, key, value)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree update failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree update failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // UpdateKey finds by key and updates key; requires writer transaction.
@@ -121,14 +141,19 @@ func (b3 *btreeWithTransaction[TK, TV]) UpdateKey(ctx context.Context, key TK) (
 		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("can't update item, transaction is not for writing, rollback failed: %w", err)
+		}
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
 	r, err := b3.BtreeInterface.UpdateKey(ctx, key)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree update key failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree update key failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // UpdateCurrentValue updates the current item; requires writer transaction.
@@ -137,14 +162,19 @@ func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentValue(ctx context.Context, 
 		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("can't update item, transaction is not for writing, rollback failed: %w", err)
+		}
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
 	r, err := b3.BtreeInterface.UpdateCurrentValue(ctx, value)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree update current value failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree update current value failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // UpdateCurrentItem updates the current item; requires writer transaction.
@@ -153,14 +183,19 @@ func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentItem(ctx context.Context, k
 		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("can't update item, transaction is not for writing, rollback failed: %w", err)
+		}
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
 	r, err := b3.BtreeInterface.UpdateCurrentItem(ctx, key, value)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree update current item failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree update current item failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // UpdateCurrentKey updates the current item's key; requires writer transaction.
@@ -169,14 +204,19 @@ func (b3 *btreeWithTransaction[TK, TV]) UpdateCurrentKey(ctx context.Context, ke
 		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("can't update item, transaction is not for writing, rollback failed: %w", err)
+		}
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
 	r, err := b3.BtreeInterface.UpdateCurrentKey(ctx, key)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree update current key failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree update current key failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // Remove finds by key and deletes; requires writer transaction.
@@ -185,14 +225,19 @@ func (b3 *btreeWithTransaction[TK, TV]) Remove(ctx context.Context, key TK) (boo
 		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("can't update item, transaction is not for writing, rollback failed: %w", err)
+		}
 		return false, fmt.Errorf("can't update item, transaction is not for writing")
 	}
 	r, err := b3.BtreeInterface.Remove(ctx, key)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree remove failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree remove failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // RemoveCurrentItem deletes the current item; requires writer transaction.
@@ -201,14 +246,19 @@ func (b3 *btreeWithTransaction[TK, TV]) RemoveCurrentItem(ctx context.Context) (
 		return false, errTransHasNotBegunMsg
 	}
 	if b3.transaction.GetMode() != sop.ForWriting {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("can't remove item, transaction is not for writing, rollback failed: %w", err)
+		}
 		return false, fmt.Errorf("can't remove item, transaction is not for writing")
 	}
 	r, err := b3.BtreeInterface.RemoveCurrentItem(ctx)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree remove current item failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree remove current item failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // Read-only operations: the following methods only require a begun transaction (any mode).
@@ -217,27 +267,37 @@ func (b3 *btreeWithTransaction[TK, TV]) RemoveCurrentItem(ctx context.Context) (
 // Find positions the cursor on an exact/first match; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Find(ctx context.Context, key TK, firstItemWithKey bool) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("%v, rollback failed: %w", errTransHasNotBegunMsg, err)
+		}
 		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.BtreeInterface.Find(ctx, key, firstItemWithKey)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree find failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree find failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // FindWithID positions the cursor on a match with specific ID; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) FindWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("%v, rollback failed: %w", errTransHasNotBegunMsg, err)
+		}
 		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.BtreeInterface.FindWithID(ctx, key, id)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree find with id failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree find with id failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // GetCurrentKey returns the current key/ID; returns zero value if no transaction.
@@ -253,78 +313,108 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentKey() Item[TK, TV] {
 func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	var zero TV
 	if !b3.transaction.HasBegun() {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return zero, fmt.Errorf("%v, rollback failed: %w", errTransHasNotBegunMsg, err)
+		}
 		return zero, errTransHasNotBegunMsg
 	}
 	v, err := b3.BtreeInterface.GetCurrentValue(ctx)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return v, fmt.Errorf("btree get current value failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return v, fmt.Errorf("btree get current value failed: %w", err)
 	}
-	return v, err
+	return v, nil
 }
 
 // GetCurrentItem returns the current item; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], error) {
 	var zero Item[TK, TV]
 	if !b3.transaction.HasBegun() {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return zero, fmt.Errorf("%v, rollback failed: %w", errTransHasNotBegunMsg, err)
+		}
 		return zero, errTransHasNotBegunMsg
 	}
 	r, err := b3.BtreeInterface.GetCurrentItem(ctx)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree get current item failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree get current item failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // First positions the cursor at the smallest key; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) First(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("%v, rollback failed: %w", errTransHasNotBegunMsg, err)
+		}
 		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.BtreeInterface.First(ctx)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree first failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree first failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // Last positions the cursor at the largest key; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Last(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("%v, rollback failed: %w", errTransHasNotBegunMsg, err)
+		}
 		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.BtreeInterface.Last(ctx)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree last failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree last failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // Next advances the cursor forward; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Next(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("%v, rollback failed: %w", errTransHasNotBegunMsg, err)
+		}
 		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.BtreeInterface.Next(ctx)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree next failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree next failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }
 
 // Previous moves the cursor backward; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) Previous(ctx context.Context) (bool, error) {
 	if !b3.transaction.HasBegun() {
-		b3.transaction.Rollback(ctx, nil)
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return false, fmt.Errorf("%v, rollback failed: %w", errTransHasNotBegunMsg, err)
+		}
 		return false, errTransHasNotBegunMsg
 	}
 	r, err := b3.BtreeInterface.Previous(ctx)
 	if err != nil {
-		b3.transaction.Rollback(ctx, err)
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree previous failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree previous failed: %w", err)
 	}
-	return r, err
+	return r, nil
 }

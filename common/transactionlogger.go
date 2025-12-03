@@ -155,7 +155,7 @@ func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transactio
 					// Allow failover event to occur, return the error.
 					return false, se
 				}
-				log.Error(fmt.Sprintf("unable to acquire locks for transaction %s, skip priority log rollback, err details: %v", tid.String(), err))
+				log.Warn(fmt.Sprintf("unable to acquire locks for transaction %s, skip priority log rollback: %v", tid.String(), err))
 				continue
 			}
 

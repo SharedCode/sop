@@ -106,13 +106,11 @@ func ReinstateFailedDrives(ctx context.Context, storesFolders []string, cache so
 	}
 	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, cache)
 	if err != nil {
-		log.Error(fmt.Sprintf("failed instantiating Replication Tracker, details: %v", err))
-		return err
+		return fmt.Errorf("failed instantiating Replication Tracker: %v", err)
 	}
 
 	if err := rt.ReinstateFailedDrives(ctx); err != nil {
-		log.Error(fmt.Sprintf("failed reinstating failed drives, details: %v", err))
-		return err
+		return fmt.Errorf("failed reinstating failed drives: %w", err)
 	}
 	return nil
 }

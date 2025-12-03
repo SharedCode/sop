@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	log "log/slog"
+
 	"github.com/redis/go-redis/v9"
 
 	"github.com/sharedcode/sop"
@@ -20,6 +22,7 @@ type client struct {
 // NewClient returns a Cache backed by the default shared Redis connection.
 // The underlying connection must have been initialized via package-level setup.
 func NewClient() sop.L2Cache {
+	log.Debug("NewClient called")
 	return &client{
 		conn: connection,
 	}
@@ -28,6 +31,7 @@ func NewClient() sop.L2Cache {
 // NewConnectionClient opens a new Redis connection with the given options and returns a CloseableCache.
 // Call Close on the returned cache when no longer needed. Useful for isolating blob-related caches.
 func NewConnectionClient(options Options) sop.CloseableCache {
+	log.Info("NewConnectionClient called", "address", options.Address, "db", options.DB)
 	c := openConnection(options)
 	return &client{
 		conn:    c,
@@ -40,6 +44,7 @@ func (c *client) Close() error {
 	if !c.isOwner || c.conn == nil {
 		return nil
 	}
+	log.Info("Closing Redis client connection")
 	err := closeConnection(c.conn)
 	c.conn = nil
 	return err
@@ -57,8 +62,9 @@ func (c client) Ping(ctx context.Context) error {
 	}
 	pong, err := c.conn.Client.Ping(ctx).Result()
 	if err != nil {
-		return err
+		return fmt.Errorf("redis ping failed: %w", err)
 	}
+	log.Debug("Redis Ping success", "response", pong)
 	fmt.Println(pong, err)
 	// Output: PONG <nil>
 
@@ -67,7 +73,11 @@ func (c client) Ping(ctx context.Context) error {
 
 // Clear removes all keys in the current Redis database. Use with caution.
 func (c client) Clear(ctx context.Context) error {
-	return c.conn.Client.FlushDB(ctx).Err()
+	log.Warn("Clearing all keys in Redis database")
+	if err := c.conn.Client.FlushDB(ctx).Err(); err != nil {
+		return fmt.Errorf("redis clear failed: %w", err)
+	}
+	return nil
 }
 
 // Set stores a string value with the specified expiration; expiration < 0 disables caching.
@@ -79,7 +89,10 @@ func (c client) Set(ctx context.Context, key string, value string, expiration ti
 	if expiration < 0 {
 		return nil
 	}
-	return c.conn.Client.Set(ctx, key, value, expiration).Err()
+	if err := c.conn.Client.Set(ctx, key, value, expiration).Err(); err != nil {
+		return fmt.Errorf("redis set failed for key %s: %w", key, err)
+	}
+	return nil
 }
 
 // Get retrieves a string value. Returns (found, value, error-from-backend).
@@ -92,6 +105,8 @@ func (c client) Get(ctx context.Context, key string) (bool, string, error) {
 	r := err == nil
 	if c.keyNotFound(err) {
 		err = nil
+	} else if err != nil {
+		err = fmt.Errorf("redis get failed for key %s: %w", key, err)
 	}
 	return r, s, err
 }
@@ -106,6 +121,8 @@ func (c client) GetEx(ctx context.Context, key string, expiration time.Duration)
 	r := err == nil
 	if c.keyNotFound(err) {
 		err = nil
+	} else if err != nil {
+		err = fmt.Errorf("redis getex failed for key %s: %w", key, err)
 	}
 	return r, s, err
 }
@@ -124,9 +141,12 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 	// serialize User object to JSON
 	ba, err := encoding.DefaultMarshaler.Marshal(value)
 	if err != nil {
-		return err
+		return fmt.Errorf("redis setstruct marshal failed for key %s: %w", key, err)
 	}
-	return c.conn.Client.Set(ctx, key, ba, expiration).Err()
+	if err := c.conn.Client.Set(ctx, key, ba, expiration).Err(); err != nil {
+		return fmt.Errorf("redis setstruct failed for key %s: %w", key, err)
+	}
+	return nil
 }
 
 // GetStruct retrieves a struct value and unmarshals it into target.
@@ -140,12 +160,17 @@ func (c client) GetStruct(ctx context.Context, key string, target interface{}) (
 	ba, err := c.conn.Client.Get(ctx, key).Bytes()
 	if err == nil {
 		err = encoding.DefaultMarshaler.Unmarshal(ba, target)
+		if err != nil {
+			err = fmt.Errorf("redis getstruct unmarshal failed for key %s: %w", key, err)
+		}
 	}
 
 	// Convert key not found into returning false and nil err.
 	r := err == nil
 	if c.keyNotFound(err) {
 		err = nil
+	} else if err != nil {
+		err = fmt.Errorf("redis getstruct failed for key %s: %w", key, err)
 	}
 	return r, err
 }
@@ -161,12 +186,17 @@ func (c client) GetStructEx(ctx context.Context, key string, target interface{},
 	ba, err := c.conn.Client.GetEx(ctx, key, expiration).Bytes()
 	if err == nil {
 		err = encoding.DefaultMarshaler.Unmarshal(ba, target)
+		if err != nil {
+			err = fmt.Errorf("redis getstructex unmarshal failed for key %s: %w", key, err)
+		}
 	}
 
 	// Convert key not found into returning false and nil err.
 	r := err == nil
 	if c.keyNotFound(err) {
 		err = nil
+	} else if err != nil {
+		err = fmt.Errorf("redis getstructex failed for key %s: %w", key, err)
 	}
 	return r, err
 }
@@ -183,6 +213,8 @@ func (c client) Delete(ctx context.Context, keys []string) (bool, error) {
 	r := err == nil
 	if c.keyNotFound(err) {
 		err = nil
+	} else if err != nil {
+		err = fmt.Errorf("redis delete failed for keys %v: %w", keys, err)
 	}
 	return r, err
 }
@@ -190,10 +222,7 @@ func (c client) Delete(ctx context.Context, keys []string) (bool, error) {
 // IsRestarted returns true if the Redis server run_id has changed since the previous call.
 // It uses the INFO server section to read run_id, caching it per client instance.
 func (c *client) IsRestarted(ctx context.Context) bool {
-	if atomic.SwapInt64(&hasRestarted, 0) == 1 {
-		return true
-	}
-	return false
+	return atomic.SwapInt64(&hasRestarted, 0) == 1
 }
 
 func init() {

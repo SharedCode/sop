@@ -155,6 +155,26 @@ _manage_database.argtypes = [
 _manage_database.restype = ctypes.POINTER(ctypes.c_char)
 
 
+_manage_logging = lib.manageLogging
+_manage_logging.argtypes = [
+    ctypes.c_int,
+    ctypes.c_char_p,
+]
+_manage_logging.restype = ctypes.POINTER(ctypes.c_char)
+
+
+def create_context() -> int:
+    return ctypes.c_int64(_create_context()).value
+
+
+_manage_logging = lib.manageLogging
+_manage_logging.argtypes = [
+    ctypes.c_int,
+    ctypes.c_char_p,
+]
+_manage_logging.restype = ctypes.POINTER(ctypes.c_char)
+
+
 def create_context() -> int:
     return ctypes.c_int64(_create_context()).value
 
@@ -398,6 +418,25 @@ def manage_database(ctxID: int, action: int, targetID: str, payload: str) -> str
     res = _manage_database(
         ctypes.c_int64(ctxID).value, to_cint(action), tID, p
     )
+    if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
+        return None
+
+    s = to_str(res)
+    _free_string(res)
+    return s
+
+
+def manage_logging(level: int, log_path: str) -> str:
+    """
+    Configure logging for the Go library.
+    level: 0=Debug, 1=Info, 2=Warn, 3=Error
+    log_path: Optional path to log file. If None/Empty, logs to stderr.
+    """
+    lp = None
+    if log_path is not None:
+        lp = to_cstring(log_path)
+
+    res = _manage_logging(to_cint(level), lp)
     if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
         return None
 

@@ -3,7 +3,7 @@ package vector
 import (
 	"context"
 	"fmt"
-	"log"
+	log "log/slog"
 	"math"
 	"math/rand"
 	"time"
@@ -15,7 +15,11 @@ import (
 	"github.com/sharedcode/sop/inredfs"
 )
 
-const batchSize = 200
+const (
+	batchSize                   = 200
+	optimizeLockDuration        = 1 * time.Hour
+	optimizeLockRefreshInterval = 30 * time.Minute
+)
 
 // Optimize reorganizes the index to improve query performance by rebuilding the vector structures.
 //
@@ -36,7 +40,7 @@ const batchSize = 200
 // Warning: This method commits the transaction passed to Open(). The caller should not attempt
 // to use the original transaction after calling Optimize().
 func (di *domainIndex[T]) Optimize(ctx context.Context) error {
-	log.Printf("DEBUG: Optimize started for domain %s", di.name)
+	log.Debug("Optimize started", "domain", di.name)
 
 	// 1. Initialization
 	currentVersion, newVersion, suffix, useTempVectors, _, cleanupLock, err := di.initialize(ctx)
@@ -67,7 +71,7 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 		return err
 	}
 
-	log.Println("DEBUG: Optimize completed successfully")
+	log.Debug("Optimize completed successfully")
 	return nil
 }
 
@@ -94,7 +98,7 @@ func (di *domainIndex[T]) openSysStore(ctx context.Context, tx sop.Transaction) 
 func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string, bool, []*sop.LockKey, func(), error) {
 	// 1. Commit the current transaction to ensure any pending writes are saved.
 	if di.trans.HasBegun() {
-		log.Println("DEBUG: Committing initial transaction")
+		log.Debug("Committing initial transaction")
 		if err := di.trans.Commit(ctx); err != nil {
 			return 0, 0, "", false, nil, nil, err
 		}
@@ -106,7 +110,7 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 	}
 	lockKeyName := fmt.Sprintf("optimize_lock_%s", di.name)
 	lockKeys := di.config.Cache.CreateLockKeys([]string{lockKeyName})
-	success, _, err := di.config.Cache.DualLock(ctx, 2*time.Hour, lockKeys)
+	success, _, err := di.config.Cache.DualLock(ctx, optimizeLockDuration, lockKeys)
 	if err != nil {
 		return 0, 0, "", false, nil, nil, fmt.Errorf("failed to acquire optimization lock: %w", err)
 	}
@@ -117,17 +121,17 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 	// Start a goroutine to refresh the lock TTL periodically
 	done := make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(30 * time.Minute)
+		ticker := time.NewTicker(optimizeLockRefreshInterval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-done:
 				return
 			case <-ticker.C:
-				if ok, err := di.config.Cache.IsLockedTTL(ctx, 2*time.Hour, lockKeys); err != nil {
-					log.Printf("WARN: Failed to refresh optimization lock TTL: %v", err)
+				if ok, err := di.config.Cache.IsLockedTTL(ctx, optimizeLockDuration, lockKeys); err != nil {
+					log.Warn("Failed to refresh optimization lock TTL", "error", err)
 				} else if !ok {
-					log.Printf("WARN: Optimization lock lost during refresh")
+					log.Warn("Optimization lock lost during refresh")
 				}
 			}
 		}
@@ -136,13 +140,13 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 	cleanupLock := func() {
 		close(done)
 		if err := di.config.Cache.Unlock(ctx, lockKeys); err != nil {
-			log.Printf("WARN: Failed to unlock optimization lock: %v", err)
+			log.Warn("Failed to unlock optimization lock", "error", err)
 		}
 	}
 
 	// We need to know the current version to start.
 	// We start a short TX just to get the version.
-	log.Println("DEBUG: Starting check transaction")
+	log.Debug("Starting check transaction")
 	tx, err := di.beginTransaction(ctx)
 	if err != nil {
 		cleanupLock()
@@ -153,7 +157,10 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 	// Re-open SysStore
 	sysStore, err := di.openSysStore(ctx, tx)
 	if err != nil {
-		tx.Rollback(ctx)
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			cleanupLock()
+			return 0, 0, "", false, nil, nil, fmt.Errorf("openSysStore failed: %w, rollback failed: %v", err, rbErr)
+		}
 		cleanupLock()
 		return 0, 0, "", false, nil, nil, err
 	}
@@ -161,11 +168,14 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 
 	currentVersion, err := di.getActiveVersion(ctx, tx)
 	if err != nil {
-		tx.Rollback(ctx)
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			cleanupLock()
+			return 0, 0, "", false, nil, nil, fmt.Errorf("getActiveVersion failed: %w, rollback failed: %v", err, rbErr)
+		}
 		cleanupLock()
 		return 0, 0, "", false, nil, nil, err
 	}
-	log.Printf("DEBUG: Current version: %d", currentVersion)
+	log.Debug("Current version", "version", currentVersion)
 
 	// Prepare New Stores (Version + 1)
 	newVersion := currentVersion + 1
@@ -175,12 +185,15 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 	lookupName := di.name + lookupSuffix + suffix
 	found, err := inredfs.IsStoreExists(ctx, tx, lookupName)
 	if err != nil {
-		tx.Rollback(ctx)
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			cleanupLock()
+			return 0, 0, "", false, nil, nil, fmt.Errorf("IsStoreExists failed: %w, rollback failed: %v", err, rbErr)
+		}
 		cleanupLock()
 		return 0, 0, "", false, nil, nil, err
 	}
 	if found {
-		log.Println("DEBUG: Found previous failed optimization, cleaning up")
+		log.Debug("Found previous failed optimization, cleaning up")
 		storesToRemove := []string{
 			di.name + centroidsSuffix + suffix,
 			di.name + vectorsSuffix + suffix,
@@ -198,8 +211,11 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 			return 0, 0, "", false, nil, nil, err
 		}
 	} else {
-		log.Println("DEBUG: No previous failed optimization, rolling back check TX")
-		tx.Rollback(ctx)
+		log.Debug("No previous failed optimization, rolling back check TX")
+		if err := tx.Rollback(ctx); err != nil {
+			cleanupLock()
+			return 0, 0, "", false, nil, nil, fmt.Errorf("rollback failed: %w", err)
+		}
 	}
 
 	useTempVectors := newVersion == 1 && di.config.EnableIngestionBuffer
@@ -207,14 +223,14 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 }
 
 func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suffix string, useTempVectors bool) (int, error) {
-	log.Println("DEBUG: Phase 1: Build Lookup Table")
+	log.Debug("Phase 1: Build Lookup Table")
 
 	var count int
 	var lastVectorKey *ai.VectorKey
 	var lastTempKey string
 
 	for {
-		log.Println("DEBUG: Starting batch transaction")
+		log.Debug("Starting batch transaction")
 		tx, err := di.beginTransaction(ctx)
 		if err != nil {
 			return 0, err
@@ -222,13 +238,17 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 
 		oldArch, err := di.openArch(ctx, tx, currentVersion)
 		if err != nil {
-			tx.Rollback(ctx)
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				return 0, fmt.Errorf("openArch failed: %w, rollback failed: %v", err, rbErr)
+			}
 			return 0, err
 		}
 
 		newLookup, err := newBtree[int, string](ctx, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, 1000, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
-			tx.Rollback(ctx)
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				return 0, fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
+			}
 			return 0, err
 		}
 
@@ -238,7 +258,9 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 
 		if useTempVectors {
 			if oldArch.TempVectors == nil {
-				tx.Rollback(ctx)
+				if err := tx.Rollback(ctx); err != nil {
+					return 0, fmt.Errorf("rollback failed: %w", err)
+				}
 				break
 			}
 			b3Temp = oldArch.TempVectors
@@ -263,7 +285,9 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 		}
 
 		if err != nil {
-			tx.Rollback(ctx)
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				return 0, fmt.Errorf("iterator failed: %w, rollback failed: %v", err, rbErr)
+			}
 			return 0, err
 		}
 
@@ -276,7 +300,9 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 				if useTempVectors {
 					item, err := b3Temp.GetCurrentItem(ctx)
 					if err != nil {
-						tx.Rollback(ctx)
+						if rbErr := tx.Rollback(ctx); rbErr != nil {
+							return 0, fmt.Errorf("GetCurrentItem failed: %w, rollback failed: %v", err, rbErr)
+						}
 						return 0, err
 					}
 					itemID = item.Key
@@ -285,7 +311,9 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 					shouldProcess := true
 					if di.deduplicationEnabled {
 						if found, err := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key}, false); err != nil {
-							tx.Rollback(ctx)
+							if rbErr := tx.Rollback(ctx); rbErr != nil {
+								return 0, fmt.Errorf("Content.Find failed: %w, rollback failed: %v", err, rbErr)
+							}
 							return 0, err
 						} else if found {
 							currentKey := oldArch.Content.GetCurrentKey().Key
@@ -299,7 +327,9 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 
 					if shouldProcess {
 						if _, err := newLookup.Add(ctx, count, itemID); err != nil {
-							tx.Rollback(ctx)
+							if rbErr := tx.Rollback(ctx); rbErr != nil {
+								return 0, fmt.Errorf("newLookup.Add failed: %w, rollback failed: %v", err, rbErr)
+							}
 							return 0, err
 						}
 						count++
@@ -307,7 +337,9 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 				} else {
 					item, err := b3.GetCurrentItem(ctx)
 					if err != nil {
-						tx.Rollback(ctx)
+						if rbErr := tx.Rollback(ctx); rbErr != nil {
+							return 0, fmt.Errorf("GetCurrentItem failed: %w, rollback failed: %v", err, rbErr)
+						}
 						return 0, err
 					}
 					itemID = item.Key.ItemID
@@ -315,7 +347,9 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 
 					shouldProcess := true
 					if found, err := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: itemID}, false); err != nil {
-						tx.Rollback(ctx)
+						if rbErr := tx.Rollback(ctx); rbErr != nil {
+							return 0, fmt.Errorf("Content.Find failed: %w, rollback failed: %v", err, rbErr)
+						}
 						return 0, err
 					} else if found {
 						currentKey := oldArch.Content.GetCurrentKey().Key
@@ -328,7 +362,9 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 
 					if shouldProcess {
 						if _, err := newLookup.Add(ctx, count, itemID); err != nil {
-							tx.Rollback(ctx)
+							if rbErr := tx.Rollback(ctx); rbErr != nil {
+								return 0, fmt.Errorf("newLookup.Add failed: %w, rollback failed: %v", err, rbErr)
+							}
 							return 0, err
 						}
 						count++
@@ -355,7 +391,9 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 				}
 
 				if err != nil {
-					tx.Rollback(ctx)
+					if rbErr := tx.Rollback(ctx); rbErr != nil {
+						return 0, fmt.Errorf("Next failed: %w, rollback failed: %v", err, rbErr)
+					}
 					return 0, err
 				} else if !nextOk {
 					break
@@ -363,7 +401,7 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 			}
 		}
 
-		log.Printf("DEBUG: Committing batch, processed %d items", processed)
+		log.Debug("Committing batch", "processed_items", processed)
 		if err := tx.Commit(ctx); err != nil {
 			return 0, err
 		}
@@ -376,7 +414,7 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 }
 
 func (di *domainIndex[T]) phase2(ctx context.Context, currentVersion int64, suffix string, count int) (map[int][]float32, error) {
-	log.Println("DEBUG: Phase 2: Sampling & Centroids")
+	log.Debug("Phase 2: Sampling & Centroids")
 	if count > 0 {
 		tx, err := di.beginTransaction(ctx)
 		if err != nil {
@@ -385,13 +423,17 @@ func (di *domainIndex[T]) phase2(ctx context.Context, currentVersion int64, suff
 
 		oldArch, err := di.openArch(ctx, tx, currentVersion)
 		if err != nil {
-			tx.Rollback(ctx)
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				return nil, fmt.Errorf("openArch failed: %w, rollback failed: %v", err, rbErr)
+			}
 			return nil, err
 		}
 
 		newLookup, err := newBtree[int, string](ctx, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, 1000, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
-			tx.Rollback(ctx)
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				return nil, fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
+			}
 			return nil, err
 		}
 
@@ -416,7 +458,9 @@ func (di *domainIndex[T]) phase2(ctx context.Context, currentVersion int64, suff
 
 		for idx := range indices {
 			if found, err := newLookup.Find(ctx, idx, false); err != nil {
-				tx.Rollback(ctx)
+				if rbErr := tx.Rollback(ctx); rbErr != nil {
+					return nil, fmt.Errorf("newLookup.Find failed: %w, rollback failed: %v", err, rbErr)
+				}
 				return nil, err
 			} else if !found {
 				continue
@@ -426,14 +470,18 @@ func (di *domainIndex[T]) phase2(ctx context.Context, currentVersion int64, suff
 			var vec []float32
 			if currentVersion == 0 && oldArch.TempVectors != nil {
 				if found, err := oldArch.TempVectors.Find(ctx, itemID, false); err != nil {
-					tx.Rollback(ctx)
+					if rbErr := tx.Rollback(ctx); rbErr != nil {
+						return nil, fmt.Errorf("TempVectors.Find failed: %w, rollback failed: %v", err, rbErr)
+					}
 					return nil, err
 				} else if found {
 					vec, _ = oldArch.TempVectors.GetCurrentValue(ctx)
 				}
 			} else {
 				if found, err := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: itemID}, false); err != nil {
-					tx.Rollback(ctx)
+					if rbErr := tx.Rollback(ctx); rbErr != nil {
+						return nil, fmt.Errorf("Content.Find failed: %w, rollback failed: %v", err, rbErr)
+					}
 					return nil, err
 				} else if !found {
 					continue
@@ -464,18 +512,24 @@ func (di *domainIndex[T]) phase2(ctx context.Context, currentVersion int64, suff
 		}
 		newCentroidsMap, err := ComputeCentroids(samples, k)
 		if err != nil {
-			tx.Rollback(ctx)
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				return nil, fmt.Errorf("ComputeCentroids failed: %w, rollback failed: %v", err, rbErr)
+			}
 			return nil, err
 		}
 
 		newCentroids, err := newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, 100, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
-			tx.Rollback(ctx)
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				return nil, fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
+			}
 			return nil, err
 		}
 		for id, vec := range newCentroidsMap {
 			if _, err := newCentroids.Add(ctx, id, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
-				tx.Rollback(ctx)
+				if rbErr := tx.Rollback(ctx); rbErr != nil {
+					return nil, fmt.Errorf("newCentroids.Add failed: %w, rollback failed: %v", err, rbErr)
+				}
 				return nil, err
 			}
 		}
@@ -493,7 +547,7 @@ func (di *domainIndex[T]) phase2(ctx context.Context, currentVersion int64, suff
 }
 
 func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newVersion int64, suffix string, useTempVectors bool, newCentroidsMap map[int][]float32) error {
-	log.Println("DEBUG: Phase 3: Migration")
+	log.Debug("Phase 3: Migration")
 
 	// 3a. Migrate Vectors
 	if !useTempVectors {
@@ -506,13 +560,17 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 
 			oldArch, err := di.openArch(ctx, tx, currentVersion)
 			if err != nil {
-				tx.Rollback(ctx)
+				if rbErr := tx.Rollback(ctx); rbErr != nil {
+					return fmt.Errorf("openArch failed: %w, rollback failed: %v", err, rbErr)
+				}
 				return err
 			}
 
 			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, 1000, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
 			if err != nil {
-				tx.Rollback(ctx)
+				if rbErr := tx.Rollback(ctx); rbErr != nil {
+					return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
+				}
 				return err
 			}
 
@@ -520,7 +578,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 			if di.config.UsageMode == ai.DynamicWithVectorCountTracking {
 				newCentroids, err = newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, 100, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 				if err != nil {
-					tx.Rollback(ctx)
+					if rbErr := tx.Rollback(ctx); rbErr != nil {
+						return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
+					}
 					return err
 				}
 			}
@@ -537,7 +597,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 			}
 
 			if err != nil {
-				tx.Rollback(ctx)
+				if rbErr := tx.Rollback(ctx); rbErr != nil {
+					return fmt.Errorf("iterator failed: %w, rollback failed: %v", err, rbErr)
+				}
 				return err
 			}
 
@@ -546,7 +608,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 				for {
 					item, err := b3.GetCurrentItem(ctx)
 					if err != nil {
-						tx.Rollback(ctx)
+						if rbErr := tx.Rollback(ctx); rbErr != nil {
+							return fmt.Errorf("GetCurrentItem failed: %w, rollback failed: %v", err, rbErr)
+						}
 						return err
 					}
 
@@ -558,7 +622,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 							shouldMigrate = true
 						} else {
 							if _, err := oldArch.Content.RemoveCurrentItem(ctx); err != nil {
-								tx.Rollback(ctx)
+								if rbErr := tx.Rollback(ctx); rbErr != nil {
+									return fmt.Errorf("RemoveCurrentItem failed: %w, rollback failed: %v", err, rbErr)
+								}
 								return err
 							}
 						}
@@ -571,7 +637,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 
 						key := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: item.Key.ItemID}
 						if _, err := newVectors.Add(ctx, key, vec); err != nil {
-							tx.Rollback(ctx)
+							if rbErr := tx.Rollback(ctx); rbErr != nil {
+								return fmt.Errorf("newVectors.Add failed: %w, rollback failed: %v", err, rbErr)
+							}
 							return err
 						}
 
@@ -590,7 +658,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 							currentKey.NextVersion = int64(newVersion)
 
 							if _, err := oldArch.Content.UpdateCurrentKey(ctx, currentKey); err != nil {
-								tx.Rollback(ctx)
+								if rbErr := tx.Rollback(ctx); rbErr != nil {
+									return fmt.Errorf("UpdateCurrentKey failed: %w, rollback failed: %v", err, rbErr)
+								}
 								return err
 							}
 						}
@@ -605,7 +675,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 					}
 
 					if ok, err := b3.Next(ctx); err != nil {
-						tx.Rollback(ctx)
+						if rbErr := tx.Rollback(ctx); rbErr != nil {
+							return fmt.Errorf("Next failed: %w, rollback failed: %v", err, rbErr)
+						}
 						return err
 					} else if !ok {
 						break
@@ -634,18 +706,24 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 
 			oldArch, err := di.openArch(ctx, tx, currentVersion)
 			if err != nil {
-				tx.Rollback(ctx)
+				if rbErr := tx.Rollback(ctx); rbErr != nil {
+					return fmt.Errorf("openArch failed: %w, rollback failed: %v", err, rbErr)
+				}
 				return err
 			}
 
 			if oldArch.TempVectors == nil {
-				tx.Rollback(ctx)
+				if err := tx.Rollback(ctx); err != nil {
+					return fmt.Errorf("rollback failed: %w", err)
+				}
 				break
 			}
 
 			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, 1000, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
 			if err != nil {
-				tx.Rollback(ctx)
+				if rbErr := tx.Rollback(ctx); rbErr != nil {
+					return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
+				}
 				return err
 			}
 
@@ -653,7 +731,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 			if di.config.UsageMode == ai.DynamicWithVectorCountTracking {
 				newCentroids, err = newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, 100, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 				if err != nil {
-					tx.Rollback(ctx)
+					if rbErr := tx.Rollback(ctx); rbErr != nil {
+						return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
+					}
 					return err
 				}
 			}
@@ -670,7 +750,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 			}
 
 			if err != nil {
-				tx.Rollback(ctx)
+				if rbErr := tx.Rollback(ctx); rbErr != nil {
+					return fmt.Errorf("iterator failed: %w, rollback failed: %v", err, rbErr)
+				}
 				return err
 			}
 
@@ -679,7 +761,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 				for {
 					item, err := b3.GetCurrentItem(ctx)
 					if err != nil {
-						tx.Rollback(ctx)
+						if rbErr := tx.Rollback(ctx); rbErr != nil {
+							return fmt.Errorf("GetCurrentItem failed: %w, rollback failed: %v", err, rbErr)
+						}
 						return err
 					}
 
@@ -690,7 +774,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 							if currentKey.Deleted {
 								shouldProcess = false
 								if _, err := oldArch.Content.RemoveCurrentItem(ctx); err != nil {
-									tx.Rollback(ctx)
+									if rbErr := tx.Rollback(ctx); rbErr != nil {
+										return fmt.Errorf("RemoveCurrentItem failed: %w, rollback failed: %v", err, rbErr)
+									}
 									return err
 								}
 							} else if currentKey.CentroidID != 0 {
@@ -705,7 +791,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 
 						key := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: item.Key}
 						if _, err := newVectors.Add(ctx, key, vec); err != nil {
-							tx.Rollback(ctx)
+							if rbErr := tx.Rollback(ctx); rbErr != nil {
+								return fmt.Errorf("newVectors.Add failed: %w, rollback failed: %v", err, rbErr)
+							}
 							return err
 						}
 
@@ -724,7 +812,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 							currentKey.NextVersion = int64(newVersion)
 
 							if _, err := oldArch.Content.UpdateCurrentKey(ctx, currentKey); err != nil {
-								tx.Rollback(ctx)
+								if rbErr := tx.Rollback(ctx); rbErr != nil {
+									return fmt.Errorf("UpdateCurrentKey failed: %w, rollback failed: %v", err, rbErr)
+								}
 								return err
 							}
 						}
@@ -738,7 +828,9 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 					}
 
 					if ok, err := b3.Next(ctx); err != nil {
-						tx.Rollback(ctx)
+						if rbErr := tx.Rollback(ctx); rbErr != nil {
+							return fmt.Errorf("Next failed: %w, rollback failed: %v", err, rbErr)
+						}
 						return err
 					} else if !ok {
 						break
@@ -759,7 +851,7 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 }
 
 func (di *domainIndex[T]) phase4(ctx context.Context, currentVersion int64, newVersion int64, useTempVectors bool) error {
-	log.Println("DEBUG: Phase 4: Finalize")
+	log.Debug("Phase 4: Finalize")
 	tx, err := di.beginTransaction(ctx)
 	if err != nil {
 		return err
@@ -768,7 +860,9 @@ func (di *domainIndex[T]) phase4(ctx context.Context, currentVersion int64, newV
 
 	sysStore, err := di.openSysStore(ctx, tx)
 	if err != nil {
-		tx.Rollback(ctx)
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			return fmt.Errorf("openSysStore failed: %w, rollback failed: %v", err, rbErr)
+		}
 		return err
 	}
 	di.sysStore = sysStore

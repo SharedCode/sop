@@ -3,6 +3,7 @@ package inredfs
 import (
 	"context"
 	"fmt"
+	log "log/slog"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/common"
@@ -11,6 +12,7 @@ import (
 
 // NewTransaction is a convenience function to create an enduser facing transaction object that wraps the two phase commit transaction.
 func NewTransaction(ctx context.Context, to TransationOptions) (sop.Transaction, error) {
+	log.Debug("NewTransaction called")
 	twoPT, err := NewTwoPhaseCommitTransaction(ctx, to)
 	if err != nil {
 		return nil, err
@@ -25,6 +27,7 @@ func NewTransaction(ctx context.Context, to TransationOptions) (sop.Transaction,
 // Locks use maxTime as TTL so they are bounded even if ctx is canceled. If you want replication/log
 // cleanup to finish under the same budget, set ctx.Deadline to at least maxTime plus a small grace period.
 func NewTwoPhaseCommitTransaction(ctx context.Context, to TransationOptions) (sop.TwoPhaseCommitTransaction, error) {
+	log.Debug("NewTwoPhaseCommitTransaction called")
 	if to.Cache == nil {
 		to.Cache = sop.NewCacheClient()
 	}
@@ -59,6 +62,7 @@ func NewTwoPhaseCommitTransaction(ctx context.Context, to TransationOptions) (so
 // NewTransactionWithReplication creates a transaction that supports replication via SOP's replication on StoreRepository & Registry,
 // and Erasure Coding on the Blob Store.
 func NewTransactionWithReplication(ctx context.Context, towr TransationOptionsWithReplication) (sop.Transaction, error) {
+	log.Debug("NewTransactionWithReplication called")
 	twoPT, err := NewTwoPhaseCommitTransactionWithReplication(ctx, towr)
 	if err != nil {
 		return nil, err
@@ -71,6 +75,7 @@ func NewTransactionWithReplication(ctx context.Context, towr TransationOptionsWi
 // Timeout semantics: see NewTwoPhaseCommitTransaction for guidance on ctx.Deadline vs maxTime and lock TTLs.
 // Returns sop.TwoPhaseCommitTransaction to allow integration with custom application transactions requiring direct access to SOP's API.
 func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, towr TransationOptionsWithReplication) (sop.TwoPhaseCommitTransaction, error) {
+	log.Debug("NewTwoPhaseCommitTransactionWithReplication called")
 	if towr.IsEmpty() {
 		return nil, fmt.Errorf("towr can't be empty")
 	}

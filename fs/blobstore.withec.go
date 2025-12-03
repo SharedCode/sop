@@ -95,9 +95,7 @@ func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobI
 	// Get the blob table (blobFilePath) specific ec configuration.
 	baseFolderPathsAcrossDrives, ec := b.getBaseFolderPathsAndErasureConfig(blobFilePath)
 	if baseFolderPathsAcrossDrives == nil {
-		err := fmt.Errorf("can't find Erasure Config setting for file %s", blobFilePath)
-		log.Error(err.Error())
-		return nil, err
+		return nil, fmt.Errorf("can't find Erasure Config setting for file %s", blobFilePath)
 	}
 
 	shards := make([][]byte, len(baseFolderPathsAcrossDrives))
@@ -121,7 +119,7 @@ func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobI
 			if err != nil {
 				// Store any error (winner doesn't matter).
 				readErrPtr.Store(&errBox{err: err})
-				log.Error("failed reading from file %s, error: %v", fn, err)
+				log.Warn(fmt.Sprintf("failed reading from file %s, error: %v", fn, err))
 				log.Info("if there are enough shards to reconstruct data, 'reader' may still work")
 				return nil
 			}
@@ -303,9 +301,7 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.Blobs
 		// Get the blob table specific erasure configuration.
 		baseFolderPathsAcrossDrives, _ := b.getBaseFolderPathsAndErasureConfig(storeBlobIDs.BlobTable)
 		if baseFolderPathsAcrossDrives == nil {
-			err := fmt.Errorf("can't find Erasure Config setting for file %s", storeBlobIDs.BlobTable)
-			log.Error(err.Error())
-			return err
+			return fmt.Errorf("can't find Erasure Config setting for file %s", storeBlobIDs.BlobTable)
 		}
 
 		for _, blobID := range storeBlobIDs.Blobs {
@@ -324,7 +320,7 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.Blobs
 
 				tr.Go(func() error {
 					if err := b.fileIO.Remove(ctx, fn); err != nil {
-						log.Error(fmt.Sprintf("error deleting from drive but ignoring it to tolerate, part of EC feature, details: %v", err))
+						log.Warn(fmt.Sprintf("error deleting from drive but ignoring it to tolerate, part of EC feature, details: %v", err))
 					}
 					return nil
 				})

@@ -797,6 +797,10 @@ When multiple transactions across different machines or threads commit concurren
 *   **Simplified Concurrency**: Developers don't need complex locking logic. SOP transactions are natively thread and machine safe. It rolls back only true conflicts and merges everything else.
 *   **Proven at Scale**: These capabilities are demonstrated in the `inredfs/stresstests`, simulating distributed parallel transaction commits.
 
+SOP encourages applications to use the B-tree store and its derivatives in a simple, synchronization-free manner. The library automatically handles data merging or rolling back in case of conflicts, ensuring data integrity without complex application-level locking. This approach simplifies development while providing fine-grained, key/value-pair level isolation and resolution—a unique capability in distributed storage.
+
+It operates like swarm computing: SOP manages coordination across threads and machines in a peer-to-peer, masterless architecture (where every node acts as a master), delivering robust consistency and scalability effortlessly.
+
 ## ACID Transactions vs. Big Data
 It is well known to the database world that data engines are written to support being transactional or not. Transactions work best for non-big data management. And Big Data support typically has no support for transactions, specifically, ACID type of transactions. These perception change with SOP V2+. That is, SOP V2 supports ACID transactions and Big Data, together with "partial updates". Yes, full fidelity Big Data management protected by ACID transactions.
 

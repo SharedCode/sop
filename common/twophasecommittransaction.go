@@ -187,7 +187,7 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	if err := t.phase2Commit(ctx); err != nil {
 		if t.nodesKeysExist() {
 			if p1Err := t.logger.priorityRollback(ctx, t.registry, t.GetID()); p1Err != nil {
-				log.Error(fmt.Sprintf("phase 2 commit priorityRollback failed, details: %v", p1Err))
+				log.Warn(fmt.Sprintf("phase 2 commit priorityRollback failed, details: %v", p1Err))
 				// Should generate a failover below.
 				if se, ok := p1Err.(sop.Error); ok && se.Code == sop.RestoreRegistryFileSectorFailure {
 					err = se
