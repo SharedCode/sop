@@ -18,7 +18,7 @@ KEY_META_ID = "id"
 KEY_META_TRANSACTION_ID = "transaction_id"
 
 class VectorAction(Enum):
-    NewVectorDB = 1
+    # NewVectorDB = 1
     OpenVectorStore = 2
     UpsertVector = 3
     UpsertBatchVector = 4
@@ -26,9 +26,9 @@ class VectorAction(Enum):
     DeleteVector = 6
     QueryVector = 7
     VectorCount = 8
-    BeginTransaction = 9
+    # BeginTransaction = 9
     OptimizeVector = 10
-    CloseVectorDB = 11
+    # CloseVectorDB = 11
 
 class UsageMode(Enum):
     BuildOnceQueryMany = 0

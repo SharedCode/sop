@@ -10,12 +10,28 @@ import (
 
 	"github.com/google/uuid"
 
-	log "log/slog"
-
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/encoding"
 	"github.com/sharedcode/sop/jsondb"
+)
+
+type btreeAction int
+const (
+	BtreeActionUnknown = iota
+	Add
+	AddIfNotExist
+	Update
+	Upsert
+	Remove
+	Find
+	FindWithID
+	GetItems
+	GetValues
+	GetKeys
+	First
+	Last
+	IsUnique
+	Count
+	GetStoreInfo
 )
 
 // Manage Btree payload struct is used for communication between SOP language binding, e.g. Python,
@@ -34,17 +50,12 @@ type ManageBtreePayload[TK, TV any] struct {
 
 //export manageBtree
 func manageBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.char) *C.char {
-	ps := C.GoString(payload)
 	ctx := getContext(ctxID)
 	if ctx == nil {
 		return C.CString(fmt.Sprintf("context with ID %v not found", int64(ctxID)))
 	}
 
 	switch int(action) {
-	case NewBtree:
-		return newBtree(ctx, ps)
-	case OpenBtree:
-		return openBtree(ctx, ps)
 	case Add:
 		fallthrough
 	case AddIfNotExist:
@@ -58,104 +69,6 @@ func manageBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.ch
 	default:
 		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
 		return C.CString(errMsg)
-	}
-}
-
-func newBtree(ctx context.Context, ps string) *C.char {
-	var b3o BtreeOptions
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &b3o); err != nil {
-		// Rare for an error to occur, but do return an errMsg if it happens.
-		errMsg := fmt.Sprintf("error Unmarshal BtreeOptions, details: %v", err)
-		return C.CString(errMsg)
-	}
-	log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
-
-	item, ok := Transactions.GetItem(sop.UUID(b3o.TransactionID))
-
-	if !ok {
-		errMsg := fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String())
-		return C.CString(errMsg)
-	}
-	so := convertTo(&b3o)
-
-	if b3o.IsPrimitiveKey {
-		log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
-		b3, err := jsondb.NewJsonBtree[any, any](ctx, *so, item.Transaction, nil)
-		if err != nil {
-			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
-			return C.CString(errMsg)
-		}
-		// Add the B-tree to the transaction btree map so it can get lookedup.
-		b3id, _ := Transactions.AddBtree(sop.UUID(b3o.TransactionID), b3)
-		return C.CString(b3id.String())
-	} else {
-		log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
-		b3, err := jsondb.NewJsonBtreeMapKey(ctx, *so, item.Transaction, b3o.IndexSpecification)
-		if err != nil {
-			errMsg := fmt.Sprintf("error creating Btree, details: %v", err)
-			return C.CString(errMsg)
-		}
-		// Add the B-tree to the transaction btree map so it can get lookedup.
-		b3id, _ := Transactions.AddBtree(sop.UUID(b3o.TransactionID), b3)
-		return C.CString(b3id.String())
-	}
-}
-
-func openBtree(ctx context.Context, ps string) *C.char {
-	var b3o BtreeOptions
-	if err := encoding.DefaultMarshaler.Unmarshal([]byte(ps), &b3o); err != nil {
-		// Rare for an error to occur, but do return an errMsg if it happens.
-		errMsg := fmt.Sprintf("error Unmarshal BtreeOptions, details: %v", err)
-		return C.CString(errMsg)
-	}
-	log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
-
-	item, ok := Transactions.GetItem(sop.UUID(b3o.TransactionID))
-
-	if !ok {
-		errMsg := fmt.Sprintf("can't find Transaction %v", b3o.TransactionID.String())
-		return C.CString(errMsg)
-	}
-	so := convertTo(&b3o)
-
-	// Get StoreInfo from backend DB and determine if key is primitive or not.
-	intf := item.Transaction.(interface{})
-	t2 := intf.(*sop.SinglePhaseTransaction).SopPhaseCommitTransaction
-	intf = t2
-	t := intf.(*common.Transaction)
-
-	sr := t.StoreRepository
-	si, err := sr.Get(ctx, so.Name)
-	isPrimitiveKey := false
-	if err == nil && len(si) > 0 {
-		isPrimitiveKey = si[0].IsPrimitiveKey
-	} else if err == nil && len(si) == 0 {
-		errMsg := fmt.Sprintf("error opening Btree (%s), store not found", so.Name)
-		return C.CString(errMsg)
-	}
-
-	if isPrimitiveKey {
-		b3, err := jsondb.OpenJsonBtree[any, any](ctx, so.Name, item.Transaction, nil)
-		if err != nil {
-			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
-			return C.CString(errMsg)
-		}
-		ce := b3.GetStoreInfo().MapKeyIndexSpecification
-		if ce != "" {
-			errMsg := fmt.Sprintf("error opening for 'Primitive Type' Btree (%s), CELexpression %s is restricted for class type Key", so.Name, ce)
-			log.Error(errMsg)
-			return C.CString(errMsg)
-		}
-		b3id, _ := Transactions.AddBtree(sop.UUID(b3o.TransactionID), b3)
-		return C.CString(b3id.String())
-	} else {
-		b3, err := jsondb.OpenJsonBtreeMapKey(ctx, so.Name, item.Transaction)
-		if err != nil {
-			errMsg := fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err)
-			return C.CString(errMsg)
-		}
-		b3id, _ := Transactions.AddBtree(sop.UUID(b3o.TransactionID), b3)
-		return C.CString(b3id.String())
 	}
 }
 

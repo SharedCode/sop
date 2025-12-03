@@ -332,7 +332,7 @@ func extractMetaData(payload *C.char) (*ManageBtreeMetaData, any, *C.char) {
 		return p, nil, C.CString(errMsg)
 	}
 
-	b32, ok := Transactions.GetBtree(sop.UUID(p.TransactionID), sop.UUID(p.BtreeID))
+	b32, ok := transRegistry.GetBtree(sop.UUID(p.TransactionID), sop.UUID(p.BtreeID))
 	if !ok {
 		errMsg := fmt.Sprintf("did not find B-tree(id=%v) from lookup", p.BtreeID)
 		return p, nil, C.CString(errMsg)

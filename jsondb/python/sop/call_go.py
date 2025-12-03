@@ -145,6 +145,16 @@ _manage_model_store.argtypes = [
 _manage_model_store.restype = ctypes.POINTER(ctypes.c_char)
 
 
+_manage_database = lib.manageDatabase
+_manage_database.argtypes = [
+    ctypes.c_int64,
+    ctypes.c_int,
+    ctypes.c_char_p,
+    ctypes.c_char_p,
+]
+_manage_database.restype = ctypes.POINTER(ctypes.c_char)
+
+
 def create_context() -> int:
     return ctypes.c_int64(_create_context()).value
 
@@ -366,6 +376,26 @@ def manage_model_store(ctxID: int, action: int, targetID: str, payload: str) -> 
         p = to_cstring(payload)
 
     res = _manage_model_store(
+        ctypes.c_int64(ctxID).value, to_cint(action), tID, p
+    )
+    if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:
+        return None
+
+    s = to_str(res)
+    _free_string(res)
+    return s
+
+
+def manage_database(ctxID: int, action: int, targetID: str, payload: str) -> str:
+    tID = None
+    if targetID is not None:
+        tID = to_cstring(targetID)
+    
+    p = None
+    if payload is not None:
+        p = to_cstring(payload)
+
+    res = _manage_database(
         ctypes.c_int64(ctxID).value, to_cint(action), tID, p
     )
     if res is None or ctypes.cast(res, ctypes.c_char_p).value is None:

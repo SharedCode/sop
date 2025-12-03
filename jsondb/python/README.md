@@ -96,7 +96,7 @@ with db.begin_transaction(ctx) as tx:
     # --- 5. General Purpose B-Tree ---
     # Create a new B-Tree store.
     bo = BtreeOptions(name="user_store", is_unique=True)
-    user_store = Btree.new(ctx, "user_store", tx, options=bo)
+    user_store = db.new_btree(ctx, "user_store", tx, options=bo)
     
     # Add an item.
     user_store.add(ctx, Item(key="user1", value="John Doe"))
@@ -125,7 +125,7 @@ with db.begin_transaction(ctx) as tx:
     print(f"Loaded Model: {model['algorithm']}")
 
     # --- B-Tree Lookup ---
-    us = Btree.open(ctx, "user_store", tx)
+    us = db.open_btree(ctx, "user_store", tx)
     if us.find(ctx, "user1"):
         # Fetch the current item
         item = us.get_current_item(ctx)

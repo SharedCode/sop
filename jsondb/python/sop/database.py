@@ -7,9 +7,19 @@ from enum import Enum
 from . import call_go
 from . import context
 from . import transaction
+from .btree import Btree, BtreeOptions, IndexSpecification
 from .transaction import DBType
-from .ai.model import ModelStore, ModelAction
+from .ai.model import ModelStore
 from .ai.vector import VectorStore, UsageMode, VectorStoreTransportOptions, VectorStoreConfig
+
+class DatabaseAction(Enum):
+    NewDatabase = 1
+    BeginTransaction = 2
+    # CloseDatabase = 3
+    NewBtree = 4
+    OpenBtree = 5
+    OpenModelStore = 6
+    OpenVectorStore = 7
 
 class Database:
     def __init__(self, ctx: context.Context, storage_path: str = "", db_type: DBType = DBType.Standalone, 
@@ -34,44 +44,37 @@ class Database:
 
         payload = json.dumps(opts)
         
-        # Action NewModelDB (which is now NewDatabase)
-        # We use manage_model_store because that's where NewDatabase is handled
-        res = call_go.manage_model_store(ctx.id, ModelAction.NewModelDB.value, None, payload)
+        # Action NewDatabase
+        res = call_go.manage_database(ctx.id, DatabaseAction.NewDatabase.value, None, payload)
         try:
             self.id = uuid.UUID(res)
         except:
             raise Exception(res)
 
     def begin_transaction(self, ctx: context.Context, mode: int = 1, options: Optional[transaction.TransactionOptions] = None) -> transaction.Transaction:
-        # We can use manage_vector_db BeginTransaction (Action 9) which works on dbRegistry
+        # We use manage_database BeginTransaction
         if options:
             payload = json.dumps(asdict(options))
         else:
             payload = str(mode)
             
-        res = call_go.manage_vector_db(ctx.id, 9, str(self.id), payload)
+        res = call_go.manage_database(ctx.id, DatabaseAction.BeginTransaction.value, str(self.id), payload)
         try:
             tid = uuid.UUID(res)
-            return transaction.Transaction(ctx, id=tid, begun=True)
+            return transaction.Transaction(ctx, id=tid, begun=True, database_id=self.id)
         except:
             raise Exception(res)
 
     def open_model_store(self, ctx: context.Context, trans: transaction.Transaction, name: str) -> ModelStore:
-        # Action NewBTreeModelStore (Action 1)
-        # We use NewBTreeModelStore because OpenModelStore is not supported/deprecated
+        # Action OpenModelStore (Action 6)
         opts = {
             "transaction_id": str(trans.transaction_id),
-            "path": name # ModelStoreOptions uses "path" for name/path?
+            "path": name
         }
-        # Check ModelStoreOptions in Go:
-        # type ModelStoreOptions struct {
-        # 	Path          string `json:"path"`
-        # 	TransactionID string `json:"transaction_id"`
-        # }
-        # So yes, "path" is used.
         
         payload = json.dumps(opts)
-        res = call_go.manage_model_store(ctx.id, ModelAction.NewBTreeModelStore.value, None, payload)
+        # Pass self.id as targetID so Go can find the Database instance
+        res = call_go.manage_database(ctx.id, DatabaseAction.OpenModelStore.value, str(self.id), payload)
         try:
             store_id = uuid.UUID(res)
             return ModelStore(store_id, trans.transaction_id)
@@ -79,7 +82,7 @@ class Database:
             raise Exception(res)
 
     def open_vector_store(self, ctx: context.Context, trans: transaction.Transaction, name: str) -> VectorStore:
-        # Action 2 is OpenVectorStore in VectorAction
+        # Action OpenVectorStore (Action 7)
         config = VectorStoreConfig(usage_mode=UsageMode.Dynamic.value, content_size=0)
         opts = VectorStoreTransportOptions(
             transaction_id=str(trans.transaction_id),
@@ -89,12 +92,15 @@ class Database:
         )
         payload = json.dumps(asdict(opts))
 
-        res = call_go.manage_vector_db(ctx.id, 2, str(self.id), payload)
+        res = call_go.manage_database(ctx.id, DatabaseAction.OpenVectorStore.value, str(self.id), payload)
         try:
             store_id = uuid.UUID(res)
             return VectorStore(store_id, trans.transaction_id)
         except:
             raise Exception(res)
 
-    def close(self, ctx: context.Context) -> None:
-        call_go.manage_model_store(ctx.id, ModelAction.CloseModelDB.value, str(self.id), "")
+    def new_btree(self, ctx: context.Context, name: str, trans: transaction.Transaction, options: Optional[BtreeOptions] = None, index_spec: IndexSpecification = None) -> Btree:
+        return Btree.new(ctx, name, trans, options, index_spec)
+
+    def open_btree(self, ctx: context.Context, name: str, trans: transaction.Transaction) -> Btree:
+        return Btree.open(ctx, name, trans)

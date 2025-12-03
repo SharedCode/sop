@@ -138,7 +138,7 @@ func (db *Database) OpenModelStore(ctx context.Context, name string, t sop.Trans
 
 // OpenBtree opens a general purpose B-Tree store.
 // This allows the Database to manage standard Key-Value stores alongside AI stores.
-func (db *Database) OpenBtree(ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[string, any], error) {
+func (db *Database) OpenBtree(ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[any, any], error) {
 	if err := os.MkdirAll(db.storagePath, 0755); err != nil {
 		return nil, err
 	}
@@ -146,11 +146,11 @@ func (db *Database) OpenBtree(ctx context.Context, name string, t sop.Transactio
 	// For the Database wrapper, we provide a sensible default or we could make this generic if Go allowed methods to have type parameters (it does).
 	// However, since Database is a struct, we can't easily make this method generic for the return type without the struct being generic.
 	// For now, we'll expose a string/any B-Tree.
-	return inredfs.OpenBtree[string, any](ctx, name, t, nil)
+	return inredfs.OpenBtree[any, any](ctx, name, t, nil)
 }
 
 // NewBtree creates a new general purpose B-Tree store.
-func (db *Database) NewBtree(ctx context.Context, name string, t sop.Transaction, options ...sop.StoreOptions) (btree.BtreeInterface[string, any], error) {
+func (db *Database) NewBtree(ctx context.Context, name string, t sop.Transaction, options ...sop.StoreOptions) (btree.BtreeInterface[any, any], error) {
 	if err := os.MkdirAll(db.storagePath, 0755); err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (db *Database) NewBtree(ctx context.Context, name string, t sop.Transaction
 			Description:              "General purpose B-Tree created via Database",
 		}
 	}
-	return inredfs.NewBtree[string, any](ctx, opts, t, nil)
+	return inredfs.NewBtree[any, any](ctx, opts, t, nil)
 }
 
 // OpenVectorStore opens a vector store with map[string]any payload.

@@ -114,11 +114,12 @@ class Transaction:
     Delegates API calls to the SOP library that does Direct IO to disk drives w/ built-in L1/L2 caching.
     """
 
-    def __init__(self, ctx: context.Context, options: TransactionOptions = None, id: uuid.UUID = None, begun: bool = False):
+    def __init__(self, ctx: context.Context, options: TransactionOptions = None, id: uuid.UUID = None, begun: bool = False, database_id: uuid.UUID = None):
         self.ctx = ctx
         self.options = options
         self.transaction_id = uuid.UUID(int=0)
         self.begun = begun
+        self.database_id = database_id
 
         if id is not None:
             self.transaction_id = id

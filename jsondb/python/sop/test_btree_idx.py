@@ -41,13 +41,14 @@ class TestBtreeIndexSpecs(unittest.TestCase):
         bo = btree.BtreeOptions("personidx", True, cache_config=cache)
         bo.set_value_data_size(btree.ValueDataSize.Small)
         bo.is_primitive_key = False
-        btree.Btree.new(
+        cls.db.new_btree(
             ctx,
-            bo,
+            "personidx",
             t,
+            options=bo,
             # specify the Index fields of the Key class. You control how many fields get included
             # and each field's sort order (asc or desc).
-            btree.IndexSpecification(
+            index_spec=btree.IndexSpecification(
                 index_fields=(
                     btree.IndexFieldSpecification(
                         "address1", ascending_sort_order=False
@@ -62,7 +63,7 @@ class TestBtreeIndexSpecs(unittest.TestCase):
     def test_add(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "personidx", t)
+        b3 = self.db.open_btree(ctx, "personidx", t)
 
         pk = Key(address1="123 main st", address2="Fremont, CA")
         l = [btree.Item(pk, Person(first_name="joe", last_name="petit"))]
@@ -78,7 +79,7 @@ class TestBtreeIndexSpecs(unittest.TestCase):
     def test_get_items_batch(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "personidx", t)
+        b3 = self.db.open_btree(ctx, "personidx", t)
         items = b3.get_items(
             ctx,
             btree.PagingInfo(0, 0, 10, direction=btree.PagingDirection.Forward.value),

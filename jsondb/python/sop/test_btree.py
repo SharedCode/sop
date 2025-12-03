@@ -75,7 +75,7 @@ class TestBtree(unittest.TestCase):
         bo = btree.BtreeOptions("barstoreec", True, cache_config=cache)
         bo.set_value_data_size(btree.ValueDataSize.Small)
 
-        b3 = btree.Btree.new(ctx, bo, t)
+        b3 = cls.db.new_btree(ctx, "barstoreec", t, options=bo)
         l = [
             btree.Item(1, "foo"),
         ]
@@ -88,7 +88,7 @@ class TestBtree(unittest.TestCase):
     def test_add_if_not_exists(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "barstoreec", t)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
         l = [
             btree.Item(1, "foo"),
         ]
@@ -106,7 +106,7 @@ class TestBtree(unittest.TestCase):
         bo.set_value_data_size(btree.ValueDataSize.Small)
         bo.is_primitive_key = False
 
-        b3 = btree.Btree.new(ctx, bo, t)
+        b3 = self.db.new_btree(ctx, "barstoreec_mk", t, options=bo)
 
         pk = pKey("foo")
         l = [
@@ -126,7 +126,7 @@ class TestBtree(unittest.TestCase):
         bo.set_value_data_size(btree.ValueDataSize.Small)
         bo.is_primitive_key = False
 
-        b3 = btree.Btree.new(ctx, bo, t)
+        b3 = self.db.new_btree(ctx, "barstoreec_mk2", t, options=bo)
 
         l = [
             btree.Item(1, "foo"),
@@ -144,7 +144,7 @@ class TestBtree(unittest.TestCase):
     def test_get_items(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "barstoreec", t)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.get_items(
             ctx, btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
         )
@@ -155,7 +155,7 @@ class TestBtree(unittest.TestCase):
     def test_get_keys(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "barstoreec", t)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.get_keys(
             ctx, btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
         )
@@ -166,7 +166,7 @@ class TestBtree(unittest.TestCase):
     def test_get_values(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "barstoreec", t)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
         keys = b3.get_keys(
             ctx, btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
         )
@@ -179,7 +179,7 @@ class TestBtree(unittest.TestCase):
     def test_find(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "barstoreec", t)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.find(ctx, 1)
 
         print(f"find succeeded {res}.")
@@ -189,7 +189,7 @@ class TestBtree(unittest.TestCase):
     def test_find_with_id(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "barstoreec", t)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
         keys = b3.get_keys(
             ctx, btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
         )
@@ -202,7 +202,7 @@ class TestBtree(unittest.TestCase):
     def test_goto_first(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "barstoreec", t)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.first(ctx)
 
         print(f"goto first succeeded {res}.")
@@ -211,7 +211,7 @@ class TestBtree(unittest.TestCase):
     def test_goto_last(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "barstoreec", t)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.last(ctx)
 
         print(f"goto last succeeded {res}.")
@@ -220,7 +220,7 @@ class TestBtree(unittest.TestCase):
     def test_is_unique(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "barstoreec", t)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.is_unique()
 
         print(f"is_unique succeeded {res}.")
@@ -229,7 +229,7 @@ class TestBtree(unittest.TestCase):
     def test_count(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "barstoreec", t)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.count()
 
         print(f"count succeeded {res}.")
@@ -238,7 +238,7 @@ class TestBtree(unittest.TestCase):
     def test_get_store_info(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "barstoreec", t)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.get_store_info()
 
         print(f"storeInfo: {res}")
@@ -261,7 +261,7 @@ class TestBtreeMapKey(unittest.TestCase):
         bo.set_value_data_size(btree.ValueDataSize.Small)
         bo.is_primitive_key = False
 
-        b3 = btree.Btree.new(ctx, bo, t)
+        b3 = cls.db.new_btree(ctx, "foobar", t, options=bo)
         l = [
             btree.Item(pKey(key="123"), "foo"),
         ]
@@ -271,7 +271,7 @@ class TestBtreeMapKey(unittest.TestCase):
         bo.set_value_data_size(btree.ValueDataSize.Small)
         bo.is_primitive_key = False
 
-        btree.Btree.new(ctx, bo, t)
+        cls.db.new_btree(ctx, "person", t, options=bo)
 
         t.commit(ctx)
 
@@ -280,7 +280,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_add_if_not_exists(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "foobar", t)
+        b3 = self.db.open_btree(ctx, "foobar", t)
         l = [
             btree.Item(pKey(key="123"), "foo"),
         ]
@@ -293,7 +293,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_get_items(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "foobar", t)
+        b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.get_items(
             ctx, btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
         )
@@ -304,7 +304,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_get_keys(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "foobar", t)
+        b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.get_keys(
             ctx, btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
         )
@@ -315,7 +315,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_get_values(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "foobar", t)
+        b3 = self.db.open_btree(ctx, "foobar", t)
         keys = b3.get_keys(
             ctx, btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
         )
@@ -328,7 +328,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_find(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "foobar", t)
+        b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.find(ctx, pKey(key="123"))
 
         print(f"find succeeded {res}.")
@@ -338,7 +338,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_find_with_id(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "foobar", t)
+        b3 = self.db.open_btree(ctx, "foobar", t)
         keys = b3.get_keys(
             ctx, btree.PagingInfo(0, 5, direction=btree.PagingDirection.Forward.value)
         )
@@ -351,7 +351,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_goto_first(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "foobar", t)
+        b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.first(ctx)
 
         print(f"goto first succeeded {res}.")
@@ -360,7 +360,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_goto_last(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "foobar", t)
+        b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.last(ctx)
 
         print(f"goto last succeeded {res}.")
@@ -369,7 +369,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_is_unique(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "foobar", t)
+        b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.is_unique()
 
         print(f"is_unique succeeded {res}.")
@@ -378,7 +378,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_count(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "foobar", t)
+        b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.count()
 
         print(f"count succeeded {res}.")
@@ -387,7 +387,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_get_store_info(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "foobar", t)
+        b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.get_store_info()
 
         print(f"storeInfo: {res}")
@@ -396,7 +396,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_add_people(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "person", t)
+        b3 = self.db.open_btree(ctx, "person", t)
 
         # Prepare a batch of 500 Person records.
         l = []
@@ -412,7 +412,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_get_keys_get_values(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "person", t)
+        b3 = self.db.open_btree(ctx, "person", t)
         b3.first(ctx)
         keys = b3.get_keys(
             ctx,
@@ -426,7 +426,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_get_keys_backwards_get_values(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "person", t)
+        b3 = self.db.open_btree(ctx, "person", t)
         # Position cursor to the last item.
         b3.last(ctx)
         # Navigate to the 200th item backwards then fetch that item & the item previous to it.
@@ -443,7 +443,7 @@ class TestBtreeMapKey(unittest.TestCase):
     def test_get_keys_over_the_edge_get_values(self):
         t = self.db.begin_transaction(ctx, options=to)
 
-        b3 = btree.Btree.open(ctx, "person", t)
+        b3 = self.db.open_btree(ctx, "person", t)
         b3.first(ctx)
         keys = b3.get_keys(
             ctx,

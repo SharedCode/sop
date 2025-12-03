@@ -216,7 +216,6 @@ const (
 	DatabaseActionUnknown = iota
 	NewDatabase
 	BeginTransaction
-	_ // CloseDatabase
 	NewBtree
 	OpenBtree
 	OpenModelStore

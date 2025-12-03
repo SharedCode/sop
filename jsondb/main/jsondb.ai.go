@@ -7,16 +7,9 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
-	"log"
-	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/model"
-	"github.com/sharedcode/sop/ai/vector"
-	"github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/inredfs"
 )
 
 // --- Vector Database & Store Management ---
@@ -37,24 +30,17 @@ const (
 
 const (
 	VectorActionUnknown = iota
-	NewVectorDB
-	OpenVectorStore
+	_                   // NewVectorDB
+	_                   // OpenVectorStore
 	UpsertVector
 	UpsertBatchVector
 	GetVector
 	DeleteVector
 	QueryVector
 	VectorCount
-	VectorBeginTransaction // New Action
+	_ // VectorBeginTransaction
 	OptimizeVector
 )
-
-type VectorDBOptions struct {
-	StoragePath   string                            `json:"storage_path"`
-	DBType        int                               `json:"db_type"` // 0: Standalone, 1: Clustered
-	ErasureConfig map[string]fs.ErasureCodingConfig `json:"erasure_config,omitempty"`
-	StoresFolders []string                          `json:"stores_folders,omitempty"`
-}
 
 type VectorStoreConfig struct {
 	UsageMode   int `json:"usage_mode"`
@@ -99,7 +85,7 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			return nil, fmt.Errorf("invalid store UUID: %v", err)
 		}
 
-		obj, ok := Transactions.GetBtree(transUUID, storeUUID)
+		obj, ok := transRegistry.GetBtree(transUUID, storeUUID)
 		if !ok {
 			return nil, fmt.Errorf("Vector Store not found in transaction")
 		}
@@ -111,101 +97,6 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 	}
 
 	switch int(action) {
-	case NewVectorDB:
-		var opts VectorDBOptions
-		if err := json.Unmarshal([]byte(jsonPayload), &opts); err != nil {
-			return C.CString(fmt.Sprintf("invalid options: %v", err))
-		}
-
-		// Create DB
-		db := database.NewDatabase(database.DatabaseType(opts.DBType), opts.StoragePath)
-		if len(opts.ErasureConfig) > 0 || len(opts.StoresFolders) > 0 {
-			db.SetReplicationConfig(opts.ErasureConfig, opts.StoresFolders)
-		}
-
-		id := dbRegistry.Add(db)
-
-		return C.CString(id.String())
-
-	case VectorBeginTransaction:
-		// targetID is the DB UUID
-		targetUUID, _ := sop.ParseUUID(targetIDStr)
-		db, ok := dbRegistry.Get(targetUUID)
-		if !ok {
-			return C.CString("Database not found")
-		}
-
-		// Payload is Transaction Mode (int). Default to ReadWrite (1) if not specified or 0?
-		// sop.TransactionMode: Read=0, ReadWrite=1.
-		// Let's assume payload is just the integer string.
-		mode := sop.ForWriting
-		var opts inredfs.TransationOptionsWithReplication
-		if jsonPayload != "" {
-			if err := json.Unmarshal([]byte(jsonPayload), &opts); err == nil {
-				mode = opts.Mode
-				// Adjust MaxTime from minutes to Duration.
-				opts.MaxTime = opts.MaxTime * time.Minute
-			} else {
-				var m int
-				if err := json.Unmarshal([]byte(jsonPayload), &m); err == nil {
-					mode = sop.TransactionMode(m)
-				}
-			}
-		}
-
-		tx, err := db.BeginTransaction(ctx, mode, opts)
-		if err != nil {
-			return C.CString(err.Error())
-		}
-
-		id := Transactions.Add(tx)
-		return C.CString(id.String())
-
-	case OpenVectorStore:
-		var opts VectorStoreTransportOptions
-		if err := json.Unmarshal([]byte(jsonPayload), &opts); err != nil {
-			return C.CString(fmt.Sprintf("invalid options: %v", err))
-		}
-		log.Printf("DEBUG: OpenVectorStore StoragePath='%s' Payload='%s'\n", opts.StoragePath, jsonPayload)
-
-		// targetID is the DB UUID
-		targetUUID, _ := sop.ParseUUID(targetIDStr)
-		db, ok := dbRegistry.Get(targetUUID)
-		if !ok {
-			return C.CString("Database not found")
-		}
-
-		transUUID, err := sop.ParseUUID(opts.TransactionID)
-		if err != nil {
-			return C.CString("Invalid transaction UUID")
-		}
-
-		item, ok := Transactions.GetItem(transUUID)
-		if !ok {
-			return C.CString("Transaction not found")
-		}
-
-		cfg := vector.Config{
-			UsageMode:   ai.UsageMode(opts.Config.UsageMode),
-			ContentSize: sop.ValueDataSize(opts.Config.ContentSize),
-			StoragePath: opts.StoragePath,
-		}
-
-		store, err := db.OpenVectorStore(ctx, opts.Name, item.Transaction, cfg)
-		if err != nil {
-			return C.CString(err.Error())
-		}
-
-		id, err := Transactions.AddBtree(transUUID, store)
-		if err != nil {
-			return C.CString(err.Error())
-		}
-		if id.IsNil() {
-			return C.CString("Transaction not found during registration")
-		}
-
-		return C.CString(id.String())
-
 	case UpsertVector:
 		store, err := getStore()
 		if err != nil {
@@ -340,22 +231,15 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 
 const (
 	ModelActionUnknown = iota
-	NewBTreeModelStore
-	NewModelDB
-	OpenModelStore
+	_                  // NewBTreeModelStore
+	_                  // NewModelDB
+	_                  // OpenModelStore
 	SaveModel
 	LoadModel
 	ListModels
 	DeleteModel
-	CloseModelDB
+	_ // CloseDatabase
 )
-
-type ModelDBOptions struct {
-	StoragePath   string                            `json:"storage_path"`
-	DBType        int                               `json:"db_type"` // 0: Standalone, 1: Clustered
-	ErasureConfig map[string]fs.ErasureCodingConfig `json:"erasure_config,omitempty"`
-	StoresFolders []string                          `json:"stores_folders,omitempty"`
-}
 
 type ModelStoreOptions struct {
 	Path          string `json:"path"`
@@ -393,7 +277,7 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 			return nil, fmt.Errorf("invalid store UUID: %v", err)
 		}
 
-		obj, ok := Transactions.GetBtree(transUUID, storeUUID)
+		obj, ok := transRegistry.GetBtree(transUUID, storeUUID)
 		if !ok {
 			return nil, fmt.Errorf("Model Store not found in transaction")
 		}
@@ -405,52 +289,6 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 	}
 
 	switch int(action) {
-	case NewModelDB:
-		var opts ModelDBOptions
-		if err := json.Unmarshal([]byte(jsonPayload), &opts); err != nil {
-			return C.CString(fmt.Sprintf("invalid options: %v", err))
-		}
-
-		db := database.NewDatabase(database.DatabaseType(opts.DBType), opts.StoragePath)
-		if len(opts.ErasureConfig) > 0 || len(opts.StoresFolders) > 0 {
-			db.SetReplicationConfig(opts.ErasureConfig, opts.StoresFolders)
-		}
-		id := dbRegistry.Add(db)
-
-		return C.CString(id.String())
-
-	case OpenModelStore:
-		return C.CString("OpenModelStore not supported in this version. Use NewBTreeModelStore.")
-
-	case NewBTreeModelStore:
-		var opts ModelStoreOptions
-		if err := json.Unmarshal([]byte(jsonPayload), &opts); err != nil {
-			return C.CString(fmt.Sprintf("invalid options: %v", err))
-		}
-
-		transUUID, err := sop.ParseUUID(opts.TransactionID)
-		if err != nil {
-			return C.CString("Invalid transaction UUID")
-		}
-
-		item, ok := Transactions.GetItem(transUUID)
-		if !ok {
-			return C.CString("Transaction not found")
-		}
-
-		// Use a default name "global" for the model store when created this way.
-		store := model.New("global", item.Transaction)
-
-		id, err := Transactions.AddBtree(transUUID, store)
-		if err != nil {
-			return C.CString(err.Error())
-		}
-		if id.IsNil() {
-			return C.CString("Transaction not found during registration")
-		}
-
-		return C.CString(id.String())
-
 	case SaveModel:
 		store, err := getStore()
 		if err != nil {
@@ -515,10 +353,6 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 		if err := store.Delete(ctx, item.Category, item.Name); err != nil {
 			return C.CString(err.Error())
 		}
-
-	case CloseModelDB:
-		targetUUID, _ := sop.ParseUUID(targetIDStr)
-		dbRegistry.Remove(targetUUID)
 	}
 
 	return nil

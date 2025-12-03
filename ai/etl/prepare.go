@@ -70,7 +70,7 @@ func PrepareData(ctx context.Context, url, out string, limit int) error {
 
 		// Create item
 		baseID := strings.ToLower(strings.ReplaceAll(disease, " ", "_"))
-		
+
 		// Generate deterministic ID based on content
 		h := fnv.New32a()
 		h.Write([]byte(disease))
@@ -78,7 +78,7 @@ func PrepareData(ctx context.Context, url, out string, limit int) error {
 			h.Write([]byte(s))
 		}
 		id := fmt.Sprintf("%s_%x", baseID, h.Sum32())
-		
+
 		desc := fmt.Sprintf("Symptoms: %s", strings.Join(symptoms, ", "))
 
 		items = append(items, agent.DataItem{

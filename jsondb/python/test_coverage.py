@@ -96,11 +96,15 @@ class TestCoverage(unittest.TestCase):
 
     def test_model_store_open_error(self):
         ctx = context.Context()
-        t = Transaction(ctx, id=uuid.uuid4(), begun=True)
-        with patch('sop.call_go.manage_model_store', return_value="Open Error"):
+        t = Transaction(ctx, id=uuid.uuid4(), begun=True, database_id=uuid.uuid4())
+        with patch('sop.call_go.manage_database', side_effect=[str(uuid.uuid4()), "Open Error"]):
             with self.assertRaises(Exception):
-                from sop.ai.model import ModelStore
-                ModelStore.open_btree_store(ctx, t)
+                from sop.database import Database
+                # We need a database instance to call open_model_store
+                # But we can mock the database instance or just call the method if we can instantiate it.
+                # Easier to just mock the call inside Database.open_model_store
+                db = Database(ctx)
+                db.open_model_store(ctx, t, "store")
 
     def test_model_store_save_error(self):
         ctx = context.Context()
@@ -140,7 +144,7 @@ class TestCoverage(unittest.TestCase):
 
     def test_database_init_error(self):
         ctx = context.Context()
-        with patch('sop.call_go.manage_model_store', return_value="Init Error"):
+        with patch('sop.call_go.manage_database', return_value="Init Error"):
             with self.assertRaises(Exception):
                 from sop.database import Database
                 Database(ctx)
@@ -148,18 +152,17 @@ class TestCoverage(unittest.TestCase):
     def test_database_begin_transaction_error(self):
         ctx = context.Context()
         # Mock successful init
-        with patch('sop.call_go.manage_model_store', return_value=str(uuid.uuid4())):
+        with patch('sop.call_go.manage_database', side_effect=[str(uuid.uuid4()), "Begin Error"]):
             from sop.database import Database
             db = Database(ctx)
             
-            with patch('sop.call_go.manage_vector_db', return_value="Begin Error"):
-                with self.assertRaises(Exception):
-                    db.begin_transaction(ctx)
+            with self.assertRaises(Exception):
+                db.begin_transaction(ctx)
 
     def test_database_open_model_store_error(self):
         ctx = context.Context()
-        t = Transaction(ctx, id=uuid.uuid4(), begun=True)
-        with patch('sop.call_go.manage_model_store', side_effect=[str(uuid.uuid4()), "Open Error"]):
+        t = Transaction(ctx, id=uuid.uuid4(), begun=True, database_id=uuid.uuid4())
+        with patch('sop.call_go.manage_database', side_effect=[str(uuid.uuid4()), "Open Error"]):
             from sop.database import Database
             db = Database(ctx)
             with self.assertRaises(Exception):
@@ -167,13 +170,12 @@ class TestCoverage(unittest.TestCase):
 
     def test_database_open_vector_store_error(self):
         ctx = context.Context()
-        t = Transaction(ctx, id=uuid.uuid4(), begun=True)
-        with patch('sop.call_go.manage_model_store', return_value=str(uuid.uuid4())):
+        t = Transaction(ctx, id=uuid.uuid4(), begun=True, database_id=uuid.uuid4())
+        with patch('sop.call_go.manage_database', side_effect=[str(uuid.uuid4()), "Open Error"]):
             from sop.database import Database
             db = Database(ctx)
-            with patch('sop.call_go.manage_vector_db', return_value="Open Error"):
-                with self.assertRaises(Exception):
-                    db.open_vector_store(ctx, t, "store")
+            with self.assertRaises(Exception):
+                db.open_vector_store(ctx, t, "store")
 
 if __name__ == '__main__':
     unittest.main()

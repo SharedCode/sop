@@ -53,10 +53,10 @@ def main():
             # 3a. Generic B-Trees (e.g. User Data)
             logger.info("Creating Generic B-Trees...")
             user_btree_opts = btree.BtreeOptions(name="Users", slot_length=100)
-            user_btree = btree.Btree.new(ctx, user_btree_opts, trans)
+            user_btree = db.new_btree(ctx, "Users", trans, options=user_btree_opts)
             
             log_btree_opts = btree.BtreeOptions(name="Logs", slot_length=100)
-            log_btree = btree.Btree.new(ctx, log_btree_opts, trans)
+            log_btree = db.new_btree(ctx, "Logs", trans, options=log_btree_opts)
 
             # 3b. Model Stores
             logger.info("Creating Model Stores...")
@@ -124,7 +124,7 @@ def main():
 
     with db.begin_transaction(ctx, options=read_opts) as trans:
         # Open existing B-Trees
-        user_btree = btree.Btree.open(ctx, "Users", trans)
+        user_btree = db.open_btree(ctx, "Users", trans)
         count = user_btree.count()
         logger.info(f"Users B-Tree count: {count}")
         if count != num_items:

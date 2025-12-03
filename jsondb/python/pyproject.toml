@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sop4py"
-version = "2.0.19"
+version = "2.0.21"
 authors = [
     { name="Gerardo Recinto", email="gerardorecinto@yahoo.com" },
 ]

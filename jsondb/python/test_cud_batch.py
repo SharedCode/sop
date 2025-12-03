@@ -51,7 +51,7 @@ class TestCUDBatch(unittest.TestCase):
             bo = BtreeOptions("users", True, cache_config=cache)
             bo.set_value_data_size(ValueDataSize.Small)
             
-            b3 = Btree.new(ctx, bo, t)
+            b3 = db.new_btree(ctx, "users", t, options=bo)
             
             items = []
             for i in range(100):
@@ -62,7 +62,7 @@ class TestCUDBatch(unittest.TestCase):
 
         # Verify Insert
         with db.begin_transaction(ctx, options=opts) as t:
-            b3 = Btree.open(ctx, "users", t)
+            b3 = db.open_btree(ctx, "users", t)
             count = b3.count()
             self.assertEqual(count, 100)
             
@@ -76,7 +76,7 @@ class TestCUDBatch(unittest.TestCase):
         # 2. Update
         print("Updating 100 users...")
         with db.begin_transaction(ctx, options=opts) as t:
-            b3 = Btree.open(ctx, "users", t)
+            b3 = db.open_btree(ctx, "users", t)
             
             items = []
             for i in range(100):
@@ -87,7 +87,7 @@ class TestCUDBatch(unittest.TestCase):
 
         # Verify Update
         with db.begin_transaction(ctx, options=opts) as t:
-            b3 = Btree.open(ctx, "users", t)
+            b3 = db.open_btree(ctx, "users", t)
             items = b3.get_values(ctx, [BtreeItem(key="user_50")])
             self.assertEqual(len(items), 1)
             self.assertEqual(items[0].value, "Updated User 50")
@@ -95,7 +95,7 @@ class TestCUDBatch(unittest.TestCase):
         # 3. Delete
         print("Deleting 100 users...")
         with db.begin_transaction(ctx, options=opts) as t:
-            b3 = Btree.open(ctx, "users", t)
+            b3 = db.open_btree(ctx, "users", t)
             
             keys = [f"user_{i}" for i in range(100)]
             b3.remove(ctx, keys)
@@ -103,7 +103,7 @@ class TestCUDBatch(unittest.TestCase):
 
         # Verify Delete
         with db.begin_transaction(ctx, options=opts) as t:
-            b3 = Btree.open(ctx, "users", t)
+            b3 = db.open_btree(ctx, "users", t)
             count = b3.count()
             self.assertEqual(count, 0)
 
@@ -224,19 +224,19 @@ class TestCUDBatch(unittest.TestCase):
             # But usually there is at least one or the system initializes them.
             # Let's check if we can open it.
             # After optimize, version is 1, so store name has _1 suffix
-            b_centroids = Btree.open(ctx, "vectors_test_centroids_1", t)
+            b_centroids = vdb.open_btree(ctx, "vectors_test_centroids_1", t)
             c_count = b_centroids.count()
             print(f"Centroids count: {c_count}")
             # With 50 items, it might be small, but should be accessible.
             
             # 2. Vectors
-            b_vectors = Btree.open(ctx, "vectors_test_vecs_1", t)
+            b_vectors = vdb.open_btree(ctx, "vectors_test_vecs_1", t)
             v_count = b_vectors.count()
             print(f"Vectors count: {v_count}")
             self.assertEqual(v_count, 50)
 
             # 3. Content (Payloads)
-            b_content = Btree.open(ctx, "vectors_test_data", t)
+            b_content = vdb.open_btree(ctx, "vectors_test_data", t)
             d_count = b_content.count()
             print(f"Content count: {d_count}")
             self.assertEqual(d_count, 50)

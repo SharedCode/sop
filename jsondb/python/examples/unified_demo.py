@@ -45,10 +45,10 @@ def main():
 
         # --- A. General Purpose B-Tree Operation ---
         print("Opening General B-Tree 'users'...")
-        # Note: Btree.new creates a new store. Btree.open opens existing.
+        # Note: db.new_btree creates a new store. db.open_btree opens existing.
         # For demo, we use new.
         btree_opts = BtreeOptions(name="users")
-        users_store = Btree.new(ctx, "users", trans, options=btree_opts)
+        users_store = ai_db.new_btree(ctx, "users", trans, options=btree_opts)
         
         user_id = uuid.uuid4()
         print(f"Adding User to B-Tree: {user_id}")
@@ -72,7 +72,7 @@ def main():
     print("\n--- Verifying Data ---")
     with ai_db.begin_transaction(ctx, options=trans_opts) as trans:
         # Open B-Tree
-        users_store = Btree.open(ctx, "users", trans)
+        users_store = ai_db.open_btree(ctx, "users", trans)
         found = users_store.find(ctx, str(user_id))
         if found:
             # Fetch value

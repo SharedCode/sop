@@ -6,7 +6,7 @@ from . import context
 
 logger = logging.getLogger(__name__)
 
-from typing import TypeVar, Generic, Type, List
+from typing import TypeVar, Generic, Type, List, Optional
 from dataclasses import dataclass, asdict
 
 from . import transaction
@@ -143,8 +143,8 @@ class ManageBtreePayload(Generic[TK, TV]):
 
 
 class BtreeAction(Enum):
-    NewBtree = auto()
-    OpenBtree = auto()
+    # NewBtree = auto()
+    # OpenBtree = auto()
     Add = auto()
     AddIfNotExist = auto()
     Update = auto()
@@ -183,8 +183,9 @@ class Btree(Generic[TK, TV]):
     def new(
         cls: Type["Btree[TK,TV]"],
         ctx: context.Context,
-        options: BtreeOptions,
+        name: str,
         trans: transaction.Transaction,
+        options: Optional[BtreeOptions] = None,
         index_spec: IndexSpecification = None,
     ) -> "Btree[TK,TV]":
         """Create a new B-tree store in the backend storage with the options specified then returns an instance
@@ -193,8 +194,9 @@ class Btree(Generic[TK, TV]):
         Args:
             cls (Type[&quot;Btree[TK,TV]&quot;]): Supports generics for Key (TK) & Value (TV) pair.
             ctx (context.Context): context.Context object, useful for telling SOP in the backend the ID of the context for use in calls.
-            options (BtreeOptions): _description_
+            name (str): Name of the B-tree store to create.
             trans (transaction.Transaction): instance of a transaction.Transaction that the B-tree store to be opened belongs.
+            options (BtreeOptions, optional): Defaults to None.
             index_spec (IndexSpecification, optional): Defaults to None.
 
         Raises:
@@ -203,13 +205,21 @@ class Btree(Generic[TK, TV]):
         Returns:
             Btree[TK,TV]: B-tree instance
         """
+        if options is None:
+            options = BtreeOptions(name=name, is_unique=True, slot_length=1000, description="General purpose B-Tree created via Database")
+        else:
+            options.name = name
 
         options.transaction_id = str(trans.transaction_id)
         if index_spec is not None:
             options.index_specification = json.dumps(asdict(index_spec))
 
-        res = call_go.manage_btree(
-            ctx.id, BtreeAction.NewBtree.value, json.dumps(asdict(options)), None
+        if trans.database_id is None:
+             raise BtreeError("Transaction must be associated with a Database to create a Btree")
+
+        from .database import DatabaseAction
+        res = call_go.manage_database(
+            ctx.id, DatabaseAction.NewBtree.value, str(trans.database_id), json.dumps(asdict(options))
         )
 
         if res == None:
@@ -241,8 +251,13 @@ class Btree(Generic[TK, TV]):
         """
         options: BtreeOptions = BtreeOptions(name=name)
         options.transaction_id = str(trans.transaction_id)
-        res = call_go.manage_btree(
-            ctx.id, BtreeAction.OpenBtree.value, json.dumps(asdict(options)), ""
+        
+        if trans.database_id is None:
+             raise BtreeError("Transaction must be associated with a Database to open a Btree")
+
+        from .database import DatabaseAction
+        res = call_go.manage_database(
+            ctx.id, DatabaseAction.OpenBtree.value, str(trans.database_id), json.dumps(asdict(options))
         )
 
         if res == None:

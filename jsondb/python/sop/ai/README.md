@@ -10,13 +10,18 @@ Ensure you have the shared library (`libjsondb.so`, `.dll`, or `.dylib`) built a
 
 ### Vector Database
 
-```python
-from sop.ai.vector import VectorDatabase, VectorDBOptions, DBType, UsageMode
-from sop.transaction import ErasureCodingConfig
+You can use the unified `sop.Database` class to manage your Vector Stores.
 
-# 1. Initialize Vector DB
+```python
+import sop
+from sop.transaction import ErasureCodingConfig, DBType
+
+# 1. Initialize Context
+ctx = sop.Context()
+
+# 2. Initialize Database
 # Standalone (Local, No Replication)
-db = VectorDatabase(storage_path="./my_vector_db", db_type=DBType.Standalone)
+db = sop.Database(ctx, storage_path="./my_vector_db", db_type=DBType.Standalone)
 
 # Clustered (Distributed, With Replication)
 ec_config = ErasureCodingConfig(
@@ -26,18 +31,20 @@ ec_config = ErasureCodingConfig(
     repair_corrupted_shards=True
 )
 
-clustered_db = VectorDatabase(
+clustered_db = sop.Database(
+    ctx,
     storage_path="./my_cluster_db", 
     db_type=DBType.Clustered,
-    erasure_config=ec_config,
+    erasure_config={"default": ec_config},
     stores_folders=["/mnt/d1/sop", "/mnt/d2/sop"]
 )
 
-# 2. Open a Store
-store = db.open("documents")
+# 3. Open a Store within a Transaction
+with db.begin_transaction(ctx) as tx:
+    store = db.open_vector_store(ctx, tx, "documents")
 
-# 3. Upsert Items
-# ...
+    # 4. Upsert Items
+    # ...
 ```
 
 ### Replication Support

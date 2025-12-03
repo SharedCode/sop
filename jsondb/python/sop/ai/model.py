@@ -9,14 +9,14 @@ from .. import context
 from .. import transaction
 
 class ModelAction(Enum):
-    NewBTreeModelStore = 1
-    NewModelDB = 2
+    # NewBTreeModelStore = 1
+    # NewModelDB = 2
     OpenModelStore = 3
     SaveModel = 4
     LoadModel = 5
     ListModels = 6
     DeleteModel = 7
-    CloseModelDB = 8
+    # CloseDatabase = 8
 
 @dataclass
 class Model:
@@ -37,17 +37,6 @@ class ModelStore:
             "id": str(self.id),
             "transaction_id": str(self.transaction_id)
         })
-
-    @staticmethod
-    def open_btree_store(ctx: context.Context, trans: transaction.Transaction) -> 'ModelStore':
-        opts = {"transaction_id": str(trans.transaction_id)}
-        payload = json.dumps(opts)
-        res = call_go.manage_model_store(ctx.id, ModelAction.NewBTreeModelStore.value, None, payload)
-        try:
-            id = uuid.UUID(res)
-            return ModelStore(id, trans.transaction_id)
-        except:
-            raise Exception(res)
 
     def save(self, ctx: context.Context, category: str, name: str, model: Any) -> None:
         if hasattr(model, "__dataclass_fields__"):

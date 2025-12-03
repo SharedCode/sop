@@ -65,6 +65,7 @@ func NewJsonBtreeMapKey(ctx context.Context, so sop.StoreOptions, t sop.Transact
 		}
 		j.indexSpecification = &is
 		comparer = is.Comparer
+		so.CELexpression = indexSpecification
 	}
 
 	b3, err := NewJsonBtree[map[string]any, any](ctx, so, t, comparer)
