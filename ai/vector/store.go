@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"sort"
-	"sync"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -929,11 +928,12 @@ func (di *domainIndex[T]) addCentroidToCache(id int, vec []float32) {
 	}
 }
 
-var optimizingDomains sync.Map
-
 func (di *domainIndex[T]) isOptimizing(ctx context.Context) (bool, error) {
-	_, ok := optimizingDomains.Load(di.name)
-	return ok, nil
+	if di.config.Cache == nil {
+		return false, nil
+	}
+	lockKeyName := di.config.Cache.FormatLockKey(fmt.Sprintf("optimize_lock_%s", di.name))
+	return di.config.Cache.IsLockedByOthers(ctx, []string{lockKeyName})
 }
 
 func (di *domainIndex[T]) getActiveVersion(ctx context.Context, trans sop.Transaction) (int64, error) {

@@ -37,63 +37,133 @@ const batchSize = 200
 // to use the original transaction after calling Optimize().
 func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 	log.Printf("DEBUG: Optimize started for domain %s", di.name)
+
+	// 1. Initialization
+	currentVersion, newVersion, suffix, useTempVectors, _, cleanupLock, err := di.initialize(ctx)
+	if err != nil {
+		return err
+	}
+	defer cleanupLock()
+
+	// 2. Phase 1: Build Lookup Table
+	count, err := di.phase1(ctx, currentVersion, suffix, useTempVectors)
+	if err != nil {
+		return err
+	}
+
+	// 3. Phase 2: Sampling & Centroids
+	newCentroidsMap, err := di.phase2(ctx, currentVersion, suffix, count)
+	if err != nil {
+		return err
+	}
+
+	// 4. Phase 3: Migration
+	if err := di.phase3(ctx, currentVersion, newVersion, suffix, useTempVectors, newCentroidsMap); err != nil {
+		return err
+	}
+
+	// 5. Phase 4: Finalize
+	if err := di.phase4(ctx, currentVersion, newVersion, useTempVectors); err != nil {
+		return err
+	}
+
+	log.Println("DEBUG: Optimize completed successfully")
+	return nil
+}
+
+func (di *domainIndex[T]) openArch(ctx context.Context, tx sop.Transaction, ver int64) (*Architecture, error) {
+	// Clear cache to force re-open with new tx
+	di.archCache = nil
+	di.trans = tx
+	return di.getArchitecture(ctx, ver)
+}
+
+func (di *domainIndex[T]) openSysStore(ctx context.Context, tx sop.Transaction) (btree.BtreeInterface[string, int64], error) {
+	sysStoreName := fmt.Sprintf("%s%s", di.name, sysConfigSuffix)
+	return newBtree[string, int64](ctx, sop.ConfigureStore(sysStoreName, true, 1000, sysConfigDesc, sop.SmallData, ""), tx, func(a, b string) int {
+		if a < b {
+			return -1
+		}
+		if a > b {
+			return 1
+		}
+		return 0
+	})
+}
+
+func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string, bool, []*sop.LockKey, func(), error) {
 	// 1. Commit the current transaction to ensure any pending writes are saved.
 	if di.trans.HasBegun() {
 		log.Println("DEBUG: Committing initial transaction")
 		if err := di.trans.Commit(ctx); err != nil {
-			return err
+			return 0, 0, "", false, nil, nil, err
 		}
 	}
 
-	// Helper to open the architecture in the current transaction
-	openArch := func(tx sop.Transaction, ver int64) (*Architecture, error) {
-		// Clear cache to force re-open with new tx
-		di.archCache = nil
-		di.trans = tx
-		return di.getArchitecture(ctx, ver)
+	// Set Distributed Lock
+	if di.config.Cache == nil {
+		return 0, 0, "", false, nil, nil, fmt.Errorf("cache is required for optimization locking")
+	}
+	lockKeyName := fmt.Sprintf("optimize_lock_%s", di.name)
+	lockKeys := di.config.Cache.CreateLockKeys([]string{lockKeyName})
+	success, _, err := di.config.Cache.DualLock(ctx, 2*time.Hour, lockKeys)
+	if err != nil {
+		return 0, 0, "", false, nil, nil, fmt.Errorf("failed to acquire optimization lock: %w", err)
+	}
+	if !success {
+		return 0, 0, "", false, nil, nil, fmt.Errorf("failed to acquire optimization lock for domain %s (already locked)", di.name)
 	}
 
-	// Helper to open SysStore
-	openSysStore := func(tx sop.Transaction) (btree.BtreeInterface[string, int64], error) {
-		sysStoreName := fmt.Sprintf("%s%s", di.name, sysConfigSuffix)
-		return newBtree[string, int64](ctx, sop.ConfigureStore(sysStoreName, true, 1000, sysConfigDesc, sop.SmallData, ""), tx, func(a, b string) int {
-			if a < b {
-				return -1
+	// Start a goroutine to refresh the lock TTL periodically
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(30 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				if ok, err := di.config.Cache.IsLockedTTL(ctx, 2*time.Hour, lockKeys); err != nil {
+					log.Printf("WARN: Failed to refresh optimization lock TTL: %v", err)
+				} else if !ok {
+					log.Printf("WARN: Optimization lock lost during refresh")
+				}
 			}
-			if a > b {
-				return 1
-			}
-			return 0
-		})
+		}
+	}()
+
+	cleanupLock := func() {
+		close(done)
+		if err := di.config.Cache.Unlock(ctx, lockKeys); err != nil {
+			log.Printf("WARN: Failed to unlock optimization lock: %v", err)
+		}
 	}
-
-	// 2. Phase 1: Build Lookup Table (Batched)
-
-	// Set In-Memory Lock
-	optimizingDomains.Store(di.name, true)
-	defer optimizingDomains.Delete(di.name)
 
 	// We need to know the current version to start.
 	// We start a short TX just to get the version.
 	log.Println("DEBUG: Starting check transaction")
 	tx, err := di.beginTransaction(ctx)
 	if err != nil {
-		return err
+		cleanupLock()
+		return 0, 0, "", false, nil, nil, err
 	}
 	di.trans = tx
 
 	// Re-open SysStore
-	sysStore, err := openSysStore(tx)
+	sysStore, err := di.openSysStore(ctx, tx)
 	if err != nil {
 		tx.Rollback(ctx)
-		return err
+		cleanupLock()
+		return 0, 0, "", false, nil, nil, err
 	}
 	di.sysStore = sysStore
 
 	currentVersion, err := di.getActiveVersion(ctx, tx)
 	if err != nil {
 		tx.Rollback(ctx)
-		return err
+		cleanupLock()
+		return 0, 0, "", false, nil, nil, err
 	}
 	log.Printf("DEBUG: Current version: %d", currentVersion)
 
@@ -102,23 +172,15 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 	suffix := fmt.Sprintf("_%d", newVersion)
 
 	// Check if previous optimization failed (stores exist)
-	// If so, we should clean them up before starting.
-	// We can check if the new lookup store exists.
 	lookupName := di.name + lookupSuffix + suffix
 	found, err := inredfs.IsStoreExists(ctx, tx, lookupName)
 	if err != nil {
-		// If we can't check, assume it doesn't exist or we can't proceed safely
-		// But IsStoreExists might return error if store not found in some implementations?
-		// Assuming standard SOP behavior: error means something wrong with DB.
 		tx.Rollback(ctx)
-		return err
+		cleanupLock()
+		return 0, 0, "", false, nil, nil, err
 	}
 	if found {
 		log.Println("DEBUG: Found previous failed optimization, cleaning up")
-		// Previous optimization failed. Cleanup.
-		// We need to remove the stores.
-		// Since we are in a transaction, we can use the store repository to remove them.
-		// But we need to know the names.
 		storesToRemove := []string{
 			di.name + centroidsSuffix + suffix,
 			di.name + vectorsSuffix + suffix,
@@ -128,71 +190,26 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 		pt := tx.GetPhasedTransaction()
 		if ct, ok := pt.(*common.Transaction); ok {
 			for _, name := range storesToRemove {
-				// Ignore errors if store doesn't exist (partial failure)
 				_ = ct.StoreRepository.Remove(ctx, name)
 			}
 		}
-		// Commit the cleanup
 		if err := tx.Commit(ctx); err != nil {
-			return err
+			cleanupLock()
+			return 0, 0, "", false, nil, nil, err
 		}
-
-		// Start a new transaction for the actual work
-		tx, err = di.beginTransaction(ctx)
-		if err != nil {
-			return err
-		}
-		di.trans = tx
 	} else {
-		// No previous failed attempt found, rollback the check TX
 		log.Println("DEBUG: No previous failed optimization, rolling back check TX")
 		tx.Rollback(ctx)
-
-		// Start a new transaction for the actual work
-		// tx, err = di.beginTransaction(ctx)
-		// if err != nil {
-		// 	return err
-		// }
-		// di.trans = tx
 	}
 
-	// We need to create the stores in the first transaction to ensure they exist for subsequent batches.
-	// Note: We are NOT using the helper openArch yet because we are creating NEW stores.
-
-	// Create/Open New Stores
-	// We use a loop to process batches.
-
-	// State for iteration
-	var count int
-
-	// We need to iterate the OLD stores.
-	// Problem: We can't easily "pause" a B-Tree iterator across transactions.
-	// We have to seek to the last key.
-
-	// Let's close the initial check TX and start the loop fresh.
-	// tx.Rollback(ctx) // Already rolled back or committed above?
-	// Wait, if found was true, tx is new. If found was false, tx is rolled back.
-	// The original code had:
-	/*
-		} else {
-			tx.Rollback(ctx)
-			tx, err = di.beginTransaction(ctx)
-			di.trans = tx
-		}
-		tx.Rollback(ctx)
-	*/
-	// This means we ALWAYS enter the loop with NO active transaction.
-	// So I should remove the `tx.Rollback(ctx)` if I want to keep the logic consistent,
-	// OR just acknowledge that the loop starts its own transaction.
-
-	// --- Phase 1: Build Lookup Table (Batched) ---
-	log.Println("DEBUG: Phase 1: Build Lookup Table")
-	// Source depends on version:
-	// - Version 1 (Initial Optimization): Source is TempVectors (if enabled)
-	// - Version > 1 (Re-Optimization): Source is Vectors
-	// - Version 1 (Direct Ingestion): Source is Vectors (if TempVectors disabled)
 	useTempVectors := newVersion == 1 && di.config.EnableIngestionBuffer
+	return currentVersion, newVersion, suffix, useTempVectors, lockKeys, cleanupLock, nil
+}
 
+func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suffix string, useTempVectors bool) (int, error) {
+	log.Println("DEBUG: Phase 1: Build Lookup Table")
+
+	var count int
 	var lastVectorKey *ai.VectorKey
 	var lastTempKey string
 
@@ -200,19 +217,19 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 		log.Println("DEBUG: Starting batch transaction")
 		tx, err := di.beginTransaction(ctx)
 		if err != nil {
-			return err
+			return 0, err
 		}
 
-		oldArch, err := openArch(tx, currentVersion)
+		oldArch, err := di.openArch(ctx, tx, currentVersion)
 		if err != nil {
 			tx.Rollback(ctx)
-			return err
+			return 0, err
 		}
 
 		newLookup, err := newBtree[int, string](ctx, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, 1000, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
 			tx.Rollback(ctx)
-			return err
+			return 0, err
 		}
 
 		var ok bool
@@ -221,7 +238,6 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 
 		if useTempVectors {
 			if oldArch.TempVectors == nil {
-				// Should not happen if version == 0, but handle gracefully
 				tx.Rollback(ctx)
 				break
 			}
@@ -248,7 +264,7 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 
 		if err != nil {
 			tx.Rollback(ctx)
-			return err
+			return 0, err
 		}
 
 		processed := 0
@@ -261,17 +277,16 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 					item, err := b3Temp.GetCurrentItem(ctx)
 					if err != nil {
 						tx.Rollback(ctx)
-						return err
+						return 0, err
 					}
 					itemID = item.Key
 					key = item.Key
 
-					// Check Content for duplicates (logic from original Optimize)
 					shouldProcess := true
 					if di.deduplicationEnabled {
 						if found, err := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key}, false); err != nil {
 							tx.Rollback(ctx)
-							return err
+							return 0, err
 						} else if found {
 							currentKey := oldArch.Content.GetCurrentKey().Key
 							if currentKey.Deleted {
@@ -285,7 +300,7 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 					if shouldProcess {
 						if _, err := newLookup.Add(ctx, count, itemID); err != nil {
 							tx.Rollback(ctx)
-							return err
+							return 0, err
 						}
 						count++
 					}
@@ -293,30 +308,28 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 					item, err := b3.GetCurrentItem(ctx)
 					if err != nil {
 						tx.Rollback(ctx)
-						return err
+						return 0, err
 					}
 					itemID = item.Key.ItemID
 					key = item.Key
 
-					// Check Content for Deleted status
 					shouldProcess := true
 					if found, err := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: itemID}, false); err != nil {
 						tx.Rollback(ctx)
-						return err
+						return 0, err
 					} else if found {
 						currentKey := oldArch.Content.GetCurrentKey().Key
 						if currentKey.Deleted {
 							shouldProcess = false
 						}
 					} else {
-						// If not found in Content, it's a ghost vector. Skip it.
 						shouldProcess = false
 					}
 
 					if shouldProcess {
 						if _, err := newLookup.Add(ctx, count, itemID); err != nil {
 							tx.Rollback(ctx)
-							return err
+							return 0, err
 						}
 						count++
 					}
@@ -343,7 +356,7 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 
 				if err != nil {
 					tx.Rollback(ctx)
-					return err
+					return 0, err
 				} else if !nextOk {
 					break
 				}
@@ -352,41 +365,36 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 
 		log.Printf("DEBUG: Committing batch, processed %d items", processed)
 		if err := tx.Commit(ctx); err != nil {
-			return err
+			return 0, err
 		}
 
 		if processed < batchSize {
 			break
 		}
 	}
+	return count, nil
+}
 
-	// if count == 0 {
-	// 	log.Println("DEBUG: No items to optimize")
-	// 	return nil
-	// }
-
-	// --- Phase 2: Sampling & Centroids (Single Batch) ---
+func (di *domainIndex[T]) phase2(ctx context.Context, currentVersion int64, suffix string, count int) (map[int][]float32, error) {
 	log.Println("DEBUG: Phase 2: Sampling & Centroids")
 	if count > 0 {
-		// We assume sampling fits in one TX (read-only mostly) + writing centroids (small).
 		tx, err := di.beginTransaction(ctx)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		oldArch, err := openArch(tx, currentVersion)
+		oldArch, err := di.openArch(ctx, tx, currentVersion)
 		if err != nil {
 			tx.Rollback(ctx)
-			return err
+			return nil, err
 		}
 
 		newLookup, err := newBtree[int, string](ctx, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, 1000, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
 			tx.Rollback(ctx)
-			return err
+			return nil, err
 		}
 
-		// Sampling Logic (Copied from store.go)
 		const maxSamples = 50000
 		var samples []ai.Item[T]
 		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -409,25 +417,24 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 		for idx := range indices {
 			if found, err := newLookup.Find(ctx, idx, false); err != nil {
 				tx.Rollback(ctx)
-				return err
+				return nil, err
 			} else if !found {
 				continue
 			}
 			itemID, _ := newLookup.GetCurrentValue(ctx)
 
-			// Fetch Vector (Strict: TempVectors for V0, Vectors for V>0)
 			var vec []float32
 			if currentVersion == 0 && oldArch.TempVectors != nil {
 				if found, err := oldArch.TempVectors.Find(ctx, itemID, false); err != nil {
 					tx.Rollback(ctx)
-					return err
+					return nil, err
 				} else if found {
 					vec, _ = oldArch.TempVectors.GetCurrentValue(ctx)
 				}
 			} else {
 				if found, err := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: itemID}, false); err != nil {
 					tx.Rollback(ctx)
-					return err
+					return nil, err
 				} else if !found {
 					continue
 				}
@@ -448,7 +455,6 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 			}
 		}
 
-		// Compute Centroids
 		k := int(math.Sqrt(float64(count)))
 		if k < 1 {
 			k = 1
@@ -459,52 +465,46 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 		newCentroidsMap, err := ComputeCentroids(samples, k)
 		if err != nil {
 			tx.Rollback(ctx)
-			return err
+			return nil, err
 		}
 
-		// Write Centroids
 		newCentroids, err := newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, 100, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
 			tx.Rollback(ctx)
-			return err
+			return nil, err
 		}
 		for id, vec := range newCentroidsMap {
 			if _, err := newCentroids.Add(ctx, id, ai.Centroid{Vector: vec, VectorCount: 0}); err != nil {
 				tx.Rollback(ctx)
-				return err
+				return nil, err
 			}
 		}
 
-		// Update Cache
 		di.updateCentroidsCache(newCentroidsMap)
 
 		if err := tx.Commit(ctx); err != nil {
-			return err
+			return nil, err
 		}
+		return newCentroidsMap, nil
 	} else {
-		// If count is 0, we still need to create the empty centroids store for the new version
-		// because Phase 3 might try to open it (or Phase 4 cleanup might expect it).
-		// Actually, Phase 3 creates it if needed.
-		// But we need to clear the cache.
 		di.updateCentroidsCache(make(map[int][]float32))
+		return di.centroidsCache, nil
 	}
+}
 
-	// --- Phase 3: Migration (Batched) ---
+func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newVersion int64, suffix string, useTempVectors bool, newCentroidsMap map[int][]float32) error {
 	log.Println("DEBUG: Phase 3: Migration")
-	// We need to reload centroids map for processing
-	// We can use the cache since we just updated it.
-	newCentroidsMap := di.centroidsCache
 
 	// 3a. Migrate Vectors
 	if !useTempVectors {
-		lastVectorKey = nil // Reset
+		var lastVectorKey *ai.VectorKey
 		for {
 			tx, err := di.beginTransaction(ctx)
 			if err != nil {
 				return err
 			}
 
-			oldArch, err := openArch(tx, currentVersion)
+			oldArch, err := di.openArch(ctx, tx, currentVersion)
 			if err != nil {
 				tx.Rollback(ctx)
 				return err
@@ -550,33 +550,25 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 						return err
 					}
 
-					// Process Item
 					vec := *item.Value
-
-					// Check Content FIRST
 					shouldMigrate := false
 					if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key.ItemID}, false); found {
 						currentKey := oldArch.Content.GetCurrentKey().Key
 						if !currentKey.Deleted {
 							shouldMigrate = true
 						} else {
-							// Physical Delete: Item is marked deleted in Content
-							// We can now safely remove it from Content since we are rebuilding the index
-							// and this item will not be in the new index.
 							if _, err := oldArch.Content.RemoveCurrentItem(ctx); err != nil {
 								tx.Rollback(ctx)
 								return err
 							}
 						}
 					} else {
-						// Ghost vector (not in Content) - skip migration
 						shouldMigrate = false
 					}
 
 					if shouldMigrate {
 						cid, dist := findClosestCentroid(vec, newCentroidsMap)
 
-						// Add to New Vectors
 						key := ai.VectorKey{CentroidID: cid, DistanceToCentroid: dist, ItemID: item.Key.ItemID}
 						if _, err := newVectors.Add(ctx, key, vec); err != nil {
 							tx.Rollback(ctx)
@@ -591,15 +583,12 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 							}
 						}
 
-						// Update Content
 						if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key.ItemID}, false); found {
-							// Update Key to point to new version using Next fields (Safe Migration)
 							currentKey := oldArch.Content.GetCurrentKey().Key
 							currentKey.NextCentroidID = cid
 							currentKey.NextDistance = dist
 							currentKey.NextVersion = int64(newVersion)
 
-							// Update Key in place using UpdateCurrentKey
 							if _, err := oldArch.Content.UpdateCurrentKey(ctx, currentKey); err != nil {
 								tx.Rollback(ctx)
 								return err
@@ -636,14 +625,14 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 
 	// 3b. Migrate TempVectors
 	if useTempVectors {
-		lastTempKey = "" // Reset
+		var lastTempKey string
 		for {
 			tx, err := di.beginTransaction(ctx)
 			if err != nil {
 				return err
 			}
 
-			oldArch, err := openArch(tx, currentVersion)
+			oldArch, err := di.openArch(ctx, tx, currentVersion)
 			if err != nil {
 				tx.Rollback(ctx)
 				return err
@@ -694,14 +683,12 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 						return err
 					}
 
-					// Check Duplicates
 					shouldProcess := true
 					if di.deduplicationEnabled {
 						if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key}, false); found {
 							currentKey := oldArch.Content.GetCurrentKey().Key
 							if currentKey.Deleted {
 								shouldProcess = false
-								// Physical Delete for TempVectors items
 								if _, err := oldArch.Content.RemoveCurrentItem(ctx); err != nil {
 									tx.Rollback(ctx)
 									return err
@@ -731,13 +718,11 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 						}
 
 						if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key}, false); found {
-							// Update Key to point to new version using Next fields (Safe Migration)
 							currentKey := oldArch.Content.GetCurrentKey().Key
 							currentKey.NextCentroidID = cid
 							currentKey.NextDistance = dist
 							currentKey.NextVersion = int64(newVersion)
 
-							// Update Key in place using UpdateCurrentKey
 							if _, err := oldArch.Content.UpdateCurrentKey(ctx, currentKey); err != nil {
 								tx.Rollback(ctx)
 								return err
@@ -770,68 +755,59 @@ func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 			}
 		}
 	}
+	return nil
+}
 
-	// --- Phase 4: Finalize ---
+func (di *domainIndex[T]) phase4(ctx context.Context, currentVersion int64, newVersion int64, useTempVectors bool) error {
 	log.Println("DEBUG: Phase 4: Finalize")
-	{
-		tx, err := di.beginTransaction(ctx)
-		if err != nil {
-			return err
-		}
-		di.trans = tx // Update di.trans to the final one
+	tx, err := di.beginTransaction(ctx)
+	if err != nil {
+		return err
+	}
+	di.trans = tx
 
-		// Open Sys Store
-		sysStore, err := openSysStore(tx)
-		if err != nil {
-			tx.Rollback(ctx)
-			return err
-		}
-		di.sysStore = sysStore
+	sysStore, err := di.openSysStore(ctx, tx)
+	if err != nil {
+		tx.Rollback(ctx)
+		return err
+	}
+	di.sysStore = sysStore
 
-		// Update Version
-		if found, _ := sysStore.Find(ctx, di.name, false); found {
-			sysStore.UpdateCurrentValue(ctx, newVersion)
-		} else {
-			sysStore.Add(ctx, di.name, newVersion)
-		}
-
-		// Register OnCommit hook
-		tx.OnCommit(func(ctx context.Context) error {
-			pt := tx.GetPhasedTransaction()
-			ct, ok := pt.(*common.Transaction)
-			if !ok {
-				return nil
-			}
-
-			if useTempVectors {
-				storeName := fmt.Sprintf("%s%s", di.name, tempVectorsSuffix)
-				// Ignore error if store doesn't exist (already removed or never created)
-				_ = ct.StoreRepository.Remove(ctx, storeName)
-			}
-
-			// Cleanup old version stores
-			suffix := ""
-			if currentVersion > 0 {
-				suffix = fmt.Sprintf("_%d", currentVersion)
-			}
-			storesToRemove := []string{
-				fmt.Sprintf("%s%s%s", di.name, centroidsSuffix, suffix),
-				fmt.Sprintf("%s%s%s", di.name, vectorsSuffix, suffix),
-				fmt.Sprintf("%s%s%s", di.name, lookupSuffix, suffix),
-			}
-			for _, name := range storesToRemove {
-				// Ignore error if store doesn't exist
-				_ = ct.StoreRepository.Remove(ctx, name)
-			}
-			return nil
-		})
-
-		// Commit Final
-		if err := tx.Commit(ctx); err != nil {
-			return err
-		}
+	if found, _ := sysStore.Find(ctx, di.name, false); found {
+		sysStore.UpdateCurrentValue(ctx, newVersion)
+	} else {
+		sysStore.Add(ctx, di.name, newVersion)
 	}
 
-	log.Println("DEBUG: Optimize completed successfully")
+	tx.OnCommit(func(ctx context.Context) error {
+		pt := tx.GetPhasedTransaction()
+		ct, ok := pt.(*common.Transaction)
+		if !ok {
+			return nil
+		}
+
+		if useTempVectors {
+			storeName := fmt.Sprintf("%s%s", di.name, tempVectorsSuffix)
+			_ = ct.StoreRepository.Remove(ctx, storeName)
+		}
+
+		suffix := ""
+		if currentVersion > 0 {
+			suffix = fmt.Sprintf("_%d", currentVersion)
+		}
+		storesToRemove := []string{
+			fmt.Sprintf("%s%s%s", di.name, centroidsSuffix, suffix),
+			fmt.Sprintf("%s%s%s", di.name, vectorsSuffix, suffix),
+			fmt.Sprintf("%s%s%s", di.name, lookupSuffix, suffix),
+		}
+		for _, name := range storesToRemove {
+			_ = ct.StoreRepository.Remove(ctx, name)
+		}
+		return nil
+	})
+
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
 	return nil
 }
