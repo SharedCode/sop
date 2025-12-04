@@ -50,6 +50,9 @@ func (e ecFailFileIO) ReadFile(ctx context.Context, name string) ([]byte, error)
 	return e.base.ReadFile(ctx, name)
 }
 func (e ecFailFileIO) Remove(ctx context.Context, name string) error { return e.base.Remove(ctx, name) }
+func (e ecFailFileIO) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	return e.base.Stat(ctx, path)
+}
 func (e ecFailFileIO) Exists(ctx context.Context, p string) bool     { return e.base.Exists(ctx, p) }
 func (e ecFailFileIO) RemoveAll(ctx context.Context, p string) error { return e.base.RemoveAll(ctx, p) }
 func (e ecFailFileIO) MkdirAll(ctx context.Context, p string, perm os.FileMode) error {
