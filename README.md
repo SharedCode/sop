@@ -150,6 +150,7 @@ SOP is a NoSQL-like key/value storage engine with built-in indexing and transact
 4) Add SOP to your Go app
 - Import package:
   - `github.com/sharedcode/sop/database` (Recommended: Unified entry point for B-Trees, Vector Stores, and AI Models)
+  - `github.com/sharedcode/sop/ai` (AI Toolkit: Vector Database, Agents, and RAG)
   - `github.com/sharedcode/sop/inredfs` (Low-level: Direct access to filesystem-backed B-Trees)
 - Repo path: https://github.com/sharedcode/sop
 

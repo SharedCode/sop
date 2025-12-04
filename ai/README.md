@@ -1,8 +1,6 @@
-# AI Package
-
-This package was developed with an AI copilot, I want to keep an open development approach(not finicky and narrow) in this package to keep efficient in "automaton" cycles. Thus, source codes here may be subject to refactor because of AI first philosophy.
-
 # SOP AI Library
+
+> **Note**: This package was developed with an AI copilot. I want to keep an open development approach (not finicky and narrow) in this package to keep efficient in "automaton" cycles. Thus, source codes here may be subject to refactor because of AI first philosophy.
 
 The `sop/ai` package provides a complete toolkit for building local, privacy-first AI applications backed by the power of SOP's B-Tree storage engine. It enables you to build Vector Databases, RAG (Retrieval-Augmented Generation) systems, and Autonomous Agents without external database dependencies.
 
