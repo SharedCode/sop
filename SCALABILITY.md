@@ -82,3 +82,11 @@ SOP is designed to be "Super Friendly" to storage drives and filesystems.
 3.  **Petabyte Scale**: As calculated above, the addressing scheme supports Trillions of objects. You will run out of physical hard drives long before you hit SOP's architectural limits.
 
 **Summary**: SOP turns your **Hardware Limit** into your **Only Limit**.
+
+## 5. The Embedded Advantage: Zero-Admin Mode
+
+SOP is not just for the data center; its architecture is uniquely suited for embedded systems and applications where a traditional server-based database is impossible.
+
+*   **Embedded Mode**: SOP can be run in a fully embedded, self-contained mode where the lightweight Redis-based coordination layer is bypassed entirely.
+*   **Zero Administration**: This mode eliminates the need for any external database server or administration, simplifying deployment in small, localized, or IoT environments (competing directly with databases like SQLite, but offering B-Tree segments optimized for high-volume data structures).
+*   **Small Footprint**: You can ship SOP directly within your application's binary, providing full transactional durability and scalable storage capacity for client-side, mobile, or deeply embedded devices.
