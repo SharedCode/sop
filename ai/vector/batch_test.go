@@ -8,8 +8,9 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
-	"github.com/sharedcode/sop/database"
+	core_database "github.com/sharedcode/sop/database"
 )
 
 func TestUpsertBatchCentroidPopulation(t *testing.T) {
@@ -20,7 +21,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := database.NewDatabase(database.Standalone, tmpDir)
+	db := database.NewDatabase(core_database.Standalone, tmpDir)
 	ctx := context.Background()
 	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {

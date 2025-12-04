@@ -10,10 +10,11 @@ Ensure you have the shared library (`libjsondb.so`, `.dll`, or `.dylib`) built a
 
 ### Vector Database
 
-You can use the unified `sop.Database` class to manage your Vector Stores.
+You can use the unified `sop.ai.Database` class to manage your Vector Stores.
 
 ```python
 import sop
+from sop.ai import Database
 from sop.transaction import ErasureCodingConfig, DBType
 
 # 1. Initialize Context
@@ -21,7 +22,7 @@ ctx = sop.Context()
 
 # 2. Initialize Database
 # Standalone (Local, No Replication)
-db = sop.Database(ctx, storage_path="./my_vector_db", db_type=DBType.Standalone)
+db = Database(ctx, storage_path="./my_vector_db", db_type=DBType.Standalone)
 
 # Clustered (Distributed, With Replication)
 ec_config = ErasureCodingConfig(
@@ -31,7 +32,7 @@ ec_config = ErasureCodingConfig(
     repair_corrupted_shards=True
 )
 
-clustered_db = sop.Database(
+clustered_db = Database(
     ctx,
     storage_path="./my_cluster_db", 
     db_type=DBType.Clustered,

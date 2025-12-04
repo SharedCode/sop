@@ -3,10 +3,10 @@ import sys
 import os
 import shutil
 import time
-from sop.ai import VectorDatabase, Item, UsageMode, DBType, ModelStore, Model
-from sop import Context, Transaction, TransactionOptions, TransactionMode
+from sop.ai import Database, Item, DBType, Model
+from sop import Context, TransactionOptions, TransactionMode
 from sop.transaction import ErasureCodingConfig
-from sop.redis import Redis, RedisOptions
+from sop.redis import Redis
 
 # Ensure we can import sop
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -48,7 +48,7 @@ class TestSOPAI(unittest.TestCase):
         path = self.create_temp_dir("vec_standalone")
         
         ctx = Context()
-        vdb = VectorDatabase(ctx, storage_path=path, db_type=DBType.Standalone)
+        vdb = Database(ctx, storage_path=path, db_type=DBType.Standalone)
         
         # Transaction 1: Upsert
         tx1 = vdb.begin_transaction(ctx)
@@ -82,7 +82,7 @@ class TestSOPAI(unittest.TestCase):
         path = self.create_temp_dir("vec_clustered")
         
         ctx = Context()
-        vdb = VectorDatabase(ctx, storage_path=path, db_type=DBType.Clustered)
+        vdb = Database(ctx, storage_path=path, db_type=DBType.Clustered)
         
         # Transaction 1: Upsert
         tx1 = vdb.begin_transaction(ctx)
@@ -128,7 +128,7 @@ class TestSOPAI(unittest.TestCase):
         
         ctx = Context()
         
-        db = VectorDatabase(ctx, storage_path=path, db_type=DBType.Standalone, 
+        db = Database(ctx, storage_path=path, db_type=DBType.Standalone, 
                             erasure_config={"": ec_config},
                             stores_folders=[path, path_passive])
 
@@ -169,7 +169,7 @@ class TestSOPAI(unittest.TestCase):
         )
         
         ctx = Context()
-        vdb = VectorDatabase(ctx, storage_path=path, db_type=DBType.Clustered,
+        vdb = Database(ctx, storage_path=path, db_type=DBType.Clustered,
                              erasure_config={"": ec_config},
                              stores_folders=[path, path_passive])
         

@@ -13,6 +13,7 @@ type Config struct {
 	Synonyms              map[string]string `json:"synonyms"`
 	SystemPrompt          string            `json:"system_prompt"`
 	Policies              []PolicyConfig    `json:"policies"`
+	ETL                   ETLConfig         `json:"etl,omitempty"`                     // Configuration for the ETL/Curator pipeline
 	Embedder              EmbedderConfig    `json:"embedder,omitempty"`                // Configuration for the embedder
 	Generator             GeneratorConfig   `json:"generator,omitempty"`               // Configuration for the LLM generator
 	Data                  []DataItem        `json:"data"`                              // For seeding (MVP)
@@ -79,10 +80,23 @@ type PolicyConfig struct {
 	MaxStrikes int    `json:"max_strikes"`  // e.g. 3
 }
 
+type ETLConfig struct {
+	Curator CuratorConfig `json:"curator,omitempty"`
+}
+
+type CuratorConfig struct {
+	Type    string         `json:"type"`              // "ollama", "agent"
+	ID      string         `json:"id,omitempty"`      // ID of the agent to use (if type="agent")
+	Options map[string]any `json:"options,omitempty"` // e.g. {"model": "llama3"}
+	Prompt  string         `json:"prompt,omitempty"`  // The instruction for curation
+}
+
 type DataItem struct {
-	ID          string `json:"id"`
-	Text        string `json:"text"`
-	Description string `json:"description"`
+	ID          string         `json:"id"`
+	Text        string         `json:"text"`
+	Description string         `json:"description"`
+	Category    string         `json:"category,omitempty"`
+	Payload     map[string]any `json:"payload,omitempty"` // Generic payload for structured data (e.g. JSON objects)
 }
 
 // LoadConfigFromFile reads and parses a JSON configuration file.

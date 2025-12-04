@@ -148,6 +148,31 @@
 				"$go"
 			],
 			"group": "test"
+		},
+		{
+			"label": "Go: Test (AI)",
+			"type": "shell",
+			"command": "go",
+			"args": [
+				"test",
+				"./..."
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/ai"
+			},
+			"group": "test",
+			"problemMatcher": [
+				"$go"
+			]
+		},
+		{
+			"label": "Go: Test All",
+			"type": "shell",
+			"command": "./run_all_tests.sh",
+			"group": "test",
+			"problemMatcher": [
+				"$go"
+			]
 		}
 	]
 }

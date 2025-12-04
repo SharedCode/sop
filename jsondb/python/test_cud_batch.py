@@ -8,7 +8,7 @@ import random
 # Ensure we can import sop
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from sop.ai import VectorDatabase, Item, UsageMode, DBType, ModelStore, Model
+from sop.ai import Database, Item, UsageMode, DBType, ModelStore, Model
 from sop import Context, Transaction, TransactionOptions, TransactionMode
 from sop.btree import Btree, BtreeOptions, ValueDataSize, CacheConfig, Item as BtreeItem
 from sop.transaction import ErasureCodingConfig
@@ -35,7 +35,7 @@ class TestCUDBatch(unittest.TestCase):
         ctx = Context()
         
         # Create Database instance
-        db = VectorDatabase(ctx, storage_path=path, db_type=DBType.Standalone)
+        db = Database(ctx, storage_path=path, db_type=DBType.Standalone)
 
         # Simple config for standalone test
         opts = TransactionOptions(
@@ -114,7 +114,7 @@ class TestCUDBatch(unittest.TestCase):
         # Setup Transaction Context for B-Tree Store
         ctx = Context()
         
-        db = VectorDatabase(ctx, storage_path=path, db_type=DBType.Standalone)
+        db = Database(ctx, storage_path=path, db_type=DBType.Standalone)
 
         opts = TransactionOptions(
             mode=TransactionMode.ForWriting.value,
@@ -178,7 +178,7 @@ class TestCUDBatch(unittest.TestCase):
         path = self.create_temp_dir("vector_store")
         
         ctx = Context()
-        vdb = VectorDatabase(ctx, storage_path=path, db_type=DBType.Standalone)
+        vdb = Database(ctx, storage_path=path, db_type=DBType.Standalone)
         
         # 1. Create
         print("Creating 50 vectors...")

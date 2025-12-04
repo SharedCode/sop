@@ -94,10 +94,10 @@ Store and search vector embeddings using the unified Database.
 
 ```python
 import sop
-from sop.ai import Item
+from sop.ai import Database as AIDatabase, Item
 
 ctx = sop.Context()
-db = sop.Database(ctx, storage_path="/tmp/sop_vectors")
+db = AIDatabase(ctx, storage_path="/tmp/sop_vectors")
 
 with db.begin_transaction(ctx) as tx:
     store = db.open_vector_store(ctx, tx, "products")
@@ -127,10 +127,10 @@ Version and manage machine learning models.
 
 ```python
 import sop
-from sop.ai import Model
+from sop.ai import Database as AIDatabase, Model
 
 ctx = sop.Context()
-db = sop.Database(ctx, storage_path="/tmp/sop_data")
+db = AIDatabase(ctx, storage_path="/tmp/sop_data")
 
 with db.begin_transaction(ctx) as tx:
     model_store = db.open_model_store(ctx, tx, "my_models")

@@ -20,9 +20,10 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	database "github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
 	"github.com/sharedcode/sop/common"
-	"github.com/sharedcode/sop/database"
+	core_database "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
 	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/inredfs"
@@ -286,7 +287,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			return C.CString(fmt.Sprintf("invalid options: %v", err))
 		}
 
-		db := database.NewDatabase(database.DatabaseType(opts.DBType), opts.StoragePath)
+		db := database.NewDatabase(core_database.DatabaseType(opts.DBType), opts.StoragePath)
 		if len(opts.ErasureConfig) > 0 || len(opts.StoresFolders) > 0 {
 			db.SetReplicationConfig(opts.ErasureConfig, opts.StoresFolders)
 		}

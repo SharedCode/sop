@@ -8,8 +8,9 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
-	"github.com/sharedcode/sop/database"
+	core_database "github.com/sharedcode/sop/database"
 )
 
 func TestOptimize(t *testing.T) {
@@ -21,7 +22,7 @@ func TestOptimize(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := database.NewDatabase(database.Standalone, tmpDir)
+	db := database.NewDatabase(core_database.Standalone, tmpDir)
 	tx, err := db.BeginTransaction(context.Background(), sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction failed: %v", err)

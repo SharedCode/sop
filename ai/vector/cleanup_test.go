@@ -7,8 +7,9 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
-	"github.com/sharedcode/sop/database"
+	core_database "github.com/sharedcode/sop/database"
 )
 
 func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
@@ -17,7 +18,7 @@ func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
 	path, _ := os.MkdirTemp("", "sop-ai-test-cleanup")
 	defer os.RemoveAll(path)
 
-	db := database.NewDatabase(database.Standalone, path)
+	db := database.NewDatabase(core_database.Standalone, path)
 
 	t1, _ := db.BeginTransaction(ctx, sop.ForWriting)
 

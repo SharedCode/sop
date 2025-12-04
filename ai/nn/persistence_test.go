@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/ai/database"
+	core_database "github.com/sharedcode/sop/database"
 )
 
 func TestPerceptronPersistenceWithModelStore(t *testing.T) {
@@ -17,7 +18,7 @@ func TestPerceptronPersistenceWithModelStore(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := database.NewDatabase(database.Standalone, tmpDir)
+	db := database.NewDatabase(core_database.Standalone, tmpDir)
 	ctx := context.Background()
 
 	// 1. Create and Train a Perceptron (OR gate)

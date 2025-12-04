@@ -5,9 +5,6 @@ import (
 	"os"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/model"
-	"github.com/sharedcode/sop/ai/vector"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/fs"
@@ -15,7 +12,7 @@ import (
 	"github.com/sharedcode/sop/redis"
 )
 
-// DatabaseType defines the deployment mode of the vector database.
+// DatabaseType defines the deployment mode of the database.
 type DatabaseType int
 
 const (
@@ -27,7 +24,7 @@ const (
 	Clustered
 )
 
-// Database manages the storage and retrieval of data (B-Trees, Models, and Vectors).
+// Database manages the storage and retrieval of data (B-Trees).
 // It supports both Standalone (local) and Clustered (distributed) modes.
 type Database struct {
 	ctx           context.Context
@@ -58,6 +55,21 @@ func NewDatabase(dbType DatabaseType, storagePath string) *Database {
 // Cache returns the L2 cache used by the database.
 func (db *Database) Cache() sop.L2Cache {
 	return db.cache
+}
+
+// StoragePath returns the base storage path.
+func (db *Database) StoragePath() string {
+	return db.storagePath
+}
+
+// ErasureConfig returns the erasure coding configuration.
+func (db *Database) ErasureConfig() map[string]fs.ErasureCodingConfig {
+	return db.erasureConfig
+}
+
+// StoresFolders returns the list of storage folders (for replication).
+func (db *Database) StoresFolders() []string {
+	return db.storesFolders
 }
 
 // SetReplicationConfig configures the replication settings for the database.
@@ -128,14 +140,6 @@ func (db *Database) BeginTransaction(ctx context.Context, mode sop.TransactionMo
 	return t, nil
 }
 
-// OpenModelStore opens a ModelStore for the specified name using the provided transaction.
-func (db *Database) OpenModelStore(ctx context.Context, name string, t sop.Transaction) (ai.ModelStore, error) {
-	if err := os.MkdirAll(db.storagePath, 0755); err != nil {
-		return nil, err
-	}
-	return model.New(name, t), nil
-}
-
 // OpenBtree opens a general purpose B-Tree store.
 // This allows the Database to manage standard Key-Value stores alongside AI stores.
 func (db *Database) OpenBtree(ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[any, any], error) {
@@ -169,25 +173,4 @@ func (db *Database) NewBtree(ctx context.Context, name string, t sop.Transaction
 		}
 	}
 	return inredfs.NewBtree[any, any](ctx, opts, t, nil)
-}
-
-// OpenVectorStore opens a vector store with map[string]any payload.
-func (db *Database) OpenVectorStore(ctx context.Context, name string, t sop.Transaction, cfg vector.Config) (ai.VectorStore[map[string]any], error) {
-	if err := os.MkdirAll(db.storagePath, 0755); err != nil {
-		return nil, err
-	}
-	// Populate replication config if available and not set in cfg
-	if len(cfg.StoresFolders) == 0 && len(db.storesFolders) > 0 {
-		cfg.StoresFolders = db.storesFolders
-	}
-	if len(cfg.ErasureConfig) == 0 && len(db.erasureConfig) > 0 {
-		cfg.ErasureConfig = db.erasureConfig
-	}
-	if cfg.StoragePath == "" {
-		cfg.StoragePath = db.storagePath
-	}
-	if cfg.Cache == nil {
-		cfg.Cache = db.cache
-	}
-	return vector.Open[map[string]any](ctx, t, name, cfg)
 }
