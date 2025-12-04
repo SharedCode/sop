@@ -7,6 +7,7 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 ## Table of contents
 
 - Introduction
+- Scalability & Limits
 - High-level features and articles
 - Architecture Guide
 - Configuration & Tuning
@@ -44,6 +45,14 @@ What is SOP?
 Scalable Objects Persistence(SOP) is a raw storage engine that bakes together a set of storage related features & algorithms in order to provide the most efficient & reliable (ACID attributes of transactions) technique (known) of storage management and rich search, as it brings to the application, the raw muscle of "raw storage", direct IO communications w/ disk drives. In a code library form factor today.
 
 SOP V2 ships as a Golang code library. Thus, it can be used for storage management by applications of many types across different hardware architectures & Operating Systems (OS), that are supported by the Golang compiler.
+
+## Scalability & Limits
+SOP is architected to handle **Petabyte-scale** datasets and **Trillions of objects**.
+- **Capacity**: Up to 495 Billion items per segment (with 1,000 segments = 495 Trillion items).
+- **Throughput**: Limited only by hardware (Redis Cluster + Storage I/O), not software.
+- **Design**: Horizontal scaling via independent storage nodes and sharded registry.
+
+See the full analysis in [Scalability & Limits](SCALABILITY.md).
 
 ## Key Use Cases
 
