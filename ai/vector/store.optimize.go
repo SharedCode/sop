@@ -693,6 +693,16 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 
 						if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key.ItemID}, false); found {
 							currentKey := oldArch.Content.GetCurrentKey().Key
+
+							// Critical Fix: If the item is currently relying on NextVersion for the active version,
+							// we must promote it to the main fields to preserve it during this transition.
+							// Otherwise, if we overwrite NextVersion and crash, we lose the reference to the current version.
+							if currentKey.NextVersion == currentVersion {
+								currentKey.Version = currentKey.NextVersion
+								currentKey.CentroidID = currentKey.NextCentroidID
+								currentKey.Distance = currentKey.NextDistance
+							}
+
 							currentKey.NextCentroidID = cid
 							currentKey.NextDistance = dist
 							currentKey.NextVersion = int64(newVersion)
@@ -847,6 +857,14 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 
 						if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key}, false); found {
 							currentKey := oldArch.Content.GetCurrentKey().Key
+
+							// Critical Fix: Promote NextVersion if it is the current active version.
+							if currentKey.NextVersion == currentVersion {
+								currentKey.Version = currentKey.NextVersion
+								currentKey.CentroidID = currentKey.NextCentroidID
+								currentKey.Distance = currentKey.NextDistance
+							}
+
 							currentKey.NextCentroidID = cid
 							currentKey.NextDistance = dist
 							currentKey.NextVersion = int64(newVersion)
