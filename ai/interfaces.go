@@ -191,6 +191,8 @@ type Domain[T any] interface {
 	// Index returns the vector index used for retrieval.
 	// It requires a transaction to be passed in.
 	Index(ctx context.Context, tx sop.Transaction) (VectorStore[T], error)
+	// TextIndex returns the text search index used for retrieval.
+	TextIndex(ctx context.Context, tx sop.Transaction) (TextIndex, error)
 	// BeginTransaction starts a new transaction for the domain's underlying storage.
 	BeginTransaction(ctx context.Context, mode sop.TransactionMode) (sop.Transaction, error)
 	Policies() PolicyEngine
@@ -203,6 +205,20 @@ type Domain[T any] interface {
 type Agent[T any] interface {
 	Search(ctx context.Context, query string, limit int) ([]Hit[T], error)
 	Ask(ctx context.Context, query string) (string, error)
+}
+
+// TextSearchResult represents a scored document from text search.
+type TextSearchResult struct {
+	DocID string
+	Score float64
+}
+
+// TextIndex defines the interface for a text search index.
+type TextIndex interface {
+	// Add indexes a document.
+	Add(ctx context.Context, docID string, text string) error
+	// Search performs a text search.
+	Search(ctx context.Context, query string) ([]TextSearchResult, error)
 }
 
 // ModelStore defines the interface for persisting and retrieving AI models.

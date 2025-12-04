@@ -211,6 +211,18 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service
 			return nil, fmt.Errorf("failed to ingest seed data: %w", err)
 		}
 
+		// Text Indexing
+		textIdx, err := dom.TextIndex(ctx, tx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open text index: %w", err)
+		}
+		for i, item := range cfg.Data {
+			// Index the combined text
+			if err := textIdx.Add(ctx, item.ID, texts[i]); err != nil {
+				return nil, fmt.Errorf("failed to index text for item %s: %w", item.ID, err)
+			}
+		}
+
 		if err := tx.Commit(ctx); err != nil {
 			return nil, fmt.Errorf("failed to commit ingestion: %w", err)
 		}

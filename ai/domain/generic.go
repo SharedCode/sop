@@ -6,6 +6,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/search"
 	"github.com/sharedcode/sop/ai/vector"
 	"github.com/sharedcode/sop/database"
 )
@@ -59,6 +60,11 @@ func (d *GenericDomain[T]) Embedder() ai.Embeddings {
 // Index returns the vector index used for retrieval.
 func (d *GenericDomain[T]) Index(ctx context.Context, tx sop.Transaction) (ai.VectorStore[T], error) {
 	return vector.Open[T](ctx, tx, d.cfg.StoreName, d.cfg.StoreCfg)
+}
+
+// TextIndex returns the text index used for keyword search.
+func (d *GenericDomain[T]) TextIndex(ctx context.Context, tx sop.Transaction) (ai.TextIndex, error) {
+	return search.NewIndex(ctx, tx, d.cfg.StoreName)
 }
 
 // BeginTransaction starts a new transaction for the domain's underlying storage.

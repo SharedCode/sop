@@ -10,6 +10,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
+	"github.com/sharedcode/sop/ai/search"
 	"github.com/sharedcode/sop/ai/vector"
 )
 
@@ -135,6 +136,12 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 		return fmt.Errorf("failed to open index: %w", err)
 	}
 
+	// Open Text Index
+	textIdx, err := search.NewIndex(ctx, tx, storeName)
+	if err != nil {
+		return fmt.Errorf("failed to open text index: %w", err)
+	}
+
 	// 3. Load Data & Process in Batches
 	batchSize := 200
 	totalProcessed := 0
@@ -170,6 +177,11 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 					"description": item.Description,
 					"original_id": item.ID, // Keep original ID in payload
 				},
+			}
+
+			// Index Text
+			if err := textIdx.Add(ctx, id, texts[i]); err != nil {
+				return fmt.Errorf("failed to index text for item %s: %w", id, err)
 			}
 		}
 

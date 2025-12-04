@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/inredfs"
 )
@@ -25,38 +26,51 @@ type Index struct {
 // NewIndex creates or opens a text search index.
 func NewIndex(ctx context.Context, t sop.Transaction, name string) (*Index, error) {
 	// We use a prefix for the store names to keep them grouped.
-	postings, err := inredfs.NewBtree[string, int](ctx, sop.StoreOptions{
-		Name:              name + "_postings",
-		LeafLoadBalancing: true,
-		Description:       "Inverted index postings (Term|DocID -> Freq)",
-	}, t, nil)
+	// We use a larger SlotLength (1000) for better performance with many small items.
+	postings, err := inredfs.NewBtree[string, int](ctx, sop.ConfigureStore(
+		name+"_postings",
+		true,
+		1000,
+		"Inverted index postings (Term|DocID -> Freq)",
+		sop.SmallData,
+		"",
+	), t, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	termStats, err := inredfs.NewBtree[string, int](ctx, sop.StoreOptions{
-		Name:              name + "_term_stats",
-		LeafLoadBalancing: true,
-		Description:       "Term statistics (Term -> DocCount)",
-	}, t, nil)
+	termStats, err := inredfs.NewBtree[string, int](ctx, sop.ConfigureStore(
+		name+"_term_stats",
+		true,
+		1000,
+		"Term statistics (Term -> DocCount)",
+		sop.SmallData,
+		"",
+	), t, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	docStats, err := inredfs.NewBtree[string, int](ctx, sop.StoreOptions{
-		Name:              name + "_doc_stats",
-		LeafLoadBalancing: true,
-		Description:       "Document statistics (DocID -> Length)",
-	}, t, nil)
+	docStats, err := inredfs.NewBtree[string, int](ctx, sop.ConfigureStore(
+		name+"_doc_stats",
+		true,
+		1000,
+		"Document statistics (DocID -> Length)",
+		sop.SmallData,
+		"",
+	), t, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	global, err := inredfs.NewBtree[string, int](ctx, sop.StoreOptions{
-		Name:              name + "_global",
-		LeafLoadBalancing: true,
-		Description:       "Global statistics",
-	}, t, nil)
+	global, err := inredfs.NewBtree[string, int](ctx, sop.ConfigureStore(
+		name+"_global",
+		true,
+		1000,
+		"Global statistics",
+		sop.SmallData,
+		"",
+	), t, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -129,14 +143,8 @@ func (idx *Index) Add(ctx context.Context, docID string, text string) error {
 	return nil
 }
 
-// SearchResult represents a scored document.
-type SearchResult struct {
-	DocID string
-	Score float64
-}
-
 // Search performs a BM25 search.
-func (idx *Index) Search(ctx context.Context, query string) ([]SearchResult, error) {
+func (idx *Index) Search(ctx context.Context, query string) ([]ai.TextSearchResult, error) {
 	tokens := idx.tokenizer.Tokenize(query)
 	if len(tokens) == 0 {
 		return nil, nil
@@ -246,9 +254,9 @@ func (idx *Index) Search(ctx context.Context, query string) ([]SearchResult, err
 	}
 
 	// Convert map to slice
-	var results []SearchResult
+	var results []ai.TextSearchResult
 	for docID, score := range scores {
-		results = append(results, SearchResult{DocID: docID, Score: score})
+		results = append(results, ai.TextSearchResult{DocID: docID, Score: score})
 	}
 
 	// Sort by Score Descending

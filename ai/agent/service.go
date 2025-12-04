@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/sharedcode/sop"
@@ -85,12 +86,72 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 	if err != nil {
 		return nil, fmt.Errorf("domain %s has no index configured: %w", s.domain.ID(), err)
 	}
-	hits, err := idx.Query(ctx, vecs[0], limit, nil)
+
+	// Vector Search
+	vectorHits, err := idx.Query(ctx, vecs[0], limit, nil)
 	if err != nil {
-		return nil, fmt.Errorf("query failed: %w", err)
+		return nil, fmt.Errorf("vector query failed: %w", err)
 	}
 
-	return hits, nil
+	// Text Search
+	textIdx, err := s.domain.TextIndex(ctx, tx)
+	var textHits []ai.TextSearchResult
+	if err == nil {
+		textHits, err = textIdx.Search(ctx, query)
+		if err != nil {
+			// Log error but continue with vector results?
+			// For now, let's treat it as non-fatal if text index is missing or fails,
+			// but maybe we should log it.
+			// fmt.Printf("Text search failed: %v\n", err)
+		}
+	}
+
+	// Hybrid Fusion (RRF)
+	k := 60.0
+	scores := make(map[string]float64)
+	payloads := make(map[string]map[string]any)
+
+	// Process Vector Hits
+	for rank, hit := range vectorHits {
+		scores[hit.ID] += 1.0 / (k + float64(rank+1))
+		payloads[hit.ID] = hit.Payload
+	}
+
+	// Process Text Hits
+	for rank, hit := range textHits {
+		scores[hit.DocID] += 1.0 / (k + float64(rank+1))
+		// If payload missing, we need to fetch it
+		if _, ok := payloads[hit.DocID]; !ok {
+			item, err := idx.Get(ctx, hit.DocID)
+			if err == nil && item != nil {
+				payloads[hit.DocID] = item.Payload
+			}
+		}
+	}
+
+	// Construct Final Results
+	var results []ai.Hit[map[string]any]
+	for id, score := range scores {
+		if payload, ok := payloads[id]; ok {
+			results = append(results, ai.Hit[map[string]any]{
+				ID:      id,
+				Score:   float32(score),
+				Payload: payload,
+			})
+		}
+	}
+
+	// Sort by Score Descending
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+
+	// Limit
+	if len(results) > limit {
+		results = results[:limit]
+	}
+
+	return results, nil
 }
 
 // RunPipeline executes the configured chain of agents.
