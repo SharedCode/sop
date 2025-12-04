@@ -364,6 +364,13 @@ func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 	return stores, nil
 }
 
+// GetStoreFileStat returns the FileInfo of the store's metadata file.
+func (sr *StoreRepository) GetStoreFileStat(ctx context.Context, storeName string) (os.FileInfo, error) {
+	fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
+	fn := fmt.Sprintf("%s%c%s", storeName, os.PathSeparator, storeInfoFilename)
+	return fio.stat(ctx, fn)
+}
+
 func (sr *StoreRepository) getFromCache(ctx context.Context, names ...string) ([]sop.StoreInfo, error) {
 	stores := make([]sop.StoreInfo, 0, len(names))
 	for i := range names {

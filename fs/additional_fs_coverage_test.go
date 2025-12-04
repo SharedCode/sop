@@ -78,6 +78,10 @@ func (f *fakeFileIO) Remove(ctx context.Context, name string) error {
 	f.calls = append(f.calls, "Remove:"+name)
 	return os.Remove(name)
 }
+func (f *fakeFileIO) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	f.calls = append(f.calls, "Stat:"+path)
+	return os.Stat(path)
+}
 func (f *fakeFileIO) Exists(ctx context.Context, path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)

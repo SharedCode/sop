@@ -42,6 +42,9 @@ func (s *stubECFileIO) RemoveAll(context.Context, string) error                {
 func (s *stubECFileIO) MkdirAll(context.Context, string, os.FileMode) error    { return nil }
 func (s *stubECFileIO) ReadDir(context.Context, string) ([]os.DirEntry, error) { return nil, nil }
 func (s *stubECFileIO) List(context.Context, string) ([]string, error)         { return nil, nil }
+func (s *stubECFileIO) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	return nil, os.ErrNotExist
+}
 
 // readErrFileIO triggers read errors for all shards to reach GetOne empty shards path.
 type readErrFileIO struct{}
@@ -58,6 +61,9 @@ func (r readErrFileIO) RemoveAll(context.Context, string) error                {
 func (r readErrFileIO) MkdirAll(context.Context, string, os.FileMode) error    { return nil }
 func (r readErrFileIO) ReadDir(context.Context, string) ([]os.DirEntry, error) { return nil, nil }
 func (r readErrFileIO) List(context.Context, string) ([]string, error)         { return nil, nil }
+func (r readErrFileIO) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	return nil, os.ErrNotExist
+}
 
 // Helper to build minimal EC config.
 func testECConfig(table string, data, parity int) map[string]ErasureCodingConfig {

@@ -12,6 +12,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/common"
+	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/inredfs"
 )
 
@@ -19,6 +20,7 @@ const (
 	batchSize                   = 200
 	optimizeLockDuration        = 1 * time.Hour
 	optimizeLockRefreshInterval = 30 * time.Minute
+	optimizeGracePeriod         = 1 * time.Hour
 )
 
 // Optimize reorganizes the index to improve query performance by rebuilding the vector structures.
@@ -110,6 +112,13 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 	}
 	lockKeyName := fmt.Sprintf("optimize_lock_%s", di.name)
 	lockKeys := di.config.Cache.CreateLockKeys([]string{lockKeyName})
+
+	if ok, err := di.config.Cache.IsLockedByOthers(ctx, []string{lockKeyName}); err != nil {
+		return 0, 0, "", false, nil, nil, fmt.Errorf("failed to check optimization lock: %w", err)
+	} else if ok {
+		return 0, 0, "", false, nil, nil, fmt.Errorf("optimization already in progress for domain %s", di.name)
+	}
+
 	success, _, err := di.config.Cache.DualLock(ctx, optimizeLockDuration, lockKeys)
 	if err != nil {
 		return 0, 0, "", false, nil, nil, fmt.Errorf("failed to acquire optimization lock: %w", err)
@@ -132,6 +141,14 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 					log.Warn("Failed to refresh optimization lock TTL", "error", err)
 				} else if !ok {
 					log.Warn("Optimization lock lost during refresh")
+					ok, _, err := di.config.Cache.DualLock(ctx, optimizeLockDuration, lockKeys)
+					if err != nil {
+						lockKeys[0].IsLockOwner = false
+						log.Warn("failed to re-acquire optimization lock: %w", "error", err)
+					} else if !ok {
+						lockKeys[0].IsLockOwner = false
+						log.Warn("failed to re-acquire optimization lock, it got locked by another process")
+					}
 				}
 			}
 		}
@@ -193,6 +210,15 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 		return 0, 0, "", false, nil, nil, err
 	}
 	if found {
+		// Check grace period
+		if err := di.checkGracePeriod(ctx, tx, lookupName); err != nil {
+			if rbErr := tx.Rollback(ctx); rbErr != nil {
+				log.Warn("Rollback failed during grace period abort", "error", rbErr)
+			}
+			cleanupLock()
+			return 0, 0, "", false, nil, nil, err
+		}
+
 		log.Debug("Found previous failed optimization, cleaning up")
 		storesToRemove := []string{
 			di.name + centroidsSuffix + suffix,
@@ -220,6 +246,20 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 
 	useTempVectors := newVersion == 1 && di.config.EnableIngestionBuffer
 	return currentVersion, newVersion, suffix, useTempVectors, lockKeys, cleanupLock, nil
+}
+
+func (di *domainIndex[T]) checkGracePeriod(ctx context.Context, tx sop.Transaction, lookupName string) error {
+	if ct, ok := tx.GetPhasedTransaction().(*common.Transaction); ok {
+		if sr, ok := ct.StoreRepository.(*fs.StoreRepository); ok {
+			if fi, err := sr.GetStoreFileStat(ctx, lookupName); err == nil {
+				if time.Since(fi.ModTime()) < optimizeGracePeriod {
+					log.Warn("Optimization aborted: grace period active for existing store", "store", lookupName, "modTime", fi.ModTime())
+					return fmt.Errorf("optimization aborted: grace period active for existing store %s", lookupName)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suffix string, useTempVectors bool) (int, error) {

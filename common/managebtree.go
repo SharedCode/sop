@@ -192,22 +192,15 @@ func refetchAndMergeClosure[TK btree.Ordered, TV any](si *StoreInterface[TK, TV]
 		for uuid, ci := range b3ModifiedItems {
 			log.Debug(fmt.Sprintf("inside refetchAndMergeClosure, tid: %v", si.backendNodeRepository.transaction.GetID()))
 			if ci.Action == addAction {
-				if !b3.StoreInfo.IsValueDataInNodeSegment {
-					if ok, err := b3.AddItem(ctx, ci.item); !ok || err != nil {
-						if err != nil {
-							return err
-						}
-						return fmt.Errorf("refetchAndMergeModifications failed to merge add item with key %v", ci.item.Key)
-					}
-					ci.persisted = true
-					si.ItemActionTracker.(*itemActionTracker[TK, TV]).items[ci.item.ID] = ci
-					continue
-				}
-				if ok, err := b3.Add(ctx, ci.item.Key, *ci.item.Value); !ok || err != nil {
+				if ok, err := b3.AddItem(ctx, ci.item); !ok || err != nil {
 					if err != nil {
 						return err
 					}
 					return fmt.Errorf("refetchAndMergeModifications failed to merge add item with key %v", ci.item.Key)
+				}
+				if !b3.StoreInfo.IsValueDataInNodeSegment {
+					ci.persisted = true
+					si.ItemActionTracker.(*itemActionTracker[TK, TV]).items[ci.item.ID] = ci
 				}
 				continue
 			}
@@ -241,16 +234,8 @@ func refetchAndMergeClosure[TK btree.Ordered, TV any](si *StoreInterface[TK, TV]
 				continue
 			}
 			if ci.Action == updateAction {
-				if !b3.StoreInfo.IsValueDataInNodeSegment {
-					// Merge the inflight Item ID with target.
-					si.ItemActionTracker.(*itemActionTracker[TK, TV]).forDeletionItems = append(
-						si.ItemActionTracker.(*itemActionTracker[TK, TV]).forDeletionItems, item.ID)
-					delete(si.ItemActionTracker.(*itemActionTracker[TK, TV]).items, item.ID)
-					ci.persisted = true
-					si.ItemActionTracker.(*itemActionTracker[TK, TV]).items[ci.item.ID] = ci
-
-					// Ensure Btree will do everything else needed to update current Item, except merge change(above).
-					if ok, err := b3.UpdateCurrentNodeItem(ctx, ci.item); !ok || err != nil {
+				if b3.StoreInfo.IsValueDataInNodeSegment {
+					if ok, err := b3.UpdateCurrentItemWithItem(ctx, ci.item); !ok || err != nil {
 						if err != nil {
 							return err
 						}
@@ -258,7 +243,15 @@ func refetchAndMergeClosure[TK btree.Ordered, TV any](si *StoreInterface[TK, TV]
 					}
 					continue
 				}
-				if ok, err := b3.UpdateCurrentItem(ctx, ci.item.Key, *ci.item.Value); !ok || err != nil {
+				// Correctly track the registry IDs of data segment blobs for deletion.
+				si.ItemActionTracker.(*itemActionTracker[TK, TV]).forDeletionItems = append(
+					si.ItemActionTracker.(*itemActionTracker[TK, TV]).forDeletionItems, item.ID)
+				delete(si.ItemActionTracker.(*itemActionTracker[TK, TV]).items, item.ID)
+				ci.persisted = true
+				si.ItemActionTracker.(*itemActionTracker[TK, TV]).items[ci.item.ID] = ci
+
+				// Ensure Btree will do everything else needed to update current Item, except merge change(above).
+				if ok, err := b3.UpdateCurrentItemWithItem(ctx, ci.item); !ok || err != nil {
 					if err != nil {
 						return err
 					}

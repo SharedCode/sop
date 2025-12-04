@@ -10,9 +10,19 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/sharedcode/sop"
 )
+
+type dummyFileInfo struct{}
+
+func (dummyFileInfo) Name() string       { return "dummy" }
+func (dummyFileInfo) Size() int64        { return 0 }
+func (dummyFileInfo) Mode() os.FileMode  { return 0 }
+func (dummyFileInfo) ModTime() time.Time { return time.Now() }
+func (dummyFileInfo) IsDir() bool        { return false }
+func (dummyFileInfo) Sys() any           { return nil }
 
 // Local unique helper (avoid name clash with existing tests); mirrors errFileIO behavior.
 type scenarioErrFileIO struct {
@@ -54,6 +64,12 @@ func (e *scenarioErrFileIO) ReadDir(ctx context.Context, sourceDir string) ([]os
 }
 func (e *scenarioErrFileIO) List(ctx context.Context, path string) ([]string, error) {
 	return nil, nil
+}
+func (e *scenarioErrFileIO) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	if e.existsAlways {
+		return dummyFileInfo{}, nil
+	}
+	return nil, os.ErrNotExist
 }
 
 // scenarioFailingRemoveFileIO mirrors failingRemoveFileIO from legacy tests with a unique name.
@@ -128,6 +144,9 @@ func (f *scenarioFailingMultiShardFileIO) ReadDir(context.Context, string) ([]os
 }
 func (f *scenarioFailingMultiShardFileIO) List(context.Context, string) ([]string, error) {
 	return nil, nil
+}
+func (f *scenarioFailingMultiShardFileIO) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	return dummyFileInfo{}, nil
 }
 
 // FileIO that fails specific shard indices for a given blob id (parity exceed / tolerated scenarios).

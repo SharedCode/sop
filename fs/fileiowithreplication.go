@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	log "log/slog"
+	"os"
 
 	"github.com/sharedcode/sop"
 )
@@ -40,6 +41,11 @@ func newFileIOWithReplicationInjected(replicationTracker *replicationTracker, ma
 func (fio *fileIO) exists(ctx context.Context, targetFilename string) bool {
 	filename := fio.replicationTracker.formatActiveFolderEntity(targetFilename)
 	return fio.fio.Exists(ctx, filename)
+}
+
+func (fio *fileIO) stat(ctx context.Context, targetFilename string) (os.FileInfo, error) {
+	filename := fio.replicationTracker.formatActiveFolderEntity(targetFilename)
+	return fio.fio.Stat(ctx, filename)
 }
 
 func (fio *fileIO) write(ctx context.Context, targetFilename string, contents []byte) error {

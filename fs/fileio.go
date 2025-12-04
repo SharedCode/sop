@@ -19,6 +19,7 @@ type FileIO interface {
 	WriteFile(ctx context.Context, name string, data []byte, perm os.FileMode) error
 	ReadFile(ctx context.Context, name string) ([]byte, error)
 	Remove(ctx context.Context, name string) error
+	Stat(ctx context.Context, path string) (os.FileInfo, error)
 	Exists(ctx context.Context, path string) bool
 
 	// Directory API.
@@ -74,6 +75,17 @@ func (dio defaultFileIO) ReadFile(ctx context.Context, name string) ([]byte, err
 // Remove deletes a file with retry on transient errors.
 func (dio defaultFileIO) Remove(ctx context.Context, name string) error {
 	return dio.retryIO(ctx, func(context.Context) error { return os.Remove(name) })
+}
+
+// Stat returns the FileInfo structure describing file.
+func (dio defaultFileIO) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	var fi os.FileInfo
+	err := dio.retryIO(ctx, func(context.Context) error {
+		var e error
+		fi, e = os.Stat(path)
+		return e
+	})
+	return fi, err
 }
 
 // MkdirAll creates a directory tree with retry on transient errors.

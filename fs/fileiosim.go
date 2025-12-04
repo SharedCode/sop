@@ -7,9 +7,19 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/sharedcode/sop"
 )
+
+type simFileInfo struct{}
+
+func (simFileInfo) Name() string       { return "sim" }
+func (simFileInfo) Size() int64        { return 0 }
+func (simFileInfo) Mode() os.FileMode  { return 0 }
+func (simFileInfo) ModTime() time.Time { return time.Now() }
+func (simFileInfo) IsDir() bool        { return false }
+func (simFileInfo) Sys() any           { return nil }
 
 type fileIOSimulator struct {
 	lookup map[string][]byte
@@ -76,6 +86,9 @@ func (sim *fileIOSimulator) Remove(ctx context.Context, name string) error {
 	delete(sim.lookup, name)
 	sim.locker.Unlock()
 	return nil
+}
+func (sim *fileIOSimulator) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	return simFileInfo{}, nil
 }
 func (sim *fileIOSimulator) Exists(ctx context.Context, path string) bool {
 	return true

@@ -76,6 +76,9 @@ func (f *testFileIO) MkdirAll(_ context.Context, path string, _ os.FileMode) err
 }
 func (f *testFileIO) ReadDir(_ context.Context, _ string) ([]os.DirEntry, error) { return nil, nil }
 func (f *testFileIO) List(_ context.Context, _ string) ([]string, error)         { return nil, nil }
+func (f *testFileIO) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	return dummyFileInfo{}, nil
+}
 
 // Table-driven coverage of typical failure/success paths for fileIO + replication.
 func TestFileIOWithReplication_Scenarios(t *testing.T) {

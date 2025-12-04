@@ -94,18 +94,16 @@ func (idx *Index) Add(ctx context.Context, docID string, text string) error {
 		}
 
 		// Increment DocCount for this term
-		// We need to Read-Modify-Write
+		// We use Upsert to handle both new and existing terms
 		count := 0
 		if found, err := idx.termStats.Find(ctx, term, false); err != nil {
 			return err
 		} else if found {
 			count, _ = idx.termStats.GetCurrentValue(ctx)
 		}
-		if _, err := idx.termStats.Update(ctx, term, count+1); err != nil {
-			// If update fails (e.g. not found because we just checked), try Add
-			if _, err := idx.termStats.Add(ctx, term, 1); err != nil {
-				return err
-			}
+
+		if _, err := idx.termStats.Upsert(ctx, term, count+1); err != nil {
+			return err
 		}
 	}
 
@@ -115,14 +113,18 @@ func (idx *Index) Add(ctx context.Context, docID string, text string) error {
 	if found, _ := idx.global.Find(ctx, "total_docs", false); found {
 		totalDocs, _ = idx.global.GetCurrentValue(ctx)
 	}
-	idx.global.Add(ctx, "total_docs", totalDocs+1) // Or Update
+	if _, err := idx.global.Upsert(ctx, "total_docs", totalDocs+1); err != nil {
+		return err
+	}
 
 	// Total Length (for AvgDL)
 	totalLen := 0
 	if found, _ := idx.global.Find(ctx, "total_len", false); found {
 		totalLen, _ = idx.global.GetCurrentValue(ctx)
 	}
-	idx.global.Add(ctx, "total_len", totalLen+docLen)
+	if _, err := idx.global.Upsert(ctx, "total_len", totalLen+docLen); err != nil {
+		return err
+	}
 
 	return nil
 }

@@ -177,7 +177,7 @@ func TestUpdateCurrentNodeItem_And_FlagsGetter(t *testing.T) {
 
 	v2 := "new"
 	it2 := &Item[int, string]{Key: 1, Value: &v2, ID: sop.NewUUID()}
-	if ok, err := b.UpdateCurrentNodeItem(nil, it2); !ok || err != nil {
+	if ok, err := b.UpdateCurrentItemWithItem(nil, it2); !ok || err != nil {
 		t.Fatalf("UpdateCurrentNodeItem failed: %v", err)
 	}
 	if root.Slots[0] != it2 {
@@ -419,7 +419,7 @@ func TestUpdateCurrentNodeItem_Guards(t *testing.T) {
 	b, fnr := newTestBtree[string]()
 	// Nil selection
 	b.setCurrentItemID(sop.NilUUID, 0)
-	if ok, err := b.UpdateCurrentNodeItem(nil, &Item[int, string]{}); err != nil || ok {
+	if ok, err := b.UpdateCurrentItemWithItem(nil, &Item[int, string]{}); err != nil || ok {
 		t.Fatalf("expected false,nil on nil selection")
 	}
 	// Selection points to nil slot
@@ -429,7 +429,7 @@ func TestUpdateCurrentNodeItem_Guards(t *testing.T) {
 	b.StoreInfo.RootNodeID = root.ID
 	b.StoreInfo.Count = 1
 	b.setCurrentItemID(root.ID, 0)
-	if ok, err := b.UpdateCurrentNodeItem(nil, &Item[int, string]{}); err != nil || ok {
+	if ok, err := b.UpdateCurrentItemWithItem(nil, &Item[int, string]{}); err != nil || ok {
 		t.Fatalf("expected false,nil on nil slot selection")
 	}
 }

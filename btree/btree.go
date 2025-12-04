@@ -474,7 +474,7 @@ func (btree *Btree[TK, TV]) UpdateCurrentKey(ctx context.Context, key TK) (bool,
 }
 
 // UpdateCurrentNodeItem is used internally during refetch/merge in commit to replace the current item.
-func (btree *Btree[TK, TV]) UpdateCurrentNodeItem(ctx context.Context, item *Item[TK, TV]) (bool, error) {
+func (btree *Btree[TK, TV]) UpdateCurrentItemWithItem(ctx context.Context, item *Item[TK, TV]) (bool, error) {
 	if btree.currentItemRef.getNodeID() == sop.NilUUID {
 		return false, nil
 	}
@@ -488,6 +488,11 @@ func (btree *Btree[TK, TV]) UpdateCurrentNodeItem(ctx context.Context, item *Ite
 	btree.unfetchCurrentValue()
 	btree.currentItem = item
 	node.Slots[btree.currentItemRef.getNodeItemIndex()] = item
+
+	// Register to local cache the "item update" for submit/resolution on Commit.
+	if err := btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
+		return false, err
+	}
 
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
 	btree.saveNode(node)
@@ -600,8 +605,9 @@ func (btree *Btree[TK, TV]) IsUnique() bool {
 // Internal helpers below.
 // unfetchCurrentValue resets the current item's Value to an unfetched state to conserve memory when applicable.
 func (btree *Btree[TK, TV]) unfetchCurrentValue() {
-	if btree.StoreInfo.IsValueDataActivelyPersisted && !btree.StoreInfo.IsValueDataGloballyCached &&
-		btree.currentItem != nil && btree.currentItem.Value != nil && btree.currentItem.valueWasFetched {
+	if !btree.StoreInfo.IsValueDataInNodeSegment && btree.StoreInfo.IsValueDataActivelyPersisted &&
+		!btree.StoreInfo.IsValueDataGloballyCached && btree.currentItem != nil && 
+		btree.currentItem.Value != nil && btree.currentItem.valueWasFetched {
 		btree.currentItem.Value = nil
 		btree.currentItem.ValueNeedsFetch = true
 		btree.currentItem.valueWasFetched = false
