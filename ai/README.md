@@ -17,6 +17,7 @@ A persistent, ACID-compliant vector store that runs on your local filesystem.
     *   **Scalability**: The optimization process is batched (commits every 200 items), allowing it to scale to millions of records without hitting transaction timeouts.
     *   **Operational Constraint**: To ensure data consistency and simplicity, the Vector Store enters a **Read-Only** mode during optimization. Any attempts to `Upsert` or `Delete` will return an error until `Optimize` completes.
     *   **Crash Recovery**: If the process crashes during optimization, simply restart it. The next call to `Optimize` will automatically detect and clean up any stale artifacts before starting fresh.
+    *   **Rolling Version Safety**: When migrating items to a new optimization version, the system promotes the "Next" state to the "Current" state before overwriting it. This ensures that if the optimization process crashes mid-flight, the data remains accessible via the valid "Current" version, preventing data loss or corruption during the transition.
 *   **Deletion & Cleanup**: Implements a **Tombstone** mechanism for efficient deletions.
     *   **Soft Delete**: `Delete()` marks items as deleted in both the Index and Content stores, ensuring they are immediately hidden from search results.
     *   **Garbage Collection**: The `Optimize()` process acts as a Garbage Collector. It detects these tombstones and performs a physical delete on the underlying data, reclaiming storage space during the maintenance cycle.
