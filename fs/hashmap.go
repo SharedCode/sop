@@ -302,7 +302,7 @@ func (hm *hashmap) setupNewFile(ctx context.Context, forWriting bool, filename s
 	}
 
 	// Coordinate file preallocation across processes using a distributed lock.
-	lk := hm.cache.CreateLockKeys([]string{preallocateFileLockKey})
+	lk := hm.cache.CreateLockKeys([]string{preallocateFileLockKey + hm.replicationTracker.formatActiveFolderEntity(filename)})
 	if ok, _, err := hm.cache.DualLock(ctx, lockPreallocateFileTimeout, lk); !ok || err != nil {
 		if err == nil {
 			err = fmt.Errorf("can't acquire a lock to preallocate file %s", filename)

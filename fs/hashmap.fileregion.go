@@ -250,5 +250,6 @@ func (hm *hashmap) writeBlockRegionPayload(ctx context.Context, dio *fileDirectI
 }
 
 func (hm *hashmap) formatLockKey(filename string, offset int64) string {
-	return hm.cache.FormatLockKey(fmt.Sprintf("%s%s%v", lockFileRegionKeyPrefix, filename, offset))
+	s := hm.replicationTracker.formatActiveFolderEntity(filename)
+	return hm.cache.FormatLockKey(fmt.Sprintf("%s%s%v", lockFileRegionKeyPrefix, s, offset))
 }

@@ -584,8 +584,6 @@ func Test_Hashmap_SetupNewFile_LockConflict(t *testing.T) {
 	a, p := t.TempDir(), t.TempDir()
 
 	cache := mocks.NewMockClient()
-	// Pre-lock the preallocateFileLockKey with a foreign owner.
-	_ = cache.Set(ctx, "L"+preallocateFileLockKey, sop.NewUUID().String(), 0)
 
 	// Reset global replication state for isolation.
 	prev := GlobalReplicationDetails
@@ -603,6 +601,12 @@ func Test_Hashmap_SetupNewFile_LockConflict(t *testing.T) {
 
 	dio := newFileDirectIO()
 	fn := filepath.Join(rt.getActiveBaseFolder(), "seg-1.reg")
+
+	// Pre-lock the preallocateFileLockKey with a foreign owner.
+	// We must match the key generation logic in setupNewFile which now includes the path.
+	lockKey := preallocateFileLockKey + rt.formatActiveFolderEntity(fn)
+	_ = cache.Set(ctx, "L"+lockKey, sop.NewUUID().String(), 0)
+
 	if _, err := hm.setupNewFile(ctx, true, fn, sop.NewUUID(), dio); err == nil {
 		t.Fatalf("expected lock conflict error from setupNewFile")
 	}
