@@ -12,7 +12,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
 	core_database "github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/infs"
 )
 
 func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
@@ -101,7 +101,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 
 	// Check Version in SysStore
 	sysStoreName := fmt.Sprintf("%s_sys_config", storeName)
-	sysStore, _ := inredfs.OpenBtree[string, int64](ctx, sysStoreName, transVerify1, nil)
+	sysStore, _ := infs.OpenBtree[string, int64](ctx, sysStoreName, transVerify1, nil)
 	found, _ := sysStore.Find(ctx, storeName, false)
 	if !found {
 		t.Fatal("System config not found")
@@ -234,7 +234,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	transVerify2, _ := db.BeginTransaction(ctx, sop.ForReading)
 
 	// Check Version
-	sysStore, _ = inredfs.OpenBtree[string, int64](ctx, sysStoreName, transVerify2, nil)
+	sysStore, _ = infs.OpenBtree[string, int64](ctx, sysStoreName, transVerify2, nil)
 	sysStore.Find(ctx, storeName, false)
 	ver, _ = sysStore.GetCurrentValue(ctx)
 	if ver != 2 {

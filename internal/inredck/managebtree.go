@@ -5,8 +5,8 @@ import (
 	"context"
 
 	"github.com/sharedcode/sop"
+	cas "github.com/sharedcode/sop/adapters/cassandra"
 	"github.com/sharedcode/sop/btree"
-	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/common"
 )
 

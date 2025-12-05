@@ -99,6 +99,16 @@ SOP is designed to be versatile, powering everything from small embedded tools t
 ### 6. AI Model Registry
 *   **Scenario**: Managing versions of local AI models (weights, configurations) alongside the data they process.
 *   **Why SOP**:
+    *   **Unified Storage**: Store your models in the same ACID transaction as your training data and vector embeddings.
+    *   **Versioning**: Built-in support for versioning models (e.g., "v1.0", "v1.1") using composite keys.
+
+### 7. Embedded Search Engine
+*   **Scenario**: Adding "Search this wiki" or "Filter by text" features to an application without managing a separate Elasticsearch cluster.
+*   **Why SOP**:
+    *   **Transactional Indexing**: Index documents in the same transaction as you save them. No "eventual consistency" lag.
+    *   **BM25 Scoring**: Uses industry-standard ranking algorithms for relevance.
+    *   **Zero Ops**: It's just a library. No separate process to manage or monitor.
+*   **Why SOP**:
     *   **Unified Storage**: Store your training data (Vectors), metadata (Registry), and model artifacts (Blobs/JSON) in one ACID-compliant system.
     *   **Atomic Updates**: Update your model weights and the vector index they correspond to in a single transaction, preventing version mismatch.
 
@@ -151,7 +161,7 @@ SOP is a NoSQL-like key/value storage engine with built-in indexing and transact
 - Import package:
   - `github.com/sharedcode/sop/database` (Recommended: Unified entry point for B-Trees, Vector Stores, and AI Models)
   - `github.com/sharedcode/sop/ai` (AI Toolkit: Vector Database, Agents, and RAG)
-  - `github.com/sharedcode/sop/inredfs` (Low-level: Direct access to filesystem-backed B-Trees)
+  - `github.com/sharedcode/sop/infs` (Low-level: Direct access to filesystem-backed B-Trees)
 - Repo path: https://github.com/sharedcode/sop
 
 5) Initialize and start coding
@@ -220,14 +230,14 @@ Testing notes: Unit tests rewind lastPriorityOnIdleTime and priorityLogFound (at
 - Data directories on disks you intend SOP to use (4096-byte sector size recommended)
 
 ## Running Integration Tests
-You can run the SOP's integration tests from "inredfs" package using the following docker commands:
+You can run the SOP's integration tests from "infs" package using the following docker commands:
 NOTE: you need docker desktop running in your host machine for this to work. Go to the sop root folder, e.g. ```cd ~/sop```, where sop is the folder where you cloned from github.
 1. Build the docker image: ```docker build -t mydi .```
 2. Run the docker image in a container: ```docker run mydi```
 * Where "mydi" is the name of the docker image, you can use another name of your choice.
 
 The docker image will be built with alpine (linux) and Redis server in it. Copy the SOP source codes to it. Setup target data folder and environment variable that tells the unit tests of the data folder path.
-On docker run, the shell script ensures that the Redis server is up & running then run the ("inredfs" package's integration) test files.
+On docker run, the shell script ensures that the Redis server is up & running then run the ("infs" package's integration) test files.
 
 You can pattern how the test sets the (datapath) env't variable so you can run the same integration tests in your host machine, if needed, and yes, you need Redis running locally for this to work.
 See https://github.com/SharedCode/sop/blob/master/Dockerfile and https://github.com/SharedCode/sop/blob/master/docker-entrypoint.sh for more details.
@@ -242,8 +252,8 @@ Run tests locally without Docker using build tags:
 - Unit tests (fast): go test ./...
 - Integration tests (require Redis running on localhost and a writable data folder):
 	- Set environment variable datapath to your data directory (defaults to a local path if unset).
-	- Run: go test -tags=integration ./inredfs/integrationtests
-- Stress tests (long-running): go test -timeout 2h -tags=stress ./inredfs/stresstests/...
+	- Run: go test -tags=integration ./infs/integrationtests
+- Stress tests (long-running): go test -timeout 2h -tags=stress ./infs/stresstests/...
 
 VS Code tasks provided:
 - Go: Test (Unit)

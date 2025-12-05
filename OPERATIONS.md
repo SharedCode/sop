@@ -4,7 +4,7 @@ This guide covers the operational aspects of running SOP in production, includin
 
 ## Connection Management
 
-SOP relies on long-lived (pooled) connections to Redis and Cassandra (for `inredcfs`).
+SOP relies on long-lived (pooled) connections to Redis and Cassandra (for `incfs`).
 
 > **Note**: If running in **Standalone Mode** (using `sop.InMemory` cache), Redis is not required, and this section can be ignored.
 
@@ -17,7 +17,7 @@ SOP relies on long-lived (pooled) connections to Redis and Cassandra (for `inred
     *   `MinIdleConns`: Keep some connections warm to avoid latency spikes.
     *   `ReadTimeout` / `WriteTimeout`: Tune these to avoid premature timeouts during heavy load.
 
-### Cassandra (`inredcfs`)
+### Cassandra (`incfs`)
 *   **Consistency**: SOP typically uses `LOCAL_QUORUM` for strong consistency.
 *   **Keyspace**: Ensure the keyspace is created with an appropriate replication strategy (e.g., `NetworkTopologyStrategy`) for your cluster.
 
@@ -47,7 +47,7 @@ Not all errors trigger a failover. SOP distinguishes between transient errors (r
 
 ## Backup & Restore
 
-### Hybrid Backend (`inredcfs`)
+### Hybrid Backend (`incfs`)
 
 Backing up a hybrid system requires coordination.
 

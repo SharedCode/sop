@@ -6,9 +6,9 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/search"
 	"github.com/sharedcode/sop/ai/vector"
 	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/search"
 )
 
 // Config holds the configuration for a generic domain (Agent).

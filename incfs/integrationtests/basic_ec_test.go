@@ -1,0 +1,121 @@
+//go:build integration
+// +build integration
+
+package integrationtests
+
+import (
+	"cmp"
+	"fmt"
+	"os"
+	"testing"
+
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/fs"
+	"github.com/sharedcode/sop/incfs"
+)
+
+func initErasureCoding() {
+	// Erasure Coding configuration lookup table (map).
+	ec := make(map[string]fs.ErasureCodingConfig)
+
+	// Ensure data paths exist
+	for i := 1; i <= 3; i++ {
+		path := fmt.Sprintf("%s%cdisk%d", dataPath, os.PathSeparator, i)
+		if err := os.MkdirAll(path, 0755); err != nil {
+			panic(fmt.Sprintf("Failed to create directory %s: %v", path, err))
+		}
+		fmt.Printf("Created directory: %s\n", path)
+	}
+
+	// Erasure Coding config for "barstoreec" table uses three base folder paths that mimicks three disks.
+	// Two data shards and one parity shard.
+	ec["barstoreec"] = fs.ErasureCodingConfig{
+		DataShardsCount:   2,
+		ParityShardsCount: 1,
+		BaseFolderPathsAcrossDrives: []string{
+			fmt.Sprintf("%s%cdisk1", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk2", dataPath, os.PathSeparator),
+			fmt.Sprintf("%s%cdisk3", dataPath, os.PathSeparator),
+		},
+		RepairCorruptedShards: true,
+	}
+	fs.SetGlobalErasureConfig(ec)
+}
+
+func Test_TransactionStory_OpenVsNewBTreeEC(t *testing.T) {
+	// Cleanup potential stale data from previous runs
+	_ = incfs.RemoveBtree(ctx, "barstoreec")
+
+	trans, err := incfs.NewTransactionWithReplication(sop.ForWriting, -1, false, nil)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	trans.Begin(ctx)
+	b3, err := incfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+		Name:                     "barstoreec",
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+	}, trans, cmp.Compare)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if ok, err := b3.Add(ctx, 1, "hello world"); !ok || err != nil {
+		t.Errorf("Add(1, 'hello world') failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		return
+	}
+
+	if ok, err := b3.Find(ctx, 1, false); !ok || err != nil {
+		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		return
+	}
+	if k := b3.GetCurrentKey().Key; k != 1 {
+		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
+		trans.Rollback(ctx)
+		return
+	}
+	if v, err := b3.GetCurrentValue(ctx); v != "hello world" || err != nil {
+		t.Errorf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
+		return
+	}
+	t.Logf("Successfully added & found item with key 1.")
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+}
+
+func Test_Basic_EC_Get(t *testing.T) {
+	trans, err := incfs.NewTransactionWithReplication(sop.ForReading, -1, false, nil)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	trans.Begin(ctx)
+	b3, err := incfs.NewBtreeWithReplication[int, string](ctx, sop.StoreOptions{
+		Name:                     "barstoreec",
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+		LeafLoadBalancing:        true,
+	}, trans, cmp.Compare)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if ok, err := b3.Find(ctx, 1, false); !ok || err != nil {
+		t.Errorf("FindOne(1,false) failed, got(ok, err) = %v, %v, want = true, nil.", ok, err)
+		return
+	}
+	if k := b3.GetCurrentKey().Key; k != 1 {
+		t.Errorf("GetCurrentKey() failed, got = %v, want = 1.", k)
+		trans.Rollback(ctx)
+		return
+	}
+	if v, err := b3.GetCurrentValue(ctx); v != "hello world" || err != nil {
+		t.Errorf("GetCurrentValue() failed, got = %v, %v, want = 1, nil.", v, err)
+		return
+	}
+	t.Logf("Successfully added & found item with key 1.")
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
+}

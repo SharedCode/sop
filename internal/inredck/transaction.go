@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
-	cas "github.com/sharedcode/sop/cassandra"
+	cas "github.com/sharedcode/sop/adapters/cassandra"
 	"github.com/sharedcode/sop/common"
 )
 

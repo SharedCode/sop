@@ -2,14 +2,14 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/inredfs"
-	"github.com/sharedcode/sop/redis"
+	"github.com/sharedcode/sop/infs"
 )
 
 // DatabaseType defines the deployment mode of the database.
@@ -39,7 +39,17 @@ type Database struct {
 func NewDatabase(dbType DatabaseType, storagePath string) *Database {
 	var c sop.L2Cache
 	if dbType == Clustered {
-		c = redis.NewClient()
+		// Use the registered Redis cache factory.
+		// Note: The application must import github.com/sharedcode/sop/adapters/redis
+		// and initialize the connection (e.g. redis.OpenConnection) for this to work.
+		c = sop.NewCacheClientByType(sop.Redis)
+		if c == nil {
+			// Fallback or Error?
+			// Since Clustered implies distributed cache, we should probably panic or error if not available.
+			// But NewDatabase signature returns *Database.
+			// We'll panic for now as this is a configuration error.
+			panic(fmt.Errorf("clustered mode requested but Redis adapter not registered. Please import 'github.com/sharedcode/sop/adapters/redis' in your main package"))
+		}
 	} else {
 		c = cache.NewInMemoryCache()
 	}
@@ -79,8 +89,8 @@ func (db *Database) SetReplicationConfig(ec map[string]fs.ErasureCodingConfig, f
 }
 
 // BeginTransaction starts a new transaction.
-func (db *Database) BeginTransaction(ctx context.Context, mode sop.TransactionMode, options ...inredfs.TransationOptionsWithReplication) (sop.Transaction, error) {
-	var opts inredfs.TransationOptionsWithReplication
+func (db *Database) BeginTransaction(ctx context.Context, mode sop.TransactionMode, options ...infs.TransationOptionsWithReplication) (sop.Transaction, error) {
+	var opts infs.TransationOptionsWithReplication
 	if len(options) > 0 {
 		opts = options[0]
 	}
@@ -111,7 +121,7 @@ func (db *Database) BeginTransaction(ctx context.Context, mode sop.TransactionMo
 		// NewTransactionOptionsWithReplication takes args and returns struct.
 		// We already have struct.
 		// We can just call NewTransactionWithReplication directly.
-		t, err := inredfs.NewTransactionWithReplication(ctx, opts)
+		t, err := infs.NewTransactionWithReplication(ctx, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -123,14 +133,14 @@ func (db *Database) BeginTransaction(ctx context.Context, mode sop.TransactionMo
 
 	// Standard
 	// Map opts to standard options
-	stdOpts := inredfs.TransationOptions{
+	stdOpts := infs.TransationOptions{
 		Mode:                 opts.Mode,
 		MaxTime:              opts.MaxTime,
 		RegistryHashModValue: opts.RegistryHashModValue,
 		StoresBaseFolder:     opts.StoresBaseFolders[0],
 		Cache:                opts.Cache,
 	}
-	t, err := inredfs.NewTransaction(ctx, stdOpts)
+	t, err := infs.NewTransaction(ctx, stdOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -146,11 +156,11 @@ func (db *Database) OpenBtree(ctx context.Context, name string, t sop.Transactio
 	if err := os.MkdirAll(db.storagePath, 0755); err != nil {
 		return nil, err
 	}
-	// We use string keys and any values for a generic store, but users can use specific types if they use inredfs directly.
+	// We use string keys and any values for a generic store, but users can use specific types if they use infs.directly.
 	// For the Database wrapper, we provide a sensible default or we could make this generic if Go allowed methods to have type parameters (it does).
 	// However, since Database is a struct, we can't easily make this method generic for the return type without the struct being generic.
 	// For now, we'll expose a string/any B-Tree.
-	return inredfs.OpenBtree[any, any](ctx, name, t, nil)
+	return infs.OpenBtree[any, any](ctx, name, t, nil)
 }
 
 // NewBtree creates a new general purpose B-Tree store.
@@ -172,5 +182,5 @@ func (db *Database) NewBtree(ctx context.Context, name string, t sop.Transaction
 			Description:              "General purpose B-Tree created via Database",
 		}
 	}
-	return inredfs.NewBtree[any, any](ctx, opts, t, nil)
+	return infs.NewBtree[any, any](ctx, opts, t, nil)
 }

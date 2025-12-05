@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
-	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/common/mocks"
 )
 
@@ -60,7 +59,7 @@ func TestStress_StreamingDataStoreRollbackShouldEraseTIDLogs(t *testing.T) {
 func TestStress_TLog_FailOnFinalizeCommit(t *testing.T) {
 	// Unwind time to yesterday.
 	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
-	cas.Now = func() time.Time { return yesterday }
+	// cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 
 	trans, _ := newMockTransactionWithLogging(t, sop.ForWriting, -1)
@@ -100,7 +99,7 @@ func TestStress_TLog_FailOnFinalizeCommit(t *testing.T) {
 
 	// Fast forward by a day to allow us to expire the uncommitted transaction.
 	today := time.Now()
-	cas.Now = func() time.Time { return today }
+	// cas.Now = func() time.Time { return today }
 	sop.Now = func() time.Time { return today }
 
 	tid, _, _, _ = twoPhaseTrans.logger.GetOne(ctx)

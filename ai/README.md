@@ -47,6 +47,13 @@ A unified interface for persisting AI models, from small "Skills" (Perceptrons) 
 *   **Categorization**: Models are stored with a composite key `{Category, Name}`, allowing for organized grouping of model artifacts.
 *   **Transactional**: The B-Tree backend allows model updates to be part of the same ACID transaction as vector data changes.
 
+### 5. Text Search (`search`)
+A transactional, embedded text search engine.
+*   **ACID Compliant**: Index documents within the same transaction as your data.
+*   **BM25 Scoring**: Uses industry-standard ranking for relevance.
+*   **Architecture**: Stores Inverted Indices in SOP B-Trees.
+*   **Usage**: Ideal for "Search this wiki" or "Filter by text" features alongside Vector Search.
+
 ## Standards & Compatibility
 
 The SOP AI Kit is designed to play nicely with the broader AI ecosystem while adhering to strict software engineering standards.
@@ -78,7 +85,7 @@ The SOP AI Kit is designed to play nicely with the broader AI ecosystem while ad
 
 The SOP AI package is built as a high-level abstraction layer on top of the General Purpose SOP engine. This design ensures that both use cases share the same robust foundation while offering appropriate interfaces for their respective domains.
 
-*   **Shared Engine**: Both packages use the same `inredfs` B-Tree storage engine, ensuring identical performance, reliability, and ACID compliance.
+*   **Shared Engine**: Both packages use the same `infs` B-Tree storage engine, ensuring identical performance, reliability, and ACID compliance.
 *   **Separation of Concerns**:
     *   **General Purpose (`sop`)**: Exposes low-level B-Tree primitives and explicit transaction management for building custom data structures (Key-Value stores, Registries).
     *   **AI Package (`sop/ai`)**: Abstracts B-Trees into domain-specific "Vector Stores" and "Model Stores" with implicit transaction handling for ease of use.

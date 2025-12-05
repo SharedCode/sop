@@ -10,8 +10,8 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
-	"github.com/sharedcode/sop/ai/search"
 	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/search"
 )
 
 // IngestAgent performs the ETL process for a specific agent configuration.

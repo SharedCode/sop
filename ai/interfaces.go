@@ -5,6 +5,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/sop/search"
 )
 
 // Embeddings defines the interface for generating vector embeddings from text.
@@ -207,18 +208,12 @@ type Agent[T any] interface {
 	Ask(ctx context.Context, query string) (string, error)
 }
 
-// TextSearchResult represents a scored document from text search.
-type TextSearchResult struct {
-	DocID string
-	Score float64
-}
-
 // TextIndex defines the interface for a text search index.
 type TextIndex interface {
 	// Add indexes a document.
 	Add(ctx context.Context, docID string, text string) error
 	// Search performs a text search.
-	Search(ctx context.Context, query string) ([]TextSearchResult, error)
+	Search(ctx context.Context, query string) ([]search.TextSearchResult, error)
 }
 
 // ModelStore defines the interface for persisting and retrieving AI models.

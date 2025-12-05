@@ -7,8 +7,15 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/inredcfs"
+	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/infs"
 )
+
+// DB is the database instance.
+var DB *database.Database
+
+// DataPath is the path to the data directory.
+var DataPath string
 
 // GetStores godoc
 // @Summary GetStores returns list of stores
@@ -22,13 +29,15 @@ import (
 // @Router /stores [get]
 // @Security Bearer
 func GetStores(c *gin.Context) {
-	trans, err := inredcfs.NewTransaction(sop.ForWriting, -1, false)
+	trans, err := DB.BeginTransaction(c, sop.ForWriting)
 	if err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "new transaction call in fetching stores list failed"})
+		return
 	}
 	stores, err := trans.GetStores(c)
 	if err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "fetching stores list failed"})
+		return
 	}
 	c.IndentedJSON(http.StatusOK, stores)
 }
@@ -48,9 +57,10 @@ func GetStores(c *gin.Context) {
 func GetStoreByName(c *gin.Context) {
 	storeName := c.Param("name")
 
-	trans, err := inredcfs.NewTransaction(sop.ForReading, -1, false)
+	trans, err := DB.BeginTransaction(c, sop.ForReading)
 	if err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "new transaction call in fetching stores list failed"})
+		return
 	}
 	if err := trans.Begin(c); err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("trans.begin failed, error: %v", err)})
@@ -60,10 +70,15 @@ func GetStoreByName(c *gin.Context) {
 	// Just end the transaction, rollback does nothing.
 	defer trans.Rollback(c)
 
-	b3, err := inredcfs.OpenBtree[interface{}, interface{}](c, storeName, trans, nil)
+	// We assume replication is enabled if DB is configured so.
+	b3, err := infs.OpenBtreeWithReplication[interface{}, interface{}](c, storeName, trans, nil)
 	if err != nil {
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("fetching store %s failed, error: %v", storeName, err)})
-		return
+		// Fallback to non-replication if failed (e.g. if DB is not configured for replication)
+		b3, err = infs.OpenBtree[interface{}, interface{}](c, storeName, trans, nil)
+		if err != nil {
+			c.IndentedJSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("fetching store %s failed, error: %v", storeName, err)})
+			return
+		}
 	}
 
 	si := b3.GetStoreInfo()

@@ -25,17 +25,17 @@ Thank you for your interest in contributing to Scalable Objects Persistence (SOP
 3.  **Testing**:
     *   **Unit Tests**: Run `go test ./...` for fast feedback.
     *   **Integration Tests**: Critical for verifying backend interactions.
-        *   For `inredcfs` (Hybrid backend), you must run:
+        *   For `incfs` (Hybrid backend), you must run:
             ```bash
-            export SOP_RUN_INREDCFS_IT=1
-            go test -v -tags=integration -count=1 ./inredcfs/integrationtests/...
+            export SOP_RUN_INCFS_IT=1
+            go test -v -tags=integration -count=1 ./incfs/integrationtests/...
             ```
     *   Ensure all tests pass before submitting your PR.
 
 ## Code Structure & Guidelines
 
 *   **Public vs. Internal**:
-    *   Public packages (e.g., `inredcfs`, `streamingdata`) are the user-facing API.
+    *   Public packages (e.g., `incfs`, `streamingdata`) are the user-facing API.
     *   Internal packages (e.g., `internal/inredck`) contain implementation details that should not be exposed.
     *   See [ARCHITECTURE.md](ARCHITECTURE.md) for more details on why `inredck` is internal.
 

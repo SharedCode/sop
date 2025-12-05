@@ -17,7 +17,7 @@ import (
 // It stores Handles in hash-partitioned files (via registryMap) and keeps caches in sync:
 // - L1 cache (in-process MRU) for rapid handle lookups
 // - L2 cache (Redis) for cross-process sharing and TTL semantics
-// Replication (active/passive folders) is coordinated through replicationTracker.
+// Replication (active/passive folders) is coordinated through ReplicationTracker.
 type registryOnDisk struct {
 	hashmap            *registryMap
 	replicationTracker *replicationTracker

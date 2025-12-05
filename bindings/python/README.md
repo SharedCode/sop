@@ -1,0 +1,208 @@
+# SOP for Python (sop4py)
+
+**Scalable Objects Persistence (SOP)** is a high-performance, transactional storage engine for Python, powered by a robust Go backend. It combines the raw speed of direct disk I/O with the reliability of ACID transactions and the flexibility of modern AI data management.
+
+## Key Features
+
+*   **Unified Database**: Single entry point for managing Vector, Model, and Key-Value stores.
+*   **Transactional B-Tree Store**: Unlimited, persistent B-Tree storage for key-value data.
+*   **Vector Database**: Built-in vector search (k-NN) for AI embeddings and similarity search.
+*   **Text Search**: Transactional, embedded text search engine (BM25).
+*   **AI Model Store**: Versioned storage for machine learning models (B-Tree backed).
+*   **ACID Compliance**: Full transaction support (Begin, Commit, Rollback) with isolation.
+*   **High Performance**: Written in Go with a lightweight Python wrapper (ctypes).
+*   **Caching**: Integrated Redis-backed L1/L2 caching for speed.
+*   **Replication**: Optional Erasure Coding (EC) for fault-tolerant storage across drives.
+*   **Flexible Deployment**: Supports both **Standalone** (local) and **Clustered** (distributed) modes.
+
+## Documentation
+
+*   **[API Cookbook](COOKBOOK.md)**: Common recipes and patterns (Key-Value, Transactions, AI).
+*   **[Examples](examples/)**: Complete runnable scripts.
+
+## Prerequisites
+
+*   **Redis**: Required for caching and transaction coordination (especially in Clustered mode). **Note**: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
+*   **Storage**: Local disk space (supports multiple drives/folders).
+*   **OS**: macOS (Darwin), Linux, or Windows (AMD64).
+
+## Installation
+
+1.  **Build the Go Bridge**:
+    ```bash
+    cd jsondb
+    go build -o jsondb.so -buildmode=c-shared main/*.go
+    ```
+
+2.  **Install Python Dependencies**:
+    ```bash
+    pip install -r jsondb/python/requirements.txt
+    ```
+
+3.  **Set PYTHONPATH**:
+    ```bash
+    export PYTHONPATH=$PYTHONPATH:$(pwd)/jsondb/python
+    ```
+
+## Quick Start Guide
+
+SOP uses a unified `Database` object to manage all types of stores (Vector, Model, and B-Tree). All operations are performed within a **Transaction**.
+
+### 1. Initialize Database & Context
+
+First, create a Context and open a Database connection.
+
+```python
+from sop import Context, TransactionMode, TransactionOptions, Btree, BtreeOptions, Item
+from sop.ai import Database, DBType, Item as VectorItem
+
+# Initialize Context
+ctx = Context()
+
+# Open Database (Standalone Mode)
+# This creates/opens a database at the specified path.
+db = Database(ctx, storage_path="data/my_db", db_type=DBType.Standalone)
+```
+
+### 2. Start a Transaction
+
+All data operations (Create, Read, Update, Delete) must happen within a transaction.
+
+```python
+# Begin a transaction (Read-Write)
+# You can use 'with' block for auto-commit/rollback, or manage manually.
+with db.begin_transaction(ctx, mode=TransactionMode.ForWriting.value) as tx:
+    
+    # --- 3. Vector Store (AI) ---
+    # Open a Vector Store named "products"
+    vector_store = db.open_vector_store(ctx, tx, "products")
+    
+    # Upsert a Vector Item
+    vector_store.upsert(ctx, VectorItem(
+        id="prod_101",
+        vector=[0.1, 0.5, 0.9],
+        payload={"name": "Laptop", "price": 999}
+    ))
+
+    # --- 4. Model Store (AI) ---
+    # Open a Model Store named "classifiers"
+    model_store = db.open_model_store(ctx, tx, "classifiers")
+    
+    # Save a Model
+    model_store.save(ctx, "churn", "v1.0", {
+        "algorithm": "random_forest",
+        "trees": 100
+    })
+
+    # --- 5. General Purpose B-Tree ---
+    # Create a new B-Tree store.
+    bo = BtreeOptions(name="user_store", is_unique=True)
+    user_store = db.new_btree(ctx, "user_store", tx, options=bo)
+
+    # --- 6. Text Search ---
+    # Open a Search Index
+    idx = db.open_search(ctx, "articles", tx)
+    idx.add("doc1", "The quick brown fox")
+    
+    # Add an item.
+    user_store.add(ctx, Item(key="user1", value="John Doe"))
+
+# Transaction commits automatically here.
+# If an exception occurs, it rolls back.
+```
+
+### 6. Querying Data
+
+You can perform queries in a separate transaction (e.g., Read-Only).
+
+```python
+# Begin a Read-Only transaction (optional optimization)
+with db.begin_transaction(ctx, mode=TransactionMode.ForReading.value) as tx:
+    
+    # --- Vector Search ---
+    vs = db.open_vector_store(ctx, tx, "products")
+    hits = vs.query(ctx, vector=[0.1, 0.5, 0.8], k=5)
+    for hit in hits:
+        print(f"Vector Match: {hit.id}, Score: {hit.score}")
+
+    # --- Model Retrieval ---
+    ms = db.open_model_store(ctx, tx, "classifiers")
+    model = ms.get(ctx, "churn", "v1.0")
+    print(f"Loaded Model: {model['algorithm']}")
+
+    # --- B-Tree Lookup ---
+    us = db.open_btree(ctx, "user_store", tx)
+    if us.find(ctx, "user1"):
+        # Fetch the current item
+        item = us.get_current_item(ctx)
+        print(f"User Found: {item.value}")
+```
+
+**Performance Tip**: For **Vector Search** workloads that are "Build-Once-Query-Many", use `TransactionMode.NoCheck`. This bypasses transaction overhead for maximum query throughput.
+
+```python
+# High-performance Vector Search (No ACID checks)
+with db.begin_transaction(ctx, mode=TransactionMode.NoCheck.value) as tx:
+    vs = db.open_vector_store(ctx, tx, "products")
+    hits = vs.query(ctx, vector=[0.1, 0.5, 0.8], k=5)
+```
+
+## Advanced Configuration
+
+### Logging
+
+You can configure the internal logging of the SOP engine (Go backend) to output to a file or standard error, and control the verbosity.
+
+```python
+from sop import Logger, LogLevel
+
+# Configure logging to a file with Debug level
+Logger.configure(LogLevel.Debug, "sop_engine.log")
+
+# Or configure logging to stderr (default) with Info level
+Logger.configure(LogLevel.Info)
+```
+
+### Transaction Options
+
+You can configure timeouts, isolation levels, and more.
+
+```python
+from sop import TransactionOptions, TransactionMode
+
+opts = TransactionOptions(
+    mode=TransactionMode.ForWriting.value,
+    max_time=15,  # 15 minutes timeout
+)
+
+tx = db.begin_transaction(ctx, options=opts)
+```
+
+### Clustered Mode
+
+For distributed deployments, switch to `DBType.Clustered`. This requires Redis for coordination.
+
+```python
+from sop.ai import DBType
+
+db = Database(
+    ctx, 
+    storage_path="/mnt/shared_data", 
+    db_type=DBType.Clustered
+)
+```
+
+## Architecture
+
+SOP uses a split architecture:
+1.  **Core Engine (Go)**: Handles disk I/O, B-Tree algorithms, caching, and transactions. Compiled as a shared library (`.dylib`, `.so`, `.dll`).
+2.  **Python Wrapper**: Uses `ctypes` to interface with the Go engine, providing a Pythonic API (`sop` package).
+
+## Project Links
+
+*   **Source Code**: [GitHub - sharedcode/sop](https://github.com/sharedcode/sop)
+*   **PyPI**: [sop4py](https://pypi.org/project/sop4py)
+
+## Contributing
+
+Contributions are welcome! Please check the `CONTRIBUTING.md` file in the repository for guidelines.

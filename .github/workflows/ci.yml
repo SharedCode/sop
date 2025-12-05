@@ -21,6 +21,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      cassandra:
+        image: cassandra:4
+        ports:
+          - 9042:9042
+        options: >-
+          --health-cmd "cqlsh -e 'describe cluster'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,6 +59,16 @@ jobs:
           done
           echo "Redis reachable."
 
+      - name: Wait for Cassandra
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Waiting for Cassandra..."
+          for i in {1..60}; do
+            (echo > /dev/tcp/127.0.0.1/9042) && break || sleep 2
+          done
+          echo "Cassandra reachable."
+
       - name: Prepare datapath
         shell: bash
         env:
@@ -66,13 +85,30 @@ jobs:
         run: |
           set -euo pipefail
           echo "Running unit tests"
-          go test -timeout 30m -v -count=1 ./inmemory ./inredfs ./btree ./common
+          go test -timeout 30m -v -count=1 ./inmemory ./infs ./btree ./common
 
-      - name: Run inredfs integration tests
+      - name: Run infs integration tests
         shell: bash
         env:
           datapath: ${{ github.workspace }}/.sop_data
         run: |
           set -euo pipefail
-          echo "Running inredfs integration tests"
-          go test -timeout 30m -v -tags=integration -count=1 ./inredfs/integrationtests/...
+          echo "Running infs integration tests"
+          go test -timeout 30m -v -tags=integration -count=1 ./infs/integrationtests/...
+
+      - name: Run incfs integration tests
+        shell: bash
+        env:
+          datapath: ${{ github.workspace }}/.sop_data
+          SOP_RUN_INCFS_IT: 1
+        run: |
+          set -euo pipefail
+          echo "Running incfs integration tests"
+          go test -timeout 30m -v -tags=integration -count=1 ./incfs/integrationtests/...
+
+      - name: Build restapi
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Building restapi"
+          go build -v ./restapi/...

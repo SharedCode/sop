@@ -5,8 +5,8 @@
 package inredck
 
 import (
-	cas "github.com/sharedcode/sop/cassandra"
-	"github.com/sharedcode/sop/redis"
+	cas "github.com/sharedcode/sop/adapters/cassandra"
+	"github.com/sharedcode/sop/adapters/redis"
 )
 
 // Initialize assigns configs and opens connections for this package (Cassandra, Redis).

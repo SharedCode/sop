@@ -8,9 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/internal/inredck"
 )
 
 const (
@@ -41,37 +39,6 @@ func (x StreamingDataKey[TK]) Compare(other interface{}) int {
 		return i
 	}
 	return cmp.Compare(x.ChunkIndex, y.ChunkIndex)
-}
-
-// NewStreamingDataStore creates a new store using StoreOptions, enforcing streaming constraints.
-func NewStreamingDataStore[TK btree.Ordered](ctx context.Context, so sop.StoreOptions, trans sop.Transaction, comparer btree.ComparerFunc[StreamingDataKey[TK]]) (*StreamingDataStore[TK], error) {
-	if so.SlotLength < MinimumStreamingStoreSlotLength {
-		return nil, fmt.Errorf("streaming data store requires minimum of %d SlotLength", MinimumStreamingStoreSlotLength)
-	}
-	if so.IsValueDataInNodeSegment {
-		return nil, fmt.Errorf("streaming data store requires value data to be set for save in separate segment(IsValueDataInNodeSegment = false)")
-	}
-	if !so.IsUnique {
-		return nil, fmt.Errorf("streaming data store requires unique key (IsUnique = true) to be set to true")
-	}
-	btree, err := inredck.NewBtree[StreamingDataKey[TK], []byte](ctx, so, trans, comparer)
-	if err != nil {
-		return nil, err
-	}
-	return &StreamingDataStore[TK]{
-		BtreeInterface: btree,
-	}, nil
-}
-
-// OpenStreamingDataStore opens an existing streaming data store.
-func OpenStreamingDataStore[TK btree.Ordered](ctx context.Context, name string, trans sop.Transaction, comparer btree.ComparerFunc[StreamingDataKey[TK]]) (*StreamingDataStore[TK], error) {
-	btree, err := inredck.OpenBtree[StreamingDataKey[TK], []byte](ctx, name, trans, comparer)
-	if err != nil {
-		return nil, err
-	}
-	return &StreamingDataStore[TK]{
-		BtreeInterface: btree,
-	}, nil
 }
 
 // Add inserts a new streaming item and returns an Encoder for writing chunks.

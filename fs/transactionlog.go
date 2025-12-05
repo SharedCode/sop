@@ -37,6 +37,21 @@ var AgeLimit float64 = 70
 
 // NewTransactionLog constructs a TransactionLog bound to the provided cache and replication tracker.
 func NewTransactionLog(cache sop.L2Cache, rt *replicationTracker) *TransactionLog {
+	if cache == nil {
+		// Fallback to in-memory cache if nil, though caller should ideally provide one.
+		// This prevents nil pointer dereference in CreateLockKeys.
+		cache = sop.NewCacheClient()
+		if cache == nil {
+			// If still nil (no factory registered), we can't proceed safely with locking.
+			// But we can try to proceed without locking if that's acceptable, or panic.
+			// Given this is a constructor, panic or returning nil is appropriate.
+			// Let's try to get a simple in-memory cache if possible, but we don't have direct access to cache package here easily without circular dep?
+			// Actually sop.NewCacheClient() uses the factory.
+			// If no factory is registered, it returns nil.
+			// We should probably panic here as it's a configuration error.
+			panic("NewTransactionLog: cache is nil and no default cache factory registered")
+		}
+	}
 	return &TransactionLog{
 		cache:       cache,
 		hourLockKey: cache.CreateLockKeys([]string{"HBP"})[0],

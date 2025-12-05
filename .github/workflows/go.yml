@@ -25,7 +25,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
-        run: go build -v ./inmemory ./inredfs ./btree ./common ./fs
+        run: go build -v ./inmemory ./infs ./btree ./common ./fs ./incfs ./restapi
 
       - name: Unit tests with coverage
         run: go test -timeout 600s -race -covermode=atomic -coverprofile=coverage.out -coverpkg=./btree/...,./inmemory/...,./fs/...,./common ./btree/... ./inmemory/... ./fs/... ./common
@@ -79,7 +79,7 @@ jobs:
         env:
           datapath: ${{ github.workspace }}/.sop_data
         run: |
-          go test -timeout 2h -tags=stress ./inredfs/stresstests
+          go test -timeout 2h -tags=stress ./infs/stresstests
 
   stress-replication-only:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -125,4 +125,4 @@ jobs:
         env:
           datapath: ${{ github.workspace }}/.sop_data
         run: |
-          go test -timeout 2h -tags=stress ./inredfs/stresstests/replication -run Reinstate_MultiTable_Concurrency_SecondFailover -count=1
+          go test -timeout 2h -tags=stress ./infs/stresstests/replication -run Reinstate_MultiTable_Concurrency_SecondFailover -count=1

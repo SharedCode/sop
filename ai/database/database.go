@@ -9,6 +9,7 @@ import (
 	"github.com/sharedcode/sop/ai/model"
 	"github.com/sharedcode/sop/ai/vector"
 	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/search"
 )
 
 // Database extends the core sop.Database with AI capabilities.
@@ -52,4 +53,12 @@ func (db *Database) OpenVectorStore(ctx context.Context, name string, t sop.Tran
 		cfg.Cache = db.Cache()
 	}
 	return vector.Open[map[string]any](ctx, t, name, cfg)
+}
+
+// OpenSearch opens a text search index for the specified name using the provided transaction.
+func (db *Database) OpenSearch(ctx context.Context, name string, t sop.Transaction) (*search.Index, error) {
+	if err := os.MkdirAll(db.StoragePath(), 0755); err != nil {
+		return nil, err
+	}
+	return search.NewIndex(ctx, t, name)
 }

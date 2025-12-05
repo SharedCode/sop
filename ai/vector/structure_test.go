@@ -2,7 +2,6 @@ package vector_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -168,25 +167,20 @@ func TestVectorStoreStructure(t *testing.T) {
 	}
 
 	// Check a sample content
-	found, err := contentTree.Find(ctx, ai.ContentKey{ItemID: "item-0-0"}, false)
-	if !found {
-		t.Error("Content for item-0-0 not found")
+	item, err := store2.Get(ctx, "item-0-0")
+	if err != nil {
+		t.Errorf("Failed to Get item-0-0: %v", err)
 	} else {
-		jsonStr, _ := contentTree.GetCurrentValue(ctx)
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(jsonStr), &payload); err != nil {
-			t.Errorf("Failed to unmarshal content: %v", err)
-		}
-
 		// Check Payload
-		if payload["cluster"] != float64(0) && payload["cluster"] != 0 {
-			t.Errorf("Payload mismatch. Expected cluster 0, got %v", payload["cluster"])
+		if item.Payload["cluster"] != float64(0) && item.Payload["cluster"] != 0 {
+			t.Errorf("Payload mismatch. Expected cluster 0, got %v", item.Payload["cluster"])
 		}
 
 		// Check Linkage (CentroidID in Content should match a valid centroid)
-		currentItem := contentTree.GetCurrentKey()
-		if !validCentroids[currentItem.Key.CentroidID] {
-			t.Errorf("Content points to invalid centroid %d", currentItem.Key.CentroidID)
+		// store.Get() handles the logical resolution of CentroidID (handling Lazy Migration internally),
+		// so we just check if the returned CentroidID is valid.
+		if !validCentroids[item.CentroidID] {
+			t.Errorf("Content points to invalid centroid %d", item.CentroidID)
 		}
 	}
 

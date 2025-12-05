@@ -24,7 +24,7 @@ SOP features a unique optimization for handling large data (e.g., media files, G
 
 | `IsValueDataGloballyCached` | `bool` | Caches the Value in Redis. | `true` for read-heavy workloads. `false` for write-heavy or very large data. |
 | `LeafLoadBalancing` | `bool` | Checks siblings for space before splitting a node. | `false` (default). Set to `true` to save space at the cost of insert latency. |
-| `BlobStoreBaseFolderPath` | `string` | Base path for the filesystem blob store. | Required for `inredfs` / `inredcfs`. |
+| `BlobStoreBaseFolderPath` | `string` | Base path for the filesystem blob store. | Required for `infs` / `incfs`. |
 
 ## Performance Tuning
 

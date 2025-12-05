@@ -6,13 +6,13 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/cache"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/infs"
 )
 
 func TestOnCommit_FiresOnCommit(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	trans, err := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
 		Mode:             sop.ForWriting,
 		MaxTime:          -1,
 		StoresBaseFolder: tmpDir,
@@ -44,7 +44,7 @@ func TestOnCommit_FiresOnCommit(t *testing.T) {
 func TestOnCommit_DoesNotFireOnRollback(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	trans, err := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
 		Mode:             sop.ForWriting,
 		MaxTime:          -1,
 		StoresBaseFolder: tmpDir,

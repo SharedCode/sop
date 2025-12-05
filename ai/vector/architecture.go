@@ -9,7 +9,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/common"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/infs"
 )
 
 // Architecture demonstrates the 3-B-Tree layout for optimal performance.
@@ -55,22 +55,22 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions
 
 	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
 		if ct.HandleReplicationRelatedError != nil {
-			b3, err = inredfs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)
+			b3, err = infs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)
 		} else {
-			b3, err = inredfs.NewBtree[TK, TV](ctx, so, t, comparer)
+			b3, err = infs.NewBtree[TK, TV](ctx, so, t, comparer)
 		}
 	} else {
-		b3, err = inredfs.NewBtree[TK, TV](ctx, so, t, comparer)
+		b3, err = infs.NewBtree[TK, TV](ctx, so, t, comparer)
 	}
 
 	if err != nil {
 		if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", so.Name) {
 			if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
 				if ct.HandleReplicationRelatedError != nil {
-					return inredfs.OpenBtreeWithReplication[TK, TV](ctx, so.Name, t, comparer)
+					return infs.OpenBtreeWithReplication[TK, TV](ctx, so.Name, t, comparer)
 				}
 			}
-			return inredfs.OpenBtree[TK, TV](ctx, so.Name, t, comparer)
+			return infs.OpenBtree[TK, TV](ctx, so.Name, t, comparer)
 		}
 	}
 	return b3, err

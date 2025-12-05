@@ -169,3 +169,42 @@ store.Upsert(ctx, item)
 // 6. Commit
 trans.Commit(ctx)
 ```
+
+## 4. Text Search
+
+Index and search text documents transactionally.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai/database"
+)
+
+func main() {
+	ctx := context.Background()
+	db := database.NewDatabase(database.Standalone, "/tmp/sop_data")
+
+	// 1. Index Documents
+	t1, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	idx, _ := db.OpenSearch(ctx, "articles", t1)
+	
+	idx.Add(ctx, "doc1", "The quick brown fox")
+	idx.Add(ctx, "doc2", "jumps over the lazy dog")
+	
+	t1.Commit(ctx)
+
+	// 2. Search
+	t2, _ := db.BeginTransaction(ctx, sop.ForReading)
+	idx, _ = db.OpenSearch(ctx, "articles", t2)
+	
+	results, _ := idx.Search(ctx, "fox")
+	for _, r := range results {
+		fmt.Printf("Doc: %s, Score: %f\n", r.DocID, r.Score)
+	}
+	t2.Commit(ctx)
+}
+```

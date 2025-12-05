@@ -1,8 +1,29 @@
 #!/bin/bash
 set -e
 
+echo "--- Building Go Bridge ---"
+cd bindings/main
+
+ARCH=$(uname -m)
+OS=$(uname -s)
+
+if [ "$OS" == "Darwin" ]; then
+    if [ "$ARCH" == "arm64" ]; then
+        echo "Building for Darwin ARM64..."
+        go build -buildmode=c-shared -o ../python/sop/libjsondb_arm64darwin.dylib *.go
+    else
+        echo "Building for Darwin AMD64..."
+        go build -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib *.go
+    fi
+elif [ "$OS" == "Linux" ]; then
+    echo "Building for Linux AMD64..."
+    go build -buildmode=c-shared -o ../python/sop/libjsondb_amd64linux.so *.go
+fi
+
+cd ../..
+
 echo "--- Running Python Tests ---"
-cd jsondb/python
+cd bindings/python
 
 echo "Running sanity_check.py..."
 python3 sanity_check.py
@@ -18,6 +39,9 @@ python3 test_cud_batch.py
 
 echo "Running test_unified_db.py..."
 python3 test_unified_db.py
+
+echo "Running test_search.py..."
+python3 test_search.py
 
 echo "Running sop/test_btree.py..."
 python3 -m sop.test_btree

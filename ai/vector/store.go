@@ -12,7 +12,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/infs"
 )
 
 const (
@@ -182,6 +182,15 @@ func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, it
 
 			oldCid := oldKey.CentroidID
 			oldDist := oldKey.Distance
+
+			// Handle Lazy Migration for cleanup
+			if oldKey.Version != arch.Version {
+				if oldKey.NextVersion == arch.Version {
+					oldCid = oldKey.NextCentroidID
+					oldDist = oldKey.NextDistance
+				}
+			}
+
 			if oldCid == 0 {
 				oldCid = 1
 			}
@@ -491,6 +500,20 @@ func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
 
 	// Soft Delete: Update Key
 	currentKey.Deleted = true
+
+	// Check if we need to use the "Next" version (Lazy Migration)
+	// If the stored version matches the active version, use standard fields.
+	// If the stored NextVersion matches the active version, use Next fields.
+	if currentKey.Version != version {
+		if currentKey.NextVersion == version {
+			currentKey.CentroidID = currentKey.NextCentroidID
+			currentKey.Distance = currentKey.NextDistance
+			currentKey.Version = currentKey.NextVersion
+			currentKey.NextCentroidID = 0
+			currentKey.NextDistance = 0
+			currentKey.NextVersion = 0
+		}
+	}
 
 	// Update the Key to reflect the deleted status.
 	if _, err := arch.Content.UpdateCurrentKey(ctx, currentKey); err != nil {
@@ -951,14 +974,14 @@ func (di *domainIndex[T]) beginTransaction(ctx context.Context) (sop.Transaction
 	var t sop.Transaction
 	var err error
 	if len(di.config.StoresFolders) > 0 || len(di.config.ErasureConfig) > 0 {
-		t, err = inredfs.NewTransactionWithReplication(ctx, inredfs.TransationOptionsWithReplication{
+		t, err = infs.NewTransactionWithReplication(ctx, infs.TransationOptionsWithReplication{
 			Mode:              sop.ForWriting,
 			StoresBaseFolders: di.config.StoresFolders,
 			ErasureConfig:     di.config.ErasureConfig,
 			Cache:             di.config.Cache,
 		})
 	} else {
-		t, err = inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+		t, err = infs.NewTransaction(ctx, infs.TransationOptions{
 			Mode:             sop.ForWriting,
 			StoresBaseFolder: di.config.StoragePath,
 			Cache:            di.config.Cache,

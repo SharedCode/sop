@@ -8,7 +8,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/infs"
 )
 
 // btreeModelStore implements ModelStore using SOP B-Trees.
@@ -71,10 +71,10 @@ func (s *btreeModelStore) openStore(ctx context.Context, trans sop.Transaction) 
 		return 0
 	}
 
-	store, err := inredfs.NewBtree[ModelKey, string](ctx, so, trans, comparer)
+	store, err := infs.NewBtree[ModelKey, string](ctx, so, trans, comparer)
 	if err != nil {
 		if err.Error() == "failed in NewBtree as transaction has replication enabled, use NewBtreeWithReplication instead" {
-			store, err = inredfs.NewBtreeWithReplication[ModelKey, string](ctx, so, trans, comparer)
+			store, err = infs.NewBtreeWithReplication[ModelKey, string](ctx, so, trans, comparer)
 			if err != nil {
 				return nil, err
 			}

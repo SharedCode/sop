@@ -8,7 +8,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/cache"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/infs"
 )
 
 // TestPartialOptimizationState verifies that the system behaves correctly
@@ -25,7 +25,7 @@ func TestPartialOptimizationState(t *testing.T) {
 	c := cache.NewInMemoryCache()
 	t.Logf("Cache created: %T", c)
 
-	trans, err := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
 		Mode:             sop.ForWriting,
 		StoresBaseFolder: tmpDir,
 		Cache:            c,
@@ -118,9 +118,9 @@ func TestPartialOptimizationState(t *testing.T) {
 	// Create Version 1 Vectors store
 	// We need to pass the transaction and comparer.
 	// We can use the helper from store.go but it's private.
-	// We'll use inredfs.NewBtree directly.
+	// We'll use infs.NewBtree directly.
 	// Use sop.ConfigureStore to match OpenDomainStore configuration (IsValueDataInNodeSegment=true for SmallData)
-	v1Vectors, err := inredfs.NewBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore("partial_test_vecs_1", true, 1000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
+	v1Vectors, err := infs.NewBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore("partial_test_vecs_1", true, 1000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
 	if err != nil {
 		t.Fatalf("NewBtree failed: %v", err)
 	}

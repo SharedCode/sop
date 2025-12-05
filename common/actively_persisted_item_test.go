@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
-	cas "github.com/sharedcode/sop/cassandra"
 	"github.com/sharedcode/sop/common/mocks"
 )
 
@@ -54,7 +53,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 
 	// Unwind time to yesterday.
 	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
-	cas.Now = func() time.Time { return yesterday }
+	// cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 	//Now = func() time.Time { return yesterday }
 
@@ -87,7 +86,7 @@ func Test_StreamingDataStoreAbandonedTransactionLogsGetCleaned(t *testing.T) {
 
 	// Fast forward by a day to allow us to expire the uncommitted transaction.
 	today := time.Now()
-	cas.Now = func() time.Time { return today }
+	// cas.Now = func() time.Time { return today }
 	sop.Now = func() time.Time { return today }
 	//Now = func() time.Time { return today }
 

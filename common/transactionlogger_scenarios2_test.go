@@ -9,7 +9,8 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/cache"
-	cas "github.com/sharedcode/sop/cassandra"
+
+	// cas "github.com/sharedcode/sop/adapters/cassandra"
 	"github.com/sharedcode/sop/common/mocks"
 )
 
@@ -135,17 +136,17 @@ func Test_TransactionLogger_Rollback_CommitStoreInfo_Path(t *testing.T) {
 // ---- Expired transaction logs processing (process_expired) ----
 func Test_ProcessExpiredTransactionLogs_ConsumesHourAndClears(t *testing.T) {
 	ctx := context.Background()
-	origNow := cas.Now
-	base := time.Date(2025, 1, 2, 15, 0, 0, 0, time.UTC)
-	cas.Now = func() time.Time { return base }
-	defer func() { cas.Now = origNow }()
+	// origNow := cas.Now
+	// base := time.Date(2025, 1, 2, 15, 0, 0, 0, time.UTC)
+	// cas.Now = func() time.Time { return base }
+	// defer func() { cas.Now = origNow }()
 
 	backend := mocks.NewMockTransactionLog()
 	tl := newTransactionLogger(backend, true)
 	if err := tl.log(ctx, finalizeCommit, nil); err != nil {
 		t.Fatalf("seed log error: %v", err)
 	}
-	cas.Now = func() time.Time { return base.Add(2 * time.Hour) }
+	// cas.Now = func() time.Time { return base.Add(2 * time.Hour) }
 
 	// Use a different logger to simulate another transaction processing expired logs.
 	processorTL := newTransactionLogger(backend, true)
@@ -412,7 +413,7 @@ func Test_TransactionLogger_ProcessExpired_NoLogs(t *testing.T) {
 	ctx := context.Background()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	// Force hourBeingProcessed to a stale hour and ensure it resets when no TID returned.
-	hourBeingProcessed = cas.Now().Add(-2 * time.Hour).Format(cas.DateHourLayout)
+	hourBeingProcessed = time.Now().Add(-2 * time.Hour).Format(mocks.DateHourLayout)
 	if err := tl.processExpiredTransactionLogs(ctx, &Transaction{blobStore: mocks.NewMockBlobStore(), l2Cache: mocks.NewMockClient(), registry: mocks.NewMockRegistry(false), logger: tl}); err != nil {
 		t.Fatalf("processExpiredTransactionLogs err: %v", err)
 	}

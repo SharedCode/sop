@@ -9,12 +9,12 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/infs"
 )
 
 func TestJsonDBAnyKey_BasicCRUD(t *testing.T) {
 	ctx := context.Background()
-	trans, err := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_anykey",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -152,7 +152,7 @@ func TestJsonDBAnyKey_Open(t *testing.T) {
 	ctx := context.Background()
 	// Setup: Create a store first
 	{
-		trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+		trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 			StoresBaseFolder: "test_jsondb_open",
 			Mode:             sop.ForWriting,
 			Cache:            cache.NewInMemoryCache(),
@@ -168,7 +168,7 @@ func TestJsonDBAnyKey_Open(t *testing.T) {
 	}()
 
 	// Test Open
-	trans, err := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_open",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -203,7 +203,7 @@ func ptr[T any](v T) *T {
 
 func TestJsonDBAnyKey_Pagination(t *testing.T) {
 	ctx := context.Background()
-	trans, err := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_pagination",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -370,7 +370,7 @@ func TestJsonDBAnyKey_Pagination(t *testing.T) {
 
 func TestJsonDBAnyKey_Open_Fail(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_open_fail",
 		Mode:             sop.ForReading,
 		Cache:            cache.NewInMemoryCache(),
@@ -404,7 +404,7 @@ func TestJsonDBAnyKey_WithReplication(t *testing.T) {
 		},
 	}
 
-	trans, err := inredfs.NewTransactionWithReplication(ctx, inredfs.TransationOptionsWithReplication{
+	trans, err := infs.NewTransactionWithReplication(ctx, infs.TransationOptionsWithReplication{
 		StoresBaseFolders: folders,
 		Mode:              sop.ForWriting,
 		Cache:             cache.NewInMemoryCache(),
@@ -428,7 +428,7 @@ func TestJsonDBAnyKey_WithReplication(t *testing.T) {
 
 func TestJsonDBAnyKey_NewBtree_Failure(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_fail",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -450,7 +450,7 @@ func TestJsonDBAnyKey_NewBtree_Failure(t *testing.T) {
 
 func TestJsonDBAnyKey_GetValues_NotFound(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_getvalues",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -484,7 +484,7 @@ func TestJsonDBAnyKey_GetValues_NotFound(t *testing.T) {
 
 func TestJsonDBAnyKey_EdgeCases(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_edge",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -558,7 +558,7 @@ func TestJsonDBAnyKey_EdgeCases(t *testing.T) {
 
 func TestJsonDBAnyKey_Open_Fallback(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_open_fallback",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -579,7 +579,7 @@ func TestJsonDBAnyKey_Open_Fallback(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Open with OpenJsonBtree
-	trans, _ = inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ = infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_open_fallback",
 		Mode:             sop.ForReading,
 		Cache:            cache.NewInMemoryCache(),
@@ -599,7 +599,7 @@ func TestJsonDBAnyKey_Open_Fallback(t *testing.T) {
 
 func TestJsonDBAnyKey_GetItems_AutoNavigate(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_autonav",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -617,7 +617,7 @@ func TestJsonDBAnyKey_GetItems_AutoNavigate(t *testing.T) {
 	db.Add(ctx, []Item[int, int]{{Key: 1, Value: &val}})
 	trans.Commit(ctx)
 
-	trans, _ = inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ = infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_autonav",
 		Mode:             sop.ForReading,
 		Cache:            cache.NewInMemoryCache(),

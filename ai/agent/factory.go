@@ -71,7 +71,11 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 		}
 	}
 
-	db := database.NewDatabase(database.Standalone, storagePath)
+	dbType := database.Standalone
+	if cfg.DBType == "clustered" {
+		dbType = database.Clustered
+	}
+	db := database.NewDatabase(dbType, storagePath)
 
 	vCfg := vector.Config{
 		UsageMode:             ai.BuildOnceQueryMany, // Default

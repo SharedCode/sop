@@ -10,6 +10,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/search"
 )
 
 // Service is a generic agent service that operates on any Domain.
@@ -95,7 +96,7 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 
 	// Text Search
 	textIdx, err := s.domain.TextIndex(ctx, tx)
-	var textHits []ai.TextSearchResult
+	var textHits []search.TextSearchResult
 	if err == nil {
 		textHits, err = textIdx.Search(ctx, query)
 		if err != nil {

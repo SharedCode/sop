@@ -11,7 +11,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/encoding"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/infs"
 )
 
 // Item contains a Key and Value pair, with a generated UUID for reference.
@@ -55,10 +55,10 @@ type PagingInfo struct {
 
 // NewJsonBtree creates a new JSON-capable B-Tree. Values are marshaled by the caller as needed.
 func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
-	b3, err := inredfs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)
+	b3, err := infs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)
 	if err != nil {
 		if err.Error() == "failed in NewBtreeWithReplication as transaction has no replication, use NewBtree instead" {
-			b3, err = inredfs.NewBtree[TK, TV](ctx, so, t, comparer)
+			b3, err = infs.NewBtree[TK, TV](ctx, so, t, comparer)
 			if err != nil {
 				return nil, err
 			}
@@ -73,10 +73,10 @@ func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOpt
 
 // OpenJsonBtree opens an existing JSON-capable B-Tree.
 func OpenJsonBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
-	b3, err := inredfs.OpenBtreeWithReplication[TK, TV](ctx, name, t, comparer)
+	b3, err := infs.OpenBtreeWithReplication[TK, TV](ctx, name, t, comparer)
 	if err != nil {
 		if err.Error() == "failed in OpenBtreeWithReplication as transaction has no replication, use OpenBtree instead" {
-			b3, err = inredfs.OpenBtree[TK, TV](ctx, name, t, comparer)
+			b3, err = infs.OpenBtree[TK, TV](ctx, name, t, comparer)
 			if err != nil {
 				return nil, err
 			}

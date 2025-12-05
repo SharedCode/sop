@@ -23,7 +23,7 @@ echo "$datapath"
 
 # Run integration tests WITHOUT coverage
 echo "Running Go integration tests (no coverage, tags=integration)..."
-go test -vet=off -tags=integration -timeout 600s -v ./inredfs/integrationtests
+go test -vet=off -tags=integration -timeout 600s -v ./infs/integrationtests
 TEST_STATUS=$?
 
 echo "Tests finished with status: $TEST_STATUS"

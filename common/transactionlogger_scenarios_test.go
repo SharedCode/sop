@@ -14,7 +14,8 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/cache"
-	cas "github.com/sharedcode/sop/cassandra"
+
+	// cas "github.com/sharedcode/sop/adapters/cassandra"
 	"github.com/sharedcode/sop/common/mocks"
 )
 
@@ -498,9 +499,9 @@ func Test_TransactionLogger_ProcessExpired_WithEntry(t *testing.T) {
 	ctx := context.Background()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	// Create a log from yesterday so mock GetOne returns it.
-	prevCasNow := cas.Now
-	defer func() { cas.Now = prevCasNow }()
-	cas.Now = func() time.Time { return time.Now().Add(-24 * time.Hour) }
+	// prevCasNow := cas.Now
+	// defer func() { cas.Now = prevCasNow }()
+	// cas.Now = func() time.Time { return time.Now().Add(-24 * time.Hour) }
 
 	tid := tl.NewUUID()
 	if err := tl.Add(ctx, tid, int(finalizeCommit), nil); err != nil {
@@ -508,7 +509,7 @@ func Test_TransactionLogger_ProcessExpired_WithEntry(t *testing.T) {
 	}
 
 	// Restore time to current so process can advance hourBeingProcessed
-	cas.Now = prevCasNow
+	// cas.Now = prevCasNow
 	tx := &Transaction{}
 	if err := tl.processExpiredTransactionLogs(ctx, tx); err != nil {
 		t.Fatalf("processExpiredTransactionLogs err: %v", err)

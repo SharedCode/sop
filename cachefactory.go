@@ -50,3 +50,12 @@ func NewCacheClient() L2Cache {
 	}
 	return globalCacheFactory()
 }
+
+// NewCacheClientByType creates a new cache client for the specified type.
+// It returns nil if no factory is registered for that type.
+func NewCacheClientByType(t CacheType) L2Cache {
+	if f, ok := cacheRegistry[t]; ok {
+		return f()
+	}
+	return nil
+}

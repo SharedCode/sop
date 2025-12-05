@@ -12,7 +12,7 @@ SOP changes the game by turning your application cluster *into* the database clu
 
 *   **No External Dependencies (Standalone Mode)**: Build powerful desktop apps, CLI tools, or local AI models that store data in robust B-Trees on the local filesystem. No Docker containers or DB processes required.
 *   **Cluster Native**: In distributed mode, SOP uses Redis for lightweight coordination (locking) and the filesystem for storage. This turns your microservices into a masterless, horizontally scalable storage cluster.
-    *   *Note*: While a hybrid Cassandra backend is available, the pure filesystem backend (`inredfs`) is the **recommended model for high-scale clusters**. It utilizes a proprietary on-disk registry hashmap that outperformed the Cassandra hybrid by **25%** in stress tests on commodity hardware.
+    *   *Note*: While a hybrid Cassandra backend is available, the pure filesystem backend (`infs`) is the **recommended model for high-scale clusters**. It utilizes a proprietary on-disk registry hashmap that outperformed the Cassandra hybrid by **25%** in stress tests on commodity hardware.
 
 ## Key Highlights & Advantages
 

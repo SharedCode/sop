@@ -12,7 +12,7 @@
 // It is not intended to be used directly by end-users, but rather serves as a base
 // for more specific implementations and utilities in the SOP ecosystem.
 //
-// See `inredfs package` for a concrete implementation of a File System-based store with built-in Redis caching.
+// See `infs.package` for a concrete implementation of a File System-based store with built-in Redis caching.
 package sop
 
 // Timeout model

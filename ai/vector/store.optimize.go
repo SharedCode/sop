@@ -13,7 +13,7 @@ import (
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/infs"
 )
 
 const (
@@ -143,10 +143,8 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 					log.Warn("Optimization lock lost during refresh")
 					ok, _, err := di.config.Cache.DualLock(ctx, optimizeLockDuration, lockKeys)
 					if err != nil {
-						lockKeys[0].IsLockOwner = false
 						log.Warn("failed to re-acquire optimization lock: %w", "error", err)
 					} else if !ok {
-						lockKeys[0].IsLockOwner = false
 						log.Warn("failed to re-acquire optimization lock, it got locked by another process")
 					}
 				}
@@ -200,7 +198,7 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 
 	// Check if previous optimization failed (stores exist)
 	lookupName := di.name + lookupSuffix + suffix
-	found, err := inredfs.IsStoreExists(ctx, tx, lookupName)
+	found, err := infs.IsStoreExists(ctx, tx, lookupName)
 	if err != nil {
 		if rbErr := tx.Rollback(ctx); rbErr != nil {
 			cleanupLock()

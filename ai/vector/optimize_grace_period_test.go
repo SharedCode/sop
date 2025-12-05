@@ -13,7 +13,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
 	core_database "github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/infs"
 )
 
 func TestOptimize_GracePeriod(t *testing.T) {
@@ -80,7 +80,7 @@ func TestOptimize_GracePeriod(t *testing.T) {
 	// It uses `sop.ConfigureStore(..., true, 1000, ...)`
 
 	// Create the "failed" lookup store
-	_, err = inredfs.NewBtree[int, string](context.Background(), sop.ConfigureStore(lookupName, true, 1000, "lookup", sop.SmallData, ""), tx2, func(a, b int) int { return a - b })
+	_, err = infs.NewBtree[int, string](context.Background(), sop.ConfigureStore(lookupName, true, 1000, "lookup", sop.SmallData, ""), tx2, func(a, b int) int { return a - b })
 	if err != nil {
 		t.Fatalf("Failed to create simulation store: %v", err)
 	}

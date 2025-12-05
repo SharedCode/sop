@@ -8,12 +8,12 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/encoding"
-	"github.com/sharedcode/sop/inredfs"
+	"github.com/sharedcode/sop/infs"
 )
 
 func TestJsonDBMapKey_IndexSpecAndOpen(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_mapkey_idx_open",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -56,7 +56,7 @@ func TestJsonDBMapKey_IndexSpecAndOpen(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Re-open
-	trans, _ = inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ = infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_mapkey_idx_open",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -91,7 +91,7 @@ func TestJsonDBMapKey_IndexSpecAndOpen(t *testing.T) {
 
 func TestJsonDBMapKey_BasicCRUD(t *testing.T) {
 	ctx := context.Background()
-	trans, err := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_mapkey",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -149,7 +149,7 @@ func TestJsonDBMapKey_BasicCRUD(t *testing.T) {
 
 func TestJsonDBMapKey_WithIndexSpec(t *testing.T) {
 	ctx := context.Background()
-	trans, err := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_mapkey_idx",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -219,7 +219,7 @@ func TestJsonDBMapKey_Open(t *testing.T) {
 	ctx := context.Background()
 	// Setup
 	{
-		trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+		trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 			StoresBaseFolder: "test_jsondb_mapkey_open",
 			Mode:             sop.ForWriting,
 			Cache:            cache.NewInMemoryCache(),
@@ -234,7 +234,7 @@ func TestJsonDBMapKey_Open(t *testing.T) {
 	}()
 
 	// Test Open
-	trans, err := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_mapkey_open",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -258,7 +258,7 @@ func TestJsonDBMapKey_OpenNoIndexSpec(t *testing.T) {
 	ctx := context.Background()
 	// Setup: Create a store without index spec
 	{
-		trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+		trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 			StoresBaseFolder: "test_jsondb_mapkey_no_idx",
 			Mode:             sop.ForWriting,
 			Cache:            cache.NewInMemoryCache(),
@@ -273,7 +273,7 @@ func TestJsonDBMapKey_OpenNoIndexSpec(t *testing.T) {
 	}()
 
 	// Open and use it
-	trans, err := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_mapkey_no_idx",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -317,7 +317,7 @@ func TestJsonDBMapKey_OpenNoIndexSpec(t *testing.T) {
 
 func TestJsonDBMapKey_InvalidSpec(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_mapkey_invalid",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -338,7 +338,7 @@ func TestJsonDBMapKey_InvalidSpec(t *testing.T) {
 
 func TestJsonDBMapKey_DefaultComparer_DifferentKeys(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_mapkey_diff_keys",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -368,7 +368,7 @@ func TestJsonDBMapKey_DefaultComparer_DifferentKeys(t *testing.T) {
 
 func TestJsonDBMapKey_New_Failure(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_mapkey_fail",
 		Mode:             sop.ForWriting,
 		Cache:            cache.NewInMemoryCache(),
@@ -388,7 +388,7 @@ func TestJsonDBMapKey_New_Failure(t *testing.T) {
 
 func TestJsonDBMapKey_Open_Failure(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := inredfs.NewTransaction(ctx, inredfs.TransationOptions{
+	trans, _ := infs.NewTransaction(ctx, infs.TransationOptions{
 		StoresBaseFolder: "test_jsondb_mapkey_open_fail",
 		Mode:             sop.ForReading,
 		Cache:            cache.NewInMemoryCache(),

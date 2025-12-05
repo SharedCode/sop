@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/sharedcode/sop"
-	cas "github.com/sharedcode/sop/cassandra"
+	cas "github.com/sharedcode/sop/adapters/cassandra"
+	"github.com/sharedcode/sop/adapters/redis"
+	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/inredcfs"
-	"github.com/sharedcode/sop/redis"
+	"github.com/sharedcode/sop/infs"
 
 	"github.com/sharedcode/sop/restapi"
 )
@@ -21,6 +23,8 @@ import (
 const (
 	objectsStore = "objects"
 )
+
+var dataPath = "/tmp/sop_data"
 
 // Cassandra Config, please update with your Cassandra Server cluster config.
 var cassConfig = cas.Config{
@@ -36,9 +40,36 @@ var redisConfig = redis.Options{
 }
 
 var ctx = context.TODO()
+var ecConfig map[string]fs.ErasureCodingConfig
 
 func init() {
-	inredcfs.Initialize(cassConfig, redisConfig)
+	if dp := os.Getenv("datapath"); dp != "" {
+		dataPath = dp
+	}
+	if _, err := cas.OpenConnection(cassConfig); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := redis.OpenConnection(redisConfig); err != nil {
+		log.Fatal(err)
+	}
+
+	// Initialize EC config
+	ecConfig = make(map[string]fs.ErasureCodingConfig)
+	ecConfig[""] = fs.ErasureCodingConfig{
+		DataShardsCount:   2,
+		ParityShardsCount: 1,
+		BaseFolderPathsAcrossDrives: []string{
+			// Mimick having paths to three different disks.
+			fmt.Sprintf("%s/disk1", dataPath),
+			fmt.Sprintf("%s/disk2", dataPath),
+			fmt.Sprintf("%s/disk3", dataPath),
+		},
+		RepairCorruptedShards: false,
+	}
+
+	// Initialize Database
+	restapi.DB = database.NewDatabase(database.Clustered, dataPath)
+	restapi.DB.SetReplicationConfig(ecConfig, ecConfig[""].BaseFolderPathsAcrossDrives)
 
 	// Create Stores to ensure we have the sample "objects" btree created in SOP db.
 	if err := createStores(); err != nil {
@@ -49,29 +80,20 @@ func init() {
 
 // Create the "objects" btree store.
 func createStores() error {
-	ec := make(map[string]fs.ErasureCodingConfig)
-	// Specifying blank filename ("") means to use the same EC config across different filenames or blob table.
-	ec[""] = fs.ErasureCodingConfig{
-		DataShardsCount:   2,
-		ParityShardsCount: 1,
-		BaseFolderPathsAcrossDrives: []string{
-			// Mimick having paths to three different disks.
-			"/Users/grecinto/sop_data/disk1",
-			"/Users/grecinto/sop_data/disk2",
-			"/Users/grecinto/sop_data/disk3",
-		},
-		RepairCorruptedShards: false,
-	}
-	trans, err := inredcfs.NewTransactionWithEC(sop.ForWriting, -1, false, ec)
+	trans, err := restapi.DB.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		return err
 	}
-	if err = trans.Begin(ctx); err != nil {
-		return err
-	}
+	// BeginTransaction already calls Begin if successful?
+	// Let's check database.go.
+	// Yes: "if err := t.Begin(ctx); err != nil { return nil, err }"
+	// So I don't need to call Begin again.
+	// But wait, BeginTransaction returns (sop.Transaction, error).
+	// Does it return an already begun transaction?
+	// Yes.
 
 	// Just ensure we have "objects" store created in SOP db.
-	_, err = inredcfs.NewBtreeWithEC[string, []byte](ctx, sop.StoreOptions{
+	_, err = infs.NewBtreeWithReplication[string, []byte](ctx, sop.StoreOptions{
 		Name:                      objectsStore,
 		SlotLength:                200,
 		IsUnique:                  true,
@@ -109,19 +131,16 @@ func registerStores() {
 func getByKey(c *gin.Context) {
 	itemKey := c.Param("key")
 
-	trans, err := inredcfs.NewTransaction(sop.ForReading, -1, false)
+	trans, err := restapi.DB.BeginTransaction(c, sop.ForReading)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "new transaction call in fetching an item failed"})
-	}
-	if err := trans.Begin(c); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("trans.begin failed, error: %v", err)})
+		c.JSON(http.StatusNotFound, gin.H{"message": "new transaction options call failed"})
 		return
 	}
 
 	// Ensure to commit the transaction before going out of scope.
 	defer trans.Commit(c)
 
-	b3, err := inredcfs.OpenBtree[string, []byte](c, objectsStore, trans, cmp.Compare)
+	b3, err := infs.OpenBtreeWithReplication[string, []byte](c, objectsStore, trans, cmp.Compare)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("opening store %s failed, error: %v", objectsStore, err)})
 		return
@@ -162,16 +181,13 @@ func addItem(c *gin.Context) {
 	itemKey := c.Param("key")
 	itemValue := c.Param("value")
 
-	trans, err := inredcfs.NewTransaction(sop.ForReading, -1, false)
+	trans, err := restapi.DB.BeginTransaction(c, sop.ForWriting)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": "new transaction call in fetching an item failed"})
-	}
-	if err := trans.Begin(c); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("trans.begin failed, error: %v", err)})
+		c.JSON(http.StatusNotFound, gin.H{"message": "new transaction options call failed"})
 		return
 	}
 
-	b3, err := inredcfs.OpenBtree[string, []byte](c, objectsStore, trans, cmp.Compare)
+	b3, err := infs.OpenBtreeWithReplication[string, []byte](c, objectsStore, trans, cmp.Compare)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("opening store %s failed, error: %v", objectsStore, err)})
 		if rbErr := trans.Rollback(c); rbErr != nil {

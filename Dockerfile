@@ -28,4 +28,4 @@ CMD ["docker-entrypoint.sh"]
 # Sample commands to build then run docker image:
 # docker build -t mydi .
 # docker run mydi
-#   This will run the integration tests in inredfs package that requires Redis which is provided in docker image.
+#   This will run the integration tests in infs package that requires Redis which is provided in docker image.
