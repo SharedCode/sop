@@ -6,25 +6,25 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 
 ## Table of contents
 
-- Introduction
-- Scalability & Limits
-- High-level features and articles
-- Architecture Guide
-- Configuration & Tuning
-- Operational Guide
-- API Cookbook
-- Quick start
-- Lifecycle: failures, failover, reinstate, EC auto-repair
-- Prerequisites
-- Running integration tests (Docker)
- - Testing (unit, integration, stress)
-- Usability
-- SOP API discussions
-- SOP for Python (sop4py)
-- SOP AI Kit
-- Community & support
-- Contributing & license
- - Coordination model (OOA) and safety
+- [Introduction](#introduction)
+- [Scalability & Limits](#scalability--limits)
+- [High-level features and articles](#high-level-featuresusability-articles-about-sop)
+- [Architecture Guide](ARCHITECTURE.md)
+- [Configuration & Tuning](CONFIGURATION.md)
+- [Operational Guide](OPERATIONS.md)
+- [API Cookbook](COOKBOOK.md)
+- [Quick start](#quick-start)
+- [Lifecycle: failures, failover, reinstate, EC auto-repair](README2.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair)
+- [Prerequisites](#prerequisites)
+- [Running integration tests (Docker)](#running-integration-tests)
+ - [Testing (unit, integration, stress)](#testing-unit-integration-stress)
+- [Usability](README2.md#usability)
+- [SOP API discussions](README2.md#simple-usage)
+- [SOP for Python (sop4py)](bindings/python/README.md)
+- [SOP AI Kit](ai/README.md)
+- [Community & support](#community--support)
+- [Contributing & license](#contributing--license)
+ - [Coordination model (OOA) and safety](#coordination-model-ooa-and-safety)
 
 ## Cluster reboot procedure
 When rebooting an entire cluster running applications that use SOP, follow this order to avoid stale locks and ensure clean recovery:
