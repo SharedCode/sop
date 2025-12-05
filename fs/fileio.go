@@ -6,7 +6,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"time"
 
 	retry "github.com/sethvargo/go-retry"
 	"github.com/sharedcode/sop"
@@ -128,7 +127,7 @@ func (dio defaultFileIO) retryIO(ctx context.Context, task func(ctx context.Cont
 // It retries retryable errors per ShouldRetry and always wraps errors with sop.Error
 // so upstream failover logic can classify them.
 func retryIO(ctx context.Context, task func(ctx context.Context) error, errorCode sop.ErrorCode) error {
-	b := retry.NewFibonacci(1 * time.Second)
+	b := retry.NewFibonacci(sop.RetryStartDuration)
 	var lastErr error
 	err := retry.Do(ctx, retry.WithMaxRetries(5, b), func(ctx context.Context) error {
 		if err := task(ctx); err != nil {

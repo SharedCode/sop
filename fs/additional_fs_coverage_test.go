@@ -18,6 +18,11 @@ import (
 // --- retryIO coverage -------------------------------------------------------
 
 func Test_retryIO_Table(t *testing.T) {
+	// Speed up retries
+	prev := sop.RetryStartDuration
+	sop.RetryStartDuration = 10 * time.Millisecond
+	t.Cleanup(func() { sop.RetryStartDuration = prev })
+
 	ctx := context.Background()
 
 	tests := []struct {
@@ -426,6 +431,11 @@ func TestManageStoreFolder_CreateRemove(t *testing.T) {
 
 // retryIO success after transient errors (migrated from retryio_cases_test.go).
 func TestRetryIO_RetryableThenSuccess(t *testing.T) {
+	// Speed up retries
+	prev := sop.RetryStartDuration
+	sop.RetryStartDuration = 10 * time.Millisecond
+	t.Cleanup(func() { sop.RetryStartDuration = prev })
+
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	var attempts int32

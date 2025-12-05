@@ -12,8 +12,8 @@ import (
 	"github.com/sharedcode/sop/encoding"
 )
 
-const (
-	lockSectorRetryTimeoutInSecs = 3 * 60
+var (
+	lockSectorRetryTimeoutDuration = 3 * 60 * time.Second
 )
 
 var zeroSector = bytes.Repeat([]byte{0}, sop.HandleSizeInBytes)
@@ -61,7 +61,7 @@ func (hm *hashmap) lockFileBlockRegionWithRetry(ctx context.Context, dio *fileDi
 		if ok {
 			return lk, nil
 		}
-		if err := sop.TimedOut(ctx, "lockFileBlockRegionWithRetry", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
+		if err := sop.TimedOut(ctx, "lockFileBlockRegionWithRetry", startTime, lockSectorRetryTimeoutDuration); err != nil {
 			// If the context is canceled or the operation's context deadline was exceeded, return the raw error
 			// so callers treat it as a normal timeout/cancellation and NOT a failover trigger.
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -154,7 +154,7 @@ func (hm *hashmap) findAndAdd(ctx context.Context, filename string, handle sop.H
 		if ok {
 			break
 		}
-		if err := sop.TimedOut(ctx, "findAndAdd lock acquisition", startTime, time.Duration(lockSectorRetryTimeoutInSecs*time.Second)); err != nil {
+		if err := sop.TimedOut(ctx, "findAndAdd lock acquisition", startTime, lockSectorRetryTimeoutDuration); err != nil {
 			// If the context is canceled or the operation's context deadline was exceeded, return the raw error
 			// so callers treat it as a normal timeout/cancellation and NOT a failover trigger.
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

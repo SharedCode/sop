@@ -620,6 +620,13 @@ func Test_StoreRepository_GetRegistryHashModValue_Invalid(t *testing.T) {
 
 // Covers Add lock conflict path where store list key is locked by someone else.
 func Test_StoreRepository_Add_LockConflict(t *testing.T) {
+	// Speed up retries for this test
+	prev := sop.RetryStartDuration
+	sop.RetryStartDuration = 10 * time.Millisecond
+	t.Cleanup(func() {
+		sop.RetryStartDuration = prev
+	})
+
 	ctx := context.Background()
 	a, p := t.TempDir(), t.TempDir()
 	cache := mocks.NewMockClient()

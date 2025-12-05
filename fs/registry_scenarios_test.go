@@ -795,6 +795,13 @@ func Test_registryMap_Fetch_ErrorWrapped(t *testing.T) {
 
 // Drives the remove() path to call markDeleteFileRegion and surface write errors by using a read-only hashmap.
 func Test_registryMap_Remove_WriteError_From_ReadOnlyHashmap(t *testing.T) {
+	// Speed up retries for this test
+	prev := sop.RetryStartDuration
+	sop.RetryStartDuration = 10 * time.Millisecond
+	t.Cleanup(func() {
+		sop.RetryStartDuration = prev
+	})
+
 	ctx := context.Background()
 	base := t.TempDir()
 	rt, _ := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())

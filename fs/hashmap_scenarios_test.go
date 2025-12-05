@@ -151,6 +151,14 @@ var _ = errors.New
 // (lock fail, partial read/write, open fail), helper functions (offset calc, getIDs), fetch flow,
 // mark delete + not found, setupNewFile lock failure, and isZeroData.
 func TestHashmap_AllScenarios(t *testing.T) {
+	prev := lockSectorRetryTimeoutDuration
+	lockSectorRetryTimeoutDuration = 100 * time.Millisecond
+	prevRetry := sop.RetryStartDuration
+	sop.RetryStartDuration = 10 * time.Millisecond
+	t.Cleanup(func() {
+		lockSectorRetryTimeoutDuration = prev
+		sop.RetryStartDuration = prevRetry
+	})
 	ctx := context.Background()
 	base := t.TempDir()
 	rt, err := NewReplicationTracker(ctx, []string{base}, false, mocks.NewMockClient())

@@ -405,6 +405,13 @@ func Test_StoreRepository_Update_MissingStoreEarlyReturn(t *testing.T) {
 }
 
 func Test_StoreRepository_Add_Remove_LockFailures(t *testing.T) {
+	// Speed up retries for this test
+	prev := sop.RetryStartDuration
+	sop.RetryStartDuration = 10 * time.Millisecond
+	t.Cleanup(func() {
+		sop.RetryStartDuration = prev
+	})
+
 	ctx := context.Background()
 	cache := mocks.NewMockClient()
 	active := t.TempDir()

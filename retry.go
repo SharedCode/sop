@@ -12,10 +12,14 @@ import (
 	"github.com/sethvargo/go-retry"
 )
 
+// RetryStartDuration is the initial duration for the Fibonacci backoff.
+// It is exported to allow tests to reduce the wait time.
+var RetryStartDuration = 1 * time.Second
+
 // Retry executes task with Fibonacci backoff up to 5 retries.
 // If retries are exhausted, gaveUpTask is invoked (when not nil) and the final error is returned.
 func Retry(ctx context.Context, task func(ctx context.Context) error, gaveUpTask func(ctx context.Context)) error {
-	b := retry.NewFibonacci(1 * time.Second)
+	b := retry.NewFibonacci(RetryStartDuration)
 	if err := retry.Do(ctx, retry.WithMaxRetries(5, b), task); err != nil {
 		log.Warn(err.Error() + ", gave up")
 		if gaveUpTask != nil {
@@ -54,6 +58,7 @@ func ShouldRetry(err error) bool {
 		errors.Is(err, syscall.ENFILE), // too many open files (system-wide)
 		errors.Is(err, syscall.EACCES), // permission denied
 		errors.Is(err, syscall.EPERM),  // operation not permitted
+		errors.Is(err, syscall.EBADF),  // bad file descriptor
 		errors.Is(err, syscall.ENAMETOOLONG),
 		errors.Is(err, syscall.ENOTDIR),
 		errors.Is(err, syscall.EISDIR),

@@ -15,6 +15,11 @@ import (
 // read, exists (true/false & permission denied), readdir success & error, mkdir/removeall,
 // remove, retryIO helper behavior, and permanent error surface when parent path blocked.
 func TestFileIOScenarios(t *testing.T) {
+	// Speed up retries for this test.
+	originalDuration := sop.RetryStartDuration
+	sop.RetryStartDuration = 10 * time.Millisecond
+	defer func() { sop.RetryStartDuration = originalDuration }()
+
 	ctx := context.Background()
 	fio := NewFileIO()
 	base := t.TempDir()
