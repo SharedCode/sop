@@ -48,7 +48,7 @@ SOP V2 ships as a Golang code library. Thus, it can be used for storage manageme
 
 ## Scalability & Limits
 SOP is architected to handle **Petabyte-scale** datasets and **Trillions of objects**.
-- **Capacity**: Up to 495 Billion items per segment (with 1,000 segments = 495 Trillion items).
+- **Capacity**: Up to 495 Billion items per segment (with 1,000 segments = 495 Trillion items) **per Btree**.
 - **Throughput**: Limited only by hardware (Redis Cluster + Storage I/O), not software.
 - **Design**: Horizontal scaling via independent storage nodes and sharded registry.
 
