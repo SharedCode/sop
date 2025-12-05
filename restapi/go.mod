@@ -8,12 +8,15 @@ replace github.com/sharedcode/sop/adapters/cassandra => ../adapters/cassandra
 
 replace github.com/sharedcode/sop/adapters/redis => ../adapters/redis
 
+replace github.com/sharedcode/sop/infs => ../infs
+
 require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/okta/okta-jwt-verifier-golang v1.3.1
 	github.com/sharedcode/sop v0.0.0-00010101000000-000000000000
 	github.com/sharedcode/sop/adapters/cassandra v0.0.0-00010101000000-000000000000
 	github.com/sharedcode/sop/adapters/redis v0.0.0-00010101000000-000000000000
+	github.com/sharedcode/sop/infs v0.0.0-00010101000000-000000000000
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
 	github.com/swaggo/swag v1.16.6
@@ -64,7 +67,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
-	github.com/quic-go/quic-go v0.54.0 // indirect
+	github.com/quic-go/quic-go v0.54.1 // indirect
 	github.com/redis/go-redis/v9 v9.8.0 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
@@ -74,7 +77,7 @@ require (
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
