@@ -44,6 +44,12 @@ typedef struct { const char *p; ptrdiff_t n; } _GoString_;
 
 #line 1 "cgo-generated-wrapper"
 
+#line 3 "jsondb.search.go"
+
+#include <stdlib.h>
+
+#line 1 "cgo-generated-wrapper"
+
 
 /* End of preamble from import "C" comments.  */
 
@@ -130,6 +136,7 @@ extern char* manageTransaction(long long ctxID, int action, char* payload);
 extern char* manageDatabase(long long ctxID, int action, char* targetID, char* payload);
 extern void freeString(char* cString);
 extern char* manageBtree(long long ctxID, int action, char* payload, char* payload2);
+extern char* manageSearch(long long ctxID, int action, char* targetID, char* payload);
 
 #ifdef __cplusplus
 }
