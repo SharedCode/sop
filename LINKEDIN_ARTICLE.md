@@ -20,7 +20,7 @@ SOP changes the game by turning your application cluster *into* the database clu
 SOP gives you direct access to the storage muscle.
 *   **B-Tree Indexing**: A custom, modernized B-Tree implementation optimized for high node utilization (62%-75%+).
 *   **Direct I/O**: Bypasses layers of abstraction to talk directly to the disk.
-*   **"NoCheck" Mode**: For single-writer scenarios, skip conflict checks entirely for raw, unbridled write speed.
+*   **"NoCheck" Mode**: For build-once-read-many scenarios, skip conflict checks entirely for raw, unbridled read speed.
 
 ### 2. Full ACID Transactions
 Don't compromise on data integrity. SOP provides full **ACID** (Atomicity, Consistency, Isolation, Durability) support with **Two-Phase Commit (2PC)**. You can seamlessly integrate SOP transactions with other data sources in your ecosystem.

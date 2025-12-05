@@ -62,7 +62,7 @@ SOP is designed to be versatile, powering everything from small embedded tools t
 *   **Scenario**: Desktop apps, CLI tools, or single-node services needing rich indexing.
 *   **Why SOP**:
     *   **Pure Power**: Direct B-Tree indexing on disk.
-    *   **Speed**: "NoCheck" transaction mode offers raw speed for read-heavy or single-writer workloads.
+    *   **Speed**: "NoCheck" transaction mode. For build-once-read-many scenarios, skip conflict checks entirely for raw, unbridled read speed.
     *   **Simplicity**: No external database dependencies (just a local file structure).
 
 ### 2. Enterprise Cluster App
