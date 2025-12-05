@@ -14,6 +14,7 @@ require (
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
-	golang.org/x/sync v0.14.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )

@@ -2,12 +2,12 @@ go 1.24.3
 
 use (
 	.
-	./ai
 	./adapters/cassandra
 	./adapters/redis
+	./ai
+	./incfs
+	./infs
 	./jsondb
 	./restapi
-	./infs
-	./incfs
 	./search
 )
