@@ -11,7 +11,6 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/infs"
 )
 
@@ -33,17 +32,17 @@ const (
 
 // Config holds the configuration for the Vector Store.
 type Config struct {
-	Cache         sop.L2Cache
-	StoragePath   string
-	ContentSize   sop.ValueDataSize
-	UsageMode     ai.UsageMode
-	StoresFolders []string
-	ErasureConfig map[string]fs.ErasureCodingConfig
+	// TransactionOptions specifies the transaction options for the store.
+	TransactionOptions sop.TransactionOptions
+	ContentSize        sop.ValueDataSize
+	UsageMode          ai.UsageMode
 	// EnableIngestionBuffer enables the initial "TempVectors" stage (Stage 0)
 	// which buffers vectors for faster ingestion (O(1)) before they are indexed.
 	// If false (default), vectors are written directly to the main index (Stage 1),
 	// which is slower for ingestion but allows immediate querying and structure.
 	EnableIngestionBuffer bool
+	// Cache is the L2 cache client used for optimization locking and other operations.
+	Cache sop.L2Cache
 }
 
 // Open returns an Index for the specified domain.
@@ -952,11 +951,19 @@ func (di *domainIndex[T]) addCentroidToCache(id int, vec []float32) {
 }
 
 func (di *domainIndex[T]) isOptimizing(ctx context.Context) (bool, error) {
-	if di.config.Cache == nil {
+	if di.config.Cache != nil {
+		lockKeyName := di.config.Cache.FormatLockKey(fmt.Sprintf("optimize_lock_%s", di.name))
+		return di.config.Cache.IsLockedByOthers(ctx, []string{lockKeyName})
+	}
+	if di.config.TransactionOptions.CacheType == sop.NoCache {
 		return false, nil
 	}
-	lockKeyName := di.config.Cache.FormatLockKey(fmt.Sprintf("optimize_lock_%s", di.name))
-	return di.config.Cache.IsLockedByOthers(ctx, []string{lockKeyName})
+	cache := sop.NewCacheClientByType(di.config.TransactionOptions.CacheType)
+	if cache == nil {
+		return false, nil
+	}
+	lockKeyName := cache.FormatLockKey(fmt.Sprintf("optimize_lock_%s", di.name))
+	return cache.IsLockedByOthers(ctx, []string{lockKeyName})
 }
 
 func (di *domainIndex[T]) getActiveVersion(ctx context.Context, trans sop.Transaction) (int64, error) {
@@ -973,20 +980,9 @@ func (di *domainIndex[T]) getActiveVersion(ctx context.Context, trans sop.Transa
 func (di *domainIndex[T]) beginTransaction(ctx context.Context) (sop.Transaction, error) {
 	var t sop.Transaction
 	var err error
-	if len(di.config.StoresFolders) > 0 || len(di.config.ErasureConfig) > 0 {
-		t, err = infs.NewTransactionWithReplication(ctx, infs.TransationOptionsWithReplication{
-			Mode:              sop.ForWriting,
-			StoresBaseFolders: di.config.StoresFolders,
-			ErasureConfig:     di.config.ErasureConfig,
-			Cache:             di.config.Cache,
-		})
-	} else {
-		t, err = infs.NewTransaction(ctx, infs.TransationOptions{
-			Mode:             sop.ForWriting,
-			StoresBaseFolder: di.config.StoragePath,
-			Cache:            di.config.Cache,
-		})
-	}
+	cfg := di.config.TransactionOptions
+	cfg.Mode = sop.ForWriting
+	t, err = infs.NewTransaction(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}

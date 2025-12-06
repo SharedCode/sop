@@ -131,6 +131,8 @@ extern char* contextError(long long ctxID);
 //
 extern char* openRedisConnection(char* uri);
 extern char* closeRedisConnection();
+extern char* openCassandraConnection(char* payload);
+extern char* closeCassandraConnection();
 extern char* manageLogging(int level, char* logPath);
 extern char* manageTransaction(long long ctxID, int action, char* payload);
 extern char* manageDatabase(long long ctxID, int action, char* targetID, char* payload);

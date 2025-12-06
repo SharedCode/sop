@@ -13,7 +13,7 @@ import json
 
 # 1. Initialize Database
 ctx = sop.Context()
-db = sop.Database(ctx, storage_path="/tmp/sop_data")
+db = sop.Database(sop.DatabaseOptions(storage_path="/tmp/sop_data"))
 
 # 2. Run Transaction
 with db.begin_transaction(ctx) as t:
@@ -84,7 +84,7 @@ def transfer_funds(ctx, db, from_id, to_id, amount):
 
 # Usage
 ctx = sop.Context()
-db = sop.Database(ctx, storage_path="/tmp/sop_data")
+db = sop.Database(sop.DatabaseOptions(storage_path="/tmp/sop_data"))
 transfer_funds(ctx, db, "user_1", "user_2", 100)
 ```
 
@@ -97,7 +97,7 @@ import sop
 from sop.ai import Database as AIDatabase, Item
 
 ctx = sop.Context()
-db = AIDatabase(ctx, storage_path="/tmp/sop_vectors")
+db = AIDatabase(sop.DatabaseOptions(storage_path="/tmp/sop_vectors"))
 
 with db.begin_transaction(ctx) as tx:
     store = db.open_vector_store(ctx, tx, "products")
@@ -149,7 +149,42 @@ with db.begin_transaction(ctx) as tx:
     print(f"Loaded: {loaded['model']['id']}")
 ```
 
-## 5. Text Search
+## 5. Multi-Tenancy (Cassandra Keyspaces)
+
+Connect to different tenants (Keyspaces) on the same Cassandra cluster using the `CassandraDatabase` helper. This example also initializes Redis for distributed locking.
+
+```python
+import sop
+from sop import Redis
+from sop.database import CassandraDatabase
+
+# 1. Initialize Global Connections (Once per app)
+Redis.initialize("redis://localhost:6379/0")
+CassandraDatabase.initialize({
+    "cluster_hosts": ["127.0.0.1"],
+    "keyspace": "sop_global"
+})
+
+ctx = sop.Context()
+
+# 2. Connect to Tenant A (Keyspace: 'tenant_a')
+db_a = CassandraDatabase(keyspace="tenant_a")
+
+# 3. Connect to Tenant B (Keyspace: 'tenant_b')
+db_b = CassandraDatabase(keyspace="tenant_b")
+
+# Operations on db_a are completely isolated from db_b
+with db_a.begin_transaction(ctx) as t:
+    store = db_a.new_btree(t, "config")
+    store.add(ctx, "theme", "dark")
+    # Commit happens automatically
+
+# 4. Cleanup on shutdown
+Redis.close()
+CassandraDatabase.close()
+```
+
+## 6. Text Search
 
 Index and search text documents transactionally.
 

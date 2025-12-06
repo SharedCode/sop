@@ -38,7 +38,10 @@ import (
 func main() {
 	// 1. Create the Database Manager
 	// Standalone mode = Local Filesystem + In-Memory Cache
-	db := database.NewDatabase(database.Standalone, "./my_vector_db")
+	db := database.NewDatabase(database.DatabaseOptions{
+		DBType:      database.Standalone,
+		StoragePath: "./my_vector_db",
+	})
 	
 	// 2. Configure Storage Path
 	// db.SetStoragePath("./my_vector_db") // Done in NewDatabase
@@ -66,7 +69,10 @@ func main() {
 	// Clustered mode = Local Filesystem (Shared) + Redis Cache
 	// Note: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
 	// Ensure Redis is running on localhost:6379
-	db := database.NewDatabase(database.Clustered, "./my_cluster_db")
+	db := database.NewDatabase(database.DatabaseOptions{
+		DBType:      database.Clustered,
+		StoragePath: "./my_cluster_db",
+	})
 	
 	// 2. Configure Storage Path
 	// db.SetStoragePath("./my_cluster_db") // Done in NewDatabase
@@ -241,7 +247,10 @@ type MyPerceptron struct {
 
 func saveModel() {
 	// Initialize Database
-	db := database.NewDatabase(database.Standalone, "./my_models")
+	db := database.NewDatabase(database.DatabaseOptions{
+		DBType:      database.Standalone,
+		StoragePath: "./my_models",
+	})
 	ctx := context.Background()
 	trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := db.OpenModelStore(ctx, "default", trans)
@@ -265,7 +274,10 @@ Retrieve a model by name.
 
 ```go
 func loadModel() {
-	db := database.NewDatabase(database.Standalone, "./my_models")
+	db := database.NewDatabase(database.DatabaseOptions{
+		DBType:      database.Standalone,
+		StoragePath: "./my_models",
+	})
 	ctx := context.Background()
 	trans, _ := db.BeginTransaction(ctx, sop.ForReading)
 	store, _ := db.OpenModelStore(ctx, "default", trans)
@@ -286,7 +298,10 @@ See what's in the store.
 
 ```go
 func listModels() {
-	db := database.NewDatabase(database.Standalone, "./my_models")
+	db := database.NewDatabase(database.DatabaseOptions{
+		DBType:      database.Standalone,
+		StoragePath: "./my_models",
+	})
 	ctx := context.Background()
 	trans, _ := db.BeginTransaction(ctx, sop.ForReading)
 	store, _ := db.OpenModelStore(ctx, "default", trans)

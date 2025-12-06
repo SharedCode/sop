@@ -1,4 +1,4 @@
-package vector_test
+package vector
 
 import (
 	"context"
@@ -8,8 +8,6 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/vector"
 	core_database "github.com/sharedcode/sop/database"
 )
 
@@ -21,15 +19,20 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := database.NewDatabase(core_database.Standalone, tmpDir)
+	db := core_database.NewDatabase(sop.DatabaseOptions{
+		StoragePath: tmpDir,
+	})
 	ctx := context.Background()
 	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction failed: %v", err)
 	}
 
-	idx, err := vector.Open[map[string]any](ctx, tx, "test_batch", vector.Config{
+	idx, err := Open[map[string]any](ctx, tx, "test_batch", Config{
 		UsageMode: ai.Dynamic,
+		TransactionOptions: sop.TransactionOptions{
+			StoragePath: tmpDir,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
@@ -73,8 +76,11 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	}
 	defer tx.Rollback(ctx)
 
-	idx, err = vector.Open[map[string]any](ctx, tx, "test_batch", vector.Config{
+	idx, err = Open[map[string]any](ctx, tx, "test_batch", Config{
 		UsageMode: ai.Dynamic,
+		TransactionOptions: sop.TransactionOptions{
+			StoragePath: tmpDir,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
@@ -124,53 +130,3 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 		t.Errorf("Unexpected type for cluster: %T", clusterVal2)
 	}
 }
-
-/*
-func TestIndexAllCentroidPopulation(t *testing.T) {
-	// Setup
-	tmpDir, err := os.MkdirTemp("", "sop-ai-test-indexall-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	db := NewDatabase[map[string]any](Standalone)
-	db.SetStoragePath(tmpDir)
-	idx := db.Open("test_indexall")
-	dIdx := idx.(*domainIndex[map[string]any])
-
-	// Create items with distinct directions
-	var items []ai.Item[map[string]any]
-	for i := 0; i < 20; i++ {
-		// Use [1, i] to ensure different angles
-		items = append(items, ai.Item[map[string]any]{
-			ID:      fmt.Sprintf("item-%d", i),
-			Vector:  []float32{1.0, float32(i)},
-			Payload: map[string]any{"val": i},
-		})
-	}
-
-	// 1. UpsertContent (Stages to TempVectors)
-	if err := dIdx.UpsertContent(items); err != nil {
-		t.Fatalf("UpsertContent failed: %v", err)
-	}
-
-	// 2. IndexAll (Should train centroids and index)
-	if err := dIdx.IndexAll(); err != nil {
-		t.Fatalf("IndexAll failed: %v", err)
-	}
-
-	// 3. Verify
-	// Query for [1, 0] which matches item-0 exactly
-	hits, err := idx.Query([]float32{1.0, 0.0}, 1, nil)
-	if err != nil {
-		t.Fatalf("Query failed: %v", err)
-	}
-	if len(hits) == 0 {
-		t.Fatal("Query returned no hits")
-	}
-	if hits[0].ID != "item-0" {
-		t.Errorf("Expected item-0, got %s (Score: %f)", hits[0].ID, hits[0].Score)
-	}
-}
-*/

@@ -5,16 +5,15 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/infs"
 )
 
 func TestIndex_Scoring_BM25(t *testing.T) {
 	ctx := context.Background()
-	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
-		StoresBaseFolder: "test_search_scoring",
+	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
+		StoragePath: "test_search_scoring",
 		Mode:             sop.ForWriting,
-		Cache:            cache.NewInMemoryCache(),
+		CacheType: sop.InMemory,
 	})
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)
@@ -87,10 +86,10 @@ func TestIndex_Scoring_BM25(t *testing.T) {
 
 func TestIndex_MultiTerm_OR(t *testing.T) {
 	ctx := context.Background()
-	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
-		StoresBaseFolder: "test_search_multiterm",
+	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
+		StoragePath: "test_search_multiterm",
 		Mode:             sop.ForWriting,
-		Cache:            cache.NewInMemoryCache(),
+		CacheType: sop.InMemory,
 	})
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)

@@ -68,8 +68,8 @@ const (
 
 // Basic EC config used by replication tests.
 func initErasureCoding() {
-	ec := make(map[string]fs.ErasureCodingConfig)
-	ec["barstoreec"] = fs.ErasureCodingConfig{
+	ec := make(map[string]sop.ErasureCodingConfig)
+	ec["barstoreec"] = sop.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -79,7 +79,7 @@ func initErasureCoding() {
 		},
 		RepairCorruptedShards: true,
 	}
-	ec[""] = fs.ErasureCodingConfig{
+	ec[""] = sop.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 2,
 		BaseFolderPathsAcrossDrives: []string{

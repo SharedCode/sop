@@ -69,8 +69,12 @@ SOP is designed to be versatile, powering everything from small embedded tools t
 *   **Scenario**: Distributed systems requiring high availability and ACID guarantees.
 *   **Why SOP**:
     *   **ACID Transactions**: Two-Phase Commit (2PC) across distributed nodes.
-    *   **Scalability**: Cassandra-backed registry for infinite metadata scaling.
-    *   **Resilience**: Active/Passive registry replication and Erasure Coding for data blobs ensure zero data loss.
+    *   **Multi-Tenancy**: Native support for multi-tenancy (via Directories or Keyspaces) allows multiple tenants to share the same cluster while maintaining strict data isolation.
+    *   **Scalability**: Infinite metadata scaling via Sharded Registry (FileSystem) or Cassandra tables.
+    *   **Resilience**: Registry replication (Active/Passive or Quorum) and Erasure Coding for data blobs ensure zero data loss.
+    *   **Operational Flexibility**: Choose the backend that fits your ops stack:
+        *   **FileSystem (`infs`)**: Requires only a shared drive (NAS/S3) and Redis. Ideal for lean ops teams.
+        *   **Cassandra (`incfs`)**: **"Power up"** your existing Cassandra cluster with SOP. Adds full **ACID Transactions**, **B-Tree Indexing** (ordered data, range queries), and efficient large item management to Cassandra's eventual consistency model.
 
 ### 3. AI Vector Database
 *   **Scenario**: Storing and retrieving millions of vector embeddings for RAG (Retrieval-Augmented Generation) applications.
@@ -99,18 +103,24 @@ SOP is designed to be versatile, powering everything from small embedded tools t
 ### 6. AI Model Registry
 *   **Scenario**: Managing versions of local AI models (weights, configurations) alongside the data they process.
 *   **Why SOP**:
-    *   **Unified Storage**: Store your models in the same ACID transaction as your training data and vector embeddings.
+    *   **Unified Storage**: Store your training data (Vectors), metadata (Registry), and model artifacts (Blobs/JSON) in one ACID-compliant system.
+    *   **Atomic Updates**: Update your model weights and the vector index they correspond to in a single transaction, preventing version mismatch.
     *   **Versioning**: Built-in support for versioning models (e.g., "v1.0", "v1.1") using composite keys.
 
-### 7. Embedded Search Engine
+### 7. Cassandra Power-Up (Layer 2 Database)
+*   **Scenario**: Enhancing existing Cassandra clusters with features it natively lacks.
+*   **Why SOP**:
+    *   **Solves the "Blob Problem"**: Keeps Cassandra lean by storing only metadata (Registry) in tables, while offloading heavy data (B-Tree nodes, values) to the file system or object storage. This prevents compaction issues common with large blobs.
+    *   **Rich Indexing**: Adds full B-Tree capabilities (range queries, prefix search, ordering) which are natively missing or limited in Cassandra.
+    *   **ACID Transactions**: Provides strict ACID transactions (Two-Phase Commit) on top of Cassandra's eventually consistent architecture.
+    *   **Multi-Tenancy**: Native support for Keyspaces allows logical separation of data within the same cluster.
+
+### 8. Embedded Search Engine
 *   **Scenario**: Adding "Search this wiki" or "Filter by text" features to an application without managing a separate Elasticsearch cluster.
 *   **Why SOP**:
     *   **Transactional Indexing**: Index documents in the same transaction as you save them. No "eventual consistency" lag.
     *   **BM25 Scoring**: Uses industry-standard ranking algorithms for relevance.
     *   **Zero Ops**: It's just a library. No separate process to manage or monitor.
-*   **Why SOP**:
-    *   **Unified Storage**: Store your training data (Vectors), metadata (Registry), and model artifacts (Blobs/JSON) in one ACID-compliant system.
-    *   **Atomic Updates**: Update your model weights and the vector index they correspond to in a single transaction, preventing version mismatch.
 
 ## Core Innovations
 
@@ -168,7 +178,10 @@ SOP is a NoSQL-like key/value storage engine with built-in indexing and transact
 - Use the `database` package to initialize your environment.
   ```go
   // Initialize (Standalone or Clustered)
-  db := database.NewDatabase(database.Standalone, "/var/lib/sop")
+  db := database.NewDatabase(database.DatabaseOptions{
+      DBType:      database.Standalone,
+      StoragePath: "/var/lib/sop",
+  })
 
   // Start a Transaction
   tx, _ := db.BeginTransaction(ctx, sop.ForWriting)

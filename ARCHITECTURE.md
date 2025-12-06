@@ -67,6 +67,11 @@ SOP supports two primary backends, each with a distinct architecture for handlin
 
 Designed for **distributed, high-scale environments** as well as single-node deployments.
 
+*   **Structure**:
+    *   The SOP database resides in the file system.
+    *   Each **storage path** parameter provided during initialization corresponds to a **database folder**.
+    *   Users can manage **many stores** (B-Trees) within each database folder.
+    *   You can have **many database folders**, allowing you to create a vast set of databases, each dedicated to a specific taxonomy or domain.
 *   **Registry (Filesystem)**: Stores metadata and the registry in a specialized, memory-mapped hashmap file on disk.
     *   *Why*: **Superior Performance**. The proprietary registry hashmap on disk, combined with Redis coordination, has been proven to scale better than the Hybrid Cassandra model. In stress tests simulating heavy workloads across machines on commodity hardware, `infs` performed **25% faster** than `incfs`.
     *   *Partitioning*: The registry is split into "Segment Files" (default 1MB) to manage concurrency and file sizes. See [Configuration Guide](CONFIGURATION.md#registry-partitioning--tuning) for tuning details.
@@ -75,12 +80,17 @@ Designed for **distributed, high-scale environments** as well as single-node dep
     *   **Redis (Default)**: Uses Redis for distributed locking and caching.
     *   **In-Memory (Standalone)**: Can be configured to use internal memory for locking and caching, removing the Redis dependency entirely.
 
-### 2. Hybrid Backend (`inredcfs`)
+### 2. Hybrid Backend (`incfs`)
 
-An alternative backend for distributed environments.
+An alternative backend for distributed environments that **"Powers up"** your existing Cassandra infrastructure.
 
+*   **Structure**:
+    *   The SOP database metadata resides in Cassandra tables.
+    *   Each **Keyspace** provided during initialization corresponds to a **logical database**.
+    *   Users can manage **many stores** (B-Trees) within each Keyspace.
+    *   You can have **many Keyspaces**, allowing you to create a vast set of databases, each dedicated to a specific taxonomy or domain.
 *   **Registry (Cassandra)**: Stores metadata, B-Tree root information, and the "Virtual ID" registry.
-    *   *Why*: Provided as an option for environments that prefer Cassandra for metadata high availability, though `infs` is now the proposed model for performance.
+    *   *Why*: **"Power up"** for Cassandra. This backend layers SOP's **ACID transactions** and **B-Tree indexing** (ordered data, range queries) on top of Cassandra, giving you the best of both worlds: Cassandra's robust replication for metadata and SOP's transactional consistency.
 *   **Blob Store (Filesystem)**: Stores the actual B-Tree nodes and data values as serialized blobs.
     *   *Why*: Direct filesystem I/O is extremely fast and cost-effective for bulk data.
 *   **Locking & Caching (Redis)**: Handles distributed locking and caches frequently accessed nodes.
@@ -150,13 +160,39 @@ SOP is designed to run in two distinct modes, catering to different scale requir
 *   **Pros**: **Highest performance** (25% faster than hybrid), horizontal scalability, fault tolerance, ACID guarantees.
 
 ### 2. Hybrid Mode (Distributed)
-*   **Backend**: `inredcfs`.
+*   **Backend**: `incfs`.
 *   **Architecture**: Multiple application nodes, shared storage (Cassandra + Network FS/S3).
-*   **Use Case**: Environments with existing Cassandra infrastructure or specific metadata requirements.
-*   **Pros**: Horizontal scalability, fault tolerance.
+*   **Use Case**: Environments with existing Cassandra infrastructure.
+*   **Pros**: **"Powers up"** Cassandra with ACID transactions and B-Tree indexing. Horizontal scalability, fault tolerance.
 
 ### 3. Standalone Mode (Embedded)
 *   **Backend**: `infs` (or `inmemory` for pure RAM).
 *   **Architecture**: Single process, local storage.
 *   **Use Case**: Desktop apps, CLI tools, local AI vector stores.
 *   **Pros**: Zero external dependencies, maximum single-node performance.
+
+## Backend Comparison: Isolation & Concurrency
+
+When choosing a backend, it is crucial to understand how they handle isolation, locking, and multi-tenancy. Both backends support high concurrency, but their locking scopes differ.
+
+| Feature | **FileSystem (`infs`)** | **Cassandra (`incfs`)** |
+| :--- | :--- | :--- |
+| **Primary Use Case** | High-performance distributed or local clusters. | Environments with existing Cassandra infrastructure. |
+| **Multi-Tenancy** | **Directory-Based**: Each database is a separate folder on disk. | **Keyspace-Based**: Each database is a separate Keyspace in Cassandra. |
+| **Locking Scope** | **`BaseFolder:StoreName`**<br>Locks are isolated to the specific database folder. Two stores with the same name in different folders *do not* block each other. | **`Keyspace:StoreName`**<br>Locks are isolated to the specific Keyspace. Two stores with the same name in different keyspaces *do not* block each other. |
+| **Concurrency** | **High**. Operations on different databases (folders) are completely independent. | **High**. Operations on different keyspaces are completely independent. |
+| **Metadata Storage** | Custom high-performance Hash Map on disk. | Cassandra Tables (`store`, `registry`, etc.). |
+| **Data Storage** | Filesystem Blobs. | Filesystem Blobs. |
+| **Coordination** | Redis (Distributed) or In-Memory (Standalone). | Redis. |
+
+### Isolation & Locking Details
+
+SOP uses **Redis** (in distributed mode) to manage transaction locks. The key design principle is that **locking is scoped to the logical database**.
+
+*   **FileSystem Backend**: The "Logical Database" is defined by the `StorePath` (the folder path).
+    *   *Example*: If you have `db1/users` and `db2/users`, a transaction on `db1/users` acquires a lock on `db1:users`. It will **never** block a transaction on `db2/users`.
+*   **Cassandra Backend**: The "Logical Database" is defined by the `Keyspace`.
+    *   *Example*: If you have `keyspaceA.users` and `keyspaceB.users`, a transaction on `keyspaceA` acquires a lock on `keyspaceA:users`. It will **never** block `keyspaceB`.
+
+This architecture ensures that SOP can host thousands of independent databases (tenants) on the same infrastructure without lock contention between them.
+

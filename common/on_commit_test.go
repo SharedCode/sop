@@ -5,18 +5,18 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/cache"
+	_ "github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/infs"
 )
 
 func TestOnCommit_FiresOnCommit(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
-		Mode:             sop.ForWriting,
-		MaxTime:          -1,
-		StoresBaseFolder: tmpDir,
-		Cache:            cache.NewInMemoryCache(),
+	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
+		Mode:          sop.ForWriting,
+		MaxTime:       -1,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.InMemory,
 	})
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
@@ -44,11 +44,11 @@ func TestOnCommit_FiresOnCommit(t *testing.T) {
 func TestOnCommit_DoesNotFireOnRollback(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
-	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
-		Mode:             sop.ForWriting,
-		MaxTime:          -1,
-		StoresBaseFolder: tmpDir,
-		Cache:            cache.NewInMemoryCache(),
+	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
+		Mode:          sop.ForWriting,
+		MaxTime:       -1,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.InMemory,
 	})
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)

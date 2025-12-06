@@ -2,21 +2,21 @@ import os
 import shutil
 import sys
 import uuid
-from dataclasses import asdict
 
 # Add the parent directory to sys.path to import sop
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from sop import call_go, Context
-from sop.ai import Database, Item, UsageMode, DBType
-from sop.transaction import Transaction, TransactionOptions, TransactionMode, ErasureCodingConfig
+from sop import Context
+from sop.ai import Database, Item, DBType
+from sop.database import DatabaseOptions
+from sop.transaction import TransactionMode, ErasureCodingConfig
 from sop.redis import Redis
 
 def main():
     # Open Redis Connection (Required for Replication/Locking)
     print("Attempting to connect to Redis (localhost:6379)...")
     try:
-        Redis.open_connection("redis://localhost:6379")
+        Redis.initialize("redis://localhost:6379")
     except Exception as e:
         print(f"Skipping Replication Demo: Could not connect to Redis. Error: {e}")
         return
@@ -51,26 +51,17 @@ def main():
     ctx = Context()
     # Initialize Database with Replication Config
     # Note: We pass the Active path as the primary storage path, but also provide the full config.
-    db = Database(
-        ctx,
-        storage_path=active_path, 
+    db = Database(DatabaseOptions(
         db_type=DBType.Standalone,
         erasure_config={"": ec_config}, # Default config
         stores_folders=[active_path, passive_path]
-    )
+    ))
     
     # --- 1. Explicit Transaction with Replication ---
     print("\n--- 1. Explicit Transaction (Replicated) ---")
     
-    trans_opts = TransactionOptions(
-        mode=TransactionMode.ForWriting.value,
-        max_time=15,
-        registry_hash_mod=250,
-        stores_folders=[active_path, passive_path],
-        erasure_config={"": ec_config} # Default config
-    )
-
-    with db.begin_transaction(ctx, options=trans_opts) as trans:
+    # Transaction options are now inherited from DatabaseOptions
+    with db.begin_transaction(ctx) as trans:
         print("Transaction Started.")
         store = db.open_vector_store(ctx, trans, "demo_store_repl")
         
@@ -81,7 +72,7 @@ def main():
         print("Committing...")
     
     # Verify
-    with db.begin_transaction(ctx, options=trans_opts) as trans_read:
+    with db.begin_transaction(ctx, mode=TransactionMode.ForReading.value) as trans_read:
         store_read = db.open_vector_store(ctx, trans_read, "demo_store_repl")
         fetched = store_read.get(ctx, item1.id)
         print(f"Verified Item 1: {fetched.payload['name']}")

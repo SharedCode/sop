@@ -58,7 +58,7 @@ func init() {
 
 func Test_GetStoreList(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -71,7 +71,7 @@ func Test_GetStoreList(t *testing.T) {
 // Create an empty store on 1st run, add one item(max) on succeeding runs.
 func Test_CreateEmptyStore(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -110,7 +110,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -141,7 +141,7 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -179,7 +179,7 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 func Test_TransactionStory_SingleBTree(t *testing.T) {
 	ctx := context.Background()
 
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	// Demo NewTransactionExt specifying custom "to file path" lambda function.
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
@@ -226,7 +226,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 
 func Test_RegistryZeroDurationCache(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -274,7 +274,7 @@ func Test_RegistryZeroDurationCache(t *testing.T) {
 
 func Test_StoreCaching(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -316,7 +316,7 @@ func Test_StoreCaching(t *testing.T) {
 
 func Test_StoreCachingTTL(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -353,7 +353,7 @@ func Test_StoreCachingTTL(t *testing.T) {
 
 func Test_BtreeOpenedTwice(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())

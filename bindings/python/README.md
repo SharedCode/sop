@@ -13,6 +13,7 @@
 *   **High Performance**: Written in Go with a lightweight Python wrapper (ctypes).
 *   **Caching**: Integrated Redis-backed L1/L2 caching for speed.
 *   **Replication**: Optional Erasure Coding (EC) for fault-tolerant storage across drives.
+*   **Multi-Tenancy**: Native support for Cassandra Keyspaces or Directory-based isolation.
 *   **Flexible Deployment**: Supports both **Standalone** (local) and **Clustered** (distributed) modes.
 
 ## Documentation
@@ -55,13 +56,19 @@ First, create a Context and open a Database connection.
 ```python
 from sop import Context, TransactionMode, TransactionOptions, Btree, BtreeOptions, Item
 from sop.ai import Database, DBType, Item as VectorItem
+from sop.database import DatabaseOptions
 
 # Initialize Context
 ctx = Context()
 
 # Open Database (Standalone Mode)
 # This creates/opens a database at the specified path.
-db = Database(ctx, storage_path="data/my_db", db_type=DBType.Standalone)
+db = Database(DatabaseOptions(storage_path="data/my_db", db_type=DBType.Standalone))
+
+# Open Database (Clustered Mode with Multi-Tenancy)
+# Connects to a specific Cassandra Keyspace ("tenant_1").
+# Requires Cassandra and Redis.
+# db_clustered = Database(DatabaseOptions(storage_path="data/blobs", keyspace="tenant_1", db_type=DBType.Clustered))
 ```
 
 ### 2. Start a Transaction
@@ -94,18 +101,25 @@ with db.begin_transaction(ctx, mode=TransactionMode.ForWriting.value) as tx:
         "trees": 100
     })
 
-    # --- 5. General Purpose B-Tree ---
-    # Create a new B-Tree store.
-    bo = BtreeOptions(name="user_store", is_unique=True)
-    user_store = db.new_btree(ctx, "user_store", tx, options=bo)
+    # --- 5. B-Tree Store (Key-Value) ---
+    # Open a B-Tree named "users"
+    # Use new_btree to create a new store, or open_btree for existing ones.
+    btree = db.new_btree(ctx, "users", tx)
+    
+    # Add a Key-Value pair
+    btree.add(ctx, Item(key="user_123", value="John Doe"))
+    
+    # Find a value
+    if btree.find(ctx, "user_123"):
+        # Fetch the value
+        items = btree.get_values(ctx, Item(key="user_123"))
+        if items and items[0].value:
+            print(f"Found User: {items[0].value}")
 
     # --- 6. Text Search ---
     # Open a Search Index
     idx = db.open_search(ctx, "articles", tx)
     idx.add("doc1", "The quick brown fox")
-    
-    # Add an item.
-    user_store.add(ctx, Item(key="user1", value="John Doe"))
 
 # Transaction commits automatically here.
 # If an exception occurs, it rolls back.
@@ -190,6 +204,41 @@ db = Database(
     storage_path="/mnt/shared_data", 
     db_type=DBType.Clustered
 )
+```
+
+### Clustered Backend Setup (Cassandra + Redis)
+
+For production environments using `Clustered` mode, you should initialize both Cassandra (for storage) and Redis (for distributed locking and caching) at application startup.
+
+```python
+from sop import Redis
+from sop.database import CassandraDatabase
+
+# 1. Initialize Redis (Required for Locking/Caching in Clustered mode)
+# Format: redis://<user>:<password>@<host>:<port>/<db_number>
+Redis.initialize("redis://:password@localhost:6379/0")
+
+# 2. Initialize Cassandra (Global Connection)
+CassandraDatabase.initialize({
+    "cluster_hosts": ["127.0.0.1"],
+    "keyspace": "sop_global",  # Default keyspace
+    "consistency": 1,          # 1 = LocalQuorum
+    "authenticator": {
+        "username": "cassandra",
+        "password": "password"
+    }
+})
+
+# ... Application Logic ...
+
+# Connect to a specific tenant's keyspace
+db = CassandraDatabase(keyspace="tenant_1")
+
+# ...
+
+# Cleanup on shutdown
+Redis.close()
+CassandraDatabase.close()
 ```
 
 ## Architecture

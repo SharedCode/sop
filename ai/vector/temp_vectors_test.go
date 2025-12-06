@@ -24,7 +24,9 @@ func TestOptimizeWithTempVectors(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := database.NewDatabase(core_database.Standalone, tmpDir)
+	db := database.NewDatabase(core_database.DatabaseOptions{
+		StoragePath: tmpDir,
+	})
 
 	ctx := context.Background()
 

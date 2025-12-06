@@ -25,10 +25,10 @@ func TestPartialOptimizationState(t *testing.T) {
 	c := cache.NewInMemoryCache()
 	t.Logf("Cache created: %T", c)
 
-	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
-		Mode:             sop.ForWriting,
-		StoresBaseFolder: tmpDir,
-		Cache:            c,
+	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
+		Mode:        sop.ForWriting,
+		StoragePath: tmpDir,
+		CacheType:   sop.InMemory,
 	})
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
@@ -37,8 +37,11 @@ func TestPartialOptimizationState(t *testing.T) {
 
 	// 1. Setup Store
 	config := Config{
-		StoragePath: tmpDir,
-		UsageMode:   ai.DynamicWithVectorCountTracking,
+		TransactionOptions: sop.TransactionOptions{
+			StoragePath: tmpDir,
+			CacheType:   sop.InMemory,
+		},
+		UsageMode: ai.DynamicWithVectorCountTracking,
 	}
 	store, err := Open[string](ctx, trans, "partial_test", config)
 	if err != nil {

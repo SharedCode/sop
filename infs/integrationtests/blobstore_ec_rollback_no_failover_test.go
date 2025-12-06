@@ -74,7 +74,7 @@ func Test_EC_BlobStore_ShardsExceedParity_Rollback_NoFailover(t *testing.T) {
 		fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
 	}
 	// EC config: 2 data + 2 parity across disk10..disk13
-	ecCfg := map[string]fs.ErasureCodingConfig{
+	ecCfg := map[string]sop.ErasureCodingConfig{
 		"": {
 			DataShardsCount:   2,
 			ParityShardsCount: 2,

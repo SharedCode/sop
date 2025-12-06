@@ -49,7 +49,7 @@ const nodeSlotLength = 500
 const batchSize = 200
 
 func Test_SimpleAddPerson(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -92,7 +92,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 }
 
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 
 	// Setup transaction to ensure store exists
 	t0, _ := infs.NewTransaction(ctx, to)
@@ -149,7 +149,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 }
 
 func Test_AddAndSearchManyPersons(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -181,7 +181,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	tor, _ := infs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+	tor := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err = infs.NewTransaction(ctx, tor)
 	if err != nil {
 		t.Error(err.Error())
@@ -216,7 +216,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, _ := infs.NewTransaction(ctx, to)
 	_ = t1.Begin(ctx)
 	b3, _ := infs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -260,7 +260,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			tor, _ := infs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+			tor := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 			t1, _ = infs.NewTransaction(ctx, tor)
 			_ = t1.Begin(ctx)
 			b3, _ = infs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
@@ -273,7 +273,7 @@ func VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, _ := infs.NewTransaction(ctx, to)
 	_ = t1.Begin(ctx)
 	b3, _ := infs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -308,7 +308,7 @@ func MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
 
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, _ := infs.NewTransaction(ctx, to)
 	_ = t1.Begin(ctx)
 	b3, _ := infs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -402,7 +402,7 @@ func MixedOperations(t *testing.T) {
 }
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 
 	// 1. Create the Btree in a separate transaction and commit it.
 	t0, _ := infs.NewTransaction(ctx, to)
@@ -453,7 +453,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 }
 
 func Test_StrangeBtreeStoreName(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 
 	infs.RemoveBtree(ctx, dataPath, "2phase", nil)
 

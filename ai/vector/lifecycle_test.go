@@ -9,7 +9,6 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
 	core_database "github.com/sharedcode/sop/database"
 )
@@ -22,7 +21,9 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := database.NewDatabase(core_database.Standalone, tmpDir)
+	db := core_database.NewDatabase(core_database.DatabaseOptions{
+		StoragePath: tmpDir,
+	})
 	ctx := context.Background()
 
 	// --- Stage 0: Initial Ingestion (V0) ---
@@ -39,10 +40,15 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	// if arch.TempVectors != nil { ... }
 	// And OpenDomainStore creates TempVectors ONLY if version == 0.
 	// So any UsageMode should work for V0 ingestion into TempVectors.
-	idx0, err := db.OpenVectorStore(ctx, "lifecycle", trans0, vector.Config{
+	idx0, err := vector.Open[map[string]any](ctx, trans0, "lifecycle", vector.Config{
 		UsageMode:             ai.Dynamic,
 		ContentSize:           sop.MediumData,
 		EnableIngestionBuffer: true,
+		TransactionOptions: sop.TransactionOptions{
+			StoragePath: tmpDir,
+			CacheType:   sop.InMemory,
+		},
+		Cache: db.Cache(),
 	})
 	if err != nil {
 		t.Fatalf("Open 0 failed: %v", err)
@@ -79,10 +85,15 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BeginTransaction 1 failed: %v", err)
 	}
-	idx1, err := db.OpenVectorStore(ctx, "lifecycle", trans1, vector.Config{
+	idx1, err := vector.Open[map[string]any](ctx, trans1, "lifecycle", vector.Config{
 		UsageMode:             ai.Dynamic,
 		ContentSize:           sop.MediumData,
 		EnableIngestionBuffer: true,
+		TransactionOptions: sop.TransactionOptions{
+			StoragePath: tmpDir,
+			CacheType:   sop.InMemory,
+		},
+		Cache: db.Cache(),
 	})
 	if err != nil {
 		t.Fatalf("Open 1 failed: %v", err)
@@ -146,9 +157,14 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	}
 
 	// Upsert Item B (Should go to Vectors V1 directly)
-	idx2, err := db.OpenVectorStore(ctx, "lifecycle", trans2b, vector.Config{
+	idx2, err := vector.Open[map[string]any](ctx, trans2b, "lifecycle", vector.Config{
 		UsageMode:   ai.Dynamic,
 		ContentSize: sop.MediumData,
+		TransactionOptions: sop.TransactionOptions{
+			StoragePath: tmpDir,
+			CacheType:   sop.InMemory,
+		},
+		Cache: db.Cache(),
 	})
 	if err != nil {
 		t.Fatalf("Open 2 failed: %v", err)
@@ -181,9 +197,14 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BeginTransaction 3 failed: %v", err)
 	}
-	idx3, err := db.OpenVectorStore(ctx, "lifecycle", trans3, vector.Config{
+	idx3, err := vector.Open[map[string]any](ctx, trans3, "lifecycle", vector.Config{
 		UsageMode:   ai.Dynamic,
 		ContentSize: sop.MediumData,
+		TransactionOptions: sop.TransactionOptions{
+			StoragePath: tmpDir,
+			CacheType:   sop.InMemory,
+		},
+		Cache: db.Cache(),
 	})
 	if err != nil {
 		t.Fatalf("Open 3 failed: %v", err)

@@ -41,17 +41,12 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
 // Use with care and only when you are sure to delete the tables.
-func RemoveBtree(ctx context.Context, name string) error {
-	sr := NewStoreRepository()
-	return sr.Remove(ctx, name)
-}
-
-// NewStoreRepository is a convenience function to instantiate a repository with necessary File System
-// based blob store implementation.
-func NewStoreRepository() sop.StoreRepository {
+func RemoveBtree(ctx context.Context, name string, cacheType sop.CacheType) error {
 	fio := fs.NewFileIO()
 	mbsf := fs.NewManageStoreFolder(fio)
-	return cas.NewStoreRepository(mbsf)
+	cache := sop.NewCacheClientByType(cacheType)
+	sr := cas.NewStoreRepository(mbsf, nil, cache)
+	return sr.Remove(ctx, name)
 }
 
 // NewStreamingDataStore is a convenience function to easily instantiate a streaming data store that stores

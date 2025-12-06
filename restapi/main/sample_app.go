@@ -14,7 +14,6 @@ import (
 	cas "github.com/sharedcode/sop/adapters/cassandra"
 	"github.com/sharedcode/sop/adapters/redis"
 	"github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/infs"
 
 	"github.com/sharedcode/sop/restapi"
@@ -40,7 +39,7 @@ var redisConfig = redis.Options{
 }
 
 var ctx = context.TODO()
-var ecConfig map[string]fs.ErasureCodingConfig
+var ecConfig map[string]sop.ErasureCodingConfig
 
 func init() {
 	if dp := os.Getenv("datapath"); dp != "" {
@@ -54,8 +53,8 @@ func init() {
 	}
 
 	// Initialize EC config
-	ecConfig = make(map[string]fs.ErasureCodingConfig)
-	ecConfig[""] = fs.ErasureCodingConfig{
+	ecConfig = make(map[string]sop.ErasureCodingConfig)
+	ecConfig[""] = sop.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -68,8 +67,11 @@ func init() {
 	}
 
 	// Initialize Database
-	restapi.DB = database.NewDatabase(database.Clustered, dataPath)
-	restapi.DB.SetReplicationConfig(ecConfig, ecConfig[""].BaseFolderPathsAcrossDrives)
+	restapi.DB = database.NewDatabase(sop.DatabaseOptions{
+		StoragePath:   dataPath,
+		ErasureConfig: ecConfig,
+		StoresFolders: ecConfig[""].BaseFolderPathsAcrossDrives,
+	})
 
 	// Create Stores to ensure we have the sample "objects" btree created in SOP db.
 	if err := createStores(); err != nil {

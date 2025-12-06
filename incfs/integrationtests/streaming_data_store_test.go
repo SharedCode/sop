@@ -14,7 +14,7 @@ import (
 )
 
 func Test_StreamingDataStoreInvalidCases(t *testing.T) {
-	trans, _ := incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 
 	// Empty Store get/update methods test cases.
@@ -32,7 +32,7 @@ func Test_StreamingDataStoreInvalidCases(t *testing.T) {
 }
 
 func Test_StreamingDataStoreBasicUse(t *testing.T) {
-	trans, _ := incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStore", true, 100, "", sop.BigData, dataPath)
 	sds, _ := incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
@@ -43,7 +43,7 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Read back the data. Pass false on 2nd argument will toggle to a "reader" transaction.
-	trans, _ = incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	sds, _ = incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
 
@@ -76,7 +76,7 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 }
 
 func Test_StreamingDataStoreMultipleItems(t *testing.T) {
-	trans, _ := incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStoreM", true, 100, "", sop.BigData, dataPath)
 	sds, _ := incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
@@ -91,7 +91,7 @@ func Test_StreamingDataStoreMultipleItems(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Read back the data. Pass false on 2nd argument will toggle to a "reader" transaction.
-	trans, _ = incfs.NewTransaction(sop.ForReading, -1, true)
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	sds, _ = incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
 
@@ -124,7 +124,7 @@ func Test_StreamingDataStoreMultipleItems(t *testing.T) {
 }
 
 func Test_StreamingDataStoreDeleteAnItem(t *testing.T) {
-	trans, _ := incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStoreD", true, 100, "", sop.BigData, dataPath)
 	sds, _ := incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
@@ -142,7 +142,7 @@ func Test_StreamingDataStoreDeleteAnItem(t *testing.T) {
 	}
 	trans.Commit(ctx)
 
-	trans, _ = incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	sds, _ = incfs.OpenStreamingDataStore[string](ctx, "videoStoreD", trans, nil)
 
@@ -177,7 +177,7 @@ func Test_StreamingDataStoreDeleteAnItem(t *testing.T) {
 
 func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	// Upload the video.
-	trans, _ := incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStoreU", true, 100, "", sop.BigData, dataPath)
 	sds, _ := incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
@@ -188,7 +188,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Update the video.
-	trans, _ = incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	sds, _ = incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
 	encoder, _ = sds.Update(ctx, "fooVideo2")
@@ -201,7 +201,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Read back the video.
-	trans, _ = incfs.NewTransaction(sop.ForReading, -1, true)
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	sds, _ = incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
 
@@ -235,7 +235,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 
 func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 	// Upload the video.
-	trans, _ := incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStore2", true, 100, "", sop.BigData, dataPath)
 	sds, _ := incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
@@ -244,7 +244,7 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Update the video.
-	trans, _ = incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	sds, _ = incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
 	encoder, _ = sds.Update(ctx, "fooVideo1")
@@ -260,7 +260,7 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 
 func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 	// Upload the video.
-	trans, _ := incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStore4", true, 100, "", sop.BigData, dataPath)
 	sds, _ := incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
@@ -269,7 +269,7 @@ func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Update the video.
-	trans, _ = incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	sds, _ = incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
 	encoder, _ = sds.Update(ctx, "fooVideo3")
@@ -286,7 +286,7 @@ func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 
 func Test_StreamingDataStoreUpdate(t *testing.T) {
 	// Upload the video.
-	trans, _ := incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStore5", true, 100, "", sop.BigData, dataPath)
 	sds, _ := incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
@@ -295,7 +295,7 @@ func Test_StreamingDataStoreUpdate(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Update the video.
-	trans, _ = incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	sds, _ = incfs.NewStreamingDataStore[string](ctx, so, trans, nil)
 	encoder, _ = sds.Update(ctx, "fooVideo")
@@ -310,7 +310,7 @@ func Test_StreamingDataStoreUpdate(t *testing.T) {
 
 func Test_StreamingDataStoreDelete(t *testing.T) {
 	// Upload the video.
-	trans, _ := incfs.NewTransaction(sop.ForWriting, -1, true)
+	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStore3", true, 100, "", sop.BigData, dataPath)
 	sds, _ := incfs.NewStreamingDataStore[string](ctx, so, trans, nil)

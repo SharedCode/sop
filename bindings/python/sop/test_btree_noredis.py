@@ -3,8 +3,8 @@ from . import transaction
 from . import btree
 from . import context
 from .ai import Database, DBType
+from .database import DatabaseOptions
 
-from datetime import timedelta
 from .redis import *
 
 from dataclasses import dataclass
@@ -65,7 +65,7 @@ class TestBtree(unittest.TestCase):
         # Redis.open_connection("redis://localhost:6379")
 
         # Initialize DB
-        cls.db = Database(ctx, storage_path=stores_folders[0], db_type=DBType.Standalone, stores_folders=list(stores_folders))
+        cls.db = Database(DatabaseOptions(storage_path=stores_folders[0], db_type=DBType.Standalone, stores_folders=list(stores_folders)))
 
         # create the "barstoreec" b-tree store.
         t = cls.db.begin_transaction(ctx, options=to)
@@ -252,7 +252,7 @@ class TestBtreeMapKey(unittest.TestCase):
         # Redis.open_connection("redis://localhost:6379")
 
         # Initialize DB
-        cls.db = Database(ctx, storage_path=stores_folders[0], db_type=DBType.Standalone, stores_folders=list(stores_folders))
+        cls.db = Database(DatabaseOptions(storage_path=stores_folders[0], db_type=DBType.Standalone, stores_folders=list(stores_folders)))
 
         t = cls.db.begin_transaction(ctx, options=to)
 

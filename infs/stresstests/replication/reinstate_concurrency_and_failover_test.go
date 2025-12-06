@@ -31,7 +31,7 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 		fmt.Sprintf("%s%cdisk8", dataPath, os.PathSeparator),
 		fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
 	}
-	ec := map[string]fs.ErasureCodingConfig{
+	ec := map[string]sop.ErasureCodingConfig{
 		"": {
 			DataShardsCount:   2,
 			ParityShardsCount: 2,
@@ -44,7 +44,13 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 			RepairCorruptedShards: true,
 		},
 	}
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, stores, ec)
+	to := sop.TransactionOptions{
+		Mode:                 sop.ForWriting,
+		MaxTime:              -1,
+		RegistryHashModValue: fs.MinimumModValue,
+		StoresFolders:        stores,
+		ErasureConfig:        ec,
+	}
 
 	// Do not clear Redis here; we want to run across time.
 

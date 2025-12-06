@@ -15,6 +15,7 @@ import (
 )
 
 type storeRepository struct {
+	connection      *Connection
 	cache           sop.L2Cache
 	manageBlobStore sop.ManageStore
 }
@@ -25,9 +26,10 @@ const updateStoresLockDuration = time.Duration(15 * time.Minute)
 // NewStoreRepository manages the StoreInfo in Cassandra table.
 // Passing in nil to "managedBlobStore" will use default implementation in StoreRepository itself
 // for managing Blob Store table in Cassandra.
-func NewStoreRepository(manageBlobStore sop.ManageStore) sop.StoreRepository {
+func NewStoreRepository(manageBlobStore sop.ManageStore, customConnection *Connection, cache sop.L2Cache) sop.StoreRepository {
 	r := &storeRepository{
-		cache:           sop.NewCacheClient(),
+		connection:      customConnection,
+		cache:           cache,
 		manageBlobStore: manageBlobStore,
 	}
 	// Default to an implementation of this Store Repository for managing the blob table in Cassandra.
@@ -37,22 +39,38 @@ func NewStoreRepository(manageBlobStore sop.ManageStore) sop.StoreRepository {
 	return r
 }
 
+func (sr *storeRepository) getConnection() (*Connection, error) {
+	if sr.connection != nil {
+		return sr.connection, nil
+	}
+	return GetGlobalConnection()
+}
+
+func (sr *storeRepository) formatKey(key string) (string, error) {
+	conn, err := sr.getConnection()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s:%s", conn.Config.Keyspace, key), nil
+}
+
 // Add inserts store metadata and creates corresponding registry and blob tables.
 // It also writes the store info into Redis for faster subsequent reads (best-effort cache update).
 func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) error {
-	if connection == nil {
-		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := sr.getConnection()
+	if err != nil {
+		return err
 	}
-	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb, rcd, rc_ttl, ncd, nc_ttl, vdcd, vdc_ttl, scd, sc_ttl) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);", connection.Config.Keyspace)
+	insertStatement := fmt.Sprintf("INSERT INTO %s.store (name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb, rcd, rc_ttl, ncd, nc_ttl, vdcd, vdc_ttl, scd, sc_ttl) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);", conn.Config.Keyspace)
 	for _, s := range stores {
 
 		// Add a new store record.
-		qry := connection.Session.Query(insertStatement, s.Name, gocql.UUID(s.RootNodeID), s.SlotLength, s.Count, s.IsUnique, s.Description,
+		qry := conn.Session.Query(insertStatement, s.Name, gocql.UUID(s.RootNodeID), s.SlotLength, s.Count, s.IsUnique, s.Description,
 			s.RegistryTable, s.BlobTable, s.Timestamp, s.IsValueDataInNodeSegment, s.IsValueDataActivelyPersisted, s.IsValueDataGloballyCached,
 			s.LeafLoadBalancing, s.CacheConfig.RegistryCacheDuration, s.CacheConfig.IsRegistryCacheTTL, s.CacheConfig.NodeCacheDuration, s.CacheConfig.IsNodeCacheTTL,
 			s.CacheConfig.ValueDataCacheDuration, s.CacheConfig.IsValueDataCacheTTL, s.CacheConfig.StoreInfoCacheDuration, s.CacheConfig.IsStoreInfoCacheTTL).WithContext(ctx)
-		if connection.Config.ConsistencyBook.StoreAdd > gocql.Any {
-			qry.Consistency(connection.Config.ConsistencyBook.StoreAdd)
+		if conn.Config.ConsistencyBook.StoreAdd > gocql.Any {
+			qry.Consistency(conn.Config.ConsistencyBook.StoreAdd)
 		}
 		if err := qry.Exec(); err != nil {
 			return fmt.Errorf("cassandra store add failed for %s: %w", s.Name, err)
@@ -65,17 +83,20 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 
 		// Create a new Virtual ID registry table.
 		createNewRegistry := fmt.Sprintf("CREATE TABLE %s.%s(lid UUID PRIMARY KEY, is_idb boolean, p_ida UUID, p_idb UUID, ver int, wip_ts bigint, is_del boolean);",
-			connection.Config.Keyspace, s.RegistryTable)
-		qry = connection.Session.Query(createNewRegistry).WithContext(ctx)
-		if connection.Config.ConsistencyBook.StoreAdd > gocql.Any {
-			qry.Consistency(connection.Config.ConsistencyBook.StoreAdd)
+			conn.Config.Keyspace, s.RegistryTable)
+		qry = conn.Session.Query(createNewRegistry).WithContext(ctx)
+		if conn.Config.ConsistencyBook.StoreAdd > gocql.Any {
+			qry.Consistency(conn.Config.ConsistencyBook.StoreAdd)
 		}
 		if err := qry.Exec(); err != nil {
 			return fmt.Errorf("cassandra create registry table failed for %s: %w", s.RegistryTable, err)
 		}
 		// Tolerate error in Redis caching.
-		if err := sr.cache.SetStruct(ctx, s.Name, &s, s.CacheConfig.StoreInfoCacheDuration); err != nil {
-			log.Warn(fmt.Sprintf("StoreRepository Add failed (redis setstruct), details: %v", err))
+		key, err := sr.formatKey(s.Name)
+		if err == nil {
+			if err := sr.cache.SetStruct(ctx, key, &s, s.CacheConfig.StoreInfoCacheDuration); err != nil {
+				log.Warn(fmt.Sprintf("StoreRepository Add failed (redis setstruct), details: %v", err))
+			}
 		}
 	}
 	return nil
@@ -84,8 +105,9 @@ func (sr *storeRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 // Update applies CountDelta and timestamp changes with distributed locks to reduce contention.
 // It keeps a copy of the previous state to attempt an undo on partial failures.
 func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) ([]sop.StoreInfo, error) {
-	if connection == nil {
-		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := sr.getConnection()
+	if err != nil {
+		return nil, err
 	}
 
 	if len(stores) == 0 {
@@ -99,7 +121,11 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 	// Create lock IDs that we can use to logically lock and prevent other updates.
 	keys := make([]string, len(stores))
 	for i := range stores {
-		keys[i] = stores[i].Name
+		k, err := sr.formatKey(stores[i].Name)
+		if err != nil {
+			return nil, err
+		}
+		keys[i] = k
 	}
 	lockKeys := sr.cache.CreateLockKeys(keys)
 
@@ -118,7 +144,7 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 		return nil, fmt.Errorf("cassandra store update lock failed: %w", err)
 	}
 
-	updateStatement := fmt.Sprintf("UPDATE %s.store SET count = ?, ts = ? WHERE name = ?;", connection.Config.Keyspace)
+	updateStatement := fmt.Sprintf("UPDATE %s.store SET count = ?, ts = ? WHERE name = ?;", conn.Config.Keyspace)
 	undo := func(endIndex int, original []sop.StoreInfo) {
 		// Attempt to undo changes, 'ignores error as it is a last attempt to cleanup.
 		for ii := 0; ii < endIndex; ii++ {
@@ -134,16 +160,19 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 			si.Count = si.Count - stores[ii].CountDelta
 			si.Timestamp = original[ii].Timestamp
 
-			qry := connection.Session.Query(updateStatement, si.Count, si.Timestamp, si.Name)
-			if connection.Config.ConsistencyBook.StoreUpdate > gocql.Any {
-				qry.Consistency(connection.Config.ConsistencyBook.StoreUpdate)
+			qry := conn.Session.Query(updateStatement, si.Count, si.Timestamp, si.Name)
+			if conn.Config.ConsistencyBook.StoreUpdate > gocql.Any {
+				qry.Consistency(conn.Config.ConsistencyBook.StoreUpdate)
 			}
 			if err := qry.Exec(); err != nil {
 				log.Warn("StoreRepository Update Undo failed", "store", si.Name, "error", err)
 				continue
 			}
-			if err := sr.cache.SetStruct(ctx, si.Name, &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
-				log.Warn("StoreRepository Update Undo (redis setstruct) failed", "store", si.Name, "error", err)
+			key, err := sr.formatKey(si.Name)
+			if err == nil {
+				if err := sr.cache.SetStruct(ctx, key, &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
+					log.Warn("StoreRepository Update Undo (redis setstruct) failed", "store", si.Name, "error", err)
+				}
 			}
 		}
 	}
@@ -162,9 +191,9 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 		// Merge or apply the "count delta".
 		stores[i].Count = si.Count + stores[i].CountDelta
 
-		qry := connection.Session.Query(updateStatement, stores[i].Count, stores[i].Timestamp, stores[i].Name)
-		if connection.Config.ConsistencyBook.StoreUpdate > gocql.Any {
-			qry.Consistency(connection.Config.ConsistencyBook.StoreUpdate)
+		qry := conn.Session.Query(updateStatement, stores[i].Count, stores[i].Timestamp, stores[i].Name)
+		if conn.Config.ConsistencyBook.StoreUpdate > gocql.Any {
+			qry.Consistency(conn.Config.ConsistencyBook.StoreUpdate)
 		}
 
 		// Update store record.
@@ -176,8 +205,11 @@ func (sr *storeRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 
 		beforeUpdateStores = append(beforeUpdateStores, sis...)
 		// Tolerate redis error since we've successfully updated the master table.
-		if err := sr.cache.SetStruct(ctx, stores[i].Name, &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
-			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) store %s failed, details: %v", stores[i].Name, err))
+		key, err := sr.formatKey(stores[i].Name)
+		if err == nil {
+			if err := sr.cache.SetStruct(ctx, key, &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
+				log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) store %s failed, details: %v", stores[i].Name, err))
+			}
 		}
 	}
 
@@ -191,14 +223,15 @@ func (sr *storeRepository) Get(ctx context.Context, names ...string) ([]sop.Stor
 
 // GetAll returns all store names from Cassandra.
 func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
-	if connection == nil {
-		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := sr.getConnection()
+	if err != nil {
+		return nil, err
 	}
-	selectStatement := fmt.Sprintf("SELECT name FROM %s.store;", connection.Config.Keyspace)
+	selectStatement := fmt.Sprintf("SELECT name FROM %s.store;", conn.Config.Keyspace)
 
-	qry := connection.Session.Query(selectStatement).WithContext(ctx)
-	if connection.Config.ConsistencyBook.StoreGet > gocql.Any {
-		qry.Consistency(connection.Config.ConsistencyBook.StoreGet)
+	qry := conn.Session.Query(selectStatement).WithContext(ctx)
+	if conn.Config.ConsistencyBook.StoreGet > gocql.Any {
+		qry.Consistency(conn.Config.ConsistencyBook.StoreGet)
 	}
 
 	iter := qry.Iter()
@@ -217,8 +250,9 @@ func (sr *storeRepository) GetAll(ctx context.Context) ([]string, error) {
 // GetWithTTL returns store infos, optionally extending TTL in Redis when isCacheTTL is true.
 // Any records fetched from Cassandra are written back to Redis (best-effort).
 func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cacheDuration time.Duration, names ...string) ([]sop.StoreInfo, error) {
-	if connection == nil {
-		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := sr.getConnection()
+	if err != nil {
+		return nil, err
 	}
 	stores := make([]sop.StoreInfo, 0, len(names))
 	// Format some variadic ? and convert to interface the names param.
@@ -228,10 +262,13 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 		store := sop.StoreInfo{}
 		var err error
 		var found bool
-		if isCacheTTL {
-			found, err = sr.cache.GetStructEx(ctx, names[i], &store, cacheDuration)
-		} else {
-			found, err = sr.cache.GetStruct(ctx, names[i], &store)
+		key, err := sr.formatKey(names[i])
+		if err == nil {
+			if isCacheTTL {
+				found, err = sr.cache.GetStructEx(ctx, key, &store, cacheDuration)
+			} else {
+				found, err = sr.cache.GetStruct(ctx, key, &store)
+			}
 		}
 		if err != nil {
 			log.Warn("StoreRepository Get (redis getstruct) failed", "error", err)
@@ -247,11 +284,11 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 		return stores, nil
 	}
 	selectStatement := fmt.Sprintf("SELECT name, root_id, slot_count, count, unique, des, reg_tbl, blob_tbl, ts, vdins, vdap, vdgc, llb, rcd, rc_ttl, ncd, nc_ttl, vdcd, vdc_ttl, scd, sc_ttl FROM %s.store  WHERE name in (%v);",
-		connection.Config.Keyspace, strings.Join(paramQ, ", "))
+		conn.Config.Keyspace, strings.Join(paramQ, ", "))
 
-	qry := connection.Session.Query(selectStatement, namesAsIntf...).WithContext(ctx)
-	if connection.Config.ConsistencyBook.StoreGet > gocql.Any {
-		qry.Consistency(connection.Config.ConsistencyBook.StoreGet)
+	qry := conn.Session.Query(selectStatement, namesAsIntf...).WithContext(ctx)
+	if conn.Config.ConsistencyBook.StoreGet > gocql.Any {
+		qry.Consistency(conn.Config.ConsistencyBook.StoreGet)
 	}
 
 	iter := qry.Iter()
@@ -263,8 +300,11 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 		&store.CacheConfig.ValueDataCacheDuration, &store.CacheConfig.IsValueDataCacheTTL, &store.CacheConfig.StoreInfoCacheDuration, &store.CacheConfig.IsStoreInfoCacheTTL) {
 		store.RootNodeID = sop.UUID(rid)
 
-		if err := sr.cache.SetStruct(ctx, store.Name, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
-			log.Warn("StoreRepository Get (redis setstruct) failed", "error", err)
+		key, err := sr.formatKey(store.Name)
+		if err == nil {
+			if err := sr.cache.SetStruct(ctx, key, &store, store.CacheConfig.StoreInfoCacheDuration); err != nil {
+				log.Warn("StoreRepository Get (redis setstruct) failed", "error", err)
+			}
 		}
 
 		stores = append(stores, store)
@@ -279,8 +319,9 @@ func (sr *storeRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 
 // Remove deletes store records and drops their associated Cassandra tables, also evicting from Redis.
 func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
-	if connection == nil {
-		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := sr.getConnection()
+	if err != nil {
+		return err
 	}
 
 	if len(names) == 0 {
@@ -299,10 +340,10 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 		paramQ[i] = "?"
 		namesAsIntf[i] = interface{}(names[i])
 	}
-	deleteStatement := fmt.Sprintf("DELETE FROM %s.store WHERE name in (%v);", connection.Config.Keyspace, strings.Join(paramQ, ", "))
-	qry := connection.Session.Query(deleteStatement, namesAsIntf...).WithContext(ctx)
-	if connection.Config.ConsistencyBook.StoreRemove > gocql.Any {
-		qry.Consistency(connection.Config.ConsistencyBook.StoreRemove)
+	deleteStatement := fmt.Sprintf("DELETE FROM %s.store WHERE name in (%v);", conn.Config.Keyspace, strings.Join(paramQ, ", "))
+	qry := conn.Session.Query(deleteStatement, namesAsIntf...).WithContext(ctx)
+	if conn.Config.ConsistencyBook.StoreRemove > gocql.Any {
+		qry.Consistency(conn.Config.ConsistencyBook.StoreRemove)
 	}
 	if err := qry.Exec(); err != nil {
 		return fmt.Errorf("cassandra store remove failed: %w", err)
@@ -310,7 +351,15 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 
 	// Delete the store records in Redis.
 	// Tolerate Redis cache failure.
-	if _, err := sr.cache.Delete(ctx, names); err != nil {
+	keys := make([]string, len(names))
+	for i := range names {
+		k, err := sr.formatKey(names[i])
+		if err != nil {
+			return err
+		}
+		keys[i] = k
+	}
+	if _, err := sr.cache.Delete(ctx, keys); err != nil {
 		log.Warn("StoreRepository Remove (redis Delete) failed", "error", err)
 	}
 
@@ -322,10 +371,10 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 			}
 		}
 		// Drop Virtual ID registry table.
-		dropRegistryTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, sop.FormatRegistryTable(n))
-		qry = connection.Session.Query(dropRegistryTable).WithContext(ctx)
-		if connection.Config.ConsistencyBook.StoreRemove > gocql.Any {
-			qry.Consistency(connection.Config.ConsistencyBook.StoreRemove)
+		dropRegistryTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", conn.Config.Keyspace, sop.FormatRegistryTable(n))
+		qry = conn.Session.Query(dropRegistryTable).WithContext(ctx)
+		if conn.Config.ConsistencyBook.StoreRemove > gocql.Any {
+			qry.Consistency(conn.Config.ConsistencyBook.StoreRemove)
 		}
 		if err := qry.Exec(); err != nil {
 			return fmt.Errorf("cassandra store remove (registry table) failed: %w", err)
@@ -337,11 +386,15 @@ func (sr *storeRepository) Remove(ctx context.Context, names ...string) error {
 
 // CreateStore creates a Cassandra blob table for storing node blobs.
 func (sr *storeRepository) CreateStore(ctx context.Context, blobStoreName string) error {
+	conn, err := sr.getConnection()
+	if err != nil {
+		return err
+	}
 	// Create a new Blob table.
-	createNewBlobTable := fmt.Sprintf("CREATE TABLE %s.%s(id UUID PRIMARY KEY, node blob);", connection.Config.Keyspace, blobStoreName)
-	qry := connection.Session.Query(createNewBlobTable).WithContext(ctx)
-	if connection.Config.ConsistencyBook.StoreAdd > gocql.Any {
-		qry.Consistency(connection.Config.ConsistencyBook.StoreAdd)
+	createNewBlobTable := fmt.Sprintf("CREATE TABLE %s.%s(id UUID PRIMARY KEY, node blob);", conn.Config.Keyspace, blobStoreName)
+	qry := conn.Session.Query(createNewBlobTable).WithContext(ctx)
+	if conn.Config.ConsistencyBook.StoreAdd > gocql.Any {
+		qry.Consistency(conn.Config.ConsistencyBook.StoreAdd)
 	}
 	if err := qry.Exec(); err != nil {
 		return fmt.Errorf("cassandra create store failed: %w", err)
@@ -351,12 +404,16 @@ func (sr *storeRepository) CreateStore(ctx context.Context, blobStoreName string
 
 // RemoveStore drops a Cassandra blob table used by a store.
 func (sr *storeRepository) RemoveStore(ctx context.Context, blobStoreName string) error {
+	conn, err := sr.getConnection()
+	if err != nil {
+		return err
+	}
 	// Drop Blob table.
-	dropBlobTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", connection.Config.Keyspace, blobStoreName)
+	dropBlobTable := fmt.Sprintf("DROP TABLE IF EXISTS %s.%s;", conn.Config.Keyspace, blobStoreName)
 
-	qry := connection.Session.Query(dropBlobTable).WithContext(ctx)
-	if connection.Config.ConsistencyBook.StoreRemove > gocql.Any {
-		qry.Consistency(connection.Config.ConsistencyBook.StoreRemove)
+	qry := conn.Session.Query(dropBlobTable).WithContext(ctx)
+	if conn.Config.ConsistencyBook.StoreRemove > gocql.Any {
+		qry.Consistency(conn.Config.ConsistencyBook.StoreRemove)
 	}
 	if err := qry.Exec(); err != nil {
 		return fmt.Errorf("cassandra remove store failed: %w", err)

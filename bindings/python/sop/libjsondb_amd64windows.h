@@ -44,6 +44,12 @@ typedef struct { const char *p; ptrdiff_t n; } _GoString_;
 
 #line 1 "cgo-generated-wrapper"
 
+#line 3 "jsondb.search.go"
+
+#include <stdlib.h>
+
+#line 1 "cgo-generated-wrapper"
+
 
 /* End of preamble from import "C" comments.  */
 
@@ -125,10 +131,14 @@ extern __declspec(dllexport) char* contextError(long long int ctxID);
 //
 extern __declspec(dllexport) char* openRedisConnection(char* uri);
 extern __declspec(dllexport) char* closeRedisConnection();
+extern __declspec(dllexport) char* openCassandraConnection(char* payload);
+extern __declspec(dllexport) char* closeCassandraConnection();
+extern __declspec(dllexport) char* manageLogging(int level, char* logPath);
 extern __declspec(dllexport) char* manageTransaction(long long int ctxID, int action, char* payload);
 extern __declspec(dllexport) char* manageDatabase(long long int ctxID, int action, char* targetID, char* payload);
 extern __declspec(dllexport) void freeString(char* cString);
 extern __declspec(dllexport) char* manageBtree(long long int ctxID, int action, char* payload, char* payload2);
+extern __declspec(dllexport) char* manageSearch(long long int ctxID, int action, char* targetID, char* payload);
 
 #ifdef __cplusplus
 }

@@ -19,7 +19,7 @@ import (
 // Transaction rolls back, new completes fine.
 // Reader transaction succeeds.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t0, _ := infs.NewTransaction(ctx, to)
 	t0.Begin(ctx)
 	b3, err := infs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -75,7 +75,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		t.Error("Commit #2, got = succeess, want = fail.")
 	}
 
-	to2, _ := infs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+	to2 := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, _ = infs.NewTransaction(ctx, to2)
 	t1.Begin(ctx)
 	b3, _ = infs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
@@ -100,7 +100,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 // Two transactions updating different items with no collision but items'
 // keys are sequential/contiguous between the two.
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t0, _ := infs.NewTransaction(ctx, to)
 	t0.Begin(ctx)
 	b3, err := infs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -157,7 +157,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 
 // Reader transaction fails commit when an item read was modified by another transaction in-flight.
 func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t0, _ := infs.NewTransaction(ctx, to)
 	t0.Begin(ctx)
 
@@ -185,7 +185,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	t0.Commit(ctx)
 
 	t1, _ := infs.NewTransaction(ctx, to)
-	to2, _ := infs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+	to2 := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t2, _ := infs.NewTransaction(ctx, to2)
 
 	t1.Begin(ctx)
@@ -217,7 +217,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 // Node merging and row(or item) level conflict detection.
 // Case: Reader transaction succeeds commit, while another item in same Node got updated by another transaction.
 func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t0, _ := infs.NewTransaction(ctx, to)
 	t0.Begin(ctx)
 
@@ -247,7 +247,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 	t0.Commit(ctx)
 
 	t1, _ := infs.NewTransaction(ctx, to)
-	to2, _ := infs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+	to2 := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t2, _ := infs.NewTransaction(ctx, to2)
 
 	t1.Begin(ctx)
@@ -278,7 +278,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 
 // One transaction updates a colliding item in 1st and a 2nd trans.
 func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t0, _ := infs.NewTransaction(ctx, to)
 	t0.Begin(ctx)
 
@@ -369,7 +369,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	infs.RemoveBtree(ctx, dataPath, "twophase2", nil)
 
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, _ := infs.NewTransaction(ctx, to)
 	t1.Begin(ctx)
 	b3, _ := infs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -414,7 +414,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 		return
 	}
 
-	to2, _ := infs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+	to2 := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, _ = infs.NewTransaction(ctx, to2)
 	t1.Begin(ctx)
 

@@ -1,12 +1,13 @@
-import json
 from . import call_go
 import uuid
 from . import context
 from typing import List
 
 from enum import Enum
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
+
+from typing import Dict, Optional
 
 class TransactionMode(Enum):
     """
@@ -81,19 +82,22 @@ class ErasureCodingConfig:
 
 
 @dataclass
-class TransactionOptions:
-    mode: int
-    # max_time in Python is in minutes, SOP in Golang will convert that to respective time.duration value.
-    max_time: int
+class DatabaseOptions:
+    db_type: DBType = DBType.Standalone
+    erasure_config: Optional[Dict[str, ErasureCodingConfig]] = None
+    stores_folders: Optional[List[str]] = None
+    keyspace: Optional[str] = None
     # Registry hash mod, minimum value is 250, max is 750000. Hash mod is used on Registry map on disk.
     # At 250, 1MB segment file is generated. See comment about the equivalent in Golang side (for now).
-    registry_hash_mod: int
-    # Stores' base folder path (home folder).
-    stores_folders: List[str] = None
-    # EC config.
-    erasure_config: dict[str, ErasureCodingConfig] = None
-    # DB Type (0: Standalone, 1: Clustered)
-    db_type: int = 0
+    registry_hash_mod: int = -1
+
+@dataclass
+class TransactionOptions(DatabaseOptions):
+    mode: int = TransactionMode.ForWriting.value
+    # max_time in Python is in minutes, SOP in Golang will convert that to respective time.duration value.
+    max_time: int = 0
+    # Logging enables transaction logging.
+    logging: bool = False
 
 
 class TransactionError(Exception):

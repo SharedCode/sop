@@ -2,40 +2,43 @@ import os
 import shutil
 import sys
 import uuid
-from dataclasses import asdict
 
 # Add the parent directory to sys.path to import sop
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from sop import call_go, Context
-from sop.ai import Database, Item, UsageMode, DBType
-from sop.transaction import Transaction, TransactionOptions, TransactionMode, ErasureCodingConfig
+from sop import Context
+from sop.ai import Database, Item, DBType
+from sop.database import DatabaseOptions
+from sop.transaction import TransactionMode, ErasureCodingConfig
 from sop.redis import Redis
 
 def main():
     print("Attempting to connect to Redis (localhost:6379)...")
     try:
-        Redis.open_connection("redis://localhost:6379")
+        Redis.initialize("redis://localhost:6379")
     except Exception as e:
         print(f"Skipping Clustered Replication Demo: Could not connect to Redis. Error: {e}")
         return
 
     # Define paths
-    active_path = "vec_clus_repl_active"
-    passive_path = "vec_clus_repl_passive"
+    active_path = os.path.abspath("vec_clus_repl_active")
+    passive_path = os.path.abspath("vec_clus_repl_passive")
     
-    # Define paths for Erasure Coding shards
-    shard_paths = [
-        "vec_clus_repl_shard_1",
-        "vec_clus_repl_shard_2",
-        "vec_clus_repl_shard_3",
-        "vec_clus_repl_shard_4"
-    ]
+    # Create 4 shard paths for EC
+    shard_paths = [os.path.abspath(f"vec_clus_repl_shard_{i}") for i in range(4)]
 
     # Clean up previous run
     for p in [active_path, passive_path] + shard_paths:
         if os.path.exists(p):
             shutil.rmtree(p)
+        os.makedirs(p, exist_ok=True)
+
+    # Clean up Redis to ensure metadata is consistent with filesystem
+    try:
+        import subprocess
+        subprocess.run(["redis-cli", "flushall"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except:
+        print("Warning: Could not flush Redis. If you have stale data, the demo might fail.")
 
     print("Initializing SOP Vector Database (Clustered + Replicated + EC)...")
     
@@ -50,26 +53,16 @@ def main():
     ctx = Context()
     
     # Initialize Database with Clustered Type AND Replication Config
-    db = Database(
-        ctx,
-        storage_path=active_path, 
+    db = Database(DatabaseOptions(
         db_type=DBType.Clustered, # <--- Clustered Mode
         erasure_config={"": ec_config},
         stores_folders=[active_path, passive_path]
-    )
+    ))
     
     print("\n--- Explicit Transaction (Clustered + Replicated) ---")
     
-    trans_opts = TransactionOptions(
-        mode=TransactionMode.ForWriting.value,
-        max_time=15,
-        registry_hash_mod=250,
-        stores_folders=[active_path, passive_path],
-        erasure_config={"": ec_config}
-    )
-
     try:
-        with db.begin_transaction(ctx, options=trans_opts) as trans:
+        with db.begin_transaction(ctx, mode=TransactionMode.ForWriting.value, max_time=15) as trans:
             print("Transaction Started.")
             store = db.open_vector_store(ctx, trans, "demo_store_clus_repl")
             
@@ -80,7 +73,7 @@ def main():
             print("Committing...")
         
         # Verify
-        with db.begin_transaction(ctx, options=trans_opts) as trans_read:
+        with db.begin_transaction(ctx, mode=TransactionMode.ForReading.value, max_time=15) as trans_read:
             store_read = db.open_vector_store(ctx, trans_read, "demo_store_clus_repl")
             fetched = store_read.get(ctx, item1.id)
             print(f"Verified Item 1: {fetched.payload['name']}")
@@ -109,7 +102,7 @@ def main():
         for p in [active_path, passive_path] + shard_paths:
             if os.path.exists(p):
                 shutil.rmtree(p)
-        Redis.close_connection()
+        Redis.close()
         print("Demo completed.")
 
 if __name__ == "__main__":

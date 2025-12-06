@@ -1,4 +1,4 @@
-package fs
+package sop
 
 // ErasureCodingConfig defines per-blob-table erasure coding settings, including
 // shard counts, storage locations, and optional automatic shard repair.

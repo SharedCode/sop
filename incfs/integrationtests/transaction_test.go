@@ -51,7 +51,7 @@ const tableName1 = "person2db"
 const tableName2 = "twophase22"
 
 func Test_SimpleAddPerson(t *testing.T) {
-	trans, err := incfs.NewTransaction(sop.ForWriting, -1, false)
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -95,12 +95,12 @@ func Test_SimpleAddPerson(t *testing.T) {
 }
 
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
-	trans, err := incfs.NewTransaction(sop.ForWriting, -1, false)
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
 
-	trans2, _ := incfs.NewTransaction(sop.ForWriting, -1, false)
+	trans2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 
 	trans.Begin(ctx)
 	trans2.Begin(ctx)
@@ -135,7 +135,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 }
 
 func Test_AddAndSearchManyPersons(t *testing.T) {
-	trans, err := incfs.NewTransaction(sop.ForWriting, -1, false)
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -168,7 +168,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	trans, err = incfs.NewTransaction(sop.ForReading, -1, false)
+	trans, err = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false})
 	if err != nil {
 		t.Error(err.Error())
 		t.Fail()
@@ -202,7 +202,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := incfs.NewTransaction(sop.ForWriting, -1, false)
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	t1.Begin(ctx)
 	b3, _ := incfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
@@ -223,7 +223,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = incfs.NewTransaction(sop.ForWriting, -1, false)
+			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 			t1.Begin(ctx)
 			b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, tableName1, t1, Compare)
 		}
@@ -247,7 +247,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = incfs.NewTransaction(sop.ForReading, -1, false)
+			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false})
 			t1.Begin(ctx)
 			b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, tableName1, t1, Compare)
 		}
@@ -259,7 +259,7 @@ func Test_VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := incfs.NewTransaction(sop.ForWriting, -1, false)
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	t1.Begin(ctx)
 	b3, _ := incfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
@@ -282,7 +282,7 @@ func Test_VolumeDeletes(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = incfs.NewTransaction(sop.ForWriting, -1, false)
+			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 			t1.Begin(ctx)
 			b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, tableName1, t1, Compare)
 		}
@@ -295,7 +295,7 @@ func Test_MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
 
-	t1, _ := incfs.NewTransaction(sop.ForWriting, -1, false)
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	t1.Begin(ctx)
 	b3, _ := incfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     tableName1,
@@ -333,7 +333,7 @@ func Test_MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = incfs.NewTransaction(sop.ForWriting, -1, false)
+			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 			t1.Begin(ctx)
 			b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, tableName1, t1, Compare)
 		}
@@ -369,7 +369,7 @@ func Test_MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = incfs.NewTransaction(sop.ForWriting, -1, false)
+			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 			t1.Begin(ctx)
 			b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, tableName1, t1, Compare)
 		}
@@ -377,7 +377,7 @@ func Test_MixedOperations(t *testing.T) {
 }
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
-	t1, _ := incfs.NewTransaction(sop.ForWriting, -1, false)
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	t1.Begin(ctx)
 
 	b3, _ := incfs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -391,7 +391,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	}, t1, nil)
 	_ = t1.Commit(ctx)
 
-	t1, _ = incfs.NewTransaction(sop.ForWriting, -1, false)
+	t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	t1.Begin(ctx)
 
 	b3, _ = incfs.OpenBtree[int, string](ctx, tableName2, t1, nil)
@@ -410,7 +410,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 			t.Errorf("Rollback error: %v", err)
 		}
 
-		t1, _ = incfs.NewTransaction(sop.ForWriting, -1, false)
+		t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 		t1.Begin(ctx)
 
 		b3, _ = incfs.OpenBtree[int, string](ctx, tableName2, t1, nil)
@@ -423,7 +423,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 }
 
 func Test_IllegalBtreeStoreName(t *testing.T) {
-	t1, _ := incfs.NewTransaction(sop.ForWriting, -1, false)
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	t1.Begin(ctx)
 
 	if _, err := incfs.NewBtree[int, string](ctx, sop.StoreOptions{

@@ -34,28 +34,38 @@ func IsNil(id gocql.UUID) bool {
 
 type transactionLog struct {
 	dummy
+	connection  *Connection
 	hourLockKey *sop.LockKey
 	cache       sop.L2Cache
 }
 
 // NewTransactionLog returns a Cassandra-backed implementation of sop.TransactionLog.
-func NewTransactionLog() sop.TransactionLog {
+func NewTransactionLog(customConnection *Connection) sop.TransactionLog {
 	c := sop.NewCacheClient()
 	return &transactionLog{
+		connection:  customConnection,
 		cache:       c,
 		hourLockKey: c.CreateLockKeys([]string{"HBP"})[0],
 		dummy:       dummy{},
 	}
 }
 
+func (tl *transactionLog) getConnection() (*Connection, error) {
+	if tl.connection != nil {
+		return tl.connection, nil
+	}
+	return GetGlobalConnection()
+}
+
 // Add writes a log entry (commit function and payload) for the specified transaction ID into Cassandra (t_log table).
 func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction int, payload []byte) error {
-	if connection == nil {
-		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := tl.getConnection()
+	if err != nil {
+		return err
 	}
 
-	insertStatement := fmt.Sprintf("INSERT INTO %s.t_log (id, c_f, c_f_p) VALUES(?,?,?);", connection.Config.Keyspace)
-	qry := connection.Session.Query(insertStatement, gocql.UUID(tid), commitFunction, payload).WithContext(ctx).Consistency(transactionLoggingConsistency)
+	insertStatement := fmt.Sprintf("INSERT INTO %s.t_log (id, c_f, c_f_p) VALUES(?,?,?);", conn.Config.Keyspace)
+	qry := conn.Session.Query(insertStatement, gocql.UUID(tid), commitFunction, payload).WithContext(ctx).Consistency(transactionLoggingConsistency)
 	if err := qry.Exec(); err != nil {
 		return err
 	}
@@ -64,12 +74,13 @@ func (tl *transactionLog) Add(ctx context.Context, tid sop.UUID, commitFunction 
 
 // Remove deletes transaction log records in the t_log table for the given transaction ID.
 func (tl *transactionLog) Remove(ctx context.Context, tid sop.UUID) error {
-	if connection == nil {
-		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := tl.getConnection()
+	if err != nil {
+		return err
 	}
 
-	deleteStatement := fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
-	qry := connection.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(transactionLoggingConsistency)
+	deleteStatement := fmt.Sprintf("DELETE FROM %s.t_log WHERE id = ?;", conn.Config.Keyspace)
+	qry := conn.Session.Query(deleteStatement, gocql.UUID(tid)).WithContext(ctx).Consistency(transactionLoggingConsistency)
 	if err := qry.Exec(); err != nil {
 		return err
 	}
@@ -121,8 +132,9 @@ func (tl *transactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UU
 	if hour == "" {
 		return sop.NilUUID, nil, nil
 	}
-	if connection == nil {
-		return sop.NilUUID, nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := tl.getConnection()
+	if err != nil {
+		return sop.NilUUID, nil, err
 	}
 
 	t, err := time.Parse(DateHourLayout, hour)
@@ -141,8 +153,8 @@ func (tl *transactionLog) GetOneOfHour(ctx context.Context, hour string) (sop.UU
 
 	hrid := gocql.UUIDFromTime(t)
 
-	selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
-	qry := connection.Session.Query(selectStatement, hrid).WithContext(ctx).Consistency(transactionLoggingConsistency)
+	selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", conn.Config.Keyspace)
+	qry := conn.Session.Query(selectStatement, hrid).WithContext(ctx).Consistency(transactionLoggingConsistency)
 
 	iter := qry.Iter()
 	var tid gocql.UUID
@@ -170,12 +182,13 @@ func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error
 	cappedHour := mh.Add(-time.Duration(70 * time.Minute))
 	cappedHourTID := gocql.UUIDFromTime(cappedHour)
 
-	if connection == nil {
-		return "", NilUUID, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := tl.getConnection()
+	if err != nil {
+		return "", NilUUID, err
 	}
 
-	selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", connection.Config.Keyspace)
-	qry := connection.Session.Query(selectStatement, cappedHourTID).WithContext(ctx).Consistency(transactionLoggingConsistency)
+	selectStatement := fmt.Sprintf("SELECT id FROM %s.t_log WHERE id < ? LIMIT 1 ALLOW FILTERING;", conn.Config.Keyspace)
+	qry := conn.Session.Query(selectStatement, cappedHourTID).WithContext(ctx).Consistency(transactionLoggingConsistency)
 
 	iter := qry.Iter()
 	var tid gocql.UUID
@@ -189,12 +202,13 @@ func (tl *transactionLog) getOne(ctx context.Context) (string, gocql.UUID, error
 
 // getLogsDetails reads all commit records for the specified transaction ID from Cassandra.
 func (tl *transactionLog) getLogsDetails(ctx context.Context, tid gocql.UUID) ([]sop.KeyValuePair[int, []byte], error) {
-	if connection == nil {
-		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := tl.getConnection()
+	if err != nil {
+		return nil, err
 	}
 
-	selectStatement := fmt.Sprintf("SELECT c_f, c_f_p FROM %s.t_log WHERE id = ?;", connection.Config.Keyspace)
-	qry := connection.Session.Query(selectStatement, tid).WithContext(ctx).Consistency(transactionLoggingConsistency)
+	selectStatement := fmt.Sprintf("SELECT c_f, c_f_p FROM %s.t_log WHERE id = ?;", conn.Config.Keyspace)
+	qry := conn.Session.Query(selectStatement, tid).WithContext(ctx).Consistency(transactionLoggingConsistency)
 
 	iter := qry.Iter()
 	r := make([]sop.KeyValuePair[int, []byte], 0, iter.NumRows())

@@ -1,14 +1,14 @@
 import os
 import shutil
 import sys
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
 # Add the parent directory to sys.path to import sop
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context
 from sop.ai import Database, DBType
-from sop.transaction import Transaction, TransactionOptions, TransactionMode
+from sop.database import DatabaseOptions
 
 @dataclass
 class MyModel:
@@ -27,19 +27,10 @@ def main():
     print(f"Initializing SOP Database at '{db_path}'...")
     ctx = Context()
     # Initialize the Database (Unified Mode)
-    db = Database(ctx, storage_path=db_path, db_type=DBType.Standalone)
-
-    # Create Transaction Options
-    trans_opts = TransactionOptions(
-        mode=TransactionMode.ForWriting.value,
-        max_time=15,
-        registry_hash_mod=250,
-        stores_folders=[db_path],
-        erasure_config={}
-    )
+    db = Database(DatabaseOptions(stores_folders=[db_path], db_type=DBType.Standalone))
 
     # Start Transaction
-    with db.begin_transaction(ctx, options=trans_opts) as trans:
+    with db.begin_transaction(ctx) as trans:
         print("Transaction Started.")
 
         # Open a Model Store

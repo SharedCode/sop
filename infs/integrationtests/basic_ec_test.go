@@ -15,7 +15,7 @@ import (
 
 func Test_Basic_EC_Short(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders}
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Fatal(err)

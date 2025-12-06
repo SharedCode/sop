@@ -12,7 +12,10 @@ The `vector.Database` struct is a lightweight, stateless handle. It does not mai
 
 ```go
 // Open a handle to the DB (Cluster-safe)
-db := database.NewDatabase(database.Standalone, "/mnt/shared/sop_data")
+db := database.NewDatabase(database.DatabaseOptions{
+    DBType:      database.Standalone,
+    StoragePath: "/mnt/shared/sop_data",
+})
 
 // Open an index (Domain)
 idx := db.Open(context.Background(), "product_catalog")
@@ -59,7 +62,7 @@ By removing local locks (like `sync.RWMutex`) and relying entirely on SOP's tran
 
 ## Intended Workflow
 
-1.  **Ingest**: Use `UpsertBatch` or `UpsertContent` + `IndexAll` for high throughput.
+1.  **Ingest**: Use `UpsertBatch` for high throughput. You can configure `EnableIngestionBuffer` to `true` in `vector.Config` to use a buffered ingestion flow (Stage 0 -> Stage 1).
 2.  **Query**: Use `Search` for low-latency retrieval.
 3.  **Maintain**: Periodically call `Optimize` to optimize the index as data drifts, if there are changes. Since this performs a full index rebuild, schedule this based on your data volume and churn rate (e.g., nightly for moderate datasets, weekly for massive ones).
 

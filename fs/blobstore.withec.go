@@ -30,22 +30,22 @@ type errBox struct{ err error }
 
 // Allows app to specify a global Erasure Coding Config once and allow code to simply don't bother
 // specifying it again.
-var globalErasureConfig map[string]ErasureCodingConfig
+var globalErasureConfig map[string]sop.ErasureCodingConfig
 
 // Invoke SetGlobalErasureConfig to set the application global Erasure Coding Config lookup.
-func SetGlobalErasureConfig(erasureConfig map[string]ErasureCodingConfig) {
+func SetGlobalErasureConfig(erasureConfig map[string]sop.ErasureCodingConfig) {
 	globalErasureConfig = erasureConfig
 }
 
 // Returns the global Erasure Coding config.
-func GetGlobalErasureConfig() map[string]ErasureCodingConfig {
+func GetGlobalErasureConfig() map[string]sop.ErasureCodingConfig {
 	return globalErasureConfig
 }
 
 // Instantiate a blob store with replication (via Erasure Coding (EC)) capabilities.
 // If a per-table EC config is not supplied, the global configuration is used.
 // Validates that the number of base paths equals data+parity shard count.
-func NewBlobStoreWithEC(toFilePath ToFilePathFunc, fileIO FileIO, erasureConfig map[string]ErasureCodingConfig) (sop.BlobStore, error) {
+func NewBlobStoreWithEC(toFilePath ToFilePathFunc, fileIO FileIO, erasureConfig map[string]sop.ErasureCodingConfig) (sop.BlobStore, error) {
 	if erasureConfig == nil {
 		erasureConfig = globalErasureConfig
 	}

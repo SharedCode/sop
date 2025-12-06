@@ -1,7 +1,6 @@
 import sys
 import os
 import pytest
-from unittest.mock import MagicMock
 
 # Ensure we can import sop
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -21,7 +20,7 @@ class FakeEmbeddings:
 def test_langchain_integration():
     ctx = Context()
     # Use a temporary path for the DB
-    db = Database(ctx, storage_path="/tmp/sop_langchain_test", db_type=DBType.Standalone)
+    db = Database(DatabaseOptions(stores_folders=["/tmp/sop_langchain_test"], db_type=DBType.Standalone))
     
     embeddings = FakeEmbeddings()
     collection_name = "langchain_test"

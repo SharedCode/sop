@@ -1,8 +1,8 @@
 import unittest
-from . import transaction
 from . import btree
 from . import context
 from .ai import Database, DBType
+from .database import DatabaseOptions
 
 from .redis import *
 from .test_btree import to, stores_folders
@@ -33,7 +33,7 @@ class TestBtreeIndexSpecs(unittest.TestCase):
         # Redis.open_connection("redis://localhost:6379")
 
         # Initialize DB
-        cls.db = Database(ctx, storage_path=stores_folders[0], db_type=DBType.Standalone, stores_folders=list(stores_folders))
+        cls.db = Database(DatabaseOptions(storage_path=stores_folders[0], db_type=DBType.Standalone, stores_folders=list(stores_folders)))
 
         t = cls.db.begin_transaction(ctx, options=to)
 

@@ -19,7 +19,9 @@ func TestModelStore(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := database.NewDatabase(core_database.Standalone, tmpDir)
+	db := database.NewDatabase(core_database.DatabaseOptions{
+		StoragePath: tmpDir,
+	})
 	ctx := context.Background()
 
 	// 1. Populate

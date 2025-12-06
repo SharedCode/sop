@@ -4,7 +4,8 @@ import os
 import shutil
 import time
 from sop.ai import Database, Item, DBType, Model
-from sop import Context, TransactionOptions, TransactionMode
+from sop.database import DatabaseOptions
+from sop import Context, TransactionMode
 from sop.transaction import ErasureCodingConfig
 from sop.redis import Redis
 
@@ -18,8 +19,8 @@ class TestSOPAI(unittest.TestCase):
         # Open Redis connection globally for the tests
         try:
             # ro = RedisOptions()
-            # Redis.open_connection(ro)
-            Redis.open_connection("redis://localhost:6379")
+            # Redis.initialize(ro)
+            Redis.initialize("redis://localhost:6379")
             cls.redis_available = True
         except Exception as e:
             print(f"Warning: Failed to connect to Redis: {e}")
@@ -50,7 +51,7 @@ class TestSOPAI(unittest.TestCase):
         path = self.create_temp_dir("vec_standalone")
         
         ctx = Context()
-        vdb = Database(ctx, storage_path=path, db_type=DBType.Standalone)
+        vdb = Database(DatabaseOptions(stores_folders=[path], db_type=DBType.Standalone))
         
         # Transaction 1: Upsert
         tx1 = vdb.begin_transaction(ctx)
@@ -86,7 +87,7 @@ class TestSOPAI(unittest.TestCase):
         path = self.create_temp_dir("vec_clustered")
         
         ctx = Context()
-        vdb = Database(ctx, storage_path=path, db_type=DBType.Clustered)
+        vdb = Database(DatabaseOptions(stores_folders=[path], db_type=DBType.Clustered))
         
         # Transaction 1: Upsert
         tx1 = vdb.begin_transaction(ctx)
@@ -132,17 +133,13 @@ class TestSOPAI(unittest.TestCase):
         
         ctx = Context()
         
-        db = Database(ctx, storage_path=path, db_type=DBType.Standalone, 
-                            erasure_config={"": ec_config},
-                            stores_folders=[path, path_passive])
+        db = Database(DatabaseOptions(
+            db_type=DBType.Standalone, 
+            erasure_config={"": ec_config},
+            stores_folders=[path, path_passive]
+        ))
 
-        opts = TransactionOptions(
-            mode=TransactionMode.ForWriting.value,
-            max_time=15,
-            registry_hash_mod=250
-        )
-
-        with db.begin_transaction(ctx, options=opts) as t:
+        with db.begin_transaction(ctx) as t:
             store = db.open_model_store(ctx, t, "default")
             
             model = Model(id="bm1", algorithm="tree", hyperparameters={}, parameters=[], metrics={}, is_active=True)
@@ -175,26 +172,20 @@ class TestSOPAI(unittest.TestCase):
         )
         
         ctx = Context()
-        vdb = Database(ctx, storage_path=path, db_type=DBType.Clustered,
-                             erasure_config={"": ec_config},
-                             stores_folders=[path, path_passive])
+        vdb = Database(DatabaseOptions(
+            db_type=DBType.Clustered,
+            erasure_config={"": ec_config},
+            stores_folders=[path, path_passive]
+        ))
         
-        opts = TransactionOptions(
-            mode=TransactionMode.ForWriting.value,
-            max_time=15,
-            registry_hash_mod=250,
-            stores_folders=[path, path_passive],
-            erasure_config={"": ec_config}
-        )
-
         # Transaction 1: Upsert
-        with vdb.begin_transaction(ctx, options=opts) as tx1:
+        with vdb.begin_transaction(ctx) as tx1:
             store = vdb.open_vector_store(ctx, tx1, "products_cluster_repl")
             item = Item(id="cr1", vector=[0.5, 0.5, 0.5], payload={"cat": "CR"})
             store.upsert(ctx, item)
         
         # Transaction 2: Read
-        with vdb.begin_transaction(ctx, options=opts) as tx2:
+        with vdb.begin_transaction(ctx, mode=TransactionMode.ForReading.value) as tx2:
             store = vdb.open_vector_store(ctx, tx2, "products_cluster_repl")
             fetched = store.get(ctx, "cr1")
             self.assertEqual(fetched.id, "cr1")

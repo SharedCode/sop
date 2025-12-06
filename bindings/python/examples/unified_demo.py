@@ -2,13 +2,13 @@ import os
 import shutil
 import sys
 import uuid
-from dataclasses import asdict
 
 # Add the parent directory to sys.path to import sop
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from sop import Context, Transaction, TransactionOptions, TransactionMode, Btree, BtreeOptions, Item
+from sop import Context, TransactionMode, BtreeOptions, Item
 from sop.ai import Database, DBType, Item as VectorItem
+from sop.database import DatabaseOptions
 
 def main():
     # Define paths
@@ -26,21 +26,14 @@ def main():
     # 1. Initialize AI Database handle
     # We don't need to "create" the folder structure explicitly for AI DB, 
     # but we need the Database object to open stores.
-    ai_db = Database(ctx, storage_path=vector_db_path, db_type=DBType.Standalone)
+    ai_db = Database(DatabaseOptions(stores_folders=[vector_db_path], db_type=DBType.Standalone))
 
     # 2. Create a Transaction
     # We use a single storage path for simplicity in this demo.
     # To use multiple paths (replication), see vector_replication_demo.py
-    trans_opts = TransactionOptions(
-        mode=TransactionMode.ForWriting.value,
-        max_time=15,
-        registry_hash_mod=250,
-        stores_folders=[vector_db_path], 
-        erasure_config={}
-    )
 
     print("\n--- Starting Unified Transaction ---")
-    with ai_db.begin_transaction(ctx, options=trans_opts) as trans:
+    with ai_db.begin_transaction(ctx) as trans:
         print("Transaction Started.")
 
         # --- A. General Purpose B-Tree Operation ---
@@ -70,7 +63,7 @@ def main():
 
     # 3. Verify Data (Read back)
     print("\n--- Verifying Data ---")
-    with ai_db.begin_transaction(ctx, options=trans_opts) as trans:
+    with ai_db.begin_transaction(ctx, mode=TransactionMode.ForReading.value) as trans:
         # Open B-Tree
         users_store = ai_db.open_btree(ctx, "users", trans)
         found = users_store.find(ctx, str(user_id))

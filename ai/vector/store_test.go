@@ -21,7 +21,9 @@ func TestVectorStore(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := database.NewDatabase(core_database.Standalone, tmpDir)
+	db := database.NewDatabase(core_database.DatabaseOptions{
+		StoragePath: tmpDir,
+	})
 
 	// 1. Test Upsert
 	ctx := context.Background()
@@ -247,7 +249,9 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := database.NewDatabase(core_database.Standalone, tmpDir)
+	db := database.NewDatabase(core_database.DatabaseOptions{
+		StoragePath: tmpDir,
+	})
 
 	ctx := context.Background()
 	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
@@ -256,8 +260,10 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	}
 
 	index, err := db.OpenVectorStore(ctx, "test_delete_count", tx, vector.Config{
-		UsageMode:   ai.DynamicWithVectorCountTracking,
-		StoragePath: tmpDir,
+		UsageMode: ai.DynamicWithVectorCountTracking,
+		TransactionOptions: sop.TransactionOptions{
+			StoragePath: tmpDir,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)

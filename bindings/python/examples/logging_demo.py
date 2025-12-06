@@ -6,6 +6,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context, Logger, LogLevel
 from sop.ai import Database, DBType, Item as VectorItem
+from sop.database import DatabaseOptions
 
 def main():
     # 1. Configure Logging
@@ -20,7 +21,7 @@ def main():
     
     print(f"Opening database at {db_path}...")
     # This operation will generate logs on the Go side
-    db = Database(ctx, storage_path=db_path, db_type=DBType.Standalone)
+    db = Database(DatabaseOptions(stores_folders=[db_path], db_type=DBType.Standalone))
 
     # 3. Perform Operations
     print("Starting transaction...")

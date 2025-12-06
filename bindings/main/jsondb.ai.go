@@ -30,15 +30,12 @@ const (
 
 const (
 	VectorActionUnknown = iota
-	_                   // NewVectorDB
-	_                   // OpenVectorStore
 	UpsertVector
 	UpsertBatchVector
 	GetVector
 	DeleteVector
 	QueryVector
 	VectorCount
-	_ // VectorBeginTransaction
 	OptimizeVector
 )
 
@@ -231,14 +228,10 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 
 const (
 	ModelActionUnknown = iota
-	_                  // NewBTreeModelStore
-	_                  // NewModelDB
-	_                  // OpenModelStore
 	SaveModel
 	LoadModel
 	ListModels
 	DeleteModel
-	_ // CloseDatabase
 )
 
 type ModelStoreOptions struct {

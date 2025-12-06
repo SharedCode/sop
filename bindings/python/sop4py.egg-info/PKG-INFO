@@ -1,4 +1,4 @@
-Metadata-Version: 2.4
+Metadata-Version: 2.1
 Name: sop4py
 Version: 2.0.24
 Summary: Scalable Objects Persistence (SOP) V2 for Python. General Public Availability (GPA) Release
@@ -24,6 +24,7 @@ Description-Content-Type: text/markdown
 *   **High Performance**: Written in Go with a lightweight Python wrapper (ctypes).
 *   **Caching**: Integrated Redis-backed L1/L2 caching for speed.
 *   **Replication**: Optional Erasure Coding (EC) for fault-tolerant storage across drives.
+*   **Multi-Tenancy**: Native support for Cassandra Keyspaces for data isolation.
 *   **Flexible Deployment**: Supports both **Standalone** (local) and **Clustered** (distributed) modes.
 
 ## Documentation
@@ -73,6 +74,11 @@ ctx = Context()
 # Open Database (Standalone Mode)
 # This creates/opens a database at the specified path.
 db = Database(ctx, storage_path="data/my_db", db_type=DBType.Standalone)
+
+# Open Database (Clustered Mode with Multi-Tenancy)
+# Connects to a specific Cassandra Keyspace ("tenant_1").
+# Requires Cassandra and Redis.
+# db_clustered = Database(ctx, storage_path="data/blobs", keyspace="tenant_1")
 ```
 
 ### 2. Start a Transaction
@@ -105,18 +111,25 @@ with db.begin_transaction(ctx, mode=TransactionMode.ForWriting.value) as tx:
         "trees": 100
     })
 
-    # --- 5. General Purpose B-Tree ---
-    # Create a new B-Tree store.
-    bo = BtreeOptions(name="user_store", is_unique=True)
-    user_store = db.new_btree(ctx, "user_store", tx, options=bo)
+    # --- 5. B-Tree Store (Key-Value) ---
+    # Open a B-Tree named "users"
+    # Use new_btree to create a new store, or open_btree for existing ones.
+    btree = db.new_btree(ctx, "users", tx)
+    
+    # Add a Key-Value pair
+    btree.add(ctx, Item(key="user_123", value="John Doe"))
+    
+    # Find a value
+    if btree.find(ctx, "user_123"):
+        # Fetch the value
+        items = btree.get_values(ctx, Item(key="user_123"))
+        if items and items[0].value:
+            print(f"Found User: {items[0].value}")
 
     # --- 6. Text Search ---
     # Open a Search Index
     idx = db.open_search(ctx, "articles", tx)
     idx.add("doc1", "The quick brown fox")
-    
-    # Add an item.
-    user_store.add(ctx, Item(key="user1", value="John Doe"))
 
 # Transaction commits automatically here.
 # If an exception occurs, it rolls back.

@@ -1,8 +1,9 @@
 import unittest
 import uuid
-from unittest.mock import MagicMock, patch
-from sop import transaction, context, redis, call_go
-from sop.transaction import ErasureCodingConfig, Transaction, TransactionOptions, TransactionMode, DBType, TransactionError, InvalidTransactionStateError
+from unittest.mock import patch
+from sop import context, redis
+from sop.database import DatabaseOptions
+from sop.transaction import ErasureCodingConfig, Transaction, TransactionError
 
 class TestCoverage(unittest.TestCase):
 
@@ -75,12 +76,12 @@ class TestCoverage(unittest.TestCase):
     def test_redis_connection_error(self):
         with patch('sop.call_go.open_redis_connection', return_value="Connection Error"):
             with self.assertRaises(Exception):
-                redis.Redis.open_connection("redis://invalid")
+                redis.Redis.initialize("redis://invalid")
 
     def test_redis_close_error(self):
         with patch('sop.call_go.close_redis_connection', return_value="Close Error"):
             with self.assertRaises(Exception):
-                redis.Redis.close_connection()
+                redis.Redis.close()
 
     def test_context_methods(self):
         ctx = context.Context()
@@ -103,7 +104,7 @@ class TestCoverage(unittest.TestCase):
                 # We need a database instance to call open_model_store
                 # But we can mock the database instance or just call the method if we can instantiate it.
                 # Easier to just mock the call inside Database.open_model_store
-                db = Database(ctx)
+                db = Database()
                 db.open_model_store(ctx, t, "store")
 
     def test_model_store_save_error(self):
@@ -147,14 +148,15 @@ class TestCoverage(unittest.TestCase):
         with patch('sop.call_go.manage_database', return_value="Init Error"):
             with self.assertRaises(Exception):
                 from sop.database import Database
-                Database(ctx)
+                db = Database(DatabaseOptions())
+                db._ensure_database_created(ctx)
 
     def test_database_begin_transaction_error(self):
         ctx = context.Context()
         # Mock successful init
         with patch('sop.call_go.manage_database', side_effect=[str(uuid.uuid4()), "Begin Error"]):
             from sop.database import Database
-            db = Database(ctx)
+            db = Database(DatabaseOptions())
             
             with self.assertRaises(Exception):
                 db.begin_transaction(ctx)
@@ -164,7 +166,7 @@ class TestCoverage(unittest.TestCase):
         t = Transaction(ctx, id=uuid.uuid4(), begun=True, database_id=uuid.uuid4())
         with patch('sop.call_go.manage_database', side_effect=[str(uuid.uuid4()), "Open Error"]):
             from sop.database import Database
-            db = Database(ctx)
+            db = Database(DatabaseOptions())
             with self.assertRaises(Exception):
                 db.open_model_store(ctx, t, "store")
 
@@ -173,7 +175,7 @@ class TestCoverage(unittest.TestCase):
         t = Transaction(ctx, id=uuid.uuid4(), begun=True, database_id=uuid.uuid4())
         with patch('sop.call_go.manage_database', side_effect=[str(uuid.uuid4()), "Open Error"]):
             from sop.database import Database
-            db = Database(ctx)
+            db = Database(DatabaseOptions())
             with self.assertRaises(Exception):
                 db.open_vector_store(ctx, t, "store")
 

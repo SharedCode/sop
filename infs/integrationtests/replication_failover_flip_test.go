@@ -27,7 +27,7 @@ func Test_ActiveSide_FailoverFlip_Then_Reinstate_FastForward(t *testing.T) {
 		fmt.Sprintf("%s%cdisk8", dataPath, os.PathSeparator),
 		fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
 	}
-	isolatedEC := map[string]fs.ErasureCodingConfig{
+	isolatedEC := map[string]sop.ErasureCodingConfig{
 		"": {
 			DataShardsCount:   2,
 			ParityShardsCount: 2,
@@ -40,7 +40,7 @@ func Test_ActiveSide_FailoverFlip_Then_Reinstate_FastForward(t *testing.T) {
 			RepairCorruptedShards: true,
 		},
 	}
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, isolatedStores, isolatedEC)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: isolatedStores, ErasureConfig: isolatedEC}
 
 	table := "ec_failover_flip_it"
 
@@ -82,7 +82,7 @@ func Test_ActiveSide_FailoverFlip_Then_Reinstate_FastForward(t *testing.T) {
 	_ = tx2.Commit(ctx) // expect error via replication path; failover handler will be invoked
 
 	// Manually trigger failover since auto-failover is disabled
-	if err := fs.TriggerFailover(ctx, isolatedStores, true, to.Cache); err != nil {
+	if err := fs.TriggerFailover(ctx, isolatedStores, true, nil); err != nil {
 		t.Fatalf("TriggerFailover failed: %v", err)
 	}
 

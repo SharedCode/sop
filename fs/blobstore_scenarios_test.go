@@ -311,7 +311,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			}
 		}},
 		{name: "EC_ConfigValidation", run: func(t *testing.T) {
-			bad := map[string]ErasureCodingConfig{"t": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"only-two"}}}
+			bad := map[string]sop.ErasureCodingConfig{"t": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"only-two"}}}
 			if _, err := NewBlobStoreWithEC(nil, nil, bad); err == nil {
 				t.Fatalf("expected error mismatched config")
 			}
@@ -321,7 +321,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			if GetGlobalErasureConfig() != nil {
 				t.Fatalf("expected nil")
 			}
-			cfg := map[string]ErasureCodingConfig{"": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"x", "y", "z"}}}
+			cfg := map[string]sop.ErasureCodingConfig{"": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"x", "y", "z"}}}
 			SetGlobalErasureConfig(cfg)
 			if len(GetGlobalErasureConfig()) != 1 {
 				t.Fatalf("len mismatch")
@@ -337,7 +337,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			}
 			prev := GetGlobalErasureConfig()
 			defer SetGlobalErasureConfig(prev)
-			SetGlobalErasureConfig(map[string]ErasureCodingConfig{"": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{p1, p2, p3}, RepairCorruptedShards: true}})
+			SetGlobalErasureConfig(map[string]sop.ErasureCodingConfig{"": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{p1, p2, p3}, RepairCorruptedShards: true}})
 			bs, _ := NewBlobStoreWithEC(nil, nil, nil)
 			tbl := "b_fallback"
 			id := sop.NewUUID()
@@ -351,7 +351,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 		}},
 		{name: "EC_AddParityToleranceAndExceed", run: func(t *testing.T) {
 			base := t.TempDir()
-			cfg := map[string]ErasureCodingConfig{"tbl": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{filepath.Join(base, "a"), filepath.Join(base, "b"), filepath.Join(base, "c")}}}
+			cfg := map[string]sop.ErasureCodingConfig{"tbl": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{filepath.Join(base, "a"), filepath.Join(base, "b"), filepath.Join(base, "c")}}}
 			id := sop.NewUUID()
 			within := &scenarioFileIOWithShardFail{FileIO: NewFileIO(), blobID: id, errorIndices: map[int]struct{}{1: {}}}
 			bs1, _ := NewBlobStoreWithEC(nil, within, cfg)
@@ -367,7 +367,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 		}},
 		{name: "EC_AddMkdirAllFailure", run: func(t *testing.T) {
 			base := t.TempDir()
-			cfg := map[string]ErasureCodingConfig{"t": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{filepath.Join(base, "a"), filepath.Join(base, "b")}}}
+			cfg := map[string]sop.ErasureCodingConfig{"t": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{filepath.Join(base, "a"), filepath.Join(base, "b")}}}
 			fio := scenarioFailMkdirFileIO{FileIO: NewFileIO()}
 			bs, _ := NewBlobStoreWithEC(nil, fio, cfg)
 			id := sop.NewUUID()
@@ -389,7 +389,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			prev := GetGlobalErasureConfig()
 			defer SetGlobalErasureConfig(prev)
 			table := "tbl_ec_err"
-			SetGlobalErasureConfig(map[string]ErasureCodingConfig{table: {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{p1, p2, p3}, RepairCorruptedShards: true}})
+			SetGlobalErasureConfig(map[string]sop.ErasureCodingConfig{table: {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{p1, p2, p3}, RepairCorruptedShards: true}})
 			bs, _ := NewBlobStoreWithEC(DefaultToFilePath, nil, nil)
 			id := sop.NewUUID()
 			if err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: table, Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: []byte("abc")}}}}); err == nil {
@@ -399,7 +399,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 		{name: "EC_AddMixedExistingShardDirs", run: func(t *testing.T) {
 			base1 := filepath.Join(t.TempDir(), "d1")
 			base2 := filepath.Join(t.TempDir(), "d2")
-			cfg := map[string]ErasureCodingConfig{"tbl2": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{base1, base2}}}
+			cfg := map[string]sop.ErasureCodingConfig{"tbl2": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{base1, base2}}}
 			bsIntf, _ := NewBlobStoreWithEC(nil, nil, cfg)
 			bs := bsIntf.(*blobStoreWithEC)
 			id := sop.NewUUID()
@@ -417,7 +417,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			for _, d := range []string{d1, d2, d3} {
 				os.MkdirAll(d, 0o755)
 			}
-			cfg := map[string]ErasureCodingConfig{"rt": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2, d3}, RepairCorruptedShards: true}}
+			cfg := map[string]sop.ErasureCodingConfig{"rt": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2, d3}, RepairCorruptedShards: true}}
 			bsIntf, _ := NewBlobStoreWithEC(nil, nil, cfg)
 			bs := bsIntf.(*blobStoreWithEC)
 			id := sop.NewUUID()
@@ -448,7 +448,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 				os.MkdirAll(d, 0o755)
 			} // failAfter=3 (initial 3 shard writes), so repair attempt triggers failure
 			fio := &scenarioRepairWriteFailFileIO{FileIO: NewFileIO(), failAfter: 3}
-			cfg := map[string]ErasureCodingConfig{"rt2": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2, d3}, RepairCorruptedShards: true}}
+			cfg := map[string]sop.ErasureCodingConfig{"rt2": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2, d3}, RepairCorruptedShards: true}}
 			bsIntf, _ := NewBlobStoreWithEC(nil, fio, cfg)
 			bs := bsIntf.(*blobStoreWithEC)
 			id := sop.NewUUID()
@@ -471,7 +471,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			d1 := filepath.Join(base, "d1")
 			d2 := filepath.Join(base, "d2")
 			d3 := filepath.Join(base, "d3")
-			cfg := map[string]ErasureCodingConfig{"tbp": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2, d3}, RepairCorruptedShards: true}}
+			cfg := map[string]sop.ErasureCodingConfig{"tbp": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2, d3}, RepairCorruptedShards: true}}
 			bsIntf, _ := NewBlobStoreWithEC(nil, nil, cfg)
 			bs := bsIntf.(*blobStoreWithEC)
 			id := sop.NewUUID()
@@ -491,7 +491,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 		{name: "EC_RemoveErrorTolerance", run: func(t *testing.T) {
 			b1 := filepath.Join(t.TempDir(), "d1")
 			b2 := filepath.Join(t.TempDir(), "d2")
-			cfg := map[string]ErasureCodingConfig{"tbl": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{b1, b2}}}
+			cfg := map[string]sop.ErasureCodingConfig{"tbl": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{b1, b2}}}
 			fio := &scenarioFailingRemoveFileIO{FileIO: NewFileIO(), fail: true}
 			bsIntf, _ := NewBlobStoreWithEC(nil, fio, cfg)
 			bs := bsIntf.(*blobStoreWithEC)
@@ -503,7 +503,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 		}},
 		{name: "EC_AddExceedsParityMultiShardFileIO", run: func(t *testing.T) {
 			fio := newScenarioFailingMultiShardFileIO(0, 1)
-			cfg := map[string]ErasureCodingConfig{"bX": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"d1", "d2", "d3"}}}
+			cfg := map[string]sop.ErasureCodingConfig{"bX": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"d1", "d2", "d3"}}}
 			bs, _ := NewBlobStoreWithEC(DefaultToFilePath, fio, cfg)
 			id := sop.NewUUID()
 			if err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: "bX", Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: []byte("abc")}}}}); err == nil {
@@ -542,7 +542,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 		}},
 		{name: "EC_GetOneAllShardFailures", run: func(t *testing.T) {
 			base := t.TempDir()
-			cfg := map[string]ErasureCodingConfig{"table": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{filepath.Join(base, "d1"), filepath.Join(base, "d2"), filepath.Join(base, "d3")}}}
+			cfg := map[string]sop.ErasureCodingConfig{"table": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{filepath.Join(base, "d1"), filepath.Join(base, "d2"), filepath.Join(base, "d3")}}}
 			bs, _ := NewBlobStoreWithEC(nil, scenarioErrFileIOAlwaysErr{FileIO: NewFileIO()}, cfg)
 			if _, err := bs.(*blobStoreWithEC).GetOne(ctx, "table", sop.NewUUID()); err == nil {
 				t.Fatalf("expected shard read error")

@@ -17,35 +17,45 @@ import (
 // registry implements sop.Registry using Cassandra as the source of truth and
 // coordinates an in-process L1 cache with an external L2 cache (Redis).
 type registry struct {
-	l2Cache sop.L2Cache
-	l1Cache *cache.L1Cache
+	connection *Connection
+	l2Cache    sop.L2Cache
+	l1Cache    *cache.L1Cache
 }
 
 // updateAllOrNothingOfHandleSetLockTimeout is the TTL used for cache-based conflict checks during updates.
 const updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 
 // NewRegistry returns a Cassandra-backed implementation of sop.Registry.
-func NewRegistry() sop.Registry {
+func NewRegistry(customConnection *Connection) sop.Registry {
 	return &registry{
-		l2Cache: sop.NewCacheClient(),
-		l1Cache: cache.GetGlobalCache(),
+		connection: customConnection,
+		l2Cache:    sop.NewCacheClient(),
+		l1Cache:    cache.GetGlobalCache(),
 	}
+}
+
+func (v *registry) getConnection() (*Connection, error) {
+	if v.connection != nil {
+		return v.connection, nil
+	}
+	return GetGlobalConnection()
 }
 
 // Add inserts new handle records into Cassandra and updates L1/L2 caches best-effort.
 func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
-	if connection == nil {
-		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := v.getConnection()
+	if err != nil {
+		return err
 	}
 	for _, sh := range storesHandles {
 		insertStatement := fmt.Sprintf("INSERT INTO %s.%s (lid, is_idb, p_ida, p_idb, ver, wip_ts, is_del) VALUES(?,?,?,?,?,?,?);",
-			connection.Config.Keyspace, sh.RegistryTable)
+			conn.Config.Keyspace, sh.RegistryTable)
 		for _, h := range sh.IDs {
 
-			qry := connection.Session.Query(insertStatement, gocql.UUID(h.LogicalID), h.IsActiveIDB, gocql.UUID(h.PhysicalIDA),
+			qry := conn.Session.Query(insertStatement, gocql.UUID(h.LogicalID), h.IsActiveIDB, gocql.UUID(h.PhysicalIDA),
 				gocql.UUID(h.PhysicalIDB), h.Version, h.WorkInProgressTimestamp, h.IsDeleted).WithContext(ctx)
-			if connection.Config.ConsistencyBook.RegistryAdd > gocql.Any {
-				qry.Consistency(connection.Config.ConsistencyBook.RegistryAdd)
+			if conn.Config.ConsistencyBook.RegistryAdd > gocql.Any {
+				qry.Consistency(conn.Config.ConsistencyBook.RegistryAdd)
 			}
 
 			// Add a new store record.
@@ -65,13 +75,14 @@ func (v *registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[
 
 // Update updates per-handle records with per-key logical locks to reduce conflicts. On success, caches are synced.
 func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
-	if connection == nil {
-		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := v.getConnection()
+	if err != nil {
+		return err
 	}
 
 	for _, sh := range storesHandles {
 		updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
-			connection.Config.Keyspace, sh.RegistryTable)
+			conn.Config.Keyspace, sh.RegistryTable)
 		// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 		for _, h := range sh.IDs {
 			// Update registry record.
@@ -83,10 +94,10 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 				return fmt.Errorf("cassandra registry update lock failed: %w", err)
 			}
 
-			qry := connection.Session.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
+			qry := conn.Session.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
 				h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalID)).WithContext(ctx)
-			if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
-				qry.Consistency(connection.Config.ConsistencyBook.RegistryUpdate)
+			if conn.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
+				qry.Consistency(conn.Config.ConsistencyBook.RegistryUpdate)
 			}
 
 			// Update registry record.
@@ -116,20 +127,21 @@ func (v *registry) Update(ctx context.Context, storesHandles []sop.RegistryPaylo
 // UpdateNoLocks updates records without acquiring per-key locks. When allOrNothing is true, a logged batch is used.
 // In all cases, L1/L2 caches are refreshed on success, but Redis errors are tolerated.
 func (v *registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesHandles []sop.RegistryPayload[sop.Handle]) error {
-	if connection == nil {
-		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := v.getConnection()
+	if err != nil {
+		return err
 	}
 
 	if allOrNothing {
 		// Do the actual batch logged transaction update in Cassandra.
-		batch := connection.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
-		if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
-			batch.SetConsistency(connection.Config.ConsistencyBook.RegistryUpdate)
+		batch := conn.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+		if conn.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
+			batch.SetConsistency(conn.Config.ConsistencyBook.RegistryUpdate)
 		}
 
 		for _, sh := range storesHandles {
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
-				connection.Config.Keyspace, sh.RegistryTable)
+				conn.Config.Keyspace, sh.RegistryTable)
 			for _, h := range sh.IDs {
 				// Enqueue update registry record cmd.
 				batch.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
@@ -138,7 +150,7 @@ func (v *registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesH
 		}
 
 		// Execute the batch query, all or nothing.
-		if err := connection.Session.ExecuteBatch(batch); err != nil {
+		if err := conn.Session.ExecuteBatch(batch); err != nil {
 			// Failed update all, thus, return err to cause rollback.
 			return fmt.Errorf("cassandra registry update no locks (batch) failed: %w", err)
 		}
@@ -155,13 +167,13 @@ func (v *registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesH
 	} else {
 		for _, sh := range storesHandles {
 			updateStatement := fmt.Sprintf("UPDATE %s.%s SET is_idb = ?, p_ida = ?, p_idb = ?, ver = ?, wip_ts = ?, is_del = ? WHERE lid = ?;",
-				connection.Config.Keyspace, sh.RegistryTable)
+				conn.Config.Keyspace, sh.RegistryTable)
 			// Fail on 1st encountered error. It is non-critical operation, SOP can "heal" those got left.
 			for _, h := range sh.IDs {
-				qry := connection.Session.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
+				qry := conn.Session.Query(updateStatement, h.IsActiveIDB, gocql.UUID(h.PhysicalIDA), gocql.UUID(h.PhysicalIDB),
 					h.Version, h.WorkInProgressTimestamp, h.IsDeleted, gocql.UUID(h.LogicalID)).WithContext(ctx)
-				if connection.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
-					qry.Consistency(connection.Config.ConsistencyBook.RegistryUpdate)
+				if conn.Config.ConsistencyBook.RegistryUpdate > gocql.Any {
+					qry.Consistency(conn.Config.ConsistencyBook.RegistryUpdate)
 				}
 
 				// Update registry record.
@@ -182,8 +194,9 @@ func (v *registry) UpdateNoLocks(ctx context.Context, allOrNothing bool, storesH
 
 // Get fetches handles by ID, checking Redis first (optionally extending TTL) and falling back to Cassandra on misses.
 func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) ([]sop.RegistryPayload[sop.Handle], error) {
-	if connection == nil {
-		return nil, fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := v.getConnection()
+	if err != nil {
+		return nil, err
 	}
 
 	storesHandles := make([]sop.RegistryPayload[sop.Handle], 0, len(storesLids))
@@ -222,11 +235,11 @@ func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop
 			continue
 		}
 		selectStatement := fmt.Sprintf("SELECT lid, is_idb, p_ida, p_idb, ver, wip_ts, is_del FROM %s.%s WHERE lid in (%v);",
-			connection.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
+			conn.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
 
-		qry := connection.Session.Query(selectStatement, lidsAsIntfs...).WithContext(ctx)
-		if connection.Config.ConsistencyBook.RegistryGet > gocql.Any {
-			qry.Consistency(connection.Config.ConsistencyBook.RegistryGet)
+		qry := conn.Session.Query(selectStatement, lidsAsIntfs...).WithContext(ctx)
+		if conn.Config.ConsistencyBook.RegistryGet > gocql.Any {
+			qry.Consistency(conn.Config.ConsistencyBook.RegistryGet)
 		}
 
 		iter := qry.Iter()
@@ -259,8 +272,9 @@ func (v *registry) Get(ctx context.Context, storesLids []sop.RegistryPayload[sop
 
 // Remove deletes handle records from Cassandra and evicts affected entries from caches.
 func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[sop.UUID]) error {
-	if connection == nil {
-		return fmt.Errorf("cassandra connection is closed; call OpenConnection(config) to open it")
+	conn, err := v.getConnection()
+	if err != nil {
+		return err
 	}
 
 	for _, storeLids := range storesLids {
@@ -271,7 +285,7 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 			lidsAsIntfs[i] = interface{}(gocql.UUID(storeLids.IDs[i]))
 		}
 		deleteStatement := fmt.Sprintf("DELETE FROM %s.%s WHERE lid in (%v);",
-			connection.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
+			conn.Config.Keyspace, storeLids.RegistryTable, strings.Join(paramQ, ", "))
 
 		// Flush out the failing records from cache.
 		deleteFromCache := func(storeLids sop.RegistryPayload[sop.UUID]) {
@@ -282,9 +296,9 @@ func (v *registry) Remove(ctx context.Context, storesLids []sop.RegistryPayload[
 			}
 		}
 
-		qry := connection.Session.Query(deleteStatement, lidsAsIntfs...).WithContext(ctx)
-		if connection.Config.ConsistencyBook.RegistryRemove > gocql.Any {
-			qry.Consistency(connection.Config.ConsistencyBook.RegistryRemove)
+		qry := conn.Session.Query(deleteStatement, lidsAsIntfs...).WithContext(ctx)
+		if conn.Config.ConsistencyBook.RegistryRemove > gocql.Any {
+			qry.Consistency(conn.Config.ConsistencyBook.RegistryRemove)
 		}
 
 		v.l1Cache.Handles.Delete(storeLids.IDs)

@@ -7,7 +7,6 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
 	core_database "github.com/sharedcode/sop/database"
 )
@@ -21,7 +20,9 @@ func TestNProbeAndFiltering(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := database.NewDatabase(core_database.Standalone, tmpDir)
+	db := core_database.NewDatabase(core_database.DatabaseOptions{
+		StoragePath: tmpDir,
+	})
 	ctx := context.Background()
 	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
@@ -30,6 +31,9 @@ func TestNProbeAndFiltering(t *testing.T) {
 
 	idx, err := vector.Open[map[string]any](ctx, tx, "test_nprobe", vector.Config{
 		UsageMode: ai.Dynamic,
+		TransactionOptions: sop.TransactionOptions{
+			StoragePath: tmpDir,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
@@ -62,6 +66,9 @@ func TestNProbeAndFiltering(t *testing.T) {
 
 	idx, err = vector.Open[map[string]any](ctx, tx, "test_nprobe", vector.Config{
 		UsageMode: ai.Dynamic,
+		TransactionOptions: sop.TransactionOptions{
+			StoragePath: tmpDir,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)

@@ -19,7 +19,9 @@ func TestOptimizeRollingVersion(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Use core database to manage transactions
-	db := database.NewDatabase(database.Standalone, tmpDir)
+	db := database.NewDatabase(database.DatabaseOptions{
+		StoragePath: tmpDir,
+	})
 	ctx := context.Background()
 
 	// 2. Insert Item (Version 0)
@@ -27,9 +29,12 @@ func TestOptimizeRollingVersion(t *testing.T) {
 
 	// Call Open directly
 	cfg := Config{
-		UsageMode:   ai.Dynamic,
-		StoragePath: tmpDir,
-		Cache:       db.Cache(),
+		UsageMode: ai.Dynamic,
+		TransactionOptions: sop.TransactionOptions{
+			StoragePath: tmpDir,
+			CacheType:   sop.InMemory,
+		},
+		Cache: db.Cache(),
 	}
 	idx1, _ := Open[map[string]any](ctx, tx1, "rolling_test", cfg)
 

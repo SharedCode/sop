@@ -1,15 +1,13 @@
-import uuid
+print("Starting LangChain Demo...")
 import os
 import sys
-from typing import List, Any, Iterable, Optional, Dict, Tuple
-from dataclasses import asdict
+from typing import List
 
 # Add the parent directory to sys.path to import sop
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from sop import Context
-from sop.ai import Database, DBType, Item, SOPVectorStore
-from sop.transaction import Transaction, TransactionOptions, TransactionMode
+from sop import Context, DatabaseOptions
+from sop.ai import Database, DBType
 
 # --- Simple Deterministic Embedder for Demo ---
 class SimpleHashEmbedder:
@@ -45,14 +43,14 @@ def main():
 
     ctx = Context()
     # 1. Setup SOP
-    db = Database(ctx, storage_path=db_path, db_type=DBType.Standalone)
+    db = Database(DatabaseOptions(stores_folders=[db_path], db_type=DBType.Standalone))
 
     # 2. Setup Embedder
     embedder = SimpleHashEmbedder(dim=3)
 
     # 3. Create the LangChain Wrapper
     # We use the SOPVectorStore class from the library (sop.ai)
-    vectorstore = SOPVectorStore(ctx, db, "demo_collection", embedder)
+    vectorstore = db.vector_store(ctx, "demo_collection", embedder)
 
     # 4. Add Documents
     print("Adding documents...")

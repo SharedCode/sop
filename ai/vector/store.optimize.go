@@ -951,7 +951,9 @@ func (di *domainIndex[T]) phase4(ctx context.Context, currentVersion int64, newV
 			fmt.Sprintf("%s%s%s", di.name, lookupSuffix, suffix),
 		}
 		for _, name := range storesToRemove {
-			_ = ct.StoreRepository.Remove(ctx, name)
+			if err := ct.StoreRepository.Remove(ctx, name); err != nil {
+				log.Warn("Failed to remove store", "name", name, "error", err)
+			}
 		}
 		return nil
 	})

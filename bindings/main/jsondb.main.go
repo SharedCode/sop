@@ -16,18 +16,17 @@ import (
 
 	log "log/slog"
 
+	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 
 	"github.com/sharedcode/sop"
+	cas "github.com/sharedcode/sop/adapters/cassandra"
 	"github.com/sharedcode/sop/adapters/redis"
 	"github.com/sharedcode/sop/ai"
 	database "github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
 	"github.com/sharedcode/sop/common"
-	core_database "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
-	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/infs"
 	"github.com/sharedcode/sop/jsondb"
 )
 
@@ -122,6 +121,57 @@ func closeRedisConnection() *C.char {
 		// Remember to deallocate errMsg!
 		return C.CString(errMsg)
 	}
+	return nil
+}
+
+// Cassandra global connection management related.
+
+type CassandraConfig struct {
+	ClusterHosts      []string `json:"cluster_hosts"`
+	Keyspace          string   `json:"keyspace"`
+	Consistency       int      `json:"consistency"`
+	ConnectionTimeout int      `json:"connection_timeout"`
+	ReplicationClause string   `json:"replication_clause"`
+	Authenticator     struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	} `json:"authenticator"`
+}
+
+//export openCassandraConnection
+func openCassandraConnection(payload *C.char) *C.char {
+	jsonPayload := C.GoString(payload)
+	var cfg CassandraConfig
+	if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &cfg); err != nil {
+		return C.CString(fmt.Sprintf("invalid options: %v", err))
+	}
+
+	casConfig := cas.Config{
+		ClusterHosts:      cfg.ClusterHosts,
+		Keyspace:          cfg.Keyspace,
+		Consistency:       gocql.Consistency(cfg.Consistency),
+		ConnectionTimeout: time.Duration(cfg.ConnectionTimeout) * time.Millisecond,
+		ReplicationClause: cfg.ReplicationClause,
+	}
+	if cfg.Authenticator.Username != "" {
+		casConfig.Authenticator = gocql.PasswordAuthenticator{
+			Username: cfg.Authenticator.Username,
+			Password: cfg.Authenticator.Password,
+		}
+	}
+
+	_, err := cas.OpenConnection(casConfig)
+	if err != nil {
+		errMsg := fmt.Sprintf("error encountered opening Cassandra connection, details: %v", err)
+		log.Warn(errMsg)
+		return C.CString(errMsg)
+	}
+	return nil
+}
+
+//export closeCassandraConnection
+func closeCassandraConnection() *C.char {
+	cas.CloseConnection()
 	return nil
 }
 
@@ -264,13 +314,6 @@ const (
 	OpenSearch
 )
 
-type DatabaseOptions struct {
-	StoragePath   string                            `json:"storage_path"`
-	DBType        int                               `json:"db_type"` // 0: Standalone, 1: Clustered
-	ErasureConfig map[string]fs.ErasureCodingConfig `json:"erasure_config,omitempty"`
-	StoresFolders []string                          `json:"stores_folders,omitempty"`
-}
-
 //export manageDatabase
 func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C.char) *C.char {
 	ctx := getContext(ctxID)
@@ -283,14 +326,16 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 
 	switch int(action) {
 	case NewDatabase:
-		var opts DatabaseOptions
+		var opts sop.DatabaseOptions
 		if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &opts); err != nil {
 			return C.CString(fmt.Sprintf("invalid options: %v", err))
 		}
 
-		db := database.NewDatabase(core_database.DatabaseType(opts.DBType), opts.StoragePath)
-		if len(opts.ErasureConfig) > 0 || len(opts.StoresFolders) > 0 {
-			db.SetReplicationConfig(opts.ErasureConfig, opts.StoresFolders)
+		var db *database.Database
+		if opts.Keyspace != "" {
+			db = database.NewCassandraDatabase(opts)
+		} else {
+			db = database.NewDatabase(opts)
 		}
 
 		id := dbRegistry.Add(db)
@@ -307,12 +352,13 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		}
 
 		mode := sop.ForWriting
-		var opts infs.TransationOptionsWithReplication
+		var maxTime time.Duration
+		var opts sop.TransactionOptions
 		if jsonPayload != "" {
 			if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &opts); err == nil {
 				mode = opts.Mode
 				// Adjust MaxTime from minutes to Duration.
-				opts.MaxTime = opts.MaxTime * time.Minute
+				maxTime = opts.MaxTime * time.Minute
 			} else {
 				var m int
 				if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &m); err == nil {
@@ -321,7 +367,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			}
 		}
 
-		tx, err := db.BeginTransaction(ctx, mode, opts)
+		tx, err := db.BeginTransaction(ctx, mode, maxTime)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -499,7 +545,9 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		cfg := vector.Config{
 			UsageMode:   ai.UsageMode(opts.Config.UsageMode),
 			ContentSize: sop.ValueDataSize(opts.Config.ContentSize),
-			StoragePath: opts.StoragePath,
+		}
+		if opts.StoragePath != "" {
+			cfg.TransactionOptions.StoresFolders = []string{opts.StoragePath}
 		}
 
 		store, err := db.OpenVectorStore(ctx, opts.Name, item.Transaction, cfg)

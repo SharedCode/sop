@@ -49,11 +49,11 @@ func init() {
 
 func initErasureCoding() {
 	// Erasure Coding configuration lookup table (map).
-	ec := make(map[string]fs.ErasureCodingConfig)
+	ec := make(map[string]sop.ErasureCodingConfig)
 
 	// Erasure Coding config for "barstoreec" table uses three base folder paths that mimicks three disks.
 	// Two data shards and one parity shard.
-	ec[""] = fs.ErasureCodingConfig{
+	ec[""] = sop.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -88,7 +88,7 @@ func (o *openFailDirectIO) Close(file *os.File) error { return nil }
 
 func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -119,7 +119,7 @@ func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders}
 
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
@@ -190,7 +190,7 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 func TestOpenBtree_TransWithRepl_failed(t *testing.T) {
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders}
 
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
@@ -208,7 +208,7 @@ func TestOpenBtree_TransWithRepl_failed(t *testing.T) {
 func TestOpenBtreeWithRepl_succeeded(t *testing.T) {
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders}
 
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {

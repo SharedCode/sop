@@ -28,8 +28,7 @@ except OSError as e:
     print("Ensure 'libjsondb_<arch><os>.so' (or .dll/.dylib) is in the same directory.")
     exit()
 
-# Call the 'hello' function (no arguments, no return value)
-print("Calling Go's open_redis_connection() function:")
+# Redis global connection management related.
 _open_redis_conn = lib.openRedisConnection
 
 # Call the 'open+_redis_connection' function with arguments and set argument/return types
@@ -38,8 +37,42 @@ _open_redis_conn.argtypes = [
 ]  # Specify argument types
 _open_redis_conn.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
 
+def open_redis_connection(uri: str) -> str:
+    res = _open_redis_conn(uri.encode("utf-8"))
+    if res:
+        return ctypes.string_at(res).decode("utf-8")
+    return None
+
 _close_redis_conn = lib.closeRedisConnection
 _close_redis_conn.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
+
+def close_redis_connection() -> str:
+    res = _close_redis_conn()
+    if res:
+        return ctypes.string_at(res).decode("utf-8")
+    return None
+
+# Cassandra global connection management related.
+_open_cassandra_conn = lib.openCassandraConnection
+_open_cassandra_conn.argtypes = [
+    ctypes.c_char_p,
+]  # Specify argument types
+_open_cassandra_conn.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
+
+def open_cassandra_connection(payload: str) -> str:
+    res = _open_cassandra_conn(payload.encode("utf-8"))
+    if res:
+        return ctypes.string_at(res).decode("utf-8")
+    return None
+
+_close_cassandra_conn = lib.closeCassandraConnection
+_close_cassandra_conn.restype = ctypes.POINTER(ctypes.c_char)  # Specify return type
+
+def close_cassandra_connection() -> str:
+    res = _close_cassandra_conn()
+    if res:
+        return ctypes.string_at(res).decode("utf-8")
+    return None
 
 # De-allocate backing memory for a string.
 _free_string = lib.freeString

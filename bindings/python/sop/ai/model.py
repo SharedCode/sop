@@ -1,22 +1,17 @@
 import json
 import uuid
 from dataclasses import dataclass, asdict
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from enum import Enum
 
 from .. import call_go
 from .. import context
-from .. import transaction
 
 class ModelAction(Enum):
-    # NewBTreeModelStore = 1
-    # NewModelDB = 2
-    OpenModelStore = 3
-    SaveModel = 4
-    LoadModel = 5
-    ListModels = 6
-    DeleteModel = 7
-    # CloseDatabase = 8
+    SaveModel = 1
+    LoadModel = 2
+    ListModels = 3
+    DeleteModel = 4
 
 @dataclass
 class Model:

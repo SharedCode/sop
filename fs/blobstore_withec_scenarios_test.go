@@ -66,13 +66,13 @@ func (r readErrFileIO) Stat(ctx context.Context, path string) (os.FileInfo, erro
 }
 
 // Helper to build minimal EC config.
-func testECConfig(table string, data, parity int) map[string]ErasureCodingConfig {
+func testECConfig(table string, data, parity int) map[string]sop.ErasureCodingConfig {
 	total := data + parity
 	base := make([]string, total)
 	for i := 0; i < total; i++ {
 		base[i] = "d" + string(rune('0'+i))
 	}
-	return map[string]ErasureCodingConfig{
+	return map[string]sop.ErasureCodingConfig{
 		table: {DataShardsCount: data, ParityShardsCount: parity, BaseFolderPathsAcrossDrives: base, RepairCorruptedShards: false},
 	}
 }
@@ -121,7 +121,7 @@ func TestBlobStoreWithEC_GetOne_AllReadsFail(t *testing.T) {
 func TestBlobStoreWithEC_MissingConfigBranches(t *testing.T) {
 	ctx := context.Background()
 	// Only table "present" has a configuration.
-	cfg := map[string]ErasureCodingConfig{
+	cfg := map[string]sop.ErasureCodingConfig{
 		"present": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"d1", "d2"}},
 	}
 	bs, err := NewBlobStoreWithEC(nil, nil, cfg)

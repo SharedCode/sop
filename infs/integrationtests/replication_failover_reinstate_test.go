@@ -124,7 +124,7 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 		fmt.Sprintf("%s%cdisk8", dataPath, os.PathSeparator),
 		fmt.Sprintf("%s%cdisk9", dataPath, os.PathSeparator),
 	}
-	isolatedEC := map[string]fs.ErasureCodingConfig{
+	isolatedEC := map[string]sop.ErasureCodingConfig{
 		"": {
 			DataShardsCount:   2,
 			ParityShardsCount: 2,
@@ -137,7 +137,13 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 			RepairCorruptedShards: true,
 		},
 	}
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, isolatedStores, isolatedEC)
+	to := sop.TransactionOptions{
+		Mode:                 sop.ForWriting,
+		MaxTime:              -1,
+		RegistryHashModValue: fs.MinimumModValue,
+		StoresFolders:        isolatedStores,
+		ErasureConfig:        isolatedEC,
+	}
 
 	// Use a unique table name for isolated tests to avoid cross-suite collisions.
 	table := "ec_failover_ff_isolated_it"
@@ -354,7 +360,7 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 	// Note: we intentionally skip simulating another failover here to keep the integration test deterministic and fast.
 }
 
-func readAll(ctx context.Context, to infs.TransationOptionsWithReplication, table string, t *testing.T) map[int]string {
+func readAll(ctx context.Context, to sop.TransactionOptions, table string, t *testing.T) map[int]string {
 	t.Helper()
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
@@ -385,7 +391,7 @@ func readAll(ctx context.Context, to infs.TransationOptionsWithReplication, tabl
 	return out
 }
 
-func getValue(ctx context.Context, to infs.TransationOptionsWithReplication, table string, key int, t *testing.T) (string, bool) {
+func getValue(ctx context.Context, to sop.TransactionOptions, table string, key int, t *testing.T) (string, bool) {
 	t.Helper()
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
@@ -412,7 +418,7 @@ func getValue(ctx context.Context, to infs.TransationOptionsWithReplication, tab
 }
 
 // ensureStoreExists opens the store if present, or creates it in a separate short transaction if missing.
-func ensureStoreExists(ctx context.Context, to infs.TransationOptionsWithReplication, name string) error {
+func ensureStoreExists(ctx context.Context, to sop.TransactionOptions, name string) error {
 	// Try open first.
 	if trans, err := infs.NewTransactionWithReplication(ctx, to); err == nil {
 		if err = trans.Begin(ctx); err == nil {

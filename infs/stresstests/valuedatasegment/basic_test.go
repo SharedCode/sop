@@ -40,7 +40,7 @@ func getDataPath() string {
 var dataPath string = getDataPath()
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -72,7 +72,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -116,7 +116,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 
 func Test_ByteArrayValue(t *testing.T) {
 	infs.RemoveBtree(ctx, dataPath, "baStore", nil)
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -158,7 +158,7 @@ func Test_ByteArrayValue(t *testing.T) {
 }
 
 func Test_ByteArrayValueGet(t *testing.T) {
-	to, _ := infs.NewTransactionOptions(dataPath, sop.NoCheck, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.NoCheck, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())

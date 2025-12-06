@@ -13,7 +13,7 @@ import (
 // RemoveBtree removes the B-tree with the given name from backend storage.
 // This is destructive and cannot be rolled back.
 func RemoveBtree(ctx context.Context, name string) error {
-	storeRepository := cas.NewStoreRepository(nil)
+	storeRepository := cas.NewStoreRepository(nil, nil)
 	return storeRepository.Remove(ctx, name)
 }
 

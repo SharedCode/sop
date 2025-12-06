@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from sop import context, transaction, btree
 from sop.ai import Database, DBType, Item as VectorItem
+from sop.database import DatabaseOptions
 from sop.redis import Redis
 
 # Configure logging
@@ -19,8 +20,10 @@ logger = logging.getLogger(__name__)
 def main():
     logger.info("Starting Sanity Check...")
 
-    # Initialize Redis (required for SOP)
-    Redis.open_connection("redis://localhost:6379")
+    # Initialize Redis connection
+    Redis.initialize("redis://localhost:6379")
+    
+    # Initialize Cassandra connection
 
     # 1. Initialize Context
     ctx = context.Context()
@@ -34,19 +37,12 @@ def main():
     if not os.path.exists(store_path):
         os.makedirs(store_path)
     
-    db = Database(ctx, storage_path=store_path, db_type=DBType.Standalone)
-
-    trans_options = transaction.TransactionOptions(
-        mode=transaction.TransactionMode.ForWriting.value,
-        max_time=15,
-        registry_hash_mod=250,
-        stores_folders=[store_path],
-        erasure_config={}
-    )
+    options = DatabaseOptions(stores_folders=[store_path], db_type=DBType.Standalone)
+    db = Database(options)
 
     logger.info("Initializing Transaction...")
     try:
-        with db.begin_transaction(ctx, options=trans_options) as trans:
+        with db.begin_transaction(ctx) as trans:
             logger.info(f"Transaction started: {trans.transaction_id}")
 
             # 3. Create B-Trees
@@ -114,15 +110,8 @@ def main():
     logger.info("Verifying data...")
     
     # We need a new transaction for reading (or NoCheck mode)
-    read_opts = transaction.TransactionOptions(
-        mode=transaction.TransactionMode.ForReading.value,
-        max_time=15,
-        registry_hash_mod=250,
-        stores_folders=[store_path],
-        erasure_config={}
-    )
 
-    with db.begin_transaction(ctx, options=read_opts) as trans:
+    with db.begin_transaction(ctx, mode=transaction.TransactionMode.ForReading.value) as trans:
         # Open existing B-Trees
         user_btree = db.open_btree(ctx, "Users", trans)
         count = user_btree.count()
@@ -151,16 +140,8 @@ def main():
     # 6. Optimize Vector Store
     logger.info("Optimizing Vector Store...")
     
-    optimize_opts = transaction.TransactionOptions(
-        mode=transaction.TransactionMode.ForWriting.value,
-        max_time=15,
-        registry_hash_mod=250,
-        stores_folders=[store_path],
-        erasure_config={}
-    )
-    
     # Optimize commits the transaction internally, so we don't use 'with' block which tries to commit again
-    trans = db.begin_transaction(ctx, options=optimize_opts)
+    trans = db.begin_transaction(ctx)
     vec_store = db.open_vector_store(ctx, trans, "Embeddings")
     vec_store.optimize(ctx)
     logger.info("Vector Store optimized.")

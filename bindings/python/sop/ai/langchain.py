@@ -1,4 +1,4 @@
-from typing import Any, Iterable, List, Optional, Type, Dict
+from typing import Any, Iterable, List, Optional, Type
 import uuid
 import logging
 
@@ -50,15 +50,6 @@ class SOPVectorStore(VectorStore):
         self.db = db
         self.collection_name = collection_name
         self.embedding = embedding
-        
-        # Default transaction options for writes
-        self.trans_opts = transaction.TransactionOptions(
-            mode=transaction.TransactionMode.ForWriting.value,
-            max_time=15,
-            registry_hash_mod=250,
-            stores_folders=[db.storage_path] if hasattr(db, 'storage_path') else [],
-            erasure_config={}
-        )
 
     def add_texts(
         self,
@@ -101,7 +92,7 @@ class SOPVectorStore(VectorStore):
 
         # 3. Upsert to SOP (with Transaction)
         # We create a short-lived transaction for this operation
-        with self.db.begin_transaction(self.ctx, options=self.trans_opts) as trans:
+        with self.db.begin_transaction(self.ctx, mode=transaction.TransactionMode.ForWriting.value) as trans:
             store = self.db.open_vector_store(self.ctx, trans, self.collection_name)
             store.upsert_batch(self.ctx, items)
             
@@ -124,7 +115,7 @@ class SOPVectorStore(VectorStore):
         vector = self.embedding.embed_query(query)
 
         # 2. Search SOP (with Transaction)
-        with self.db.begin_transaction(self.ctx, options=self.trans_opts) as trans:
+        with self.db.begin_transaction(self.ctx, mode=transaction.TransactionMode.ForReading.value) as trans:
             store = self.db.open_vector_store(self.ctx, trans, self.collection_name)
             hits = store.query(self.ctx, vector=vector, k=k)
 

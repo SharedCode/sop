@@ -22,7 +22,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	yesterday := time.Now().Add(time.Duration(-48 * time.Hour))
 	sop.Now = func() time.Time { return yesterday }
 
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, _ := infs.NewTransaction(ctx, to)
 	trans.Begin(ctx)
 
@@ -79,7 +79,7 @@ func Cleanup(t *testing.T) {
 	yesterday := time.Now().Add(time.Duration(-24 * time.Hour))
 	sop.Now = func() time.Time { return yesterday }
 
-	to2, _ := infs.NewTransactionOptions(dataPath, sop.ForReading, -1, fs.MinimumModValue)
+	to2 := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, _ := infs.NewTransaction(ctx, to2)
 	trans.Begin(ctx)
 	_, _ = infs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)

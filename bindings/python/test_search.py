@@ -1,7 +1,7 @@
 import unittest
 import os
 import shutil
-from sop import context, database, transaction
+from sop import context, database
 
 class TestSearch(unittest.TestCase):
     def setUp(self):
@@ -10,7 +10,7 @@ class TestSearch(unittest.TestCase):
 
     def test_search_basic(self):
         ctx = context.Context()
-        db = database.Database(ctx, "data/search_test", database.DBType.Standalone)
+        db = database.Database(database.DatabaseOptions(stores_folders=["data/search_test"], db_type=database.DBType.Standalone))
         t = db.begin_transaction(ctx)
         
         idx = db.open_search(ctx, "my_index", t)

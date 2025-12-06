@@ -3,13 +3,14 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sop.ai import Database, DBType
+from sop.database import DatabaseOptions
 from sop.ai.vector import Item
 from sop import Context
 
 def test_unified_db():
     print("Initializing Unified Database...")
     ctx = Context()
-    db = Database(ctx, storage_path="/tmp/sop_unified_test", db_type=DBType.Standalone)
+    db = Database(DatabaseOptions(stores_folders=["/tmp/sop_unified_test"], db_type=DBType.Standalone))
     
     print("Opening Vector Store 'finance'...")
     tx = db.begin_transaction(ctx)

@@ -5,16 +5,15 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/infs"
 )
 
 func TestIndex_AddAndSearch(t *testing.T) {
 	ctx := context.Background()
-	trans, err := infs.NewTransaction(ctx, infs.TransationOptions{
-		StoresBaseFolder: "test_search_trans",
+	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
+		StoragePath: "test_search_trans",
 		Mode:             sop.ForWriting,
-		Cache:            cache.NewInMemoryCache(),
+		CacheType: sop.InMemory,
 	})
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)

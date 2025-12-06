@@ -1,6 +1,6 @@
 import json
-from typing import List, Dict, Optional
-from dataclasses import dataclass, asdict
+from typing import List
+from dataclasses import dataclass
 from enum import Enum
 from . import call_go
 from . import context

@@ -17,7 +17,7 @@ import (
 
 func Test_StreamingDataStoreInvalidCases(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
 	trans, _ := infs.NewTransactionWithReplication(ctx, to)
 	_ = trans.Begin(ctx)
 
@@ -37,7 +37,7 @@ func Test_StreamingDataStoreInvalidCases(t *testing.T) {
 
 func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
 	trans, _ := infs.NewTransactionWithReplication(ctx, to)
 	_ = trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStore", true, 100, "", sop.BigData, "")
@@ -83,7 +83,7 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 
 func Test_StreamingDataStoreMultipleItems(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
 	trans, _ := infs.NewTransactionWithReplication(ctx, to)
 	_ = trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStoreM", true, 100, "", sop.BigData, "")
@@ -99,7 +99,7 @@ func Test_StreamingDataStoreMultipleItems(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Read back the data. Pass false on 2nd argument will toggle to a "reader" transaction.
-	to2, _ := infs.NewTransactionOptionsWithReplication(sop.ForReading, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	to2 := sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
 	trans, _ = infs.NewTransactionWithReplication(ctx, to2)
 	_ = trans.Begin(ctx)
 	sds, _ = infs.NewStreamingDataStoreWithReplication[string](ctx, so, trans, nil)
@@ -134,7 +134,7 @@ func Test_StreamingDataStoreMultipleItems(t *testing.T) {
 
 func Test_StreamingDataStoreDeleteAnItem(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
 	trans, _ := infs.NewTransactionWithReplication(ctx, to)
 	_ = trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStoreD", true, 100, "", sop.BigData, "")
@@ -189,7 +189,7 @@ func Test_StreamingDataStoreDeleteAnItem(t *testing.T) {
 func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	ctx := context.Background()
 	// Upload the video.
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
 	trans, _ := infs.NewTransactionWithReplication(ctx, to)
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStoreU", true, 100, "", sop.BigData, "")
@@ -214,7 +214,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Read back the video.
-	to2, _ := infs.NewTransactionOptionsWithReplication(sop.ForReading, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	to2 := sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
 	trans, _ = infs.NewTransactionWithReplication(ctx, to2)
 	trans.Begin(ctx)
 	sds, _ = infs.NewStreamingDataStoreWithReplication[string](ctx, so, trans, nil)
@@ -250,7 +250,7 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 	ctx := context.Background()
 	// Upload the video.
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
 	trans, _ := infs.NewTransactionWithReplication(ctx, to)
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStore2", true, 100, "", sop.BigData, "")
@@ -277,7 +277,7 @@ func Test_StreamingDataStoreUpdateWithCountCheck(t *testing.T) {
 func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 	ctx := context.Background()
 	// Upload the video.
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
 	trans, _ := infs.NewTransactionWithReplication(ctx, to)
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStore4", true, 100, "", sop.BigData, "")
@@ -305,7 +305,7 @@ func Test_StreamingDataStoreUpdateExtend(t *testing.T) {
 func Test_StreamingDataStoreUpdate(t *testing.T) {
 	ctx := context.Background()
 	// Upload the video.
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
 	trans, _ := infs.NewTransactionWithReplication(ctx, to)
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStore5", true, 100, "", sop.BigData, "")
@@ -331,7 +331,7 @@ func Test_StreamingDataStoreUpdate(t *testing.T) {
 func Test_StreamingDataStoreDelete(t *testing.T) {
 	ctx := context.Background()
 	// Upload the video.
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFoldersDefault, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Error(err)

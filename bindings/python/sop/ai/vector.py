@@ -1,13 +1,12 @@
 import json
 import uuid
 from dataclasses import dataclass, asdict
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional
 from enum import Enum
 
 from .. import call_go
 from .. import context
 from .. import transaction
-from ..transaction import DBType
 
 KEY_ID = "ID"
 KEY_VECTOR = "Vector"
@@ -18,17 +17,13 @@ KEY_META_ID = "id"
 KEY_META_TRANSACTION_ID = "transaction_id"
 
 class VectorAction(Enum):
-    # NewVectorDB = 1
-    OpenVectorStore = 2
-    UpsertVector = 3
-    UpsertBatchVector = 4
-    GetVector = 5
-    DeleteVector = 6
-    QueryVector = 7
-    VectorCount = 8
-    # BeginTransaction = 9
-    OptimizeVector = 10
-    # CloseVectorDB = 11
+    UpsertVector = 1
+    UpsertBatchVector = 2
+    GetVector = 3
+    DeleteVector = 4
+    QueryVector = 5
+    VectorCount = 6
+    OptimizeVector = 7
 
 class UsageMode(Enum):
     BuildOnceQueryMany = 0

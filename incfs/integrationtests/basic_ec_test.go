@@ -16,7 +16,7 @@ import (
 
 func initErasureCoding() {
 	// Erasure Coding configuration lookup table (map).
-	ec := make(map[string]fs.ErasureCodingConfig)
+	ec := make(map[string]sop.ErasureCodingConfig)
 
 	// Ensure data paths exist
 	for i := 1; i <= 3; i++ {
@@ -29,7 +29,7 @@ func initErasureCoding() {
 
 	// Erasure Coding config for "barstoreec" table uses three base folder paths that mimicks three disks.
 	// Two data shards and one parity shard.
-	ec["barstoreec"] = fs.ErasureCodingConfig{
+	ec["barstoreec"] = sop.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -46,7 +46,7 @@ func Test_TransactionStory_OpenVsNewBTreeEC(t *testing.T) {
 	// Cleanup potential stale data from previous runs
 	_ = incfs.RemoveBtree(ctx, "barstoreec")
 
-	trans, err := incfs.NewTransactionWithReplication(sop.ForWriting, -1, false, nil)
+	trans, err := incfs.NewTransactionWithReplication(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -86,7 +86,7 @@ func Test_TransactionStory_OpenVsNewBTreeEC(t *testing.T) {
 }
 
 func Test_Basic_EC_Get(t *testing.T) {
-	trans, err := incfs.NewTransactionWithReplication(sop.ForReading, -1, false, nil)
+	trans, err := incfs.NewTransactionWithReplication(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false})
 	if err != nil {
 		t.Fatal(err.Error())
 	}

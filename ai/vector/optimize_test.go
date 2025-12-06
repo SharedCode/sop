@@ -22,7 +22,9 @@ func TestOptimize(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Initialize Database
-	db := database.NewDatabase(core_database.Standalone, tmpDir)
+	db := database.NewDatabase(core_database.DatabaseOptions{
+		StoragePath: tmpDir,
+	})
 	tx, err := db.BeginTransaction(context.Background(), sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction failed: %v", err)

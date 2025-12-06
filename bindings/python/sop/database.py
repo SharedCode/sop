@@ -1,7 +1,7 @@
 import json
 import uuid
-from dataclasses import dataclass, asdict
-from typing import List, Dict, Optional
+from dataclasses import asdict
+from typing import Dict, Optional
 from enum import Enum
 
 from . import call_go
@@ -9,7 +9,7 @@ from . import context
 from . import transaction
 from .btree import Btree, BtreeOptions, IndexSpecification
 from .search import Index
-from .transaction import DBType
+from .transaction import DBType, DatabaseOptions
 
 
 class DatabaseAction(Enum):
@@ -22,25 +22,28 @@ class DatabaseAction(Enum):
     OpenSearch = 7
 
 class Database:
-    def __init__(self, ctx: context.Context, storage_path: str = "", db_type: DBType = DBType.Standalone, 
-                 erasure_config: Optional[Dict[str, transaction.ErasureCodingConfig]] = None,
-                 stores_folders: Optional[List[str]] = None):
-        
-        self.storage_path = storage_path # Store for reference
-        
-        # We reuse ModelDBOptions structure on Go side which expects storage_path and db_type
+    def __init__(self, options: DatabaseOptions):
+        self.options = options
+        self.id = None
+
+    def _ensure_database_created(self, ctx: context.Context):
+        if self.id:
+            return
+
+        # We reuse ModelDBOptions structure on Go side which expects storage_path and cache_type
         opts = {
-            "storage_path": storage_path,
-            "db_type": db_type.value
+            "cache_type": 2 if self.options.db_type == DBType.Clustered else 1
         }
         
-        if erasure_config:
+        if self.options.erasure_config:
             # Convert ErasureCodingConfig objects to dicts if needed, or rely on asdict/json serialization
-            # Assuming transaction.ErasureCodingConfig is a dataclass
-            opts["erasure_config"] = {k: asdict(v) for k, v in erasure_config.items()}
+            opts["erasure_config"] = {k: asdict(v) for k, v in self.options.erasure_config.items()}
             
-        if stores_folders:
-            opts["stores_folders"] = stores_folders
+        if self.options.stores_folders:
+            opts["stores_folders"] = self.options.stores_folders
+
+        if self.options.keyspace:
+            opts["keyspace"] = self.options.keyspace
 
         payload = json.dumps(opts)
         
@@ -51,12 +54,15 @@ class Database:
         except:
             raise Exception(res)
 
-    def begin_transaction(self, ctx: context.Context, mode: int = 1, options: Optional[transaction.TransactionOptions] = None) -> transaction.Transaction:
-        # We use manage_database BeginTransaction
-        if options:
-            payload = json.dumps(asdict(options))
-        else:
-            payload = str(mode)
+    def begin_transaction(self, ctx: context.Context, mode: int = 1, max_time: int = 15) -> transaction.Transaction:
+        self._ensure_database_created(ctx)
+        
+        # We only need to send mode and max_time
+        opts = {
+            "mode": mode,
+            "max_time": max_time
+        }
+        payload = json.dumps(opts)
             
         res = call_go.manage_database(ctx.id, DatabaseAction.BeginTransaction.value, str(self.id), payload)
         try:
@@ -67,12 +73,15 @@ class Database:
 
 
     def new_btree(self, ctx: context.Context, name: str, trans: transaction.Transaction, options: Optional[BtreeOptions] = None, index_spec: IndexSpecification = None) -> Btree:
+        self._ensure_database_created(ctx)
         return Btree.new(ctx, name, trans, options, index_spec)
 
     def open_btree(self, ctx: context.Context, name: str, trans: transaction.Transaction) -> Btree:
+        self._ensure_database_created(ctx)
         return Btree.open(ctx, name, trans)
 
     def open_search(self, ctx: context.Context, name: str, trans: transaction.Transaction) -> Index:
+        self._ensure_database_created(ctx)
         opts = {
             "transaction_id": str(trans.transaction_id),
             "name": name
@@ -83,4 +92,39 @@ class Database:
             # res is the UUID of the opened store
             return Index(ctx, res, str(trans.transaction_id))
         except:
+            raise Exception(res)
+
+class CassandraDatabase(Database):
+    def __init__(self, keyspace: str, storage_path: str = ""):
+        options = DatabaseOptions(
+            stores_folders=[storage_path] if storage_path else [],
+            db_type=DBType.Clustered,
+            keyspace=keyspace
+        )
+        super().__init__(options)
+
+    @staticmethod
+    def initialize(config: Dict[str, any]):
+        """
+        Initialize the global Cassandra connection.
+        
+        Args:
+            config (Dict[str, any]): Configuration dictionary containing:
+                - cluster_hosts (List[str]): List of Cassandra host addresses
+                - keyspace (str): Default keyspace name
+                - consistency (int): Consistency level (default: LocalQuorum)
+                - connection_timeout (int): Timeout in milliseconds
+                - replication_clause (str): Replication strategy string
+                - authenticator (Dict): Optional auth config with 'username' and 'password'
+        """
+        payload = json.dumps(config)
+        res = call_go.open_cassandra_connection(payload)
+        if res:
+            raise Exception(res)
+
+    @staticmethod
+    def close():
+        """Close the global Cassandra connection."""
+        res = call_go.close_cassandra_connection()
+        if res:
             raise Exception(res)

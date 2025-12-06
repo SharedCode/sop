@@ -2,15 +2,15 @@ import os
 import shutil
 import sys
 import uuid
-from dataclasses import asdict
 
 # Add the parent directory to sys.path to import sop
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context
-from sop.ai import Database, Item, UsageMode, DBType
-from sop.transaction import Transaction, TransactionOptions, TransactionMode
-from sop.redis import Redis, RedisOptions
+from sop.ai import Database, Item, DBType
+from sop.database import DatabaseOptions
+from sop.transaction import TransactionMode
+from sop.redis import Redis
 
 def main():
     db_path = os.path.abspath("vector_clustered_demo_db")
@@ -18,11 +18,19 @@ def main():
     # Clean up previous run
     if os.path.exists(db_path):
         shutil.rmtree(db_path)
+    os.makedirs(db_path, exist_ok=True)
+
+    # Clean up Redis to ensure metadata is consistent with filesystem
+    try:
+        import subprocess
+        subprocess.run(["redis-cli", "flushall"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except:
+        print("Warning: Could not flush Redis. If you have stale data, the demo might fail.")
 
     print("Attempting to connect to Redis (localhost:6379)...")
     # opts = RedisOptions()
     try:
-        Redis.open_connection("redis://localhost:6379")
+        Redis.initialize("redis://localhost:6379")
     except Exception as e:
         print(f"Skipping Clustered Demo: Could not connect to Redis. Error: {e}")
         return
@@ -32,22 +40,15 @@ def main():
         ctx = Context()
         # Note: In Clustered mode, we typically use a shared storage path or distributed file system,
         # but for this demo we use a local path.
-        db = Database(ctx, storage_path=db_path, db_type=DBType.Clustered)
+        db = Database(DatabaseOptions(stores_folders=[db_path], db_type=DBType.Clustered))
 
         # --- 1. Explicit Transaction ---
         print("\n--- 1. Explicit Transaction ---")
         # For Clustered, we usually need to specify the stores folders if we want replication,
         # but here we just want to test the Redis caching integration.
         # We use the same path for simplicity.
-        trans_opts = TransactionOptions(
-            mode=TransactionMode.ForWriting.value,
-            max_time=15,
-            registry_hash_mod=250,
-            stores_folders=[db_path], # Standalone-like folder structure but with Redis cache
-            erasure_config={}
-        )
 
-        with db.begin_transaction(ctx, options=trans_opts) as trans:
+        with db.begin_transaction(ctx) as trans:
             print("Transaction Started.")
             store = db.open_vector_store(ctx, trans, "demo_store_clustered")
             
@@ -62,7 +63,7 @@ def main():
             print("Committing...")
         
         # Verify in new transaction
-        with db.begin_transaction(ctx, options=trans_opts) as trans_read:
+        with db.begin_transaction(ctx, mode=TransactionMode.ForReading.value) as trans_read:
             store_read = db.open_vector_store(ctx, trans_read, "demo_store_clustered")
             fetched1 = store_read.get(ctx, item1.id)
             print(f"Verified Item 1: {fetched1.payload['name']}")
@@ -73,7 +74,7 @@ def main():
         print(f"An error occurred: {e}")
     finally:
         print("Closing Redis connection...")
-        Redis.close_connection()
+        Redis.close()
         
         # Clean up
         if os.path.exists(db_path):

@@ -25,8 +25,9 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions
 	}
 	so.DisableRegistryStoreFormatting = true
 	trans, _ := t.GetPhasedTransaction().(*common.Transaction)
-	sr := trans.GetStoreRepository().(*fs.StoreRepository)
-	so.BlobStoreBaseFolderPath = sr.GetStoresBaseFolder()
+	if sr, ok := trans.GetStoreRepository().(*fs.StoreRepository); ok {
+		so.BlobStoreBaseFolderPath = sr.GetStoresBaseFolder()
+	}
 	return common.NewBtree[TK, TV](ctx, so, t, comparer)
 }
 
@@ -76,12 +77,10 @@ func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, nam
 
 // RemoveBtree removes the B-tree with the given name from backend storage.
 // This is destructive: it drops registry and node-blob data and cannot be rolled back.
-func RemoveBtree(ctx context.Context, storesBaseFolder string, name string, cache sop.L2Cache) error {
+func RemoveBtree(ctx context.Context, storesBaseFolder string, name string, cacheType sop.CacheType) error {
 	log.Info(fmt.Sprintf("Btree %s%c%s is about to be deleted", storesBaseFolder, os.PathSeparator, name))
 
-	if cache == nil {
-		cache = sop.NewCacheClient()
-	}
+	cache := sop.NewCacheClientByType(cacheType)
 	replicationTracker, err := fs.NewReplicationTracker(ctx, []string{storesBaseFolder}, false, cache)
 	if err != nil {
 		return err

@@ -28,7 +28,7 @@ var redisConfig = redis.Options{
 	DB:       0,  // use default DB
 }
 
-var transOptions infs.TransationOptionsWithReplication
+var transOptions sop.TransactionOptions
 
 func getDataPath() string {
 	s := os.Getenv("datapath")
@@ -49,10 +49,11 @@ func init() {
 		panic(err)
 	}
 	initErasureCoding()
-	var err error
-	transOptions, err = infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
-	if err != nil {
-		panic(err)
+	transOptions = sop.TransactionOptions{
+		Mode:                 sop.ForWriting,
+		MaxTime:              -1,
+		RegistryHashModValue: fs.MinimumModValue,
+		StoresFolders:        storesFolders,
 	}
 }
 
@@ -276,11 +277,11 @@ func restoreRegistryPermissions(t *testing.T, table string) {
 
 func initErasureCoding() {
 	// Erasure Coding configuration lookup table (map).
-	ec := make(map[string]fs.ErasureCodingConfig)
+	ec := make(map[string]sop.ErasureCodingConfig)
 
 	// Erasure Coding config for "barstoreec" table uses three base folder paths that mimicks three disks.
 	// Two data shards and one parity shard.
-	ec[""] = fs.ErasureCodingConfig{
+	ec[""] = sop.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{

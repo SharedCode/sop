@@ -17,11 +17,11 @@ import (
 
 func initErasureCoding() {
 	// Erasure Coding configuration lookup table (map).
-	ec := make(map[string]fs.ErasureCodingConfig)
+	ec := make(map[string]sop.ErasureCodingConfig)
 
 	// Erasure Coding config for "barstoreec" table uses three base folder paths that mimicks three disks.
 	// Two data shards and one parity shard.
-	ec["barstoreec"] = fs.ErasureCodingConfig{
+	ec["barstoreec"] = sop.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 1,
 		BaseFolderPathsAcrossDrives: []string{
@@ -33,7 +33,7 @@ func initErasureCoding() {
 	}
 	// Erasure Coding config for default. Any B-tree that does not have a matching key in the EC config, will be given
 	// a place in the default(key = "") eonfig entry.
-	ec[""] = fs.ErasureCodingConfig{
+	ec[""] = sop.ErasureCodingConfig{
 		DataShardsCount:   2,
 		ParityShardsCount: 2,
 		BaseFolderPathsAcrossDrives: []string{
@@ -59,7 +59,7 @@ var storesFoldersDefault = []string{
 
 func Test_Basic_EC(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders}
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -101,7 +101,7 @@ func Test_Basic_EC(t *testing.T) {
 
 func Test_Basic_EC_Get(t *testing.T) {
 	ctx := context.Background()
-	to, _ := infs.NewTransactionOptionsWithReplication(sop.ForWriting, -1, fs.MinimumModValue, storesFolders, nil)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders}
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())

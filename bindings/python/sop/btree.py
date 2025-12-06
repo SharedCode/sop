@@ -15,7 +15,6 @@ from . import transaction
 TK = TypeVar("TK")
 TV = TypeVar("TV")
 
-from datetime import timedelta
 
 from enum import Enum, auto
 

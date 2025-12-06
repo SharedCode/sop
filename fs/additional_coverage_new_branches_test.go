@@ -14,7 +14,7 @@ import (
 
 // Covers NewBlobStoreWithEC constructor validation error when base paths count mismatches data+parity shard count.
 func TestBlobStoreWithEC_New_MismatchBasePathsCount(t *testing.T) {
-	cfg := map[string]ErasureCodingConfig{
+	cfg := map[string]sop.ErasureCodingConfig{
 		"tbl": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"only-one"}}, // expect error: need 2 paths
 	}
 	if _, err := NewBlobStoreWithEC(DefaultToFilePath, NewFileIO(), cfg); err == nil {
@@ -29,7 +29,7 @@ func TestBlobStoreWithEC_GetOne_RepairsCorruptedShard(t *testing.T) {
 	d1 := t.TempDir()
 	d2 := t.TempDir()
 	table := "tblrepair"
-	cfg := map[string]ErasureCodingConfig{
+	cfg := map[string]sop.ErasureCodingConfig{
 		table: {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2}, RepairCorruptedShards: true},
 	}
 	bsIntf, err := NewBlobStoreWithEC(DefaultToFilePath, NewFileIO(), cfg)
@@ -258,9 +258,9 @@ func TestPriorityLog_Remove_NonExistent_NoError(t *testing.T) {
 
 // Additional constructor mismatch coverage using global config path.
 func TestBlobStoreWithEC_New_Mismatch_UsingGlobalConfig(t *testing.T) {
-	SetGlobalErasureConfig(map[string]ErasureCodingConfig{"": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"a", "b"}}})
+	SetGlobalErasureConfig(map[string]sop.ErasureCodingConfig{"": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"a", "b"}}})
 	// Provide config with wrong base paths count (needs 3 but give 2) via global by passing nil map.
-	bad := map[string]ErasureCodingConfig{"bad": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"x", "y"}}}
+	bad := map[string]sop.ErasureCodingConfig{"bad": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{"x", "y"}}}
 	if _, err := NewBlobStoreWithEC(DefaultToFilePath, NewFileIO(), bad); err == nil {
 		t.Fatalf("expected mismatch via global path")
 	}
@@ -272,7 +272,7 @@ func TestBlobStoreWithEC_GlobalFallbackAdd(t *testing.T) {
 	d2 := t.TempDir()
 	oldGlobal := GetGlobalErasureConfig()
 	t.Cleanup(func() { SetGlobalErasureConfig(oldGlobal) })
-	SetGlobalErasureConfig(map[string]ErasureCodingConfig{"": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2}}})
+	SetGlobalErasureConfig(map[string]sop.ErasureCodingConfig{"": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2}}})
 	bsIntf, err := NewBlobStoreWithEC(DefaultToFilePath, NewFileIO(), nil) // nil -> use global
 	if err != nil {
 		t.Fatalf("NewBlobStoreWithEC: %v", err)
@@ -389,7 +389,7 @@ func TestReplicationTracker_HandleReplicationRelatedError_Failover(t *testing.T)
 func TestBlobStoreWithEC_Update_CoversDelegate(t *testing.T) {
 	d1 := t.TempDir()
 	d2 := t.TempDir()
-	cfg := map[string]ErasureCodingConfig{"tblu": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2}}}
+	cfg := map[string]sop.ErasureCodingConfig{"tblu": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2}}}
 	bsIntf, err := NewBlobStoreWithEC(DefaultToFilePath, NewFileIO(), cfg)
 	if err != nil {
 		t.Fatalf("NewBlobStoreWithEC: %v", err)

@@ -30,7 +30,7 @@ func Test_KeyUpdate_Bundled(t *testing.T) {
 	}
 	defer os.RemoveAll(dataPath)
 
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, _ := infs.NewTransaction(ctx, to)
 	t1.Begin(ctx)
 
@@ -86,7 +86,7 @@ func Test_KeyUpdate_Separate(t *testing.T) {
 	}
 	defer os.RemoveAll(dataPath)
 
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 
 	// Transaction 1: Add
 	t1, _ := infs.NewTransaction(ctx, to)
@@ -148,7 +148,7 @@ func Test_KeyUpdate_WithFetch(t *testing.T) {
 	}
 	defer os.RemoveAll(dataPath)
 
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 
 	// Transaction 1: Add
 	t1, _ := infs.NewTransaction(ctx, to)
@@ -205,7 +205,7 @@ func Test_Remove_Lazy(t *testing.T) {
 	}
 	defer os.RemoveAll(dataPath)
 
-	to, _ := infs.NewTransactionOptions(dataPath, sop.ForWriting, -1, fs.MinimumModValue)
+	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 
 	// Transaction 1: Add
 	t1, _ := infs.NewTransaction(ctx, to)

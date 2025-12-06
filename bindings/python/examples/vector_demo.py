@@ -2,14 +2,14 @@ import os
 import shutil
 import sys
 import uuid
-from dataclasses import asdict
 
 # Add the parent directory to sys.path to import sop
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context
-from sop.ai import Database, Item, UsageMode, DBType
-from sop.transaction import Transaction, TransactionOptions, TransactionMode
+from sop.ai import Database, Item, DBType
+from sop.database import DatabaseOptions
+from sop.transaction import TransactionMode
 
 def main():
     db_path = "vector_demo_db"
@@ -20,22 +20,14 @@ def main():
 
     print(f"Initializing SOP Vector Database at '{db_path}'...")
     ctx = Context()
-    db = Database(ctx, storage_path=db_path, db_type=DBType.Standalone)
+    db = Database(DatabaseOptions(stores_folders=[db_path], db_type=DBType.Standalone))
 
     # --- 1. Explicit Transaction (Commit) ---
     print("\n--- 1. Explicit Transaction (Commit) ---")
     
     # Create Transaction Options
-    trans_opts = TransactionOptions(
-        mode=TransactionMode.ForWriting.value,
-        max_time=15,
-        registry_hash_mod=250,
-        stores_folders=[db_path],
-        erasure_config={}
-    )
-
     # Start Transaction
-    with db.begin_transaction(ctx, options=trans_opts) as trans:
+    with db.begin_transaction(ctx) as trans:
         print("Transaction Started.")
         
         # Open store within transaction
@@ -57,7 +49,7 @@ def main():
     
     # Verify after commit (Need new transaction to read)
     print("Verifying after commit...")
-    with db.begin_transaction(ctx, options=trans_opts) as trans_read:
+    with db.begin_transaction(ctx, mode=TransactionMode.ForReading.value, max_time=15) as trans_read:
         store_read = db.open_vector_store(ctx, trans_read, "demo_store")
         try:
             after = store_read.get(ctx, item2.id)
@@ -70,7 +62,7 @@ def main():
     print("\n--- 2. Explicit Transaction (Rollback) ---")
     
     try:
-        with db.begin_transaction(ctx, options=trans_opts) as trans:
+        with db.begin_transaction(ctx, mode=TransactionMode.ForWriting.value, max_time=15) as trans:
             print("Transaction Started.")
             store_rb = db.open_vector_store(ctx, trans, "demo_store")
             
@@ -86,7 +78,7 @@ def main():
         print("Transaction should have rolled back.")
 
     # Verify after rollback
-    with db.begin_transaction(ctx, options=trans_opts) as trans_check:
+    with db.begin_transaction(ctx, mode=TransactionMode.ForReading.value, max_time=15) as trans_check:
         store_check = db.open_vector_store(ctx, trans_check, "demo_store")
         try:
             store_check.get(ctx, item3.id)

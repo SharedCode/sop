@@ -9,7 +9,6 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/adapters/redis"
 	"github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/infs"
 )
 
@@ -22,7 +21,9 @@ func Example_standalone() {
 
 	// 2. Initialize Database in Standalone mode.
 	// This automatically sets up an InMemory cache.
-	db := database.NewDatabase(database.Standalone, storagePath)
+	db := database.NewDatabase(database.DatabaseOptions{
+		StoresFolders: []string{storagePath},
+	})
 
 	// 3. Start a transaction.
 	ctx := context.Background()
@@ -83,8 +84,11 @@ func Example_infs_direct() {
 
 	// 2. Create Transaction Options.
 	// Here we explicitly choose InMemory cache.
-	opts, _ := infs.NewTransactionOptions(storagePath, sop.ForWriting, -1, fs.MinimumModValue)
-	opts.Cache = sop.NewCacheClientByType(sop.InMemory)
+	opts := sop.TransactionOptions{
+		StoresFolders: []string{storagePath},
+		CacheType:     sop.InMemory,
+		Mode:          sop.ForWriting,
+	}
 
 	// 3. Start a transaction.
 	ctx := context.Background()
@@ -152,10 +156,14 @@ func Example_clustered() {
 	// 2. Define storage path.
 	storagePath := "/tmp/sop_clustered_example"
 	_ = os.RemoveAll(storagePath)
+	_ = os.MkdirAll(storagePath, 0755)
 
 	// 3. Initialize Database in Clustered mode.
 	// This will use the registered Redis cache.
-	db := database.NewDatabase(database.Clustered, storagePath)
+	db := database.NewDatabase(database.DatabaseOptions{
+		CacheType:     sop.Redis,
+		StoresFolders: []string{storagePath},
+	})
 
 	// 4. Start a transaction.
 	ctx := context.Background()

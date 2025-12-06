@@ -9,7 +9,6 @@ import (
 func init() {
 	// Register dummy factories to allow SetCacheFactory to work
 	sop.RegisterCacheFactory(sop.NoCache, func() sop.L2Cache { return nil })
-	sop.RegisterCacheFactory(sop.InMemory, func() sop.L2Cache { return nil })
 	sop.RegisterCacheFactory(sop.Redis, func() sop.L2Cache { return nil })
 }
 
