@@ -39,6 +39,7 @@
       "description": "I am the core medical knowledge base.",
       "system_prompt": "You are a medical expert. Based on the provided canonical symptoms, diagnose the condition.",
       "storage_path": "doctor_core",
+      "db_type": "standalone",
       "enable_ingestion_buffer": true,
       "auto_optimize": true,
       "data": []

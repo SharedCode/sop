@@ -4,28 +4,33 @@ Code coverage: https://app.codecov.io/github/sharedcode/sop
 
 ## Table of contents
 
-- Summary
-- High-level features and articles
-- Simple usage (transaction + B-tree + replication)
-- Replication: Active/Passive and Erasure Coding (EC)
-- Lifecycle: Failures, Failover, Reinstate, and EC Auto-Repair
-- Store caching config guide
-- Data partitioning
-- Usability
-- Best practices
-- SOP in Redis & File System
-- Sample code (Go) and struct keys
-- Streaming data (big data upload/download/partial updates)
-- Transaction batching and ACID
-- Fine tuning
-- Transaction logging, serialization, two-phase commit
-- Coordination model (OOA) and safety
-- Optimistic Orchestration Algorithm (OOA)
-- Concurrent/parallel commits
-- ACID vs Big Data
-- Another Big Data example
-- Tidbits and background
-- SOP in-memory
+- [Summary](#summary)
+- [High-level features and articles](#high-level-features-articles-about-sop)
+- [Simple usage (transaction + B-tree + replication)](#simple-usage)
+- [Replication: Active/Passive and Erasure Coding (EC)](#software-based-efficient-replication)
+- [Lifecycle: Failures, Failover, Reinstate, and EC Auto-Repair](#lifecycle-failures-failover-reinstate-and-ec-auto-repair)
+- [Store caching config guide](#store-caching-config-guide)
+- [Data partitioning](#data-partitioning)
+- [Usability](#usability)
+- [Best practices](#best-practices)
+- [SOP in Redis, Cassandra & File System (incfs)](#sop-in-redis-cassandra--file-system-incfs)
+- [SOP in Redis & File System](#sop-in-redis--file-system)
+- [Sample code (Go) and struct keys](#sample-code)
+- [Streaming data (big data upload/download/partial updates)](#streaming-data)
+- [Transaction batching](#transaction-batching)
+- [Atomicity, Consistency, Isolation and Durability](#atomicity-consistency-isolation-and-durability)
+- [Fine tuning](#fine-tuning)
+- [Transaction logging](#transaction-logging)
+- [Item Serialization](#item-serialization)
+- [Two Phase Commit](#two-phase-commit)
+- [Coordination model (OOA) and safety](#coordination-model-ooa-and-safety)
+- [Optimistic Orchestration Algorithm (OOA)](#optimistic-orchestration-algorithm-ooa)
+- [Concurrent/parallel commits](#concurrent-or-parallel-commits)
+- [ACID vs Big Data](#acid-transactions-vs-big-data)
+- [Another Big Data example](#another-big-data-example)
+- [Tidbits](#tid-bits)
+- [Brief Background](#brief-background)
+- [SOP in-memory](#sop-in-memory)
 
 ## Cluster reboot procedure
 When rebooting an entire cluster running applications that use SOP, follow this order to avoid stale locks and ensure clean recovery:
