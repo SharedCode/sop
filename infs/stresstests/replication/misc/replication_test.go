@@ -88,7 +88,7 @@ func (o *openFailDirectIO) Close(file *os.File) error { return nil }
 
 func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())

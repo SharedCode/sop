@@ -66,9 +66,9 @@ import (
 
 func main() {
 	// 1. Initialize the Database (No Redis required for standalone!)
-	db := database.NewDatabase(database.DatabaseOptions{
-		DBType:      database.Standalone,
-		StoragePath: "./data/doctor_brain",
+	db := database.NewDatabase(sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{"./data/doctor_brain"},
 	})
 
 	// 2. Start Transaction
@@ -388,9 +388,9 @@ If you just want a high-performance, local vector store without the agent logic,
 import "github.com/sharedcode/sop/database"
 
 // Create a persistent store
-db := database.NewDatabase(database.DatabaseOptions{
-    DBType:      database.Standalone,
-    StoragePath: "data/my_vectors",
+db := database.NewDatabase(sop.DatabaseOptions{
+    Type:          sop.Standalone,
+    StoresFolders: []string{"data/my_vectors"},
 })
 ctx := context.Background()
 trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
@@ -521,9 +521,9 @@ To enable clustered mode, simply change the database type and ensure you have a 
 ```go
 // 1. Initialize the Database in Clustered Mode
 // This will automatically connect to a local Redis instance (localhost:6379) for caching.
-db := database.NewDatabase(database.DatabaseOptions{
-    DBType:      database.Clustered,
-    StoragePath: "./data/doctor_brain_cluster",
+db := database.NewDatabase(sop.DatabaseOptions{
+    Type:          sop.Clustered,
+    StoresFolders: []string{"./data/doctor_brain_cluster"},
 })
 
 // 2. Open the "Doctor" index

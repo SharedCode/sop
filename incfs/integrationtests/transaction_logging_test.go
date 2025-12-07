@@ -14,7 +14,7 @@ import (
 )
 
 func MultipleExpiredTransCleanup(t *testing.T) {
-	incfs.RemoveBtree(ctx, "ztab1")
+	incfs.RemoveBtree(ctx, "ztab1", sop.Redis)
 
 	// Seed with good records.
 	yesterday := time.Now().Add(time.Duration(-48 * time.Hour))

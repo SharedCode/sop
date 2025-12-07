@@ -27,9 +27,9 @@ type UserProfile struct {
 func main() {
 	// 1. Initialize Database (Standalone or Clustered)
 	// Standalone uses in-memory caching; Clustered uses Redis.
-	db := database.NewDatabase(database.DatabaseOptions{
-		DBType:      database.Standalone,
-		StoragePath: "/tmp/sop_data",
+	db := database.NewDatabase(sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{"/tmp/sop_data"},
 	})
 
 	// 2. Start Transaction
@@ -150,9 +150,9 @@ type VectorItem struct {
 }
 
 // 2. Initialize Database
-db := database.NewDatabase(database.DatabaseOptions{
-    DBType:      database.Standalone,
-    StoragePath: "/tmp/sop_vectors",
+db := database.NewDatabase(sop.DatabaseOptions{
+    Type:          sop.Standalone,
+    StoresFolders: []string{"/tmp/sop_vectors"},
 })
 
 // 3. Start Transaction
@@ -192,9 +192,9 @@ import (
 
 func main() {
 	ctx := context.Background()
-	db := database.NewDatabase(database.DatabaseOptions{
-		DBType:      database.Standalone,
-		StoragePath: "/tmp/sop_data",
+	db := database.NewDatabase(sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{"/tmp/sop_data"},
 	})
 
 	// 1. Index Documents

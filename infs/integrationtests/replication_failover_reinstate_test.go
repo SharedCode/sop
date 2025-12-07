@@ -578,7 +578,7 @@ func cleanupECShards(name string) {
 func cleanupStoreRepository(name string, bases []string) {
 	for _, base := range bases {
 		// Ignore error; it will fail if the store doesn't exist which is fine for cleanup.
-		_ = infs.RemoveBtree(context.Background(), base, name, nil)
+		_ = infs.RemoveBtree(context.Background(), sop.DatabaseOptions{StoresFolders: []string{base}, CacheType: sop.Redis}, name)
 	}
 }
 

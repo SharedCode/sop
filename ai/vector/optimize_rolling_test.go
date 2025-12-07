@@ -20,7 +20,7 @@ func TestOptimizeRollingVersion(t *testing.T) {
 
 	// Use core database to manage transactions
 	db := database.NewDatabase(database.DatabaseOptions{
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 	})
 	ctx := context.Background()
 
@@ -31,7 +31,7 @@ func TestOptimizeRollingVersion(t *testing.T) {
 	cfg := Config{
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 			CacheType:   sop.InMemory,
 		},
 		Cache: db.Cache(),

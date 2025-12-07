@@ -8,7 +8,7 @@ import random
 # Ensure we can import sop
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from sop.ai import Database, Item, DBType, Model
+from sop.ai import Database, Item, DatabaseType, Model
 from sop.database import DatabaseOptions
 from sop import Context, TransactionOptions, TransactionMode
 from sop.btree import BtreeOptions, ValueDataSize, CacheConfig, Item as BtreeItem
@@ -35,7 +35,7 @@ class TestCUDBatch(unittest.TestCase):
         ctx = Context()
         
         # Create Database instance
-        db = Database(DatabaseOptions(stores_folders=[path], db_type=DBType.Standalone))
+        db = Database(DatabaseOptions(stores_folders=[path], type=DatabaseType.Standalone))
 
         # 1. Create (Insert)
         print("Creating 100 users...")
@@ -107,7 +107,7 @@ class TestCUDBatch(unittest.TestCase):
         # Setup Transaction Context for B-Tree Store
         ctx = Context()
         
-        db = Database(DatabaseOptions(stores_folders=[path], db_type=DBType.Standalone))
+        db = Database(DatabaseOptions(stores_folders=[path], type=DatabaseType.Standalone))
 
         opts = TransactionOptions(
             mode=TransactionMode.ForWriting.value,
@@ -171,7 +171,7 @@ class TestCUDBatch(unittest.TestCase):
         path = self.create_temp_dir("vector_store")
         
         ctx = Context()
-        vdb = Database(DatabaseOptions(stores_folders=[path], db_type=DBType.Standalone))
+        vdb = Database(DatabaseOptions(stores_folders=[path], type=DatabaseType.Standalone))
         
         # 1. Create
         print("Creating 50 vectors...")

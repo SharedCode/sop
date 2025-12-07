@@ -6,6 +6,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
 )
 
@@ -52,7 +53,7 @@ func (j *JsonDBMapKey) defaultComparer(mapX map[string]any, mapY map[string]any)
 }
 
 // NewJsonBtreeMapKey creates a schema-less JSON B-Tree using map[string]any keys and optional index spec.
-func NewJsonBtreeMapKey(ctx context.Context, so sop.StoreOptions, t sop.Transaction, indexSpecification string) (*JsonDBMapKey, error) {
+func NewJsonBtreeMapKey(ctx context.Context, db *database.Database, so sop.StoreOptions, t sop.Transaction, indexSpecification string) (*JsonDBMapKey, error) {
 	var comparer btree.ComparerFunc[map[string]any]
 	j := JsonDBMapKey{}
 	if indexSpecification == "" {
@@ -68,7 +69,7 @@ func NewJsonBtreeMapKey(ctx context.Context, so sop.StoreOptions, t sop.Transact
 		so.CELexpression = indexSpecification
 	}
 
-	b3, err := NewJsonBtree[map[string]any, any](ctx, so, t, comparer)
+	b3, err := NewJsonBtree[map[string]any, any](ctx, db, so, t, comparer)
 	if err != nil {
 		return nil, err
 	}
@@ -78,10 +79,10 @@ func NewJsonBtreeMapKey(ctx context.Context, so sop.StoreOptions, t sop.Transact
 }
 
 // OpenJsonBtreeMapKey opens an existing schema-less JSON B-Tree and reconstructs its index specification.
-func OpenJsonBtreeMapKey(ctx context.Context, name string, t sop.Transaction) (*JsonDBMapKey, error) {
+func OpenJsonBtreeMapKey(ctx context.Context, db *database.Database, name string, t sop.Transaction) (*JsonDBMapKey, error) {
 	j := JsonDBMapKey{}
 
-	b3, err := OpenJsonBtree[map[string]any, any](ctx, name, t, j.proxyComparer)
+	b3, err := OpenJsonBtree[map[string]any, any](ctx, db, name, t, j.proxyComparer)
 	if err != nil {
 		return nil, err
 	}

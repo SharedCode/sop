@@ -7,7 +7,7 @@ from typing import List
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context, DatabaseOptions
-from sop.ai import Database, DBType
+from sop.ai import Database, DatabaseType
 
 # --- Simple Deterministic Embedder for Demo ---
 class SimpleHashEmbedder:
@@ -43,7 +43,7 @@ def main():
 
     ctx = Context()
     # 1. Setup SOP
-    db = Database(DatabaseOptions(stores_folders=[db_path], db_type=DBType.Standalone))
+    db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Standalone))
 
     # 2. Setup Embedder
     embedder = SimpleHashEmbedder(dim=3)

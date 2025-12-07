@@ -7,7 +7,7 @@ import uuid
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context
-from sop.ai import Database, Item, DBType
+from sop.ai import Database, Item, DatabaseType
 from sop.database import DatabaseOptions
 from sop.transaction import TransactionMode
 
@@ -20,7 +20,7 @@ def main():
 
     print(f"Initializing SOP Vector Database at '{db_path}'...")
     ctx = Context()
-    db = Database(DatabaseOptions(stores_folders=[db_path], db_type=DBType.Standalone))
+    db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Standalone))
 
     # --- 1. Explicit Transaction (Commit) ---
     print("\n--- 1. Explicit Transaction (Commit) ---")

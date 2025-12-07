@@ -71,15 +71,30 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 		}
 	}
 
+	// Determine Database Type
+	var dbType sop.DatabaseType
+	switch cfg.DBType {
+	case "clustered":
+		dbType = sop.Clustered
+	case "standalone":
+		dbType = sop.Standalone
+	default:
+		dbType = sop.Standalone
+	}
+
 	db := database.NewDatabase(database.DatabaseOptions{
-		StoragePath: storagePath,
+		StoresFolders: []string{storagePath},
+		Type:          dbType,
 	})
 
 	vCfg := vector.Config{
 		UsageMode:             ai.BuildOnceQueryMany, // Default
 		EnableIngestionBuffer: cfg.EnableIngestionBuffer,
-		TransactionOptions:    sop.TransactionOptions{StoragePath: storagePath},
-		Cache:                 db.Cache(),
+		TransactionOptions: sop.TransactionOptions{
+			StoresFolders: []string{storagePath},
+			CacheType:     db.CacheType(),
+		},
+		Cache: db.Cache(),
 	}
 
 	if cfg.ContentSize != "" {

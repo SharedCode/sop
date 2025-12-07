@@ -20,7 +20,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	db := core_database.NewDatabase(sop.DatabaseOptions{
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 	})
 	ctx := context.Background()
 	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
@@ -31,7 +31,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	idx, err := Open[map[string]any](ctx, tx, "test_batch", Config{
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 		},
 	})
 	if err != nil {
@@ -79,7 +79,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	idx, err = Open[map[string]any](ctx, tx, "test_batch", Config{
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 		},
 	})
 	if err != nil {

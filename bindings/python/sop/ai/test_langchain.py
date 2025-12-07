@@ -5,8 +5,9 @@ import pytest
 # Ensure we can import sop
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from sop import Context, Database
-from sop.transaction import DBType
+from sop import Context, DatabaseOptions
+from sop.ai import Database
+from sop.transaction import DatabaseType
 from sop.ai.langchain import SOPVectorStore
 
 class FakeEmbeddings:
@@ -20,7 +21,7 @@ class FakeEmbeddings:
 def test_langchain_integration():
     ctx = Context()
     # Use a temporary path for the DB
-    db = Database(DatabaseOptions(stores_folders=["/tmp/sop_langchain_test"], db_type=DBType.Standalone))
+    db = Database(DatabaseOptions(stores_folders=["/tmp/sop_langchain_test"], type=DatabaseType.Standalone))
     
     embeddings = FakeEmbeddings()
     collection_name = "langchain_test"
@@ -43,7 +44,7 @@ def test_langchain_integration():
 
 def test_from_texts():
     ctx = Context()
-    db = Database(ctx, storage_path="/tmp/sop_langchain_test_2", db_type=DBType.Standalone)
+    db = Database(DatabaseOptions(stores_folders=["/tmp/sop_langchain_test_2"], type=DatabaseType.Standalone))
     embeddings = FakeEmbeddings()
     
     texts = ["apple", "banana"]

@@ -23,7 +23,7 @@ func TestOptimize(t *testing.T) {
 
 	// Initialize Database
 	db := database.NewDatabase(core_database.DatabaseOptions{
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 	})
 	tx, err := db.BeginTransaction(context.Background(), sop.ForWriting)
 	if err != nil {

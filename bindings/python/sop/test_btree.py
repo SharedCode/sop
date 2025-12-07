@@ -2,7 +2,7 @@ import unittest
 from . import transaction
 from . import btree
 from . import context
-from .ai import Database, DBType
+from .ai import Database, DatabaseType
 from .database import DatabaseOptions
 
 from .redis import *
@@ -65,10 +65,10 @@ class TestBtree(unittest.TestCase):
         # Redis.open_connection("redis://localhost:6379")
 
         # Initialize DB
-        cls.db = Database(DatabaseOptions(storage_path=stores_folders[0], db_type=DBType.Standalone, stores_folders=list(stores_folders)))
+        cls.db = Database(DatabaseOptions(type=DatabaseType.Standalone, stores_folders=list(stores_folders), erasure_config=ec))
 
         # create the "barstoreec" b-tree store.
-        t = cls.db.begin_transaction(ctx, options=to)
+        t = cls.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
         # t.begin()
 
         cache = btree.CacheConfig()
@@ -86,7 +86,7 @@ class TestBtree(unittest.TestCase):
         print("new B3 succeeded")
 
     def test_add_if_not_exists(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "barstoreec", t)
         l = [
@@ -99,7 +99,7 @@ class TestBtree(unittest.TestCase):
         print("test add_if_not_exists")
 
     def test_add_if_not_exists_mapkey(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         cache = btree.CacheConfig()
         bo = btree.BtreeOptions("barstoreec_mk", True, cache_config=cache)
@@ -119,7 +119,7 @@ class TestBtree(unittest.TestCase):
         print("test add_if_not_exists")
 
     def test_add_if_not_exists_mapkey_fail(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         cache = btree.CacheConfig()
         bo = btree.BtreeOptions("barstoreec_mk2", True, cache_config=cache)
@@ -142,7 +142,7 @@ class TestBtree(unittest.TestCase):
         print("test add_if_not_exists mapkey fail case")
 
     def test_get_items(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.get_items(
@@ -153,7 +153,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_keys(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.get_keys(
@@ -164,7 +164,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_values(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "barstoreec", t)
         keys = b3.get_keys(
@@ -177,7 +177,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_find(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.find(ctx, 1)
@@ -187,7 +187,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_find_with_id(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "barstoreec", t)
         keys = b3.get_keys(
@@ -200,7 +200,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_goto_first(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.first(ctx)
@@ -209,7 +209,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_goto_last(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.last(ctx)
@@ -218,7 +218,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_is_unique(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.is_unique()
@@ -227,7 +227,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_count(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.count()
@@ -236,7 +236,7 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_store_info(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "barstoreec", t)
         res = b3.get_store_info()
@@ -252,9 +252,9 @@ class TestBtreeMapKey(unittest.TestCase):
         # Redis.open_connection("redis://localhost:6379")
 
         # Initialize DB
-        cls.db = Database(DatabaseOptions(storage_path=stores_folders[0], db_type=DBType.Standalone, stores_folders=list(stores_folders)))
+        cls.db = Database(DatabaseOptions(type=DatabaseType.Standalone, stores_folders=list(stores_folders), erasure_config=ec))
 
-        t = cls.db.begin_transaction(ctx, options=to)
+        t = cls.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         cache = btree.CacheConfig()
         bo = btree.BtreeOptions("foobar", True, cache_config=cache)
@@ -278,7 +278,7 @@ class TestBtreeMapKey(unittest.TestCase):
         print("new B3 succeeded")
 
     def test_add_if_not_exists(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "foobar", t)
         l = [
@@ -291,7 +291,7 @@ class TestBtreeMapKey(unittest.TestCase):
         print("test add_if_not_exists")
 
     def test_get_items(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.get_items(
@@ -302,7 +302,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_keys(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.get_keys(
@@ -313,7 +313,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_values(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "foobar", t)
         keys = b3.get_keys(
@@ -326,7 +326,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_find(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.find(ctx, pKey(key="123"))
@@ -336,7 +336,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_find_with_id(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "foobar", t)
         keys = b3.get_keys(
@@ -349,7 +349,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_goto_first(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.first(ctx)
@@ -358,7 +358,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_goto_last(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.last(ctx)
@@ -367,7 +367,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_is_unique(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.is_unique()
@@ -376,7 +376,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_count(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.count()
@@ -385,7 +385,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_store_info(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "foobar", t)
         res = b3.get_store_info()
@@ -394,7 +394,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_add_people(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "person", t)
 
@@ -410,7 +410,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_keys_get_values(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "person", t)
         b3.first(ctx)
@@ -424,7 +424,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_keys_backwards_get_values(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "person", t)
         # Position cursor to the last item.
@@ -441,7 +441,7 @@ class TestBtreeMapKey(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_keys_over_the_edge_get_values(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "person", t)
         b3.first(ctx)

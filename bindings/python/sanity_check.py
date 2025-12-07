@@ -9,7 +9,7 @@ import logging
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from sop import context, transaction, btree
-from sop.ai import Database, DBType, Item as VectorItem
+from sop.ai import Database, DatabaseType, Item as VectorItem
 from sop.database import DatabaseOptions
 from sop.redis import Redis
 
@@ -37,7 +37,7 @@ def main():
     if not os.path.exists(store_path):
         os.makedirs(store_path)
     
-    options = DatabaseOptions(stores_folders=[store_path], db_type=DBType.Standalone)
+    options = DatabaseOptions(stores_folders=[store_path], type=DatabaseType.Standalone)
     db = Database(options)
 
     logger.info("Initializing Transaction...")

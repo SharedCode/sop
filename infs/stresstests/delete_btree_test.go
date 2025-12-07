@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/infs"
 )
 
@@ -25,7 +26,7 @@ func DeleteBTree(t *testing.T) {
 	}
 
 	for _, tn := range tableList {
-		if err := infs.RemoveBtree(ctx, dataPath, tn, nil); err != nil {
+		if err := infs.RemoveBtree(ctx, sop.DatabaseOptions{StoresFolders: []string{dataPath}, CacheType: sop.Redis}, tn); err != nil {
 			t.Error(err)
 		}
 	}

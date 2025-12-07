@@ -2,7 +2,7 @@ import os
 import time
 import tempfile
 from sop import Logger, LogLevel, Context
-from sop.ai import Database, DBType
+from sop.ai import Database, DatabaseType
 from sop.database import DatabaseOptions
 
 def test_logging_to_file():
@@ -22,7 +22,7 @@ def test_logging_to_file():
         db_path = os.path.join(tempfile.gettempdir(), "sop_log_test_db")
         
         print(f"Creating DB at {db_path}...")
-        db = Database(DatabaseOptions(stores_folders=[db_path], db_type=DBType.Standalone))
+        db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Standalone))
         
         # Begin a transaction (should log something if level is Info/Debug)
         tx = db.begin_transaction(ctx)

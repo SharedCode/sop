@@ -3,7 +3,7 @@ import sys
 import os
 import shutil
 import time
-from sop.ai import Database, Item, DBType, Model
+from sop.ai import Database, Item, DatabaseType, Model
 from sop.database import DatabaseOptions
 from sop import Context, TransactionMode
 from sop.transaction import ErasureCodingConfig
@@ -51,7 +51,7 @@ class TestSOPAI(unittest.TestCase):
         path = self.create_temp_dir("vec_standalone")
         
         ctx = Context()
-        vdb = Database(DatabaseOptions(stores_folders=[path], db_type=DBType.Standalone))
+        vdb = Database(DatabaseOptions(stores_folders=[path], type=DatabaseType.Standalone))
         
         # Transaction 1: Upsert
         tx1 = vdb.begin_transaction(ctx)
@@ -87,7 +87,7 @@ class TestSOPAI(unittest.TestCase):
         path = self.create_temp_dir("vec_clustered")
         
         ctx = Context()
-        vdb = Database(DatabaseOptions(stores_folders=[path], db_type=DBType.Clustered))
+        vdb = Database(DatabaseOptions(stores_folders=[path], type=DatabaseType.Clustered))
         
         # Transaction 1: Upsert
         tx1 = vdb.begin_transaction(ctx)
@@ -134,7 +134,7 @@ class TestSOPAI(unittest.TestCase):
         ctx = Context()
         
         db = Database(DatabaseOptions(
-            db_type=DBType.Standalone, 
+            type=DatabaseType.Standalone, 
             erasure_config={"": ec_config},
             stores_folders=[path, path_passive]
         ))
@@ -173,7 +173,7 @@ class TestSOPAI(unittest.TestCase):
         
         ctx = Context()
         vdb = Database(DatabaseOptions(
-            db_type=DBType.Clustered,
+            type=DatabaseType.Clustered,
             erasure_config={"": ec_config},
             stores_folders=[path, path_passive]
         ))

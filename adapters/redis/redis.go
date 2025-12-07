@@ -74,6 +74,9 @@ func (c client) Ping(ctx context.Context) error {
 // Clear removes all keys in the current Redis database. Use with caution.
 func (c client) Clear(ctx context.Context) error {
 	log.Warn("Clearing all keys in Redis database")
+	if c.conn == nil {
+		return fmt.Errorf("redis connection is not open; can't create new client")
+	}
 	if err := c.conn.Client.FlushDB(ctx).Err(); err != nil {
 		return fmt.Errorf("redis clear failed: %w", err)
 	}

@@ -19,13 +19,12 @@ func Example_standalone() {
 	storagePath := "/tmp/sop_standalone_example"
 	_ = os.RemoveAll(storagePath) // Clean up previous run
 
-	// 2. Initialize Database in Standalone mode.
-	// This automatically sets up an InMemory cache.
-	db := database.NewDatabase(database.DatabaseOptions{
+	// 1. Initialize Database (Standalone or Clustered)
+	// Standalone uses in-memory caching; Clustered uses Redis.
+	db := database.NewDatabase(sop.DatabaseOptions{
+		Type:          sop.Standalone,
 		StoresFolders: []string{storagePath},
-	})
-
-	// 3. Start a transaction.
+	}) // 3. Start a transaction.
 	ctx := context.Background()
 	// You can pass options, but defaults are usually sufficient for standalone.
 	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
@@ -160,8 +159,8 @@ func Example_clustered() {
 
 	// 3. Initialize Database in Clustered mode.
 	// This will use the registered Redis cache.
-	db := database.NewDatabase(database.DatabaseOptions{
-		CacheType:     sop.Redis,
+	db := database.NewDatabase(sop.DatabaseOptions{
+		Type:          sop.Clustered,
 		StoresFolders: []string{storagePath},
 	})
 

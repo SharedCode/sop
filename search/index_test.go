@@ -11,9 +11,9 @@ import (
 func TestIndex_AddAndSearch(t *testing.T) {
 	ctx := context.Background()
 	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_search_trans",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+		StoresFolders: []string{"test_search_trans"},
+		Mode:          sop.ForWriting,
+		CacheType:     sop.InMemory,
 	})
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)

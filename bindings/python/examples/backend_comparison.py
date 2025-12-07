@@ -5,7 +5,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sop.context import Context
-from sop.database import Database, DBType, CassandraDatabase, DatabaseOptions
+from sop.database import Database, DatabaseType, CassandraDatabase, DatabaseOptions
 from sop.transaction import TransactionMode
 from sop.btree import Item
 
@@ -29,7 +29,7 @@ def main():
     
     print(f"Initializing Standalone Database at {path_standalone}...")
     # Note: keyspace is NOT provided.
-    db_standalone = Database(DatabaseOptions(stores_folders=[path_standalone], db_type=DBType.Standalone))
+    db_standalone = Database(DatabaseOptions(stores_folders=[path_standalone], type=DatabaseType.Standalone))
     
     print("Starting transaction...")
     t1 = db_standalone.begin_transaction(ctx, TransactionMode.ForWriting)
@@ -65,7 +65,7 @@ def main():
     # Note: keyspace IS provided.
     # Requires Cassandra and Redis running.
     try:
-        # We can omit db_type=DBType.Clustered because keyspace implies it.
+        # We can omit type=DatabaseType.Clustered because keyspace implies it.
         db_clustered = CassandraDatabase(keyspace=keyspace_name, storage_path=path_clustered)
         
         print("Starting transaction...")

@@ -27,7 +27,7 @@ func TestOptimize_GracePeriod(t *testing.T) {
 
 	// Initialize Database
 	db := core_database.NewDatabase(core_database.DatabaseOptions{
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 	})
 	tx, err := db.BeginTransaction(context.Background(), sop.ForWriting)
 	if err != nil {
@@ -37,7 +37,7 @@ func TestOptimize_GracePeriod(t *testing.T) {
 	idx, err := vector.Open[map[string]any](context.Background(), tx, storeName, vector.Config{
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 			CacheType:   sop.InMemory,
 		},
 		Cache: db.Cache(),
@@ -134,7 +134,7 @@ func TestOptimize_GracePeriod(t *testing.T) {
 	idx3, err := vector.Open[map[string]any](context.Background(), tx3, storeName, vector.Config{
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 			CacheType:   sop.InMemory,
 		},
 		Cache: db.Cache(),
@@ -170,7 +170,7 @@ func TestOptimize_GracePeriod(t *testing.T) {
 	idx4, err := vector.Open[map[string]any](context.Background(), tx4, storeName, vector.Config{
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 		},
 	})
 	if err != nil {

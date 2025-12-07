@@ -1,7 +1,7 @@
 from .database import Database
 from .vector import Item, VectorStore, UsageMode
 from .model import Model, ModelStore
-from ..database import DBType
+from ..database import DatabaseType
 
 __all__ = [
     "Database",
@@ -10,5 +10,5 @@ __all__ = [
     "UsageMode",
     "Model",
     "ModelStore",
-    "DBType",
+    "DatabaseType",
 ]

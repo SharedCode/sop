@@ -27,7 +27,7 @@ func TestPartialOptimizationState(t *testing.T) {
 
 	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
 		Mode:        sop.ForWriting,
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 		CacheType:   sop.InMemory,
 	})
 	if err != nil {
@@ -38,7 +38,7 @@ func TestPartialOptimizationState(t *testing.T) {
 	// 1. Setup Store
 	config := Config{
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 			CacheType:   sop.InMemory,
 		},
 		UsageMode: ai.DynamicWithVectorCountTracking,

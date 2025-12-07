@@ -36,9 +36,9 @@ type AgentConfig struct {
 
 func main() {
 	// 1. Initialize Database
-	db := database.NewDatabase(database.DatabaseOptions{
-		DBType:      database.Standalone,
-		StoragePath: "./data/ai_registry",
+	db := database.NewDatabase(sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{"./data/ai_registry"},
 	})
 	ctx := context.Background()
 
@@ -72,9 +72,9 @@ func main() {
 
 ```go
 func load() {
-	db := database.NewDatabase(database.DatabaseOptions{
-		DBType:      database.Standalone,
-		StoragePath: "./data/ai_registry",
+	db := database.NewDatabase(sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{"./data/ai_registry"},
 	})
 	ctx := context.Background()
 	

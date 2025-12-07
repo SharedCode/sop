@@ -25,7 +25,7 @@ class TransactionMode(Enum):
     ForReading = 2
 
 
-class DBType(Enum):
+class DatabaseType(Enum):
     Standalone = 0
     Clustered = 1
 
@@ -83,7 +83,7 @@ class ErasureCodingConfig:
 
 @dataclass
 class DatabaseOptions:
-    db_type: DBType = DBType.Standalone
+    type: DatabaseType = DatabaseType.Standalone
     erasure_config: Optional[Dict[str, ErasureCodingConfig]] = None
     stores_folders: Optional[List[str]] = None
     keyspace: Optional[str] = None

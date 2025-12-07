@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/sharedcode/sop"
@@ -26,6 +25,15 @@ type Database struct {
 
 // NewDatabase creates a new database manager.
 func NewDatabase(config sop.DatabaseOptions) *Database {
+	// If CacheType is not set, infer it from Type.
+	if config.CacheType == sop.NoCache {
+		if config.Type == sop.Clustered {
+			config.CacheType = sop.Redis
+		} else {
+			config.CacheType = sop.InMemory
+		}
+	}
+
 	var c sop.L2Cache
 	if config.CacheType == sop.Redis {
 		// Use the registered Redis cache factory.
@@ -115,22 +123,20 @@ func (db *Database) BeginTransaction(ctx context.Context, mode sop.TransactionMo
 
 	var t sop.Transaction
 	var err error
-	if db.config.Keyspace != "" {
-		t, err = incfs.NewTransaction(ctx, opts)
-	} else if len(opts.ErasureConfig) > 0 || len(opts.StoresFolders) > 1 {
-		// Use Replication
-		// Ensure BaseFolderPathsAcrossDrives is populated if missing, using StoresFolders.
-		for k, v := range opts.ErasureConfig {
-			if len(v.BaseFolderPathsAcrossDrives) == 0 {
-				v.BaseFolderPathsAcrossDrives = opts.StoresFolders
-				opts.ErasureConfig[k] = v
-			}
-		}
-		t, err = infs.NewTransactionWithReplication(ctx, opts)
-	} else {
-		t, err = infs.NewTransaction(ctx, opts)
-	}
 
+	if opts.IsReplicated() {
+		if opts.IsCassandraHybrid() {
+			t, err = incfs.NewTransactionWithReplication(ctx, opts)
+		} else {
+			t, err = infs.NewTransactionWithReplication(ctx, opts)
+		}
+	} else {
+		if db.config.IsCassandraHybrid() {
+			t, err = incfs.NewTransaction(ctx, opts)
+		} else {
+			t, err = infs.NewTransaction(ctx, opts)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -145,31 +151,34 @@ func (db *Database) BeginTransaction(ctx context.Context, mode sop.TransactionMo
 // OpenBtree opens a general purpose B-Tree store.
 // This allows the Database to manage standard Key-Value stores alongside AI stores.
 func (db *Database) OpenBtree(ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[any, any], error) {
-	if len(db.config.StoresFolders) > 0 {
-		if err := os.MkdirAll(db.config.StoresFolders[0], 0755); err != nil {
-			return nil, err
+	return OpenBtree[any, any](ctx, db, name, t, nil)
+}
+
+// OpenBtree opens a general purpose B-Tree store.
+// This allows the Database to manage standard Key-Value stores alongside AI stores.
+func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, db *Database, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	if db.config.IsReplicated() {
+		if db.config.IsCassandraHybrid() {
+			return incfs.OpenBtree[TK, TV](ctx, name, t, comparer)
+		} else {
+			return infs.OpenBtreeWithReplication[TK, TV](ctx, name, t, comparer)
+		}
+	} else {
+		if db.config.IsCassandraHybrid() {
+			return incfs.OpenBtree[TK, TV](ctx, name, t, comparer)
+		} else {
+			return infs.OpenBtree[TK, TV](ctx, name, t, comparer)
 		}
 	}
-	if db.config.Keyspace != "" {
-		return incfs.OpenBtree[any, any](ctx, name, t, nil)
-	}
-	if len(db.config.StoresFolders) > 1 || len(db.config.ErasureConfig) > 0 {
-		return infs.OpenBtreeWithReplication[any, any](ctx, name, t, nil)
-	}
-	// We use string keys and any values for a generic store, but users can use specific types if they use infs.directly.
-	// For the Database wrapper, we provide a sensible default or we could make this generic if Go allowed methods to have type parameters (it does).
-	// However, since Database is a struct, we can't easily make this method generic for the return type without the struct being generic.
-	// For now, we'll expose a string/any B-Tree.
-	return infs.OpenBtree[any, any](ctx, name, t, nil)
 }
 
 // NewBtree creates a new general purpose B-Tree store.
 func (db *Database) NewBtree(ctx context.Context, name string, t sop.Transaction, options ...sop.StoreOptions) (btree.BtreeInterface[any, any], error) {
-	if len(db.config.StoresFolders) > 0 {
-		if err := os.MkdirAll(db.config.StoresFolders[0], 0755); err != nil {
-			return nil, err
-		}
-	}
+	return NewBtree[any, any](ctx, db, name, t, nil)
+}
+
+// NewBtree creates a new general purpose B-Tree store.
+func NewBtree[TK btree.Ordered, TV any](ctx context.Context, db *Database, name string, t sop.Transaction, comparer btree.ComparerFunc[TK], options ...sop.StoreOptions) (btree.BtreeInterface[TK, TV], error) {
 	var opts sop.StoreOptions
 	if len(options) > 0 {
 		opts = options[0]
@@ -184,14 +193,32 @@ func (db *Database) NewBtree(ctx context.Context, name string, t sop.Transaction
 			Description:              "General purpose B-Tree created via Database",
 		}
 	}
-	if db.config.Keyspace != "" {
-		if len(db.config.StoresFolders) > 0 {
-			opts.BlobStoreBaseFolderPath = db.config.StoresFolders[0]
+
+	// If BlobStoreBaseFolderPath is not set, use the first store folder from the database configuration.
+	if opts.BlobStoreBaseFolderPath == "" && len(db.config.StoresFolders) > 0 {
+		opts.BlobStoreBaseFolderPath = db.config.StoresFolders[0]
+	}
+
+	if db.config.IsReplicated() {
+		if db.config.IsCassandraHybrid() {
+			return incfs.NewBtreeWithReplication[TK, TV](ctx, opts, t, comparer)
+		} else {
+			return infs.NewBtreeWithReplication[TK, TV](ctx, opts, t, comparer)
 		}
-		return incfs.NewBtree[any, any](ctx, opts, t, nil)
+	} else {
+		if db.config.IsCassandraHybrid() {
+			return incfs.NewBtree[TK, TV](ctx, opts, t, comparer)
+		} else {
+			return infs.NewBtree[TK, TV](ctx, opts, t, comparer)
+		}
 	}
-	if len(db.config.StoresFolders) > 1 || len(db.config.ErasureConfig) > 0 {
-		return infs.NewBtreeWithReplication[any, any](ctx, opts, t, nil)
+}
+
+// RemoveBtree removes a B-Tree store from the database.
+// This is a destructive operation and cannot be undone.
+func (db *Database) RemoveBtree(ctx context.Context, name string) error {
+	if db.config.IsCassandraHybrid() {
+		return incfs.RemoveBtree(ctx, name, db.config.CacheType)
 	}
-	return infs.NewBtree[any, any](ctx, opts, t, nil)
+	return infs.RemoveBtree(ctx, db.config, name)
 }

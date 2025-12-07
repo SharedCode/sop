@@ -44,7 +44,7 @@ func initErasureCoding() {
 
 func Test_TransactionStory_OpenVsNewBTreeEC(t *testing.T) {
 	// Cleanup potential stale data from previous runs
-	_ = incfs.RemoveBtree(ctx, "barstoreec")
+	_ = incfs.RemoveBtree(ctx, "barstoreec", sop.Redis)
 
 	trans, err := incfs.NewTransactionWithReplication(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	if err != nil {

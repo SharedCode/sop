@@ -28,8 +28,8 @@ func TestMultiDatabase(t *testing.T) {
 	os.RemoveAll(path2)
 
 	// 2. Initialize Databases
-	db1 := database.NewCassandraDatabase(sop.DatabaseOptions{Keyspace: keyspace1, StoragePath: path1})
-	db2 := database.NewCassandraDatabase(sop.DatabaseOptions{Keyspace: keyspace2, StoragePath: path2})
+	db1 := database.NewCassandraDatabase(sop.DatabaseOptions{Keyspace: keyspace1, StoresFolders: []string{path1}})
+	db2 := database.NewCassandraDatabase(sop.DatabaseOptions{Keyspace: keyspace2, StoresFolders: []string{path2}})
 
 	storeName := "shared_store_name"
 

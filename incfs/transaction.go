@@ -26,7 +26,7 @@ func NewTransaction(ctx context.Context, config sop.TransactionOptions) (sop.Tra
 	var conn *cas.Connection
 	var err error
 	var needsClose bool
-	if config.Keyspace != "" {
+	if config.IsCassandraHybrid() {
 		conn, err = cas.GetConnection(config.Keyspace)
 		if err != nil {
 			return nil, err
@@ -34,7 +34,11 @@ func NewTransaction(ctx context.Context, config sop.TransactionOptions) (sop.Tra
 		needsClose = true
 	}
 
-	twoPT, err := inredck.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, config.Logging, bs, cas.NewStoreRepository(mbsf, conn), conn)
+	if config.CacheType == sop.NoCache {
+		config.CacheType = sop.Redis
+	}
+	cache := sop.NewCacheClientByType(config.CacheType)
+	twoPT, err := inredck.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, config.Logging, bs, cas.NewStoreRepository(mbsf, conn, cache), conn)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +69,7 @@ func NewTransactionWithReplication(ctx context.Context, config sop.TransactionOp
 
 	var conn *cas.Connection
 	var needsClose bool
-	if config.Keyspace != "" {
+	if config.IsCassandraHybrid() {
 		conn, err = cas.GetConnection(config.Keyspace)
 		if err != nil {
 			return nil, err
@@ -73,7 +77,11 @@ func NewTransactionWithReplication(ctx context.Context, config sop.TransactionOp
 		needsClose = true
 	}
 
-	twoPT, err := inredck.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, config.Logging, bs, cas.NewStoreRepository(mbsf, conn), conn)
+	if config.CacheType == sop.NoCache {
+		config.CacheType = sop.Redis
+	}
+	cache := sop.NewCacheClientByType(config.CacheType)
+	twoPT, err := inredck.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, config.Logging, bs, cas.NewStoreRepository(mbsf, conn, cache), conn)
 	if err != nil {
 		return nil, err
 	}

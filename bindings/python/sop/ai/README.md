@@ -15,14 +15,15 @@ You can use the unified `sop.ai.Database` class to manage your Vector Stores.
 ```python
 import sop
 from sop.ai import Database
-from sop.transaction import ErasureCodingConfig, DBType
+from sop.database import DatabaseOptions
+from sop.transaction import ErasureCodingConfig, DatabaseType
 
 # 1. Initialize Context
 ctx = sop.Context()
 
 # 2. Initialize Database
 # Standalone (Local, No Replication)
-db = Database(ctx, storage_path="./my_vector_db", db_type=DBType.Standalone)
+db = Database(DatabaseOptions(stores_folders=["./my_vector_db"], type=DatabaseType.Standalone))
 
 # Clustered (Distributed, With Replication)
 ec_config = ErasureCodingConfig(
@@ -32,13 +33,11 @@ ec_config = ErasureCodingConfig(
     repair_corrupted_shards=True
 )
 
-clustered_db = Database(
-    ctx,
-    storage_path="./my_cluster_db", 
-    db_type=DBType.Clustered,
-    erasure_config={"default": ec_config},
-    stores_folders=["/mnt/d1/sop", "/mnt/d2/sop"]
-)
+clustered_db = Database(DatabaseOptions(
+    stores_folders=["/mnt/d1/sop", "/mnt/d2/sop"],
+    type=DatabaseType.Clustered,
+    erasure_config={"default": ec_config}
+))
 
 # 3. Open a Store within a Transaction
 with db.begin_transaction(ctx) as tx:

@@ -1,11 +1,11 @@
 import unittest
 from . import btree
 from . import context
-from .ai import Database, DBType
+from .ai import Database, DatabaseType
 from .database import DatabaseOptions
 
 from .redis import *
-from .test_btree import to, stores_folders
+from .test_btree import to, stores_folders, ec
 
 from dataclasses import dataclass
 
@@ -33,9 +33,9 @@ class TestBtreeIndexSpecs(unittest.TestCase):
         # Redis.open_connection("redis://localhost:6379")
 
         # Initialize DB
-        cls.db = Database(DatabaseOptions(storage_path=stores_folders[0], db_type=DBType.Standalone, stores_folders=list(stores_folders)))
+        cls.db = Database(DatabaseOptions(type=DatabaseType.Standalone, stores_folders=list(stores_folders), erasure_config=ec))
 
-        t = cls.db.begin_transaction(ctx, options=to)
+        t = cls.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         cache = btree.CacheConfig()
         bo = btree.BtreeOptions("personidx", True, cache_config=cache)
@@ -61,7 +61,7 @@ class TestBtreeIndexSpecs(unittest.TestCase):
         t.commit(ctx)
 
     def test_add(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "personidx", t)
 
@@ -77,7 +77,7 @@ class TestBtreeIndexSpecs(unittest.TestCase):
         t.commit(ctx)
 
     def test_get_items_batch(self):
-        t = self.db.begin_transaction(ctx, options=to)
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 
         b3 = self.db.open_btree(ctx, "personidx", t)
         items = b3.get_items(

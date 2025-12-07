@@ -7,7 +7,7 @@ import uuid
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context
-from sop.ai import Database, Item, DBType
+from sop.ai import Database, Item, DatabaseType
 from sop.database import DatabaseOptions
 from sop.transaction import TransactionMode, ErasureCodingConfig
 from sop.redis import Redis
@@ -52,7 +52,7 @@ def main():
     # Initialize Database with Replication Config
     # Note: We pass the Active path as the primary storage path, but also provide the full config.
     db = Database(DatabaseOptions(
-        db_type=DBType.Standalone,
+        type=DatabaseType.Standalone,
         erasure_config={"": ec_config}, # Default config
         stores_folders=[active_path, passive_path]
     ))

@@ -432,8 +432,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 }
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
-	sr := incfs.NewStoreRepository()
-	sr.Remove(ctx, "twophase3")
+	incfs.RemoveBtree(ctx, "twophase3", sop.Redis)
 
 	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	t1.Begin(ctx)
@@ -522,8 +521,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 - A commit with full conflict: retry success
 */
 func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
-	sr := incfs.NewStoreRepository()
-	sr.Remove(ctx, "tablex")
+	incfs.RemoveBtree(ctx, "tablex", sop.Redis)
 
 	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	t1.Begin(ctx)
@@ -609,8 +607,7 @@ One or both of these two should fail:
 - A commit with full conflict.
 */
 func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
-	sr := incfs.NewStoreRepository()
-	sr.Remove(ctx, "tablex2")
+	incfs.RemoveBtree(ctx, "tablex2", sop.Redis)
 
 	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	t1.Begin(ctx)
@@ -694,8 +691,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 - A commit with full conflict on update: rollback
 */
 func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
-	sr := incfs.NewStoreRepository()
-	sr.Remove(ctx, "tabley")
+	incfs.RemoveBtree(ctx, "tabley", sop.Redis)
 
 	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	t1.Begin(ctx)

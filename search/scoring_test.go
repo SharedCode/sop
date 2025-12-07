@@ -11,9 +11,9 @@ import (
 func TestIndex_Scoring_BM25(t *testing.T) {
 	ctx := context.Background()
 	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_search_scoring",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+		StoresFolders: []string{"test_search_scoring"},
+		Mode:          sop.ForWriting,
+		CacheType:     sop.InMemory,
 	})
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)
@@ -87,9 +87,9 @@ func TestIndex_Scoring_BM25(t *testing.T) {
 func TestIndex_MultiTerm_OR(t *testing.T) {
 	ctx := context.Background()
 	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_search_multiterm",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+		StoresFolders: []string{"test_search_multiterm"},
+		Mode:          sop.ForWriting,
+		CacheType:     sop.InMemory,
 	})
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)

@@ -18,7 +18,7 @@ func TestAIDatabase_Standalone_ModelStore(t *testing.T) {
 	defer os.RemoveAll(storagePath)
 
 	db := database.NewDatabase(core.DatabaseOptions{
-		StoragePath: storagePath,
+		StoresFolders: []string{storagePath},
 	})
 
 	ctx := context.Background()
@@ -47,7 +47,7 @@ func TestAIDatabase_Standalone_VectorStore(t *testing.T) {
 	defer os.RemoveAll(storagePath)
 
 	db := database.NewDatabase(core.DatabaseOptions{
-		StoragePath: storagePath,
+		StoresFolders: []string{storagePath},
 	})
 
 	ctx := context.Background()
@@ -79,7 +79,7 @@ func TestAIDatabase_Standalone_Search(t *testing.T) {
 	defer os.RemoveAll(storagePath)
 
 	db := database.NewDatabase(core.DatabaseOptions{
-		StoragePath: storagePath,
+		StoresFolders: []string{storagePath},
 	})
 
 	ctx := context.Background()

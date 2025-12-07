@@ -401,8 +401,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 }
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
-	sr := incfs.NewStoreRepository()
-	sr.Remove(ctx, "twophase2")
+	incfs.RemoveBtree(ctx, "twophase2", sop.Redis)
 
 	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	t1.Begin(ctx)

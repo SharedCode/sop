@@ -21,7 +21,7 @@ func TestNProbeAndFiltering(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	db := core_database.NewDatabase(core_database.DatabaseOptions{
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 	})
 	ctx := context.Background()
 	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
@@ -32,7 +32,7 @@ func TestNProbeAndFiltering(t *testing.T) {
 	idx, err := vector.Open[map[string]any](ctx, tx, "test_nprobe", vector.Config{
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 		},
 	})
 	if err != nil {
@@ -67,7 +67,7 @@ func TestNProbeAndFiltering(t *testing.T) {
 	idx, err = vector.Open[map[string]any](ctx, tx, "test_nprobe", vector.Config{
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 		},
 	})
 	if err != nil {

@@ -25,7 +25,7 @@ func TestOptimizeWithTempVectors(t *testing.T) {
 
 	// Initialize Database
 	db := database.NewDatabase(core_database.DatabaseOptions{
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 	})
 
 	ctx := context.Background()

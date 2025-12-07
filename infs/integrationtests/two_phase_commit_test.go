@@ -14,7 +14,7 @@ import (
 
 func Test_TwoPhaseCommit_RolledBack_Short(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 
 	// 1. Create store and commit.
 	t0, _ := infs.NewTransaction(ctx, to)

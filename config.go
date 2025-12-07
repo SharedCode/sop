@@ -7,7 +7,11 @@ import (
 type DatabaseType int
 
 const (
-	Standalone = iota
+	// Standalone mode uses an in-memory cache for coordination (locks, etc.).
+	// It is appropriate for standalone or embedded applications running in a single process.
+	Standalone DatabaseType = iota
+	// Clustered mode uses Redis for coordination (locks, etc.).
+	// It allows hosting multiple application instances across a network, properly orchestrated by SOP.
 	Clustered
 )
 
@@ -24,6 +28,10 @@ type DatabaseOptions struct {
 	CacheType CacheType `json:"cache_type"`
 	// Registry hash modulo value used for hashing.
 	RegistryHashModValue int `json:"registry_hash_mod,omitempty"`
+
+	// Type specifies the database type (Standalone or Clustered).
+	// This is a convenience field that sets the default CacheType.
+	Type DatabaseType `json:"type"`
 }
 
 // TransactionOptions holds the configuration for transactions.
@@ -49,23 +57,39 @@ type TransactionOptions struct {
 }
 
 // Copy Database Options to Transaction Options.
-func (t DatabaseOptions) CopyTo(transOptions *TransactionOptions) {
-	transOptions.StoresFolders = t.StoresFolders
-	transOptions.Keyspace = t.Keyspace
-	transOptions.ErasureConfig = t.ErasureConfig
-	transOptions.CacheType = t.CacheType
-	transOptions.RegistryHashModValue = t.RegistryHashModValue
+func (do DatabaseOptions) CopyTo(transOptions *TransactionOptions) {
+	transOptions.StoresFolders = do.StoresFolders
+	transOptions.Keyspace = do.Keyspace
+	transOptions.ErasureConfig = do.ErasureConfig
+	transOptions.CacheType = do.CacheType
+	transOptions.RegistryHashModValue = do.RegistryHashModValue
 }
 
 // GetDatabaseOptions returns the DatabaseOptions subset from TransactionOptions.
-func (t TransactionOptions) GetDatabaseOptions() DatabaseOptions {
+func (to TransactionOptions) GetDatabaseOptions() DatabaseOptions {
 	return DatabaseOptions{
-		StoresFolders:        t.StoresFolders,
-		Keyspace:             t.Keyspace,
-		ErasureConfig:        t.ErasureConfig,
-		CacheType:            t.CacheType,
-		RegistryHashModValue: t.RegistryHashModValue,
+		StoresFolders:        to.StoresFolders,
+		Keyspace:             to.Keyspace,
+		ErasureConfig:        to.ErasureConfig,
+		CacheType:            to.CacheType,
+		RegistryHashModValue: to.RegistryHashModValue,
 	}
+}
+
+func (to TransactionOptions) IsReplicated() bool {
+	return len(to.ErasureConfig) > 0 || len(to.StoresFolders) > 1
+}
+
+func (do DatabaseOptions) IsReplicated() bool {
+	return len(do.ErasureConfig) > 0 || len(do.StoresFolders) > 1
+}
+
+func (to TransactionOptions) IsCassandraHybrid() bool {
+	return to.Keyspace != ""
+}
+
+func (do DatabaseOptions) IsCassandraHybrid() bool {
+	return do.Keyspace != ""
 }
 
 func (do DatabaseOptions) GetDatabaseType() DatabaseType {
@@ -78,6 +102,7 @@ func (do DatabaseOptions) GetDatabaseType() DatabaseType {
 }
 
 func (do *DatabaseOptions) SetDatabaseType(t DatabaseType) {
+	do.Type = t
 	if t == Clustered {
 		do.CacheType = Redis
 	} else {

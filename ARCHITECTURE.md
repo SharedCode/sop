@@ -20,7 +20,7 @@ sop/
 ├── database/          # High-level Database API (Entry point)
 ├── fs/                # Filesystem registry & I/O
 ├── incfs/             # Hybrid backend (Cassandra + Filesystem)
-├── infs/              # Standard backend (Filesystem + Redis)
+├── infs/              # Standard backend (Filesystem only)
 ├── inmemory/          # In-memory backend for standalone mode
 ├── internal/          # Internal implementation details (hidden)
 ├── jsondb/            # JSON document store
@@ -33,7 +33,7 @@ sop/
 
 These packages are intended for direct use by consumers of the library:
 
-*   **`github.com/sharedcode/sop/infs`**: The **primary and recommended** backend. It uses the local filesystem for both metadata (via a high-performance hashmap) and data, with Redis for caching and coordination.
+*   **`github.com/sharedcode/sop/infs`**: The **primary and recommended** backend. It uses the local filesystem for both metadata (via a high-performance hashmap) and data. Redis is used strictly for **caching and coordination** (locking), not for data persistence.
     *   *Usage*: Ideal for both **distributed clusters** and single-node deployments. It outperforms the hybrid backend in stress tests.
 
 *   **`github.com/sharedcode/sop/incfs`**: The "Hybrid" backend. It combines:
@@ -155,7 +155,7 @@ SOP is designed to run in two distinct modes, catering to different scale requir
 
 ### 1. Filesystem Backend (`infs`) - **Recommended**
 *   **Backend**: `infs`.
-*   **Architecture**: Multiple application nodes, shared storage (Network FS/S3) + Redis.
+*   **Architecture**: Multiple application nodes, shared storage (Network FS/S3). Redis is used for **coordination only**.
 *   **Use Case**: Enterprise applications, high-availability services, distributed clusters.
 *   **Pros**: **Highest performance** (25% faster than hybrid), horizontal scalability, fault tolerance, ACID guarantees.
 

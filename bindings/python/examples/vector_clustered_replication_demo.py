@@ -7,7 +7,7 @@ import uuid
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context
-from sop.ai import Database, Item, DBType
+from sop.ai import Database, Item, DatabaseType
 from sop.database import DatabaseOptions
 from sop.transaction import TransactionMode, ErasureCodingConfig
 from sop.redis import Redis
@@ -28,6 +28,16 @@ def main():
     shard_paths = [os.path.abspath(f"vec_clus_repl_shard_{i}") for i in range(4)]
 
     # Clean up previous run
+    # Try to remove btree properly first if active path exists
+    if os.path.exists(active_path):
+        try:
+            ctx = Context()
+            # Redis is already initialized above
+            db = Database(DatabaseOptions(stores_folders=[active_path], type=DatabaseType.Clustered))
+            db.remove_btree(ctx, "demo_store_clus_repl")
+        except:
+            pass
+
     for p in [active_path, passive_path] + shard_paths:
         if os.path.exists(p):
             shutil.rmtree(p)
@@ -54,7 +64,7 @@ def main():
     
     # Initialize Database with Clustered Type AND Replication Config
     db = Database(DatabaseOptions(
-        db_type=DBType.Clustered, # <--- Clustered Mode
+        type=DatabaseType.Clustered, # <--- Clustered Mode
         erasure_config={"": ec_config},
         stores_folders=[active_path, passive_path]
     ))

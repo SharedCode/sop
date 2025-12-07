@@ -21,7 +21,7 @@ func TestOnCommit_FiresOnCommit(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	ctx := context.Background()
-	opts := sop.TransactionOptions{StoragePath: tmpDir, Mode: sop.ForWriting, MaxTime: -1}
+	opts := sop.TransactionOptions{StoresFolders: []string{tmpDir}, Mode: sop.ForWriting, MaxTime: -1}
 
 	trans, err := NewTransaction(ctx, opts)
 	if err != nil {
@@ -55,7 +55,7 @@ func TestOnCommit_DoesNotFireOnRollback(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	ctx := context.Background()
-	opts := sop.TransactionOptions{StoragePath: tmpDir, Mode: sop.ForWriting, MaxTime: -1}
+	opts := sop.TransactionOptions{StoresFolders: []string{tmpDir}, Mode: sop.ForWriting, MaxTime: -1}
 
 	trans, err := NewTransaction(ctx, opts)
 	if err != nil {

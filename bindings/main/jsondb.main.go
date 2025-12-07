@@ -312,6 +312,7 @@ const (
 	OpenModelStore
 	OpenVectorStore
 	OpenSearch
+	RemoveBtree
 )
 
 //export manageDatabase
@@ -332,7 +333,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		}
 
 		var db *database.Database
-		if opts.Keyspace != "" {
+		if opts.IsCassandraHybrid() {
 			db = database.NewCassandraDatabase(opts)
 		} else {
 			db = database.NewDatabase(opts)
@@ -387,7 +388,8 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		if err != nil {
 			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
 		}
-		if _, ok := dbRegistry.Get(targetUUID); !ok {
+		db, ok := dbRegistry.Get(targetUUID)
+		if !ok {
 			return C.CString("Database not found")
 		}
 
@@ -399,7 +401,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 
 		if b3o.IsPrimitiveKey {
 			log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
-			b3, err := jsondb.NewJsonBtree[any, any](ctx, *so, item.Transaction, nil)
+			b3, err := jsondb.NewJsonBtree[any, any](ctx, db.Database, *so, item.Transaction, nil)
 			if err != nil {
 				return C.CString(fmt.Sprintf("error creating Btree, details: %v", err))
 			}
@@ -407,7 +409,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			return C.CString(b3id.String())
 		} else {
 			log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
-			b3, err := jsondb.NewJsonBtreeMapKey(ctx, *so, item.Transaction, b3o.IndexSpecification)
+			b3, err := jsondb.NewJsonBtreeMapKey(ctx, db.Database, *so, item.Transaction, b3o.IndexSpecification)
 			if err != nil {
 				return C.CString(fmt.Sprintf("error creating Btree, details: %v", err))
 			}
@@ -427,7 +429,8 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		if err != nil {
 			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
 		}
-		if _, ok := dbRegistry.Get(targetUUID); !ok {
+		db, ok := dbRegistry.Get(targetUUID)
+		if !ok {
 			return C.CString("Database not found")
 		}
 
@@ -453,7 +456,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		}
 
 		if isPrimitiveKey {
-			b3, err := jsondb.OpenJsonBtree[any, any](ctx, so.Name, item.Transaction, nil)
+			b3, err := jsondb.OpenJsonBtree[any, any](ctx, db.Database, so.Name, item.Transaction, nil)
 			if err != nil {
 				return C.CString(fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err))
 			}
@@ -466,7 +469,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			b3id, _ := transRegistry.AddBtree(sop.UUID(b3o.TransactionID), b3)
 			return C.CString(b3id.String())
 		} else {
-			b3, err := jsondb.OpenJsonBtreeMapKey(ctx, so.Name, item.Transaction)
+			b3, err := jsondb.OpenJsonBtreeMapKey(ctx, db.Database, so.Name, item.Transaction)
 			if err != nil {
 				return C.CString(fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err))
 			}
@@ -605,6 +608,22 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		}
 
 		return C.CString(id.String())
+
+	case RemoveBtree:
+		targetUUID, err := sop.ParseUUID(targetIDStr)
+		if err != nil {
+			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
+		}
+		db, ok := dbRegistry.Get(targetUUID)
+		if !ok {
+			return C.CString("Database not found")
+		}
+
+		btreeName := jsonPayload
+		if err := db.RemoveBtree(ctx, btreeName); err != nil {
+			return C.CString(err.Error())
+		}
+		return nil
 	}
 	return nil
 }

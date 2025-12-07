@@ -68,7 +68,6 @@ func init() {
 
 	// Initialize Database
 	restapi.DB = database.NewDatabase(sop.DatabaseOptions{
-		StoragePath:   dataPath,
 		ErasureConfig: ecConfig,
 		StoresFolders: ecConfig[""].BaseFolderPathsAcrossDrives,
 	})

@@ -9,7 +9,7 @@ from . import context
 from . import transaction
 from .btree import Btree, BtreeOptions, IndexSpecification
 from .search import Index
-from .transaction import DBType, DatabaseOptions
+from .transaction import DatabaseType, DatabaseOptions
 
 
 class DatabaseAction(Enum):
@@ -20,6 +20,7 @@ class DatabaseAction(Enum):
     OpenModelStore = 5
     OpenVectorStore = 6
     OpenSearch = 7
+    RemoveBtree = 8
 
 class Database:
     def __init__(self, options: DatabaseOptions):
@@ -30,9 +31,9 @@ class Database:
         if self.id:
             return
 
-        # We reuse ModelDBOptions structure on Go side which expects storage_path and cache_type
+        # We reuse ModelDBOptions structure on Go side which expects storage_path and type
         opts = {
-            "cache_type": 2 if self.options.db_type == DBType.Clustered else 1
+            "type": self.options.type.value
         }
         
         if self.options.erasure_config:
@@ -94,11 +95,26 @@ class Database:
         except:
             raise Exception(res)
 
+    def remove_btree(self, ctx: context.Context, name: str) -> None:
+        self._ensure_database_created(ctx)
+        # Action RemoveBtree (Action 8)
+        # Payload is just the name
+        res = call_go.manage_database(ctx.id, DatabaseAction.RemoveBtree.value, str(self.id), name)
+        if res is not None:
+            raise Exception(res)
+
 class CassandraDatabase(Database):
+    """
+    CassandraDatabase implements a Hybrid Store architecture.
+    
+    It uses Apache Cassandra for the Registry (Metadata) and the local File System
+    for the Data (B-Tree Nodes and Values). This allows for a distributed registry
+    while keeping data locality or using a shared network drive for data.
+    """
     def __init__(self, keyspace: str, storage_path: str = ""):
         options = DatabaseOptions(
             stores_folders=[storage_path] if storage_path else [],
-            db_type=DBType.Clustered,
+            type=DatabaseType.Clustered,
             keyspace=keyspace
         )
         super().__init__(options)

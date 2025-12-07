@@ -77,11 +77,14 @@ func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, nam
 
 // RemoveBtree removes the B-tree with the given name from backend storage.
 // This is destructive: it drops registry and node-blob data and cannot be rolled back.
-func RemoveBtree(ctx context.Context, storesBaseFolder string, name string, cacheType sop.CacheType) error {
-	log.Info(fmt.Sprintf("Btree %s%c%s is about to be deleted", storesBaseFolder, os.PathSeparator, name))
+func RemoveBtree(ctx context.Context, options sop.DatabaseOptions, name string) error {
+	if len(options.StoresFolders) == 0 {
+		return fmt.Errorf("needs at least a folder to delete a Btree")
+	}
+	log.Info(fmt.Sprintf("Btree %s%c%s is about to be deleted", options.StoresFolders[0], os.PathSeparator, name))
 
-	cache := sop.NewCacheClientByType(cacheType)
-	replicationTracker, err := fs.NewReplicationTracker(ctx, []string{storesBaseFolder}, false, cache)
+	cache := sop.NewCacheClientByType(options.CacheType)
+	replicationTracker, err := fs.NewReplicationTracker(ctx, options.StoresFolders, false, cache)
 	if err != nil {
 		return err
 	}
@@ -90,7 +93,10 @@ func RemoveBtree(ctx context.Context, storesBaseFolder string, name string, cach
 		return err
 	}
 
-	return storeRepository.Remove(ctx, name)
+	if err := storeRepository.Remove(ctx, name); err != nil {
+		return err
+	}
+	return nil
 }
 
 // ReinstateFailedDrives asks the replication tracker to reinstate failed passive targets.

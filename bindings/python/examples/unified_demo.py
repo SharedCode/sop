@@ -7,7 +7,7 @@ import uuid
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context, TransactionMode, BtreeOptions, Item
-from sop.ai import Database, DBType, Item as VectorItem
+from sop.ai import Database, DatabaseType, Item as VectorItem
 from sop.database import DatabaseOptions
 
 def main():
@@ -26,7 +26,7 @@ def main():
     # 1. Initialize AI Database handle
     # We don't need to "create" the folder structure explicitly for AI DB, 
     # but we need the Database object to open stores.
-    ai_db = Database(DatabaseOptions(stores_folders=[vector_db_path], db_type=DBType.Standalone))
+    ai_db = Database(DatabaseOptions(stores_folders=[vector_db_path], type=DatabaseType.Standalone))
 
     # 2. Create a Transaction
     # We use a single storage path for simplicity in this demo.

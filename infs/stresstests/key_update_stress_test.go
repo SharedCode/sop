@@ -42,7 +42,7 @@ func Test_ConcurrentKeyUpdates_DifferentItems(t *testing.T) {
 	tableName := fmt.Sprintf("person_key_update_test_%d", time.Now().UnixNano())
 
 	// 1. Setup: Create store and add an initial item
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)
@@ -153,7 +153,7 @@ func Test_ConcurrentKeyUpdates_SameItem_Conflict(t *testing.T) {
 	tableName := fmt.Sprintf("person_key_update_conflict_test_%d", time.Now().UnixNano())
 
 	// 1. Setup
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)
@@ -231,7 +231,7 @@ func Test_ConcurrentValueUpdates_SameItem_Conflict(t *testing.T) {
 	tableName := fmt.Sprintf("person_value_update_conflict_test_%d", time.Now().UnixNano())
 
 	// 1. Setup
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)
@@ -309,7 +309,7 @@ func Test_ConcurrentKeyAndValueUpdates_SameItem_Conflict(t *testing.T) {
 	tableName := fmt.Sprintf("person_key_value_update_conflict_test_%d", time.Now().UnixNano())
 
 	// 1. Setup
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)

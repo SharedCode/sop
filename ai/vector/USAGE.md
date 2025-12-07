@@ -12,9 +12,9 @@ The `vector.Database` struct is a lightweight, stateless handle. It does not mai
 
 ```go
 // Open a handle to the DB (Cluster-safe)
-db := database.NewDatabase(database.DatabaseOptions{
-    DBType:      database.Standalone,
-    StoragePath: "/mnt/shared/sop_data",
+db := database.NewDatabase(sop.DatabaseOptions{
+    Type:          sop.Standalone,
+    StoresFolders: []string{"/mnt/shared/sop_data"},
 })
 
 // Open an index (Domain)

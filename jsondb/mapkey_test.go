@@ -6,21 +6,21 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
-	"github.com/sharedcode/sop/infs"
 )
 
 func TestJsonDBMapKey_IndexSpecAndOpen(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_jsondb_mapkey_idx_open",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+	d := database.NewDatabase(sop.DatabaseOptions{
+		StoresFolders: []string{"test_jsondb_mapkey_idx_open"},
+		CacheType:     sop.InMemory,
 	})
+	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_mapkey_idx_open")
 	}()
-	trans.Begin(ctx)
+	// trans.Begin(ctx)
 
 	idxSpec := NewIndexSpecification([]IndexFieldSpecification{
 		{FieldName: "name", AscendingSortOrder: true},
@@ -28,7 +28,7 @@ func TestJsonDBMapKey_IndexSpecAndOpen(t *testing.T) {
 	})
 	ba, _ := encoding.DefaultMarshaler.Marshal(idxSpec)
 
-	db, err := NewJsonBtreeMapKey(ctx, sop.StoreOptions{
+	db, err := NewJsonBtreeMapKey(ctx, d, sop.StoreOptions{
 		Name:       "users_idx",
 		SlotLength: 10,
 	}, trans, string(ba))
@@ -55,14 +55,14 @@ func TestJsonDBMapKey_IndexSpecAndOpen(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Re-open
-	trans, _ = infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_jsondb_mapkey_idx_open",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+	d = database.NewDatabase(sop.DatabaseOptions{
+		StoresFolders: []string{"test_jsondb_mapkey_idx_open"},
+		CacheType:     sop.InMemory,
 	})
-	trans.Begin(ctx)
+	trans, _ = d.BeginTransaction(ctx, sop.ForWriting)
+	// trans.Begin(ctx)
 
-	db2, err := OpenJsonBtreeMapKey(ctx, "users_idx", trans)
+	db2, err := OpenJsonBtreeMapKey(ctx, d, "users_idx", trans)
 	if err != nil {
 		t.Fatalf("OpenJsonBtreeMapKey failed: %v", err)
 	}
@@ -90,11 +90,11 @@ func TestJsonDBMapKey_IndexSpecAndOpen(t *testing.T) {
 
 func TestJsonDBMapKey_BasicCRUD(t *testing.T) {
 	ctx := context.Background()
-	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_jsondb_mapkey",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+	d := database.NewDatabase(sop.DatabaseOptions{
+		StoresFolders: []string{"test_jsondb_mapkey"},
+		CacheType:     sop.InMemory,
 	})
+	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestJsonDBMapKey_BasicCRUD(t *testing.T) {
 		}
 	}()
 
-	trans.Begin(ctx)
+	// trans.Begin(ctx)
 
 	so := sop.StoreOptions{
 		Name:       "map_store",
@@ -112,7 +112,7 @@ func TestJsonDBMapKey_BasicCRUD(t *testing.T) {
 	}
 
 	// Test with default comparer (no index spec)
-	db, err := NewJsonBtreeMapKey(ctx, so, trans, "")
+	db, err := NewJsonBtreeMapKey(ctx, d, so, trans, "")
 	if err != nil {
 		t.Fatalf("NewJsonBtreeMapKey failed: %v", err)
 	}
@@ -148,11 +148,11 @@ func TestJsonDBMapKey_BasicCRUD(t *testing.T) {
 
 func TestJsonDBMapKey_WithIndexSpec(t *testing.T) {
 	ctx := context.Background()
-	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_jsondb_mapkey_idx",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+	d := database.NewDatabase(sop.DatabaseOptions{
+		StoresFolders: []string{"test_jsondb_mapkey_idx"},
+		CacheType:     sop.InMemory,
 	})
+	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestJsonDBMapKey_WithIndexSpec(t *testing.T) {
 		os.RemoveAll("test_jsondb_mapkey_idx")
 	}()
 
-	trans.Begin(ctx)
+	// trans.Begin(ctx)
 
 	so := sop.StoreOptions{
 		Name:       "map_store_idx",
@@ -170,7 +170,7 @@ func TestJsonDBMapKey_WithIndexSpec(t *testing.T) {
 	// Simple index spec
 	indexSpec := `{"index_fields": [{"field_name": "id", "ascending_sort_order": true}]}`
 
-	db, err := NewJsonBtreeMapKey(ctx, so, trans, indexSpec)
+	db, err := NewJsonBtreeMapKey(ctx, d, so, trans, indexSpec)
 	if err != nil {
 		t.Fatalf("NewJsonBtreeMapKey failed: %v", err)
 	}
@@ -218,14 +218,14 @@ func TestJsonDBMapKey_Open(t *testing.T) {
 	ctx := context.Background()
 	// Setup
 	{
-		trans, _ := infs.NewTransaction(ctx, sop.TransactionOptions{
-			StoragePath: "test_jsondb_mapkey_open",
-			Mode:             sop.ForWriting,
-			CacheType: sop.InMemory,
+		d := database.NewDatabase(sop.DatabaseOptions{
+			StoresFolders: []string{"test_jsondb_mapkey_open"},
+			CacheType:     sop.InMemory,
 		})
-		trans.Begin(ctx)
+		trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+		// trans.Begin(ctx)
 		so := sop.StoreOptions{Name: "map_store_open"}
-		_, _ = NewJsonBtreeMapKey(ctx, so, trans, "")
+		_, _ = NewJsonBtreeMapKey(ctx, d, so, trans, "")
 		trans.Commit(ctx)
 	}
 	defer func() {
@@ -233,17 +233,17 @@ func TestJsonDBMapKey_Open(t *testing.T) {
 	}()
 
 	// Test Open
-	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_jsondb_mapkey_open",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+	d := database.NewDatabase(sop.DatabaseOptions{
+		StoresFolders: []string{"test_jsondb_mapkey_open"},
+		CacheType:     sop.InMemory,
 	})
+	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
 	}
-	trans.Begin(ctx)
+	// trans.Begin(ctx)
 
-	db, err := OpenJsonBtreeMapKey(ctx, "map_store_open", trans)
+	db, err := OpenJsonBtreeMapKey(ctx, d, "map_store_open", trans)
 	if err != nil {
 		t.Fatalf("OpenJsonBtreeMapKey failed: %v", err)
 	}
@@ -257,14 +257,14 @@ func TestJsonDBMapKey_OpenNoIndexSpec(t *testing.T) {
 	ctx := context.Background()
 	// Setup: Create a store without index spec
 	{
-		trans, _ := infs.NewTransaction(ctx, sop.TransactionOptions{
-			StoragePath: "test_jsondb_mapkey_no_idx",
-			Mode:             sop.ForWriting,
-			CacheType: sop.InMemory,
+		d := database.NewDatabase(sop.DatabaseOptions{
+			StoresFolders: []string{"test_jsondb_mapkey_no_idx"},
+			CacheType:     sop.InMemory,
 		})
-		trans.Begin(ctx)
+		trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+		// trans.Begin(ctx)
 		so := sop.StoreOptions{Name: "map_store_no_idx"}
-		_, _ = NewJsonBtreeMapKey(ctx, so, trans, "")
+		_, _ = NewJsonBtreeMapKey(ctx, d, so, trans, "")
 		trans.Commit(ctx)
 	}
 	defer func() {
@@ -272,17 +272,17 @@ func TestJsonDBMapKey_OpenNoIndexSpec(t *testing.T) {
 	}()
 
 	// Open and use it
-	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_jsondb_mapkey_no_idx",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+	d := database.NewDatabase(sop.DatabaseOptions{
+		StoresFolders: []string{"test_jsondb_mapkey_no_idx"},
+		CacheType:     sop.InMemory,
 	})
+	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
 	}
-	trans.Begin(ctx)
+	// trans.Begin(ctx)
 
-	db, err := OpenJsonBtreeMapKey(ctx, "map_store_no_idx", trans)
+	db, err := OpenJsonBtreeMapKey(ctx, d, "map_store_no_idx", trans)
 	if err != nil {
 		t.Fatalf("OpenJsonBtreeMapKey failed: %v", err)
 	}
@@ -316,19 +316,19 @@ func TestJsonDBMapKey_OpenNoIndexSpec(t *testing.T) {
 
 func TestJsonDBMapKey_InvalidSpec(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_jsondb_mapkey_invalid",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+	d := database.NewDatabase(sop.DatabaseOptions{
+		StoresFolders: []string{"test_jsondb_mapkey_invalid"},
+		CacheType:     sop.InMemory,
 	})
+	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_mapkey_invalid")
 	}()
-	trans.Begin(ctx)
+	// trans.Begin(ctx)
 
 	so := sop.StoreOptions{Name: "map_store_invalid"}
 	// Invalid JSON
-	_, err := NewJsonBtreeMapKey(ctx, so, trans, "{invalid_json")
+	_, err := NewJsonBtreeMapKey(ctx, d, so, trans, "{invalid_json")
 	if err == nil {
 		t.Error("Expected error for invalid JSON spec")
 	}
@@ -337,18 +337,18 @@ func TestJsonDBMapKey_InvalidSpec(t *testing.T) {
 
 func TestJsonDBMapKey_DefaultComparer_DifferentKeys(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_jsondb_mapkey_diff_keys",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+	d := database.NewDatabase(sop.DatabaseOptions{
+		StoresFolders: []string{"test_jsondb_mapkey_diff_keys"},
+		CacheType:     sop.InMemory,
 	})
+	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_mapkey_diff_keys")
 	}()
-	trans.Begin(ctx)
+	// trans.Begin(ctx)
 
 	so := sop.StoreOptions{Name: "map_store_diff_keys"}
-	db, _ := NewJsonBtreeMapKey(ctx, so, trans, "")
+	db, _ := NewJsonBtreeMapKey(ctx, d, so, trans, "")
 
 	// Add item with key "a"
 	key1 := map[string]any{"a": 1}
@@ -367,19 +367,19 @@ func TestJsonDBMapKey_DefaultComparer_DifferentKeys(t *testing.T) {
 
 func TestJsonDBMapKey_New_Failure(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_jsondb_mapkey_fail",
-		Mode:             sop.ForWriting,
-		CacheType: sop.InMemory,
+	d := database.NewDatabase(sop.DatabaseOptions{
+		StoresFolders: []string{"test_jsondb_mapkey_fail"},
+		CacheType:     sop.InMemory,
 	})
+	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_mapkey_fail")
 	}()
-	trans.Begin(ctx)
+	// trans.Begin(ctx)
 	trans.Commit(ctx) // Commit to force failure
 
 	so := sop.StoreOptions{Name: "fail_map_store"}
-	_, err := NewJsonBtreeMapKey(ctx, so, trans, "")
+	_, err := NewJsonBtreeMapKey(ctx, d, so, trans, "")
 	if err == nil {
 		t.Error("Expected error for committed transaction")
 	}
@@ -387,17 +387,17 @@ func TestJsonDBMapKey_New_Failure(t *testing.T) {
 
 func TestJsonDBMapKey_Open_Failure(t *testing.T) {
 	ctx := context.Background()
-	trans, _ := infs.NewTransaction(ctx, sop.TransactionOptions{
-		StoragePath: "test_jsondb_mapkey_open_fail",
-		Mode:             sop.ForReading,
-		CacheType: sop.InMemory,
+	d := database.NewDatabase(sop.DatabaseOptions{
+		StoresFolders: []string{"test_jsondb_mapkey_open_fail"},
+		CacheType:     sop.InMemory,
 	})
+	trans, _ := d.BeginTransaction(ctx, sop.ForReading)
 	defer func() {
 		os.RemoveAll("test_jsondb_mapkey_open_fail")
 	}()
-	trans.Begin(ctx)
+	// trans.Begin(ctx)
 
-	_, err := OpenJsonBtreeMapKey(ctx, "non_existent", trans)
+	_, err := OpenJsonBtreeMapKey(ctx, d, "non_existent", trans)
 	if err == nil {
 		t.Error("Expected error for non-existent store")
 	}

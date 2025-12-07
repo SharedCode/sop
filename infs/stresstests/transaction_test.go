@@ -54,7 +54,7 @@ const tableName2 = "twophase22"
 
 func Test_SimpleAddPerson(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
@@ -99,7 +99,7 @@ func Test_SimpleAddPerson(t *testing.T) {
 
 func AddToBreakNodeThenRemoveAll(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, _ := infs.NewTransaction(ctx, to)
 	trans.Begin(ctx)
 
@@ -131,7 +131,7 @@ func AddToBreakNodeThenRemoveAll(t *testing.T) {
 
 func Test_AddThenTripleUpdatesPerson(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
@@ -241,7 +241,7 @@ func Test_AddThenTripleUpdatesPerson(t *testing.T) {
 
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
@@ -283,7 +283,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 
 func Test_AddAndSearchManyPersons(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatalf("%s", err.Error())
@@ -316,7 +316,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	to2 := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	trans, err = infs.NewTransaction(ctx, to2)
 	if err != nil {
 		t.Errorf("%s", err.Error())
@@ -352,7 +352,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, _ := infs.NewTransaction(ctx, to)
 	t1.Begin(ctx)
 	b3, _ := infs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -380,7 +380,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	}
 
 	// Search them all. Searching 90,000 items just took few seconds in my laptop.
-	to2 := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 
 	b3.Last(ctx)
 	b3.First(ctx)
@@ -415,7 +415,7 @@ func Test_VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	//to.UseCacheForFileRegionLocks = true
 	t1, _ := infs.NewTransaction(ctx, to)
 	t1.Begin(ctx)
@@ -453,7 +453,7 @@ func Test_MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
 
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 	t1, _ := infs.NewTransaction(ctx, to)
 	t1.Begin(ctx)
 	b3, _ := infs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -536,7 +536,7 @@ func Test_MixedOperations(t *testing.T) {
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoragePath: dataPath, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
 
 	// Pre-create the store in a separate transaction so it exists for the test.
 	t0, _ := infs.NewTransaction(ctx, to)

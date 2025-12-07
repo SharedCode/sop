@@ -90,6 +90,20 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, config sop
 			return nil, fmt.Errorf("config.ErasureConfig can't be nil")
 		}
 	}
+
+	// If BaseFolderPathsAcrossDrives is not set, use the StoresFolders.
+	// This is a convenience fallback for simple setups where the user wants to use the same folders for both
+	// Registry replication and Blob Store erasure coding.
+	// However, conceptually they are distinct:
+	// - StoresFolders: Active/Passive Registry replication
+	// - BaseFolderPathsAcrossDrives: Erasure Coding shards for Blob Store
+	for k, v := range config.ErasureConfig {
+		if len(v.BaseFolderPathsAcrossDrives) == 0 {
+			v.BaseFolderPathsAcrossDrives = config.StoresFolders
+			config.ErasureConfig[k] = v
+		}
+	}
+
 	fio := fs.NewFileIO()
 	cache := sop.NewCacheClientByType(config.CacheType)
 	if cache == nil {

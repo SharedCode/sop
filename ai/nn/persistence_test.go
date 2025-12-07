@@ -19,7 +19,7 @@ func TestPerceptronPersistenceWithModelStore(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	db := database.NewDatabase(core_database.DatabaseOptions{
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 	})
 	ctx := context.Background()
 

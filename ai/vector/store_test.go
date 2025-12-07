@@ -22,7 +22,7 @@ func TestVectorStore(t *testing.T) {
 
 	// Initialize Database
 	db := database.NewDatabase(core_database.DatabaseOptions{
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 	})
 
 	// 1. Test Upsert
@@ -250,7 +250,7 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 
 	// Initialize Database
 	db := database.NewDatabase(core_database.DatabaseOptions{
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 	})
 
 	ctx := context.Background()
@@ -262,7 +262,7 @@ func TestDeleteUpdatesCentroidCount(t *testing.T) {
 	index, err := db.OpenVectorStore(ctx, "test_delete_count", tx, vector.Config{
 		UsageMode: ai.DynamicWithVectorCountTracking,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 		},
 	})
 	if err != nil {

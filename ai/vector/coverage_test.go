@@ -37,7 +37,7 @@ func TestArchitectureDirectMethods(t *testing.T) {
 	// We can reuse the Database helper to get a transaction.
 
 	db := database.NewDatabase(core_database.DatabaseOptions{
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 	})
 
 	ctx := context.Background()

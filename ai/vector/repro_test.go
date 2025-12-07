@@ -14,7 +14,7 @@ func TestRepro(t *testing.T) {
 	fmt.Printf("Redis: %d\n", sop.Redis)
 
 	db := database.NewDatabase(database.DatabaseOptions{
-		StoragePath: "/tmp/test",
+		StoresFolders: []string{"/tmp/test"},
 	})
 
 	cache := db.Cache()

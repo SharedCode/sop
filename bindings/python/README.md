@@ -55,7 +55,7 @@ First, create a Context and open a Database connection.
 
 ```python
 from sop import Context, TransactionMode, TransactionOptions, Btree, BtreeOptions, Item
-from sop.ai import Database, DBType, Item as VectorItem
+from sop.ai import Database, DatabaseType, Item as VectorItem
 from sop.database import DatabaseOptions
 
 # Initialize Context
@@ -63,12 +63,12 @@ ctx = Context()
 
 # Open Database (Standalone Mode)
 # This creates/opens a database at the specified path.
-db = Database(DatabaseOptions(storage_path="data/my_db", db_type=DBType.Standalone))
+db = Database(DatabaseOptions(stores_folders=["data/my_db"], type=DatabaseType.Standalone))
 
 # Open Database (Clustered Mode with Multi-Tenancy)
 # Connects to a specific Cassandra Keyspace ("tenant_1").
 # Requires Cassandra and Redis.
-# db_clustered = Database(DatabaseOptions(storage_path="data/blobs", keyspace="tenant_1", db_type=DBType.Clustered))
+# db_clustered = Database(DatabaseOptions(stores_folders=["data/blobs"], keyspace="tenant_1", type=DatabaseType.Clustered))
 ```
 
 ### 2. Start a Transaction
@@ -78,7 +78,7 @@ All data operations (Create, Read, Update, Delete) must happen within a transact
 ```python
 # Begin a transaction (Read-Write)
 # You can use 'with' block for auto-commit/rollback, or manage manually.
-with db.begin_transaction(ctx, mode=TransactionMode.ForWriting.value) as tx:
+with db.begin_transaction(ctx) as tx:
     
     # --- 3. Vector Store (AI) ---
     # Open a Vector Store named "products"
@@ -182,10 +182,9 @@ Logger.configure(LogLevel.Info)
 You can configure timeouts, isolation levels, and more.
 
 ```python
-from sop import TransactionOptions, TransactionMode
+from sop import TransactionOptions
 
 opts = TransactionOptions(
-    mode=TransactionMode.ForWriting.value,
     max_time=15,  # 15 minutes timeout
 )
 
@@ -194,15 +193,15 @@ tx = db.begin_transaction(ctx, options=opts)
 
 ### Clustered Mode
 
-For distributed deployments, switch to `DBType.Clustered`. This requires Redis for coordination.
+For distributed deployments, switch to `DatabaseType.Clustered`. This requires Redis for coordination.
 
 ```python
-from sop.ai import DBType
+from sop.ai import DatabaseType
 
 db = Database(
     ctx, 
-    storage_path="/mnt/shared_data", 
-    db_type=DBType.Clustered
+    stores_folders=["/mnt/shared_data"], 
+    type=DatabaseType.Clustered
 )
 ```
 

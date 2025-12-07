@@ -178,9 +178,9 @@ SOP is a NoSQL-like key/value storage engine with built-in indexing and transact
 - Use the `database` package to initialize your environment.
   ```go
   // Initialize (Standalone or Clustered)
-  db := database.NewDatabase(database.DatabaseOptions{
-      DBType:      database.Standalone,
-      StoragePath: "/var/lib/sop",
+  db := database.NewDatabase(sop.DatabaseOptions{
+      Type:          sop.Standalone,
+      StoresFolders: []string{"/var/lib/sop"},
   })
 
   // Start a Transaction

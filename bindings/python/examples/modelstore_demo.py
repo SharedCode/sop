@@ -7,7 +7,7 @@ from dataclasses import dataclass
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context
-from sop.ai import Database, DBType
+from sop.ai import Database, DatabaseType
 from sop.database import DatabaseOptions
 
 @dataclass
@@ -27,7 +27,7 @@ def main():
     print(f"Initializing SOP Database at '{db_path}'...")
     ctx = Context()
     # Initialize the Database (Unified Mode)
-    db = Database(DatabaseOptions(stores_folders=[db_path], db_type=DBType.Standalone))
+    db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Standalone))
 
     # Start Transaction
     with db.begin_transaction(ctx) as trans:

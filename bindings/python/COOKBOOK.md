@@ -13,7 +13,7 @@ import json
 
 # 1. Initialize Database
 ctx = sop.Context()
-db = sop.Database(sop.DatabaseOptions(storage_path="/tmp/sop_data"))
+db = sop.Database(sop.DatabaseOptions(stores_folders=["/tmp/sop_data"]))
 
 # 2. Run Transaction
 with db.begin_transaction(ctx) as t:
@@ -84,7 +84,7 @@ def transfer_funds(ctx, db, from_id, to_id, amount):
 
 # Usage
 ctx = sop.Context()
-db = sop.Database(sop.DatabaseOptions(storage_path="/tmp/sop_data"))
+db = sop.Database(sop.DatabaseOptions(stores_folders=["/tmp/sop_data"]))
 transfer_funds(ctx, db, "user_1", "user_2", 100)
 ```
 
@@ -97,7 +97,7 @@ import sop
 from sop.ai import Database as AIDatabase, Item
 
 ctx = sop.Context()
-db = AIDatabase(sop.DatabaseOptions(storage_path="/tmp/sop_vectors"))
+db = AIDatabase(sop.DatabaseOptions(stores_folders=["/tmp/sop_vectors"]))
 
 with db.begin_transaction(ctx) as tx:
     store = db.open_vector_store(ctx, tx, "products")
@@ -208,3 +208,40 @@ with db.begin_transaction(ctx) as t:
     for r in results:
         print(f"Doc: {r.DocID}, Score: {r.Score}")
 ```
+
+## 4. Managing Stores (Remove Btree)
+
+You can remove a B-Tree store from the database. This action is permanent and deletes all data associated with the store.
+
+```python
+import sop
+from sop import btree
+
+# 1. Initialize Database
+ctx = sop.Context()
+db = sop.Database(sop.DatabaseOptions(stores_folders=["/tmp/sop_data"]))
+
+# 2. Create a store to delete
+with db.begin_transaction(ctx) as t:
+    bo = btree.BtreeOptions("temp_store")
+    store = db.new_btree(ctx, "temp_store", t, bo)
+    store.add(ctx, sop.btree.Item(key="foo", value="bar"))
+    print("Created 'temp_store' and added data.")
+
+# 3. Remove the store
+# Note: RemoveBtree is a database-level operation and does not require an active transaction.
+try:
+    db.remove_btree(ctx, "temp_store")
+    print("Successfully removed 'temp_store'.")
+except Exception as e:
+    print(f"Failed to remove store: {e}")
+
+# 4. Verify removal
+with db.begin_transaction(ctx) as t:
+    try:
+        store = db.open_btree(ctx, "temp_store", t)
+        print("Store still exists (unexpected).")
+    except Exception:
+        print("Store not found (expected).")
+```
+

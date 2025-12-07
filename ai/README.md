@@ -118,9 +118,9 @@ import (
 
 func main() {
     // 1. Initialize the Vector Database
-    db := database.NewDatabase(database.DatabaseOptions{
-        DBType:      database.Standalone,
-        StoragePath: "./my_knowledge_base",
+    db := database.NewDatabase(sop.DatabaseOptions{
+        Type:          sop.Standalone,
+        StoresFolders: []string{"./my_knowledge_base"},
     })
     
     // 2. Start a Transaction

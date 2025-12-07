@@ -18,7 +18,7 @@ func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
 	defer os.RemoveAll(path)
 
 	db := core_database.NewDatabase(core_database.DatabaseOptions{
-		StoragePath: path,
+		StoresFolders: []string{path},
 	})
 
 	t1, _ := db.BeginTransaction(ctx, sop.ForWriting)
@@ -26,7 +26,7 @@ func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
 	cfg := vector.Config{
 		UsageMode: ai.DynamicWithVectorCountTracking,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: path,
+			StoresFolders: []string{path},
 			CacheType:   sop.InMemory,
 		},
 		Cache: db.Cache(),

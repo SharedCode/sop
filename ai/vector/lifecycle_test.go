@@ -22,7 +22,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	db := core_database.NewDatabase(core_database.DatabaseOptions{
-		StoragePath: tmpDir,
+		StoresFolders: []string{tmpDir},
 	})
 	ctx := context.Background()
 
@@ -45,7 +45,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 		ContentSize:           sop.MediumData,
 		EnableIngestionBuffer: true,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 			CacheType:   sop.InMemory,
 		},
 		Cache: db.Cache(),
@@ -90,7 +90,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 		ContentSize:           sop.MediumData,
 		EnableIngestionBuffer: true,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 			CacheType:   sop.InMemory,
 		},
 		Cache: db.Cache(),
@@ -161,7 +161,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 		UsageMode:   ai.Dynamic,
 		ContentSize: sop.MediumData,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 			CacheType:   sop.InMemory,
 		},
 		Cache: db.Cache(),
@@ -201,7 +201,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 		UsageMode:   ai.Dynamic,
 		ContentSize: sop.MediumData,
 		TransactionOptions: sop.TransactionOptions{
-			StoragePath: tmpDir,
+			StoresFolders: []string{tmpDir},
 			CacheType:   sop.InMemory,
 		},
 		Cache: db.Cache(),

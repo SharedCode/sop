@@ -10,7 +10,7 @@ class TestSearch(unittest.TestCase):
 
     def test_search_basic(self):
         ctx = context.Context()
-        db = database.Database(database.DatabaseOptions(stores_folders=["data/search_test"], db_type=database.DBType.Standalone))
+        db = database.Database(database.DatabaseOptions(stores_folders=["data/search_test"], type=database.DatabaseType.Standalone))
         t = db.begin_transaction(ctx)
         
         idx = db.open_search(ctx, "my_index", t)

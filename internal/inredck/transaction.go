@@ -11,7 +11,9 @@ import (
 
 // NewTransaction is a convenience function to create an end-user facing transaction object that wraps the two-phase commit transaction.
 func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
-	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging, cas.NewBlobStore(nil), cas.NewStoreRepository(nil, nil), nil)
+	// inredck assumes Redis for caching.
+	cache := sop.NewCacheClientByType(sop.Redis)
+	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, logging, cas.NewBlobStore(nil), cas.NewStoreRepository(nil, nil, cache), nil)
 	if err != nil {
 		return nil, err
 	}

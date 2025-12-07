@@ -7,7 +7,7 @@ import uuid
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context
-from sop.ai import Database, Item, DBType
+from sop.ai import Database, Item, DatabaseType
 from sop.database import DatabaseOptions
 from sop.transaction import TransactionMode
 from sop.redis import Redis
@@ -17,6 +17,16 @@ def main():
     
     # Clean up previous run
     if os.path.exists(db_path):
+        try:
+            # Try to clean up properly using SOP API to ensure Redis is also cleaned
+            ctx = Context()
+            # We need to initialize Redis first for RemoveBtree to work in Clustered mode
+            Redis.initialize("redis://localhost:6379")
+            db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Clustered))
+            db.remove_btree(ctx, "demo_store_clustered")
+        except:
+            # If it fails (e.g. corrupted, or Redis not available yet), ignore and proceed to force delete
+            pass
         shutil.rmtree(db_path)
     os.makedirs(db_path, exist_ok=True)
 
@@ -30,17 +40,27 @@ def main():
     print("Attempting to connect to Redis (localhost:6379)...")
     # opts = RedisOptions()
     try:
-        Redis.initialize("redis://localhost:6379")
+        # Re-initialize if needed (idempotent usually, or check if already init)
+        # Redis.initialize("redis://localhost:6379") 
+        # Since we might have initialized it above, we can skip or just let it be.
+        # But the original code initialized it here.
+        pass
     except Exception as e:
         print(f"Skipping Clustered Demo: Could not connect to Redis. Error: {e}")
         return
+
+    # Ensure Redis is initialized for the main logic
+    try:
+         Redis.initialize("redis://localhost:6379")
+    except:
+         pass
 
     try:
         print(f"Initializing SOP Vector Database (Clustered) at '{db_path}'...")
         ctx = Context()
         # Note: In Clustered mode, we typically use a shared storage path or distributed file system,
         # but for this demo we use a local path.
-        db = Database(DatabaseOptions(stores_folders=[db_path], db_type=DBType.Clustered))
+        db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Clustered))
 
         # --- 1. Explicit Transaction ---
         print("\n--- 1. Explicit Transaction ---")

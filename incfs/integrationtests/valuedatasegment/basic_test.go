@@ -112,7 +112,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 }
 
 func Test_ByteArrayValue(t *testing.T) {
-	incfs.RemoveBtree(ctx, "baStore")
+	incfs.RemoveBtree(ctx, "baStore", sop.Redis)
 	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
 	if err != nil {
 		t.Fatal(err.Error())

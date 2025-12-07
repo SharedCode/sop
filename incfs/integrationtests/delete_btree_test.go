@@ -6,6 +6,7 @@ package integrationtests
 import (
 	"testing"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/incfs"
 )
 
@@ -23,7 +24,7 @@ func DeleteBTree(t *testing.T) {
 	}
 
 	for _, tn := range tableList {
-		if err := incfs.RemoveBtree(ctx, tn); err != nil {
+		if err := incfs.RemoveBtree(ctx, tn, sop.Redis); err != nil {
 			t.Error(err)
 		}
 	}

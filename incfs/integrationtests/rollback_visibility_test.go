@@ -22,7 +22,7 @@ func TestRollbackVisibilityRaceCondition(t *testing.T) {
 	os.RemoveAll(path)
 
 	// 2. Initialize Database
-	db := database.NewCassandraDatabase(sop.DatabaseOptions{Keyspace: keyspace, StoragePath: path})
+	db := database.NewCassandraDatabase(sop.DatabaseOptions{Keyspace: keyspace, StoresFolders: []string{path}})
 	storeName := "race_store"
 
 	// 3. Transaction A: Create Store (but don't commit yet)
