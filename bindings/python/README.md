@@ -154,7 +154,18 @@ with db.begin_transaction(ctx) as tx:
         value={"name": "Alice"}
     ))
 
-    # --- 7. Text Search ---
+    # --- 7. Simplified Lookup (Dictionary Keys) ---
+    # You can search for items using a plain dictionary, without needing the original dataclass.
+    # This is useful for consumer apps that just need to read data.
+    
+    # Open existing B-Tree (no IndexSpec needed, it's loaded from disk)
+    employees_read = db.open_btree(ctx, "employees", tx)
+    
+    # Search using a dict matching the key structure
+    if employees_read.find(ctx, {"region": "US", "department": "Sales", "id": 101}):
+        print("Found Alice!")
+
+    # --- 8. Text Search ---
     # Open a Search Index
     idx = db.open_search(ctx, "articles", tx)
     idx.add("doc1", "The quick brown fox")
