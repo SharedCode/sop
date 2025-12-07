@@ -63,6 +63,12 @@ python3 examples/modelstore_demo.py
 echo "Running examples/unified_demo.py..."
 python3 examples/unified_demo.py
 
+echo "Running examples/complex_key_demo.py..."
+python3 examples/complex_key_demo.py
+
+echo "Running examples/metadata_key_demo.py..."
+python3 examples/metadata_key_demo.py
+
 echo "Running examples/vector_demo.py..."
 python3 examples/vector_demo.py
 

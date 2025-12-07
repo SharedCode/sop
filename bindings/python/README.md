@@ -6,6 +6,8 @@
 
 *   **Unified Database**: Single entry point for managing Vector, Model, and Key-Value stores.
 *   **Transactional B-Tree Store**: Unlimited, persistent B-Tree storage for key-value data.
+*   **Complex Keys**: Support for composite keys (structs/dataclasses) with custom index specifications (e.g., Region -> Dept -> ID).
+*   **Metadata "Ride-on" Keys**: Store metadata directly in the B-Tree key (e.g., timestamps, status flags) to enable high-speed scanning and filtering of millions of records without fetching the heavy value payload. Ideal for "Big Data" management and analytics.
 *   **Vector Database**: Built-in vector search (k-NN) for AI embeddings and similarity search.
 *   **Text Search**: Transactional, embedded text search engine (BM25).
 *   **AI Model Store**: Versioned storage for machine learning models (B-Tree backed).
@@ -15,6 +17,14 @@
 *   **Replication**: Optional Erasure Coding (EC) for fault-tolerant storage across drives.
 *   **Multi-Tenancy**: Native support for Cassandra Keyspaces or Directory-based isolation.
 *   **Flexible Deployment**: Supports both **Standalone** (local) and **Clustered** (distributed) modes.
+
+## Performance & Big Data Management
+
+SOP is designed for high-throughput, low-latency scenarios, making it suitable for "Big Data" management on commodity hardware.
+
+*   **"Ride-on" Metadata**: By embedding metadata (like `IsDeleted`, `LastUpdated`, `Category`) directly into the Key struct but *excluding* it from the index (using `IndexSpecification`), you can scan millions of keys per second to filter data. This avoids the I/O penalty of fetching the full Value (which might be a large JSON blob or binary file) just to check a status flag.
+*   **Direct I/O**: SOP bypasses OS page caches where appropriate to offer consistent, raw disk performance.
+*   **Parallelism**: The underlying Go engine utilizes highly concurrent goroutines for managing B-Tree nodes and vector indexes.
 
 ## Documentation
 
@@ -116,7 +126,11 @@ with db.begin_transaction(ctx) as tx:
         if items and items[0].value:
             print(f"Found User: {items[0].value}")
 
-    # --- 6. Text Search ---
+    # --- 6. Complex Keys (Structs) ---
+    # See COOKBOOK.md for full example on using Dataclasses and IndexSpecs
+    # to create multi-column indexes (e.g., Region -> Dept -> ID).
+
+    # --- 7. Text Search ---
     # Open a Search Index
     idx = db.open_search(ctx, "articles", tx)
     idx.add("doc1", "The quick brown fox")

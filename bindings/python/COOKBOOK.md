@@ -88,7 +88,129 @@ db = sop.Database(sop.DatabaseOptions(stores_folders=["/tmp/sop_data"]))
 transfer_funds(ctx, db, "user_1", "user_2", 100)
 ```
 
-## 3. Vector Database (AI)
+## 3. Complex Keys & Indexing
+
+SOP supports complex keys (structs/dataclasses) and allows you to define how fields are indexed and sorted. This enables efficient multi-column sorting and prefix scanning.
+
+```python
+from dataclasses import dataclass
+from sop import Context, BtreeOptions, Item, ValueDataSize, PagingInfo
+from sop.btree import IndexSpecification, IndexFieldSpecification
+from sop.ai import Database, DatabaseType
+from sop.database import DatabaseOptions
+
+# 1. Define Key Structure (Region -> Dept -> ID)
+@dataclass
+class UserKey:
+    region: str
+    department: str
+    employee_id: int
+
+# 2. Define Value Structure
+@dataclass
+class UserProfile:
+    name: str
+    role: str
+
+ctx = Context()
+db = Database(DatabaseOptions(stores_folders=["/tmp/sop_complex_db"], type=DatabaseType.Standalone))
+
+with db.begin_transaction(ctx) as t:
+    # Configure B-Tree for Complex Keys
+    bo = BtreeOptions("employees", is_unique=True)
+    bo.is_primitive_key = False 
+    bo.set_value_data_size(ValueDataSize.Small)
+
+    # Define Index Hierarchy: Region -> Department -> EmployeeID
+    idx_spec = IndexSpecification(
+        index_fields=(
+            IndexFieldSpecification("region", ascending_sort_order=True),
+            IndexFieldSpecification("department", ascending_sort_order=True),
+            IndexFieldSpecification("employee_id", ascending_sort_order=True),
+        )
+    )
+
+    store = db.new_btree(ctx, "employees", t, options=bo, index_spec=idx_spec)
+
+    # Add Data
+    k1 = UserKey(region="US", department="Eng", employee_id=101)
+    store.add(ctx, Item(key=k1, value=UserProfile(name="Alice", role="Dev")))
+    
+    k2 = UserKey(region="US", department="Sales", employee_id=202)
+    store.add(ctx, Item(key=k2, value=UserProfile(name="Bob", role="Manager")))
+
+    print("Added users.")
+
+# Querying
+with db.begin_transaction(ctx) as t:
+    store = db.open_btree(ctx, "employees", t)
+
+    # Range Scan: Find all "US" employees
+    # Since 'region' is the first index field, we can scan efficiently.
+    if store.first(ctx):
+        items = store.get_items(ctx, PagingInfo(page_size=100))
+        for item in items:
+            if item.key['region'] == "US":
+                print(f"Found: {item.value['name']} in {item.key['department']}")
+```
+
+## 4. Metadata-Carrying Keys (Soft Delete)
+
+Store metadata (like `is_deleted` flags or timestamps) directly in the Key. This allows you to filter records efficiently using `get_keys` without fetching the heavy Value payload from disk.
+
+```python
+from dataclasses import dataclass
+import time
+from sop import Context, BtreeOptions, Item, ValueDataSize, PagingInfo
+from sop.btree import IndexSpecification, IndexFieldSpecification
+from sop.ai import Database, DatabaseType
+from sop.database import DatabaseOptions
+
+# 1. Define Key with "Ride-On" Metadata
+# Only 'doc_id' is indexed. 'is_deleted' rides along.
+@dataclass
+class DocKey:
+    doc_id: int
+    is_deleted: bool = False
+    timestamp: int = 0
+
+ctx = Context()
+db = Database(DatabaseOptions(stores_folders=["/tmp/sop_meta_db"], type=DatabaseType.Standalone))
+
+with db.begin_transaction(ctx) as t:
+    bo = BtreeOptions("documents", is_unique=True)
+    bo.is_primitive_key = False
+    # Use Big values (implies we want to avoid fetching them unless necessary)
+    bo.set_value_data_size(ValueDataSize.Big)
+
+    # Index ONLY on doc_id
+    idx_spec = IndexSpecification(
+        index_fields=(
+            IndexFieldSpecification("doc_id", ascending_sort_order=True),
+        )
+    )
+    store = db.new_btree(ctx, "documents", t, options=bo, index_spec=idx_spec)
+
+    # Add Data
+    k1 = DocKey(doc_id=100, is_deleted=False, timestamp=int(time.time()))
+    store.add(ctx, Item(key=k1, value="Large Content A..."))
+
+    k2 = DocKey(doc_id=101, is_deleted=True, timestamp=int(time.time()))
+    store.add(ctx, Item(key=k2, value="Large Content B..."))
+
+# Querying Metadata Only
+with db.begin_transaction(ctx) as t:
+    store = db.open_btree(ctx, "documents", t)
+    if store.first(ctx):
+        # get_keys fetches ONLY the keys. Values remain on disk.
+        keys = store.get_keys(ctx, PagingInfo(page_size=100))
+        
+        for item in keys:
+            status = "[DELETED]" if item.key['is_deleted'] else "[ACTIVE]"
+            print(f"Doc {item.key['doc_id']}: {status}")
+```
+
+## 5. Vector Database (AI)
 
 Store and search vector embeddings using the unified Database.
 
@@ -121,7 +243,7 @@ with db.begin_transaction(ctx) as tx:
         print(f"Match: {hit.id}, Score: {hit.score}")
 ```
 
-## 4. AI Model Store
+## 6. AI Model Store
 
 Version and manage machine learning models.
 
@@ -149,7 +271,7 @@ with db.begin_transaction(ctx) as tx:
     print(f"Loaded: {loaded['model']['id']}")
 ```
 
-## 5. Multi-Tenancy (Cassandra Keyspaces)
+## 7. Multi-Tenancy (Cassandra Keyspaces)
 
 Connect to different tenants (Keyspaces) on the same Cassandra cluster using the `CassandraDatabase` helper. This example also initializes Redis for distributed locking.
 
@@ -184,7 +306,7 @@ Redis.close()
 CassandraDatabase.close()
 ```
 
-## 6. Text Search
+## 8. Text Search
 
 Index and search text documents transactionally.
 
