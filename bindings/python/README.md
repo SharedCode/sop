@@ -127,8 +127,26 @@ with db.begin_transaction(ctx) as tx:
             print(f"Found User: {items[0].value}")
 
     # --- 6. Complex Keys (Structs) ---
-    # See COOKBOOK.md for full example on using Dataclasses and IndexSpecs
-    # to create multi-column indexes (e.g., Region -> Dept -> ID).
+    # Define a composite key using a dataclass
+    from dataclasses import dataclass
+    from sop.btree import IndexSpecification
+
+    @dataclass
+    class EmployeeKey:
+        region: str
+        department: str
+        id: int
+
+    # Create B-Tree with custom index (Region -> Dept -> ID)
+    # This enables fast prefix scans (e.g., "Get all employees in US")
+    spec = IndexSpecification[EmployeeKey](keys=[("region", 0), ("department", 1), ("id", 2)])
+    employees = db.new_btree(ctx, "employees", tx, spec)
+
+    # Add item with complex key
+    employees.add(ctx, Item(
+        key=EmployeeKey("US", "Sales", 101), 
+        value={"name": "Alice"}
+    ))
 
     # --- 7. Text Search ---
     # Open a Search Index
