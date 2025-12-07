@@ -158,6 +158,7 @@ SOP is designed to be the universal storage layer for your entire stack, regardl
 *   **Cross-Platform & Architecture**:
     *   **Write Once, Run Anywhere**: Pre-compiled binaries and libraries are available for **Linux**, **Windows**, **macOS**, and **Android**.
     *   **Hardware Agnostic**: Runs efficiently on everything from ARM-based Raspberry Pis and mobile devices to x86_64 cloud servers.
+    *   **Mixed-Platform Clusters**: You can build a single logical enterprise cluster using a mix of Linux servers, Windows workstations, and macOS nodes. SOP abstracts away the OS-level differences in **DirectIO**, **File Sector I/O**, and **Locking**. A lock acquired by a Linux node is respected by a Windows node (via Redis), and data written by one is readable by the other.
 
 *   **Microservices & REST**:
     *   **The Universal API**: For languages without native bindings (Java, C#, Node.js), SOP can be deployed as a lightweight **RESTful Microservice**.
