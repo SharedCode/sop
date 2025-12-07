@@ -198,6 +198,43 @@ with db.begin_transaction(ctx) as t:
     k2 = DocKey(doc_id=101, is_deleted=True, timestamp=int(time.time()))
     store.add(ctx, Item(key=k2, value="Large Content B..."))
 
+## 5. Simplified Lookup (Dictionary Keys)
+
+While the Producer application (which creates the store) should use strict Dataclasses and IndexSpecifications to ensure data integrity, Consumer applications can be loosely coupled. You can search for items using plain Python dictionaries as long as the keys match the structure defined in the B-Tree.
+
+```python
+import sop
+from sop import Context, Item
+from sop.ai import Database, DatabaseType
+from sop.database import DatabaseOptions
+
+# Initialize Context
+ctx = Context()
+db = Database(DatabaseOptions(stores_folders=["/tmp/sop_complex_db"], type=DatabaseType.Standalone))
+
+with db.begin_transaction(ctx) as t:
+    # Open existing B-Tree
+    # Note: No IndexSpecification needed here; it's loaded from the store's metadata.
+    store = db.open_btree(ctx, "employees", t)
+
+    # Search using a plain dictionary
+    # The dictionary keys must match the field names defined in the IndexSpecification.
+    search_key = {
+        "region": "US", 
+        "department": "Sales", 
+        "employee_id": 202
+    }
+    
+    if store.find(ctx, search_key):
+        # Fetch the value
+        # We pass the same dict as the key to get_values
+        items = store.get_values(ctx, Item(key=search_key))
+        if items:
+            # The value is returned as a dict (since we didn't provide a dataclass)
+            user_profile = items[0].value
+            print(f"Found: {user_profile['name']}")
+```
+
 # Querying Metadata Only
 with db.begin_transaction(ctx) as t:
     store = db.open_btree(ctx, "documents", t)
