@@ -8,6 +8,7 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 
 - [Introduction](#introduction)
 - [Scalability & Limits](#scalability--limits)
+- [Swarm Computing (Architecture)](SWARM_COMPUTING.md)
 - [High-level features and articles](#high-level-featuresusability-articles-about-sop)
 - [Architecture Guide](ARCHITECTURE.md)
 - [Configuration & Tuning](CONFIGURATION.md)
