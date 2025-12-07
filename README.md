@@ -9,6 +9,7 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 - [Introduction](#introduction)
 - [Scalability & Limits](#scalability--limits)
 - [Swarm Computing (Architecture)](SWARM_COMPUTING.md)
+- [Workflows & Scenarios](WORKFLOWS.md)
 - [High-level features and articles](#high-level-featuresusability-articles-about-sop)
 - [Architecture Guide](ARCHITECTURE.md)
 - [Configuration & Tuning](CONFIGURATION.md)
@@ -58,6 +59,8 @@ See the full analysis in [Scalability & Limits](SCALABILITY.md).
 ## Key Use Cases
 
 SOP is designed to be versatile, powering everything from small embedded tools to massive enterprise clusters.
+
+For detailed architectural patterns, deployment lifecycles, and configuration examples, see [Workflows & Scenarios](WORKFLOWS.md).
 
 ### 1. Standalone App (Embedded DB)
 *   **Scenario**: Desktop apps, CLI tools, or single-node services needing rich indexing.

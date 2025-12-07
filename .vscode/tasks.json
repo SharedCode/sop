@@ -76,7 +76,7 @@
 			"args": [
 				"test",
 				"-tags=integration",
-				"./inredfs/integrationtests"
+				"./infs/integrationtests"
 			],
 			"group": "test",
 			"problemMatcher": [
@@ -92,7 +92,7 @@
 				"-timeout",
 				"2h",
 				"-tags=stress",
-				"./inredfs/stresstests/..."
+				"./infs/stresstests/..."
 			],
 			"group": "test",
 			"problemMatcher": [
