@@ -127,6 +127,16 @@ The `infs` package uses the file system (local disk, NAS, or S3-mounted drive) a
     *   **Parallel Execution**: Run 50 test suites in parallel on the same machine. Just give each one a unique temp folder. No port conflicts, no shared state.
     *   **Simple Promotion**: Promoting a reference dataset (e.g., a product catalog) from Dev to QA to Production is just a file copy. You can literally "ship the database" as an artifact alongside your application binary.
 
+### Scenario L: Big Data & Analytics
+**Ideal for:** Log Management, Audit Trails, IoT Telemetry, Large-Scale Document Stores.
+
+*   **The Challenge**: You have millions of records (e.g., JSON documents, images, or logs). You frequently need to filter them based on metadata (e.g., *"Find all 'Error' logs from 'Server-1' in the last hour"* or *"List all 'Active' users"*). Fetching the full record just to check a status flag is too slow and I/O intensive.
+*   **The SOP Solution**: Use **"Ride-on" Keys** and **Complex Keys**.
+*   **Capabilities**:
+    *   **Ride-on Metadata**: Embed critical metadata (Status, Timestamp, Category) directly into the Key struct. SOP allows you to fetch *only* the keys from the B-Tree. This means you can scan millions of items per second to filter data without ever touching the heavy Value payload on disk.
+    *   **Complex Indexing**: Define composite keys (e.g., `Region -> Department -> EmployeeID`) using standard structs. SOP automatically handles the sorting and indexing, allowing for efficient prefix scans and range queries across multiple dimensions.
+    *   **Soft Deletes**: Implement "Trash Can" functionality by adding an `IsDeleted` flag to your key. Your application can instantly filter out deleted items during a key scan without the performance hit of physical deletion or the complexity of a separate "tombstone" table.
+
 ---
 
 ## 2. The `incfs` Path: Cassandra Supercharged
