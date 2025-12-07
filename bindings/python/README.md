@@ -129,7 +129,7 @@ with db.begin_transaction(ctx) as tx:
     # --- 6. Complex Keys (Structs) ---
     # Define a composite key using a dataclass
     from dataclasses import dataclass
-    from sop.btree import IndexSpecification
+    from sop.btree import IndexSpecification, IndexFieldSpecification
 
     @dataclass
     class EmployeeKey:
@@ -139,8 +139,14 @@ with db.begin_transaction(ctx) as tx:
 
     # Create B-Tree with custom index (Region -> Dept -> ID)
     # This enables fast prefix scans (e.g., "Get all employees in US")
-    spec = IndexSpecification[EmployeeKey](keys=[("region", 0), ("department", 1), ("id", 2)])
-    employees = db.new_btree(ctx, "employees", tx, spec)
+    spec = IndexSpecification(index_fields=(
+        IndexFieldSpecification("region", ascending_sort_order=True),
+        IndexFieldSpecification("department", ascending_sort_order=True),
+        IndexFieldSpecification("id", ascending_sort_order=True)
+    ))
+    
+    # Pass spec as index_spec argument
+    employees = db.new_btree(ctx, "employees", tx, index_spec=spec)
 
     # Add item with complex key
     employees.add(ctx, Item(
