@@ -12,11 +12,11 @@ import (
 
 func TestJsonDBAnyKey_BasicCRUD(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_anykey"},
 		CacheType:     sop.InMemory,
-	})
-	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, err := database.BeginTransaction(ctx, d, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
 	}
@@ -150,11 +150,11 @@ func TestJsonDBAnyKey_Open(t *testing.T) {
 	ctx := context.Background()
 	// Setup: Create a store first
 	{
-		d := database.NewDatabase(sop.DatabaseOptions{
+		d := sop.DatabaseOptions{
 			StoresFolders: []string{"test_jsondb_open"},
 			CacheType:     sop.InMemory,
-		})
-		trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+		}
+		trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 		so := sop.StoreOptions{Name: "foo_store_open"}
 		comparer := func(a, b string) int { return 0 } // Dummy comparer
 		_, _ = NewJsonBtree[string, string](ctx, d, so, trans, comparer)
@@ -165,11 +165,11 @@ func TestJsonDBAnyKey_Open(t *testing.T) {
 	}()
 
 	// Test Open
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_open"},
 		CacheType:     sop.InMemory,
-	})
-	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, err := database.BeginTransaction(ctx, d, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
 	}
@@ -199,11 +199,11 @@ func ptr[T any](v T) *T {
 
 func TestJsonDBAnyKey_Pagination(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_pagination"},
 		CacheType:     sop.InMemory,
-	})
-	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, err := database.BeginTransaction(ctx, d, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
 	}
@@ -366,11 +366,11 @@ func TestJsonDBAnyKey_Pagination(t *testing.T) {
 
 func TestJsonDBAnyKey_Open_Fail(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_open_fail"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ := d.BeginTransaction(ctx, sop.ForReading)
+	}
+	trans, _ := database.BeginTransaction(ctx, d, sop.ForReading)
 	defer func() {
 		os.RemoveAll("test_jsondb_open_fail")
 	}()
@@ -400,12 +400,12 @@ func TestJsonDBAnyKey_WithReplication(t *testing.T) {
 		},
 	}
 
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: folders,
 		CacheType:     sop.InMemory,
 		ErasureConfig: ec,
-	})
-	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, err := database.BeginTransaction(ctx, d, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransactionWithReplication failed: %v", err)
 	}
@@ -424,11 +424,11 @@ func TestJsonDBAnyKey_WithReplication(t *testing.T) {
 
 func TestJsonDBAnyKey_NewBtree_Failure(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_fail"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_fail")
 	}()
@@ -446,11 +446,11 @@ func TestJsonDBAnyKey_NewBtree_Failure(t *testing.T) {
 
 func TestJsonDBAnyKey_GetValues_NotFound(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_getvalues"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_getvalues")
 	}()
@@ -480,11 +480,11 @@ func TestJsonDBAnyKey_GetValues_NotFound(t *testing.T) {
 
 func TestJsonDBAnyKey_EdgeCases(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_edge"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_edge")
 	}()
@@ -537,7 +537,7 @@ func TestJsonDBAnyKey_EdgeCases(t *testing.T) {
 	// 4. GetValues with ID
 	// First get an item to get its ID
 	db.First(ctx)
-	k := db.GetCurrentKey()
+	k := db.BtreeInterface.GetCurrentKey()
 	// Now fetch by ID
 	itemWithID := Item[int, int]{Key: k.Key, ID: uuid.UUID(k.ID)}
 	jsonStr, err := db.GetValues(ctx, []Item[int, int]{itemWithID})
@@ -554,11 +554,11 @@ func TestJsonDBAnyKey_EdgeCases(t *testing.T) {
 
 func TestJsonDBAnyKey_Open_Fallback(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_open_fallback"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_open_fallback")
 	}()
@@ -575,11 +575,11 @@ func TestJsonDBAnyKey_Open_Fallback(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Open with OpenJsonBtree
-	d = database.NewDatabase(sop.DatabaseOptions{
+	d = sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_open_fallback"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ = d.BeginTransaction(ctx, sop.ForReading)
+	}
+	trans, _ = database.BeginTransaction(ctx, d, sop.ForReading)
 	// trans.Begin(ctx)
 
 	// This should try OpenBtreeWithReplication -> fail -> OpenBtree -> success
@@ -595,11 +595,11 @@ func TestJsonDBAnyKey_Open_Fallback(t *testing.T) {
 
 func TestJsonDBAnyKey_GetItems_AutoNavigate(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_autonav"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_autonav")
 	}()
@@ -613,11 +613,11 @@ func TestJsonDBAnyKey_GetItems_AutoNavigate(t *testing.T) {
 	db.Add(ctx, []Item[int, int]{{Key: 1, Value: &val}})
 	trans.Commit(ctx)
 
-	d = database.NewDatabase(sop.DatabaseOptions{
+	d = sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_autonav"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ = d.BeginTransaction(ctx, sop.ForReading)
+	}
+	trans, _ = database.BeginTransaction(ctx, d, sop.ForReading)
 	// trans.Begin(ctx)
 	db, _ = OpenJsonBtree[int, int](ctx, d, "autonav_store", trans, nil)
 

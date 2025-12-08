@@ -2,11 +2,11 @@ package jsondb
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
 )
 
@@ -53,7 +53,7 @@ func (j *JsonDBMapKey) defaultComparer(mapX map[string]any, mapY map[string]any)
 }
 
 // NewJsonBtreeMapKey creates a schema-less JSON B-Tree using map[string]any keys and optional index spec.
-func NewJsonBtreeMapKey(ctx context.Context, db *database.Database, so sop.StoreOptions, t sop.Transaction, indexSpecification string) (*JsonDBMapKey, error) {
+func NewJsonBtreeMapKey(ctx context.Context, config sop.DatabaseOptions, so sop.StoreOptions, t sop.Transaction, indexSpecification string) (*JsonDBMapKey, error) {
 	var comparer btree.ComparerFunc[map[string]any]
 	j := JsonDBMapKey{}
 	if indexSpecification == "" {
@@ -69,7 +69,7 @@ func NewJsonBtreeMapKey(ctx context.Context, db *database.Database, so sop.Store
 		so.CELexpression = indexSpecification
 	}
 
-	b3, err := NewJsonBtree[map[string]any, any](ctx, db, so, t, comparer)
+	b3, err := NewJsonBtree[map[string]any, any](ctx, config, so, t, comparer)
 	if err != nil {
 		return nil, err
 	}
@@ -79,16 +79,17 @@ func NewJsonBtreeMapKey(ctx context.Context, db *database.Database, so sop.Store
 }
 
 // OpenJsonBtreeMapKey opens an existing schema-less JSON B-Tree and reconstructs its index specification.
-func OpenJsonBtreeMapKey(ctx context.Context, db *database.Database, name string, t sop.Transaction) (*JsonDBMapKey, error) {
+func OpenJsonBtreeMapKey(ctx context.Context, config sop.DatabaseOptions, name string, t sop.Transaction) (*JsonDBMapKey, error) {
 	j := JsonDBMapKey{}
 
-	b3, err := OpenJsonBtree[map[string]any, any](ctx, db, name, t, j.proxyComparer)
+	b3, err := OpenJsonBtree[map[string]any, any](ctx, config, name, t, j.proxyComparer)
 	if err != nil {
 		return nil, err
 	}
 
 	// Resurrect the Key index specification originally provided when creating B-tree.
 	iss := b3.GetStoreInfo().MapKeyIndexSpecification
+	fmt.Printf("Resurrected IndexSpec: %s\n", iss)
 	if iss != "" {
 		// Create the comparer from the IndexSpecification JSON string that defines the fields list comprising the index (on key) & their sort order.
 		var is IndexSpecification

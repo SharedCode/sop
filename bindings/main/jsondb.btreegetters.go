@@ -67,6 +67,8 @@ func getFromBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.c
 	case GetKeys:
 		fallthrough
 	case GetItems:
+		fallthrough
+	case GetCurrentKey:
 		return get(ctx, int(action), payload, payload2)
 	case GetValues:
 		return getValues(ctx, payload, payload2)
@@ -74,6 +76,13 @@ func getFromBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.c
 		errMsg := fmt.Sprintf("unsupported manage action(%d) of item to B-tree (unknown)", int(action))
 		return nil, C.CString(errMsg)
 	}
+}
+
+//export getFromBtreeOut
+func getFromBtreeOut(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.char, result **C.char, error **C.char) {
+	r, e := getFromBtree(ctxID, action, payload, payload2)
+	*result = r
+	*error = e
 }
 
 //export getBtreeItemCount
@@ -90,6 +99,13 @@ func getBtreeItemCount(payload *C.char) (C.longlong, *C.char) {
 		res := b3.Count()
 		return C.longlong(res), nil
 	}
+}
+
+//export getBtreeItemCountOut
+func getBtreeItemCountOut(payload *C.char, count *C.longlong, error **C.char) {
+	c, e := getBtreeItemCount(payload)
+	*count = c
+	*error = e
 }
 
 func getStoreInfo(payload *C.char) (*C.char, *C.char) {
@@ -143,6 +159,8 @@ func get(ctx context.Context, getAction int, payload *C.char, payload2 *C.char) 
 			res, err = b3.GetKeys(ctx, payload)
 		case GetItems:
 			res, err = b3.GetItems(ctx, payload)
+		case GetCurrentKey:
+			res, err = b3.GetCurrentKey()
 		}
 		if err != nil {
 			errMsg := fmt.Sprintf("error get objects from B-tree (id=%v), details: %v", p.BtreeID, err)
@@ -169,6 +187,8 @@ func get(ctx context.Context, getAction int, payload *C.char, payload2 *C.char) 
 			res, err = b3.GetKeys(ctx, payload)
 		case GetItems:
 			res, err = b3.GetItems(ctx, payload)
+		case GetCurrentKey:
+			res, err = b3.GetCurrentKey()
 		}
 		if err != nil {
 			errMsg := fmt.Sprintf("error get objects from B-tree (id=%v), details: %v", p.BtreeID, err)

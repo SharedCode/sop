@@ -159,6 +159,8 @@ class BtreeAction(Enum):
     IsUnique = auto()
     Count = auto()
     GetStoreInfo = auto()
+    UpdateKey = auto()
+    UpdateCurrentKey = auto()
 
 
 class Btree(Generic[TK, TV]):
@@ -277,6 +279,18 @@ class Btree(Generic[TK, TV]):
 
     def update(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
         return self._manage(ctx, BtreeAction.Update.value, items)
+
+    def update_key(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
+        """
+        UpdateKey updates the key of the item found by the key in the provided item.
+        """
+        return self._manage(ctx, BtreeAction.UpdateKey.value, items)
+
+    def update_current_key(self, ctx: context.Context, item: Item[TK, TV]) -> bool:
+        """
+        UpdateCurrentKey updates the key of the currently positioned item.
+        """
+        return self._manage(ctx, BtreeAction.UpdateCurrentKey.value, item)
 
     def upsert(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
         return self._manage(ctx, BtreeAction.Upsert.value, items)
@@ -601,6 +615,10 @@ class Btree(Generic[TK, TV]):
         getAction: int,
         pagingInfo: PagingInfo,
     ) -> Item[TK, TV]:
+        """
+        _get is a helper method that encapsulates the call to the backend to fetch items from the B-tree.
+        It handles the packaging of the paging info and metadata required by the backend.
+        """
         if pagingInfo.direction > PagingDirection.Backward.value:
             pagingInfo.direction = PagingDirection.Backward.value
         if pagingInfo.direction < PagingDirection.Forward.value:

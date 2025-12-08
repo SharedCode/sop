@@ -26,10 +26,10 @@ func TestOptimize_GracePeriod(t *testing.T) {
 	storeName := "test_grace"
 
 	// Initialize Database
-	db := core_database.NewDatabase(core_database.DatabaseOptions{
+	db, _ := core_database.ValidateOptions(sop.DatabaseOptions{
 		StoresFolders: []string{tmpDir},
 	})
-	tx, err := db.BeginTransaction(context.Background(), sop.ForWriting)
+	tx, err := core_database.BeginTransaction(context.Background(), db, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction failed: %v", err)
 	}
@@ -38,9 +38,9 @@ func TestOptimize_GracePeriod(t *testing.T) {
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
 			StoresFolders: []string{tmpDir},
-			CacheType:   sop.InMemory,
+			CacheType:     sop.InMemory,
 		},
-		Cache: db.Cache(),
+		Cache: sop.NewCacheClientByType(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
@@ -65,7 +65,7 @@ func TestOptimize_GracePeriod(t *testing.T) {
 	// - storeName + "_centroids_1"
 	// - storeName + "_vecs_1"
 
-	tx2, err := db.BeginTransaction(context.Background(), sop.ForWriting)
+	tx2, err := core_database.BeginTransaction(context.Background(), db, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction 2 failed: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestOptimize_GracePeriod(t *testing.T) {
 	}
 
 	// Run Optimize again. It should detect the stale stores and clean them up.
-	tx3, err := db.BeginTransaction(context.Background(), sop.ForWriting)
+	tx3, err := core_database.BeginTransaction(context.Background(), db, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction 3 failed: %v", err)
 	}
@@ -135,9 +135,9 @@ func TestOptimize_GracePeriod(t *testing.T) {
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
 			StoresFolders: []string{tmpDir},
-			CacheType:   sop.InMemory,
+			CacheType:     sop.InMemory,
 		},
-		Cache: db.Cache(),
+		Cache: sop.NewCacheClientByType(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open 3 failed: %v", err)
@@ -163,7 +163,7 @@ func TestOptimize_GracePeriod(t *testing.T) {
 	}
 
 	// Verify we can still access the index
-	tx4, err := db.BeginTransaction(context.Background(), sop.ForReading)
+	tx4, err := core_database.BeginTransaction(context.Background(), db, sop.ForReading)
 	if err != nil {
 		t.Fatalf("BeginTransaction 4 failed: %v", err)
 	}

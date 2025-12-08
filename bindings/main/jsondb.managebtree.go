@@ -15,6 +15,7 @@ import (
 )
 
 type btreeAction int
+
 const (
 	BtreeActionUnknown = iota
 	Add
@@ -32,6 +33,9 @@ const (
 	IsUnique
 	Count
 	GetStoreInfo
+	UpdateKey
+	UpdateCurrentKey
+	GetCurrentKey
 )
 
 // Manage Btree payload struct is used for communication between SOP language binding, e.g. Python,
@@ -63,6 +67,10 @@ func manageBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.ch
 	case Upsert:
 		fallthrough
 	case Update:
+		fallthrough
+	case UpdateKey:
+		fallthrough
+	case UpdateCurrentKey:
 		return manage(ctx, int(action), payload, payload2)
 	case Remove:
 		return remove(ctx, payload, payload2)
@@ -92,6 +100,14 @@ func manage(ctx context.Context, action int, payload, payload2 *C.char) *C.char 
 			ok, err = b3.AddIfNotExist(ctx, payload.Items)
 		case Update:
 			ok, err = b3.Update(ctx, payload.Items)
+		case UpdateKey:
+			ok, err = b3.UpdateKey(ctx, payload.Items)
+		case UpdateCurrentKey:
+			if len(payload.Items) == 0 {
+				err = fmt.Errorf("UpdateCurrentKey requires at least one item")
+			} else {
+				ok, err = b3.UpdateCurrentKey(ctx, payload.Items[0])
+			}
 		case Upsert:
 			ok, err = b3.Upsert(ctx, payload.Items)
 		default:
@@ -126,6 +142,14 @@ func manage(ctx context.Context, action int, payload, payload2 *C.char) *C.char 
 			ok, err = b3.AddIfNotExist(ctx, payload.Items)
 		case Update:
 			ok, err = b3.Update(ctx, payload.Items)
+		case UpdateKey:
+			ok, err = b3.UpdateKey(ctx, payload.Items)
+		case UpdateCurrentKey:
+			if len(payload.Items) == 0 {
+				err = fmt.Errorf("UpdateCurrentKey requires at least one item")
+			} else {
+				ok, err = b3.UpdateCurrentKey(ctx, payload.Items[0])
+			}
 		case Upsert:
 			ok, err = b3.Upsert(ctx, payload.Items)
 		default:

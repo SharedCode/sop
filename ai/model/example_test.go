@@ -7,7 +7,6 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai/database"
-	core_database "github.com/sharedcode/sop/database"
 )
 
 // MyModel is a sample struct to demonstrate storage.
@@ -24,7 +23,7 @@ func Example() {
 	tmpDir, _ := os.MkdirTemp("", "sop-model-example-*")
 	defer os.RemoveAll(tmpDir)
 
-	db := database.NewDatabase(core_database.DatabaseOptions{
+	db := database.NewDatabase(sop.DatabaseOptions{
 		StoresFolders: []string{tmpDir},
 	})
 

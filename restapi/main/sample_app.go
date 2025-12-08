@@ -67,10 +67,14 @@ func init() {
 	}
 
 	// Initialize Database
-	restapi.DB = database.NewDatabase(sop.DatabaseOptions{
+	var err error
+	restapi.DB, err = database.ValidateOptions(sop.DatabaseOptions{
 		ErasureConfig: ecConfig,
 		StoresFolders: ecConfig[""].BaseFolderPathsAcrossDrives,
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Create Stores to ensure we have the sample "objects" btree created in SOP db.
 	if err := createStores(); err != nil {
@@ -81,7 +85,7 @@ func init() {
 
 // Create the "objects" btree store.
 func createStores() error {
-	trans, err := restapi.DB.BeginTransaction(ctx, sop.ForWriting)
+	trans, err := database.BeginTransaction(ctx, restapi.DB, sop.ForWriting)
 	if err != nil {
 		return err
 	}
@@ -132,7 +136,7 @@ func registerStores() {
 func getByKey(c *gin.Context) {
 	itemKey := c.Param("key")
 
-	trans, err := restapi.DB.BeginTransaction(c, sop.ForReading)
+	trans, err := database.BeginTransaction(c, restapi.DB, sop.ForReading)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "new transaction options call failed"})
 		return
@@ -182,7 +186,7 @@ func addItem(c *gin.Context) {
 	itemKey := c.Param("key")
 	itemValue := c.Param("value")
 
-	trans, err := restapi.DB.BeginTransaction(c, sop.ForWriting)
+	trans, err := database.BeginTransaction(c, restapi.DB, sop.ForWriting)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "new transaction options call failed"})
 		return

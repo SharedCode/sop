@@ -124,6 +124,7 @@ class Transaction:
         self.transaction_id = uuid.UUID(int=0)
         self.begun = begun
         self.database_id = database_id
+        self._completed = False
 
         if id is not None:
             self.transaction_id = id
@@ -136,6 +137,9 @@ class Transaction:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._completed:
+            return True
+
         if exc_type:
             self.rollback(self.ctx)
             return False # Propagate exception
@@ -156,6 +160,7 @@ class Transaction:
         if res != None:
             raise TransactionError(f"Transaction begin failed, details {res}")
         self.begun = True
+        self._completed = False
 
     def commit(
         self,
@@ -171,11 +176,15 @@ class Transaction:
             InvalidTransactionStateError: _description_
             TransactionError: _description_
         """
+        if self._completed:
+            return
+
         if self.transaction_id == uuid.UUID(int=0):
             raise InvalidTransactionStateError("transaction_id is missing")
         res = call_go.manage_transaction(ctx.id, 3, str(self.transaction_id))
         if res != None:
             raise TransactionError(f"Transaction commit failed, details {res}")
+        self._completed = True
 
     def rollback(
         self,
@@ -190,8 +199,12 @@ class Transaction:
             InvalidTransactionStateError: _description_
             TransactionError: _description_
         """
+        if self._completed:
+            return
+
         if self.transaction_id == uuid.UUID(int=0):
             raise InvalidTransactionStateError("transaction_id is missing")
         res = call_go.manage_transaction(ctx.id, 4, str(self.transaction_id))
         if res != None:
             raise TransactionError(f"Transaction rollback failed, details {res}")
+        self._completed = True

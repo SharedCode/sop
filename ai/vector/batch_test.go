@@ -19,11 +19,11 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := core_database.NewDatabase(sop.DatabaseOptions{
+	db, _ := core_database.ValidateOptions(sop.DatabaseOptions{
 		StoresFolders: []string{tmpDir},
 	})
 	ctx := context.Background()
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	tx, err := core_database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction failed: %v", err)
 	}
@@ -32,6 +32,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
 			StoresFolders: []string{tmpDir},
+			CacheType:     sop.InMemory,
 		},
 	})
 	if err != nil {
@@ -70,7 +71,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 	// We can't easily access centroids directly from here without opening the store manually,
 	// but we can check if Query works effectively.
 
-	tx, err = db.BeginTransaction(ctx, sop.ForReading)
+	tx, err = core_database.BeginTransaction(ctx, db, sop.ForReading)
 	if err != nil {
 		t.Fatalf("BeginTransaction failed: %v", err)
 	}

@@ -13,11 +13,11 @@ func TestRepro(t *testing.T) {
 	fmt.Printf("InMemory: %d\n", sop.InMemory)
 	fmt.Printf("Redis: %d\n", sop.Redis)
 
-	db := database.NewDatabase(database.DatabaseOptions{
+	db, _ := database.ValidateOptions(sop.DatabaseOptions{
 		StoresFolders: []string{"/tmp/test"},
 	})
 
-	cache := db.Cache()
+	cache := sop.NewCacheClientByType(db.CacheType)
 	fmt.Printf("Cache type: %T\n", cache)
 
 	if cache == nil {

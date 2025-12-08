@@ -9,12 +9,12 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/domain"
 	"github.com/sharedcode/sop/ai/embed"
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/policy"
 	"github.com/sharedcode/sop/ai/vector"
-	"github.com/sharedcode/sop/database"
 )
 
 // Dependencies holds external dependencies required for agent creation.
@@ -82,7 +82,7 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 		dbType = sop.Standalone
 	}
 
-	db := database.NewDatabase(database.DatabaseOptions{
+	db := database.NewDatabase(sop.DatabaseOptions{
 		StoresFolders: []string{storagePath},
 		Type:          dbType,
 	})

@@ -547,6 +547,7 @@ func Test_Transaction_Methods_Errors(t *testing.T) {
 	trans4, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, nil, mocks.NewMockTransactionLog())
 	trans4.Begin(ctx)
 	trans4.phaseDone = 2 // simulate committed
+	trans4.committed = true
 	if err := trans4.Rollback(ctx, nil); err == nil {
 		t.Errorf("expected error on Rollback after commit, got nil")
 	}

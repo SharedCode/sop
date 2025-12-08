@@ -49,6 +49,8 @@ type Transaction struct {
 	mode sop.TransactionMode
 	// -1 = intial state, 0 = began, 1 = phase 1 commit started, 2 = phase 2 commit or rollback done.
 	phaseDone int
+	// committed is true if the transaction has been successfully committed.
+	committed bool
 	maxTime   time.Duration
 	logger    *transactionLog
 
@@ -136,6 +138,9 @@ func (t *Transaction) Phase1Commit(ctx context.Context) error {
 		return fmt.Errorf("no transaction to commit, call Begin to start a transaction")
 	}
 	if t.phaseDone == 2 {
+		if t.committed {
+			return nil
+		}
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 1
@@ -175,6 +180,9 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 		return fmt.Errorf("phase 1 commit has not been invoke yet")
 	}
 	if t.phaseDone == 2 {
+		if t.committed {
+			return nil
+		}
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 2
@@ -182,6 +190,7 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 	// Ensure resources are cleaned up or released.
 	defer t.Close()
 	if t.mode != sop.ForWriting {
+		t.committed = true
 		return nil
 	}
 	if err := t.phase2Commit(ctx); err != nil {
@@ -212,6 +221,7 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 		}
 		return fmt.Errorf("phase 2 commit failed, details: %w", err)
 	}
+	t.committed = true
 	return nil
 }
 
@@ -219,7 +229,11 @@ func (t *Transaction) Phase2Commit(ctx context.Context) error {
 // It also invokes replication error handlers to enable failover.
 func (t *Transaction) Rollback(ctx context.Context, err error) error {
 	if t.phaseDone == 2 {
-		return fmt.Errorf("transaction is done, 'create a new one")
+		if t.committed {
+			return fmt.Errorf("transaction is already committed, cannot rollback")
+		}
+		// Transaction is already done. Treat Rollback as idempotent.
+		return nil
 	}
 	if !t.HasBegun() {
 		return fmt.Errorf("no transaction to rollback, call Begin to start a transaction")

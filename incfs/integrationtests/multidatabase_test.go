@@ -28,19 +28,19 @@ func TestMultiDatabase(t *testing.T) {
 	os.RemoveAll(path2)
 
 	// 2. Initialize Databases
-	db1 := database.NewCassandraDatabase(sop.DatabaseOptions{Keyspace: keyspace1, StoresFolders: []string{path1}})
-	db2 := database.NewCassandraDatabase(sop.DatabaseOptions{Keyspace: keyspace2, StoresFolders: []string{path2}})
+	config1 := sop.DatabaseOptions{Keyspace: keyspace1, StoresFolders: []string{path1}}
+	config2 := sop.DatabaseOptions{Keyspace: keyspace2, StoresFolders: []string{path2}}
 
 	storeName := "shared_store_name"
 
 	// 3. Database 1: Add Data
 	t.Logf("Database 1: Adding data to keyspace %s...", keyspace1)
-	tx1, err := db1.BeginTransaction(ctx, sop.ForWriting)
+	tx1, err := database.BeginTransaction(ctx, config1, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("Database 1 BeginTransaction failed: %v", err)
 	}
 
-	store1, err := db1.NewBtree(ctx, storeName, tx1)
+	store1, err := database.NewBtree[string, string](ctx, config1, storeName, tx1, nil)
 	if err != nil {
 		t.Fatalf("Database 1 NewBtree failed: %v", err)
 	}
@@ -55,12 +55,12 @@ func TestMultiDatabase(t *testing.T) {
 
 	// 4. Database 2: Add Data (Same Store Name, Same Key, Different Value)
 	t.Logf("Database 2: Adding data to keyspace %s...", keyspace2)
-	tx2, err := db2.BeginTransaction(ctx, sop.ForWriting)
+	tx2, err := database.BeginTransaction(ctx, config2, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("Database 2 BeginTransaction failed: %v", err)
 	}
 
-	store2, err := db2.NewBtree(ctx, storeName, tx2)
+	store2, err := database.NewBtree[string, string](ctx, config2, storeName, tx2, nil)
 	if err != nil {
 		// If the store already exists (which it shouldn't in a clean DB2), this will fail.
 		// But wait, if db1 and db2 share the same Redis instance (which they do in this test setup),
@@ -82,11 +82,11 @@ func TestMultiDatabase(t *testing.T) {
 
 	// 5. Verify Database 1 Data
 	t.Log("Database 1: Verifying data...")
-	tx1b, err := db1.BeginTransaction(ctx, sop.ForReading)
+	tx1b, err := database.BeginTransaction(ctx, config1, sop.ForReading)
 	if err != nil {
 		t.Fatalf("Database 1 BeginTransaction (Read) failed: %v", err)
 	}
-	store1b, err := db1.OpenBtree(ctx, storeName, tx1b)
+	store1b, err := database.OpenBtree[string, string](ctx, config1, storeName, tx1b, nil)
 	if err != nil {
 		t.Fatalf("Database 1 OpenBtree failed: %v", err)
 	}
@@ -108,11 +108,11 @@ func TestMultiDatabase(t *testing.T) {
 
 	// 6. Verify Database 2 Data
 	t.Log("Database 2: Verifying data...")
-	tx2b, err := db2.BeginTransaction(ctx, sop.ForReading)
+	tx2b, err := database.BeginTransaction(ctx, config2, sop.ForReading)
 	if err != nil {
 		t.Fatalf("Database 2 BeginTransaction (Read) failed: %v", err)
 	}
-	store2b, err := db2.OpenBtree(ctx, storeName, tx2b)
+	store2b, err := database.OpenBtree[string, string](ctx, config2, storeName, tx2b, nil)
 	if err != nil {
 		t.Fatalf("Database 2 OpenBtree failed: %v", err)
 	}

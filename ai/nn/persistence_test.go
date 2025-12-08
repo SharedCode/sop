@@ -7,7 +7,6 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai/database"
-	core_database "github.com/sharedcode/sop/database"
 )
 
 func TestPerceptronPersistenceWithModelStore(t *testing.T) {
@@ -18,7 +17,7 @@ func TestPerceptronPersistenceWithModelStore(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := database.NewDatabase(core_database.DatabaseOptions{
+	db := database.NewDatabase(sop.DatabaseOptions{
 		StoresFolders: []string{tmpDir},
 	})
 	ctx := context.Background()

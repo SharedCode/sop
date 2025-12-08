@@ -20,11 +20,11 @@ func TestNProbeAndFiltering(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := core_database.NewDatabase(core_database.DatabaseOptions{
+	db, _ := core_database.ValidateOptions(sop.DatabaseOptions{
 		StoresFolders: []string{tmpDir},
 	})
 	ctx := context.Background()
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	tx, err := core_database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction failed: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestNProbeAndFiltering(t *testing.T) {
 	}
 
 	// 3. Test nprobe
-	tx, err = db.BeginTransaction(ctx, sop.ForReading)
+	tx, err = core_database.BeginTransaction(ctx, db, sop.ForReading)
 	if err != nil {
 		t.Fatalf("BeginTransaction failed: %v", err)
 	}

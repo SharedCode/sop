@@ -19,22 +19,22 @@ func TestOptimizeRollingVersion(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Use core database to manage transactions
-	db := database.NewDatabase(database.DatabaseOptions{
+	db, _ := database.ValidateOptions(sop.DatabaseOptions{
 		StoresFolders: []string{tmpDir},
 	})
 	ctx := context.Background()
 
 	// 2. Insert Item (Version 0)
-	tx1, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	tx1, _ := database.BeginTransaction(ctx, db, sop.ForWriting)
 
 	// Call Open directly
 	cfg := Config{
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
 			StoresFolders: []string{tmpDir},
-			CacheType:   sop.InMemory,
+			CacheType:     sop.InMemory,
 		},
-		Cache: db.Cache(),
+		Cache: sop.NewCacheClientByType(db.CacheType),
 	}
 	idx1, _ := Open[map[string]any](ctx, tx1, "rolling_test", cfg)
 
@@ -49,7 +49,7 @@ func TestOptimizeRollingVersion(t *testing.T) {
 	tx1.Commit(ctx)
 
 	// 3. Optimize #1 (Moves to Version 1)
-	tx2, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	tx2, _ := database.BeginTransaction(ctx, db, sop.ForWriting)
 	idx2, _ := Open[map[string]any](ctx, tx2, "rolling_test", cfg)
 	if err := idx2.Optimize(ctx); err != nil {
 		t.Fatalf("Optimize #1 failed: %v", err)
@@ -57,7 +57,7 @@ func TestOptimizeRollingVersion(t *testing.T) {
 
 	// 3b. Verify Access after Optimize #1 (Active Version = 1)
 	// The item should be accessible via NextVersion logic (Version=0, NextVersion=1)
-	tx2a, _ := db.BeginTransaction(ctx, sop.ForReading)
+	tx2a, _ := database.BeginTransaction(ctx, db, sop.ForReading)
 	idx2a, _ := Open[map[string]any](ctx, tx2a, "rolling_test", cfg)
 
 	got1, err := idx2a.Get(ctx, "item1")
@@ -82,7 +82,7 @@ func TestOptimizeRollingVersion(t *testing.T) {
 	tx2a.Commit(ctx)
 
 	// 4. Optimize #2 (Moves to Version 2)
-	tx3, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	tx3, _ := database.BeginTransaction(ctx, db, sop.ForWriting)
 	idx3, _ := Open[map[string]any](ctx, tx3, "rolling_test", cfg)
 	if err := idx3.Optimize(ctx); err != nil {
 		t.Fatalf("Optimize #2 failed: %v", err)
@@ -90,7 +90,7 @@ func TestOptimizeRollingVersion(t *testing.T) {
 
 	// 4b. Verify Access after Optimize #2 (Active Version = 2)
 	// The item should be accessible. Internally, it should have rolled (Version=1, NextVersion=2).
-	tx3a, _ := db.BeginTransaction(ctx, sop.ForReading)
+	tx3a, _ := database.BeginTransaction(ctx, db, sop.ForReading)
 	idx3a, _ := Open[map[string]any](ctx, tx3a, "rolling_test", cfg)
 
 	got2, err := idx3a.Get(ctx, "item1")
@@ -115,7 +115,7 @@ func TestOptimizeRollingVersion(t *testing.T) {
 	tx3a.Commit(ctx)
 
 	// 5. Verify Internal State
-	tx4, _ := db.BeginTransaction(ctx, sop.ForReading)
+	tx4, _ := database.BeginTransaction(ctx, db, sop.ForReading)
 	idx4, _ := Open[map[string]any](ctx, tx4, "rolling_test", cfg)
 
 	di := idx4.(*domainIndex[map[string]any])

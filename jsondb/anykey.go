@@ -54,8 +54,8 @@ type PagingInfo struct {
 }
 
 // NewJsonBtree creates a new JSON-capable B-Tree. Values are marshaled by the caller as needed.
-func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, db *database.Database, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
-	b3, err := database.NewBtree[TK, TV](ctx, db, so.Name, t, comparer, so)
+func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, config sop.DatabaseOptions, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
+	b3, err := database.NewBtree[TK, TV](ctx, config, so.Name, t, comparer, so)
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +65,8 @@ func NewJsonBtree[TK btree.Ordered, TV any](ctx context.Context, db *database.Da
 }
 
 // OpenJsonBtree opens an existing JSON-capable B-Tree.
-func OpenJsonBtree[TK btree.Ordered, TV any](ctx context.Context, db *database.Database, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
-	b3, err := database.OpenBtree[TK, TV](ctx, db, name, t, comparer)
+func OpenJsonBtree[TK btree.Ordered, TV any](ctx context.Context, config sop.DatabaseOptions, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
+	b3, err := database.OpenBtree[TK, TV](ctx, config, name, t, comparer)
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +112,24 @@ func (j *JsonDBAnyKey[TK, TV]) Update(ctx context.Context, items []Item[TK, TV])
 		}
 	}
 	return allSucceeded, nil
+}
+
+// UpdateKey updates the key of the item found by the key in the provided item.
+func (j *JsonDBAnyKey[TK, TV]) UpdateKey(ctx context.Context, items []Item[TK, TV]) (bool, error) {
+	allSucceeded := true
+	for i := range items {
+		if ok, err := j.BtreeInterface.UpdateKey(ctx, items[i].Key); err != nil {
+			return false, err
+		} else if !ok {
+			allSucceeded = false
+		}
+	}
+	return allSucceeded, nil
+}
+
+// UpdateCurrentKey updates the key of the currently positioned item.
+func (j *JsonDBAnyKey[TK, TV]) UpdateCurrentKey(ctx context.Context, item Item[TK, TV]) (bool, error) {
+	return j.BtreeInterface.UpdateCurrentKey(ctx, item.Key)
 }
 
 // Upsert adds new items or updates existing ones based on key existence.
@@ -310,6 +328,14 @@ func (j *JsonDBAnyKey[TK, TV]) GetValues(ctx context.Context, keys []Item[TK, TV
 		values[i].extract(&item)
 	}
 	return toJsonString(values)
+}
+
+// GetCurrentKey returns the current item's key and ID as a JSON string.
+func (j *JsonDBAnyKey[TK, TV]) GetCurrentKey() (string, error) {
+	item := j.BtreeInterface.GetCurrentKey()
+	var itm Item[TK, TV]
+	itm.extract(&item)
+	return toJsonString([]Item[TK, TV]{itm})
 }
 
 // toJsonString encodes objects to a JSON string or returns an empty string for empty input.

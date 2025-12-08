@@ -115,6 +115,7 @@ struct getFromBtree_return {
 	char* r1;
 };
 extern struct getFromBtree_return getFromBtree(long long ctxID, int action, char* payload, char* payload2);
+extern void getFromBtreeOut(long long ctxID, int action, char* payload, char* payload2, char** result, char** error);
 
 /* Return type for getBtreeItemCount */
 struct getBtreeItemCount_return {
@@ -122,6 +123,7 @@ struct getBtreeItemCount_return {
 	char* r1;
 };
 extern struct getBtreeItemCount_return getBtreeItemCount(char* payload);
+extern void getBtreeItemCountOut(char* payload, long long* count, char** error);
 extern long long createContext();
 extern void cancelContext(long long ctxID);
 extern void removeContext(long long ctxID);

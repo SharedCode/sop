@@ -23,6 +23,7 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 - [Usability](README2.md#usability)
 - [SOP API discussions](README2.md#simple-usage)
 - [SOP for Python (sop4py)](bindings/python/README.md)
+- [SOP for C# (sop4cs)](bindings/csharp/README.md)
 - [SOP AI Kit](ai/README.md)
 - [Community & support](#community--support)
 - [Contributing & license](#contributing--license)

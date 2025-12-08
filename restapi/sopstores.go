@@ -12,7 +12,7 @@ import (
 )
 
 // DB is the database instance.
-var DB *database.Database
+var DB sop.DatabaseOptions
 
 // DataPath is the path to the data directory.
 var DataPath string
@@ -29,7 +29,7 @@ var DataPath string
 // @Router /stores [get]
 // @Security Bearer
 func GetStores(c *gin.Context) {
-	trans, err := DB.BeginTransaction(c, sop.ForWriting)
+	trans, err := database.BeginTransaction(c, DB, sop.ForWriting)
 	if err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "new transaction call in fetching stores list failed"})
 		return
@@ -57,13 +57,9 @@ func GetStores(c *gin.Context) {
 func GetStoreByName(c *gin.Context) {
 	storeName := c.Param("name")
 
-	trans, err := DB.BeginTransaction(c, sop.ForReading)
+	trans, err := database.BeginTransaction(c, DB, sop.ForReading)
 	if err != nil {
 		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "new transaction call in fetching stores list failed"})
-		return
-	}
-	if err := trans.Begin(c); err != nil {
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": fmt.Sprintf("trans.begin failed, error: %v", err)})
 		return
 	}
 

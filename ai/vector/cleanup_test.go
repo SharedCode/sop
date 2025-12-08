@@ -17,19 +17,19 @@ func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
 	path, _ := os.MkdirTemp("", "sop-ai-test-cleanup")
 	defer os.RemoveAll(path)
 
-	db := core_database.NewDatabase(core_database.DatabaseOptions{
+	db, _ := core_database.ValidateOptions(sop.DatabaseOptions{
 		StoresFolders: []string{path},
 	})
 
-	t1, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	t1, _ := core_database.BeginTransaction(ctx, db, sop.ForWriting)
 
 	cfg := vector.Config{
 		UsageMode: ai.DynamicWithVectorCountTracking,
 		TransactionOptions: sop.TransactionOptions{
 			StoresFolders: []string{path},
-			CacheType:   sop.InMemory,
+			CacheType:     sop.InMemory,
 		},
-		Cache: db.Cache(),
+		Cache: sop.NewCacheClientByType(db.CacheType),
 	}
 
 	store, err := vector.Open[map[string]any](ctx, t1, "cleanup_test", cfg)
@@ -50,7 +50,7 @@ func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
 	t1.Commit(ctx)
 
 	// 3. Delete Item (Soft Delete)
-	t2, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	t2, _ := core_database.BeginTransaction(ctx, db, sop.ForWriting)
 	store, _ = vector.Open[map[string]any](ctx, t2, "cleanup_test", cfg)
 
 	if err := store.Delete(ctx, id); err != nil {
@@ -59,7 +59,7 @@ func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
 	t2.Commit(ctx)
 
 	// Verify Soft Delete
-	t3, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	t3, _ := core_database.BeginTransaction(ctx, db, sop.ForWriting)
 	store, _ = vector.Open[map[string]any](ctx, t3, "cleanup_test", cfg)
 
 	// Should not be found via Get
@@ -80,7 +80,7 @@ func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
 	t3.Commit(ctx)
 
 	// 4. Run Optimize
-	t4, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	t4, _ := core_database.BeginTransaction(ctx, db, sop.ForWriting)
 	store, _ = vector.Open[map[string]any](ctx, t4, "cleanup_test", cfg)
 
 	if err := store.Optimize(ctx); err != nil {
@@ -88,7 +88,7 @@ func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
 	}
 
 	// 5. Verify Physical Deletion
-	t5, _ := db.BeginTransaction(ctx, sop.ForWriting)
+	t5, _ := core_database.BeginTransaction(ctx, db, sop.ForWriting)
 	store, _ = vector.Open[map[string]any](ctx, t5, "cleanup_test", cfg)
 	contentStore, _ = store.Content(ctx)
 

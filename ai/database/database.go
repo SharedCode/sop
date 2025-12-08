@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -14,22 +15,64 @@ import (
 
 // Database extends the core sop.Database with AI capabilities.
 type Database struct {
-	*database.Database
+	config sop.DatabaseOptions
+	cache  sop.L2Cache
 }
 
 // NewDatabase creates a new AI-enabled database manager.
-// It wraps the core database.NewDatabase.
 func NewDatabase(config sop.DatabaseOptions) *Database {
+	config, _ = database.ValidateOptions(config)
 	return &Database{
-		Database: database.NewDatabase(config),
+		config: config,
+		cache:  sop.NewCacheClientByType(config.CacheType),
 	}
 }
 
 // NewCassandraDatabase creates a new AI-enabled database manager backed by Cassandra.
 func NewCassandraDatabase(config sop.DatabaseOptions) *Database {
+	config, _ = database.ValidateCassandraOptions(config)
 	return &Database{
-		Database: database.NewCassandraDatabase(config),
+		config: config,
+		cache:  sop.NewCacheClientByType(config.CacheType),
 	}
+}
+
+// Cache returns the L2 cache used by the database.
+func (db *Database) Cache() sop.L2Cache {
+	return db.cache
+}
+
+// StoragePath returns the base storage path.
+func (db *Database) StoragePath() string {
+	if len(db.config.StoresFolders) > 0 {
+		return db.config.StoresFolders[0]
+	}
+	return ""
+}
+
+// ErasureConfig returns the configured erasure coding configuration.
+func (db *Database) ErasureConfig() map[string]sop.ErasureCodingConfig {
+	return db.config.ErasureConfig
+}
+
+// CacheType returns the configured cache type.
+func (db *Database) CacheType() sop.CacheType {
+	return db.config.CacheType
+}
+
+// StoresFolders returns the list of storage folders (for replication).
+func (db *Database) StoresFolders() []string {
+	return db.config.StoresFolders
+}
+
+// BeginTransaction starts a new transaction.
+func (db *Database) BeginTransaction(ctx context.Context, mode sop.TransactionMode, maxTime ...time.Duration) (sop.Transaction, error) {
+	return database.BeginTransaction(ctx, db.config, mode, maxTime...)
+}
+
+// Config returns the database configuration.
+func (db *Database) Config() sop.DatabaseOptions {
+	return db.config
 }
 
 // OpenModelStore opens a ModelStore for the specified name using the provided transaction.

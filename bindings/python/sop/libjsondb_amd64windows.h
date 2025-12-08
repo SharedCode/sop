@@ -115,6 +115,7 @@ struct getFromBtree_return {
 	char* r1;
 };
 extern __declspec(dllexport) struct getFromBtree_return getFromBtree(long long int ctxID, int action, char* payload, char* payload2);
+extern __declspec(dllexport) void getFromBtreeOut(long long int ctxID, int action, char* payload, char* payload2, char** result, char** error);
 
 /* Return type for getBtreeItemCount */
 struct getBtreeItemCount_return {
@@ -122,6 +123,7 @@ struct getBtreeItemCount_return {
 	char* r1;
 };
 extern __declspec(dllexport) struct getBtreeItemCount_return getBtreeItemCount(char* payload);
+extern __declspec(dllexport) void getBtreeItemCountOut(char* payload, long long int* count, char** error);
 extern __declspec(dllexport) long long int createContext();
 extern __declspec(dllexport) void cancelContext(long long int ctxID);
 extern __declspec(dllexport) void removeContext(long long int ctxID);

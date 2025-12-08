@@ -2,7 +2,7 @@
 
 Simple, copy-pasteable examples for common SOP scenarios.
 
-> **Note**: This cookbook focuses on the Go API. For Python examples, see the [Python Cookbook](jsondb/python/COOKBOOK.md).
+> **Note**: This cookbook focuses on the Go API. For Python examples, see the [Python Cookbook](bindings/python/COOKBOOK.md). For C# examples, see the [C# Examples](bindings/csharp/Sop.Examples/).
 
 ## 1. Storing 100k User Profiles (`database`)
 
@@ -42,7 +42,7 @@ func main() {
 	// 3. Open/Create Store
 	// Configure: Medium data size
 	opts := sop.ConfigureStore("users", true, 1000, "User Profiles", sop.MediumData, "")
-	store, err := db.NewBtree(ctx, "users", trans, opts)
+	store, err := database.NewBtree[string, UserProfile](ctx, db, "users", trans, nil, opts)
 	if err != nil {
 		panic(err)
 	}
@@ -51,9 +51,6 @@ func main() {
 	for i := 0; i < 100000; i++ {
 		id := fmt.Sprintf("user_%d", i)
 		profile := UserProfile{ID: id, Name: "John Doe", Email: "john@example.com"}
-		// Note: In a real app, you might want to serialize 'profile' to JSON string if using generic store,
-		// or use the generic B-Tree directly if you want type safety.
-		// The Database wrapper currently returns BtreeInterface[string, any].
 		store.Add(ctx, id, profile)
 		
 		// Commit every 1000 items to keep memory usage low
@@ -62,7 +59,7 @@ func main() {
 			// Start new transaction
 			trans, _ = db.BeginTransaction(ctx, sop.ForWriting)
 			// Re-open store in new transaction
-			store, _ = db.OpenBtree(ctx, "users", trans)
+			store, _ = database.OpenBtree[string, UserProfile](ctx, db, "users", trans, nil)
 		}
 	}
 	
@@ -81,24 +78,19 @@ func TransferFunds(ctx context.Context, db *database.Database, fromID, toID stri
 	trans, _ := db.BeginTransaction(ctx, sop.ForWriting)
 
 	// 2. Open Stores
-	accounts, _ := db.OpenBtree(ctx, "accounts", trans)
-	logs, _ := db.OpenBtree(ctx, "logs", trans)
+	accounts, _ := database.OpenBtree[string, Account](ctx, db, "accounts", trans, nil)
+	logs, _ := database.OpenBtree[string, LogEntry](ctx, db, "logs", trans, nil)
 
 	// 3. Deduct
-	var fromAccount Account
 	if found, _ := accounts.FindOne(ctx, fromID, true); found {
-		val, _ := accounts.GetCurrentValue(ctx)
-		// Cast/Unmarshal val to Account...
-		fromAccount = val.(Account)
+		fromAccount, _ := accounts.GetCurrentValue(ctx)
 		fromAccount.Balance -= amount
 		accounts.UpdateCurrentValue(ctx, fromAccount)
 	}
 
 	// 4. Add
-	var toAccount Account
 	if found, _ := accounts.FindOne(ctx, toID, true); found {
-		val, _ := accounts.GetCurrentValue(ctx)
-		toAccount = val.(Account)
+		toAccount, _ := accounts.GetCurrentValue(ctx)
 		toAccount.Balance += amount
 		accounts.UpdateCurrentValue(ctx, toAccount)
 	}
@@ -215,5 +207,39 @@ func main() {
 		fmt.Printf("Doc: %s, Score: %f\n", r.DocID, r.Score)
 	}
 	t2.Commit(ctx)
+}
+```
+
+## 5. Managing Stores (Create, Open, Delete)
+
+SOP provides standalone functions for managing the lifecycle of B-Tree stores.
+
+```go
+func ManageStores(ctx context.Context, db *database.Database) error {
+	t, _ := db.BeginTransaction(ctx, sop.ForWriting)
+
+	// 1. Create a new store
+	// database.NewBtree[Key, Value](...)
+	store, _ := database.NewBtree[string, string](ctx, db, "my_store", t, nil)
+	store.Add(ctx, "foo", "bar")
+	
+	t.Commit(ctx)
+
+	// 2. Open an existing store
+	t2, _ := db.BeginTransaction(ctx, sop.ForReading)
+	// database.OpenBtree[Key, Value](...)
+	store2, _ := database.OpenBtree[string, string](ctx, db, "my_store", t2, nil)
+	val, _ := store2.FindOne(ctx, "foo", false)
+	fmt.Println(val)
+	t2.Commit(ctx)
+
+	// 3. Remove a store
+	// database.RemoveBtree(...)
+	// Note: This is a destructive operation and does not require a transaction.
+	if err := database.RemoveBtree(ctx, db, "my_store"); err != nil {
+		return err
+	}
+	
+	return nil
 }
 ```

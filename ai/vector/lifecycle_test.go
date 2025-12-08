@@ -21,14 +21,14 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	db := core_database.NewDatabase(core_database.DatabaseOptions{
+	db, _ := core_database.ValidateOptions(sop.DatabaseOptions{
 		StoresFolders: []string{tmpDir},
 	})
 	ctx := context.Background()
 
 	// --- Stage 0: Initial Ingestion (V0) ---
 	t.Log("--- Stage 0: Initial Ingestion ---")
-	trans0, err := db.BeginTransaction(ctx, sop.ForWriting)
+	trans0, err := core_database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction 0 failed: %v", err)
 	}
@@ -46,9 +46,9 @@ func TestVectorStoreLifecycle(t *testing.T) {
 		EnableIngestionBuffer: true,
 		TransactionOptions: sop.TransactionOptions{
 			StoresFolders: []string{tmpDir},
-			CacheType:   sop.InMemory,
+			CacheType:     sop.InMemory,
 		},
-		Cache: db.Cache(),
+		Cache: sop.NewCacheClientByType(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open 0 failed: %v", err)
@@ -81,7 +81,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 
 	// --- Stage 1: Optimize (V0 -> V1) ---
 	t.Log("--- Stage 1: Optimize (V0 -> V1) ---")
-	trans1, err := db.BeginTransaction(ctx, sop.ForWriting)
+	trans1, err := core_database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction 1 failed: %v", err)
 	}
@@ -91,9 +91,9 @@ func TestVectorStoreLifecycle(t *testing.T) {
 		EnableIngestionBuffer: true,
 		TransactionOptions: sop.TransactionOptions{
 			StoresFolders: []string{tmpDir},
-			CacheType:   sop.InMemory,
+			CacheType:     sop.InMemory,
 		},
-		Cache: db.Cache(),
+		Cache: sop.NewCacheClientByType(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open 1 failed: %v", err)
@@ -106,7 +106,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 
 	// --- Stage 2a: Verify V1 State ---
 	t.Log("--- Stage 2a: Verify V1 State ---")
-	trans2a, err := db.BeginTransaction(ctx, sop.ForReading)
+	trans2a, err := core_database.BeginTransaction(ctx, db, sop.ForReading)
 	if err != nil {
 		t.Fatalf("BeginTransaction 2a failed: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 
 	// --- Stage 2b: Ingestion into V1 ---
 	t.Log("--- Stage 2b: Ingestion into V1 ---")
-	trans2b, err := db.BeginTransaction(ctx, sop.ForWriting)
+	trans2b, err := core_database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction 2b failed: %v", err)
 	}
@@ -162,9 +162,9 @@ func TestVectorStoreLifecycle(t *testing.T) {
 		ContentSize: sop.MediumData,
 		TransactionOptions: sop.TransactionOptions{
 			StoresFolders: []string{tmpDir},
-			CacheType:   sop.InMemory,
+			CacheType:     sop.InMemory,
 		},
-		Cache: db.Cache(),
+		Cache: sop.NewCacheClientByType(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open 2 failed: %v", err)
@@ -193,7 +193,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 
 	// --- Stage 3: Optimize (V1 -> V2) ---
 	t.Log("--- Stage 3: Optimize (V1 -> V2) ---")
-	trans3, err := db.BeginTransaction(ctx, sop.ForWriting)
+	trans3, err := core_database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction 3 failed: %v", err)
 	}
@@ -202,9 +202,9 @@ func TestVectorStoreLifecycle(t *testing.T) {
 		ContentSize: sop.MediumData,
 		TransactionOptions: sop.TransactionOptions{
 			StoresFolders: []string{tmpDir},
-			CacheType:   sop.InMemory,
+			CacheType:     sop.InMemory,
 		},
-		Cache: db.Cache(),
+		Cache: sop.NewCacheClientByType(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open 3 failed: %v", err)
@@ -217,7 +217,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 
 	// --- Stage 4: Verify V2 State ---
 	t.Log("--- Stage 4: Verify V2 State ---")
-	trans4, err := db.BeginTransaction(ctx, sop.ForReading)
+	trans4, err := core_database.BeginTransaction(ctx, db, sop.ForReading)
 	if err != nil {
 		t.Fatalf("BeginTransaction 4 failed: %v", err)
 	}

@@ -17,17 +17,17 @@ func TestDatabase_Standalone_Simple(t *testing.T) {
 	_ = os.RemoveAll(storagePath)
 	defer os.RemoveAll(storagePath)
 
-	db := database.NewDatabase(database.DatabaseOptions{
+	db, _ := database.ValidateOptions(sop.DatabaseOptions{
 		StoresFolders: []string{storagePath},
 	})
 
 	ctx := context.Background()
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	tx, err := database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction failed: %v", err)
 	}
 
-	store, err := db.NewBtree(ctx, "test_store", tx)
+	store, err := database.NewBtree[string, string](ctx, db, "test_store", tx, nil)
 	if err != nil {
 		t.Fatalf("NewBtree failed: %v", err)
 	}
@@ -62,20 +62,20 @@ func TestDatabase_Standalone_Replication(t *testing.T) {
 		},
 	}
 
-	db := database.NewDatabase(database.DatabaseOptions{
+	db, _ := database.ValidateOptions(sop.DatabaseOptions{
 		StoresFolders: folders,
 		ErasureConfig: ecConfig,
 	})
 
 	ctx := context.Background()
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	tx, err := database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("BeginTransaction failed: %v", err)
 	}
 
 	// Note: Store name must match EC config key or be handled by default?
 	// Usually EC config is per store.
-	store, err := db.NewBtree(ctx, "test_store", tx)
+	store, err := database.NewBtree[string, string](ctx, db, "test_store", tx, nil)
 	if err != nil {
 		t.Fatalf("NewBtree failed: %v", err)
 	}
@@ -93,19 +93,19 @@ func TestDatabase_Clustered_Construction(t *testing.T) {
 	// This test verifies we can construct the object.
 	// Actual connection might fail if Redis/Cassandra are not present.
 
-	db := database.NewDatabase(database.DatabaseOptions{
+	db, err := database.ValidateOptions(sop.DatabaseOptions{
 		CacheType:     sop.Redis,
 		StoresFolders: []string{"/tmp/sop_test_clustered"},
 	})
 
-	if db == nil {
-		t.Fatal("NewDatabase returned nil for Clustered")
+	if err != nil {
+		t.Fatal("ValidateOptions returned error for Clustered")
 	}
 
 	// We expect BeginTransaction to fail or panic if Redis is not reachable,
 	// but we can try it to see what happens.
 	ctx := context.Background()
-	_, err := db.BeginTransaction(ctx, sop.ForWriting)
+	_, err = database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err == nil {
 		// If it succeeds (maybe mock redis?), great.
 		// If it fails, we check if it's a connection error.
@@ -116,25 +116,25 @@ func TestDatabase_Clustered_Construction(t *testing.T) {
 }
 
 func TestDatabase_Cassandra_Construction(t *testing.T) {
-	db := database.NewCassandraDatabase(database.DatabaseOptions{
+	_, err := database.ValidateCassandraOptions(sop.DatabaseOptions{
 		Keyspace:      "test_keyspace",
 		StoresFolders: []string{"/tmp/sop_test_cassandra"},
 	})
 
-	if db == nil {
-		t.Fatal("NewCassandraDatabase returned nil")
+	if err != nil {
+		t.Fatal("ValidateCassandraOptions returned error")
 	}
 }
 
 func TestDatabase_Cassandra_Transaction_Simple(t *testing.T) {
-	db := database.NewCassandraDatabase(database.DatabaseOptions{
+	db, _ := database.ValidateCassandraOptions(sop.DatabaseOptions{
 		Keyspace:      "test_keyspace",
 		StoresFolders: []string{"/tmp/sop_test_cassandra_simple"},
 	})
 
 	ctx := context.Background()
 	// Expect error connecting to Cassandra
-	_, err := db.BeginTransaction(ctx, sop.ForWriting)
+	_, err := database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err == nil {
 		t.Fatal("Expected error connecting to Cassandra, got nil")
 	}
@@ -163,13 +163,13 @@ func TestDatabase_Cassandra_Transaction_Replication(t *testing.T) {
 		},
 	}
 
-	db := database.NewCassandraDatabase(database.DatabaseOptions{
+	db, _ := database.ValidateCassandraOptions(sop.DatabaseOptions{
 		Keyspace:      "test_keyspace",
 		ErasureConfig: ecConfig,
 	})
 
 	ctx := context.Background()
-	_, err := db.BeginTransaction(ctx, sop.ForWriting)
+	_, err := database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err == nil {
 		t.Fatal("Expected error connecting to Cassandra, got nil")
 	}

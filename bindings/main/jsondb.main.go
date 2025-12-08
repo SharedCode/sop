@@ -26,6 +26,7 @@ import (
 	database "github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
 	"github.com/sharedcode/sop/common"
+	sopdb "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
 	"github.com/sharedcode/sop/jsondb"
 )
@@ -368,7 +369,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			}
 		}
 
-		tx, err := db.BeginTransaction(ctx, mode, maxTime)
+		tx, err := sopdb.BeginTransaction(ctx, db.Config(), mode, maxTime)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -381,7 +382,8 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &b3o); err != nil {
 			return C.CString(fmt.Sprintf("error Unmarshal BtreeOptions, details: %v", err))
 		}
-		log.Debug(fmt.Sprintf("BtreeOptions: %v", b3o))
+		log.Info(fmt.Sprintf("BtreeOptions: %v", b3o))
+		log.Info(fmt.Sprintf("NewBtree IndexSpec: %s", b3o.IndexSpecification))
 
 		// Validate Database exists
 		targetUUID, err := sop.ParseUUID(targetIDStr)
@@ -401,7 +403,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 
 		if b3o.IsPrimitiveKey {
 			log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
-			b3, err := jsondb.NewJsonBtree[any, any](ctx, db.Database, *so, item.Transaction, nil)
+			b3, err := jsondb.NewJsonBtree[any, any](ctx, db.Config(), *so, item.Transaction, nil)
 			if err != nil {
 				return C.CString(fmt.Sprintf("error creating Btree, details: %v", err))
 			}
@@ -409,7 +411,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			return C.CString(b3id.String())
 		} else {
 			log.Debug(fmt.Sprintf("NewBtree %s, primitiveKey: %v", b3o.Name, b3o.IsPrimitiveKey))
-			b3, err := jsondb.NewJsonBtreeMapKey(ctx, db.Database, *so, item.Transaction, b3o.IndexSpecification)
+			b3, err := jsondb.NewJsonBtreeMapKey(ctx, db.Config(), *so, item.Transaction, b3o.IndexSpecification)
 			if err != nil {
 				return C.CString(fmt.Sprintf("error creating Btree, details: %v", err))
 			}
@@ -456,7 +458,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		}
 
 		if isPrimitiveKey {
-			b3, err := jsondb.OpenJsonBtree[any, any](ctx, db.Database, so.Name, item.Transaction, nil)
+			b3, err := jsondb.OpenJsonBtree[any, any](ctx, db.Config(), so.Name, item.Transaction, nil)
 			if err != nil {
 				return C.CString(fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err))
 			}
@@ -469,7 +471,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			b3id, _ := transRegistry.AddBtree(sop.UUID(b3o.TransactionID), b3)
 			return C.CString(b3id.String())
 		} else {
-			b3, err := jsondb.OpenJsonBtreeMapKey(ctx, db.Database, so.Name, item.Transaction)
+			b3, err := jsondb.OpenJsonBtreeMapKey(ctx, db.Config(), so.Name, item.Transaction)
 			if err != nil {
 				return C.CString(fmt.Sprintf("error opening Btree (%s), details: %v", so.Name, err))
 			}
@@ -620,7 +622,7 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		}
 
 		btreeName := jsonPayload
-		if err := db.RemoveBtree(ctx, btreeName); err != nil {
+		if err := sopdb.RemoveBtree(ctx, db.Config(), btreeName); err != nil {
 			return C.CString(err.Error())
 		}
 		return nil

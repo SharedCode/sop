@@ -98,6 +98,45 @@ class TestBtree(unittest.TestCase):
         t.commit(ctx)
         print("test add_if_not_exists")
 
+    def test_update_current_key(self):
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
+        
+        # Add item
+        b3.add(ctx, btree.Item(key=100, value="val100"))
+        t.commit(ctx)
+
+        # Update Key
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
+        
+        # Find and Update
+        self.assertTrue(b3.find(ctx, 100))
+        
+        # Update the key (same key should succeed)
+        self.assertTrue(b3.update_current_key(ctx, btree.Item(key=100)))
+        
+        # Update the key (different key should fail)
+        # try:
+        #     b3.update_current_key(ctx, btree.Item(key=101))
+        #     self.fail("Should have raised BtreeError")
+        # except btree.BtreeError:
+        #     pass
+            
+        t.commit(ctx)
+
+        # Verify
+        t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
+        b3 = self.db.open_btree(ctx, "barstoreec", t)
+        
+        # Key 100 should still exist (since we updated to same key)
+        self.assertTrue(b3.find(ctx, 100))
+        
+        # Clean up
+        b3.remove(ctx, 100)
+        t.commit(ctx)
+        print("test_update_current_key passed")
+
     def test_add_if_not_exists_mapkey(self):
         t = self.db.begin_transaction(ctx, mode=to.mode, max_time=to.max_time)
 

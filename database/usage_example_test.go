@@ -21,13 +21,13 @@ func Example_standalone() {
 
 	// 1. Initialize Database (Standalone or Clustered)
 	// Standalone uses in-memory caching; Clustered uses Redis.
-	db := database.NewDatabase(sop.DatabaseOptions{
+	db, _ := database.ValidateOptions(sop.DatabaseOptions{
 		Type:          sop.Standalone,
 		StoresFolders: []string{storagePath},
 	}) // 3. Start a transaction.
 	ctx := context.Background()
 	// You can pass options, but defaults are usually sufficient for standalone.
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	tx, err := database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err != nil {
 		fmt.Printf("Failed to begin transaction: %v\n", err)
 		return
@@ -35,7 +35,7 @@ func Example_standalone() {
 
 	// 4. Create or Open a B-Tree.
 	// Using the generic NewBtree helper from Database.
-	store, err := db.NewBtree(ctx, "users", tx)
+	store, err := database.NewBtree[string, string](ctx, db, "users", tx, nil)
 	if err != nil {
 		fmt.Printf("Failed to create btree: %v\n", err)
 		tx.Rollback(ctx)
@@ -60,8 +60,8 @@ func Example_standalone() {
 	fmt.Println("Standalone transaction committed successfully.")
 
 	// Verify data
-	tx, _ = db.BeginTransaction(ctx, sop.ForReading)
-	store, _ = db.OpenBtree(ctx, "users", tx)
+	tx, _ = database.BeginTransaction(ctx, db, sop.ForReading)
+	store, _ = database.OpenBtree[string, string](ctx, db, "users", tx, nil)
 	found, _ := store.Find(ctx, "user1", false)
 	if found {
 		val, _ := store.GetCurrentValue(ctx)
@@ -159,21 +159,21 @@ func Example_clustered() {
 
 	// 3. Initialize Database in Clustered mode.
 	// This will use the registered Redis cache.
-	db := database.NewDatabase(sop.DatabaseOptions{
+	db, _ := database.ValidateOptions(sop.DatabaseOptions{
 		Type:          sop.Clustered,
 		StoresFolders: []string{storagePath},
 	})
 
 	// 4. Start a transaction.
 	ctx := context.Background()
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	tx, err := database.BeginTransaction(ctx, db, sop.ForWriting)
 	if err != nil {
 		fmt.Printf("Failed to begin transaction: %v\n", err)
 		return
 	}
 
 	// 5. Create a B-Tree.
-	store, err := db.NewBtree(ctx, "products", tx)
+	store, err := database.NewBtree[string, string](ctx, db, "products", tx, nil)
 	if err != nil {
 		fmt.Printf("Failed to create btree: %v\n", err)
 		tx.Rollback(ctx)

@@ -6,8 +6,9 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
-	"github.com/sharedcode/sop/database"
+	sopdb "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/search"
 )
 
@@ -69,7 +70,7 @@ func (d *GenericDomain[T]) TextIndex(ctx context.Context, tx sop.Transaction) (a
 
 // BeginTransaction starts a new transaction for the domain's underlying storage.
 func (d *GenericDomain[T]) BeginTransaction(ctx context.Context, mode sop.TransactionMode) (sop.Transaction, error) {
-	return d.cfg.DB.BeginTransaction(ctx, mode)
+	return sopdb.BeginTransaction(ctx, d.cfg.DB.Config(), mode)
 }
 
 // Policies returns the policy engine that enforces safety and compliance rules.

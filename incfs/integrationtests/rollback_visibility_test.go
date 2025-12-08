@@ -22,32 +22,32 @@ func TestRollbackVisibilityRaceCondition(t *testing.T) {
 	os.RemoveAll(path)
 
 	// 2. Initialize Database
-	db := database.NewCassandraDatabase(sop.DatabaseOptions{Keyspace: keyspace, StoresFolders: []string{path}})
+	config := sop.DatabaseOptions{Keyspace: keyspace, StoresFolders: []string{path}}
 	storeName := "race_store"
 
 	// 3. Transaction A: Create Store (but don't commit yet)
 	t.Log("Trans A: Beginning transaction...")
-	tA, err := db.BeginTransaction(ctx, sop.ForWriting)
+	tA, err := database.BeginTransaction(ctx, config, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("Trans A BeginTransaction failed: %v", err)
 	}
 
 	t.Log("Trans A: Creating B-Tree...")
 	// This immediately creates the tables in Cassandra
-	_, err = db.NewBtree(ctx, storeName, tA)
+	_, err = database.NewBtree[string, string](ctx, config, storeName, tA, nil)
 	if err != nil {
 		t.Fatalf("Trans A NewBtree failed: %v", err)
 	}
 
 	// 4. Transaction B: Open the same Store (Race Condition)
 	t.Log("Trans B: Beginning transaction...")
-	tB, err := db.BeginTransaction(ctx, sop.ForWriting)
+	tB, err := database.BeginTransaction(ctx, config, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("Trans B BeginTransaction failed: %v", err)
 	}
 
 	t.Log("Trans B: Opening B-Tree (should succeed because tables exist)...")
-	storeB, err := db.OpenBtree(ctx, storeName, tB)
+	storeB, err := database.OpenBtree[string, string](ctx, config, storeName, tB, nil)
 	if err != nil {
 		t.Fatalf("Trans B OpenBtree failed: %v", err)
 	}

@@ -12,11 +12,11 @@ import (
 
 func TestJsonDBMapKey_IndexSpecAndOpen(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_mapkey_idx_open"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_mapkey_idx_open")
 	}()
@@ -55,11 +55,11 @@ func TestJsonDBMapKey_IndexSpecAndOpen(t *testing.T) {
 	trans.Commit(ctx)
 
 	// Re-open
-	d = database.NewDatabase(sop.DatabaseOptions{
+	d = sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_mapkey_idx_open"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ = d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, _ = database.BeginTransaction(ctx, d, sop.ForWriting)
 	// trans.Begin(ctx)
 
 	db2, err := OpenJsonBtreeMapKey(ctx, d, "users_idx", trans)
@@ -72,7 +72,7 @@ func TestJsonDBMapKey_IndexSpecAndOpen(t *testing.T) {
 		t.Errorf("First failed: %v, %v", ok, err)
 	}
 
-	k := db2.GetCurrentKey()
+	k := db2.BtreeInterface.GetCurrentKey()
 	if k.Key["name"] != "alice" {
 		t.Errorf("Expected alice, got %v", k.Key["name"])
 	}
@@ -90,11 +90,11 @@ func TestJsonDBMapKey_IndexSpecAndOpen(t *testing.T) {
 
 func TestJsonDBMapKey_BasicCRUD(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_mapkey"},
 		CacheType:     sop.InMemory,
-	})
-	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, err := database.BeginTransaction(ctx, d, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
 	}
@@ -148,11 +148,11 @@ func TestJsonDBMapKey_BasicCRUD(t *testing.T) {
 
 func TestJsonDBMapKey_WithIndexSpec(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_mapkey_idx"},
 		CacheType:     sop.InMemory,
-	})
-	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, err := database.BeginTransaction(ctx, d, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestJsonDBMapKey_WithIndexSpec(t *testing.T) {
 
 	// Verify order (id 1 < id 2)
 	db.First(ctx)
-	k := db.GetCurrentKey()
+	k := db.BtreeInterface.GetCurrentKey()
 	if id, ok := k.Key["id"].(int); ok {
 		if id != 1 {
 			t.Errorf("Expected first key id 1, got %v", id)
@@ -218,11 +218,11 @@ func TestJsonDBMapKey_Open(t *testing.T) {
 	ctx := context.Background()
 	// Setup
 	{
-		d := database.NewDatabase(sop.DatabaseOptions{
+		d := sop.DatabaseOptions{
 			StoresFolders: []string{"test_jsondb_mapkey_open"},
 			CacheType:     sop.InMemory,
-		})
-		trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+		}
+		trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 		// trans.Begin(ctx)
 		so := sop.StoreOptions{Name: "map_store_open"}
 		_, _ = NewJsonBtreeMapKey(ctx, d, so, trans, "")
@@ -233,11 +233,11 @@ func TestJsonDBMapKey_Open(t *testing.T) {
 	}()
 
 	// Test Open
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_mapkey_open"},
 		CacheType:     sop.InMemory,
-	})
-	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, err := database.BeginTransaction(ctx, d, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
 	}
@@ -257,11 +257,11 @@ func TestJsonDBMapKey_OpenNoIndexSpec(t *testing.T) {
 	ctx := context.Background()
 	// Setup: Create a store without index spec
 	{
-		d := database.NewDatabase(sop.DatabaseOptions{
+		d := sop.DatabaseOptions{
 			StoresFolders: []string{"test_jsondb_mapkey_no_idx"},
 			CacheType:     sop.InMemory,
-		})
-		trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+		}
+		trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 		// trans.Begin(ctx)
 		so := sop.StoreOptions{Name: "map_store_no_idx"}
 		_, _ = NewJsonBtreeMapKey(ctx, d, so, trans, "")
@@ -272,11 +272,11 @@ func TestJsonDBMapKey_OpenNoIndexSpec(t *testing.T) {
 	}()
 
 	// Open and use it
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_mapkey_no_idx"},
 		CacheType:     sop.InMemory,
-	})
-	trans, err := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, err := database.BeginTransaction(ctx, d, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
 	}
@@ -316,11 +316,11 @@ func TestJsonDBMapKey_OpenNoIndexSpec(t *testing.T) {
 
 func TestJsonDBMapKey_InvalidSpec(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_mapkey_invalid"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_mapkey_invalid")
 	}()
@@ -337,11 +337,11 @@ func TestJsonDBMapKey_InvalidSpec(t *testing.T) {
 
 func TestJsonDBMapKey_DefaultComparer_DifferentKeys(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_mapkey_diff_keys"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_mapkey_diff_keys")
 	}()
@@ -367,11 +367,11 @@ func TestJsonDBMapKey_DefaultComparer_DifferentKeys(t *testing.T) {
 
 func TestJsonDBMapKey_New_Failure(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_mapkey_fail"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ := d.BeginTransaction(ctx, sop.ForWriting)
+	}
+	trans, _ := database.BeginTransaction(ctx, d, sop.ForWriting)
 	defer func() {
 		os.RemoveAll("test_jsondb_mapkey_fail")
 	}()
@@ -387,11 +387,11 @@ func TestJsonDBMapKey_New_Failure(t *testing.T) {
 
 func TestJsonDBMapKey_Open_Failure(t *testing.T) {
 	ctx := context.Background()
-	d := database.NewDatabase(sop.DatabaseOptions{
+	d := sop.DatabaseOptions{
 		StoresFolders: []string{"test_jsondb_mapkey_open_fail"},
 		CacheType:     sop.InMemory,
-	})
-	trans, _ := d.BeginTransaction(ctx, sop.ForReading)
+	}
+	trans, _ := database.BeginTransaction(ctx, d, sop.ForReading)
 	defer func() {
 		os.RemoveAll("test_jsondb_mapkey_open_fail")
 	}()
