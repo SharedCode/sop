@@ -183,16 +183,16 @@ SOP is a NoSQL-like key/value storage engine with built-in indexing and transact
 - Use the `database` package to initialize your environment.
   ```go
   // Initialize (Standalone or Clustered)
-  db := database.NewDatabase(sop.DatabaseOptions{
+  opts := sop.DatabaseOptions{
       Type:          sop.Standalone,
       StoresFolders: []string{"/var/lib/sop"},
-  })
+  }
 
   // Start a Transaction
-  tx, _ := db.BeginTransaction(ctx, sop.ForWriting)
+  tx, _ := database.BeginTransaction(ctx, opts, sop.ForWriting)
 
   // Open a Store (B-Tree, Vector, or Model)
-  users, _ := db.NewBtree(ctx, "users", tx)
+  users, _ := database.NewBtree[string, string](ctx, opts, "users", tx, nil)
 
   // Perform Operations
   users.Add(ctx, "user1", "John Doe")

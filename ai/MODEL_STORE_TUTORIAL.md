@@ -24,7 +24,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/ai/database"
 )
 
 // A simple configuration for an LLM Agent

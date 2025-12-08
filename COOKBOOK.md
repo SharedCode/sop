@@ -25,16 +25,16 @@ type UserProfile struct {
 }
 
 func main() {
-	// 1. Initialize Database (Standalone or Clustered)
+	// 1. Initialize Database Options
 	// Standalone uses in-memory caching; Clustered uses Redis.
-	db := database.NewDatabase(sop.DatabaseOptions{
+	dbOpts := sop.DatabaseOptions{
 		Type:          sop.Standalone,
 		StoresFolders: []string{"/tmp/sop_data"},
-	})
+	}
 
 	// 2. Start Transaction
 	ctx := context.Background()
-	trans, err := db.BeginTransaction(ctx, sop.ForWriting)
+	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
 	if err != nil {
 		panic(err)
 	}
@@ -42,7 +42,7 @@ func main() {
 	// 3. Open/Create Store
 	// Configure: Medium data size
 	opts := sop.ConfigureStore("users", true, 1000, "User Profiles", sop.MediumData, "")
-	store, err := database.NewBtree[string, UserProfile](ctx, db, "users", trans, nil, opts)
+	store, err := database.NewBtree[string, UserProfile](ctx, dbOpts, "users", trans, nil, opts)
 	if err != nil {
 		panic(err)
 	}

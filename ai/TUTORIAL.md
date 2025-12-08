@@ -61,7 +61,7 @@ package main
 import (
 	"fmt"
 	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/ai/database"
 )
 
 func main() {
