@@ -57,6 +57,11 @@ type cacheGetError struct {
 }
 
 func newCacheGetError() *cacheGetError { return &cacheGetError{base: mocks.NewMockClient()} }
+
+func (c *cacheGetError) GetType() sop.L2CacheType {
+	return sop.Redis
+}
+
 func (c *cacheGetError) Set(ctx context.Context, k, v string, d time.Duration) error {
 	return c.base.Set(ctx, k, v, d)
 }

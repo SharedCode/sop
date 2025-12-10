@@ -55,7 +55,7 @@ namespace Sop.Examples
             Console.WriteLine("Committed.");
 
             // Verify Update
-            using (var trans = db.BeginTransaction(ctx))
+            using (var trans = db.BeginTransaction(ctx, TransactionMode.ForReading))
             {
                 var btree = db.OpenBtree<string, string>(ctx, "batched_btree", trans);
                 var item = btree.GetValues(ctx, new List<Item<string, string>> { new Item<string, string> { Key = "key_50" } });
@@ -81,7 +81,7 @@ namespace Sop.Examples
             Console.WriteLine("Committed.");
 
             // Verify Remove
-            using (var trans = db.BeginTransaction(ctx))
+            using (var trans = db.BeginTransaction(ctx, TransactionMode.ForReading))
             {
                 var btree = db.OpenBtree<string, string>(ctx, "batched_btree", trans);
                 long count = btree.Count();

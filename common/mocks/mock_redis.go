@@ -22,6 +22,10 @@ func NewMockClient() sop.L2Cache {
 	}
 }
 
+func (m *mockRedis) GetType() sop.L2CacheType {
+	return sop.Redis
+}
+
 // IsRestarted returns the internal flag once and then resets it to false.
 func (m *mockRedis) IsRestarted(ctx context.Context) bool {
 	if m.restarted {

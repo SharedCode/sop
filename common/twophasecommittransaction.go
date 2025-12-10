@@ -83,6 +83,9 @@ type Transaction struct {
 // Note: commitMaxDuration is the internal safety cap for commit and lock TTLs; the effective limit is min(ctx deadline, commitMaxDuration).
 func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration time.Duration, logging bool,
 	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, l2Cache sop.L2Cache, transactionLog sop.TransactionLog) (*Transaction, error) {
+	if l2Cache == nil {
+		return nil, fmt.Errorf("l2Cache can't be nil")
+	}
 	// Transaction commit time defaults to 15 mins if negative or 0.
 	if commitMaxDuration <= 0 {
 		commitMaxDuration = time.Duration(15 * time.Minute)
@@ -91,13 +94,14 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration ti
 	if commitMaxDuration > time.Duration(1*time.Hour) {
 		commitMaxDuration = time.Duration(1 * time.Hour)
 	}
+	l1c := cache.GetGlobalL1Cache(l2Cache)
 	t := &Transaction{
 		mode:            mode,
 		maxTime:         commitMaxDuration,
 		StoreRepository: storeRepository,
 		registry:        registry,
 		l2Cache:         l2Cache,
-		l1Cache:         cache.NewGlobalCache(l2Cache, cache.DefaultMinCapacity, cache.DefaultMaxCapacity),
+		l1Cache:         l1c,
 		blobStore:       blobStore,
 		logger:          newTransactionLogger(transactionLog, logging),
 		phaseDone:       -1,
@@ -330,8 +334,6 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 
 	for !successful {
 
-		log.Debug(fmt.Sprintf("inside phase1Commit forloop, tid: %v", t.GetID()))
-
 		var err error
 		if err = t.timedOut(ctx, startTime); err != nil {
 			return err
@@ -339,7 +341,6 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 
 		//* Start: Try to lock all updated & removed nodes before moving forward.
 		if ok, _, _ := t.l2Cache.Lock(ctx, t.maxTime, t.nodesKeys); !ok {
-			log.Debug(fmt.Sprintf("cache.Lock can't lock all nodesKeys, tid: %v", t.GetID()))
 			// Unlock in case there are those that got locked.
 			t.l2Cache.Unlock(ctx, t.nodesKeys)
 			sop.RandomSleep(ctx)
@@ -356,7 +357,6 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		if needsRefetchAndMerge {
 			log.Debug(fmt.Sprintf("before refetchAndMergeModifications, tid: %v", t.GetID()))
 			if err := t.refetchAndMergeModifications(ctx); err != nil {
-				log.Info(fmt.Sprintf("after refetchAndMergeModifications, tid: %v, error: %v", t.GetID(), err))
 				return err
 			}
 
@@ -364,7 +364,6 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 				return err
 			}
 			if err = t.lockTrackedItems(ctx); err != nil {
-				log.Info(fmt.Sprintf("failed to lock tracked items, details: %v", err))
 				return err
 			}
 

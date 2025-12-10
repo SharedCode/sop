@@ -46,12 +46,15 @@ func init() {
 
 	// Initialize Erasure Coding (EC) for the EC tests.
 	initErasureCoding()
+
+	// Register Redis L2Cache for use in Integration tests.
+	sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
 }
 
 var ctx = context.Background()
 
 func Test_GetStoreList(t *testing.T) {
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -62,7 +65,7 @@ func Test_GetStoreList(t *testing.T) {
 
 // Create an empty store on 1st run, add one item(max) on succeeding runs.
 func Test_CreateEmptyStore(t *testing.T) {
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -79,7 +82,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 		trans.Commit(ctx)
 		return
 	}
-	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	trans.Begin(ctx)
 
 	b3, err = incfs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -100,7 +103,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 }
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -130,7 +133,7 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -178,7 +181,7 @@ func MyToFilePath(basePath string, id sop.UUID) string {
 func Test_TransactionStory_SingleBTree(t *testing.T) {
 
 	// Demo NewTransactionExt specifying custom "to file path" lambda function.
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -223,7 +226,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 }
 
 func Test_RegistryZeroDurationCache(t *testing.T) {
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -270,7 +273,7 @@ func Test_RegistryZeroDurationCache(t *testing.T) {
 }
 
 func Test_StoreCaching(t *testing.T) {
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -311,7 +314,7 @@ func Test_StoreCaching(t *testing.T) {
 }
 
 func Test_StoreCachingTTL(t *testing.T) {
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}

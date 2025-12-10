@@ -25,7 +25,7 @@ type DatabaseOptions struct {
 	// ErasureConfig specifies the erasure coding configuration for replication.
 	ErasureConfig map[string]ErasureCodingConfig `json:"erasure_config,omitempty"`
 	// CacheType specifies the type of cache to use (e.g. InMemory, Redis).
-	CacheType CacheType `json:"cache_type"`
+	CacheType L2CacheType `json:"cache_type"`
 	// Registry hash modulo value used for hashing.
 	RegistryHashModValue int `json:"registry_hash_mod,omitempty"`
 
@@ -44,7 +44,7 @@ type TransactionOptions struct {
 	// ErasureConfig specifies the erasure coding configuration for replication.
 	ErasureConfig map[string]ErasureCodingConfig `json:"erasure_config,omitempty"`
 	// CacheType specifies the type of cache to use (e.g. InMemory, Redis).
-	CacheType CacheType `json:"cache_type"`
+	CacheType L2CacheType `json:"cache_type"`
 	// Registry hash modulo value used for hashing.
 	RegistryHashModValue int `json:"registry_hash_mod,omitempty"`
 

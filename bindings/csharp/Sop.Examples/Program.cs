@@ -19,6 +19,9 @@ class Program
         Console.WriteLine("8. Batched B-Tree Operations");
         Console.WriteLine("9. Cassandra Initialization Demo");
         Console.WriteLine("10. Text Search Demo");
+        Console.WriteLine("11. Clustered Database Demo");
+        Console.WriteLine("12. Concurrent Transactions Demo");
+        Console.WriteLine("13. Concurrent Transactions Demo (Standalone)");
         Console.WriteLine("0. Exit");
         Console.WriteLine("=================");
 
@@ -27,7 +30,7 @@ class Program
             Console.Write("\nEnter example number to run: ");
             var input = Console.ReadLine();
 
-            if (input == "0") break;
+            if (input == null || input == "0") break;
 
             try
             {
@@ -63,14 +66,24 @@ class Program
                     case "10":
                         TextSearchDemo.Run();
                         break;
+                    case "11":
+                        ClusteredDemo.Run();
+                        break;
+                    case "12":
+                        ConcurrentTransactionsDemo.Run();
+                        break;
+                    case "13":
+                        ConcurrentTransactionsDemoStandalone.Run();
+                        break;
                     default:
-                        Console.WriteLine("Invalid option.");
+                        Console.WriteLine("Invalid selection.");
                         break;
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error: {ex.Message}");
+                Console.WriteLine($"Error running example: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
             }
         }
     }

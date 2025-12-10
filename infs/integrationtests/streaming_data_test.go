@@ -16,8 +16,11 @@ import (
 
 func Test_StreamingData_Short(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault}
-	trans, _ := infs.NewTransactionWithReplication(ctx, to)
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault, CacheType: sop.Redis}
+	trans, err := infs.NewTransactionWithReplication(ctx, to)
+	if err != nil {
+		t.Fatal(err)
+	}
 	trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStore_short", true, 100, "", sop.BigData, "")
 	sds, _ := infs.NewStreamingDataStoreWithReplication[string](ctx, so, trans, nil)

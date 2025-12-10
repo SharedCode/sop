@@ -321,6 +321,10 @@ func newAlwaysLockFailCache() *alwaysLockFailCache {
 	return &alwaysLockFailCache{mocks.NewMockClient()}
 }
 
+func (c *alwaysLockFailCache) GetType() sop.L2CacheType {
+	return sop.Redis
+}
+
 func (c *alwaysLockFailCache) Set(ctx context.Context, k, v string, d time.Duration) error {
 	return c.mocksCache.Set(ctx, k, v, d)
 }

@@ -121,7 +121,7 @@ func Test_RefetchAndMerge_StoreInfoFetchError(t *testing.T) {
 	so := sop.StoreOptions{Name: "rfm_storeinfo_err", SlotLength: 8, IsValueDataInNodeSegment: true}
 	ns := sop.NewStoreInfo(so)
 	si := StoreInterface[PersonKey, Person]{}
-	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: mocks.NewMockClient(), l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: &errStoreRepo{e: errors.New("boom")}}
+	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: mocks.NewMockClient(), l1Cache: cache.GetGlobalL1Cache(mocks.NewMockClient()), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: &errStoreRepo{e: errors.New("boom")}}
 	si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
 	nrw := newNodeRepository[PersonKey, Person](tr, ns)
 	si.NodeRepository = nrw

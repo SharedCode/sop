@@ -71,7 +71,7 @@ public static class BtreeComplexKey
             }
         }
 
-        using (var trans2 = db.BeginTransaction(ctx))
+        using (var trans2 = db.BeginTransaction(ctx, TransactionMode.ForReading))
         {
             try
             {

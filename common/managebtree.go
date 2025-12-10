@@ -192,6 +192,7 @@ func refetchAndMergeClosure[TK btree.Ordered, TV any](si *StoreInterface[TK, TV]
 		for uuid, ci := range b3ModifiedItems {
 			log.Debug(fmt.Sprintf("inside refetchAndMergeClosure, tid: %v", si.backendNodeRepository.transaction.GetID()))
 			if ci.Action == addAction {
+				log.Debug(fmt.Sprintf("Merging add item: %v", ci.item.Key))
 				if ok, err := b3.AddItem(ctx, ci.item); !ok || err != nil {
 					if err != nil {
 						return err

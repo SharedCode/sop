@@ -38,7 +38,7 @@ namespace Sop.Examples
 
             // 2. Search
             Console.WriteLine("\n2. Searching...");
-            using (var trans = db.BeginTransaction(ctx))
+            using (var trans = db.BeginTransaction(ctx, TransactionMode.ForReading))
             {
                 var search = db.OpenSearch(ctx, "my_text_index", trans);
                 

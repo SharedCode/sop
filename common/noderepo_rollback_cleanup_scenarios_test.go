@@ -46,9 +46,9 @@ func (e *errRepo) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) err
 func Test_NodeRepository_RemoveNodes_Error_Propagates(t *testing.T) {
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(redis)
 
-	tr := &Transaction{l2Cache: redis, l1Cache: cache.GetGlobalCache(), blobStore: failingBlobStore{}}
+	tr := &Transaction{l2Cache: redis, l1Cache: cache.GetGlobalL1Cache(redis), blobStore: failingBlobStore{}}
 	nr := &nodeRepositoryBackend{transaction: tr}
 
 	ids := []sop.BlobsPayload[sop.UUID]{
@@ -128,7 +128,7 @@ func Test_RefetchAndMerge_Closure_Error_From_StoreRepo(t *testing.T) {
 
 	so := sop.StoreOptions{Name: "rfm_err_closure", SlotLength: 4, IsValueDataInNodeSegment: true}
 	si := sop.NewStoreInfo(so)
-	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: mocks.NewMockClient(), l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: eRepo}
+	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: mocks.NewMockClient(), l1Cache: cache.GetGlobalL1Cache(mocks.NewMockClient()), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: eRepo}
 
 	// Minimal btree wiring
 	s := StoreInterface[PersonKey, Person]{}
@@ -151,12 +151,12 @@ func Test_RefetchAndMerge_Closure_Error_From_StoreRepo(t *testing.T) {
 func Test_NodeRepository_RollbackAdded_And_NewRoot_Success(t *testing.T) {
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(redis)
 	blobs := mocks.NewMockBlobStore()
 	reg := mocks.NewMockRegistry(false)
-	tr := &Transaction{l2Cache: redis, l1Cache: cache.GetGlobalCache(), blobStore: blobs, registry: reg}
+	tr := &Transaction{l2Cache: redis, l1Cache: cache.GetGlobalL1Cache(redis), blobStore: blobs, registry: reg}
 	tr.logger = newTransactionLogger(mocks.NewMockTransactionLog(), true)
-	nr := &nodeRepositoryBackend{transaction: tr, l2Cache: redis, l1Cache: cache.GetGlobalCache()}
+	nr := &nodeRepositoryBackend{transaction: tr, l2Cache: redis, l1Cache: cache.GetGlobalL1Cache(redis)}
 
 	// Seed blobs and cache and registry for added/new root entries
 	addID := sop.NewUUID()
@@ -270,8 +270,8 @@ func Test_Transaction_DeleteObsoleteEntries_PropagatesBlobError(t *testing.T) {
 	ctx := context.Background()
 	// Use failing blobstore and ensure MRU cache is initialized
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	tx := &Transaction{l2Cache: redis, blobStore: failingBlobStore{}, registry: mocks.NewMockRegistry(false), l1Cache: cache.GetGlobalCache()}
+	cache.GetGlobalL1Cache(redis)
+	tx := &Transaction{l2Cache: redis, blobStore: failingBlobStore{}, registry: mocks.NewMockRegistry(false), l1Cache: cache.GetGlobalL1Cache(redis)}
 	unused := []sop.BlobsPayload[sop.UUID]{{BlobTable: "bt", Blobs: []sop.UUID{sop.NewUUID()}}}
 	err := tx.deleteObsoleteEntries(ctx, nil, unused)
 	if err == nil {
@@ -282,10 +282,10 @@ func Test_Transaction_DeleteObsoleteEntries_PropagatesBlobError(t *testing.T) {
 func Test_Transaction_DeleteObsoleteEntries_Branches(t *testing.T) {
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(redis)
 	blobs := mocks.NewMockBlobStore()
 	reg := mocks.NewMockRegistry(false)
-	tx := &Transaction{l2Cache: redis, l1Cache: cache.GetGlobalCache(), blobStore: blobs, registry: reg}
+	tx := &Transaction{l2Cache: redis, l1Cache: cache.GetGlobalL1Cache(redis), blobStore: blobs, registry: reg}
 
 	// Prepare unusedNodeIDs and deletedRegistryIDs
 	id1 := sop.NewUUID()
@@ -309,7 +309,7 @@ func Test_Transaction_DeleteObsoleteEntries_Branches(t *testing.T) {
 func Test_ItemActionTracker_Get_CacheMissThenHit(t *testing.T) {
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(redis)
 	blobs := mocks.NewMockBlobStore()
 
 	so := sop.StoreOptions{Name: "iat_get", SlotLength: 4, IsValueDataInNodeSegment: false}

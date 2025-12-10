@@ -68,8 +68,8 @@ func newNodeRepository[TK btree.Ordered, TV any](t *Transaction, storeInfo *sop.
 		storeInfo:      storeInfo,
 		readNodesCache: cache.NewCache[sop.UUID, any](readNodesMruMinCapacity, readNodesMruMaxCapacity),
 		localCache:     make(map[sop.UUID]cachedNode),
-		l2Cache:        sop.NewCacheClient(),
-		l1Cache:        cache.GetGlobalCache(),
+		l2Cache:        t.l2Cache,
+		l1Cache:        cache.GetGlobalL1Cache(t.l2Cache),
 		count:          storeInfo.Count,
 	}
 	return &nodeRepositoryFrontEnd[TK, TV]{

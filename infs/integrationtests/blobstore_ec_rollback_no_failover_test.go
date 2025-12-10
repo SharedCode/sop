@@ -98,7 +98,7 @@ func Test_EC_BlobStore_ShardsExceedParity_Rollback_NoFailover(t *testing.T) {
 	cleanupStoreRepository(table, isolatedStores)
 
 	// Build components mirroring NewTwoPhaseCommitTransactionWithReplication but with a custom BlobStore fileIO.
-	cache := sop.NewCacheClient()
+	cache := sop.GetL2Cache(sop.Redis)
 	rt, err := fs.NewReplicationTracker(ctx, isolatedStores, true, cache)
 	if err != nil {
 		t.Fatalf("NewReplicationTracker: %v", err)

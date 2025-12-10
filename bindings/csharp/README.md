@@ -30,6 +30,8 @@ SOP is designed for high-throughput, low-latency scenarios, making it suitable f
 
 We provide a comprehensive examples project covering B-Trees, Vector Search, Model Store, and more.
 
+**Prerequisite**: Ensure you have built the Go bridge library (see [Installation](#installation)) and placed it in the output directory.
+
 To run the interactive examples suite:
 
 ```bash
@@ -43,20 +45,28 @@ The suite includes:
 4.  **Paging**: Forward/Backward navigation.
 5.  **Vector Search**: Simulated AI/RAG embedding search.
 6.  **Model Store**: Large binary object storage.
+7.  **Logging**: Demonstration of the logging capabilities.
+8.  **Batched Operations**: High-performance batched inserts/updates.
+9.  **Cassandra Init**: Demo of Cassandra-backed initialization.
+10. **Text Search**: Full-text search capabilities.
+11. **Clustered Database**: Distributed database operations (requires Redis).
+12. **Concurrent Transactions**: Multi-threaded transaction handling (requires Redis).
+13. **Concurrent Transactions (Standalone)**: Multi-threaded transaction handling (local only).
 
 ## Prerequisites
 
 *   **Redis**: Required for caching and transaction coordination (especially in Clustered mode). **Note**: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
 *   **Storage**: Local disk space (supports multiple drives/folders).
-*   **OS**: macOS (Darwin), Linux, or Windows (AMD64).
-*   **.NET SDK**: .NET Core 3.1 or later.
+*   **OS**: macOS, Linux, or Windows.
+    *   **Architectures**: x64 (AMD64/Intel64) and ARM64 (Apple Silicon/Linux aarch64).
+*   **.NET SDK**: .NET 10.0 or later.
 
 ## Installation
 
 1.  **Build the Go Bridge**:
     From the repository root:
     ```bash
-    go build -buildmode=c-shared -o bindings/csharp/Sop.Examples/bin/Debug/netcoreapp3.1/libjsondb.dylib ./bindings/main/...
+    go build -buildmode=c-shared -o bindings/csharp/Sop.Examples/bin/Debug/net10.0/libjsondb.dylib ./bindings/main/...
     # Note: Adjust the output path and extension (.so for Linux, .dll for Windows) as needed.
     ```
 
@@ -64,7 +74,7 @@ The suite includes:
     Add the `Sop` project to your solution or reference the compiled assembly.
 
 3.  **Native Library**:
-    Ensure the compiled `libjsondb` (dylib/so/dll) is in your application's output directory (e.g., `bin/Debug/netX.X/`).
+    Ensure the compiled `libjsondb` (dylib/so/dll) is in your application's output directory (e.g., `bin/Debug/net10.0/`).
 
 ## Quick Start Guide
 
@@ -230,7 +240,7 @@ catch
 ### 3. Querying Data (Read-Only)
 
 ```csharp
-using var trans = db.BeginTransaction(ctx, mode: 2); // 2 = ForReading
+using var trans = db.BeginTransaction(ctx, mode: TransactionMode.ForReading);
 try
 {
     // --- Vector Search ---
@@ -295,7 +305,6 @@ Initialize the shared Cassandra connection for multi-tenant storage.
 var config = new CassandraConfig
 {
     ClusterHosts = new List<string> { "localhost" },
-    Keyspace = "sop_test",
     Consistency = 1,
     ReplicationClause = "{'class':'SimpleStrategy', 'replication_factor':1}"
 };
@@ -309,13 +318,14 @@ Cassandra.Close();
 
 ### Clustered Database
 
-Create a clustered database with Erasure Coding support.
+Create a clustered database with Erasure Coding support and Cassandra Keyspace.
 
 ```csharp
 var dbOpts = new DatabaseOptions 
 { 
     StoresFolders = new List<string> { "/mnt/data1", "/mnt/data2" },
     Type = (int)DatabaseType.Clustered,
+    Keyspace = "my_tenant_keyspace",
     ErasureConfig = new Dictionary<string, ErasureCodingConfig>
     {
         { "default", new ErasureCodingConfig { DataShards = 2, ParityShards = 1 } }

@@ -41,10 +41,13 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 // (registry & node blob) that are permanent action and thus, 'can't get rolled back.
 //
 // Use with care and only when you are sure to delete the tables.
-func RemoveBtree(ctx context.Context, name string, cacheType sop.CacheType) error {
+func RemoveBtree(ctx context.Context, name string, cacheType sop.L2CacheType) error {
 	fio := fs.NewFileIO()
 	mbsf := fs.NewManageStoreFolder(fio)
-	cache := sop.NewCacheClientByType(cacheType)
+	cache := sop.GetL2Cache(cacheType)
+	if cache == nil {
+		return fmt.Errorf("unable to get L2 cache for type %v", cacheType)
+	}
 	sr := cas.NewStoreRepository(mbsf, nil, cache)
 	return sr.Remove(ctx, name)
 }

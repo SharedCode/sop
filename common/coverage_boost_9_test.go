@@ -42,11 +42,11 @@ func (t *fetchedNilRepo) Fetched(id sop.UUID) {
 func Test_RefetchAndMerge_Update_SeparateSegment_FalseWithoutError_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	rg := mocks.NewMockRegistry(false)
 	sr := mocks.NewMockStoreRepository()
-	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
 	so := sop.StoreOptions{Name: "rfm_update_sep_false", SlotLength: 4, IsValueDataInNodeSegment: false}
 	ns := sop.NewStoreInfo(so)
@@ -111,11 +111,11 @@ func Test_RefetchAndMerge_Update_SeparateSegment_FalseWithoutError_ReturnsError(
 func Test_RefetchAndMerge_Update_InNodeSegment_FalseWithoutError_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	rg := mocks.NewMockRegistry(false)
 	sr := mocks.NewMockStoreRepository()
-	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
 	so := sop.StoreOptions{Name: "rfm_update_innode_false", SlotLength: 4, IsValueDataInNodeSegment: true}
 	ns := sop.NewStoreInfo(so)
@@ -181,11 +181,11 @@ func Test_RefetchAndMerge_Update_InNodeSegment_FalseWithoutError_ReturnsError(t 
 func Test_TransactionLogger_Rollback_Finalize_DeleteObsoleteEntries_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	tx := &Transaction{
 		blobStore:       mocks.NewMockBlobStore(),
 		l2Cache:         l2,
-		l1Cache:         cache.GetGlobalCache(),
+		l1Cache:         cache.GetGlobalL1Cache(l2),
 		registry:        mocks.NewMockRegistry(false),
 		StoreRepository: mocks.NewMockStoreRepository(),
 	}
@@ -222,9 +222,9 @@ func Test_TransactionLogger_Rollback_Finalize_DeleteObsoleteEntries_Succeeds(t *
 func Test_TransactionLogger_Rollback_Committed_CommitTrackedItemsValues_Deletes(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
-	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, registry: mocks.NewMockRegistry(false), StoreRepository: mocks.NewMockStoreRepository()}
+	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: bs, registry: mocks.NewMockRegistry(false), StoreRepository: mocks.NewMockStoreRepository()}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
 	// Seed a blob and a cached value for the same ID
@@ -262,11 +262,11 @@ func Test_TransactionLogger_Rollback_Committed_CommitTrackedItemsValues_Deletes(
 func Test_RefetchAndMerge_Remove_FalseWithoutError_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	rg := mocks.NewMockRegistry(false)
 	sr := mocks.NewMockStoreRepository()
-	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
 	so := sop.StoreOptions{Name: "rfm_remove_false", SlotLength: 4, IsValueDataInNodeSegment: true}
 	ns := sop.NewStoreInfo(so)
@@ -328,9 +328,9 @@ func Test_RefetchAndMerge_Remove_FalseWithoutError_ReturnsError(t *testing.T) {
 func Test_TransactionLogger_Rollback_Finalize_DeleteTrackedItemsValues_Deletes(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
-	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, registry: mocks.NewMockRegistry(false), StoreRepository: mocks.NewMockStoreRepository()}
+	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: bs, registry: mocks.NewMockRegistry(false), StoreRepository: mocks.NewMockStoreRepository()}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
 	id := sop.NewUUID()
@@ -397,11 +397,11 @@ func Test_CommitTrackedItemsValues_EarlyReturn_ActivelyPersisted_NoOp(t *testing
 func Test_RefetchAndMerge_GetAction_NoOp_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	rg := mocks.NewMockRegistry(false)
 	sr := mocks.NewMockStoreRepository()
-	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
 	so := sop.StoreOptions{Name: "rfm_get_noop", SlotLength: 4, IsValueDataInNodeSegment: true}
 	ns := sop.NewStoreInfo(so)

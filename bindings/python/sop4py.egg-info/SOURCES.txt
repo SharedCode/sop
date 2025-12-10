@@ -4,6 +4,7 @@ pyproject.toml
 sop/__init__.py
 sop/btree.py
 sop/call_go.py
+sop/cassandra.py
 sop/context.py
 sop/database.py
 sop/libjsondb_amd64darwin.dylib

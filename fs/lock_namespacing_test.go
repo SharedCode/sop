@@ -92,6 +92,10 @@ type capturingMockCache struct {
 	mock         sop.L2Cache
 }
 
+func (c *capturingMockCache) GetType() sop.L2CacheType {
+	return sop.Redis
+}
+
 func (c *capturingMockCache) FormatLockKey(k string) string {
 	// The default implementation might just return k or prefix it.
 	// We want to see what hashmap passes to it.

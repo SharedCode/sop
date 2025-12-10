@@ -91,6 +91,9 @@ func initErasureCoding() {
 		RepairCorruptedShards: true,
 	}
 	fs.SetGlobalErasureConfig(ec)
+
+	// Register L2 Cache Redis.
+	sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
 }
 
 var storesFolders = []string{
@@ -109,7 +112,8 @@ func TestMain(m *testing.M) {
 	log.SetDefault(l)
 
 	// Initialize Redis-backed components.
-	if _, err := redis.OpenConnection(redisConfig); err != nil {
+	conn, err := redis.OpenConnection(redisConfig)
+	if err != nil {
 		log.Error("Failed to open Redis connection", "error", err)
 		os.Exit(1)
 	}
@@ -124,8 +128,7 @@ func TestMain(m *testing.M) {
 	}
 
 	// Clear Redis cache between runs to avoid cross-test contamination.
-	cache := sop.NewCacheClient()
-	_ = cache.Clear(context.Background())
+	_ = conn.Client.FlushDB(context.Background())
 
 	// Shorten default node cache to keep tests snappy.
 	testDefaultCacheConfig = sop.GetDefaulCacheConfig()

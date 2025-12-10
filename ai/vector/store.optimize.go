@@ -181,7 +181,7 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 	}
 	di.sysStore = sysStore
 
-	currentVersion, err := di.getActiveVersion(ctx, tx)
+	currentVersion, err := di.getActiveVersion(ctx)
 	if err != nil {
 		if rbErr := tx.Rollback(ctx); rbErr != nil {
 			cleanupLock()

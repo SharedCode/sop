@@ -3,6 +3,13 @@ using System.Text.Json;
 
 namespace Sop;
 
+public enum TransactionMode
+{
+    NoCheck = 0,
+    ForWriting = 1,
+    ForReading = 2
+}
+
 internal enum TransactionAction
 {
     NewTransaction = 1,

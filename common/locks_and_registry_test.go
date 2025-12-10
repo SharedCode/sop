@@ -199,10 +199,10 @@ func Test_Transaction_DeleteObsoleteEntries_DeletesAll(t *testing.T) {
 	ctx := context.Background()
 	// Setup caches and mocks
 	rc := mocks.NewMockClient()
-	cache.NewGlobalCache(rc, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(rc)
 	bs := mocks.NewMockBlobStore()
 	reg := mocks.NewMockRegistry(false)
-	tx := &Transaction{l1Cache: cache.GetGlobalCache(), l2Cache: rc, blobStore: bs, registry: reg}
+	tx := &Transaction{l1Cache: cache.GetGlobalL1Cache(rc), l2Cache: rc, blobStore: bs, registry: reg}
 
 	// Seed one unused node ID blob and MRU entry
 	nid := sop.NewUUID()

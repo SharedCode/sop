@@ -8,9 +8,9 @@ public static class Redis
     /// <summary>
     /// Initializes the global shared Redis connection.
     /// </summary>
-    public static void Initialize(string ipAddress)
+    public static void Initialize(string url)
     {
-        var resPtr = NativeMethods.OpenRedisConnection(Interop.ToBytes(ipAddress));
+        var resPtr = NativeMethods.OpenRedisConnection(Interop.ToBytes(url));
         var res = Interop.FromPtr(resPtr);
         if (res != null) throw new SopException(res);
     }

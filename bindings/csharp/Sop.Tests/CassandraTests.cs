@@ -12,7 +12,6 @@ public class CassandraTests
         var config = new CassandraConfig
         {
             ClusterHosts = new List<string> { "localhost" },
-            Keyspace = "sop_test",
             Consistency = 1, // LocalQuorum
             ConnectionTimeout = 5000,
             ReplicationClause = "{'class':'SimpleStrategy', 'replication_factor':1}",

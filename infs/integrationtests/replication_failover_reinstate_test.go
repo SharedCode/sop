@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/adapters/redis"
 	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/infs"
 )
@@ -115,8 +116,8 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 	ctx := context.Background()
 
 	// Ensure clean L2 and status files to avoid cross-test influence.
-	cache := sop.NewCacheClient()
-	_ = cache.Clear(ctx)
+	conn, _ := redis.OpenConnection(redisConfig)
+	_ = conn.Client.FlushDB(ctx)
 	cleanupReplicationStatusFiles()
 
 	// Use dedicated replication base folders and EC disks for this test to avoid cross-test contamination.
@@ -143,6 +144,7 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 		RegistryHashModValue: fs.MinimumModValue,
 		StoresFolders:        isolatedStores,
 		ErasureConfig:        isolatedEC,
+		CacheType:            sop.Redis,
 	}
 
 	// Use a unique table name for isolated tests to avoid cross-suite collisions.
@@ -222,7 +224,7 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 	restoreRegistryPermissions(t, table)
 	restoreStoreInfoPermissions(t, table)
 	reinstateErr := make(chan error, 1)
-	go func() { reinstateErr <- infs.ReinstateFailedDrives(ctx, isolatedStores, nil) }()
+	go func() { reinstateErr <- infs.ReinstateFailedDrives(ctx, isolatedStores, sop.Redis) }()
 
 	// Detect immediate reinstate failures (fail fast with clearer error).
 	select {
@@ -578,7 +580,7 @@ func cleanupECShards(name string) {
 func cleanupStoreRepository(name string, bases []string) {
 	for _, base := range bases {
 		// Ignore error; it will fail if the store doesn't exist which is fine for cleanup.
-		_ = infs.RemoveBtree(context.Background(), sop.DatabaseOptions{StoresFolders: []string{base}, CacheType: sop.Redis}, name)
+		_ = infs.RemoveBtree(context.Background(), name, []string{base}, sop.Redis)
 	}
 }
 

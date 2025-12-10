@@ -24,6 +24,10 @@ func newFlakyCache(base sop.L2Cache, targetKey string) *flakyCache {
 	return &flakyCache{base: base, targetKey: targetKey, triggerOnce: false}
 }
 
+func (f *flakyCache) GetType() sop.L2CacheType {
+	return sop.Redis
+}
+
 // Cache interface forwarding with minimal behavior changes.
 func (f *flakyCache) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	return f.base.Set(ctx, key, value, expiration)
@@ -125,6 +129,10 @@ func Test_ItemActionTracker_Lock_PostSetReadMiss_ReturnsError(t *testing.T) {
 type errLockCache struct {
 	base      sop.L2Cache
 	targetKey string
+}
+
+func (e *errLockCache) GetType() sop.L2CacheType {
+	return sop.Redis
 }
 
 func (e *errLockCache) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
@@ -263,6 +271,10 @@ type errCache struct {
 
 func newErrCache(base sop.L2Cache, valueKey string) *errCache {
 	return &errCache{base: base, valueKey: valueKey}
+}
+
+func (e *errCache) GetType() sop.L2CacheType {
+	return sop.Redis
 }
 
 func (e *errCache) Set(ctx context.Context, key string, value string, expiration time.Duration) error {

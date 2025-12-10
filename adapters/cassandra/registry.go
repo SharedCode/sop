@@ -26,11 +26,11 @@ type registry struct {
 const updateAllOrNothingOfHandleSetLockTimeout = time.Duration(10 * time.Minute)
 
 // NewRegistry returns a Cassandra-backed implementation of sop.Registry.
-func NewRegistry(customConnection *Connection) sop.Registry {
+func NewRegistry(customConnection *Connection, l2Cache sop.L2Cache) sop.Registry {
 	return &registry{
 		connection: customConnection,
-		l2Cache:    sop.NewCacheClient(),
-		l1Cache:    cache.GetGlobalCache(),
+		l2Cache:    l2Cache,
+		l1Cache:    cache.GetGlobalL1Cache(l2Cache),
 	}
 }
 

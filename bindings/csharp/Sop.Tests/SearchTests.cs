@@ -44,7 +44,7 @@ public class SearchTests : IDisposable
         t.Commit();
 
         // Search in new transaction
-        t = db.BeginTransaction(ctx);
+        t = db.BeginTransaction(ctx, TransactionMode.ForReading);
         idx = db.OpenSearch(ctx, "my_index", t);
 
         var results = idx.SearchQuery("hello");

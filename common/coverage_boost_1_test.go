@@ -22,8 +22,8 @@ func Test_RefetchAndMerge_AddItem_SeparateSegment_Succeeds(t *testing.T) {
 	_ = sr.Add(ctx, *ns)
 
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	c := cache.GetGlobalL1Cache(l2)
+	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: c, blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
 	si := StoreInterface[PersonKey, Person]{}
 	si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
@@ -76,12 +76,12 @@ func (f failingBlobStoreRemove) Remove(ctx context.Context, storesBlobsIDs []sop
 func Test_CommitNewRootNodes_ReturnsFalse_OnExistingRoot(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 	reg := mocks.NewMockRegistry(false)
 	bs := mocks.NewMockBlobStore()
-	tx := &Transaction{registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
+	tx := &Transaction{registry: reg, l2Cache: l2, l1Cache: gc, blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "root_exists", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache()}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: gc}
 
 	// Prepare node and pre-populate registry with existing handle for same logical ID
 	lid := sop.NewUUID()
@@ -105,12 +105,12 @@ func Test_CommitNewRootNodes_ReturnsFalse_OnExistingRoot(t *testing.T) {
 func Test_CommitRemovedNodes_Conflict_ReturnsFalse(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 	reg := mocks.NewMockRegistry(false)
 	bs := mocks.NewMockBlobStore()
-	tx := &Transaction{registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
+	tx := &Transaction{registry: reg, l2Cache: l2, l1Cache: gc, blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rm_conflict", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache()}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: gc}
 
 	// Case 1: IsDeleted=true triggers false
 	{
@@ -152,14 +152,14 @@ func Test_CommitRemovedNodes_Conflict_ReturnsFalse(t *testing.T) {
 func Test_RollbackNewRootNodes_Error_Paths(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 	baseReg := &mocks.Mock_vid_registry{Lookup: make(map[sop.UUID]sop.Handle)}
 	reg := &failingRemoveRegistry{Mock_vid_registry: baseReg}
 	bs := mocks.NewMockBlobStore()
 	txLog := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-	tx := &Transaction{registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: failingBlobStoreRemove{BlobStore: bs}, logger: txLog}
+	tx := &Transaction{registry: reg, l2Cache: l2, l1Cache: gc, blobStore: failingBlobStoreRemove{BlobStore: bs}, logger: txLog}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_root_errs", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache()}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: gc}
 
 	// Build rollback payloads
 	lid := sop.NewUUID()
@@ -177,12 +177,12 @@ func Test_RollbackNewRootNodes_Error_Paths(t *testing.T) {
 func Test_TransactionLogger_Rollback_PreCommit_AddActivelyPersistedItem(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 	trLog := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	reg := mocks.NewMockRegistry(false)
 	bs := mocks.NewMockBlobStore()
 	sr := mocks.NewMockStoreRepository()
-	tnx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), registry: reg, blobStore: bs, logger: trLog, StoreRepository: sr}
+	tnx := &Transaction{l2Cache: l2, l1Cache: gc, registry: reg, blobStore: bs, logger: trLog, StoreRepository: sr}
 
 	// Build a pre-commit log for addActivelyPersistedItem
 	bibs := sop.BlobsPayload[sop.UUID]{BlobTable: "bt_pre", Blobs: []sop.UUID{sop.NewUUID()}}
@@ -354,17 +354,17 @@ func Test_Phase1Commit_LockFailsOnce_TriggersRefetchAndMerge(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
 	l2 := &flapLockCache{L2Cache: base}
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 
 	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	blobs := mocks.NewMockBlobStore()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: blobs, logger: tl, phaseDone: 0}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: gc, blobStore: blobs, logger: tl, phaseDone: 0}
 
 	// One updated node in local cache to produce a lock key.
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_lock_refetch", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: gc, count: si.Count}
 	uid := sop.NewUUID()
 	n := &btree.Node[PersonKey, Person]{ID: uid, Version: 1}
 	nr.localCache[uid] = cachedNode{action: updateAction, node: n}
@@ -435,13 +435,13 @@ func (wrapTLAddErr) PriorityLog() sop.TransactionPriorityLog { return prioRemove
 func Test_Phase2Commit_LogAddError_RemovesPriorityWithoutLocks(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	tx := &Transaction{mode: sop.ForWriting, phaseDone: 1, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(wrapTLAddErr{}, true)}
+	gc := cache.GetGlobalL1Cache(l2)
+	tx := &Transaction{mode: sop.ForWriting, phaseDone: 1, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: gc, blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(wrapTLAddErr{}, true)}
 
 	// Minimal backend; no tracked items, so rollback is cheap.
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p2_log_err", SlotLength: 2})
 	tx.btreesBackend = []btreeBackend{{
-		nodeRepository:                   &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache()},
+		nodeRepository:                   &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: gc},
 		getStoreInfo:                     func() *sop.StoreInfo { return si },
 		hasTrackedItems:                  func() bool { return false },
 		checkTrackedItems:                func(context.Context) error { return nil },
@@ -477,16 +477,16 @@ func Test_Phase1Commit_IsLockedFlaps_ContinuesThenSucceeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
 	l2 := &isLockedFlapCache{L2Cache: base}
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 
 	reg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	blobs := mocks.NewMockBlobStore()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: blobs, logger: tl, phaseDone: 0}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: gc, blobStore: blobs, logger: tl, phaseDone: 0}
 
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_islocked_flap", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: gc, count: si.Count}
 	uid := sop.NewUUID()
 	n := &btree.Node[PersonKey, Person]{ID: uid, Version: 1}
 	nr.localCache[uid] = cachedNode{action: updateAction, node: n}
@@ -526,7 +526,7 @@ func buildHandles(ids ...sop.UUID) []sop.RegistryPayload[sop.Handle] {
 func Test_AcquireLocks_TakeoverFromSameTransaction_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	tx := &Transaction{l2Cache: l2, registry: mocks.NewMockRegistry(false), blobStore: mocks.NewMockBlobStore(), StoreRepository: mocks.NewMockStoreRepository()}
 	tid := tl.TransactionLog.NewUUID()
@@ -548,7 +548,7 @@ func Test_AcquireLocks_TakeoverFromSameTransaction_Succeeds(t *testing.T) {
 func Test_AcquireLocks_LockedByDifferentTransaction_ReturnsFailoverError(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	tx := &Transaction{l2Cache: l2}
 	owner := sop.NewUUID()
@@ -591,6 +591,10 @@ func Test_PriorityRollback_NoTransactionOrRegistry_NoOp(t *testing.T) {
 
 // lockThenIsLockedFalseCache wraps a cache and forces IsLocked to return false even after Lock succeeds.
 type lockThenIsLockedFalseCache struct{ inner sop.L2Cache }
+
+func (c lockThenIsLockedFalseCache) GetType() sop.L2CacheType {
+	return sop.Redis
+}
 
 func (c lockThenIsLockedFalseCache) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	return c.inner.Set(ctx, key, value, expiration)
@@ -656,6 +660,10 @@ func (c lockThenIsLockedFalseCache) IsRestarted(ctx context.Context) bool {
 
 // lockErrorCache forces Lock to return an error to trigger error propagation path in acquireLocks.
 type lockErrorCache struct{ inner sop.L2Cache }
+
+func (c lockErrorCache) GetType() sop.L2CacheType {
+	return sop.Redis
+}
 
 func (c lockErrorCache) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	return c.inner.Set(ctx, key, value, expiration)
@@ -797,18 +805,18 @@ func (t tlogFailOnFunc) NewUUID() sop.UUID { return t.inner.NewUUID() }
 func Test_Phase1Commit_AreFetchedItemsIntact_FalseThenRetrySucceeds(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 
 	// Registry that flips from mismatch to match on successive Get calls.
 	baseReg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	reg := &getFlipRegistry{Mock_vid_registry: baseReg}
 
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: gc, blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
 
 	// Backend with one fetched node; no updates/removes/adds/root nodes.
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_fetched_retry", SlotLength: 2})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: gc, count: si.Count}
 	fid := sop.NewUUID()
 	// Version must be 1 to match reg on retry
 	nr.localCache[fid] = cachedNode{action: getAction, node: &btree.Node[PersonKey, Person]{ID: fid, Version: 1}}
@@ -836,9 +844,9 @@ func Test_Phase1Commit_AreFetchedItemsIntact_FalseThenRetrySucceeds(t *testing.T
 func Test_Transaction_Cleanup_LogError_DeleteObsoleteEntries(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 	tl := newTransactionLogger(tlogFailOnFunc{inner: mocks.NewMockTransactionLog(), target: int(deleteObsoleteEntries)}, true)
-	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), registry: mocks.NewMockRegistry(false), logger: tl}
+	tx := &Transaction{l2Cache: l2, l1Cache: gc, blobStore: mocks.NewMockBlobStore(), registry: mocks.NewMockRegistry(false), logger: tl}
 	if err := tx.cleanup(ctx); err == nil {
 		t.Fatalf("expected error from cleanup when deleteObsoleteEntries log fails")
 	}
@@ -847,9 +855,9 @@ func Test_Transaction_Cleanup_LogError_DeleteObsoleteEntries(t *testing.T) {
 func Test_Transaction_Cleanup_LogError_DeleteTrackedItemsValues(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 	tl := newTransactionLogger(tlogFailOnFunc{inner: mocks.NewMockTransactionLog(), target: int(deleteTrackedItemsValues)}, true)
-	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), registry: mocks.NewMockRegistry(false), logger: tl}
+	tx := &Transaction{l2Cache: l2, l1Cache: gc, blobStore: mocks.NewMockBlobStore(), registry: mocks.NewMockRegistry(false), logger: tl}
 	if err := tx.cleanup(ctx); err == nil {
 		t.Fatalf("expected error from cleanup when deleteTrackedItemsValues log fails")
 	}

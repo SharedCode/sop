@@ -7,6 +7,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/incfs"
 	"github.com/sharedcode/sop/infs"
 )
@@ -29,9 +30,16 @@ func ValidateOptions(config sop.DatabaseOptions) (sop.DatabaseOptions, error) {
 
 	if config.CacheType == sop.Redis {
 		// Check if Redis adapter is registered.
-		c := sop.NewCacheClientByType(sop.Redis)
+		c := sop.GetL2Cache(sop.Redis)
 		if c == nil {
-			return config, fmt.Errorf("clustered mode requested but Redis adapter not registered. Please import 'github.com/sharedcode/sop/adapters/redis' in your main package")
+			// Auto register InMemory L2 Cache.
+			sop.RegisterL2CacheFactory(sop.InMemory, cache.NewL2InMemoryCache)
+		}
+	} else if config.CacheType == sop.InMemory {
+		c := sop.GetL2Cache(sop.InMemory)
+		if c == nil {
+			// Auto register InMemory L2 Cache.
+			sop.RegisterL2CacheFactory(sop.InMemory, cache.NewL2InMemoryCache)
 		}
 	}
 
@@ -43,7 +51,7 @@ func ValidateCassandraOptions(config sop.DatabaseOptions) (sop.DatabaseOptions, 
 	if config.Keyspace == "" {
 		return config, fmt.Errorf("Cassandra mode requires Keyspace to be set")
 	}
-	c := sop.NewCacheClientByType(sop.Redis)
+	c := sop.GetL2Cache(sop.Redis)
 	if c == nil {
 		return config, fmt.Errorf("Cassandra mode requires Redis adapter. Please import 'github.com/sharedcode/sop/adapters/redis'")
 	}
@@ -155,5 +163,14 @@ func RemoveBtree(ctx context.Context, config sop.DatabaseOptions, name string) e
 	if config.IsCassandraHybrid() {
 		return incfs.RemoveBtree(ctx, name, config.CacheType)
 	}
-	return infs.RemoveBtree(ctx, config, name)
+	return infs.RemoveBtree(ctx, name, config.StoresFolders, config.CacheType)
+}
+
+// ReinstateFailedDrives asks the replication tracker to reinstate failed passive targets.
+// This API is only applicable for infs backend.
+func ReinstateFailedDrives(ctx context.Context, config sop.DatabaseOptions) error {
+	if config.IsCassandraHybrid() {
+		return fmt.Errorf("ReinstateFailedDrives only apply for infs, a pure File System based backend")
+	}
+	return infs.ReinstateFailedDrives(ctx, config.StoresFolders, config.CacheType)
 }

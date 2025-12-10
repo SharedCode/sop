@@ -284,11 +284,11 @@ func Test_ToStruct_ToByteArray_RoundTrip_And_Nil(t *testing.T) {
 func Test_TransactionLogger_Rollback_AddedRemovedUpdated_Branches(t *testing.T) {
 	ctx := context.Background()
 	localRedis := mocks.NewMockClient()
-	cache.NewGlobalCache(localRedis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(localRedis)
 	localBlobs := mocks.NewMockBlobStore()
 	localReg := mocks.NewMockRegistry(false)
-	tx := &Transaction{l2Cache: localRedis, l1Cache: cache.GetGlobalCache(), blobStore: localBlobs, registry: localReg}
-	nr := &nodeRepositoryBackend{transaction: tx, l2Cache: localRedis, l1Cache: cache.GetGlobalCache()}
+	tx := &Transaction{l2Cache: localRedis, l1Cache: cache.GetGlobalL1Cache(localRedis), blobStore: localBlobs, registry: localReg}
+	nr := &nodeRepositoryBackend{transaction: tx, l2Cache: localRedis, l1Cache: cache.GetGlobalL1Cache(localRedis)}
 	tx.btreesBackend = []btreeBackend{{nodeRepository: nr}}
 	addedID := sop.NewUUID()
 	removedLID := sop.NewUUID()
@@ -335,11 +335,11 @@ func Test_TransactionLogger_Rollback_AddedRemovedUpdated_Branches(t *testing.T) 
 func Test_TransactionLogger_Rollback_NewRootAndTrackedValues(t *testing.T) {
 	ctx := context.Background()
 	localRedis := mocks.NewMockClient()
-	cache.NewGlobalCache(localRedis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(localRedis)
 	localBlobs := mocks.NewMockBlobStore()
 	localReg := mocks.NewMockRegistry(false)
-	tx := &Transaction{l2Cache: localRedis, l1Cache: cache.GetGlobalCache(), blobStore: localBlobs, registry: localReg}
-	nr := &nodeRepositoryBackend{transaction: tx, l2Cache: localRedis, l1Cache: cache.GetGlobalCache()}
+	tx := &Transaction{l2Cache: localRedis, l1Cache: cache.GetGlobalL1Cache(localRedis), blobStore: localBlobs, registry: localReg}
+	nr := &nodeRepositoryBackend{transaction: tx, l2Cache: localRedis, l1Cache: cache.GetGlobalL1Cache(localRedis)}
 	tx.btreesBackend = []btreeBackend{{nodeRepository: nr}}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	tx.logger = tl
@@ -391,10 +391,10 @@ func Test_TransactionLogger_Rollback_FinalizeCommit_Cases(t *testing.T) {
 		switch name {
 		case "deletes_all":
 			localRedis := mocks.NewMockClient()
-			cache.NewGlobalCache(localRedis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+			cache.GetGlobalL1Cache(localRedis)
 			localBlobs := mocks.NewMockBlobStore()
 			localReg := mocks.NewMockRegistry(false)
-			tx := &Transaction{l2Cache: localRedis, l1Cache: cache.GetGlobalCache(), blobStore: localBlobs, registry: localReg}
+			tx := &Transaction{l2Cache: localRedis, l1Cache: cache.GetGlobalL1Cache(localRedis), blobStore: localBlobs, registry: localReg}
 			tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 			nodeBlobID := sop.NewUUID()
 			itemBlobID := sop.NewUUID()

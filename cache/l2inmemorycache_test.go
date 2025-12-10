@@ -7,7 +7,7 @@ import (
 )
 
 func TestInMemoryCache_BasicOperations(t *testing.T) {
-	c := NewInMemoryCache()
+	c := NewL2InMemoryCache()
 	ctx := context.Background()
 
 	// Test Set and Get
@@ -48,7 +48,7 @@ func TestInMemoryCache_BasicOperations(t *testing.T) {
 }
 
 func TestInMemoryCache_Expiration(t *testing.T) {
-	c := NewInMemoryCache()
+	c := NewL2InMemoryCache()
 	ctx := context.Background()
 
 	key := "expKey"
@@ -75,7 +75,7 @@ func TestInMemoryCache_Expiration(t *testing.T) {
 }
 
 func TestInMemoryCache_StructOperations(t *testing.T) {
-	c := NewInMemoryCache()
+	c := NewL2InMemoryCache()
 	ctx := context.Background()
 
 	type TestStruct struct {
@@ -105,7 +105,7 @@ func TestInMemoryCache_StructOperations(t *testing.T) {
 }
 
 func TestInMemoryCache_Locking(t *testing.T) {
-	c := NewInMemoryCache()
+	c := NewL2InMemoryCache()
 	ctx := context.Background()
 
 	keys := []string{"lock1", "lock2"}
@@ -141,7 +141,7 @@ func TestInMemoryCache_Locking(t *testing.T) {
 }
 
 func TestInMemoryCache_GetEx(t *testing.T) {
-	c := NewInMemoryCache()
+	c := NewL2InMemoryCache()
 	ctx := context.Background()
 
 	key := "getExKey"

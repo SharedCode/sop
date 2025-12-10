@@ -292,10 +292,10 @@ func Test_NodeRepository_CommitUpdatedNodes_OngoingUpdate_ReturnsFalse(t *testin
 func Test_NodeRepository_Frontend_Wrappers(t *testing.T) { // from noderepository_frontend_test.go
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	reg := mocks.NewMockRegistry(false)
 	blobs := mocks.NewMockBlobStore()
-	tx := &Transaction{registry: reg, l2Cache: l2, blobStore: blobs, l1Cache: cache.GetGlobalCache()}
+	tx := &Transaction{registry: reg, l2Cache: l2, blobStore: blobs, l1Cache: cache.GetGlobalL1Cache(l2)}
 	so := sop.StoreOptions{Name: "nr_front", SlotLength: 4, IsValueDataInNodeSegment: true}
 	si := sop.NewStoreInfo(so)
 	nr := newNodeRepository[PersonKey, Person](tx, si)
@@ -504,11 +504,11 @@ func Test_CommitNewRootNodes_NonEmptyRoot_ReturnsFalseNil(t *testing.T) {
 
 	// Setup transaction and backend
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	reg := mocks.NewMockRegistry(false)
-	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), registry: reg, blobStore: mocks.NewMockBlobStore()}
+	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), registry: reg, blobStore: mocks.NewMockBlobStore()}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "nr_root", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, l2Cache: l2, l1Cache: cache.GetGlobalCache(), storeInfo: si}
+	nr := &nodeRepositoryBackend{transaction: tx, l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), storeInfo: si}
 
 	// Seed registry with an existing handle for the intended logical ID
 	lid := sop.NewUUID()
@@ -536,11 +536,11 @@ func Test_CommitUpdatedNodes_VersionMismatch_ReturnsFalse(t *testing.T) {
 	ctx := context.Background()
 
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	reg := mocks.NewMockRegistry(false)
-	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), registry: reg, blobStore: mocks.NewMockBlobStore()}
+	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), registry: reg, blobStore: mocks.NewMockBlobStore()}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "nr_upd", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, l2Cache: l2, l1Cache: cache.GetGlobalCache(), storeInfo: si}
+	nr := &nodeRepositoryBackend{transaction: tx, l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), storeInfo: si}
 
 	// Logical ID and handle version set to 2, but node version will be 1 -> mismatch
 	lid := sop.NewUUID()
@@ -568,11 +568,11 @@ func Test_RollbackNewRootNodes_NotCommitted_KeepsRegistryEntry(t *testing.T) {
 	ctx := context.Background()
 
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	reg := mocks.NewMockRegistry(false)
-	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, registry: reg}
-	nr := &nodeRepositoryBackend{transaction: tx, l2Cache: l2, l1Cache: cache.GetGlobalCache()}
+	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: bs, registry: reg}
+	nr := &nodeRepositoryBackend{transaction: tx, l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2)}
 	tx.btreesBackend = []btreeBackend{{nodeRepository: nr}}
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	tx.logger = tl

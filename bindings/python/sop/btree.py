@@ -161,6 +161,9 @@ class BtreeAction(Enum):
     GetStoreInfo = auto()
     UpdateKey = auto()
     UpdateCurrentKey = auto()
+    GetCurrentKey = auto()
+    Next = auto()
+    Previous = auto()
 
 
 class Btree(Generic[TK, TV]):
@@ -291,6 +294,15 @@ class Btree(Generic[TK, TV]):
         UpdateCurrentKey updates the key of the currently positioned item.
         """
         return self._manage(ctx, BtreeAction.UpdateCurrentKey.value, item)
+
+    def get_current_key(self, ctx: context.Context) -> Item[TK, TV]:
+        """
+        GetCurrentKey returns the current item (Key & Value) where the cursor is positioned.
+        """
+        items = self._get(ctx, BtreeAction.GetCurrentKey.value, PagingInfo())
+        if items and len(items) > 0:
+            return items[0]
+        return None
 
     def upsert(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
         return self._manage(ctx, BtreeAction.Upsert.value, items)
@@ -520,6 +532,62 @@ class Btree(Generic[TK, TV]):
         )
         if res == None:
             raise BtreeError(f"Last call failed for Btree:{self.id} in SOP")
+
+        return self._to_bool(res)
+
+    def next(
+        self,
+        ctx: context.Context,
+    ) -> bool:
+        """Navigate or positions the cursor to the next item of the b-tree store.
+
+        Args:
+            ctx (context.Context): _description_
+
+        Raises:
+            BtreeError: _description_
+
+        Returns:
+            bool: _description_
+        """
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
+        )
+        res = call_go.navigate_btree(
+            ctx.id, BtreeAction.Next.value, json.dumps(asdict(metadata)), None
+        )
+        if res == None:
+            raise BtreeError(f"Next call failed for Btree:{self.id} in SOP")
+
+        return self._to_bool(res)
+
+    def previous(
+        self,
+        ctx: context.Context,
+    ) -> bool:
+        """Navigate or positions the cursor to the previous item of the b-tree store.
+
+        Args:
+            ctx (context.Context): _description_
+
+        Raises:
+            BtreeError: _description_
+
+        Returns:
+            bool: _description_
+        """
+        metadata: ManageBtreeMetaData = ManageBtreeMetaData(
+            is_primitive_key=self.is_primitive_key,
+            btree_id=str(self.id),
+            transaction_id=str(self.transaction_id),
+        )
+        res = call_go.navigate_btree(
+            ctx.id, BtreeAction.Previous.value, json.dumps(asdict(metadata)), None
+        )
+        if res == None:
+            raise BtreeError(f"Previous call failed for Btree:{self.id} in SOP")
 
         return self._to_bool(res)
 

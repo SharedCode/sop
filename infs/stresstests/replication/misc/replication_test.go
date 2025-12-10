@@ -37,6 +37,7 @@ func init() {
 	if _, err := redis.OpenConnection(redisConfig); err != nil {
 		panic(err)
 	}
+	sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
 
 	// cache := sop.NewCacheClient()
 	// log.Info("about to issue cache.Clear")
@@ -88,7 +89,7 @@ func (o *openFailDirectIO) Close(file *os.File) error { return nil }
 
 func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: sop.Redis}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -119,7 +120,7 @@ func TestDirectIOSetupNewFileFailure_NoReplication(t *testing.T) {
 func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders}
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders, CacheType: sop.Redis}
 
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
@@ -190,7 +191,7 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 func TestOpenBtree_TransWithRepl_failed(t *testing.T) {
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders}
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders, CacheType: sop.Redis}
 
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
@@ -208,7 +209,7 @@ func TestOpenBtree_TransWithRepl_failed(t *testing.T) {
 func TestOpenBtreeWithRepl_succeeded(t *testing.T) {
 	ctx := context.Background()
 	// Take from global EC config the data paths & EC config details.
-	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders}
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders, CacheType: sop.Redis}
 
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {

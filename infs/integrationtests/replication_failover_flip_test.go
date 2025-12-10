@@ -40,7 +40,7 @@ func Test_ActiveSide_FailoverFlip_Then_Reinstate_FastForward(t *testing.T) {
 			RepairCorruptedShards: true,
 		},
 	}
-	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: isolatedStores, ErasureConfig: isolatedEC}
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: isolatedStores, ErasureConfig: isolatedEC, CacheType: sop.Redis}
 
 	table := "ec_failover_flip_it"
 
@@ -82,7 +82,7 @@ func Test_ActiveSide_FailoverFlip_Then_Reinstate_FastForward(t *testing.T) {
 	_ = tx2.Commit(ctx) // expect error via replication path; failover handler will be invoked
 
 	// Manually trigger failover since auto-failover is disabled
-	if err := fs.TriggerFailover(ctx, isolatedStores, true, nil); err != nil {
+	if err := fs.TriggerFailover(ctx, isolatedStores, true, sop.GetL2Cache(sop.Redis)); err != nil {
 		t.Fatalf("TriggerFailover failed: %v", err)
 	}
 
@@ -109,7 +109,7 @@ func Test_ActiveSide_FailoverFlip_Then_Reinstate_FastForward(t *testing.T) {
 	// Disarm failures and run reinstate; write deltas during reinstate
 	ResetDirectIOSim()
 	reinstateErr := make(chan error, 1)
-	go func() { reinstateErr <- infs.ReinstateFailedDrives(ctx, isolatedStores, nil) }()
+	go func() { reinstateErr <- infs.ReinstateFailedDrives(ctx, isolatedStores, sop.Redis) }()
 
 	// Write some deltas while reinstate runs
 	for i := 3; i <= 5; i++ {

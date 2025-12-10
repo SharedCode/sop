@@ -44,7 +44,10 @@ internal enum DatabaseAction
     OpenModelStore = 5,
     OpenVectorStore = 6,
     OpenSearch = 7,
-    RemoveBtree = 8
+    RemoveBtree = 8,
+    RemoveModelStore = 9,
+    RemoveVectorStore = 10,
+    RemoveSearch = 11
 }
 
 public class Database
@@ -57,11 +60,11 @@ public class Database
         _options = options;
     }
 
-    public Transaction BeginTransaction(Context ctx, int mode = 1, int maxTime = 15)
+    public Transaction BeginTransaction(Context ctx, TransactionMode mode = TransactionMode.ForWriting, int maxTime = 15)
     {
         EnsureDatabaseCreated(ctx);
 
-        var opts = new { mode = mode, max_time = maxTime };
+        var opts = new { mode = (int)mode, max_time = maxTime };
         var payload = JsonSerializer.SerializeToUtf8Bytes(opts);
 
         var resPtr = NativeMethods.ManageDatabase(ctx.Id, (int)DatabaseAction.BeginTransaction, Interop.ToBytes(Id.ToString()), payload);
@@ -95,6 +98,27 @@ public class Database
     public void RemoveBtree(Context ctx, string name)
     {
         var resPtr = NativeMethods.ManageDatabase(ctx.Id, (int)DatabaseAction.RemoveBtree, Interop.ToBytes(Id.ToString()), Interop.ToBytes(name));
+        var res = Interop.FromPtr(resPtr);
+        if (res != null) throw new SopException(res);
+    }
+
+    public void RemoveModelStore(Context ctx, string name)
+    {
+        var resPtr = NativeMethods.ManageDatabase(ctx.Id, (int)DatabaseAction.RemoveModelStore, Interop.ToBytes(Id.ToString()), Interop.ToBytes(name));
+        var res = Interop.FromPtr(resPtr);
+        if (res != null) throw new SopException(res);
+    }
+
+    public void RemoveVectorStore(Context ctx, string name)
+    {
+        var resPtr = NativeMethods.ManageDatabase(ctx.Id, (int)DatabaseAction.RemoveVectorStore, Interop.ToBytes(Id.ToString()), Interop.ToBytes(name));
+        var res = Interop.FromPtr(resPtr);
+        if (res != null) throw new SopException(res);
+    }
+
+    public void RemoveSearch(Context ctx, string name)
+    {
+        var resPtr = NativeMethods.ManageDatabase(ctx.Id, (int)DatabaseAction.RemoveSearch, Interop.ToBytes(Id.ToString()), Interop.ToBytes(name));
         var res = Interop.FromPtr(resPtr);
         if (res != null) throw new SopException(res);
     }

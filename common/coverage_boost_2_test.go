@@ -162,7 +162,8 @@ func Test_NodeRepository_RollbackUpdatedNodes_ErrorBranches(t *testing.T) {
 	rg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	tx := &Transaction{l2Cache: l2, blobStore: bs, registry: rg}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_upd_errs", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: cache.GetGlobalCache()}
+	gc := cache.GetGlobalL1Cache(l2)
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: gc}
 
 	// Prepare vids and registry handles: one with inactive ID set, one without to hit WorkInProgressTimestamp reset path.
 	lid1, lid2 := sop.NewUUID(), sop.NewUUID()
@@ -179,7 +180,7 @@ func Test_NodeRepository_RollbackUpdatedNodes_ErrorBranches(t *testing.T) {
 	// Case 2: nodesAreLocked=false uses Update; induce Update error via mock flag.
 	rg2 := mocks.NewMockRegistry(true).(*mocks.Mock_vid_registry)
 	tx2 := &Transaction{l2Cache: mocks.NewMockClient(), blobStore: mocks.NewMockBlobStore(), registry: rg2}
-	nr2 := &nodeRepositoryBackend{transaction: tx2, storeInfo: si, l2Cache: tx2.l2Cache, l1Cache: cache.GetGlobalCache()}
+	nr2 := &nodeRepositoryBackend{transaction: tx2, storeInfo: si, l2Cache: tx2.l2Cache, l1Cache: gc}
 	// Seed registry with inactive IDs so code attempts Update.
 	lid3 := sop.NewUUID()
 	vids2 := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, BlobTable: si.BlobTable, IDs: []sop.UUID{lid3}}}
@@ -199,7 +200,8 @@ func Test_NodeRepository_RollbackAddedNodes_ErrorPaths(t *testing.T) {
 	bs := errBlobStore{err: fmt.Errorf("blob rm err")}
 	tx := &Transaction{l2Cache: l2, registry: rg, blobStore: bs}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_added_errs", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	gc := cache.GetGlobalL1Cache(l2)
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: gc, count: si.Count}
 
 	lid := sop.NewUUID()
 	vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, IDs: []sop.UUID{lid}}}
@@ -214,7 +216,8 @@ func Test_NodeRepository_RemoveNodes_DeleteError_PropagatesLastErr(t *testing.T)
 	l2 := deleteErrCache{L2Cache: mocks.NewMockClient()}
 	tx := &Transaction{l2Cache: l2, blobStore: mocks.NewMockBlobStore()}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rm_nodes_del_err", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: cache.GetGlobalCache()}
+	gc := cache.GetGlobalL1Cache(l2)
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: gc}
 	bibs := []sop.BlobsPayload[sop.UUID]{{BlobTable: si.BlobTable, Blobs: []sop.UUID{sop.NewUUID()}}}
 	if err := nr.removeNodes(ctx, bibs); err == nil {
 		t.Fatalf("expected delete error to propagate as lastErr")
@@ -246,7 +249,7 @@ func Test_Phase2Commit_WithUpdatedHandles_Warns_And_Cleans(t *testing.T) {
 	ctx := context.Background()
 	// Seed caches
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 	// Registry and store repo
 	rg := mocks.NewMockRegistry(false)
 	sr := mocks.NewMockStoreRepository()
@@ -254,7 +257,7 @@ func Test_Phase2Commit_WithUpdatedHandles_Warns_And_Cleans(t *testing.T) {
 	baseTL := mocks.NewMockTransactionLog().(*mocks.MockTransactionLog)
 	tl := newTransactionLogger(wrapTLPrioRemoveErr{inner: baseTL}, true)
 
-	tx := &Transaction{mode: sop.ForWriting, phaseDone: 1, StoreRepository: sr, registry: rg, logger: tl, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore()}
+	tx := &Transaction{mode: sop.ForWriting, phaseDone: 1, StoreRepository: sr, registry: rg, logger: tl, l2Cache: l2, l1Cache: gc, blobStore: mocks.NewMockBlobStore()}
 
 	// Provide updated handles so UpdateNoLocks path triggers and Remove is attempted
 	h := sop.NewHandle(sop.NewUUID())
@@ -311,15 +314,15 @@ func Test_Phase1Commit_Conflict_Then_RefetchAndRetry_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	// Redis/L1
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 	// Transaction wiring
 	rg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: 0, id: sop.NewUUID()}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: rg, l2Cache: l2, l1Cache: gc, blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: 0, id: sop.NewUUID()}
 
 	// Store/node repo with one updated node
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_retry", SlotLength: 4, IsValueDataInNodeSegment: true})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: gc, count: si.Count}
 	uid := sop.NewUUID()
 	n := &btree.Node[PersonKey, Person]{ID: uid, Version: 2}
 	nr.localCache[uid] = cachedNode{action: updateAction, node: n}
@@ -423,7 +426,8 @@ func Test_NodeRepository_RollbackNewRootNodes_ErrorPaths_NoUnregister(t *testing
 	rg := mocks.NewMockRegistry(false)
 	tx := &Transaction{l2Cache: l2, blobStore: bs, registry: rg, logger: newTransactionLogger(mocks.NewMockTransactionLog(), true)}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_newroot_err", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: cache.GetGlobalCache()}
+	gc := cache.GetGlobalL1Cache((l2))
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: gc}
 	lid := sop.NewUUID()
 	vids := []sop.RegistryPayload[sop.UUID]{{RegistryTable: si.RegistryTable, IDs: []sop.UUID{lid}}}
 	bibs := []sop.BlobsPayload[sop.UUID]{{BlobTable: si.BlobTable, Blobs: []sop.UUID{sop.NewUUID()}}}
@@ -498,7 +502,8 @@ func Test_NodeRepository_RollbackRemovedNodes_BothPaths(t *testing.T) {
 	rg1 := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	l2 := mocks.NewMockClient()
 	tx1 := &Transaction{registry: rg1, l2Cache: l2}
-	nr1 := &nodeRepositoryBackend{transaction: tx1, storeInfo: si, l2Cache: l2, l1Cache: cache.GetGlobalCache()}
+	gc := cache.GetGlobalL1Cache(l2)
+	nr1 := &nodeRepositoryBackend{transaction: tx1, storeInfo: si, l2Cache: l2, l1Cache: gc}
 	lid1 := sop.NewUUID()
 	h1 := sop.NewHandle(lid1)
 	h1.IsDeleted = true
@@ -511,7 +516,7 @@ func Test_NodeRepository_RollbackRemovedNodes_BothPaths(t *testing.T) {
 	// Case 2: nodesAreLocked=false -> Update
 	rg2 := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	tx2 := &Transaction{registry: rg2, l2Cache: l2}
-	nr2 := &nodeRepositoryBackend{transaction: tx2, storeInfo: si, l2Cache: l2, l1Cache: cache.GetGlobalCache()}
+	nr2 := &nodeRepositoryBackend{transaction: tx2, storeInfo: si, l2Cache: l2, l1Cache: gc}
 	lid2 := sop.NewUUID()
 	h2 := sop.NewHandle(lid2)
 	h2.WorkInProgressTimestamp = 123
@@ -707,13 +712,13 @@ func Test_Phase1Commit_LockFailOnce_TriggersRefetchAndMerge(t *testing.T) {
 	// L2 cache fails first Lock, then succeeds.
 	base := mocks.NewMockClient()
 	l2 := &lockFailOnceCache{L2Cache: base}
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	reg := mocks.NewMockRegistry(false)
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_lock_fail_once", SlotLength: 2})
 
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: -1}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: gc, blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: -1}
 
 	// Prepare updated node so nodesKeys are formed and lock path executes.
 	lid := sop.NewUUID()
@@ -724,7 +729,7 @@ func Test_Phase1Commit_LockFailOnce_TriggersRefetchAndMerge(t *testing.T) {
 	// Count refetch-and-merge invocations.
 	var refetchCount int
 
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{lid: {node: n, action: updateAction}}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{lid: {node: n, action: updateAction}}, l2Cache: l2, l1Cache: gc, count: si.Count}
 	tx.btreesBackend = []btreeBackend{{
 		nodeRepository:                   nr,
 		getStoreInfo:                     func() *sop.StoreInfo { return si },
@@ -810,9 +815,9 @@ func (t tlogFailAdd) NewUUID() sop.UUID { return sop.NewUUID() }
 func Test_Transaction_Cleanup_LogError_Propagates(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(tlogFailAdd{}, true)}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(tlogFailAdd{}, true)}
 
 	if err := tx.cleanup(ctx); err == nil {
 		t.Fatalf("expected cleanup to propagate log(Add) error")
@@ -848,19 +853,19 @@ func Test_Phase1Commit_IsLockedError_ThenSucceeds(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
 	l2 := &isLockedErrOnceCache{L2Cache: base}
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	reg := mocks.NewMockRegistry(false)
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_islocked_err", SlotLength: 2})
 
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: -1}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: mocks.NewMockBlobStore(), logger: tl, phaseDone: -1}
 
 	lid := sop.NewUUID()
 	n := &btree.Node[sop.UUID, int]{ID: lid, Version: 0}
 	reg.(*mocks.Mock_vid_registry).Lookup[lid] = sop.Handle{LogicalID: lid, PhysicalIDA: lid, Version: 0}
 
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{lid: {node: n, action: updateAction}}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, localCache: map[sop.UUID]cachedNode{lid: {node: n, action: updateAction}}, l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), count: si.Count}
 	tx.btreesBackend = []btreeBackend{{
 		nodeRepository:                   nr,
 		getStoreInfo:                     func() *sop.StoreInfo { return si },
@@ -920,10 +925,10 @@ func Test_NodeRepository_CommitUpdatedNodes_RegistryGetError(t *testing.T) {
 func Test_Transaction_Cleanup_Succeeds_ExecutesAllSteps(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: tl}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Second, StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: mocks.NewMockBlobStore(), logger: tl}
 
 	// Seed updated and removed handles so getToBeObsoleteEntries yields work.
 	id := sop.NewUUID()

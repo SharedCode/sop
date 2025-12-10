@@ -20,6 +20,11 @@ import (
 type mockCacheWarn struct{ inner sop.L2Cache }
 
 func newMockCacheWarn() mockCacheWarn { return mockCacheWarn{inner: mocks.NewMockClient()} }
+
+func (m mockCacheWarn) GetType() sop.L2CacheType {
+	return sop.Redis
+}
+
 func (m mockCacheWarn) Set(ctx context.Context, k, v string, d time.Duration) error {
 	return m.inner.Set(ctx, k, v, d)
 }

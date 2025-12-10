@@ -35,7 +35,8 @@ SOP is designed for high-throughput, low-latency scenarios, making it suitable f
 
 *   **Redis**: Required for caching and transaction coordination (especially in Clustered mode). **Note**: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
 *   **Storage**: Local disk space (supports multiple drives/folders).
-*   **OS**: macOS (Darwin), Linux, or Windows (AMD64).
+*   **OS**: macOS, Linux, or Windows.
+    *   **Architectures**: x64 (AMD64/Intel64) and ARM64 (Apple Silicon/Linux aarch64).
 
 ## Installation
 
@@ -47,7 +48,32 @@ SOP is designed for high-throughput, low-latency scenarios, making it suitable f
 
 2.  **Install Python Dependencies**:
     ```bash
-    pip install -r jsondb/python/requirements.txt
+    pip install -r requirements.txt
+    ```
+
+## Running the Examples
+
+The `examples/` directory contains runnable scripts demonstrating various features.
+
+To run an example, ensure you are in the `bindings/python` directory and have your virtual environment activated (if using one).
+
+**Basic Usage:**
+```bash
+python3 examples/basic_demo.py
+```
+
+**Concurrent Transactions (Standalone):**
+This demo shows how to run concurrent transactions without a Redis dependency.
+```bash
+python3 examples/concurrent_demo_standalone.py
+```
+
+**Vector Search:**
+```bash
+python3 examples/vector_search_demo.py
+```
+
+See the `examples/` directory for more scripts.
     ```
 
 3.  **Set PYTHONPATH**:
@@ -260,16 +286,16 @@ For production environments using `Clustered` mode, you should initialize both C
 
 ```python
 from sop import Redis
-from sop.database import CassandraDatabase
+from sop.cassandra import Cassandra
+from sop.database import Database, DatabaseOptions, DatabaseType
 
 # 1. Initialize Redis (Required for Locking/Caching in Clustered mode)
 # Format: redis://<user>:<password>@<host>:<port>/<db_number>
 Redis.initialize("redis://:password@localhost:6379/0")
 
 # 2. Initialize Cassandra (Global Connection)
-CassandraDatabase.initialize({
+Cassandra.initialize({
     "cluster_hosts": ["127.0.0.1"],
-    "keyspace": "sop_global",  # Default keyspace
     "consistency": 1,          # 1 = LocalQuorum
     "authenticator": {
         "username": "cassandra",
@@ -280,13 +306,16 @@ CassandraDatabase.initialize({
 # ... Application Logic ...
 
 # Connect to a specific tenant's keyspace
-db = CassandraDatabase(keyspace="tenant_1")
+db = Database(DatabaseOptions(
+    keyspace="tenant_1",
+    type=DatabaseType.Clustered
+))
 
 # ...
 
 # Cleanup on shutdown
 Redis.close()
-CassandraDatabase.close()
+Cassandra.close()
 ```
 
 ## Architecture

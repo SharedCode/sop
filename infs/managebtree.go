@@ -77,14 +77,18 @@ func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, nam
 
 // RemoveBtree removes the B-tree with the given name from backend storage.
 // This is destructive: it drops registry and node-blob data and cannot be rolled back.
-func RemoveBtree(ctx context.Context, options sop.DatabaseOptions, name string) error {
-	if len(options.StoresFolders) == 0 {
+func RemoveBtree(ctx context.Context, name string, storesFolders []string, cacheType sop.L2CacheType) error {
+	if len(storesFolders) == 0 {
 		return fmt.Errorf("needs at least a folder to delete a Btree")
 	}
-	log.Info(fmt.Sprintf("Btree %s%c%s is about to be deleted", options.StoresFolders[0], os.PathSeparator, name))
+	cache := sop.GetL2Cache(cacheType)
+	if cache == nil {
+		return fmt.Errorf("unable to get L2 cache for type %v", cacheType)
+	}
 
-	cache := sop.NewCacheClientByType(options.CacheType)
-	replicationTracker, err := fs.NewReplicationTracker(ctx, options.StoresFolders, false, cache)
+	log.Info(fmt.Sprintf("Btree %s%c%s is about to be deleted", storesFolders[0], os.PathSeparator, name))
+
+	replicationTracker, err := fs.NewReplicationTracker(ctx, storesFolders, false, cache)
 	if err != nil {
 		return err
 	}
@@ -101,14 +105,16 @@ func RemoveBtree(ctx context.Context, options sop.DatabaseOptions, name string) 
 
 // ReinstateFailedDrives asks the replication tracker to reinstate failed passive targets.
 // storesFolders must contain the active and passive stores' base folder paths.
-func ReinstateFailedDrives(ctx context.Context, storesFolders []string, cache sop.L2Cache) error {
+func ReinstateFailedDrives(ctx context.Context, storesFolders []string, cacheType sop.L2CacheType) error {
 	if len(storesFolders) != 2 {
 		return fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths)")
 	}
 
+	cache := sop.GetL2Cache(cacheType)
 	if cache == nil {
-		cache = sop.NewCacheClient()
+		return fmt.Errorf("unable to get L2 cache for type %v", cacheType)
 	}
+
 	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, cache)
 	if err != nil {
 		return fmt.Errorf("failed instantiating Replication Tracker: %v", err)

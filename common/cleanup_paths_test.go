@@ -64,8 +64,8 @@ func Test_Transaction_GetToBeObsoleteEntries(t *testing.T) {
 func Test_Transaction_DeleteObsoleteEntries(t *testing.T) {
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	l1 := cache.GetGlobalCache()
+	c := cache.GetGlobalL1Cache(redis)
+	l1 := c
 	blobs := mocks.NewMockBlobStore()
 	reg := mocks.NewMockRegistry(false)
 

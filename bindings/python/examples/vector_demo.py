@@ -62,7 +62,7 @@ def main():
     print("\n--- 2. Explicit Transaction (Rollback) ---")
     
     try:
-        with db.begin_transaction(ctx, mode=TransactionMode.ForWriting.value, max_time=15) as trans:
+        with db.begin_transaction(ctx, max_time=15) as trans:
             print("Transaction Started.")
             store_rb = db.open_vector_store(ctx, trans, "demo_store")
             

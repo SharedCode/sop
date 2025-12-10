@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -24,7 +25,7 @@ func NewDatabase(config sop.DatabaseOptions) *Database {
 	config, _ = database.ValidateOptions(config)
 	return &Database{
 		config: config,
-		cache:  sop.NewCacheClientByType(config.CacheType),
+		cache:  sop.GetL2Cache(config.CacheType),
 	}
 }
 
@@ -33,7 +34,7 @@ func NewCassandraDatabase(config sop.DatabaseOptions) *Database {
 	config, _ = database.ValidateCassandraOptions(config)
 	return &Database{
 		config: config,
-		cache:  sop.NewCacheClientByType(config.CacheType),
+		cache:  sop.GetL2Cache(config.CacheType),
 	}
 }
 
@@ -56,7 +57,7 @@ func (db *Database) ErasureConfig() map[string]sop.ErasureCodingConfig {
 }
 
 // CacheType returns the configured cache type.
-func (db *Database) CacheType() sop.CacheType {
+func (db *Database) CacheType() sop.L2CacheType {
 	return db.config.CacheType
 }
 
@@ -117,4 +118,91 @@ func (db *Database) OpenSearch(ctx context.Context, name string, t sop.Transacti
 		}
 	}
 	return search.NewIndex(ctx, t, name)
+}
+
+// RemoveModelStore removes the model store and its underlying B-Tree.
+func (db *Database) RemoveModelStore(ctx context.Context, name string) error {
+	return database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s_models", name))
+}
+
+// RemoveVectorStore removes the vector store and its underlying B-Trees.
+func (db *Database) RemoveVectorStore(ctx context.Context, name string) error {
+	// We will try to remove all potential tables.
+	// We won't stop on error, but we will return the last error if any.
+	var lastErr error
+
+	remove := func(n string) {
+		if err := database.RemoveBtree(ctx, db.config, n); err != nil {
+			lastErr = err
+		}
+	}
+
+	suffixes := []string{
+		"_sys_config",
+		"_lku",
+		"_centroids",
+		"_vecs",
+		"_tmp_vecs",
+		"_data",
+	}
+
+	for _, suffix := range suffixes {
+		remove(fmt.Sprintf("%s%s", name, suffix))
+	}
+
+	// Also try to remove versioned tables.
+	// We use an internal transaction to peek at the current version.
+	trans, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err == nil {
+		vs, err := db.OpenVectorStore(ctx, name, trans, vector.Config{})
+		if err == nil {
+			version, _ := vs.Version(ctx)
+
+			// Remove the current version vector components.
+			versionSuffix := fmt.Sprintf("_%d", version)
+			remove(fmt.Sprintf("%s%s%s", name, "_lku", versionSuffix))
+			remove(fmt.Sprintf("%s%s%s", name, "_centroids", versionSuffix))
+			remove(fmt.Sprintf("%s%s%s", name, "_vecs", versionSuffix))
+
+			// Remove the previous version vector components, if there is.
+			if version > 0 {
+				versionSuffix = fmt.Sprintf("_%d", version-1)
+				remove(fmt.Sprintf("%s%s%s", name, "_lku", versionSuffix))
+				remove(fmt.Sprintf("%s%s%s", name, "_centroids", versionSuffix))
+				remove(fmt.Sprintf("%s%s%s", name, "_vecs", versionSuffix))
+			}
+
+			// Remove the next version vector components, if there is.
+			versionSuffix = fmt.Sprintf("_%d", version+1)
+			remove(fmt.Sprintf("%s%s%s", name, "_lku", versionSuffix))
+			remove(fmt.Sprintf("%s%s%s", name, "_centroids", versionSuffix))
+			remove(fmt.Sprintf("%s%s%s", name, "_vecs", versionSuffix))
+		}
+		// We only read, so rollback is fine/preferred to release locks immediately.
+		_ = trans.Rollback(ctx)
+	}
+
+	return lastErr
+}
+
+// RemoveSearch removes the search index and its underlying B-Trees.
+func (db *Database) RemoveSearch(ctx context.Context, name string) error {
+	var lastErr error
+	remove := func(n string) {
+		if err := database.RemoveBtree(ctx, db.config, n); err != nil {
+			lastErr = err
+		}
+	}
+
+	suffixes := []string{
+		"_postings",
+		"_term_stats",
+		"_doc_stats",
+		"_global",
+	}
+
+	for _, suffix := range suffixes {
+		remove(fmt.Sprintf("%s%s", name, suffix))
+	}
+	return lastErr
 }

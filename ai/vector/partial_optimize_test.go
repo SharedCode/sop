@@ -22,13 +22,13 @@ func TestPartialOptimizationState(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	ctx := context.Background()
-	c := cache.NewInMemoryCache()
+	c := cache.NewL2InMemoryCache()
 	t.Logf("Cache created: %T", c)
 
 	trans, err := infs.NewTransaction(ctx, sop.TransactionOptions{
-		Mode:        sop.ForWriting,
+		Mode:          sop.ForWriting,
 		StoresFolders: []string{tmpDir},
-		CacheType:   sop.InMemory,
+		CacheType:     sop.InMemory,
 	})
 	if err != nil {
 		t.Fatalf("NewTransaction failed: %v", err)
@@ -39,7 +39,7 @@ func TestPartialOptimizationState(t *testing.T) {
 	config := Config{
 		TransactionOptions: sop.TransactionOptions{
 			StoresFolders: []string{tmpDir},
-			CacheType:   sop.InMemory,
+			CacheType:     sop.InMemory,
 		},
 		UsageMode: ai.DynamicWithVectorCountTracking,
 	}

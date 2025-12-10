@@ -141,9 +141,9 @@ func Test_TwoPC_Phase1_And_Phase2_Preconditions(t *testing.T) {
 func Test_TwoPC_Merge_Unlock_And_HandleSectorLockTimeout(t *testing.T) {
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(redis)
 
-	tx := &Transaction{l2Cache: redis, l1Cache: cache.GetGlobalCache()}
+	tx := &Transaction{l2Cache: redis, l1Cache: cache.GetGlobalL1Cache(redis)}
 
 	// Build minimal stores and nodes
 	so := sop.StoreOptions{Name: "st", SlotLength: 2}
@@ -190,7 +190,7 @@ func Test_TwoPC_Merge_Unlock_And_HandleSectorLockTimeout(t *testing.T) {
 // ---- Delete obsolete entries smoke ----
 func Test_TwoPC_DeleteObsoleteEntries_Smoke(t *testing.T) {
 	ctx := context.Background()
-	tr := &Transaction{blobStore: mockNodeBlobStore, registry: mockRegistry, l1Cache: cache.GetGlobalCache()}
+	tr := &Transaction{blobStore: mockNodeBlobStore, registry: mockRegistry, l1Cache: cache.GetGlobalL1Cache(mocks.NewMockClient())}
 	del := []sop.RegistryPayload[sop.UUID]{{IDs: []sop.UUID{sop.NewUUID()}}}
 	unused := []sop.BlobsPayload[sop.UUID]{{Blobs: []sop.UUID{sop.NewUUID()}}}
 	if err := tr.deleteObsoleteEntries(ctx, del, unused); err != nil {

@@ -40,7 +40,7 @@ func TestOptimize_GracePeriod(t *testing.T) {
 			StoresFolders: []string{tmpDir},
 			CacheType:     sop.InMemory,
 		},
-		Cache: sop.NewCacheClientByType(db.CacheType),
+		Cache: sop.GetL2Cache(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open failed: %v", err)
@@ -137,7 +137,7 @@ func TestOptimize_GracePeriod(t *testing.T) {
 			StoresFolders: []string{tmpDir},
 			CacheType:     sop.InMemory,
 		},
-		Cache: sop.NewCacheClientByType(db.CacheType),
+		Cache: sop.GetL2Cache(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open 3 failed: %v", err)

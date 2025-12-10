@@ -29,7 +29,7 @@ class TestSOPAI(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         try:
-            Redis.close_connection()
+            Redis.close()
         except:
             pass
 

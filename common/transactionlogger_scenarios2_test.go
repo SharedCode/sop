@@ -76,7 +76,7 @@ func Test_Transaction_DeleteTrackedItemsValues_CacheAndNoCache(t *testing.T) {
 	ctx := context.Background()
 	// Set up isolated mocks
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(redis)
 	blobs := mocks.NewMockBlobStore()
 	tx := &Transaction{l2Cache: redis, blobStore: blobs}
 
@@ -121,8 +121,8 @@ func Test_TransactionLogger_Rollback_CommitStoreInfo_Path(t *testing.T) {
 	localReg := mocks.NewMockRegistry(false)
 	localBlobs := mocks.NewMockBlobStore()
 	localRedis := mocks.NewMockClient()
-	cache.NewGlobalCache(localRedis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	tx := &Transaction{registry: localReg, blobStore: localBlobs, l2Cache: localRedis, l1Cache: cache.GetGlobalCache(), StoreRepository: mocks.NewMockStoreRepository()}
+	cache.GetGlobalL1Cache(localRedis)
+	tx := &Transaction{registry: localReg, blobStore: localBlobs, l2Cache: localRedis, l1Cache: cache.GetGlobalL1Cache(localRedis), StoreRepository: mocks.NewMockStoreRepository()}
 	ll := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	name := "st1"
 	_ = tx.StoreRepository.Add(ctx, sop.StoreInfo{Name: name})

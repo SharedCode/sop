@@ -77,5 +77,18 @@ public static class VectorSearchAI
             trans.Rollback();
             throw;
         }
+        finally
+        {
+            // Cleanup
+            Console.WriteLine("Cleaning up vector store...");
+            try 
+            {
+                db.RemoveVectorStore(ctx, "products_vectors");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Cleanup failed: {ex.Message}");
+            }
+        }
     }
 }

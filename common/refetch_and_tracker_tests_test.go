@@ -19,8 +19,8 @@ func Test_RefetchAndMerge_Add_SeparateSegment_DuplicateKey_ReturnsError(t *testi
 	_ = sr.Add(ctx, *ns)
 
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	cache.GetGlobalL1Cache(l2)
+	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
 	si := StoreInterface[PersonKey, Person]{}
 	si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
@@ -86,11 +86,11 @@ func Test_ItemActionTracker_Get_FetchesFromBlob_AndCaches(t *testing.T) {
 func Test_RefetchAndMerge_AddAction_SeparateSegment_Succeeds(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	rg := mocks.NewMockRegistry(false)
 	sr := mocks.NewMockStoreRepository()
-	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
 	// Use separate segment for values to exercise AddItem branch.
 	so := sop.StoreOptions{Name: "rfm_add_sep", SlotLength: 4, IsValueDataInNodeSegment: false}
@@ -131,11 +131,11 @@ func Test_RefetchAndMerge_AddAction_SeparateSegment_Succeeds(t *testing.T) {
 func Test_RefetchAndMerge_RemoveAction_FailFind_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	rg := mocks.NewMockRegistry(false)
 	sr := mocks.NewMockStoreRepository()
-	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	tx := &Transaction{registry: rg, l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: bs, logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
 	so := sop.StoreOptions{Name: "rfm_remove_fail", SlotLength: 4, IsValueDataInNodeSegment: true}
 	ns := sop.NewStoreInfo(so)

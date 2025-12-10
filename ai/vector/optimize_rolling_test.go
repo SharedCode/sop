@@ -34,7 +34,7 @@ func TestOptimizeRollingVersion(t *testing.T) {
 			StoresFolders: []string{tmpDir},
 			CacheType:     sop.InMemory,
 		},
-		Cache: sop.NewCacheClientByType(db.CacheType),
+		Cache: sop.GetL2Cache(db.CacheType),
 	}
 	idx1, _ := Open[map[string]any](ctx, tx1, "rolling_test", cfg)
 
@@ -120,7 +120,7 @@ func TestOptimizeRollingVersion(t *testing.T) {
 
 	di := idx4.(*domainIndex[map[string]any])
 
-	activeVer, _ := di.getActiveVersion(ctx, tx4)
+	activeVer, _ := di.getActiveVersion(ctx)
 	if activeVer != 2 {
 		t.Errorf("Expected active version 2, got %d", activeVer)
 	}

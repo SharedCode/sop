@@ -28,9 +28,9 @@ func NewTransaction(ctx context.Context, config sop.TransactionOptions) (sop.Tra
 // cleanup to finish under the same budget, set ctx.Deadline to at least maxTime plus a small grace period.
 func NewTwoPhaseCommitTransaction(ctx context.Context, config sop.TransactionOptions) (sop.TwoPhaseCommitTransaction, error) {
 	log.Debug("NewTwoPhaseCommitTransaction called")
-	cache := sop.NewCacheClientByType(config.CacheType)
+	cache := sop.GetL2Cache(config.CacheType)
 	if cache == nil {
-		cache = sop.NewCacheClient()
+		return nil, fmt.Errorf("can't create L2 Cache, please ensure that an L2 Cache Factory for type %v is registered", config.CacheType)
 	}
 	fio := fs.NewFileIO()
 	var folder string
@@ -105,9 +105,9 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, config sop
 	}
 
 	fio := fs.NewFileIO()
-	cache := sop.NewCacheClientByType(config.CacheType)
+	cache := sop.GetL2Cache(config.CacheType)
 	if cache == nil {
-		cache = sop.NewCacheClient()
+		return nil, fmt.Errorf("can't create L2 Cache, please ensure that an L2 Cache Factory for type %v is registered", config.CacheType)
 	}
 	replicationTracker, err := fs.NewReplicationTracker(ctx, config.StoresFolders, true, cache)
 	if err != nil {

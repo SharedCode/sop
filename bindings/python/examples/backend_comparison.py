@@ -5,9 +5,11 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sop.context import Context
-from sop.database import Database, DatabaseType, CassandraDatabase, DatabaseOptions
+from sop.database import Database, DatabaseType, DatabaseOptions
 from sop.transaction import TransactionMode
 from sop.btree import Item
+from sop.cassandra import Cassandra
+from sop.redis import Redis
 
 def main():
     ctx = Context()
@@ -32,7 +34,7 @@ def main():
     db_standalone = Database(DatabaseOptions(stores_folders=[path_standalone], type=DatabaseType.Standalone))
     
     print("Starting transaction...")
-    t1 = db_standalone.begin_transaction(ctx, TransactionMode.ForWriting)
+    t1 = db_standalone.begin_transaction(ctx)
     
     print("Creating B-Tree 'local_store'...")
     store1 = db_standalone.new_btree(ctx, "local_store", t1)
@@ -65,11 +67,19 @@ def main():
     # Note: keyspace IS provided.
     # Requires Cassandra and Redis running.
     try:
+        # Initialize connections (assuming localhost)
+        Cassandra.initialize({"cluster_hosts": ["localhost"], "consistency": 1})
+        Redis.initialize("redis://localhost:6379")
+
         # We can omit type=DatabaseType.Clustered because keyspace implies it.
-        db_clustered = CassandraDatabase(keyspace=keyspace_name, storage_path=path_clustered)
+        db_clustered = Database(DatabaseOptions(
+            keyspace=keyspace_name, 
+            stores_folders=[path_clustered],
+            type=DatabaseType.Clustered
+        ))
         
         print("Starting transaction...")
-        t2 = db_clustered.begin_transaction(ctx, TransactionMode.ForWriting)
+        t2 = db_clustered.begin_transaction(ctx)
         
         print(f"Creating B-Tree 'cluster_store' in keyspace '{keyspace_name}'...")
         store2 = db_clustered.new_btree(ctx, "cluster_store", t2)
@@ -80,8 +90,16 @@ def main():
         print(f"Check {path_clustered} to see the Blob files.")
         print(f"Check Cassandra keyspace '{keyspace_name}' to see the Registry tables.")
         
+        Cassandra.close()
+        Redis.close()
+        
     except Exception as e:
         print(f"Skipping Clustered test (requires Cassandra/Redis): {e}")
+        try:
+            Cassandra.close()
+            Redis.close()
+        except:
+            pass
 
 if __name__ == "__main__":
     main()

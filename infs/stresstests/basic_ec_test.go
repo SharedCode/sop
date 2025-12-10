@@ -59,7 +59,7 @@ var storesFoldersDefault = []string{
 
 func Test_Basic_EC(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders}
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders, CacheType: l2Cache}
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -101,7 +101,7 @@ func Test_Basic_EC(t *testing.T) {
 
 func Test_Basic_EC_Get(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders}
+	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders, CacheType: l2Cache}
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())

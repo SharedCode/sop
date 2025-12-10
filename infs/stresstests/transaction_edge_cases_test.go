@@ -23,7 +23,7 @@ import (
 // Reader transaction succeeds.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
 	t2, _ := infs.NewTransaction(ctx, to)
 
@@ -75,7 +75,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	if err2 == nil {
 		t.Error("Commit #2, got = succeess, want = fail.")
 	}
-	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ = infs.NewTransaction(ctx, to2)
 	t1.Begin(ctx)
 	b3, _ = infs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -105,7 +105,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 // keys are sequential/contiguous between the two.
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
 	t2, _ := infs.NewTransaction(ctx, to)
 
@@ -168,9 +168,9 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 // Reader transaction fails commit when an item read was modified by another transaction in-flight.
 func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
-	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t2, _ := infs.NewTransaction(ctx, to2)
 
 	t1.Begin(ctx)
@@ -233,9 +233,9 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 // Case: Reader transaction succeeds commit, while another item in same Node got updated by another transaction.
 func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
-	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t2, _ := infs.NewTransaction(ctx, to2)
 
 	t1.Begin(ctx)
@@ -299,7 +299,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 // One transaction updates a colliding item in 1st and a 2nd trans.
 func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
 	t2, _ := infs.NewTransaction(ctx, to)
 
@@ -394,9 +394,9 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	// Needs a new context so our runs don't affect one another.
 	ctx := context.Background()
-	infs.RemoveBtree(ctx, sop.DatabaseOptions{StoresFolders: []string{dataPath}, CacheType: sop.Redis}, "twophase3")
+	infs.RemoveBtree(ctx, "twophase3", []string{dataPath}, sop.Redis)
 
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
 	t1.Begin(ctx)
 	b3, _ := infs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -453,7 +453,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 		return
 	}
 
-	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ = infs.NewTransaction(ctx, to2)
 	t1.Begin(ctx)
 
@@ -482,9 +482,9 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	// for {
 	ctx := context.Background()
-	infs.RemoveBtree(ctx, sop.DatabaseOptions{StoresFolders: []string{dataPath}, CacheType: sop.Redis}, "tablex")
+	infs.RemoveBtree(ctx, "tablex", []string{dataPath}, sop.Redis)
 
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
 	t1.Begin(ctx)
 	b3, _ := infs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -556,7 +556,7 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 		t.FailNow()
 	}
 
-	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ = infs.NewTransaction(ctx, to2)
 	t1.Begin(ctx)
 
@@ -595,9 +595,9 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 */
 func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	ctx := context.Background()
-	infs.RemoveBtree(ctx, sop.DatabaseOptions{StoresFolders: []string{dataPath}, CacheType: sop.Redis}, "tablex2")
+	infs.RemoveBtree(ctx, "tablex2", []string{dataPath}, sop.Redis)
 
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
 	t1.Begin(ctx)
 	b3, _ := infs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -688,7 +688,7 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 		t.FailNow()
 	}
 
-	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ = infs.NewTransaction(ctx, to2)
 	t1.Begin(ctx)
 
@@ -717,9 +717,9 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 */
 func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	ctx := context.Background()
-	infs.RemoveBtree(ctx, sop.DatabaseOptions{StoresFolders: []string{dataPath}, CacheType: sop.Redis}, "tabley")
+	infs.RemoveBtree(ctx, "tabley", []string{dataPath}, sop.Redis)
 
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
 	t1.Begin(ctx)
 	b3, _ := infs.NewBtree[int, string](ctx, sop.StoreOptions{
@@ -791,7 +791,7 @@ func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 		log.Info(err3.Error())
 	}
 
-	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to2 := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 
 	t1, _ = infs.NewTransaction(ctx, to2)
 	t1.Begin(ctx)

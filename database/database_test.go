@@ -19,6 +19,7 @@ func TestDatabase_Standalone_Simple(t *testing.T) {
 
 	db, _ := database.ValidateOptions(sop.DatabaseOptions{
 		StoresFolders: []string{storagePath},
+		CacheType:     sop.InMemory,
 	})
 
 	ctx := context.Background()
@@ -63,8 +64,9 @@ func TestDatabase_Standalone_Replication(t *testing.T) {
 	}
 
 	db, _ := database.ValidateOptions(sop.DatabaseOptions{
-		StoresFolders: folders,
+		StoresFolders: []string{folders[0], folders[1]},
 		ErasureConfig: ecConfig,
+		CacheType:     sop.InMemory,
 	})
 
 	ctx := context.Background()

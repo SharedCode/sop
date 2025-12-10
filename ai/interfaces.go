@@ -90,6 +90,9 @@ type VectorStore[T any] interface {
 	Content(ctx context.Context) (btree.BtreeInterface[ContentKey, string], error)
 	// Lookup returns the Sequence Lookup B-Tree for advanced manipulation (e.g. random sampling).
 	Lookup(ctx context.Context) (btree.BtreeInterface[int, string], error)
+
+	// Version returns the Vector store's version number, which is a unix elapsed time.
+	Version(ctx context.Context) (int64, error)
 }
 
 // UsageMode defines how the vector database is intended to be used.

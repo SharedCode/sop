@@ -25,7 +25,11 @@ func init() {
 	if _, err := redis.OpenConnection(redisConfig); err != nil {
 		panic(err)
 	}
+	// For stress tests only
+	sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
 }
+
+var l2Cache = sop.Redis
 
 var ctx = context.Background()
 
@@ -40,7 +44,7 @@ func getDataPath() string {
 var dataPath string = getDataPath()
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -72,7 +76,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -115,8 +119,8 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 }
 
 func Test_ByteArrayValue(t *testing.T) {
-	infs.RemoveBtree(ctx, sop.DatabaseOptions{StoresFolders: []string{dataPath}, CacheType: sop.Redis}, "baStore")
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	infs.RemoveBtree(ctx, "baStore", []string{dataPath}, l2Cache)
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -158,7 +162,7 @@ func Test_ByteArrayValue(t *testing.T) {
 }
 
 func Test_ByteArrayValueGet(t *testing.T) {
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.NoCheck, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.NoCheck, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())

@@ -18,10 +18,10 @@ func Test_TransactionLogger_Rollback_Multiple_Phases(t *testing.T) {
 	ctx := context.Background()
 	// Wire minimal tx with caches, blob, store repo, registry, and backend repo required by rollback branches.
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false)}
+	gc := cache.GetGlobalL1Cache(l2)
+	tx := &Transaction{l2Cache: l2, l1Cache: gc, blobStore: mocks.NewMockBlobStore(), StoreRepository: mocks.NewMockStoreRepository(), registry: mocks.NewMockRegistry(false)}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_multi", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: gc, count: si.Count}
 	tx.btreesBackend = []btreeBackend{{nodeRepository: nr}}
 
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
@@ -60,12 +60,12 @@ func Test_TransactionLogger_Rollback_Multiple_Phases(t *testing.T) {
 func Test_TransactionLogger_Rollback_CommitUpdated_RemoveNodes_Path(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	rg := mocks.NewMockRegistry(false)
-	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, registry: rg}
+	tx := &Transaction{l2Cache: l2, l1Cache: gc, blobStore: bs, registry: rg}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_upd_rm", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: gc, count: si.Count}
 	tx.btreesBackend = []btreeBackend{{nodeRepository: nr}}
 
 	// Seed one inactive blob ID and a corresponding cached key to exercise deletion.
@@ -91,12 +91,12 @@ func Test_TransactionLogger_Rollback_CommitUpdated_RemoveNodes_DeleteErr_Propaga
 	ctx := context.Background()
 	base := mocks.NewMockClient()
 	l2 := deleteErrCache{L2Cache: base}
-	cache.NewGlobalCache(base, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(base)
 	bs := mocks.NewMockBlobStore()
 	rg := mocks.NewMockRegistry(false)
-	tx := &Transaction{l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: bs, registry: rg}
+	tx := &Transaction{l2Cache: l2, l1Cache: gc, blobStore: bs, registry: rg}
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_upd_rm_err", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: gc, count: si.Count}
 	tx.btreesBackend = []btreeBackend{{nodeRepository: nr}}
 
 	// Seed a blob and also ensure the cache key exists so Delete is attempted.
@@ -168,8 +168,8 @@ func Test_RefetchAndMerge_Update_SeparateSegment_Succeeds_Alt(t *testing.T) {
 	_ = sr.Add(ctx, *ns)
 
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
-	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
+	gc := cache.GetGlobalL1Cache(l2)
+	tr := &Transaction{registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: gc, blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), false), StoreRepository: sr}
 
 	si := StoreInterface[PersonKey, Person]{}
 	si.ItemActionTracker = newItemActionTracker[PersonKey, Person](ns, tr.l2Cache, tr.blobStore, tr.logger)
@@ -197,8 +197,8 @@ func Test_RefetchAndMerge_Update_SeparateSegment_Succeeds_Alt(t *testing.T) {
 	// Seed MRU and Handle for root so repo.get can fetch after refetch resets caches
 	rootID := b3.StoreInfo.RootNodeID
 	if cn, ok := nrw.nodeRepositoryBackend.localCache[rootID]; ok && cn.node != nil {
-		cache.GetGlobalCache().SetNodeToMRU(ctx, rootID, cn.node, ns.CacheConfig.NodeCacheDuration)
-		cache.GetGlobalCache().Handles.Set([]sop.KeyValuePair[sop.UUID, sop.Handle]{{Key: rootID, Value: sop.NewHandle(rootID)}})
+		gc.SetNodeToMRU(ctx, rootID, cn.node, ns.CacheConfig.NodeCacheDuration)
+		gc.Handles.Set([]sop.KeyValuePair[sop.UUID, sop.Handle]{{Key: rootID, Value: sop.NewHandle(rootID)}})
 	} else {
 		t.Fatalf("expected root node in local cache for MRU seed")
 	}
@@ -312,7 +312,7 @@ func Test_ItemActionTracker_Add_ActivelyPersisted_PersistsAndCaches_Alt(t *testi
 	so := sop.StoreOptions{Name: "iat_add_active", SlotLength: 4, IsUnique: true, IsValueDataActivelyPersisted: true, IsValueDataGloballyCached: true}
 	ns := sop.NewStoreInfo(so)
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	rec := &tlRecorder{tid: sop.NewUUID()}
 	tl := &transactionLog{TransactionLog: rec, logging: true, transactionID: rec.tid}
@@ -450,6 +450,10 @@ type errIsLockedCache13 struct {
 	err   error
 }
 
+func (c errIsLockedCache13) GetType() sop.L2CacheType {
+	return sop.Redis
+}
+
 func (c errIsLockedCache13) Set(ctx context.Context, key, value string, expiration time.Duration) error {
 	return c.inner.Set(ctx, key, value, expiration)
 }
@@ -512,6 +516,10 @@ func (c errIsLockedCache13) IsRestarted(ctx context.Context) bool {
 type errGetExCache13 struct {
 	inner sop.L2Cache
 	err   error
+}
+
+func (c errGetExCache13) GetType() sop.L2CacheType {
+	return sop.Redis
 }
 
 func (c errGetExCache13) Set(ctx context.Context, key, value string, expiration time.Duration) error {

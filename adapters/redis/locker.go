@@ -11,9 +11,6 @@ import (
 // IsLockedTTL reports whether all provided lock keys are owned by this process and
 // extends their TTL by the specified duration when owned.
 func (c client) IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
-	if c.conn == nil {
-		return false, fmt.Errorf("redis connection is not open")
-	}
 	r := true
 	var lastErr error
 	for _, lk := range lockKeys {
@@ -41,12 +38,13 @@ func (c client) IsLockedTTL(ctx context.Context, duration time.Duration, lockKey
 // Lock attempts to acquire locks for all provided keys using the given TTL duration.
 // If any key is already locked by another owner, it returns false and that owner's UUID.
 func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
-	if c.conn == nil {
-		return false, sop.NilUUID, fmt.Errorf("redis connection is not open")
+	conn, err := c.getConnection()
+	if err != nil {
+		return false, sop.NilUUID, err
 	}
 	for _, lk := range lockKeys {
 		// Try to set the lock using SetNX
-		set, err := c.conn.Client.SetNX(ctx, lk.Key, lk.LockID.String(), duration).Result()
+		set, err := conn.Client.SetNX(ctx, lk.Key, lk.LockID.String(), duration).Result()
 		if err != nil {
 			return false, sop.NilUUID, err
 		}
@@ -102,9 +100,6 @@ func (c client) DualLock(ctx context.Context, duration time.Duration, lockKeys [
 
 // IsLocked reports whether all provided lock keys are currently owned by this process.
 func (c client) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
-	if c.conn == nil {
-		return false, fmt.Errorf("redis connection is not open")
-	}
 	r := true
 	var lastErr error
 	for _, lk := range lockKeys {
@@ -146,9 +141,6 @@ func (c client) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bo
 
 // Unlock releases the provided lock keys, deleting only those owned by this process.
 func (c client) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
-	if c.conn == nil {
-		return fmt.Errorf("redis connection is not open")
-	}
 	var lastErr error
 	for _, lk := range lockKeys {
 		if !lk.IsLockOwner {

@@ -218,6 +218,10 @@ func Test_TransactionLog_GetOne_Success(t *testing.T) {
 // cacheIsLockedFalse wraps a base cache and forces IsLocked to return false while delegating others.
 type cacheIsLockedFalse struct{ base sop.L2Cache }
 
+func (c *cacheIsLockedFalse) GetType() sop.L2CacheType {
+	return sop.Redis
+}
+
 func (c *cacheIsLockedFalse) Set(ctx context.Context, key, value string, exp time.Duration) error {
 	return c.base.Set(ctx, key, value, exp)
 }

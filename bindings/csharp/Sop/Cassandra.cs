@@ -18,9 +18,6 @@ public class CassandraConfig
     [JsonPropertyName("cluster_hosts")]
     public List<string> ClusterHosts { get; set; }
 
-    [JsonPropertyName("keyspace")]
-    public string Keyspace { get; set; }
-
     [JsonPropertyName("consistency")]
     public int Consistency { get; set; }
 

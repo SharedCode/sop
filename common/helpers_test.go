@@ -85,9 +85,9 @@ func Test_Transaction_StoreInfo_Deltas(t *testing.T) {
 func Test_Transaction_PopulateMRU_And_Versions(t *testing.T) {
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(redis)
 
-	tx := &Transaction{l1Cache: cache.GetGlobalCache()}
+	tx := &Transaction{l1Cache: cache.GetGlobalL1Cache(redis)}
 
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "st_mru", SlotLength: 2})
 	// Two nodes and their corresponding handles

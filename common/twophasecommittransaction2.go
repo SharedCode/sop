@@ -534,13 +534,13 @@ var priorityLogFound bool
 
 var onStartUpFlag bool = true
 
-func onStartUp() bool {
-	if sop.GetCacheFactoryType() == sop.NoCache {
+func (t *Transaction) onStartUp() bool {
+	if t.l2Cache == nil {
 		return false
 	}
 
 	r := onStartUpFlag
-	if r && sop.GetCacheFactoryType() == sop.InMemory {
+	if r && t.l2Cache.GetType() == sop.InMemory {
 		onStartUpFlag = false
 		return r
 	}
@@ -557,7 +557,7 @@ func (t *Transaction) onIdle(ctx context.Context) {
 
 	// If cache backend restarted, attempt a one-time priority rollback sweep immediately.
 	if t.l2Cache != nil && t.logger != nil && t.logger.PriorityLog().IsEnabled() {
-		if t.l2Cache.IsRestarted(ctx) || onStartUp() {
+		if t.l2Cache.IsRestarted(ctx) || t.onStartUp() {
 			// On restart, sweep all priority logs (ignore age) once.
 			log.Info("onIdle: cache restarted or on startup, doing priority rollback check(sweep mode)...")
 			ctxAll := context.WithValue(ctx, sop.ContextPriorityLogIgnoreAge, true)

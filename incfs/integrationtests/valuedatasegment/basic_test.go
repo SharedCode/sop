@@ -34,10 +34,13 @@ func init() {
 		dataPath = dp
 	}
 	incfs.Initialize(cassConfig, redisConfig)
+
+	// Register Redis L2Cache for use in Integration tests.
+	sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
 }
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -69,7 +72,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 	// 2. Instantiate a BTree
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -113,7 +116,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 
 func Test_ByteArrayValue(t *testing.T) {
 	incfs.RemoveBtree(ctx, "baStore", sop.Redis)
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -155,7 +158,7 @@ func Test_ByteArrayValue(t *testing.T) {
 }
 
 func Test_ByteArrayValueGet(t *testing.T) {
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.NoCheck, MaxTime: -1, Logging: false})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.NoCheck, MaxTime: -1, Logging: false, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}

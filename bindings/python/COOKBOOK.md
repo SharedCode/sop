@@ -310,27 +310,33 @@ with db.begin_transaction(ctx) as tx:
 
 ## 7. Multi-Tenancy (Cassandra Keyspaces)
 
-Connect to different tenants (Keyspaces) on the same Cassandra cluster using the `CassandraDatabase` helper. This example also initializes Redis for distributed locking.
+Connect to different tenants (Keyspaces) on the same Cassandra cluster using `DatabaseOptions`. This example also initializes Redis for distributed locking.
 
 ```python
 import sop
 from sop import Redis
-from sop.database import CassandraDatabase
+from sop.cassandra import Cassandra
+from sop.database import Database, DatabaseOptions, DatabaseType
 
 # 1. Initialize Global Connections (Once per app)
 Redis.initialize("redis://localhost:6379/0")
-CassandraDatabase.initialize({
-    "cluster_hosts": ["127.0.0.1"],
-    "keyspace": "sop_global"
+Cassandra.initialize({
+    "cluster_hosts": ["127.0.0.1"]
 })
 
 ctx = sop.Context()
 
 # 2. Connect to Tenant A (Keyspace: 'tenant_a')
-db_a = CassandraDatabase(keyspace="tenant_a")
+db_a = Database(DatabaseOptions(
+    keyspace="tenant_a",
+    type=DatabaseType.Clustered
+))
 
 # 3. Connect to Tenant B (Keyspace: 'tenant_b')
-db_b = CassandraDatabase(keyspace="tenant_b")
+db_b = Database(DatabaseOptions(
+    keyspace="tenant_b",
+    type=DatabaseType.Clustered
+))
 
 # Operations on db_a are completely isolated from db_b
 with db_a.begin_transaction(ctx) as t:
@@ -340,7 +346,7 @@ with db_a.begin_transaction(ctx) as t:
 
 # 4. Cleanup on shutdown
 Redis.close()
-CassandraDatabase.close()
+Cassandra.close()
 ```
 
 ## 8. Text Search

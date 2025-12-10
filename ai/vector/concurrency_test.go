@@ -34,7 +34,7 @@ func TestOptimize_ConcurrencyLocking(t *testing.T) {
 	}
 
 	// We need a cache for locking
-	c := cache.NewInMemoryCache()
+	c := cache.NewL2InMemoryCache()
 
 	idx, err := db.OpenVectorStore(context.Background(), "test_concurrent", tx, vector.Config{
 		UsageMode: ai.Dynamic,

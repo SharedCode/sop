@@ -4,7 +4,7 @@ import os
 # Add parent directory to path to import sop
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from sop.database import CassandraDatabase
+from sop.database import Cassandra
 
 def main():
     print("--- Testing Cassandra Initialization ---")
@@ -12,7 +12,6 @@ def main():
     # Configuration for a local Cassandra instance
     config = {
         "cluster_hosts": ["localhost"],
-        "keyspace": "sop_test",
         "consistency": 1, # LocalQuorum
         "connection_timeout": 5000,
         "replication_clause": "{'class':'SimpleStrategy', 'replication_factor':1}"
@@ -21,7 +20,7 @@ def main():
     print(f"Initializing Cassandra with config: {config}")
     
     try:
-        CassandraDatabase.initialize(config)
+        Cassandra.initialize(config)
         print("Cassandra initialized successfully (or failed with connection error if not running).")
         
         # We expect it to fail if Cassandra isn't running locally, but the call itself should be valid.
@@ -38,7 +37,7 @@ def main():
     finally:
         print("Closing connection...")
         try:
-            CassandraDatabase.close()
+            Cassandra.close()
             print("Connection closed.")
         except Exception as e:
             print(f"Error closing connection: {e}")

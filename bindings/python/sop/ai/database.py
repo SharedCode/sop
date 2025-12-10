@@ -67,3 +67,4 @@ class Database(BaseDatabase):
         """
         from .langchain import SOPVectorStore
         return SOPVectorStore(ctx, self, name, embedding, **kwargs)
+

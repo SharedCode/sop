@@ -49,7 +49,7 @@ func NewRegistry(readWrite bool, hashModValue int, rt *replicationTracker, l2Cac
 		hashmap:            newRegistryMap(readWrite, hashModValue, rt, l2Cache),
 		replicationTracker: rt,
 		l2Cache:            l2Cache,
-		l1Cache:            cache.GetGlobalCache(),
+		l1Cache:            cache.GetGlobalL1Cache(l2Cache),
 	}
 }
 

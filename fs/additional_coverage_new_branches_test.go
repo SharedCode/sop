@@ -94,7 +94,7 @@ func TestRegistry_Replicate_rmCloseOverrideError(t *testing.T) {
 	a := t.TempDir()
 	b := t.TempDir()
 	rt, _ := NewReplicationTracker(ctx, []string{a, b}, true, mocks.NewMockClient())
-	r := NewRegistry(true, MinimumModValue, rt, nil)
+	r := NewRegistry(true, MinimumModValue, rt, mocks.NewMockClient())
 	defer r.Close()
 	// Provide override returning error.
 	r.rmCloseOverride = func() error { return errors.New("close override error") }

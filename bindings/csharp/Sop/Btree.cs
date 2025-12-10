@@ -98,7 +98,9 @@ internal enum BtreeAction
     GetStoreInfo = 15,
     UpdateKey = 16,
     UpdateCurrentKey = 17,
-    GetCurrentKey = 18
+    GetCurrentKey = 18,
+    Next = 19,
+    Previous = 20
 }
 
 public class PagingInfo
@@ -287,6 +289,21 @@ public class Btree<TK, TV>
         return Navigate(ctx, (int)BtreeAction.First);
     }
 
+    public bool Next(Context ctx)
+    {
+        return Navigate(ctx, (int)BtreeAction.Next);
+    }
+
+    public bool Previous(Context ctx)
+    {
+        return Navigate(ctx, (int)BtreeAction.Previous);
+    }
+
+    public bool Last(Context ctx)
+    {
+        return Navigate(ctx, (int)BtreeAction.Last);
+    }
+
     public Item<TK, TV> GetCurrentKey(Context ctx)
     {
         var metadata = new ManageBtreeMetaData
@@ -320,11 +337,6 @@ public class Btree<TK, TV>
             return items[0];
         }
         return null;
-    }
-
-    public bool Last(Context ctx)
-    {
-        return Navigate(ctx, (int)BtreeAction.Last);
     }
 
     public List<Item<TK, TV>> GetKeys(Context ctx, PagingInfo pagingInfo)

@@ -109,7 +109,7 @@ func Test_Phase1Commit_RefetchAndMerge_Path_Succeeds(t *testing.T) {
 	// Use mock redis for both L1 and L2; wrap L2 to fail first Lock then succeed.
 	base := mocks.NewMockClient()
 	redis := &flipLockCache{L2Cache: base, failures: 1}
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(redis)
 
 	// Transaction wiring with mocks.
 	t2 := &Transaction{
@@ -118,7 +118,7 @@ func Test_Phase1Commit_RefetchAndMerge_Path_Succeeds(t *testing.T) {
 		StoreRepository: mocks.NewMockStoreRepository(),
 		registry:        mocks.NewMockRegistry(false),
 		l2Cache:         redis,
-		l1Cache:         cache.GetGlobalCache(),
+		l1Cache:         cache.GetGlobalL1Cache(redis),
 		blobStore:       mocks.NewMockBlobStore(),
 		logger:          newTransactionLogger(mocks.NewMockTransactionLog(), true),
 		phaseDone:       0,
@@ -133,7 +133,7 @@ func Test_Phase1Commit_RefetchAndMerge_Path_Succeeds(t *testing.T) {
 		readNodesCache: cache.NewCache[sop.UUID, any](8, 12),
 		localCache:     make(map[sop.UUID]cachedNode),
 		l2Cache:        redis,
-		l1Cache:        cache.GetGlobalCache(),
+		l1Cache:        cache.GetGlobalL1Cache(redis),
 		count:          si.Count,
 	}
 
@@ -178,12 +178,12 @@ func Test_Phase2Commit_LogError_NoNodeLocks_RemovesPrioLog(t *testing.T) {
 
 	// Provide minimal dependencies to allow rollback path without panics.
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(redis)
 	bs := mocks.NewMockBlobStore()
 	sr := mocks.NewMockStoreRepository()
 	rg := mocks.NewMockRegistry(false)
 
-	tx := &Transaction{mode: sop.ForWriting, logger: tl, l2Cache: redis, l1Cache: cache.GetGlobalCache(), blobStore: bs, StoreRepository: sr, registry: rg, id: sop.NewUUID()}
+	tx := &Transaction{mode: sop.ForWriting, logger: tl, l2Cache: redis, l1Cache: cache.GetGlobalL1Cache(redis), blobStore: bs, StoreRepository: sr, registry: rg, id: sop.NewUUID()}
 
 	// Minimal node repository/backend for rollback functions.
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p2_err", SlotLength: 4})
@@ -193,7 +193,7 @@ func Test_Phase2Commit_LogError_NoNodeLocks_RemovesPrioLog(t *testing.T) {
 		readNodesCache: cache.NewCache[sop.UUID, any](8, 12),
 		localCache:     make(map[sop.UUID]cachedNode),
 		l2Cache:        redis,
-		l1Cache:        cache.GetGlobalCache(),
+		l1Cache:        cache.GetGlobalL1Cache(redis),
 		count:          si.Count,
 	}
 	tx.btreesBackend = []btreeBackend{{
@@ -441,8 +441,9 @@ func Test_Phase2Commit_ReplicationWarnings_DoNotFailCommit(t *testing.T) {
 	sr := errRepStoreRepo{inner: mocks.NewMockStoreRepository(), err: fmt.Errorf("store replicate fail")}
 	rg := errRepRegistry{Mock_vid_registry: mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry), err: fmt.Errorf("registry replicate fail")}
 	tl := newTransactionLogger(wrapTL{inner: mocks.NewMockTransactionLog().(*mocks.MockTransactionLog)}, true)
+	redis := mocks.NewMockClient()
 
-	tx := &Transaction{mode: sop.ForWriting, phaseDone: 1, StoreRepository: sr, registry: rg, logger: tl, l1Cache: cache.GetGlobalCache()}
+	tx := &Transaction{mode: sop.ForWriting, phaseDone: 1, StoreRepository: sr, registry: rg, logger: tl, l1Cache: cache.GetGlobalL1Cache(redis)}
 
 	// Call Phase2Commit; finalize logging and replication tasks should run and warn, but commit succeeds.
 	if err := tx.Phase2Commit(ctx); err != nil {
@@ -543,15 +544,15 @@ func Test_TransactionLogger_Rollback_FinalizeWithPayload_TrackedOnly(t *testing.
 func Test_NodeRepository_RollbackNewRootNodes_RemovesCacheAndRegistry(t *testing.T) {
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(redis)
 	bs := mocks.NewMockBlobStore()
 	rg := mocks.NewMockRegistry(false)
 	sr := mocks.NewMockStoreRepository()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
-	tx := &Transaction{l2Cache: redis, l1Cache: cache.GetGlobalCache(), blobStore: bs, registry: rg, StoreRepository: sr, logger: tl}
+	tx := &Transaction{l2Cache: redis, l1Cache: cache.GetGlobalL1Cache(redis), blobStore: bs, registry: rg, StoreRepository: sr, logger: tl}
 
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "rb_newroot", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: redis, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: redis, l1Cache: cache.GetGlobalL1Cache(redis), count: si.Count}
 
 	// Prepare payloads
 	lid := sop.NewUUID()
@@ -693,6 +694,10 @@ func Test_TransactionLogger_DoPriorityRollbacks_Batch_Succeeds(t *testing.T) {
 // the "can't attain a lock in Redis" error branch.
 type missAfterSetCache struct{ base sop.L2Cache }
 
+func (m missAfterSetCache) GetType() sop.L2CacheType {
+	return sop.Redis
+}
+
 func (m missAfterSetCache) Set(ctx context.Context, k, v string, d time.Duration) error {
 	return m.base.Set(ctx, k, v, d)
 }
@@ -754,7 +759,7 @@ func Test_ItemActionTracker_Lock_CantAttain_AfterSet_ReturnsError(t *testing.T) 
 	ctx := context.Background()
 	base := mocks.NewMockClient()
 	// Use our sabotaging cache for the tracker, but keep global L1 to something valid.
-	cache.NewGlobalCache(base, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(base)
 	bs := mocks.NewMockBlobStore()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_lock", SlotLength: 2})
@@ -777,7 +782,7 @@ func Test_ItemActionTracker_Lock_CantAttain_AfterSet_ReturnsError(t *testing.T) 
 func Test_CommitTrackedItemsValues_CacheSet_Error_WarnsOnly(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()
-	cache.NewGlobalCache(base, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(base)
 	bs := mocks.NewMockBlobStore()
 	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
 
@@ -808,7 +813,7 @@ func ptr[T any](v T) *T { return &v }
 func Test_Phase1Commit_NotBegun_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	sr := mocks.NewMockStoreRepository()
 	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
@@ -824,7 +829,7 @@ func Test_Phase1Commit_NotBegun_ReturnsError(t *testing.T) {
 func Test_Rollback_NotBegun_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	sr := mocks.NewMockStoreRepository()
 	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())

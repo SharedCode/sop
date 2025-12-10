@@ -156,6 +156,10 @@ type KeyValueStore[TK any, TV any] interface {
 
 // L2Cache abstracts an out-of-process cache (e.g., Redis) and its locking facilities.
 type L2Cache interface {
+	// Implement to return the CacheType.
+	GetType() L2CacheType
+
+	// Set upserts a value under a key, and specifies when it will expire or disappear from L2 cache.
 	Set(ctx context.Context, key string, value string, expiration time.Duration) error
 	// Get returns: found(bool), value(string), err(error from backend).
 	Get(ctx context.Context, key string) (bool, string, error)

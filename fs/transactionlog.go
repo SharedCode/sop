@@ -38,9 +38,7 @@ var AgeLimit float64 = 70
 // NewTransactionLog constructs a TransactionLog bound to the provided cache and replication tracker.
 func NewTransactionLog(cache sop.L2Cache, rt *replicationTracker) *TransactionLog {
 	if cache == nil {
-		// Fallback to in-memory cache if nil, though caller should ideally provide one.
-		// This prevents nil pointer dereference in CreateLockKeys.
-		cache = sop.NewCacheClient()
+		cache = rt.l2Cache
 		if cache == nil {
 			// If still nil (no factory registered), we can't proceed safely with locking.
 			// But we can try to proceed without locking if that's acceptable, or panic.

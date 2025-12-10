@@ -9,3 +9,5 @@ from .btree import Btree, BtreeOptions, Item, PagingInfo, PagingDirection, Value
 from .database import Database, DatabaseOptions
 from .logger import Logger, LogLevel
 from .redis import Redis
+from .cassandra import Cassandra
+

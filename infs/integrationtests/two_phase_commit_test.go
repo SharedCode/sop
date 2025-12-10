@@ -14,10 +14,13 @@ import (
 
 func Test_TwoPhaseCommit_RolledBack_Short(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: sop.Redis}
 
 	// 1. Create store and commit.
-	t0, _ := infs.NewTransaction(ctx, to)
+	t0, err := infs.NewTransaction(ctx, to)
+	if err != nil {
+		t.Fatalf("NewTransaction failed: %v", err)
+	}
 	t0.Begin(ctx)
 	b3, err := infs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name: "twophase2_short", SlotLength: 8, IsValueDataInNodeSegment: true,
@@ -28,7 +31,10 @@ func Test_TwoPhaseCommit_RolledBack_Short(t *testing.T) {
 	_ = t0.Commit(ctx)
 
 	// 2. Add items and rollback.
-	t1, _ := infs.NewTransaction(ctx, to)
+	t1, err := infs.NewTransaction(ctx, to)
+	if err != nil {
+		t.Fatalf("NewTransaction 2 failed: %v", err)
+	}
 	t1.Begin(ctx)
 
 	b3, err = infs.OpenBtree[int, string](ctx, "twophase2_short", t1, nil)
@@ -51,7 +57,10 @@ func Test_TwoPhaseCommit_RolledBack_Short(t *testing.T) {
 	}
 
 	// 3. Verify rolled back
-	t1, _ = infs.NewTransaction(ctx, to)
+	t1, err = infs.NewTransaction(ctx, to)
+	if err != nil {
+		t.Fatalf("NewTransaction 3 failed: %v", err)
+	}
 	t1.Begin(ctx)
 	b3, err = infs.OpenBtree[int, string](ctx, "twophase2_short", t1, nil)
 	if err != nil {

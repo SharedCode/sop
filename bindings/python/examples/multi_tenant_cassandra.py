@@ -6,7 +6,7 @@ import uuid
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sop.context import Context
-from sop.database import CassandraDatabase
+from sop.database import Cassandra, Database, DatabaseOptions, DatabaseType
 from sop.transaction import TransactionMode
 from sop import Redis, Item
 
@@ -16,9 +16,8 @@ def main():
     Redis.initialize("redis://localhost:6379/0")
 
     print("Initializing Cassandra Connection...")
-    CassandraDatabase.initialize({
+    Cassandra.initialize({
         "cluster_hosts": ["localhost"],
-        "keyspace": "sop_global",
         "consistency": 1
     })
 
@@ -34,10 +33,13 @@ def main():
         # CREATE KEYSPACE db1 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
         # CREATE KEYSPACE db2 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
         
-        db1 = CassandraDatabase(keyspace="db1")
+        db1 = Database(DatabaseOptions(
+            type=DatabaseType.Clustered,
+            keyspace="db1"
+        ))
         
         print("Tenant 1: Starting transaction...")
-        t1 = db1.begin_transaction(ctx, TransactionMode.ForWriting)
+        t1 = db1.begin_transaction(ctx)
         store1 = db1.new_btree(ctx, store_name, t1)
         store1.add(ctx, Item(key="key1", value="value_for_tenant_1"))
         t1.commit(ctx)
@@ -45,10 +47,13 @@ def main():
 
         # Tenant 2
         print("Connecting to Tenant 2 (Keyspace: db2)...")
-        db2 = CassandraDatabase(keyspace="db2")
+        db2 = Database(DatabaseOptions(
+            type=DatabaseType.Clustered,
+            keyspace="db2"
+        ))
         
         print("Tenant 2: Starting transaction...")
-        t2 = db2.begin_transaction(ctx, TransactionMode.ForWriting)
+        t2 = db2.begin_transaction(ctx)
         store2 = db2.new_btree(ctx, store_name, t2)
         store2.add(ctx, Item(key="key1", value="value_for_tenant_2"))
         t2.commit(ctx)
@@ -56,7 +61,7 @@ def main():
 
         # Verify Isolation
         print("Verifying Tenant 1 data...")
-        t1b = db1.begin_transaction(ctx, TransactionMode.ForReading)
+        t1b = db1.begin_transaction(ctx, TransactionMode.ForReading.value)
         store1b = db1.open_btree(ctx, store_name, t1b)
         found = store1b.find(ctx, "key1")
         if found:
@@ -71,7 +76,7 @@ def main():
         t1b.commit(ctx)
 
         print("Verifying Tenant 2 data...")
-        t2b = db2.begin_transaction(ctx, TransactionMode.ForReading)
+        t2b = db2.begin_transaction(ctx, TransactionMode.ForReading.value)
         store2b = db2.open_btree(ctx, store_name, t2b)
         found = store2b.find(ctx, "key1")
         if found:

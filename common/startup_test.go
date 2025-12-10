@@ -4,53 +4,64 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/cache"
+	"github.com/sharedcode/sop/common/mocks"
 )
 
 func init() {
 	// Register dummy factories to allow SetCacheFactory to work
-	sop.RegisterCacheFactory(sop.NoCache, func() sop.L2Cache { return nil })
-	sop.RegisterCacheFactory(sop.Redis, func() sop.L2Cache { return nil })
+	sop.RegisterL2CacheFactory(sop.NoCache, func() sop.L2Cache { return nil })
+	sop.RegisterL2CacheFactory(sop.Redis, func() sop.L2Cache { return nil })
 }
 
 func TestOnStartUp_InMemory(t *testing.T) {
 	// Save state
 	originalFlag := onStartUpFlag
-	originalFactory := sop.GetCacheFactoryType()
+	originalCache := sop.GetL2Cache(sop.InMemory)
 	defer func() {
 		onStartUpFlag = originalFlag
-		sop.SetCacheFactory(originalFactory)
+		if originalCache == nil {
+			sop.RegisterL2CacheFactory(sop.InMemory, nil)
+		}
 	}()
 
 	// Setup
 	onStartUpFlag = true
-	sop.SetCacheFactory(sop.InMemory)
+	sop.RegisterL2CacheFactory(sop.InMemory, cache.NewL2InMemoryCache)
+
+	trans := &Transaction{l2Cache: cache.NewL2InMemoryCache()}
 
 	// First call should return true
-	if !onStartUp() {
+	if !trans.onStartUp() {
 		t.Error("Expected onStartUp() to return true on first call for InMemory, got false")
 	}
 
 	// Second call should return false (run once)
-	if onStartUp() {
+	if trans.onStartUp() {
 		t.Error("Expected onStartUp() to return false on second call for InMemory, got true")
 	}
 }
 
+type mockNoCache struct {
+	sop.L2Cache
+}
+
+func (m mockNoCache) GetType() sop.L2CacheType { return sop.NoCache }
+
 func TestOnStartUp_NoCache(t *testing.T) {
 	// Save state
 	originalFlag := onStartUpFlag
-	originalFactory := sop.GetCacheFactoryType()
 	defer func() {
 		onStartUpFlag = originalFlag
-		sop.SetCacheFactory(originalFactory)
 	}()
 
 	// Setup
 	onStartUpFlag = true
-	sop.SetCacheFactory(sop.NoCache)
+
+	trans := &Transaction{l2Cache: mockNoCache{L2Cache: mocks.NewMockClient()}}
 
 	// Should return false
-	if onStartUp() {
+	if trans.onStartUp() {
 		t.Error("Expected onStartUp() to return false for NoCache, got true")
 	}
 }
@@ -58,18 +69,17 @@ func TestOnStartUp_NoCache(t *testing.T) {
 func TestOnStartUp_Redis(t *testing.T) {
 	// Save state
 	originalFlag := onStartUpFlag
-	originalFactory := sop.GetCacheFactoryType()
 	defer func() {
 		onStartUpFlag = originalFlag
-		sop.SetCacheFactory(originalFactory)
 	}()
 
 	// Setup
 	onStartUpFlag = true
-	sop.SetCacheFactory(sop.Redis)
+
+	trans := &Transaction{l2Cache: mocks.NewMockClient()}
 
 	// Should return false
-	if onStartUp() {
+	if trans.onStartUp() {
 		t.Error("Expected onStartUp() to return false for Redis, got true")
 	}
 }

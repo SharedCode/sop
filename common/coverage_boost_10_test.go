@@ -223,10 +223,10 @@ func Test_Phase1Commit_RefetchAndMerge_Retry_Succeeds(t *testing.T) {
 	// Provide a minimal backend with no nodes so commit steps are no-ops but paths execute.
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_loop", SlotLength: 2})
 	// Ensure global cache is initialized to avoid nil L1
-	cache.NewGlobalCache(mocks.NewMockClient(), cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(mocks.NewMockClient())
 
 	tr.btreesBackend = []btreeBackend{{
-		nodeRepository:                   &nodeRepositoryBackend{transaction: tr, l1Cache: cache.GetGlobalCache()},
+		nodeRepository:                   &nodeRepositoryBackend{transaction: tr, l1Cache: gc},
 		refetchAndMerge:                  func(ctx context.Context) error { return nil },
 		getStoreInfo:                     func() *sop.StoreInfo { return si },
 		hasTrackedItems:                  func() bool { return true },
@@ -705,7 +705,7 @@ func (r *regUpdateFailover) UpdateNoLocks(ctx context.Context, allOrNothing bool
 func Test_Phase1Commit_HandleRegistrySectorLockTimeout_Path(t *testing.T) {
 	ctx := context.Background()
 	l2 := mocks.NewMockClient()
-	cache.NewGlobalCache(l2, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	gc := cache.GetGlobalL1Cache(l2)
 
 	// Prepare a lock key that will be placed in sop.Error.UserData
 	ud := l2.CreateLockKeys([]string{"rg"})[0]
@@ -714,11 +714,11 @@ func Test_Phase1Commit_HandleRegistrySectorLockTimeout_Path(t *testing.T) {
 	baseReg := mocks.NewMockRegistry(false).(*mocks.Mock_vid_registry)
 	reg := &regUpdateFailover{Mock_vid_registry: baseReg, ud: ud}
 
-	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: cache.GetGlobalCache(), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
+	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: mocks.NewMockStoreRepository(), registry: reg, l2Cache: l2, l1Cache: gc, blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
 
 	// One updated node with matching version so commitUpdatedNodes reaches Update and returns sop.Error
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_hlr", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: cache.GetGlobalCache(), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: map[sop.UUID]cachedNode{}, l2Cache: l2, l1Cache: gc, count: si.Count}
 	uid := sop.NewUUID()
 	nr.localCache[uid] = cachedNode{action: updateAction, node: &btree.Node[PersonKey, Person]{ID: uid, Version: 1}}
 	h := sop.NewHandle(uid)

@@ -314,6 +314,9 @@ const (
 	OpenVectorStore
 	OpenSearch
 	RemoveBtree
+	RemoveModelStore
+	RemoveVectorStore
+	RemoveSearch
 )
 
 //export manageDatabase
@@ -623,6 +626,54 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 
 		btreeName := jsonPayload
 		if err := sopdb.RemoveBtree(ctx, db.Config(), btreeName); err != nil {
+			return C.CString(err.Error())
+		}
+		return nil
+
+	case RemoveModelStore:
+		targetUUID, err := sop.ParseUUID(targetIDStr)
+		if err != nil {
+			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
+		}
+		db, ok := dbRegistry.Get(targetUUID)
+		if !ok {
+			return C.CString("Database not found")
+		}
+
+		name := jsonPayload
+		if err := db.RemoveModelStore(ctx, name); err != nil {
+			return C.CString(err.Error())
+		}
+		return nil
+
+	case RemoveVectorStore:
+		targetUUID, err := sop.ParseUUID(targetIDStr)
+		if err != nil {
+			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
+		}
+		db, ok := dbRegistry.Get(targetUUID)
+		if !ok {
+			return C.CString("Database not found")
+		}
+
+		name := jsonPayload
+		if err := db.RemoveVectorStore(ctx, name); err != nil {
+			return C.CString(err.Error())
+		}
+		return nil
+
+	case RemoveSearch:
+		targetUUID, err := sop.ParseUUID(targetIDStr)
+		if err != nil {
+			return C.CString(fmt.Sprintf("invalid database UUID: %v", err))
+		}
+		db, ok := dbRegistry.Get(targetUUID)
+		if !ok {
+			return C.CString("Database not found")
+		}
+
+		name := jsonPayload
+		if err := db.RemoveSearch(ctx, name); err != nil {
 			return C.CString(err.Error())
 		}
 		return nil

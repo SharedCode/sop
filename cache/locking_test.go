@@ -7,7 +7,7 @@ import (
 )
 
 func TestInMemoryCache_LockingContention(t *testing.T) {
-	c := NewInMemoryCache()
+	c := NewL2InMemoryCache()
 	ctx := context.Background()
 
 	key := "contentionKey"
@@ -49,7 +49,7 @@ func TestInMemoryCache_LockingContention(t *testing.T) {
 }
 
 func TestInMemoryCache_LockingExpiration(t *testing.T) {
-	c := NewInMemoryCache()
+	c := NewL2InMemoryCache()
 	ctx := context.Background()
 
 	key := "expirationKey"
@@ -96,7 +96,7 @@ func TestInMemoryCache_LockingExpiration(t *testing.T) {
 }
 
 func TestInMemoryCache_IsLockedByOthers(t *testing.T) {
-	c := NewInMemoryCache()
+	c := NewL2InMemoryCache()
 	ctx := context.Background()
 
 	key := "othersKey"

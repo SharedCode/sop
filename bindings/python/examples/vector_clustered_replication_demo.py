@@ -72,7 +72,7 @@ def main():
     print("\n--- Explicit Transaction (Clustered + Replicated) ---")
     
     try:
-        with db.begin_transaction(ctx, mode=TransactionMode.ForWriting.value, max_time=15) as trans:
+        with db.begin_transaction(ctx, max_time=15) as trans:
             print("Transaction Started.")
             store = db.open_vector_store(ctx, trans, "demo_store_clus_repl")
             

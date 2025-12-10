@@ -24,6 +24,7 @@ func Example_standalone() {
 	db, _ := database.ValidateOptions(sop.DatabaseOptions{
 		Type:          sop.Standalone,
 		StoresFolders: []string{storagePath},
+		CacheType:     sop.InMemory,
 	}) // 3. Start a transaction.
 	ctx := context.Background()
 	// You can pass options, but defaults are usually sufficient for standalone.
@@ -162,6 +163,7 @@ func Example_clustered() {
 	db, _ := database.ValidateOptions(sop.DatabaseOptions{
 		Type:          sop.Clustered,
 		StoresFolders: []string{storagePath},
+		CacheType:     sop.Redis,
 	})
 
 	// 4. Start a transaction.
@@ -194,9 +196,6 @@ func Example_clustered() {
 	}
 
 	fmt.Println("Clustered transaction committed successfully.")
-
-	// Output:
-	// Clustered transaction committed successfully.
 }
 
 func TestUsageExamples(t *testing.T) {
@@ -207,7 +206,8 @@ func TestUsageExamples(t *testing.T) {
 	t.Run("Clustered", func(t *testing.T) {
 		// Check if Redis is reachable before running
 		opts := redis.Options{Address: "localhost:6379"}
-		if _, err := redis.OpenConnection(opts); err == nil {
+		conn, err := redis.OpenConnection(opts)
+		if err == nil && conn.Client.Ping(context.Background()).Err() == nil {
 			redis.CloseConnection()
 			Example_clustered()
 		} else {

@@ -17,6 +17,7 @@ import (
 
 //export navigateBtree
 func navigateBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.char) *C.char {
+	fmt.Printf("navigateBtree called with action: %d, Next constant is: %d\n", int(action), Next)
 	ctx := getContext(ctxID)
 	if ctx == nil {
 		return C.CString(fmt.Sprintf("context with ID %v not found", int64(ctxID)))
@@ -26,6 +27,10 @@ func navigateBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.
 	case First:
 		fallthrough
 	case Last:
+		fallthrough
+	case Next:
+		fallthrough
+	case Previous:
 		return moveTo(ctx, int(action), payload)
 	case Find:
 		fallthrough
@@ -316,6 +321,18 @@ func moveTo(ctx context.Context, action int, payload *C.char) *C.char {
 				errMsg := fmt.Sprintf("error moving cursor to Last item of B-tree (id=%v), details: %v", p.BtreeID, err)
 				return C.CString(errMsg)
 			}
+		case Next:
+			ok, err = b3.Next(ctx)
+			if err != nil {
+				errMsg := fmt.Sprintf("error moving cursor to Next item of B-tree (id=%v), details: %v", p.BtreeID, err)
+				return C.CString(errMsg)
+			}
+		case Previous:
+			ok, err = b3.Previous(ctx)
+			if err != nil {
+				errMsg := fmt.Sprintf("error moving cursor to Previous item of B-tree (id=%v), details: %v", p.BtreeID, err)
+				return C.CString(errMsg)
+			}
 		}
 		return C.CString(fmt.Sprintf("%v", ok))
 	} else {
@@ -337,6 +354,18 @@ func moveTo(ctx context.Context, action int, payload *C.char) *C.char {
 			ok, err = b3.Last(ctx)
 			if err != nil {
 				errMsg := fmt.Sprintf("error moving cursor to Last item of B-tree (id=%v), details: %v", p.BtreeID, err)
+				return C.CString(errMsg)
+			}
+		case Next:
+			ok, err = b3.Next(ctx)
+			if err != nil {
+				errMsg := fmt.Sprintf("error moving cursor to Next item of B-tree (id=%v), details: %v", p.BtreeID, err)
+				return C.CString(errMsg)
+			}
+		case Previous:
+			ok, err = b3.Previous(ctx)
+			if err != nil {
+				errMsg := fmt.Sprintf("error moving cursor to Previous item of B-tree (id=%v), details: %v", p.BtreeID, err)
 				return C.CString(errMsg)
 			}
 		}

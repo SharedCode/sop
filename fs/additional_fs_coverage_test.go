@@ -227,6 +227,8 @@ func (m *lockFailingCache) Info(ctx context.Context, section string) (string, er
 func (m *lockFailingCache) IsRestarted(ctx context.Context) bool {
 	return false
 }
+func (m *lockFailingCache) GetType() sop.L2CacheType { return sop.Redis }
+
 func Test_updateFileBlockRegion_LockTimeout(t *testing.T) {
 	// Short-deadline context forces the timeout branch on lock acquisition loop.
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)

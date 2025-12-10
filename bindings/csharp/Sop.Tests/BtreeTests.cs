@@ -50,7 +50,7 @@ public class BtreeTests : IDisposable
         }
 
         // Verify Insert
-        using (var t = db.BeginTransaction(ctx))
+        using (var t = db.BeginTransaction(ctx, TransactionMode.ForReading))
         {
             var btree = db.NewBtree<string, string>(ctx, "users", t);
             
@@ -76,7 +76,7 @@ public class BtreeTests : IDisposable
         }
 
         // Verify Update
-        using (var t = db.BeginTransaction(ctx))
+        using (var t = db.BeginTransaction(ctx, TransactionMode.ForReading))
         {
             var btree = db.NewBtree<string, string>(ctx, "users", t);
             var items = btree.GetValues(ctx, "user_50");
@@ -98,7 +98,7 @@ public class BtreeTests : IDisposable
         }
 
         // Verify Delete
-        using (var t = db.BeginTransaction(ctx))
+        using (var t = db.BeginTransaction(ctx, TransactionMode.ForReading))
         {
             var btree = db.NewBtree<string, string>(ctx, "users", t);
             Assert.Equal(0, btree.Count());
@@ -136,7 +136,7 @@ public class BtreeTests : IDisposable
             t.Commit();
         }
 
-        using (var t = db.BeginTransaction(ctx))
+        using (var t = db.BeginTransaction(ctx, TransactionMode.ForReading))
         {
             var btree = db.OpenBtree<ComplexKey, string>(ctx, "complex", t);
             

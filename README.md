@@ -29,6 +29,15 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 - [Contributing & license](#contributing--license)
  - [Coordination model (OOA) and safety](#coordination-model-ooa-and-safety)
 
+## Swarm Computing & Concurrent Transactions
+SOP supports "Swarm Computing" where multiple distributed processes or threads can concurrently modify the same B-Tree without external locks. The library handles ACID transactions, conflict detection, and merging automatically.
+
+**Important Requirement for First Commit:**
+To enable seamless concurrent merging on a newly created B-Tree, you **must pre-seed the B-Tree with at least one item** (e.g., a description or metadata item) in a separate, initial transaction.
+- **Why?** This establishes the root node and structure, preventing race conditions that can occur when multiple transactions attempt to initialize an empty tree simultaneously.
+- **Safety:** Your data remains ACID-compliant. This step simply ensures the "first commit" doesn't suffer from a "random drop" race condition where one transaction's initialization overwrites another's.
+- **After this single seed item is committed, the B-Tree is fully ready for high-concurrency "swarm" operations.**
+
 ## Cluster reboot procedure
 When rebooting an entire cluster running applications that use SOP, follow this order to avoid stale locks and ensure clean recovery:
 
@@ -244,6 +253,8 @@ Testing notes: Unit tests rewind lastPriorityOnIdleTime and priorityLogFound (at
 
 ## Prerequisites
 - Go 1.24.3+
+- **OS**: macOS, Linux, or Windows.
+    - **Architectures**: x64 (AMD64/Intel64) and ARM64 (Apple Silicon/Linux aarch64).
 - (Optional) Redis server (local or cluster) - for distributed coordination
 - Data directories on disks you intend SOP to use (4096-byte sector size recommended)
 

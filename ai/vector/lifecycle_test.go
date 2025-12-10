@@ -48,7 +48,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 			StoresFolders: []string{tmpDir},
 			CacheType:     sop.InMemory,
 		},
-		Cache: sop.NewCacheClientByType(db.CacheType),
+		Cache: sop.GetL2Cache(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open 0 failed: %v", err)
@@ -93,7 +93,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 			StoresFolders: []string{tmpDir},
 			CacheType:     sop.InMemory,
 		},
-		Cache: sop.NewCacheClientByType(db.CacheType),
+		Cache: sop.GetL2Cache(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open 1 failed: %v", err)
@@ -164,7 +164,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 			StoresFolders: []string{tmpDir},
 			CacheType:     sop.InMemory,
 		},
-		Cache: sop.NewCacheClientByType(db.CacheType),
+		Cache: sop.GetL2Cache(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open 2 failed: %v", err)
@@ -204,7 +204,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 			StoresFolders: []string{tmpDir},
 			CacheType:     sop.InMemory,
 		},
-		Cache: sop.NewCacheClientByType(db.CacheType),
+		Cache: sop.GetL2Cache(db.CacheType),
 	})
 	if err != nil {
 		t.Fatalf("Open 3 failed: %v", err)

@@ -17,7 +17,7 @@ import (
 // A shortened CRUD flow derived from stresstests, using tiny slot length and small batch sizes.
 func Test_ShortCRUD(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func Test_ShortCRUD(t *testing.T) {
 // A compact concurrent test that intentionally collides once and validates that only one commit succeeds.
 func Test_ShortConcurrentCollision(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: sop.Redis}
 
 	// Seed store if needed
 	seed, err := infs.NewTransaction(ctx, to)

@@ -55,7 +55,7 @@ var globalReplicationDetailsLocker sync.Mutex = sync.Mutex{}
 // It reads persisted status, initializes global in-memory state, and optionally synchronizes with L2 cache.
 func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, replicate bool, l2Cache sop.L2Cache) (*replicationTracker, error) {
 	if l2Cache == nil {
-		l2Cache = sop.NewCacheClient()
+		return nil, fmt.Errorf("l2Cache can't be nil")
 	}
 	isFirstFolderActive := true
 	rt := replicationTracker{

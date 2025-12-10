@@ -21,7 +21,7 @@ func Test_StaleCowCleanup_OnUpdate_RollbackRestoresOriginal(t *testing.T) {
 	_ = os.MkdirAll(path, 0755)
 	defer os.RemoveAll(path)
 
-	rt, err := NewReplicationTracker(ctx, []string{path}, false, nil)
+	rt, err := NewReplicationTracker(ctx, []string{path}, false, mocks.NewMockClient())
 	if err != nil {
 		t.Fatalf("NewReplicationTracker failed: %v", err)
 	}

@@ -236,7 +236,7 @@ func Test_StoreInfo_Delta_Computations(t *testing.T) {
 func Test_PopulateMru_Updates_Versions(t *testing.T) {
 	ctx := context.Background()
 	redis := mocks.NewMockClient()
-	cache.NewGlobalCache(redis, cache.DefaultMinCapacity, cache.DefaultMaxCapacity)
+	cache.GetGlobalL1Cache(redis)
 
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "mru", SlotLength: 4})
 	id := sop.NewUUID()
@@ -244,7 +244,7 @@ func Test_PopulateMru_Updates_Versions(t *testing.T) {
 	handles := []sop.RegistryPayload[sop.Handle]{{IDs: []sop.Handle{{LogicalID: id, Version: 5}}}}
 	nodes := []sop.Tuple[*sop.StoreInfo, []interface{}]{{First: si, Second: []interface{}{n}}}
 
-	tx := &Transaction{l1Cache: cache.GetGlobalCache()}
+	tx := &Transaction{l1Cache: cache.GetGlobalL1Cache(redis)}
 	tx.updateVersionThenPopulateMru(ctx, handles, nodes)
 
 	got := tx.l1Cache.GetNodeFromMRU(handles[0].IDs[0], &btree.Node[PersonKey, Person]{})

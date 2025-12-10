@@ -268,7 +268,7 @@ func (di *domainIndex[T]) Upsert(ctx context.Context, item ai.Item[T]) error {
 		return fmt.Errorf("vector store is currently optimizing, read-only mode active")
 	}
 
-	version, err := di.getActiveVersion(ctx, di.trans)
+	version, err := di.getActiveVersion(ctx)
 	if err != nil {
 		return err
 	}
@@ -301,7 +301,7 @@ func (di *domainIndex[T]) UpsertBatch(ctx context.Context, items []ai.Item[T]) e
 		return fmt.Errorf("vector store is currently optimizing, read-only mode active")
 	}
 
-	version, err := di.getActiveVersion(ctx, di.trans)
+	version, err := di.getActiveVersion(ctx)
 	if err != nil {
 		return err
 	}
@@ -364,7 +364,7 @@ func (di *domainIndex[T]) UpsertBatch(ctx context.Context, items []ai.Item[T]) e
 
 // Get retrieves a vector by ID.
 func (di *domainIndex[T]) Get(ctx context.Context, id string) (*ai.Item[T], error) {
-	version, err := di.getActiveVersion(ctx, di.trans)
+	version, err := di.getActiveVersion(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -474,7 +474,7 @@ func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("vector store is currently optimizing, read-only mode active")
 	}
 
-	version, err := di.getActiveVersion(ctx, di.trans)
+	version, err := di.getActiveVersion(ctx)
 	if err != nil {
 		return err
 	}
@@ -559,7 +559,7 @@ func (di *domainIndex[T]) Delete(ctx context.Context, id string) error {
 
 // Query searches for the nearest neighbors.
 func (di *domainIndex[T]) Query(ctx context.Context, vec []float32, k int, filter func(T) bool) ([]ai.Hit[T], error) {
-	version, err := di.getActiveVersion(ctx, di.trans)
+	version, err := di.getActiveVersion(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +706,7 @@ func (di *domainIndex[T]) Query(ctx context.Context, vec []float32, k int, filte
 
 // Count returns the total number of items.
 func (di *domainIndex[T]) Count(ctx context.Context) (int64, error) {
-	version, err := di.getActiveVersion(ctx, di.trans)
+	version, err := di.getActiveVersion(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -721,7 +721,7 @@ func (di *domainIndex[T]) Count(ctx context.Context) (int64, error) {
 
 // AddCentroid adds a new centroid.
 func (di *domainIndex[T]) AddCentroid(ctx context.Context, vec []float32) (int, error) {
-	version, err := di.getActiveVersion(ctx, di.trans)
+	version, err := di.getActiveVersion(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -753,7 +753,7 @@ func (di *domainIndex[T]) AddCentroid(ctx context.Context, vec []float32) (int, 
 
 // Centroids returns the Centroids B-Tree for advanced manipulation.
 func (di *domainIndex[T]) Centroids(ctx context.Context) (btree.BtreeInterface[int, ai.Centroid], error) {
-	version, err := di.getActiveVersion(ctx, di.trans)
+	version, err := di.getActiveVersion(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -766,7 +766,7 @@ func (di *domainIndex[T]) Centroids(ctx context.Context) (btree.BtreeInterface[i
 
 // Vectors returns the Vectors B-Tree for advanced manipulation.
 func (di *domainIndex[T]) Vectors(ctx context.Context) (btree.BtreeInterface[ai.VectorKey, []float32], error) {
-	version, err := di.getActiveVersion(ctx, di.trans)
+	version, err := di.getActiveVersion(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -779,7 +779,7 @@ func (di *domainIndex[T]) Vectors(ctx context.Context) (btree.BtreeInterface[ai.
 
 // Content returns the Content B-Tree for advanced manipulation.
 func (di *domainIndex[T]) Content(ctx context.Context) (btree.BtreeInterface[ai.ContentKey, string], error) {
-	version, err := di.getActiveVersion(ctx, di.trans)
+	version, err := di.getActiveVersion(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -796,7 +796,7 @@ func (di *domainIndex[T]) Content(ctx context.Context) (btree.BtreeInterface[ai.
 // It is a snapshot of the items at the time of the last optimization and is NOT updated in real-time
 // during standard Upsert/Delete operations.
 func (di *domainIndex[T]) Lookup(ctx context.Context) (btree.BtreeInterface[int, string], error) {
-	version, err := di.getActiveVersion(ctx, di.trans)
+	version, err := di.getActiveVersion(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -805,6 +805,12 @@ func (di *domainIndex[T]) Lookup(ctx context.Context) (btree.BtreeInterface[int,
 		return nil, err
 	}
 	return arch.Lookup, nil
+}
+
+// Version returns the current version number of the Vector store. This version changes 
+// when Optimize method completes its task and new set of Vector index is in place.
+func (di *domainIndex[T]) Version(ctx context.Context) (int64, error) {
+	return di.getActiveVersion(ctx)
 }
 
 // --- Helpers ---
@@ -958,7 +964,7 @@ func (di *domainIndex[T]) isOptimizing(ctx context.Context) (bool, error) {
 	if di.config.TransactionOptions.CacheType == sop.NoCache {
 		return false, nil
 	}
-	cache := sop.NewCacheClientByType(di.config.TransactionOptions.CacheType)
+	cache := sop.GetL2Cache(di.config.TransactionOptions.CacheType)
 	if cache == nil {
 		return false, nil
 	}
@@ -966,7 +972,7 @@ func (di *domainIndex[T]) isOptimizing(ctx context.Context) (bool, error) {
 	return cache.IsLockedByOthers(ctx, []string{lockKeyName})
 }
 
-func (di *domainIndex[T]) getActiveVersion(ctx context.Context, trans sop.Transaction) (int64, error) {
+func (di *domainIndex[T]) getActiveVersion(ctx context.Context) (int64, error) {
 	found, err := di.sysStore.Find(ctx, di.name, false)
 	if err != nil {
 		return 0, err

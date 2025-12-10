@@ -6,11 +6,12 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/cache"
 	_ "github.com/sharedcode/sop/cache"
 )
 
 func init() {
-	sop.SetCacheFactory(sop.InMemory)
+	sop.RegisterL2CacheFactory(sop.InMemory, cache.NewL2InMemoryCache)
 }
 
 func TestOnCommit_FiresOnCommit(t *testing.T) {
@@ -21,7 +22,7 @@ func TestOnCommit_FiresOnCommit(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	ctx := context.Background()
-	opts := sop.TransactionOptions{StoresFolders: []string{tmpDir}, Mode: sop.ForWriting, MaxTime: -1}
+	opts := sop.TransactionOptions{StoresFolders: []string{tmpDir}, Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.InMemory}
 
 	trans, err := NewTransaction(ctx, opts)
 	if err != nil {
@@ -55,7 +56,7 @@ func TestOnCommit_DoesNotFireOnRollback(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	ctx := context.Background()
-	opts := sop.TransactionOptions{StoresFolders: []string{tmpDir}, Mode: sop.ForWriting, MaxTime: -1}
+	opts := sop.TransactionOptions{StoresFolders: []string{tmpDir}, Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.InMemory}
 
 	trans, err := NewTransaction(ctx, opts)
 	if err != nil {

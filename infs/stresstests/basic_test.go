@@ -36,6 +36,7 @@ func getDataPath() string {
 var dataPath string = getDataPath()
 
 var testDefaultCacheConfig sop.StoreCacheConfig
+var l2Cache = sop.Redis
 
 func init() {
 	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
@@ -54,11 +55,14 @@ func init() {
 	// Node Cache Duration for these tests is 5 minutes.
 	testDefaultCacheConfig.NodeCacheDuration = time.Duration(5 * time.Minute)
 	sop.SetDefaultCacheConfig(testDefaultCacheConfig)
+
+	// For stress tests only
+	sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
 }
 
 func Test_GetStoreList(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -71,7 +75,7 @@ func Test_GetStoreList(t *testing.T) {
 // Create an empty store on 1st run, add one item(max) on succeeding runs.
 func Test_CreateEmptyStore(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -110,7 +114,7 @@ func Test_CreateEmptyStore(t *testing.T) {
 
 func Test_TransactionStory_OpenVsNewBTree(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -141,7 +145,7 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 	// 3. Do CRUD on BTree
 	// 4. Commit Transaction
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForReading, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -179,7 +183,7 @@ func Test_TransactionStory_SingleBTree_Get(t *testing.T) {
 func Test_TransactionStory_SingleBTree(t *testing.T) {
 	ctx := context.Background()
 
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	// Demo NewTransactionExt specifying custom "to file path" lambda function.
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
@@ -226,7 +230,7 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 
 func Test_RegistryZeroDurationCache(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -274,7 +278,7 @@ func Test_RegistryZeroDurationCache(t *testing.T) {
 
 func Test_StoreCaching(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -316,7 +320,7 @@ func Test_StoreCaching(t *testing.T) {
 
 func Test_StoreCachingTTL(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -353,7 +357,7 @@ func Test_StoreCachingTTL(t *testing.T) {
 
 func Test_BtreeOpenedTwice(t *testing.T) {
 	ctx := context.Background()
-	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue}
+	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {
 		t.Fatal(err.Error())

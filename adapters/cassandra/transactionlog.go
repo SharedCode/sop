@@ -40,12 +40,11 @@ type transactionLog struct {
 }
 
 // NewTransactionLog returns a Cassandra-backed implementation of sop.TransactionLog.
-func NewTransactionLog(customConnection *Connection) sop.TransactionLog {
-	c := sop.NewCacheClient()
+func NewTransactionLog(customConnection *Connection, cache sop.L2Cache) sop.TransactionLog {
 	return &transactionLog{
 		connection:  customConnection,
-		cache:       c,
-		hourLockKey: c.CreateLockKeys([]string{"HBP"})[0],
+		cache:       cache,
+		hourLockKey: cache.CreateLockKeys([]string{"HBP"})[0],
 		dummy:       dummy{},
 	}
 }

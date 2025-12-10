@@ -29,42 +29,36 @@ type L1Cache struct {
 	Handles      Cache[sop.UUID, sop.Handle]
 }
 
-const (
-	// DefaultMinCapacity is the default minimum number of entries to retain before evictions are considered.
-	DefaultMinCapacity = 1000
-	// DefaultMaxCapacity is the default hard limit of entries allowed in the L1 cache.
-	DefaultMaxCapacity = 1350
-)
+// DefaultMinCapacity is the default minimum number of entries to retain before evictions are considered.
+var DefaultMinCapacity = 1000
 
-// Global is the singleton L1 cache instance used by GetGlobalCache and NewGlobalCache.
-var Global *L1Cache
+// DefaultMaxCapacity is the default hard limit of entries allowed in the L1 cache.
+var DefaultMaxCapacity = 1350
 
-// NewGlobalCache initializes or replaces the global L1 cache singleton.
-// It reuses the existing instance when capacities match; otherwise it creates a new one.
-func NewGlobalCache(l2CacheNodes sop.L2Cache, minCapacity, maxCapacity int) *L1Cache {
-	if Global == nil || Global.mru.minCapacity != minCapacity || Global.mru.maxCapacity != maxCapacity {
-		Global = NewL1Cache(l2CacheNodes, minCapacity, maxCapacity)
-	} else {
-		Global.l2CacheNodes = l2CacheNodes
-	}
-	return Global
-}
+// globalL1CacheRegistry is the singleton L1 cache instance used by GetGlobalCache and NewGlobalCache.
+var globalL1CacheRegistry = make(map[sop.L2CacheType]*L1Cache)
+var globalL1Locker sync.Mutex
 
-// GetGlobalCache returns the global L1 cache singleton, creating one on first use
+// GetGlobalL1Cache returns the global L1 cache singleton, creating one on first use
 // with a Redis L2 cache and default capacities when necessary.
-func GetGlobalCache() *L1Cache {
-	if Global == nil {
-		c := sop.NewCacheClient()
-		NewGlobalCache(c, DefaultMinCapacity, DefaultMaxCapacity)
+func GetGlobalL1Cache(l2c sop.L2Cache) *L1Cache {
+	gc := globalL1CacheRegistry[l2c.GetType()]
+	if gc == nil {
+		globalL1Locker.Lock()
+		defer globalL1Locker.Unlock()
+		// Create and register new Global L1Cache for the given Cache Type.
+		gc = NewL1Cache(l2c, DefaultMinCapacity, DefaultMaxCapacity)
+		gc.l2CacheNodes = l2c
+		globalL1CacheRegistry[l2c.GetType()] = gc
 	}
-	return Global
+	return gc
 }
 
 // NewL1Cache constructs a new L1Cache with the given L2 cache and capacity bounds.
-func NewL1Cache(l2cn sop.L2Cache, minCapacity, maxCapacity int) *L1Cache {
+func NewL1Cache(l2c sop.L2Cache, minCapacity, maxCapacity int) *L1Cache {
 	l1c := &L1Cache{
 		lookup:       make(map[sop.UUID]*l1CacheEntry, maxCapacity),
-		l2CacheNodes: l2cn,
+		l2CacheNodes: l2c,
 		Handles:      NewSynchronizedCache[sop.UUID, sop.Handle](minCapacity, maxCapacity),
 	}
 	l1c.mru = newL1Mru(l1c, minCapacity, maxCapacity)

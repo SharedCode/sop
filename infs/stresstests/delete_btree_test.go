@@ -26,7 +26,7 @@ func DeleteBTree(t *testing.T) {
 	}
 
 	for _, tn := range tableList {
-		if err := infs.RemoveBtree(ctx, sop.DatabaseOptions{StoresFolders: []string{dataPath}, CacheType: sop.Redis}, tn); err != nil {
+		if err := infs.RemoveBtree(ctx, tn, []string{dataPath}, sop.Redis); err != nil {
 			t.Error(err)
 		}
 	}

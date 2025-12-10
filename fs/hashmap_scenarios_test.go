@@ -65,6 +65,10 @@ type mockCacheHashmap struct {
 	isLockedAlways bool
 }
 
+func (m *mockCacheHashmap) GetType() sop.L2CacheType {
+	return sop.Redis
+}
+
 func (m *mockCacheHashmap) Lock(ctx context.Context, d time.Duration, lk []*sop.LockKey) (bool, sop.UUID, error) {
 	if m.lockFail {
 		return false, sop.NilUUID, nil

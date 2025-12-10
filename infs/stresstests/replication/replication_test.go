@@ -33,7 +33,7 @@ var transOptions sop.TransactionOptions
 func getDataPath() string {
 	s := os.Getenv("datapath")
 	if s == "" {
-		s = "/Users/grecinto/sop_data_replication"
+		s = "/Users/grecinto/sop_data/replication"
 	}
 	return s
 }
@@ -41,6 +41,10 @@ func getDataPath() string {
 var dataPath string = getDataPath()
 
 func init() {
+	initialize()
+}
+
+func initialize() {
 	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
 		Level: log.LevelInfo,
 	}))
@@ -54,7 +58,11 @@ func init() {
 		MaxTime:              -1,
 		RegistryHashModValue: fs.MinimumModValue,
 		StoresFolders:        storesFolders,
+		CacheType:            sop.Redis,
 	}
+
+	// For stress tests only
+	sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
 }
 
 func TestMain(t *testing.T) {
@@ -303,7 +311,7 @@ var storesFolders = []string{
 // FailedToReplicate = true.
 func reinstateDrive(t *testing.T) {
 	ctx := context.Background()
-	if err := infs.ReinstateFailedDrives(ctx, storesFolders, nil); err != nil {
+	if err := infs.ReinstateFailedDrives(ctx, storesFolders, sop.Redis); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}

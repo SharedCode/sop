@@ -86,6 +86,7 @@ func OpenConnectionWithURL(url string) (*Connection, error) {
 	}
 
 	connection = openConnectionFromRedisOptions(opts)
+	log.Info("Redis connection established", "connection", connection)
 	return connection, nil
 }
 
