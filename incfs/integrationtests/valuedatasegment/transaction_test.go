@@ -48,7 +48,7 @@ const nodeSlotLength = 500
 const batchSize = 200
 
 func Test_SimpleAddPerson(t *testing.T) {
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -95,12 +95,12 @@ func Test_SimpleAddPerson(t *testing.T) {
 }
 
 func Test_TwoTransactionsWithNoConflict(t *testing.T) {
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 
-	trans2, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	trans2, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 
 	trans.Begin(ctx)
 	trans2.Begin(ctx)
@@ -135,7 +135,7 @@ func Test_TwoTransactionsWithNoConflict(t *testing.T) {
 }
 
 func Test_AddAndSearchManyPersons(t *testing.T) {
-	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	trans, err := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -171,7 +171,7 @@ func Test_AddAndSearchManyPersons(t *testing.T) {
 		return
 	}
 
-	trans, err = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	trans, err = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, CacheType: sop.Redis})
 	if err != nil {
 		t.Errorf("%v", err)
 		t.Fail()
@@ -205,7 +205,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	t1.Begin(ctx)
 	b3, _ := incfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -229,7 +229,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 			t1.Begin(ctx)
 			b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
@@ -253,7 +253,7 @@ func Test_VolumeAddThenSearch(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, CacheType: sop.Redis})
 			t1.Begin(ctx)
 			b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
@@ -265,7 +265,7 @@ func VolumeDeletes(t *testing.T) {
 	start := 9001
 	end := 100000
 
-	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	t1.Begin(ctx)
 	b3, _ := incfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -291,7 +291,7 @@ func VolumeDeletes(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 			t1.Begin(ctx)
 			b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
@@ -304,7 +304,7 @@ func MixedOperations(t *testing.T) {
 	start := 9000
 	end := 14000
 
-	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	t1.Begin(ctx)
 	b3, _ := incfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "persondb",
@@ -345,7 +345,7 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 			t1.Begin(ctx)
 			b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
@@ -381,7 +381,7 @@ func MixedOperations(t *testing.T) {
 				t.Error(err)
 				t.Fail()
 			}
-			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+			t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 			t1.Begin(ctx)
 			b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "persondb", t1, Compare)
 		}
@@ -390,7 +390,7 @@ func MixedOperations(t *testing.T) {
 
 func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	// Setup: Create the table first
-	t0, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t0, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	t0.Begin(ctx)
 	incfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase",
@@ -403,7 +403,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	}, t0, nil)
 	t0.Commit(ctx)
 
-	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	t1.Begin(ctx)
 
 	b3, _ := incfs.OpenBtree[int, string](ctx, "twophase", t1, nil)
@@ -420,7 +420,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 	if err := twoPhase.Phase1Commit(ctx); err == nil {
 		twoPhase.Rollback(ctx, nil)
 
-		t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+		t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 		t1.Begin(ctx)
 
 		b3, _ = incfs.OpenBtree[int, string](ctx, "twophase", t1, nil)
@@ -433,7 +433,7 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 }
 
 func Test_IllegalBtreeStoreName(t *testing.T) {
-	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	t1.Begin(ctx)
 
 	if _, err := incfs.NewBtree[int, string](ctx, sop.StoreOptions{

@@ -46,7 +46,7 @@ func Test_TransactionStory_OpenVsNewBTreeEC(t *testing.T) {
 	// Cleanup potential stale data from previous runs
 	_ = incfs.RemoveBtree(ctx, "barstoreec", sop.Redis)
 
-	trans, err := incfs.NewTransactionWithReplication(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	trans, err := incfs.NewTransactionWithReplication(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -86,7 +86,7 @@ func Test_TransactionStory_OpenVsNewBTreeEC(t *testing.T) {
 }
 
 func Test_Basic_EC_Get(t *testing.T) {
-	trans, err := incfs.NewTransactionWithReplication(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	trans, err := incfs.NewTransactionWithReplication(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, CacheType: sop.Redis})
 	if err != nil {
 		t.Fatal(err.Error())
 	}

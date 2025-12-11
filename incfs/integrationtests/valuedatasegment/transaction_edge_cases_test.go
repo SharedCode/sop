@@ -19,7 +19,7 @@ import (
 // Reader transaction succeeds.
 func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	// Pre-requisite: Ensure store exists and has data.
-	t0, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t0, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	t0.Begin(ctx)
 	b3, err := incfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 		Name:                     "personvdb7",
@@ -44,8 +44,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 		t0.Rollback(ctx)
 	}
 
-	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
-	t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
+	t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 
 	t1.Begin(ctx)
 	t2.Begin(ctx)
@@ -72,7 +72,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	// 	b3.Add(ctx, pk, p)
 	// 	b3.Add(ctx, pk2, p2)
 	// 	t1.Commit(ctx)
-	// 	t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	// 	t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	// 	t1.Begin(ctx)
 	// 	b3, _ = incfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
 	// 		Name:                     "personvdb7",
@@ -115,7 +115,7 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 	if err2 == nil {
 		t.Error("Commit #2, got = succeess, want = fail.")
 	}
-	t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, CacheType: sop.Redis})
 	t1.Begin(ctx)
 	b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	var person Person
@@ -139,8 +139,8 @@ func Test_TwoTransactionsUpdatesOnSameItem(t *testing.T) {
 // Two transactions updating different items with no collision but items'
 // keys are sequential/contiguous between the two.
 func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
-	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
-	t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
+	t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 
 	t1.Begin(ctx)
 	t2.Begin(ctx)
@@ -167,7 +167,7 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+		t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 		t1.Begin(ctx)
 		b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
@@ -196,8 +196,8 @@ func Test_TwoTransactionsUpdatesOnSameNodeDifferentItems(t *testing.T) {
 
 // Reader transaction fails commit when an item read was modified by another transaction in-flight.
 func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
-	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
-	t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
+	t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, CacheType: sop.Redis})
 
 	t1.Begin(ctx)
 	t2.Begin(ctx)
@@ -224,7 +224,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 		b3.Add(ctx, pk, p)
 		b3.Add(ctx, pk2, p2)
 		t1.Commit(ctx)
-		t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+		t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 		t1.Begin(ctx)
 		b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
@@ -254,8 +254,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesSameItem(t *testing.T) {
 // Node merging and row(or item) level conflict detection.
 // Case: Reader transaction succeeds commit, while another item in same Node got updated by another transaction.
 func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T) {
-	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
-	t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
+	t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, CacheType: sop.Redis})
 
 	t1.Begin(ctx)
 	t2.Begin(ctx)
@@ -284,7 +284,7 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 		b3.Add(ctx, pk2, p2)
 		b3.Add(ctx, pk3, p3)
 		t1.Commit(ctx)
-		t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+		t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 		t1.Begin(ctx)
 		b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
@@ -313,8 +313,8 @@ func Test_TwoTransactionsOneReadsAnotherWritesAnotherItemOnSameNode(t *testing.T
 
 // One transaction updates a colliding item in 1st and a 2nd trans.
 func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
-	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
-	t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
+	t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 
 	t1.Begin(ctx)
 	t2.Begin(ctx)
@@ -347,7 +347,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 		b3.Add(ctx, pk4, p4)
 		b3.Add(ctx, pk5, p5)
 		t1.Commit(ctx)
-		t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+		t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 		t1.Begin(ctx)
 		b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "personvdb7", t1, Compare)
 	}
@@ -403,7 +403,7 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	incfs.RemoveBtree(ctx, "twophase2", sop.Redis)
 
-	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 	t1.Begin(ctx)
 	b3, _ := incfs.NewBtree[int, string](ctx, sop.StoreOptions{
 		Name:                     "twophase2",
@@ -421,7 +421,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	eg, ctx2 := errgroup.WithContext(ctx)
 
 	f1 := func() error {
-		t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+		t1, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 		t1.Begin(ctx)
 		b3, _ := incfs.OpenBtree[int, string](ctx2, "twophase2", t1, nil)
 		b3.Add(ctx2, 5000, "I am the value with 5000 key.")
@@ -431,7 +431,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	}
 
 	f2 := func() error {
-		t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+		t2, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, CacheType: sop.Redis})
 		t2.Begin(ctx)
 		b32, _ := incfs.OpenBtree[int, string](ctx2, "twophase2", t2, nil)
 		b32.Add(ctx2, 5500, "I am the value with 5000 key.")
@@ -448,7 +448,7 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 		return
 	}
 
-	t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: false, CacheType: sop.Redis})
+	t1, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, CacheType: sop.Redis})
 	t1.Begin(ctx)
 
 	b3, _ = incfs.OpenBtree[int, string](ctx, "twophase2", t1, nil)

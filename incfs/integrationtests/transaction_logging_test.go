@@ -21,7 +21,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 
-	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
+	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, })
 	trans.Begin(ctx)
 
 	b3, _ := incfs.NewBtree[PersonKey, Person](ctx, sop.StoreOptions{
@@ -46,7 +46,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 
-	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, })
 	trans.Begin(ctx)
 
 	b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
@@ -60,7 +60,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 
-	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, })
 	trans.Begin(ctx)
 
 	b3, _ = incfs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
@@ -73,7 +73,7 @@ func MultipleExpiredTransCleanup(t *testing.T) {
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 
-	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, Logging: true})
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, })
 
 	// Cleanup should be launched from this call.
 	trans.Begin(ctx)
@@ -85,7 +85,7 @@ func Cleanup(t *testing.T) {
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 
-	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: true})
+	trans, _ := incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, })
 	trans.Begin(ctx)
 	_, _ = incfs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	trans.Commit(ctx)
@@ -94,7 +94,7 @@ func Cleanup(t *testing.T) {
 	cas.Now = func() time.Time { return yesterday }
 	sop.Now = func() time.Time { return yesterday }
 
-	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, Logging: true})
+	trans, _ = incfs.NewTransaction(ctx, sop.TransactionOptions{Mode: sop.ForReading, MaxTime: -1, })
 	trans.Begin(ctx)
 	_, _ = incfs.OpenBtree[PersonKey, Person](ctx, "ztab1", trans, Compare)
 	trans.Commit(ctx)
