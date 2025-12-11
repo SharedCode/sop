@@ -33,6 +33,16 @@ public class ClusteredDatabaseTests : IDisposable
         // Note: This test might fail if Redis is not available, as Clustered mode usually requires Redis.
         // However, we can wrap it in a try-catch to ignore connection errors if that's the only issue,
         // verifying that the C# binding correctly attempts to use Clustered mode.
+
+        // Initialize Redis for Clustered mode
+        try
+        {
+            Redis.Initialize("redis://localhost:6379");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to connect to Redis: {ex.Message}");
+        }
         
         string path = CreateTempDir("clustered_db");
         using var ctx = new Context();
@@ -55,6 +65,7 @@ public class ClusteredDatabaseTests : IDisposable
             b3.Add(ctx, new Item<string, string> { Key = "k", Value = "v" });
             
             t.Commit();
+            Redis.Close();
         }
         catch (SopException e)
         {

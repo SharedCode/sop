@@ -28,7 +28,7 @@ func Test_NewTwoPhase_TimeBounds_Begin_Close(t *testing.T) {
 	cr := &closerRegistry{}
 
 	// Negative maxTime -> defaults to 15m
-	tx, err := NewTwoPhaseCommitTransaction(sop.ForReading, -1, true, bs, sr, cr, l2, mocks.NewMockTransactionLog())
+	tx, err := NewTwoPhaseCommitTransaction(sop.ForReading, -1, bs, sr, cr, l2, mocks.NewMockTransactionLog())
 	if err != nil {
 		t.Fatalf("ctor err: %v", err)
 	}
@@ -61,7 +61,7 @@ func Test_NewTwoPhase_TimeBounds_Begin_Close(t *testing.T) {
 	_ = tx // keep tx referenced
 
 	// Over-1h clamp
-	tx2, err := NewTwoPhaseCommitTransaction(sop.ForWriting, 2*time.Hour, false, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
+	tx2, err := NewTwoPhaseCommitTransaction(sop.ForWriting, 2*time.Hour, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
 	if err != nil {
 		t.Fatalf("ctor2 err: %v", err)
 	}

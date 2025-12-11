@@ -96,8 +96,7 @@ type SinglePhaseTransaction struct {
 // mode controls permissions. When logging is true, lower layers may record commit steps
 // to aid recovery and cleanup of expired resources.
 func NewTransaction(mode TransactionMode,
-	twoPhaseCommitTrans TwoPhaseCommitTransaction,
-	logging bool) (Transaction, error) {
+	twoPhaseCommitTrans TwoPhaseCommitTransaction) (Transaction, error) {
 	twoPhase := twoPhaseCommitTrans
 	return &SinglePhaseTransaction{
 		SopPhaseCommitTransaction: twoPhase,

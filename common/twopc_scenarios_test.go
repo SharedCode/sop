@@ -18,7 +18,7 @@ import (
 // ---- Preconditions and basic flow ----
 func Test_TwoPC_Preconditions_And_BeginClose(t *testing.T) {
 	// default maxTime path (<=0)
-	tr, err := NewTwoPhaseCommitTransaction(sop.ForReading, 0, false, mockNodeBlobStore, mockStoreRepository, mockRegistry, mockRedisCache, mocks.NewMockTransactionLog())
+	tr, err := NewTwoPhaseCommitTransaction(sop.ForReading, 0, mockNodeBlobStore, mockStoreRepository, mockRegistry, mockRedisCache, mocks.NewMockTransactionLog())
 	if err != nil {
 		t.Fatalf("ctor error: %v", err)
 	}
@@ -50,7 +50,7 @@ func Test_TwoPC_Preconditions_And_BeginClose(t *testing.T) {
 	}
 
 	// max cap path (>1h gets capped)
-	tr2, err := NewTwoPhaseCommitTransaction(sop.ForReading, 3*time.Hour, false, mockNodeBlobStore, mockStoreRepository, mockRegistry, mockRedisCache, mocks.NewMockTransactionLog())
+	tr2, err := NewTwoPhaseCommitTransaction(sop.ForReading, 3*time.Hour, mockNodeBlobStore, mockStoreRepository, mockRegistry, mockRedisCache, mocks.NewMockTransactionLog())
 	if err != nil || tr2 == nil {
 		t.Fatalf("ctor(>1h) err=%v tr2=%v", err, tr2)
 	}

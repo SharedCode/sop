@@ -17,7 +17,7 @@ func NewTransaction(ctx context.Context, config sop.TransactionOptions) (sop.Tra
 	if err != nil {
 		return nil, err
 	}
-	return sop.NewTransaction(config.Mode, twoPT, true)
+	return sop.NewTransaction(config.Mode, twoPT)
 }
 
 // NewTwoPhaseCommitTransaction will instantiate a transaction object for writing(forWriting=true)
@@ -55,7 +55,7 @@ func NewTwoPhaseCommitTransaction(ctx context.Context, config sop.TransactionOpt
 	}
 
 	tl := fs.NewTransactionLog(cache, replicationTracker)
-	t, err := common.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, true,
+	t, err := common.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime,
 		fs.NewBlobStore(fs.DefaultToFilePath, nil), sr, fs.NewRegistry(config.Mode == sop.ForWriting,
 			config.RegistryHashModValue, replicationTracker, cache), cache, tl)
 
@@ -72,7 +72,7 @@ func NewTransactionWithReplication(ctx context.Context, config sop.TransactionOp
 	if err != nil {
 		return nil, err
 	}
-	return sop.NewTransaction(config.Mode, twoPT, true)
+	return sop.NewTransaction(config.Mode, twoPT)
 }
 
 // NewTwoPhaseCommitTransactionWithReplication creates a two-phase commit transaction with replication enabled.
@@ -132,7 +132,7 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, config sop
 
 	tl := fs.NewTransactionLog(cache, replicationTracker)
 
-	t, err := common.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, true, bs, sr,
+	t, err := common.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, bs, sr,
 		fs.NewRegistry(config.Mode == sop.ForWriting, config.RegistryHashModValue, replicationTracker, cache), cache, tl)
 	t.HandleReplicationRelatedError = replicationTracker.HandleReplicationRelatedError
 

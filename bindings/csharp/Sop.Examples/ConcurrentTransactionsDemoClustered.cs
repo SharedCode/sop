@@ -14,7 +14,7 @@ namespace Sop.Examples
             Logger.Configure(LogLevel.Debug, "");
 
             // Initialize Redis for Clustered mode
-            try 
+            try
             {
                 Redis.Initialize("redis://localhost:6379");
             }

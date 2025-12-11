@@ -517,7 +517,7 @@ func Test_Transaction_onIdle_DoesNotPanic_WithBackendAndDisabledPriorityLog(t *t
 
 func Test_Transaction_Methods_Errors(t *testing.T) {
 	ctx := context.Background()
-	trans, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, mocks.NewMockClient(), mocks.NewMockTransactionLog())
+	trans, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, nil, nil, nil, mocks.NewMockClient(), mocks.NewMockTransactionLog())
 	if err != nil {
 		t.Fatalf("failed to create transaction: %v", err)
 	}
@@ -531,20 +531,20 @@ func Test_Transaction_Methods_Errors(t *testing.T) {
 	}
 
 	// Phase1Commit before Begin should error
-	trans2, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, mocks.NewMockClient(), mocks.NewMockTransactionLog())
+	trans2, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, nil, nil, nil, mocks.NewMockClient(), mocks.NewMockTransactionLog())
 	if err := trans2.Phase1Commit(ctx); err == nil {
 		t.Errorf("expected error on Phase1Commit before Begin, got nil")
 	}
 
 	// Phase2Commit before Phase1Commit should error
-	trans3, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, mocks.NewMockClient(), mocks.NewMockTransactionLog())
+	trans3, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, nil, nil, nil, mocks.NewMockClient(), mocks.NewMockTransactionLog())
 	trans3.Begin(ctx)
 	if err := trans3.Phase2Commit(ctx); err == nil {
 		t.Errorf("expected error on Phase2Commit before Phase1Commit, got nil")
 	}
 
 	// Rollback after commit should error
-	trans4, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, mocks.NewMockClient(), mocks.NewMockTransactionLog())
+	trans4, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, nil, nil, nil, mocks.NewMockClient(), mocks.NewMockTransactionLog())
 	trans4.Begin(ctx)
 	trans4.phaseDone = 2 // simulate committed
 	trans4.committed = true
@@ -553,7 +553,7 @@ func Test_Transaction_Methods_Errors(t *testing.T) {
 	}
 
 	// Close should not panic if registry is nil
-	trans5, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, false, nil, nil, nil, mocks.NewMockClient(), mocks.NewMockTransactionLog())
+	trans5, _ := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Second, nil, nil, nil, mocks.NewMockClient(), mocks.NewMockTransactionLog())
 	if err := trans5.Close(); err != nil {
 		t.Errorf("unexpected error on Close with nil registry: %v", err)
 	}

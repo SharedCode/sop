@@ -38,7 +38,7 @@ func NewTransaction(ctx context.Context, config sop.TransactionOptions) (sop.Tra
 		config.CacheType = sop.Redis
 	}
 	cache := sop.GetL2Cache(config.CacheType)
-	twoPT, err := inredck.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, config.Logging, bs, cas.NewStoreRepository(mbsf, conn, cache), conn)
+	twoPT, err := inredck.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, bs, cas.NewStoreRepository(mbsf, conn, cache), conn)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func NewTransaction(ctx context.Context, config sop.TransactionOptions) (sop.Tra
 			return nil
 		})
 	}
-	return sop.NewTransaction(config.Mode, twoPT, config.Logging)
+	return sop.NewTransaction(config.Mode, twoPT)
 }
 
 // NewTransactionWithReplication creates a transaction that supports Erasure Coding file IO.
@@ -81,7 +81,7 @@ func NewTransactionWithReplication(ctx context.Context, config sop.TransactionOp
 		config.CacheType = sop.Redis
 	}
 	cache := sop.GetL2Cache(config.CacheType)
-	twoPT, err := inredck.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, config.Logging, bs, cas.NewStoreRepository(mbsf, conn, cache), conn)
+	twoPT, err := inredck.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, bs, cas.NewStoreRepository(mbsf, conn, cache), conn)
 	if err != nil {
 		return nil, err
 	}
@@ -92,5 +92,5 @@ func NewTransactionWithReplication(ctx context.Context, config sop.TransactionOp
 			return nil
 		})
 	}
-	return sop.NewTransaction(config.Mode, twoPT, config.Logging)
+	return sop.NewTransaction(config.Mode, twoPT)
 }

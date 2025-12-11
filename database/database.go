@@ -61,6 +61,7 @@ func ValidateCassandraOptions(config sop.DatabaseOptions) (sop.DatabaseOptions, 
 
 // BeginTransaction starts a new transaction.
 func BeginTransaction(ctx context.Context, config sop.DatabaseOptions, mode sop.TransactionMode, maxTime ...time.Duration) (sop.Transaction, error) {
+	config, _ = ValidateOptions(config)
 	var mt time.Duration
 	if len(maxTime) > 0 {
 		mt = maxTime[0]
@@ -73,7 +74,6 @@ func BeginTransaction(ctx context.Context, config sop.DatabaseOptions, mode sop.
 	config.CopyTo(&opts)
 	opts.Mode = mode
 	opts.MaxTime = mt
-	opts.Logging = true
 
 	var t sop.Transaction
 	var err error

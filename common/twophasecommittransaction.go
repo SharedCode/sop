@@ -81,7 +81,7 @@ type Transaction struct {
 // NewTwoPhaseCommitTransaction creates a new two-phase commit controller.
 // commitMaxDuration limits commit duration; logging enables crash-safe recovery via a transaction log.
 // Note: commitMaxDuration is the internal safety cap for commit and lock TTLs; the effective limit is min(ctx deadline, commitMaxDuration).
-func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration time.Duration, logging bool,
+func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration time.Duration,
 	blobStore sop.BlobStore, storeRepository sop.StoreRepository, registry sop.Registry, l2Cache sop.L2Cache, transactionLog sop.TransactionLog) (*Transaction, error) {
 	if l2Cache == nil {
 		return nil, fmt.Errorf("l2Cache can't be nil")
@@ -103,7 +103,7 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, commitMaxDuration ti
 		l2Cache:         l2Cache,
 		l1Cache:         l1c,
 		blobStore:       blobStore,
-		logger:          newTransactionLogger(transactionLog, logging),
+		logger:          newTransactionLogger(transactionLog, true),
 		phaseDone:       -1,
 		id:              sop.NewUUID(),
 	}

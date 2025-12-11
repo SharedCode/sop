@@ -5,11 +5,7 @@ set -e
 TEST_PROJECT_DIR="bindings/csharp/Sop.Tests"
 # Note: This path depends on the TargetFramework in Sop.Tests.csproj. 
 # If that changes, this script needs updating.
-BIN_DIR="$TEST_PROJECT_DIR/bin/Debug/netcoreapp3.1"
-
-echo "--- Building C# Tests ---"
-# Build first to ensure the bin directory exists
-dotnet build "$TEST_PROJECT_DIR"
+BIN_DIR="bindings/csharp/sop"
 
 echo "--- Building Go Bridge ---"
 cd bindings/main
@@ -34,6 +30,10 @@ else
 fi
 
 cd ../..
+
+echo "--- Building C# Tests ---"
+# Build first to ensure the bin directory exists
+dotnet build "$TEST_PROJECT_DIR"
 
 echo "--- Running C# Tests ---"
 # Run tests without rebuilding, so our copied dylib isn't overwritten/cleaned

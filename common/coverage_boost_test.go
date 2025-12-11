@@ -816,7 +816,7 @@ func Test_Phase1Commit_NotBegun_ReturnsError(t *testing.T) {
 	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	sr := mocks.NewMockStoreRepository()
-	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
+	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
 	if err != nil {
 		t.Fatalf("ctor err: %v", err)
 	}
@@ -832,7 +832,7 @@ func Test_Rollback_NotBegun_ReturnsError(t *testing.T) {
 	cache.GetGlobalL1Cache(l2)
 	bs := mocks.NewMockBlobStore()
 	sr := mocks.NewMockStoreRepository()
-	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, true, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
+	tx, err := NewTwoPhaseCommitTransaction(sop.ForWriting, time.Minute, bs, sr, mocks.NewMockRegistry(false), l2, mocks.NewMockTransactionLog())
 	if err != nil {
 		t.Fatalf("ctor err: %v", err)
 	}

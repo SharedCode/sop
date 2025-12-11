@@ -12,29 +12,22 @@ import (
 	log "log/slog"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/adapters/redis"
 	"github.com/sharedcode/sop/database"
 )
 
-const (
+const(
 	storeName = "concurrent_tree"
 )
 
-func init() {
-	// Initialize connection to Redis.
-	redis.OpenConnectionWithURL("redis://localhost:6379")
-}
-
 var databaseOptions = sop.DatabaseOptions{
-	Type:          sop.Clustered,
-	StoresFolders: []string{"data/concurrent_demo_go"},
-}
+		Type: sop.Standalone,
+		StoresFolders: []string{"data/concurrent_demo_go"},
+	}
 
 func main() {
-	fmt.Println("--- Concurrent Transactions Demo (Go Clustered) ---")
+	fmt.Println("--- Concurrent Transactions Demo (Go Standalone) ---")
 
 	maxJitter := flag.Int("maxJitter", 0, "Maximum random jitter in milliseconds to simulate slowness")
-	reverse := flag.Int("reverse", 0, "Populate in reverse, 0 is false, 1 is true")
 	flag.Parse()
 
 	logger := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
@@ -54,26 +47,16 @@ func main() {
 	threadCount := 40
 	itemsPerThread := 300
 	// +1 for seed
-	targetCount := int64(threadCount*itemsPerThread + 1)
+	targetCount := int64(threadCount*itemsPerThread+1)
 
 	fmt.Printf("Launching %d threads, %d items each...\n", threadCount, itemsPerThread)
 
-	if *reverse > 0 {
-		for i := threadCount; i > 0; i-- {
-			wg.Add(1)
-			go func(id int) {
-				defer wg.Done()
-				worker(ctx, id, itemsPerThread, *maxJitter, targetCount)
-			}(i)
-		}
-	} else {
-		for i := 0; i < threadCount; i++ {
-			wg.Add(1)
-			go func(id int) {
-				defer wg.Done()
-				worker(ctx, id, itemsPerThread, *maxJitter, targetCount)
-			}(i)
-		}
+	for i := 0; i < threadCount; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			worker(ctx, id, itemsPerThread, *maxJitter, targetCount)
+		}(i)
 	}
 
 	wg.Wait()
@@ -82,14 +65,11 @@ func main() {
 	// Verify
 	verify(ctx, int(targetCount))
 	database.RemoveBtree(ctx, databaseOptions, storeName)
-
-	// Clear Redis cache of our garbage.
-	redis.NewClient().Clear(ctx)
-	redis.CloseConnection()
 }
 
 func seed(ctx context.Context) {
 	t, err := database.BeginTransaction(ctx, databaseOptions, sop.ForWriting)
+
 	if err != nil {
 		log.Error("Seed transaction failed", "err", err)
 		return

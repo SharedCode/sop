@@ -429,8 +429,9 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 		if err := storeWriter.removeStore(ctx, storeName); err != nil {
 			return err
 		}
-
 		delete(storesLookup, storeName)
+
+		log.Debug(fmt.Sprintf("removed store %s", storeName))
 	}
 
 	// Update Store list file of removed entries.

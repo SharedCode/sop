@@ -52,8 +52,6 @@ type TransactionOptions struct {
 	Mode TransactionMode `json:"mode"`
 	// Transaction maximum "commit" time. Acts as the commit window cap and lock TTL.
 	MaxTime time.Duration `json:"max_time"`
-	// Logging enables transaction logging.
-	Logging bool `json:"logging"`
 }
 
 // Copy Database Options to Transaction Options.
