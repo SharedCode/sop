@@ -16,6 +16,10 @@ import (
 	"github.com/sharedcode/sop/infs"
 )
 
+const(
+	storeName = "concurrent_tree"
+)
+
 func init() {
 	redis.OpenConnectionWithURL("redis://localhost:6379")
 	sop.RegisterL2CacheFactory(sop.Redis, func() sop.L2Cache {
@@ -49,7 +53,7 @@ func main() {
 	var wg sync.WaitGroup
 	threadCount := 40
 	itemsPerThread := 300
-	targetCount := int64((threadCount+1)*itemsPerThread+1)
+	targetCount := int64(threadCount*itemsPerThread+1)
 
 	fmt.Printf("Launching %d threads, %d items each...\n", threadCount, itemsPerThread)
 
@@ -75,7 +79,7 @@ func main() {
 	fmt.Println("done")
 
 	// Verify
-	verify(ctx, dbPath, (threadCount+1)*itemsPerThread+1) // +1 for seed
+	verify(ctx, dbPath, int(targetCount)) // +1 for seed
 }
 
 func seed(ctx context.Context, dbPath string) {
@@ -94,7 +98,7 @@ func seed(ctx context.Context, dbPath string) {
 	}
 
 	storeOpts := sop.StoreOptions{
-		Name:       "concurrent_tree",
+		Name:       storeName,
 		SlotLength: 500,
 		IsUnique:   true,
 	}
@@ -134,7 +138,7 @@ func worker(ctx context.Context, id int, dbPath string, itemsPerThread int, maxJ
 		}
 		t.Begin(ctx)
 
-		b3, err := infs.OpenBtree[int, string](ctx, "concurrent_tree", t, func(a, b int) int {
+		b3, err := infs.OpenBtree[int, string](ctx, storeName, t, func(a, b int) int {
 			if a < b {
 				return -1
 			}
@@ -197,7 +201,7 @@ func verify(ctx context.Context, dbPath string, expectedCount int) {
 	}
 	t.Begin(ctx)
 
-	b3, err := infs.OpenBtree[int, string](ctx, "concurrent_tree", t, func(a, b int) int {
+	b3, err := infs.OpenBtree[int, string](ctx, storeName, t, func(a, b int) int {
 		if a < b {
 			return -1
 		}
