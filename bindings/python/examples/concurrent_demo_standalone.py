@@ -12,8 +12,9 @@ from sop.context import Context
 from sop.database import Database, DatabaseOptions, DatabaseType
 from sop.transaction import TransactionMode
 from sop.btree import Item, PagingInfo, BtreeError
+from sop import Logger, LogLevel
 
-def worker(thread_id, db, ctx, items_per_thread):
+def worker(ctx, db, store_name, thread_id, items_per_thread):
     # NOTE: No threading.Lock used here.
     # SOP handles transaction isolation and merging.
     # This allows concurrent threads to do transactions without lock mgmt.
@@ -25,7 +26,7 @@ def worker(thread_id, db, ctx, items_per_thread):
         try:
             # Each thread starts its own transaction
             t = db.begin_transaction(ctx)
-            btree = db.open_btree(ctx, "concurrent_tree", t)            
+            btree = db.open_btree(ctx, store_name, t)            
             
             for j in range(items_per_thread):
                 # Unique keys per thread -> No conflicts, SOP merges changes
@@ -53,36 +54,33 @@ def main():
     print("This runs in Standalone mode (no Redis required).")
     
     db_path = "data/concurrent_demo_standalone_py"
-    
+    store_name = "concurrent_tree"
+
+    # Turn SOP's Debug level logging.
+    Logger.configure(LogLevel.Debug)
+
     ctx = Context()
     db = Database(DatabaseOptions(
         stores_folders=[db_path],
         type=DatabaseType.Standalone
     ))
-
-    # Clean up previous run's data properly.
-    try:
-        db.remove_btree(ctx, "concurrent_tree")
-    except Exception:
-        pass
-    
     # 1. Setup
     # IMPORTANT: Pre-seed the B-Tree with one item to establish the root node.
     # This prevents race conditions on the very first commit when multiple threads 
     # try to initialize an empty tree simultaneously.
     t_setup = db.begin_transaction(ctx)
-    btree = db.new_btree(ctx, "concurrent_tree", t_setup)
+    btree = db.new_btree(ctx, store_name, t_setup)
     btree.add(ctx, Item(key=-1, value="Root Seed Item"))
     t_setup.commit(ctx)
     
     threads = []
-    thread_count = 5
-    items_per_thread = 100
+    thread_count = 10
+    items_per_thread = 200
     
     print(f"Launching {thread_count} threads, {items_per_thread} items each...")
     
     for i in range(thread_count):
-        t = threading.Thread(target=worker, args=(i, db, ctx, items_per_thread))
+        t = threading.Thread(target=worker, args=(ctx, db, store_name, i, items_per_thread))
         threads.append(t)
         t.start()
         
@@ -93,7 +91,7 @@ def main():
         
     # Verify
     t_read = db.begin_transaction(ctx)
-    btree = db.open_btree(ctx, "concurrent_tree", t_read)
+    btree = db.open_btree(ctx, store_name, t_read)
     print(f"Verify Btree ID: {btree.id}")
     
     count = 0
@@ -113,6 +111,7 @@ def main():
         print("FAILURE: Count mismatch.")
         
     t_read.commit(ctx)
+    db.remove_btree(ctx, store_name)
 
 if __name__ == "__main__":
     main()

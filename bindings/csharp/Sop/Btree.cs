@@ -199,9 +199,19 @@ public class Btree<TK, TV>
         return Manage(ctx, (int)BtreeAction.Upsert, new ManageBtreePayload<TK, TV> { Items = items });
     }
 
+    public bool Update(Context ctx, Item<TK, TV> item)
+    {
+        return Manage(ctx, (int)BtreeAction.Update, new ManageBtreePayload<TK, TV> { Items = new List<Item<TK, TV>> { item } });
+    }
+
     public bool Update(Context ctx, List<Item<TK, TV>> items)
     {
         return Manage(ctx, (int)BtreeAction.Update, new ManageBtreePayload<TK, TV> { Items = items });
+    }
+
+    public bool UpdateKey(Context ctx, Item<TK, TV> item)
+    {
+        return Manage(ctx, (int)BtreeAction.UpdateKey, new ManageBtreePayload<TK, TV> { Items = new List<Item<TK,TV>> { item } });
     }
 
     public bool UpdateKey(Context ctx, List<Item<TK, TV>> items)
@@ -212,6 +222,11 @@ public class Btree<TK, TV>
     public bool UpdateCurrentKey(Context ctx, Item<TK, TV> item)
     {
         return Manage(ctx, (int)BtreeAction.UpdateCurrentKey, new ManageBtreePayload<TK, TV> { Items = new List<Item<TK, TV>> { item } });
+    }
+
+    public bool Remove(Context ctx, TK key)
+    {
+        return Manage(ctx, (int)BtreeAction.Remove, new List<TK>{ key });
     }
 
     public bool Remove(Context ctx, List<TK> keys)

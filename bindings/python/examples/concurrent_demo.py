@@ -12,6 +12,7 @@ from sop.context import Context
 from sop.database import Database, DatabaseOptions, DatabaseType
 from sop.btree import Item
 from sop.redis import Redis
+from sop import Logger, LogLevel
 
 def worker(thread_id, db, ctx, items_per_thread):
     # NOTE: No threading.Lock used here.
@@ -55,17 +56,13 @@ def main():
     
     Redis.initialize("redis://localhost:6379")
     
+    Logger.configure(LogLevel.Debug)
+    
     ctx = Context()
     db = Database(DatabaseOptions(
         stores_folders=[db_path],
         type=DatabaseType.Clustered
     ))
-
-    # Clean up previous run's data properly.
-    try:
-        db.remove_btree(ctx, "concurrent_tree")
-    except Exception:
-        pass
     
     # 1. Setup
     # IMPORTANT: Pre-seed the B-Tree with one item to establish the root node.
@@ -114,6 +111,8 @@ def main():
         print("FAILURE: Count mismatch.")
         
     t_read.commit(ctx)
+
+    db.remove_btree(ctx, "concurrent_tree")
     Redis.close()
 
 if __name__ == "__main__":

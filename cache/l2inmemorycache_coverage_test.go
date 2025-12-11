@@ -86,7 +86,7 @@ func TestInMemoryCache_LoadOrStore_Eviction(t *testing.T) {
 		for j := 0; ; j++ {
 			k := fmt.Sprintf("key-%d-%d", i, j)
 			if c.data.getShard(k) == targetShard {
-				c.data.Store(k, item{data: []byte("val")})
+				c.data.store(k, item{data: []byte("val")})
 				break
 			}
 		}
@@ -102,7 +102,7 @@ func TestInMemoryCache_LoadOrStore_Eviction(t *testing.T) {
 		}
 	}
 
-	c.data.LoadOrStore(newKey, item{data: []byte("val")})
+	c.data.loadOrStore(newKey, item{data: []byte("val")})
 
 	targetShard.mu.RLock()
 	if len(targetShard.items) != maxItemsPerShard {
@@ -228,7 +228,7 @@ func TestInMemoryCache_Store_UnknownType(t *testing.T) {
 			k := fmt.Sprintf("key-%d-%d", i, j)
 			if c.data.getShard(k) == targetShard {
 				// Store int, which is not item or lockItem
-				c.data.Store(k, 123)
+				c.data.store(k, 123)
 				break
 			}
 		}
@@ -243,7 +243,7 @@ func TestInMemoryCache_Store_UnknownType(t *testing.T) {
 			break
 		}
 	}
-	c.data.Store(newKey, 123)
+	c.data.store(newKey, 123)
 
 	targetShard.mu.RLock()
 	if len(targetShard.items) != maxItemsPerShard {
@@ -275,7 +275,7 @@ func TestInMemoryCache_Get_EdgeCases(t *testing.T) {
 	}
 
 	// GetStruct invalid json
-	c.data.Store("invalid", item{data: []byte("{invalid")})
+	c.data.store("invalid", item{data: []byte("{invalid")})
 	var res struct{}
 	found, err := c.GetStruct(ctx, "invalid", &res)
 	if found || err == nil {
@@ -480,27 +480,27 @@ func TestInMemoryCache_SetStruct_Error(t *testing.T) {
 func TestInMemoryCache_CAS_CAD_Fail(t *testing.T) {
 	c := NewL2InMemoryCache().(*L2InMemoryCache)
 	// CAS fail
-	c.data.Store("k", "v1")
-	if c.data.CompareAndSwap("k", "v2", "v3") {
+	c.data.store("k", "v1")
+	if c.data.compareAndSwap("k", "v2", "v3") {
 		t.Error("CAS should fail if old value mismatch")
 	}
-	if c.data.CompareAndSwap("missing", "v1", "v2") {
+	if c.data.compareAndSwap("missing", "v1", "v2") {
 		t.Error("CAS should fail if missing")
 	}
 
 	// CAD fail
-	if c.data.CompareAndDelete("k", "v2") {
+	if c.data.compareAndDelete("k", "v2") {
 		t.Error("CAD should fail if value mismatch")
 	}
-	if c.data.CompareAndDelete("missing", "v1") {
+	if c.data.compareAndDelete("missing", "v1") {
 		t.Error("CAD should fail if missing")
 	}
 }
 
 func TestInMemoryCache_Range_Stop(t *testing.T) {
 	c := NewL2InMemoryCache().(*L2InMemoryCache)
-	c.data.Store("k1", "v1")
-	c.data.Store("k2", "v2")
+	c.data.store("k1", "v1")
+	c.data.store("k2", "v2")
 
 	count := 0
 	c.data.Range(func(k, v interface{}) bool {

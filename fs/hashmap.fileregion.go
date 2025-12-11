@@ -126,6 +126,10 @@ func (hm *hashmap) unlockFileBlockRegion(ctx context.Context, lk *sop.LockKey) e
 // findAndAdd searches for a slot for the given handle and updates it atomically under a block lock.
 // It uses optimistic concurrency: finds a candidate slot, locks it, verifies it's still available, and writes.
 func (hm *hashmap) findAndAdd(ctx context.Context, filename string, handle sop.Handle) error {
+	log.Debug("entering findAndAdd")
+	if filename == "" {
+		return fmt.Errorf("can't findAndAdd on empty filename")
+	}
 	// Lock the "Logical Slot" (the "bucket" determined by the hash) to prevent race conditions.
 	// This serializes access to the same logical slot across all segment files.
 	blockOffset, handleInBlockOffset := hm.getBlockOffsetAndHandleInBlockOffset(handle.LogicalID)
@@ -162,7 +166,7 @@ func (hm *hashmap) findAndAdd(ctx context.Context, filename string, handle sop.H
 			}
 			// Otherwise, convert to a lock acquisition failure to allow callers to attempt
 			// stale-lock recovery (e.g., priority rollback) using the lock key in UserData.
-			err = fmt.Errorf("findAndAdd lock acquisition(%v:%v) failed: %w", blockOffset, handleInBlockOffset, err)
+			err = fmt.Errorf("findAndAdd lock acquisition(%v) failed: %w", s, err)
 			log.Debug(err.Error())
 			lk[0].LockID = ownerTID
 			return sop.Error{
@@ -175,15 +179,66 @@ func (hm *hashmap) findAndAdd(ctx context.Context, filename string, handle sop.H
 	}
 	defer hm.cache.Unlock(ctx, lk)
 
-	// 1. Find a candidate slot (read-only, no lock yet).
-	frd, err := hm.findOneFileRegion(ctx, true, filename, handle.LogicalID)
-	if err != nil {
-		return err
-	}
+	// Retry loop to acquire the lock on physical address.
+	var frd fileRegionDetails
+	var physicallockKey []*sop.LockKey
+	startTime = sop.Now()
+	for {
+		var ok bool
+		var err error
 
-	// Fail if item exists in target.
-	if !frd.handle.IsEmpty() {
-		return fmt.Errorf("findAndAdd failed, can't overwrite an item at offset=%v, item details: %v", frd.getOffset(), frd.handle)
+		// 1. Find a candidate slot (read-only, no lock yet).
+		frd, err = hm.findOneFileRegion(ctx, true, filename, handle.LogicalID)
+		if err != nil {
+			return err
+		}
+		s = hm.formatLockKey(filename, frd.blockOffset+frd.handleInBlockOffset)
+		// Check if nobody has a lock on it.
+		if frd.handle.IsEmpty() {
+			if frd.blockOffset == blockOffset && frd.handleInBlockOffset == handleInBlockOffset {
+				physicallockKey = nil
+				break
+			}
+			physicallockKey = hm.cache.CreateLockKeysForIDs([]sop.Tuple[string, sop.UUID]{
+				{
+					First:  s,
+					Second: tid,
+				},
+			})
+
+			ok, ownerTID, err = hm.cache.DualLock(ctx, LockFileRegionDuration, physicallockKey)
+			log.Debug("after DualLock call on", "address", s)
+			if err != nil {
+				return err
+			}
+			if ok {
+				log.Debug("before break")
+				break
+			}
+		}
+		if err := sop.TimedOut(ctx, "findAndAdd lock acquisition", startTime, lockSectorRetryTimeoutDuration); err != nil {
+			// If the context is canceled or the operation's context deadline was exceeded, return the raw error
+			// so callers treat it as a normal timeout/cancellation and NOT a failover trigger.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return err
+			}
+			// Otherwise, convert to a lock acquisition failure to allow callers to attempt
+			// stale-lock recovery (e.g., priority rollback) using the lock key in UserData.
+			err = fmt.Errorf("findAndAdd lock acquisition(%v) failed: %w", s, err)
+			log.Debug(err.Error())
+			if len(physicallockKey) > 0 {
+				physicallockKey[0].LockID = ownerTID
+			}
+			return sop.Error{
+				Code:     sop.LockAcquisitionFailure,
+				Err:      err,
+				UserData: physicallockKey,
+			}
+		}
+		sop.RandomSleep(ctx)
+	}
+	if physicallockKey != nil {
+		defer hm.cache.Unlock(ctx, physicallockKey)
 	}
 
 	// 2. Write.
@@ -231,10 +286,8 @@ func (hm *hashmap) writeBlockRegionPayload(ctx context.Context, dio *fileDirectI
 		return err
 	}
 
-	// Merge the updated Handle record
+	// Merge the updated Handle record & Add Checksum on the end.
 	copy(alignedBuffer[handleInBlockOffset:handleInBlockOffset+sop.HandleSizeInBytes], handleData)
-
-	// Add Checksum on the end.
 	marshalData(alignedBuffer[:blockSize-4], alignedBuffer)
 
 	// Write to main file

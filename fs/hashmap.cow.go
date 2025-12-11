@@ -10,6 +10,10 @@ import (
 	"github.com/sharedcode/sop"
 )
 
+const(
+	FILE_NOT_FOUND = "no such file or directory"
+)
+
 func (hm *hashmap) restoreFromCow(ctx context.Context, dio *fileDirectIO, blockOffset int64, alignedBuffer []byte, cowData []byte) error {
 	if len(cowData) == 0 {
 		return nil
@@ -60,13 +64,12 @@ func (hm *hashmap) createCow(ctx context.Context, filename string, offset int64,
 func (hm *hashmap) deleteCow(ctx context.Context, filename string, offset int64) error {
 	cowPath := hm.makeBlockCowPath(filename, offset)
 	fio := NewFileIO()
-	// fmt.Printf("deleteCow: Deleting %s\n", cowPath)
 	if err := fio.Remove(ctx, cowPath); err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		// Fallback check for string message, in case of wrapping issues or platform specific error messages.
-		if strings.Contains(err.Error(), "no such file or directory") {
+		if strings.Contains(err.Error(), FILE_NOT_FOUND) {
 			return nil
 		}
 		return sop.Error{
@@ -95,6 +98,7 @@ func (hm *hashmap) makeBlockCowPath(filename string, offset int64) string {
 	return fmt.Sprintf("%s_%d.cow", absCowBase, offset)
 }
 
+// checkCow checks and reads COW file, returns the data, if it is valid or not, and the error or nil if no error.
 func (hm *hashmap) checkCow(ctx context.Context, filename string, offset int64) ([]byte, bool, error) {
 	cowPath := hm.makeBlockCowPath(filename, offset)
 	fio := NewFileIO()

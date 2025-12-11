@@ -17,7 +17,6 @@ import (
 
 //export navigateBtree
 func navigateBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.char) *C.char {
-	fmt.Printf("navigateBtree called with action: %d, Next constant is: %d\n", int(action), Next)
 	ctx := getContext(ctxID)
 	if ctx == nil {
 		return C.CString(fmt.Sprintf("context with ID %v not found", int64(ctxID)))

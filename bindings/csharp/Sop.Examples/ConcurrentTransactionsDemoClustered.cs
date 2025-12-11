@@ -51,8 +51,8 @@ namespace Sop.Examples
 
             Console.WriteLine("Launching parallel tasks...");
             
-            int threadCount = 5;
-            int itemsPerThread = 100;
+            int threadCount = 20;
+            int itemsPerThread = 200;
             var threads = new List<Thread>();
 
             // We use a barrier to start threads roughly at the same time

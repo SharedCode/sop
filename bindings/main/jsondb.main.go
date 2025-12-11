@@ -271,6 +271,8 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 			return err
 		}
 
+		log.Debug("before Transaction.Commit call")
+
 		if err := t.Transaction.Commit(ctx); err != nil {
 			errMsg := fmt.Sprintf("transaction %v Commit failed, details: %v", t.Transaction.GetID().String(), err)
 			transRegistry.Remove(t.Transaction.GetID())

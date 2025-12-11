@@ -410,3 +410,60 @@ with db.begin_transaction(ctx) as t:
         print("Store not found (expected).")
 ```
 
+
+## 4. Concurrent Transactions (Swarm Computing)
+
+SOP supports "Swarm Computing" where multiple threads or processes can modify the same B-Tree concurrently without external locks. SOP handles conflict detection and merging automatically.
+
+**Important**: You must pre-seed the B-Tree with at least one item in a separate transaction before launching concurrent workers. This establishes the root node and prevents race conditions during initialization.
+
+```python
+import threading
+import time
+import random
+from sop import Context, Database, DatabaseOptions, DatabaseType, Item
+
+def worker(thread_id, db, ctx, items_per_thread):
+    retry_count = 0
+    committed = False
+    while not committed and retry_count < 10:
+        try:
+            # Each thread starts its own transaction
+            # No external locks needed!
+            with db.begin_transaction(ctx) as t:
+                btree = db.open_btree(ctx, "concurrent_tree", t)            
+                for j in range(items_per_thread):
+                    # Unique keys per thread -> No conflicts, SOP merges changes
+                    key = (thread_id * items_per_thread) + j                
+                    btree.add(ctx, Item(key=key, value=f"Thread {thread_id} - Item {j}"))
+                # Commit happens here
+            committed = True
+            print(f"Thread {thread_id} committed.")
+        except Exception as e:
+            retry_count += 1
+            time.sleep(random.random() * 0.5) # Backoff
+
+# Usage
+ctx = Context()
+
+# Option A: Standalone (Local Disk, In-Memory Cache) - Good for single-node concurrency
+db = Database(DatabaseOptions(stores_folders=["/tmp/sop_swarm"], type=DatabaseType.Standalone))
+
+# Option B: Clustered (Redis Cache) - Required for multi-process/distributed swarm
+# db = Database(DatabaseOptions(stores_folders=["/tmp/sop_swarm"], type=DatabaseType.Clustered))
+
+# 1. Pre-seed (Required for Swarm)
+with db.begin_transaction(ctx) as t:
+    btree = db.new_btree(ctx, "concurrent_tree", t)
+    btree.add(ctx, Item(key=-1, value="Root Seed"))
+
+# 2. Launch Threads
+threads = []
+for i in range(5):
+    t = threading.Thread(target=worker, args=(i, db, ctx, 100))
+    threads.append(t)
+    t.start()
+
+for t in threads:
+    t.join()
+```

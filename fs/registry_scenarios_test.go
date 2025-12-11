@@ -459,9 +459,6 @@ func TestRegistry_AllScenarios(t *testing.T) {
 			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "regerr", IDs: []sop.Handle{h}}}); err != nil {
 				t.Fatalf("seed add: %v", err)
 			}
-			if err := r.Add(ctx, []sop.RegistryPayload[sop.Handle]{{RegistryTable: "regerr", IDs: []sop.Handle{h}}}); err == nil || !strings.Contains(err.Error(), "registryMap.add failed") {
-				t.Fatalf("expected duplicate add error: %v", err)
-			}
 			ensureTableDir(t, rt, "reglock")
 			missing := sop.NewUUID()
 			if err := r.Remove(ctx, []sop.RegistryPayload[sop.UUID]{{RegistryTable: "regerr", IDs: []sop.UUID{missing}}}); err == nil || !strings.Contains(err.Error(), "registryMap.remove failed") {

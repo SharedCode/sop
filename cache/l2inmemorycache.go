@@ -4,216 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"sort"
-	"sync"
 	"time"
 
+	log "log/slog"
 	"github.com/sharedcode/sop"
 )
-
-const (
-	shardCount       = 256
-	maxItemsPerShard = 1000 // Adjust based on desired total capacity (e.g., 256 * 1000 = 256k items)
-)
-
-type shard struct {
-	mu    sync.RWMutex
-	items map[string]interface{}
-}
-
-type shardedMap struct {
-	shards [shardCount]*shard
-}
-
-func newShardedMap() *shardedMap {
-	m := &shardedMap{}
-	for i := 0; i < shardCount; i++ {
-		m.shards[i] = &shard{items: make(map[string]interface{})}
-	}
-	return m
-}
-
-func (m *shardedMap) getShard(key string) *shard {
-	h := fnv.New32a()
-	h.Write([]byte(key))
-	return m.shards[h.Sum32()%shardCount]
-}
-
-func (m *shardedMap) Load(key string) (interface{}, bool) {
-	shard := m.getShard(key)
-	shard.mu.RLock()
-	val, ok := shard.items[key]
-	shard.mu.RUnlock()
-	return val, ok
-}
-
-func (m *shardedMap) Store(key string, value interface{}) {
-	shard := m.getShard(key)
-	shard.mu.Lock()
-
-	// Eviction logic: If over capacity, remove item with earliest expiration from a random sample
-	if len(shard.items) >= maxItemsPerShard {
-		const sampleSize = 5
-		var victimKey string
-		var minExp time.Time
-		first := true
-
-		count := 0
-		for k, v := range shard.items {
-			if count >= sampleSize {
-				break
-			}
-			count++
-
-			var exp time.Time
-			switch val := v.(type) {
-			case item:
-				exp = val.expiration
-			case lockItem:
-				exp = val.expiration
-			default:
-				continue
-			}
-
-			// Treat Zero expiration as Infinite (do not evict if possible)
-			effectiveExp := exp
-			if exp.IsZero() {
-				effectiveExp = time.Now().Add(365 * 24 * 100 * time.Hour) // +100 years
-			}
-
-			if first || effectiveExp.Before(minExp) {
-				minExp = effectiveExp
-				victimKey = k
-				first = false
-			}
-		}
-
-		if victimKey != "" {
-			delete(shard.items, victimKey)
-		} else {
-			// Fallback: just delete the first one found if we couldn't determine expiration
-			for k := range shard.items {
-				delete(shard.items, k)
-				break
-			}
-		}
-	}
-
-	shard.items[key] = value
-	shard.mu.Unlock()
-}
-
-func (m *shardedMap) Delete(key string) {
-	shard := m.getShard(key)
-	shard.mu.Lock()
-	delete(shard.items, key)
-	shard.mu.Unlock()
-}
-
-func (m *shardedMap) LoadOrStore(key string, value interface{}) (actual interface{}, loaded bool) {
-	shard := m.getShard(key)
-	shard.mu.Lock()
-	actual, loaded = shard.items[key]
-	if !loaded {
-		// Eviction logic
-		if len(shard.items) >= maxItemsPerShard {
-			const sampleSize = 5
-			var victimKey string
-			var minExp time.Time
-			first := true
-
-			count := 0
-			for k, v := range shard.items {
-				if count >= sampleSize {
-					break
-				}
-				count++
-
-				var exp time.Time
-				switch val := v.(type) {
-				case item:
-					exp = val.expiration
-				case lockItem:
-					exp = val.expiration
-				default:
-					continue
-				}
-
-				// Treat Zero expiration as Infinite (do not evict if possible)
-				effectiveExp := exp
-				if exp.IsZero() {
-					effectiveExp = time.Now().Add(365 * 24 * 100 * time.Hour) // +100 years
-				}
-
-				if first || effectiveExp.Before(minExp) {
-					minExp = effectiveExp
-					victimKey = k
-					first = false
-				}
-			}
-
-			if victimKey != "" {
-				delete(shard.items, victimKey)
-			} else {
-				for k := range shard.items {
-					delete(shard.items, k)
-					break
-				}
-			}
-		}
-		actual = value
-		shard.items[key] = value
-	}
-	shard.mu.Unlock()
-	return actual, loaded
-}
-
-func (m *shardedMap) CompareAndSwap(key string, old, new interface{}) bool {
-	shard := m.getShard(key)
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-	if val, ok := shard.items[key]; ok && val == old {
-		shard.items[key] = new
-		return true
-	}
-	return false
-}
-
-func (m *shardedMap) CompareAndDelete(key string, old interface{}) bool {
-	shard := m.getShard(key)
-	shard.mu.Lock()
-	defer shard.mu.Unlock()
-	if val, ok := shard.items[key]; ok && val == old {
-		delete(shard.items, key)
-		return true
-	}
-	return false
-}
-
-func (m *shardedMap) Range(f func(key, value interface{}) bool) {
-	for _, shard := range m.shards {
-		shard.mu.RLock()
-		// Copy items to avoid holding lock during callback if possible,
-		// but Range usually allows concurrent access.
-		// For safety with long-running callbacks, we might want to copy keys.
-		// But standard sync.Map Range holds no locks during callback?
-		// Actually sync.Map Range is complex.
-		// Here we hold RLock. If callback calls Store, it will deadlock.
-		// So we should collect items then callback.
-		items := make(map[string]interface{}, len(shard.items))
-		for k, v := range shard.items {
-			items[k] = v
-		}
-		shard.mu.RUnlock()
-
-		for k, v := range items {
-			if !f(k, v) {
-				return
-			}
-		}
-	}
-}
 
 type item struct {
 	data       []byte
@@ -243,12 +39,13 @@ func (c *L2InMemoryCache) GetType() sop.L2CacheType {
 }
 
 func (c *L2InMemoryCache) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
+	log.Debug("entered Set")
 	var exp time.Time
 	if expiration > 0 {
 		exp = time.Now().Add(expiration)
 	}
 
-	c.data.Store(key, item{
+	c.data.store(key, item{
 		data:       []byte(value),
 		expiration: exp,
 	})
@@ -256,14 +53,15 @@ func (c *L2InMemoryCache) Set(ctx context.Context, key string, value string, exp
 }
 
 func (c *L2InMemoryCache) Get(ctx context.Context, key string) (bool, string, error) {
-	val, ok := c.data.Load(key)
+	log.Debug("entered Get")
+	val, ok := c.data.load(key)
 	if !ok {
 		return false, "", nil
 	}
 	it := val.(item)
 
 	if !it.expiration.IsZero() && time.Now().After(it.expiration) {
-		c.data.Delete(key)
+		c.data.delete(key)
 		return false, "", nil
 	}
 
@@ -271,20 +69,21 @@ func (c *L2InMemoryCache) Get(ctx context.Context, key string) (bool, string, er
 }
 
 func (c *L2InMemoryCache) GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error) {
-	val, ok := c.data.Load(key)
+	log.Debug("entered GetEx")
+	val, ok := c.data.load(key)
 	if !ok {
 		return false, "", nil
 	}
 	it := val.(item)
 
 	if !it.expiration.IsZero() && time.Now().After(it.expiration) {
-		c.data.Delete(key)
+		c.data.delete(key)
 		return false, "", nil
 	}
 
 	if expiration > 0 {
 		it.expiration = time.Now().Add(expiration)
-		c.data.Store(key, it)
+		c.data.store(key, it)
 	}
 
 	return true, string(it.data), nil
@@ -305,7 +104,7 @@ func (c *L2InMemoryCache) SetStruct(ctx context.Context, key string, value inter
 		exp = time.Now().Add(expiration)
 	}
 
-	c.data.Store(key, item{
+	c.data.store(key, item{
 		data:       data,
 		expiration: exp,
 	})
@@ -313,14 +112,15 @@ func (c *L2InMemoryCache) SetStruct(ctx context.Context, key string, value inter
 }
 
 func (c *L2InMemoryCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
-	val, ok := c.data.Load(key)
+	log.Debug("entered GetStruct")
+	val, ok := c.data.load(key)
 	if !ok {
 		return false, nil
 	}
 	it := val.(item)
 
 	if !it.expiration.IsZero() && time.Now().After(it.expiration) {
-		c.data.Delete(key)
+		c.data.delete(key)
 		return false, nil
 	}
 
@@ -332,20 +132,21 @@ func (c *L2InMemoryCache) GetStruct(ctx context.Context, key string, target inte
 }
 
 func (c *L2InMemoryCache) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
-	val, ok := c.data.Load(key)
+	log.Debug("entered GetStructEx")
+	val, ok := c.data.load(key)
 	if !ok {
 		return false, nil
 	}
 	it := val.(item)
 
 	if !it.expiration.IsZero() && time.Now().After(it.expiration) {
-		c.data.Delete(key)
+		c.data.delete(key)
 		return false, nil
 	}
 
 	if expiration > 0 {
 		it.expiration = time.Now().Add(expiration)
-		c.data.Store(key, it)
+		c.data.store(key, it)
 	}
 
 	if err := json.Unmarshal(it.data, target); err != nil {
@@ -357,7 +158,7 @@ func (c *L2InMemoryCache) GetStructEx(ctx context.Context, key string, target in
 
 func (c *L2InMemoryCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	for _, k := range keys {
-		c.data.Delete(k)
+		c.data.delete(k)
 	}
 	return true, nil
 }
@@ -368,7 +169,7 @@ func (c *L2InMemoryCache) Ping(ctx context.Context) error {
 
 func (c *L2InMemoryCache) Clear(ctx context.Context) error {
 	c.data.Range(func(key, value interface{}) bool {
-		c.data.Delete(key.(string))
+		c.data.delete(key.(string))
 		return true
 	})
 	return nil
@@ -407,9 +208,10 @@ func (c *L2InMemoryCache) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID
 }
 
 func (c *L2InMemoryCache) IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
+	log.Debug("entered IsLockedTTL")
 	// 1. Check if all keys are locked by us and valid
 	for _, lk := range lockKeys {
-		val, ok := c.locks.Load(lk.Key)
+		val, ok := c.locks.load(lk.Key)
 		if !ok {
 			return false, nil
 		}
@@ -418,7 +220,7 @@ func (c *L2InMemoryCache) IsLockedTTL(ctx context.Context, duration time.Duratio
 			return false, nil
 		}
 		if time.Now().After(item.expiration) {
-			c.locks.CompareAndDelete(lk.Key, val)
+			c.locks.compareAndDelete(lk.Key, val)
 			return false, nil
 		}
 	}
@@ -427,7 +229,7 @@ func (c *L2InMemoryCache) IsLockedTTL(ctx context.Context, duration time.Duratio
 	newExp := time.Now().Add(duration)
 	for _, lk := range lockKeys {
 		for {
-			val, ok := c.locks.Load(lk.Key)
+			val, ok := c.locks.load(lk.Key)
 			if !ok {
 				return false, nil
 			}
@@ -439,7 +241,7 @@ func (c *L2InMemoryCache) IsLockedTTL(ctx context.Context, duration time.Duratio
 				lockID:     item.lockID,
 				expiration: newExp,
 			}
-			if c.locks.CompareAndSwap(lk.Key, item, newItem) {
+			if c.locks.compareAndSwap(lk.Key, item, newItem) {
 				break
 			}
 		}
@@ -449,6 +251,7 @@ func (c *L2InMemoryCache) IsLockedTTL(ctx context.Context, duration time.Duratio
 }
 
 func (c *L2InMemoryCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
+	log.Debug("entered Lock")
 	if duration <= 0 {
 		duration = 15 * time.Minute
 	}
@@ -467,7 +270,7 @@ func (c *L2InMemoryCache) Lock(ctx context.Context, duration time.Duration, lock
 		}
 
 		// Try to load or store
-		val, loaded := c.locks.LoadOrStore(lk.Key, newItem)
+		val, loaded := c.locks.loadOrStore(lk.Key, newItem)
 		if loaded {
 			// Item exists
 			existing := val.(lockItem)
@@ -475,7 +278,7 @@ func (c *L2InMemoryCache) Lock(ctx context.Context, duration time.Duration, lock
 			// Check if expired
 			if time.Now().After(existing.expiration) {
 				// Expired. Try to CAS.
-				if c.locks.CompareAndSwap(lk.Key, existing, newItem) {
+				if c.locks.compareAndSwap(lk.Key, existing, newItem) {
 					// Success
 					acquired = append(acquired, lk)
 					lk.IsLockOwner = true
@@ -494,9 +297,9 @@ func (c *L2InMemoryCache) Lock(ctx context.Context, duration time.Duration, lock
 
 			// Failed to acquire. Rollback newly acquired locks.
 			for _, acquiredLk := range acquired {
-				if v, ok := c.locks.Load(acquiredLk.Key); ok {
+				if v, ok := c.locks.load(acquiredLk.Key); ok {
 					if v.(lockItem).lockID == acquiredLk.LockID {
-						c.locks.CompareAndDelete(acquiredLk.Key, v)
+						c.locks.compareAndDelete(acquiredLk.Key, v)
 					}
 				}
 				acquiredLk.IsLockOwner = false
@@ -513,12 +316,30 @@ func (c *L2InMemoryCache) Lock(ctx context.Context, duration time.Duration, lock
 }
 
 func (c *L2InMemoryCache) DualLock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
-	return c.Lock(ctx, duration, lockKeys)
+	ok, owner, err := c.Lock(ctx, duration, lockKeys)
+	if err != nil || !ok {
+		return ok, owner, err
+	}
+	// Verify lock acquisition
+	isLocked, err := c.IsLocked(ctx, lockKeys)
+	if err != nil {
+		// If verification fails, we should probably unlock to be safe, or just return error.
+		_ = c.Unlock(ctx, lockKeys)
+		return false, sop.NilUUID, err
+	}
+	if !isLocked {
+		// If IsLocked returns false, it means we lost the lock.
+		// Unlock just in case (though IsLocked saying false implies we might not own it or it expired).
+		_ = c.Unlock(ctx, lockKeys)
+		return false, sop.NilUUID, nil
+	}
+	return true, sop.NilUUID, nil
 }
 
 func (c *L2InMemoryCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
+	log.Debug("entered IsLocked")
 	for _, lk := range lockKeys {
-		val, ok := c.locks.Load(lk.Key)
+		val, ok := c.locks.load(lk.Key)
 		if !ok {
 			return false, nil
 		}
@@ -534,8 +355,9 @@ func (c *L2InMemoryCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey)
 }
 
 func (c *L2InMemoryCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
+	log.Debug("entered IsLockedByOthers")
 	for _, key := range lockKeyNames {
-		val, ok := c.locks.Load(key)
+		val, ok := c.locks.load(key)
 		if ok {
 			item := val.(lockItem)
 			if time.Now().After(item.expiration) {
@@ -549,11 +371,11 @@ func (c *L2InMemoryCache) IsLockedByOthers(ctx context.Context, lockKeyNames []s
 
 func (c *L2InMemoryCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	for _, lk := range lockKeys {
-		val, ok := c.locks.Load(lk.Key)
+		val, ok := c.locks.load(lk.Key)
 		if ok {
 			item := val.(lockItem)
 			if item.lockID == lk.LockID {
-				c.locks.CompareAndDelete(lk.Key, val)
+				c.locks.compareAndDelete(lk.Key, val)
 			}
 		}
 	}

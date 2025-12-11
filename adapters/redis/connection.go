@@ -2,10 +2,8 @@
 package redis
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -120,48 +118,6 @@ func openConnection(options Options) *Connection {
 }
 
 func openConnectionFromRedisOptions(opts *redis.Options) *Connection {
-	opts.OnConnect = func(ctx context.Context, cn *redis.Conn) error {
-		log.Debug("Redis connected")
-		// Use INFO server to get run_id which changes on restart.
-		info, err := cn.Info(ctx, "server").Result()
-		if err != nil {
-			return err
-		}
-		// Parse run_id: lines are of the form key:value
-		runID := ""
-		lines := strings.Split(info, "\r\n")
-		for _, line := range lines {
-			if len(line) > 7 && line[:7] == "run_id:" {
-				runID = line[7:]
-				break
-			}
-		}
-		if runID == "" {
-			// Fallback for systems using \n only
-			lines = strings.Split(info, "\n")
-			for _, line := range lines {
-				if len(line) > 7 && line[:7] == "run_id:" {
-					runID = line[7:]
-					break
-				}
-			}
-		}
-
-		if runID != "" {
-			val := lastSeenRunID.Load()
-			var lastID string
-			if val != nil {
-				lastID = val.(string)
-			}
-			if lastID != "" && runID != lastID {
-				log.Warn("Redis server restarted", "old_run_id", lastID, "new_run_id", runID)
-				atomic.StoreInt64(&hasRestarted, 1)
-			}
-			lastSeenRunID.Store(runID)
-		}
-		return nil
-	}
-
 	client := redis.NewClient(opts)
 
 	c := Connection{

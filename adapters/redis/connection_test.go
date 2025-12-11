@@ -2,14 +2,10 @@ package redis
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"net"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 // MockRedisServer is a simple TCP server that mimics enough of Redis to satisfy go-redis
@@ -136,93 +132,4 @@ func (s *MockRedisServer) Stop() {
 		return true
 	})
 	s.wg.Wait()
-}
-
-func TestRedisRestartDetection(t *testing.T) {
-	// Reset globals
-	atomic.StoreInt64(&hasRestarted, 0)
-	lastSeenRunID.Store("")
-	if connection != nil {
-		CloseConnection()
-	}
-
-	// Start Mock Redis 1
-	s1, err := NewMockRedisServer(0, "run_id_11111")
-	if err != nil {
-		t.Fatalf("Failed to start mock redis 1: %v", err)
-	}
-	port := s1.port
-
-	// Connect
-	opts := Options{
-		Address: fmt.Sprintf("localhost:%d", port),
-	}
-	conn, err := OpenConnection(opts)
-	if err != nil {
-		s1.Stop()
-		t.Fatalf("Failed to open connection: %v", err)
-	}
-
-	// Trigger a command to ensure connection and OnConnect is called
-	ctx := context.Background()
-	conn.Client.Ping(ctx)
-
-	// Give a moment for OnConnect goroutine/callback to finish
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify initial state
-	if atomic.LoadInt64(&hasRestarted) != 0 {
-		t.Errorf("Expected hasRestarted to be 0, got %d", atomic.LoadInt64(&hasRestarted))
-	}
-
-	val := lastSeenRunID.Load()
-	if val == nil || val.(string) != "run_id_11111" {
-		t.Errorf("Expected lastSeenRunID to be run_id_11111, got %v", val)
-	}
-
-	// Stop Server 1
-	s1.Stop()
-
-	// Start Server 2 on same port with different RunID
-	s2, err := NewMockRedisServer(port, "run_id_22222")
-	if err != nil {
-		t.Fatalf("Failed to start mock redis 2: %v", err)
-	}
-	defer s2.Stop()
-
-	// Trigger command to force reconnect
-	// Loop until success or timeout
-	timeout := time.After(2 * time.Second)
-	reconnected := false
-	for {
-		select {
-		case <-timeout:
-			t.Fatal("Timeout waiting for reconnection")
-		default:
-		}
-
-		err := conn.Client.Ping(ctx).Err()
-		if err == nil {
-			reconnected = true
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	if !reconnected {
-		t.Fatal("Failed to reconnect")
-	}
-
-	// Give a moment for OnConnect
-	time.Sleep(200 * time.Millisecond)
-
-	// Verify restarted detected
-	if atomic.LoadInt64(&hasRestarted) != 1 {
-		t.Errorf("Expected hasRestarted to be 1, got %d", atomic.LoadInt64(&hasRestarted))
-	}
-
-	val = lastSeenRunID.Load()
-	if val == nil || val.(string) != "run_id_22222" {
-		t.Errorf("Expected lastSeenRunID to be run_id_22222, got %v", val)
-	}
 }

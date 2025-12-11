@@ -334,3 +334,67 @@ var dbOpts = new DatabaseOptions
 
 var db = new Database(dbOpts);
 ```
+
+## Concurrent Transactions Example
+
+SOP supports concurrent access from multiple threads or processes. The library handles conflict detection and merging automatically.
+
+**Important**: Pre-seed the B-Tree with at least one item in a separate transaction before launching concurrent workers.
+
+```csharp
+using Sop;
+using System.Threading;
+using System.Threading.Tasks;
+
+// 1. Setup & Pre-seed
+using var ctx = new Context();
+
+// Option A: Standalone (Local Disk, In-Memory Cache)
+var db = new Database(new DatabaseOptions { 
+    StoresFolders = new List<string> { "./sop_data" },
+    Type = (int)DatabaseType.Standalone 
+});
+
+// Option B: Clustered (Redis Cache) - Required for distributed swarm
+// var db = new Database(new DatabaseOptions { 
+//     StoresFolders = new List<string> { "./sop_data" },
+//     Type = (int)DatabaseType.Clustered 
+// });
+
+using (var trans = db.BeginTransaction(ctx))
+{
+    var btree = db.NewBtree<int, string>(ctx, "concurrent_tree", trans);
+    btree.Add(ctx, new Item<int, string> { Key = -1, Value = "Root Seed" });
+    trans.Commit();
+}
+
+// 2. Launch Threads
+Parallel.For(0, 5, i => 
+{
+    int threadId = i;
+    int retryCount = 0;
+    bool committed = false;
+    
+    while (!committed && retryCount < 10)
+    {
+        try 
+        {
+            using var trans = db.BeginTransaction(ctx);
+            var btree = db.OpenBtree<int, string>(ctx, "concurrent_tree", trans);
+
+            for (int j = 0; j < 100; j++)
+            {
+                int key = (threadId * 100) + j;
+                btree.Add(ctx, new Item<int, string> { Key = key, Value = $"Thread {threadId} - Item {j}" });
+            }
+            trans.Commit();
+            committed = true;
+        }
+        catch
+        {
+            retryCount++;
+            Thread.Sleep(100 * retryCount);
+        }
+    }
+});
+```
