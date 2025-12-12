@@ -63,9 +63,15 @@ python3 examples/basic_demo.py
 ```
 
 **Concurrent Transactions (Standalone):**
-This demo shows how to run concurrent transactions without a Redis dependency.
+This demo shows how to run concurrent transactions without a Redis dependency. It simulates real-world scenarios by introducing a small random sleep interval (jitter) between batch transactions to mimic network latency and reduce contention.
 ```bash
 python3 examples/concurrent_demo_standalone.py
+```
+
+**Concurrent Transactions (Clustered):**
+This demo shows how to run concurrent transactions in a distributed environment (requires Redis). Similar to the standalone demo, it uses jitter to simulate realistic commit timing across different machines in a cluster.
+```bash
+python3 examples/concurrent_demo.py
 ```
 
 **Vector Search:**
@@ -140,6 +146,7 @@ with db.begin_transaction(ctx) as tx:
     # --- 5. B-Tree Store (Key-Value) ---
     # Open a B-Tree named "users"
     # Use new_btree to create a new store, or open_btree for existing ones.
+    # BtreeOptions.name is optional if you pass the name directly to new_btree.
     btree = db.new_btree(ctx, "users", tx)
     
     # Add a Key-Value pair

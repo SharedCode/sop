@@ -4,14 +4,14 @@ import threading
 import time
 import random
 import logging
+import shutil
 
 # Add parent directory to path to import sop
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sop.context import Context
 from sop.database import Database, DatabaseOptions, DatabaseType
-from sop.transaction import TransactionMode
-from sop.btree import Item, PagingInfo, BtreeError
+from sop.btree import Item
 from sop import Logger, LogLevel
 
 def worker(ctx, db, store_name, thread_id, items_per_thread):
@@ -28,11 +28,14 @@ def worker(ctx, db, store_name, thread_id, items_per_thread):
             t = db.begin_transaction(ctx)
             btree = db.open_btree(ctx, store_name, t)            
             
+            batch = []
             for j in range(items_per_thread):
                 # Unique keys per thread -> No conflicts, SOP merges changes
                 key = (thread_id * items_per_thread) + j                
-                if not btree.add(ctx, Item(key=key, value=f"Thread {thread_id} - Item {j}")):
-                    print(f"Thread {thread_id} add failed for key {key}")
+                batch.append(Item(key=key, value=f"Thread {thread_id} - Item {j}"))
+            
+            if not btree.add(ctx, batch):
+                raise Exception(f"Thread {thread_id} failed to write batch (add returned False)")
             
             t.commit(ctx)
             committed = True
@@ -54,10 +57,12 @@ def main():
     print("This runs in Standalone mode (no Redis required).")
     
     db_path = "data/concurrent_demo_standalone_py"
+    if os.path.exists(db_path):
+        shutil.rmtree(db_path)
     store_name = "concurrent_tree"
 
     # Turn SOP's Debug level logging.
-    Logger.configure(LogLevel.Debug)
+    Logger.configure(LogLevel.Warn)
 
     ctx = Context()
     db = Database(DatabaseOptions(
@@ -74,8 +79,8 @@ def main():
     t_setup.commit(ctx)
     
     threads = []
-    thread_count = 10
-    items_per_thread = 200
+    thread_count = 30
+    items_per_thread = 300
     
     print(f"Launching {thread_count} threads, {items_per_thread} items each...")
     
@@ -83,6 +88,8 @@ def main():
         t = threading.Thread(target=worker, args=(ctx, db, store_name, i, items_per_thread))
         threads.append(t)
         t.start()
+        # Jitter to simulate more realistic real life scenario on transactions running in the cluster.
+        time.sleep(random.randint(20, 500) / 1000.0)
         
     for t in threads:
         t.join()

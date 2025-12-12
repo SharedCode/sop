@@ -85,14 +85,9 @@ func (c client) DualLock(ctx context.Context, duration time.Duration, lockKeys [
 	// Verify lock acquisition
 	isLocked, err := c.IsLocked(ctx, lockKeys)
 	if err != nil {
-		// If verification fails, we should probably unlock to be safe, or just return error.
-		_ = c.Unlock(ctx, lockKeys)
 		return false, sop.NilUUID, err
 	}
 	if !isLocked {
-		// If IsLocked returns false, it means we lost the lock.
-		// Unlock just in case (though IsLocked saying false implies we might not own it or it expired).
-		_ = c.Unlock(ctx, lockKeys)
 		return false, sop.NilUUID, nil
 	}
 	return true, sop.NilUUID, nil

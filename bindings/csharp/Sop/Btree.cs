@@ -8,13 +8,34 @@ namespace Sop;
 public class BtreeOptions
 {
     [JsonPropertyName("name")]
-    public string Name { get; set; }
+    public string Name { get; set; } = "";
 
     [JsonPropertyName("is_unique")]
-    public bool IsUnique { get; set; } = true;
+    public bool IsUnique { get; set; } = false;
 
     [JsonPropertyName("is_primitive_key")]
-    public bool IsPrimitiveKey { get; set; }
+    public bool IsPrimitiveKey { get; set; } = true;
+
+    [JsonPropertyName("slot_length")]
+    public int SlotLength { get; set; } = 500;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = "";
+
+    [JsonPropertyName("is_value_data_in_node_segment")]
+    public bool IsValueDataInNodeSegment { get; set; } = true;
+
+    [JsonPropertyName("is_value_data_actively_persisted")]
+    public bool IsValueDataActivelyPersisted { get; set; } = false;
+
+    [JsonPropertyName("is_value_data_globally_cached")]
+    public bool IsValueDataGloballyCached { get; set; } = false;
+
+    [JsonPropertyName("leaf_load_balancing")]
+    public bool LeafLoadBalancing { get; set; } = false;
+
+    [JsonPropertyName("cache_config")]
+    public CacheConfig CacheConfig { get; set; }
 
     [JsonPropertyName("index_specification")]
     public string IndexSpecification { get; set; }
@@ -35,6 +56,56 @@ public class BtreeOptions
     {
         Name = name;
     }
+
+    public void SetValueDataSize(ValueDataSize s)
+    {
+        if (s == ValueDataSize.Medium)
+        {
+            IsValueDataActivelyPersisted = false;
+            IsValueDataGloballyCached = true;
+            IsValueDataInNodeSegment = false;
+        }
+        else if (s == ValueDataSize.Big)
+        {
+            IsValueDataActivelyPersisted = true;
+            IsValueDataGloballyCached = false;
+            IsValueDataInNodeSegment = false;
+        }
+    }
+}
+
+public enum ValueDataSize
+{
+    Small = 0,
+    Medium = 1,
+    Big = 2
+}
+
+public class CacheConfig
+{
+    [JsonPropertyName("registry_cache_duration")]
+    public int RegistryCacheDuration { get; set; } = 10;
+
+    [JsonPropertyName("is_registry_cache_ttl")]
+    public bool IsRegistryCacheTtl { get; set; } = false;
+
+    [JsonPropertyName("node_cache_duration")]
+    public int NodeCacheDuration { get; set; } = 5;
+
+    [JsonPropertyName("is_node_cache_ttl")]
+    public bool IsNodeCacheTtl { get; set; } = false;
+
+    [JsonPropertyName("store_info_cache_duration")]
+    public int StoreInfoCacheDuration { get; set; } = 5;
+
+    [JsonPropertyName("is_store_info_cache_ttl")]
+    public bool IsStoreInfoCacheTtl { get; set; } = false;
+
+    [JsonPropertyName("value_data_cache_duration")]
+    public int ValueDataCacheDuration { get; set; } = 0;
+
+    [JsonPropertyName("is_value_data_cache_ttl")]
+    public bool IsValueDataCacheTtl { get; set; } = false;
 }
 
 public class IndexFieldSpecification

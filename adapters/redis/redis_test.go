@@ -55,8 +55,8 @@ func TestBasicUse(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 
-	_, err = c.GetStruct(ctx, "fooBar", &user)
-	if err == nil {
+	found, err := c.GetStruct(ctx, "fooBar", &user)
+	if found {
 		t.Error("Struct foo still exists after delete.")
 	}
 }

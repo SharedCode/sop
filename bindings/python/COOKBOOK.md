@@ -18,8 +18,9 @@ db = sop.Database(sop.DatabaseOptions(stores_folders=["/tmp/sop_data"]))
 # 2. Run Transaction
 with db.begin_transaction(ctx) as t:
     # Open/Create Store "users"
-    bo = btree.BtreeOptions("users")
-    store = db.new_btree(ctx, "users", t, bo)
+    # BtreeOptions is optional if you just want default settings.
+    # You can pass the name directly to new_btree.
+    store = db.new_btree(ctx, "users", t)
 
     # Add Data
     for i in range(1000):
@@ -50,11 +51,9 @@ def transfer_funds(ctx, db, from_id, to_id, amount):
     # Start a transaction on the database
     with db.begin_transaction(ctx) as t:
         # Open both stores in the SAME transaction
-        acct_opts = btree.BtreeOptions("accounts")
-        accounts = db.new_btree(ctx, "accounts", t, acct_opts)
-
-        log_opts = btree.BtreeOptions("logs")
-        logs = db.new_btree(ctx, "logs", t, log_opts)
+        # BtreeOptions is optional, name can be passed directly
+        accounts = db.new_btree(ctx, "accounts", t)
+        logs = db.new_btree(ctx, "logs", t)
 
         # 1. Deduct from Sender
         if accounts.find(ctx, from_id):

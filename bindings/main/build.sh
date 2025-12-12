@@ -8,6 +8,12 @@ unset CC
 go build -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib *.go
 cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop/
+# For testing in Examples.
+cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop.Examples/libjsondb.dylib
+cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop.Examples/libjsondb.h
+rm -rf ../csharp/Sop.Examples/bin
+rm -rf ../csharp/Sop.Examples/obj
+rm -rf ../csharp/Sop.Examples/data
 
 echo "Building AMD64 windows"
 

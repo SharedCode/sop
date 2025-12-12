@@ -8,6 +8,7 @@ import (
 	"time"
 
 	log "log/slog"
+
 	"github.com/sharedcode/sop"
 )
 
@@ -200,8 +201,8 @@ func (c *L2InMemoryCache) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID
 	locks := make([]*sop.LockKey, len(keys))
 	for i, k := range keys {
 		locks[i] = &sop.LockKey{
-			Key:    c.FormatLockKey(fmt.Sprintf("%s:%v", k.First, k.Second)),
-			LockID: sop.NewUUID(),
+			Key:    c.FormatLockKey(k.First),
+			LockID: k.Second,
 		}
 	}
 	return locks
@@ -323,14 +324,9 @@ func (c *L2InMemoryCache) DualLock(ctx context.Context, duration time.Duration, 
 	// Verify lock acquisition
 	isLocked, err := c.IsLocked(ctx, lockKeys)
 	if err != nil {
-		// If verification fails, we should probably unlock to be safe, or just return error.
-		_ = c.Unlock(ctx, lockKeys)
 		return false, sop.NilUUID, err
 	}
 	if !isLocked {
-		// If IsLocked returns false, it means we lost the lock.
-		// Unlock just in case (though IsLocked saying false implies we might not own it or it expired).
-		_ = c.Unlock(ctx, lockKeys)
 		return false, sop.NilUUID, nil
 	}
 	return true, sop.NilUUID, nil

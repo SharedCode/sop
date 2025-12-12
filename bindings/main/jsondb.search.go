@@ -32,6 +32,31 @@ type SearchQueryPayload struct {
 	Query string `json:"query"`
 }
 
+func getSearchStore(targetIDStr string) (*search.Index, error) {
+	var meta map[string]string
+	if err := json.Unmarshal([]byte(targetIDStr), &meta); err != nil {
+		return nil, fmt.Errorf("invalid store metadata: %v", err)
+	}
+	transUUID, err := sop.ParseUUID(meta[KeyMetaTransactionID])
+	if err != nil {
+		return nil, fmt.Errorf("invalid transaction UUID: %v", err)
+	}
+	storeUUID, err := sop.ParseUUID(meta[KeyMetaID])
+	if err != nil {
+		return nil, fmt.Errorf("invalid store UUID: %v", err)
+	}
+
+	obj, ok := transRegistry.GetBtree(transUUID, storeUUID)
+	if !ok {
+		return nil, fmt.Errorf("Search Index not found in transaction")
+	}
+	store, ok := obj.(*search.Index)
+	if !ok {
+		return nil, fmt.Errorf("object is not a Search Index")
+	}
+	return store, nil
+}
+
 //export manageSearch
 func manageSearch(ctxID C.longlong, action C.int, targetID *C.char, payload *C.char) *C.char {
 	ctx := getContext(ctxID)
@@ -42,35 +67,9 @@ func manageSearch(ctxID C.longlong, action C.int, targetID *C.char, payload *C.c
 	targetIDStr := C.GoString(targetID)
 	jsonPayload := C.GoString(payload)
 
-	// Helper to get store from metadata
-	getStore := func() (*search.Index, error) {
-		var meta map[string]string
-		if err := json.Unmarshal([]byte(targetIDStr), &meta); err != nil {
-			return nil, fmt.Errorf("invalid store metadata: %v", err)
-		}
-		transUUID, err := sop.ParseUUID(meta[KeyMetaTransactionID])
-		if err != nil {
-			return nil, fmt.Errorf("invalid transaction UUID: %v", err)
-		}
-		storeUUID, err := sop.ParseUUID(meta[KeyMetaID])
-		if err != nil {
-			return nil, fmt.Errorf("invalid store UUID: %v", err)
-		}
-
-		obj, ok := transRegistry.GetBtree(transUUID, storeUUID)
-		if !ok {
-			return nil, fmt.Errorf("Search Index not found in transaction")
-		}
-		store, ok := obj.(*search.Index)
-		if !ok {
-			return nil, fmt.Errorf("object is not a Search Index")
-		}
-		return store, nil
-	}
-
 	switch int(action) {
 	case SearchAdd:
-		store, err := getStore()
+		store, err := getSearchStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -85,7 +84,7 @@ func manageSearch(ctxID C.longlong, action C.int, targetID *C.char, payload *C.c
 		}
 
 	case SearchSearch:
-		store, err := getStore()
+		store, err := getSearchStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}

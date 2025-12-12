@@ -61,18 +61,12 @@ func main() {
 	if *reverse > 0 {
 		for i := threadCount; i > 0; i-- {
 			wg.Add(1)
-			go func(id int) {
-				defer wg.Done()
-				worker(ctx, id, itemsPerThread, *maxJitter, targetCount)
-			}(i)
+			go runWorker(ctx, &wg, i, itemsPerThread, *maxJitter, targetCount)
 		}
 	} else {
 		for i := 0; i < threadCount; i++ {
 			wg.Add(1)
-			go func(id int) {
-				defer wg.Done()
-				worker(ctx, id, itemsPerThread, *maxJitter, targetCount)
-			}(i)
+			go runWorker(ctx, &wg, i, itemsPerThread, *maxJitter, targetCount)
 		}
 	}
 
@@ -86,6 +80,11 @@ func main() {
 	// Clear Redis cache of our garbage.
 	redis.NewClient().Clear(ctx)
 	redis.CloseConnection()
+}
+
+func runWorker(ctx context.Context, wg *sync.WaitGroup, id int, itemsPerThread int, maxJitter int, targetCount int64) {
+	defer wg.Done()
+	worker(ctx, id, itemsPerThread, maxJitter, targetCount)
 }
 
 func seed(ctx context.Context) {

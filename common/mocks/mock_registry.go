@@ -20,6 +20,9 @@ func NewMockRegistry(inducedErrorOnUpdateAllOrNothing bool) sop.Registry {
 func (v *Mock_vid_registry) Add(ctx context.Context, storesHandles []sop.RegistryPayload[sop.Handle]) error {
 	for _, storeHandles := range storesHandles {
 		for _, h := range storeHandles.IDs {
+			if _, ok := v.Lookup[h.LogicalID]; ok {
+				return fmt.Errorf("handle with ID %v already exists", h.LogicalID)
+			}
 			v.Lookup[h.LogicalID] = h
 		}
 	}

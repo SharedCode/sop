@@ -92,7 +92,7 @@ class BtreeOptions:
     Btree options specify the options available for making a B-tree.
     """
 
-    name: str
+    name: str = ""
     is_unique: bool = False
     slot_length: int = 500
     description: str = ""

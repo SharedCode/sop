@@ -31,6 +31,10 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
+func init() {
+	sop.ConfigureLogging()
+}
+
 var contextLookup map[int64]context.Context = make(map[int64]context.Context)
 var contextLookupLocker sync.Mutex
 var contextLastID int64
@@ -232,25 +236,25 @@ const (
 	Rollback
 )
 
+func extractTransaction(ps string) (*transactionItem, *C.char) {
+	uuid, err := sop.ParseUUID(ps)
+	if err != nil {
+		errMsg := fmt.Sprintf("error parsing UUID, details: %v", err)
+		return nil, C.CString(errMsg)
+	}
+
+	item, ok := transRegistry.GetItem(uuid)
+
+	if !ok {
+		errMsg := fmt.Sprintf("UUID %v not found", uuid.String())
+		return nil, C.CString(errMsg)
+	}
+	return item, nil
+}
+
 //export manageTransaction
 func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char {
 	ps := C.GoString(payload)
-
-	extractTrans := func() (*transactionItem, *C.char) {
-		uuid, err := sop.ParseUUID(ps)
-		if err != nil {
-			errMsg := fmt.Sprintf("error parsing UUID, details: %v", err)
-			return nil, C.CString(errMsg)
-		}
-
-		item, ok := transRegistry.GetItem(uuid)
-
-		if !ok {
-			errMsg := fmt.Sprintf("UUID %v not found", uuid.String())
-			return nil, C.CString(errMsg)
-		}
-		return item, nil
-	}
 
 	var ctx context.Context
 	if int64(ctxID) > 0 {
@@ -266,7 +270,7 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 	case Begin:
 		return C.CString("Begin is deprecated. Transaction is already begun when created via manageDatabase.")
 	case Commit:
-		t, err := extractTrans()
+		t, err := extractTransaction(ps)
 		if err != nil {
 			return err
 		}
@@ -282,7 +286,7 @@ func manageTransaction(ctxID C.longlong, action C.int, payload *C.char) *C.char 
 		transRegistry.Remove(t.Transaction.GetID())
 
 	case Rollback:
-		t, err := extractTrans()
+		t, err := extractTransaction(ps)
 		if err != nil {
 			return err
 		}

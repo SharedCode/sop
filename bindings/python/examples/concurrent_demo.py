@@ -14,7 +14,7 @@ from sop.btree import Item
 from sop.redis import Redis
 from sop import Logger, LogLevel
 
-def worker(thread_id, db, ctx, items_per_thread):
+def worker(ctx, db, store_name, thread_id, items_per_thread):
     # NOTE: No threading.Lock used here.
     # SOP handles transaction isolation and merging.
     
@@ -25,14 +25,17 @@ def worker(thread_id, db, ctx, items_per_thread):
         try:
             # Each thread starts its own transaction
             t = db.begin_transaction(ctx)
-            btree = db.open_btree(ctx, "concurrent_tree", t)            
+            btree = db.open_btree(ctx, store_name, t)            
             
+            batch = []
             for j in range(items_per_thread):
                 # Unique keys per thread -> No conflicts, SOP merges changes
                 key = (thread_id * items_per_thread) + j                
-                if not btree.add(ctx, Item(key=key, value=f"Thread {thread_id} - Item {j}")):
-                    print(f"Thread {thread_id} add failed for key {key}")
+                batch.append(Item(key=key, value=f"Thread {thread_id} - Item {j}"))
             
+            if not btree.add(ctx, batch):
+                raise Exception(f"Thread {thread_id} failed to write batch (add returned False)")
+
             t.commit(ctx)
             committed = True
             print(f"Thread {thread_id} committed. Btree ID: {btree.id}")
@@ -54,9 +57,10 @@ def main():
     
     db_path = "data/concurrent_demo_py"
     
+    store_name = "concurrent_tree"
     Redis.initialize("redis://localhost:6379")
     
-    Logger.configure(LogLevel.Debug)
+    Logger.configure(LogLevel.Warn)
     
     ctx = Context()
     db = Database(DatabaseOptions(
@@ -69,20 +73,22 @@ def main():
     # This prevents race conditions on the very first commit when multiple threads 
     # try to initialize an empty tree simultaneously.
     t_setup = db.begin_transaction(ctx)
-    btree = db.new_btree(ctx, "concurrent_tree", t_setup)
+    btree = db.new_btree(ctx, store_name, t_setup)
     btree.add(ctx, Item(key=-1, value="Root Seed Item"))
     t_setup.commit(ctx)
     
     threads = []
-    thread_count = 5
-    items_per_thread = 100
+    thread_count = 30
+    items_per_thread = 300
     
     print(f"Launching {thread_count} threads, {items_per_thread} items each...")
     
     for i in range(thread_count):
-        t = threading.Thread(target=worker, args=(i, db, ctx, items_per_thread))
+        t = threading.Thread(target=worker, args=(ctx, db, store_name, i, items_per_thread))
         threads.append(t)
         t.start()
+        # Jitter to simulate more realistic real life scenario on transactions running in the cluster.
+        time.sleep(random.randint(20, 500) / 1000.0)
         
     for t in threads:
         t.join()
@@ -91,7 +97,7 @@ def main():
         
     # Verify
     t_read = db.begin_transaction(ctx)
-    btree = db.open_btree(ctx, "concurrent_tree", t_read)
+    btree = db.open_btree(ctx, store_name, t_read)
     print(f"Verify Btree ID: {btree.id}")
     
     count = 0
@@ -112,7 +118,7 @@ def main():
         
     t_read.commit(ctx)
 
-    db.remove_btree(ctx, "concurrent_tree")
+    db.remove_btree(ctx, store_name)
     Redis.close()
 
 if __name__ == "__main__":

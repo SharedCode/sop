@@ -370,7 +370,14 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 			updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes = t.classifyModifiedNodes()
 			t.mergeNodesKeys(ctx, updatedNodes, removedNodes)
 			needsRefetchAndMerge = false
-			continue
+
+			if ok, _, err := t.l2Cache.DualLock(ctx, t.maxTime, t.nodesKeys); !ok || err != nil {
+				// Unlock in case there are those that got locked.
+				t.l2Cache.Unlock(ctx, t.nodesKeys)
+				sop.RandomSleep(ctx)
+				needsRefetchAndMerge = true
+				continue
+			}
 		}
 		//* End: Try to lock all updated & removed nodes before moving forward.
 
@@ -474,7 +481,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 				return fmt.Errorf("phase 1 commit failed, then rollback errored with: %w", rerr)
 			}
 
-			log.Debug("commit failed, refetch, remerge & another commit try will occur after randomSleep")
+			log.Warn("commit failed, refetch, remerge & another commit try will occur after randomSleep")
 
 			needsRefetchAndMerge = true
 			sop.RandomSleep(ctx)
@@ -524,7 +531,10 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 
 	// Ensure that we still hold the locks on the nodes' keys before finalizing the commit.
 	if ok, err := t.nodesKeysNilOrLocked(ctx); !ok || err != nil {
-		return err
+		if ok, _, _ := t.l2Cache.DualLock(ctx, t.maxTime, t.nodesKeys); !ok{
+			log.Warn(fmt.Sprintf("Transaction maxTime(%v), details: %v", t.maxTime, err))
+			return err
+		}
 	}
 
 	log.Debug(fmt.Sprintf("phase 1 commit ends, tid: %v", t.GetID()))

@@ -53,7 +53,7 @@ public class Search
         var resPtr = NativeMethods.ManageSearch(_ctx.Id, (int)SearchAction.Search, targetId, jsonPayload);
         var res = Interop.FromPtr(resPtr);
 
-        if (res == null) return new List<TextSearchResult>();
+        if (res == null || res.Trim() == "null") return new List<TextSearchResult>();
         
         // Check if result is an error message (not JSON array)
         if (!res.Trim().StartsWith("["))

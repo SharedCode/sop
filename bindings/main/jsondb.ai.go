@@ -57,6 +57,56 @@ type VectorQueryOptions struct {
 	Filter map[string]any `json:"filter"` // Simple equality match for now
 }
 
+func getVectorStore(targetIDStr string) (PyVectorStore, error) {
+	var meta map[string]string
+	if err := json.Unmarshal([]byte(targetIDStr), &meta); err != nil {
+		return nil, fmt.Errorf("invalid store metadata: %v", err)
+	}
+	transUUID, err := sop.ParseUUID(meta[KeyMetaTransactionID])
+	if err != nil {
+		return nil, fmt.Errorf("invalid transaction UUID: %v", err)
+	}
+	storeUUID, err := sop.ParseUUID(meta[KeyMetaID])
+	if err != nil {
+		return nil, fmt.Errorf("invalid store UUID: %v", err)
+	}
+
+	obj, ok := transRegistry.GetBtree(transUUID, storeUUID)
+	if !ok {
+		return nil, fmt.Errorf("Vector Store not found in transaction")
+	}
+	store, ok := obj.(PyVectorStore)
+	if !ok {
+		return nil, fmt.Errorf("object is not a Vector Store")
+	}
+	return store, nil
+}
+
+func getModelStore(targetIDStr string) (ai.ModelStore, error) {
+	var meta map[string]string
+	if err := json.Unmarshal([]byte(targetIDStr), &meta); err != nil {
+		return nil, fmt.Errorf("invalid store metadata: %v", err)
+	}
+	transUUID, err := sop.ParseUUID(meta[KeyMetaTransactionID])
+	if err != nil {
+		return nil, fmt.Errorf("invalid transaction UUID: %v", err)
+	}
+	storeUUID, err := sop.ParseUUID(meta[KeyMetaID])
+	if err != nil {
+		return nil, fmt.Errorf("invalid store UUID: %v", err)
+	}
+
+	obj, ok := transRegistry.GetBtree(transUUID, storeUUID)
+	if !ok {
+		return nil, fmt.Errorf("Model Store not found in transaction")
+	}
+	store, ok := obj.(ai.ModelStore)
+	if !ok {
+		return nil, fmt.Errorf("object is not a Model Store")
+	}
+	return store, nil
+}
+
 //export manageVectorDB
 func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C.char) *C.char {
 	ctx := getContext(ctxID)
@@ -67,35 +117,9 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 	targetIDStr := C.GoString(targetID)
 	jsonPayload := C.GoString(payload)
 
-	// Helper to get store from metadata
-	getStore := func() (PyVectorStore, error) {
-		var meta map[string]string
-		if err := json.Unmarshal([]byte(targetIDStr), &meta); err != nil {
-			return nil, fmt.Errorf("invalid store metadata: %v", err)
-		}
-		transUUID, err := sop.ParseUUID(meta[KeyMetaTransactionID])
-		if err != nil {
-			return nil, fmt.Errorf("invalid transaction UUID: %v", err)
-		}
-		storeUUID, err := sop.ParseUUID(meta[KeyMetaID])
-		if err != nil {
-			return nil, fmt.Errorf("invalid store UUID: %v", err)
-		}
-
-		obj, ok := transRegistry.GetBtree(transUUID, storeUUID)
-		if !ok {
-			return nil, fmt.Errorf("Vector Store not found in transaction")
-		}
-		store, ok := obj.(PyVectorStore)
-		if !ok {
-			return nil, fmt.Errorf("object is not a Vector Store")
-		}
-		return store, nil
-	}
-
 	switch int(action) {
 	case UpsertVector:
-		store, err := getStore()
+		store, err := getVectorStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -110,7 +134,7 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		}
 
 	case UpsertBatchVector:
-		store, err := getStore()
+		store, err := getVectorStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -125,7 +149,7 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		}
 
 	case GetVector:
-		store, err := getStore()
+		store, err := getVectorStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -147,7 +171,7 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		return C.CString(string(data))
 
 	case DeleteVector:
-		store, err := getStore()
+		store, err := getVectorStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -158,7 +182,7 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		}
 
 	case QueryVector:
-		store, err := getStore()
+		store, err := getVectorStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -199,7 +223,7 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		return C.CString(string(data))
 
 	case VectorCount:
-		store, err := getStore()
+		store, err := getVectorStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -211,7 +235,7 @@ func manageVectorDB(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		return C.CString(fmt.Sprintf("%d", count))
 
 	case OptimizeVector:
-		store, err := getStore()
+		store, err := getVectorStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -255,35 +279,9 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 	targetIDStr := C.GoString(targetID)
 	jsonPayload := C.GoString(payload)
 
-	// Helper to get store from metadata
-	getStore := func() (ai.ModelStore, error) {
-		var meta map[string]string
-		if err := json.Unmarshal([]byte(targetIDStr), &meta); err != nil {
-			return nil, fmt.Errorf("invalid store metadata: %v", err)
-		}
-		transUUID, err := sop.ParseUUID(meta[KeyMetaTransactionID])
-		if err != nil {
-			return nil, fmt.Errorf("invalid transaction UUID: %v", err)
-		}
-		storeUUID, err := sop.ParseUUID(meta[KeyMetaID])
-		if err != nil {
-			return nil, fmt.Errorf("invalid store UUID: %v", err)
-		}
-
-		obj, ok := transRegistry.GetBtree(transUUID, storeUUID)
-		if !ok {
-			return nil, fmt.Errorf("Model Store not found in transaction")
-		}
-		store, ok := obj.(ai.ModelStore)
-		if !ok {
-			return nil, fmt.Errorf("object is not a Model Store")
-		}
-		return store, nil
-	}
-
 	switch int(action) {
 	case SaveModel:
-		store, err := getStore()
+		store, err := getModelStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -298,7 +296,7 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 		}
 
 	case LoadModel:
-		store, err := getStore()
+		store, err := getModelStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -317,7 +315,7 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 		return C.CString(string(data))
 
 	case ListModels:
-		store, err := getStore()
+		store, err := getModelStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}
@@ -333,7 +331,7 @@ func manageModelStore(ctxID C.longlong, action C.int, targetID *C.char, payload 
 		return C.CString(string(data))
 
 	case DeleteModel:
-		store, err := getStore()
+		store, err := getModelStore(targetIDStr)
 		if err != nil {
 			return C.CString(err.Error())
 		}

@@ -290,12 +290,12 @@ func (t *Transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []int
 	[]sop.Tuple[*sop.StoreInfo, []interface{}],
 	[]sop.Tuple[*sop.StoreInfo, []interface{}]) {
 	var storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
-	for i, s := range t.btreesBackend {
+	for _, s := range t.btreesBackend {
 		var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []interface{}
 		for _, cacheNode := range s.nodeRepository.localCache {
 			// Allow newly created root nodes to get merged between transactions.
 			if s.nodeRepository.count == 0 &&
-				cacheNode.action == addAction && t.btreesBackend[i].getStoreInfo().RootNodeID == cacheNode.node.(btree.MetaDataType).GetID() {
+				cacheNode.action == addAction && s.getStoreInfo().RootNodeID == cacheNode.node.(btree.MetaDataType).GetID() {
 				rootNodes = append(rootNodes, cacheNode.node)
 				continue
 			}
@@ -507,6 +507,7 @@ func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tup
 			lookupByUUID.Update(v, nk)
 			continue
 		} else {
+			log.Warn(fmt.Sprintf("Releasing lock on nodeKey(%v) as not part of new set", nk))
 			// Release the held lock for a node key that we no longer care about.
 			t.l2Cache.Unlock(ctx, []*sop.LockKey{nk})
 		}

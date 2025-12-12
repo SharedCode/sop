@@ -82,12 +82,12 @@ func (c *L1Cache) SetNodeToMRU(ctx context.Context, nodeID sop.UUID, node any, n
 	ba, _ := encoding.BlobMarshaler.Marshal(node)
 	nv := node.(btree.MetaDataType).GetVersion()
 	c.locker.Lock()
+	defer c.locker.Unlock()
 	if v, ok := c.lookup[nodeID]; ok {
 		v.nodeData = ba
 		v.nodeVersion = nv
 		c.mru.remove(v.dllNode)
 		v.dllNode = c.mru.add(nodeID)
-		c.locker.Unlock()
 		return
 	}
 	// Add to MRU cache.
@@ -97,10 +97,8 @@ func (c *L1Cache) SetNodeToMRU(ctx context.Context, nodeID sop.UUID, node any, n
 		nodeVersion: nv,
 		dllNode:     n,
 	}
-	c.locker.Unlock()
-
 	// Evict LRU items if MRU is full.
-	c.Evict()
+	c.mru.evict()
 }
 
 // GetNodeFromMRU returns the node from L1 if the cached version matches the handle version; otherwise it returns nil.
@@ -195,16 +193,22 @@ func (c *L1Cache) DeleteNodes(ctx context.Context, nodesIDs []sop.UUID) (bool, e
 
 // Count returns the number of entries currently stored in the L1 cache.
 func (c *L1Cache) Count() int {
+	c.locker.Lock()
+	defer c.locker.Unlock()
 	return len(c.lookup)
 }
 
 // IsFull reports whether the L1 cache has reached its maximum capacity.
 func (c *L1Cache) IsFull() bool {
+	c.locker.Lock()
+	defer c.locker.Unlock()
 	return c.mru.isFull()
 }
 
 // Evict removes least-recently-used entries until the cache is within capacity.
 func (c *L1Cache) Evict() {
+	c.locker.Lock()
+	defer c.locker.Unlock()
 	c.mru.evict()
 }
 

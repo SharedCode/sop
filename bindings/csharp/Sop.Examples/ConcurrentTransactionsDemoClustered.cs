@@ -10,8 +10,10 @@ namespace Sop.Examples
     {
         public static void Run()
         {
+            const string StoreName = "concurrent_tree";
+
             // Enable verbose logging to stderr for debugging
-            Logger.Configure(LogLevel.Debug, "");
+            Logger.Configure(LogLevel.Warn, "");
 
             // Initialize Redis for Clustered mode
             try
@@ -44,7 +46,7 @@ namespace Sop.Examples
             // try to initialize an empty tree simultaneously.
             using (var trans = db.BeginTransaction(ctx))
             {
-                var btree = db.NewBtree<int, string>(ctx, "concurrent_tree", trans);
+                var btree = db.NewBtree<int, string>(ctx, StoreName, trans);
                 btree.Add(ctx, new Item<int, string> { Key = -1, Value = "Root Seed Item" });
                 trans.Commit();
             }
@@ -55,8 +57,7 @@ namespace Sop.Examples
             int itemsPerThread = 200;
             var threads = new List<Thread>();
 
-            // We use a barrier to start threads roughly at the same time
-            using var barrier = new Barrier(threadCount);
+            var rnd = new Random();
 
             for (int i = 0; i < threadCount; i++)
             {
@@ -65,9 +66,7 @@ namespace Sop.Examples
                 {
                     // Use the shared Context (ctx) like Python does, instead of creating one per thread.
                     // SOP Context is thread-safe for ID retrieval.
-                    
-                    barrier.SignalAndWait();
-                    
+                                        
                     // NOTE: No 'lock' statement used here.
                     // Each thread gets its own Transaction.
                     // SOP manages isolation.
@@ -75,15 +74,16 @@ namespace Sop.Examples
                     
                     int retryCount = 0;
                     bool committed = false;
-                    while (!committed && retryCount < 10)
+                    while (!committed && retryCount < 2)
                     {
                         try 
                         {
                             Console.WriteLine($"Thread {threadId} starting transaction...");
                             using var trans = db.BeginTransaction(ctx);
                             Console.WriteLine($"Thread {threadId} opening btree...");
-                            var btree = db.OpenBtree<int, string>(ctx, "concurrent_tree", trans);
 
+                            List<Item<int, string>> batch = new List<Item<int, string>>(itemsPerThread);
+                            var btree = db.OpenBtree<int, string>(ctx, StoreName, trans);
                             for (int j = 0; j < itemsPerThread; j++)
                             {
                                 // Unique keys per thread ensures no conflicts -> "Data Merge"
@@ -91,7 +91,11 @@ namespace Sop.Examples
                                 // (requiring a retry loop in a real app).
                                 int key = (threadId * itemsPerThread) + j;
                                 Console.WriteLine($"Thread {threadId} adding key {key}...");
-                                btree.Add(ctx, new Item<int, string> { Key = key, Value = $"Thread {threadId} - Item {j}" });
+                                batch.Add(new Item<int, string> { Key = key, Value = $"Thread {threadId} - Item {j}" });
+                            }
+                            if (!btree.Add(ctx, batch))
+                            {                                
+                                Console.WriteLine($"Thread {threadId} failed to write batch");
                             }
 
                             Console.WriteLine($"Thread {threadId} committing...");
@@ -114,6 +118,11 @@ namespace Sop.Examples
                 });
                 threads.Add(thread);
                 thread.Start();
+
+                // Jitter sleep between threads
+                int delay = rnd.Next(20, 500);
+                Console.WriteLine($"Waiting {delay}ms before starting next thread...");
+                Thread.Sleep(delay);
             }
 
             foreach (var t in threads) t.Join();
@@ -121,7 +130,7 @@ namespace Sop.Examples
             // Verify
             using (var trans = db.BeginTransaction(ctx, TransactionMode.ForReading))
             {
-                var btree = db.OpenBtree<int, string>(ctx, "concurrent_tree", trans);
+                var btree = db.OpenBtree<int, string>(ctx, StoreName, trans);
                 
                 long count = 0;
                 if (btree.First(ctx))
@@ -142,7 +151,8 @@ namespace Sop.Examples
                     Console.WriteLine("FAILURE: Count mismatch.");
             }
             
-            db.RemoveBtree(ctx, dbPath);
+            // Cleanup our mess.
+            db.RemoveBtree(ctx, StoreName);
             Redis.Close();
         }
     }
