@@ -14,7 +14,7 @@ import (
 
 func TestPriorityLog_ProcessNewer(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// Setup replication tracker with a temp directory
 	tempDir := t.TempDir()
 	rt, err := NewReplicationTracker(ctx, []string{tempDir}, false, mocks.NewMockClient())
@@ -29,14 +29,14 @@ func TestPriorityLog_ProcessNewer(t *testing.T) {
 	// Define log folder path (internal constant logFolder is "translogs")
 	logDir := filepath.Join(tempDir, "translogs")
 	// Ensure directory exists (pl.Add will create it, but we need it for filepath.Join)
-	
+
 	// Helper to create a priority log file
 	createLog := func(tid sop.UUID, age time.Duration) {
 		payload := []sop.RegistryPayload[sop.Handle]{
 			{RegistryTable: "table", IDs: []sop.Handle{{LogicalID: sop.NewUUID()}}},
 		}
 		ba, _ := encoding.DefaultMarshaler.Marshal(payload)
-		
+
 		// Use pl.Add to create the file
 		if err := pl.Add(ctx, tid, ba); err != nil {
 			t.Fatalf("pl.Add failed: %v", err)

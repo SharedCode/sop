@@ -606,7 +606,7 @@ func (btree *Btree[TK, TV]) IsUnique() bool {
 // unfetchCurrentValue resets the current item's Value to an unfetched state to conserve memory when applicable.
 func (btree *Btree[TK, TV]) unfetchCurrentValue() {
 	if !btree.StoreInfo.IsValueDataInNodeSegment && btree.StoreInfo.IsValueDataActivelyPersisted &&
-		!btree.StoreInfo.IsValueDataGloballyCached && btree.currentItem != nil && 
+		!btree.StoreInfo.IsValueDataGloballyCached && btree.currentItem != nil &&
 		btree.currentItem.Value != nil && btree.currentItem.valueWasFetched {
 		btree.currentItem.Value = nil
 		btree.currentItem.ValueNeedsFetch = true
