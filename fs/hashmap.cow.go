@@ -10,7 +10,7 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-const(
+const (
 	FILE_NOT_FOUND = "no such file or directory"
 )
 

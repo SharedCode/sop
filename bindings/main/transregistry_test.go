@@ -9,9 +9,10 @@ import (
 // MockTransaction is a dummy implementation of sop.Transaction for testing.
 type MockTransaction struct{}
 
-func (m *MockTransaction) Begin(ctx interface{}) error { return nil }
-func (m *MockTransaction) Commit(ctx interface{}) error { return nil }
+func (m *MockTransaction) Begin(ctx interface{}) error    { return nil }
+func (m *MockTransaction) Commit(ctx interface{}) error   { return nil }
 func (m *MockTransaction) Rollback(ctx interface{}) error { return nil }
+
 // Add other methods if required by the interface, but for registry storage, we might not need them.
 // Since we are just storing it, we can cast nil to sop.Transaction or use a simple struct if the interface is large.
 // Actually, let's just use nil for the transaction object in tests as the registry doesn't invoke methods.
@@ -92,7 +93,7 @@ func TestTransRegistry_AddBtree_InvalidTransaction(t *testing.T) {
 func TestTransRegistry_GetBtree_Invalid(t *testing.T) {
 	tr := newTransactionRegistry()
 	transID := tr.Add(nil)
-	
+
 	// Invalid Btree ID
 	_, ok := tr.GetBtree(transID, sop.NewUUID())
 	if ok {

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"os"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/sharedcode/sop"

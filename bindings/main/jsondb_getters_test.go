@@ -438,7 +438,6 @@ func TestBtree_Getters_Coverage_MoveTo_Error(t *testing.T) {
 	}
 }
 
-
 func TestBtree_Getters_ErrorPaths_Extended(t *testing.T) {
 	ctxID := CreateContextForTest()
 	defer RemoveContextForTest(ctxID)
