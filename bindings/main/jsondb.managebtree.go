@@ -38,6 +38,7 @@ const (
 	GetCurrentKey
 	Next
 	Previous
+	GetCurrentValue
 )
 
 // Manage Btree payload struct is used for communication between SOP language binding, e.g. Python,

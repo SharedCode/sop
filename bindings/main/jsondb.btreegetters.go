@@ -73,6 +73,8 @@ func getFromBtree(ctxID C.longlong, action C.int, payload *C.char, payload2 *C.c
 	case GetItems:
 		fallthrough
 	case GetCurrentKey:
+		fallthrough
+	case GetCurrentValue:
 		return get(ctx, int(action), payload, payload2)
 	case GetValues:
 		return getValues(ctx, payload, payload2)
@@ -165,6 +167,8 @@ func get(ctx context.Context, getAction int, payload *C.char, payload2 *C.char) 
 			res, err = b3.GetItems(ctx, payload)
 		case GetCurrentKey:
 			res, err = b3.GetCurrentKey()
+		case GetCurrentValue:
+			res, err = b3.GetCurrentValue(ctx)
 		}
 		if err != nil {
 			errMsg := fmt.Sprintf("error get objects from B-tree (id=%v), details: %v", p.BtreeID, err)
@@ -193,6 +197,8 @@ func get(ctx context.Context, getAction int, payload *C.char, payload2 *C.char) 
 			res, err = b3.GetItems(ctx, payload)
 		case GetCurrentKey:
 			res, err = b3.GetCurrentKey()
+		case GetCurrentValue:
+			res, err = b3.GetCurrentValue(ctx)
 		}
 		if err != nil {
 			errMsg := fmt.Sprintf("error get objects from B-tree (id=%v), details: %v", p.BtreeID, err)

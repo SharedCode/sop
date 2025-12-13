@@ -164,6 +164,7 @@ class BtreeAction(Enum):
     GetCurrentKey = auto()
     Next = auto()
     Previous = auto()
+    GetCurrentValue = auto()
 
 
 class Btree(Generic[TK, TV]):
@@ -300,6 +301,15 @@ class Btree(Generic[TK, TV]):
         GetCurrentKey returns the current item (Key & Value) where the cursor is positioned.
         """
         items = self._get(ctx, BtreeAction.GetCurrentKey.value, PagingInfo())
+        if items and len(items) > 0:
+            return items[0]
+        return None
+
+    def get_current_value(self, ctx: context.Context) -> Item[TK, TV]:
+        """
+        GetCurrentValue returns the current item (Key & Value) where the cursor is positioned.
+        """
+        items = self._get(ctx, BtreeAction.GetCurrentValue.value, PagingInfo())
         if items and len(items) > 0:
             return items[0]
         return None

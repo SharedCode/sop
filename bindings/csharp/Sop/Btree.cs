@@ -171,7 +171,8 @@ internal enum BtreeAction
     UpdateCurrentKey = 17,
     GetCurrentKey = 18,
     Next = 19,
-    Previous = 20
+    Previous = 20,
+    GetCurrentValue = 21
 }
 
 public class PagingInfo
@@ -405,6 +406,41 @@ public class Btree<TK, TV>
         NativeMethods.GetFromBtree(
             ctx.Id, 
             (int)BtreeAction.GetCurrentKey,
+            JsonSerializer.SerializeToUtf8Bytes(metadata),
+            JsonSerializer.SerializeToUtf8Bytes(payload),
+            out IntPtr resultPtr,
+            out IntPtr errorPtr
+        );
+
+        var errorMsg = Interop.FromPtr(errorPtr);
+        if (errorMsg != null) throw new SopException(errorMsg);
+
+        var resultJson = Interop.FromPtr(resultPtr);
+        if (resultJson == null) return null;
+
+        var items = JsonSerializer.Deserialize<List<Item<TK, TV>>>(resultJson);
+        if (items != null && items.Count > 0)
+        {
+            return items[0];
+        }
+        return null;
+    }
+
+    public Item<TK, TV> GetCurrentValue(Context ctx)
+    {
+        var metadata = new ManageBtreeMetaData
+        {
+            IsPrimitiveKey = _isPrimitiveKey,
+            BtreeId = Id.ToString(),
+            TransactionId = TransactionId.ToString()
+        };
+
+        // Payload is not needed for GetCurrentValue but we need to pass something valid or empty
+        var payload = new PagingInfo();
+
+        NativeMethods.GetFromBtree(
+            ctx.Id, 
+            (int)BtreeAction.GetCurrentValue,
             JsonSerializer.SerializeToUtf8Bytes(metadata),
             JsonSerializer.SerializeToUtf8Bytes(payload),
             out IntPtr resultPtr,

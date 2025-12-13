@@ -338,6 +338,17 @@ func (j *JsonDBAnyKey[TK, TV]) GetCurrentKey() (string, error) {
 	return toJsonString([]Item[TK, TV]{itm})
 }
 
+// GetCurrentValue returns the current item's value as a JSON string.
+func (j *JsonDBAnyKey[TK, TV]) GetCurrentValue(ctx context.Context) (string, error) {
+	item, err := j.BtreeInterface.GetCurrentItem(ctx)
+	if err != nil {
+		return "", err
+	}
+	var itm Item[TK, TV]
+	itm.extract(&item)
+	return toJsonString([]Item[TK, TV]{itm})
+}
+
 // toJsonString encodes objects to a JSON string or returns an empty string for empty input.
 func toJsonString[T any](objects []T) (string, error) {
 	if len(objects) == 0 {
