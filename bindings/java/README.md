@@ -82,7 +82,9 @@ Redis.close();
 
 ### 3. Cassandra Backend
 
-SOP can use Apache Cassandra as a backend for storing data blocks (Blob Store), while using Redis for the Registry (locks and metadata).
+SOP integrates with Apache Cassandra to empower it with features it natively lacks, such as full ACID transactions, efficient Blob storage, and Swarm Computing capabilities.
+
+This mode allows organizations to leverage their existing Cassandra infrastructure and Ops teams for managing the **Registry** and its replication. Meanwhile, SOP handles the heavy lifting of data management, providing Erasure Coding-based replication for data blobs and B-Tree nodes.
 
 ```java
 import com.sharedcode.sop.*;
