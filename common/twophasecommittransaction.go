@@ -119,6 +119,11 @@ func (t *Transaction) Begin(ctx context.Context) error {
 		return fmt.Errorf("transaction is done, 'create a new one")
 	}
 	t.phaseDone = 0
+
+	// Service the cleanup of left hanging transactions.
+	// We call this at the beginning to proactively resurrect locks or rollback stale transactions
+	// from previous crashes, ensuring a cleaner state before this transaction starts its work.
+	t.onIdle(ctx)
 	return nil
 }
 
@@ -135,9 +140,6 @@ func (t *Transaction) Close() error {
 // - validates state, takes locks, refetches/merges on contention,
 // - persists value blobs and prepares node mutations without finalizing registry updates.
 func (t *Transaction) Phase1Commit(ctx context.Context) error {
-	// Service the cleanup of left hanging transactions.
-	t.onIdle(ctx)
-
 	if !t.HasBegun() {
 		return fmt.Errorf("no transaction to commit, call Begin to start a transaction")
 	}
