@@ -611,7 +611,7 @@ func (t *Transaction) processPriorityRollbackOnRestart(ctx context.Context) {
 	// If this (standalone!) app restarted, attempt a one-time priority rollback sweep immediately.
 	if t.l2Cache != nil && t.logger != nil && t.logger.PriorityLog().IsEnabled() {
 		if t.onStartUp() {
-			// On restart, sweep all priority logs (ignore age) once.
+			// On restart of standalone app, sweep all priority logs (ignore age) once.
 			log.Info("onIdle: cache restarted or on startup, doing priority rollback check(sweep mode)...")
 			ctxAll := context.WithValue(ctx, sop.ContextPriorityLogIgnoreAge, true)
 			if _, err := t.logger.doPriorityRollbacks(ctxAll, t); err != nil {

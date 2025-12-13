@@ -123,6 +123,9 @@ func (t *Transaction) Begin(ctx context.Context) error {
 	// Service the cleanup of left hanging transactions.
 	// We call this at the beginning to proactively resurrect locks or rollback stale transactions
 	// from previous crashes, ensuring a cleaner state before this transaction starts its work.
+	//
+	// Note: A global coordinator ensures that for the entire cluster, only one process pings the
+	// Redis 'notrestarted' flag and performs the actual lock resurrection service if indeed needed, maximizing efficiency.
 	t.onIdle(ctx)
 	return nil
 }

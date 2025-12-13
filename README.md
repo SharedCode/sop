@@ -246,11 +246,11 @@ Also see Operational caveats: https://github.com/SharedCode/sop/blob/master/READ
 For planned maintenance, see Cluster reboot procedure: [Cluster reboot procedure](#cluster-reboot-procedure).
 
 ### Transaction idle maintenance (onIdle) & priority rollback sweeps
-Each write or read transaction opportunistically invokes an internal onIdle() path after key phases. This lightweight pass performs two independent maintenance tasks:
+Each write or read transaction opportunistically invokes an internal onIdle() path at the start (`Begin()`). This lightweight pass performs two independent maintenance tasks:
 
-1. Priority rollback sweeps: Recovers/rolls back interrupted higher-priority transactions by consulting per‑transaction priority log (.plg) files.
+1. Priority rollback sweeps (Lock Resurrection): Resurrects lost locks for interrupted higher-priority transactions by consulting per‑transaction priority log (.plg) files. This allows transactions to "self-heal" by enabling stale detection and rollback as necessary.
 	- Cluster-wide coordination: This task is coordinated across the entire cluster (or all threads in standalone mode). Only one worker "wins" and performs the sweep at any given time, ensuring no redundant processing. This prevents unnecessary "swarm overload" on these onIdle services.
-	- Restart fast path: On detecting a Redis (L2 cache) restart (run_id change) or on application start (in embedded mode), SOP triggers a one‑time sweep of all priority logs immediately, ignoring age. This accelerates recovery of any half‑committed writes that were waiting for the periodic window.
+	- Restart fast path: On application start (in embedded mode), SOP triggers a one‑time sweep of all priority logs immediately, ignoring age. This accelerates recovery of any half‑committed writes that were waiting for the periodic window. In **Clustered mode**, a global coordinator ensures that only one process in the entire cluster pings the Redis 'notrestarted' flag and performs the actual lock resurrection service if needed.
 	- Periodic path: Absent a restart, one worker periodically processes aged logs. Base interval is 5 minutes. If the previous sweep found work, a shorter 2 minute backoff is used to drain backlog faster. Intervals are governed by two atomically updated globals: lastPriorityOnIdleTime (Unix ms) and priorityLogFound (0/1 flag).
 	- **Rule**: Priority logs older than 5 minutes are considered "abandoned" and are rolled back by this servicer.
 	- Concurrency: A mutex plus atomic timestamp prevents overlapping sweeps; only one goroutine performs a rollback batch at a time even under high Begin() concurrency.
