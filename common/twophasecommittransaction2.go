@@ -530,7 +530,6 @@ var lastOnIdleRunTime int64
 var locker = sync.Mutex{}
 
 var lastPriorityOnIdleTime int64
-var lastResurrectPriorityOnIdleTime int64
 var priorityLocker = sync.Mutex{}
 var priorityLogFound bool
 
@@ -575,7 +574,7 @@ func (t *Transaction) processNewerPriorityLogsLocksResurrection(ctx context.Cont
 	// Check if the token exists. If it does, Redis is healthy (or at least hasn't restarted since we last checked).
 	// We use IsLockedByOthersTTL to check AND extend the TTL, acting as a heartbeat.
 	if ok, err := t.l2Cache.IsLockedByOthersTTL(ctx, []string{t.l2Cache.FormatLockKey(notRestartedToken)}, slideTime); ok {
-		// Token exists, so we assume no restart occurred. We can skip the expensive resurrection pass.
+		// Token exists, so we assume no restart occurred. We can skip the resurrection pass.
 		return
 	} else if err != nil {
 		// If Redis failed then most likely, we will fail as well trying to resurrect the locks, just do nothing.

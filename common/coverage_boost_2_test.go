@@ -753,6 +753,9 @@ func Test_Phase1Commit_LockFailOnce_TriggersRefetchAndMerge(t *testing.T) {
 	if err := tx.Begin(ctx); err != nil {
 		t.Fatalf("begin err: %v", err)
 	}
+	// Reset flipped because Begin -> onIdle might have consumed the failure.
+	l2.flipped = false
+
 	if err := tx.Phase1Commit(ctx); err != nil {
 		t.Fatalf("Phase1Commit err: %v", err)
 	}

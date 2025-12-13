@@ -63,13 +63,6 @@ func Test_RedisRestartDetector_ResurrectsLocks(t *testing.T) {
 		t.Fatalf("Failed to create transaction: %v", err)
 	}
 
-	// Reset the global timer to ensure the check runs.
-	// Note: We are in package common, so we can access this private variable.
-	// Set it to 10 seconds ago.
-	// If restart detected (interval=0), nextRunTime=Now. (Now-10s < Now) -> Runs.
-	// If no restart (interval=300s), nextRunTime=Now-300s. (Now-10s < Now-300s) -> False -> Doesn't run.
-	lastResurrectPriorityOnIdleTime = sop.Now().Add(-10 * time.Second).UnixMilli()
-
 	// 3. Scenario: Restart Detected (Token Missing)
 	// Ensure "notrestarted" key is NOT in L2Cache (default state of mock).
 	ctx := context.Background()
@@ -113,9 +106,6 @@ func Test_RedisRestartDetector_NoResurrectionIfTokenExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create transaction: %v", err)
 	}
-
-	// Reset the global timer
-	lastResurrectPriorityOnIdleTime = sop.Now().Add(-10 * time.Second).UnixMilli()
 
 	// 2. Scenario: No Restart (Token Exists)
 	ctx := context.Background()
