@@ -369,6 +369,9 @@ func (c *alwaysLockFailCache) DualLock(ctx context.Context, d time.Duration, lks
 func (c *alwaysLockFailCache) IsLockedByOthers(ctx context.Context, ks []string) (bool, error) {
 	return c.mocksCache.IsLockedByOthers(ctx, ks)
 }
+func (c *alwaysLockFailCache) IsLockedByOthersTTL(ctx context.Context, ks []string, d time.Duration) (bool, error) {
+	return c.mocksCache.IsLockedByOthersTTL(ctx, ks, d)
+}
 func (c *alwaysLockFailCache) Unlock(ctx context.Context, lks []*sop.LockKey) error { return nil }
 func (c *alwaysLockFailCache) Clear(ctx context.Context) error                      { return c.mocksCache.Clear(ctx) }
 func (c *alwaysLockFailCache) IsRestarted(ctx context.Context) bool {

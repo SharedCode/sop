@@ -157,6 +157,9 @@ func (c *capturingMockCache) IsLockedTTL(ctx context.Context, duration time.Dura
 func (c *capturingMockCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	return c.mock.IsLockedByOthers(ctx, lockKeyNames)
 }
+func (c *capturingMockCache) IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error) {
+	return c.mock.IsLockedByOthersTTL(ctx, lockKeyNames, duration)
+}
 func (c *capturingMockCache) IsRestarted(ctx context.Context) bool {
 	return c.mock.IsRestarted(ctx)
 }

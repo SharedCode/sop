@@ -175,6 +175,7 @@ func Test_Transaction_OnIdle_ProcessesExpired_WhenHourSet(t *testing.T) {
 	ctx := context.Background()
 	tx := &Transaction{btreesBackend: []btreeBackend{{}}}
 	tx.logger = newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	tx.l2Cache = mocks.NewMockClient()
 
 	prevHour := hourBeingProcessed
 	prevLast := lastOnIdleRunTime

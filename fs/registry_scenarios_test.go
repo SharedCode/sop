@@ -114,6 +114,9 @@ func (c *cacheGetError) IsLocked(ctx context.Context, lks []*sop.LockKey) (bool,
 func (c *cacheGetError) IsLockedByOthers(ctx context.Context, ks []string) (bool, error) {
 	return c.base.IsLockedByOthers(ctx, ks)
 }
+func (c *cacheGetError) IsLockedByOthersTTL(ctx context.Context, ks []string, d time.Duration) (bool, error) {
+	return c.base.IsLockedByOthersTTL(ctx, ks, d)
+}
 func (c *cacheGetError) Unlock(ctx context.Context, lks []*sop.LockKey) error {
 	return c.base.Unlock(ctx, lks)
 }

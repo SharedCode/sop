@@ -69,6 +69,9 @@ func (m mockCacheWarn) DualLock(ctx context.Context, d time.Duration, ks []*sop.
 func (m mockCacheWarn) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
 	return m.inner.IsLockedByOthers(ctx, names)
 }
+func (m mockCacheWarn) IsLockedByOthersTTL(ctx context.Context, names []string, d time.Duration) (bool, error) {
+	return m.inner.IsLockedByOthersTTL(ctx, names, d)
+}
 func (m mockCacheWarn) Unlock(ctx context.Context, ks []*sop.LockKey) error {
 	return m.inner.Unlock(ctx, ks)
 }

@@ -148,6 +148,10 @@ func (d dummyPriorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.Registry
 func (d dummyPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	return nil, nil
 }
+
+func (d dummyPriorityLog) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
 func (d dummyPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }

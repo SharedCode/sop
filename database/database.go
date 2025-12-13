@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/adapters/redis"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/incfs"
@@ -32,8 +33,8 @@ func ValidateOptions(config sop.DatabaseOptions) (sop.DatabaseOptions, error) {
 		// Check if Redis adapter is registered.
 		c := sop.GetL2Cache(sop.Redis)
 		if c == nil {
-			// Auto register InMemory L2 Cache.
-			sop.RegisterL2CacheFactory(sop.InMemory, cache.NewL2InMemoryCache)
+			// Auto register Redis L2 Cache.
+			sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
 		}
 	} else if config.CacheType == sop.InMemory {
 		c := sop.GetL2Cache(sop.InMemory)
@@ -53,7 +54,12 @@ func ValidateCassandraOptions(config sop.DatabaseOptions) (sop.DatabaseOptions, 
 	}
 	c := sop.GetL2Cache(sop.Redis)
 	if c == nil {
-		return config, fmt.Errorf("Cassandra mode requires Redis adapter. Please import 'github.com/sharedcode/sop/adapters/redis'")
+		// Auto register Redis L2 Cache.
+		sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
+		c = sop.GetL2Cache(sop.Redis)
+		if c == nil {
+			return config, fmt.Errorf("Cassandra mode requires Redis adapter. Ensure you have initialized Redis connection using the redis.OpenConnection method.")
+		}
 	}
 	config.CacheType = sop.Redis
 	return config, nil

@@ -492,6 +492,9 @@ func (t timeoutPriorityLog) Get(ctx context.Context, tid sop.UUID) ([]sop.Regist
 func (t timeoutPriorityLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	return t.inner.GetBatch(ctx, batchSize)
 }
+func (t timeoutPriorityLog) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
 func (t timeoutPriorityLog) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
@@ -791,6 +794,9 @@ func (p prioNoop) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[
 }
 func (p prioNoop) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	return nil, nil
+}
+func (p prioNoop) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
 }
 func (p prioNoop) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil

@@ -507,7 +507,7 @@ func (t *Transaction) mergeNodesKeys(ctx context.Context, updatedNodes []sop.Tup
 			lookupByUUID.Update(v, nk)
 			continue
 		} else {
-			log.Warn(fmt.Sprintf("Releasing lock on nodeKey(%v) as not part of new set", nk))
+			log.Info(fmt.Sprintf("Releasing lock on nodeKey(%v) as not part of new set", nk))
 			// Release the held lock for a node key that we no longer care about.
 			t.l2Cache.Unlock(ctx, []*sop.LockKey{nk})
 		}
@@ -530,6 +530,7 @@ var lastOnIdleRunTime int64
 var locker = sync.Mutex{}
 
 var lastPriorityOnIdleTime int64
+var lastResurrectPriorityOnIdleTime int64
 var priorityLocker = sync.Mutex{}
 var priorityLogFound bool
 
@@ -556,9 +557,60 @@ func (t *Transaction) onIdle(ctx context.Context) {
 		return
 	}
 
-	// If cache backend restarted, attempt a one-time priority rollback sweep immediately.
+	t.processNewerPriorityLogsLocksResurrection(ctx)
+	t.processPriorityRollbackOnRestart(ctx)
+	t.processScheduledPriorityRollback(ctx)
+	t.processExpiredLogs(ctx)
+}
+
+func (t *Transaction) processNewerPriorityLogsLocksResurrection(ctx context.Context) {
+	// We only support locks' resurrection when in Clustered mode, i.e. - Redis is the L2Cache.
+	if t.l2Cache.GetType() == sop.InMemory {
+		return
+	}
+
+	const notRestartedToken = "notrestarted"
+	const slideTime = 24 * time.Hour
+
+	// Check if the token exists. If it does, Redis is healthy (or at least hasn't restarted since we last checked).
+	// We use IsLockedByOthersTTL to check AND extend the TTL, acting as a heartbeat.
+	if ok, err := t.l2Cache.IsLockedByOthersTTL(ctx, []string{t.l2Cache.FormatLockKey(notRestartedToken)}, slideTime); ok {
+		// Token exists, so we assume no restart occurred. We can skip the expensive resurrection pass.
+		return
+	} else if err != nil {
+		// If Redis failed then most likely, we will fail as well trying to resurrect the locks, just do nothing.
+		log.Warn(fmt.Sprintf("processNewerPriorityLogsLocksResurrection: redis read failed, details: %v", err))
+		return
+	}
+
+	// Token is missing! This implies a Redis restart (or first run).
+	// Attempt to acquire the token to become the coordinator for this resurrection pass.
+	lks := t.l2Cache.CreateLockKeys([]string{notRestartedToken})
+	ok, _, err := t.l2Cache.DualLock(ctx, slideTime, lks)
+	if err != nil {
+		log.Warn(fmt.Sprintf("processNewerPriorityLogsLocksResurrection: redis lock on coordinator('%s') failed, details: %v", notRestartedToken, err))
+		return
+	}
+	if !ok {
+		// Another process won the lock and will handle the resurrection.
+		return
+	}
+
+	log.Info("onIdle: Redis restart detected (or token expired). Doing priority logs' locks resurrection...")
+
+	// We won the lock. Proceed to resurrect locks for all priority logs to ensure isolation.
+	if err := t.logger.resurrectPriorityLogLocks(ctx, t); err != nil {
+		// Trigger a failover if a handler is registered; otherwise, just log path state.
+		if t.HandleReplicationRelatedError != nil {
+			t.HandleReplicationRelatedError(ctx, err, nil, true)
+		}
+	}
+}
+
+func (t *Transaction) processPriorityRollbackOnRestart(ctx context.Context) {
+	// If this (standalone!) app restarted, attempt a one-time priority rollback sweep immediately.
 	if t.l2Cache != nil && t.logger != nil && t.logger.PriorityLog().IsEnabled() {
-		if t.l2Cache.IsRestarted(ctx) || t.onStartUp() {
+		if t.onStartUp() {
 			// On restart, sweep all priority logs (ignore age) once.
 			log.Info("onIdle: cache restarted or on startup, doing priority rollback check(sweep mode)...")
 			ctxAll := context.WithValue(ctx, sop.ContextPriorityLogIgnoreAge, true)
@@ -572,7 +624,9 @@ func (t *Transaction) onIdle(ctx context.Context) {
 			lastPriorityOnIdleTime = sop.Now().UnixMilli()
 		}
 	}
+}
 
+func (t *Transaction) processScheduledPriorityRollback(ctx context.Context) {
 	// Allow only one priority rollback processor.
 	// Check every 5 minutes if there are any pending rollbacks that "aged" (5min or older).
 	interval := priorityRollbackCheckIntervalSeconds
@@ -592,6 +646,7 @@ func (t *Transaction) onIdle(ctx context.Context) {
 		priorityLocker.Unlock()
 		if runTime {
 			log.Info("onIdle: doing scheduled priority rollback check...")
+			// Do the priority rollbacks of aged 5mins & older priority logs.
 			if found, err := t.logger.doPriorityRollbacks(ctx, t); err != nil {
 				// Trigger a failover if a handler is registered; otherwise, just log path state.
 				if t.HandleReplicationRelatedError != nil {
@@ -603,15 +658,17 @@ func (t *Transaction) onIdle(ctx context.Context) {
 			}
 		}
 	}
+}
 
+func (t *Transaction) processExpiredLogs(ctx context.Context) {
 	// If it is known that there is nothing to clean up then do 4hr interval polling,
 	// otherwise do shorter interval of 5 minutes, to allow faster cleanup.
 	// Having "abandoned" commit is a very rare occurrence.
-	interval = cleanupCheckIntervalMinutes
+	interval := cleanupCheckIntervalMinutes
 	if hourBeingProcessed != "" {
 		interval = cleanupQuickCheckIntervalMinutes
 	}
-	nextRunTime = sop.Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
+	nextRunTime := sop.Now().Add(time.Duration(-interval) * time.Minute).UnixMilli()
 	if lastOnIdleRunTime < nextRunTime {
 		runTime := false
 		locker.Lock()

@@ -34,6 +34,9 @@ func (s stubPriorityLogRemoveErr) Get(ctx context.Context, tid sop.UUID) ([]sop.
 func (s stubPriorityLogRemoveErr) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	return nil, nil
 }
+func (s stubPriorityLogRemoveErr) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
 func (s stubPriorityLogRemoveErr) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }

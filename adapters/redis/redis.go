@@ -255,6 +255,34 @@ func (c *client) IsRestarted(ctx context.Context) bool {
 	return atomic.SwapInt64(&hasRestarted, 0) == 1
 }
 
+// IsLockedByOthersTTL checks if the keys are locked by others and extends their TTL if so.
+func (c *client) IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error) {
+	if len(lockKeyNames) == 0 {
+		return false, nil
+	}
+	conn, err := c.getConnection()
+	if err != nil {
+		return false, err
+	}
+	// Use pipeline to check existence and expire in one go.
+	// If EXPIRE returns 1 (true), it existed and TTL was updated.
+	pipe := conn.Client.Pipeline()
+	cmds := make([]*redis.BoolCmd, len(lockKeyNames))
+	for i, k := range lockKeyNames {
+		cmds[i] = pipe.Expire(ctx, k, duration)
+	}
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, cmd := range cmds {
+		if cmd.Val() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func init() {
 	sop.RegisterL2CacheFactory(sop.Redis, NewClient)
 }

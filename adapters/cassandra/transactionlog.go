@@ -248,6 +248,10 @@ func (d dummy) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[
 	return nil, nil
 }
 
+func (d dummy) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
+
 // Log commit changes to its own log file separate than the rest of transaction logs.
 // This is a special log file only used during "reinstate" of drives back for replication.
 func (d dummy) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]) error {

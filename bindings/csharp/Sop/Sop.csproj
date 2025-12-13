@@ -13,15 +13,35 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Text.Json" Version="10.0.0" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="runtimes\**\*.*">
+    <None Include="libjsondb_amd64darwin.dylib">
       <Pack>true</Pack>
-      <PackagePath>runtimes</PackagePath>
+      <PackagePath>runtimes/osx-x64/native/libjsondb.dylib</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    </None>
+    <None Include="libjsondb_amd64linux.so">
+      <Pack>true</Pack>
+      <PackagePath>runtimes/linux-x64/native/libjsondb.so</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="libjsondb_amd64windows.dll">
+      <Pack>true</Pack>
+      <PackagePath>runtimes/win-x64/native/libjsondb.dll</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="libjsondb_arm64darwin.dylib">
+      <Pack>true</Pack>
+      <PackagePath>runtimes/osx-arm64/native/libjsondb.dylib</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="libjsondb_arm64linux.so">
+      <Pack>true</Pack>
+      <PackagePath>runtimes/linux-arm64/native/libjsondb.so</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

@@ -219,6 +219,9 @@ func (m *lockFailingCache) DualLock(ctx context.Context, d time.Duration, lks []
 func (m *lockFailingCache) IsLockedByOthers(ctx context.Context, ks []string) (bool, error) {
 	return m.base.IsLockedByOthers(ctx, ks)
 }
+func (m *lockFailingCache) IsLockedByOthersTTL(ctx context.Context, ks []string, d time.Duration) (bool, error) {
+	return m.base.IsLockedByOthersTTL(ctx, ks, d)
+}
 func (m *lockFailingCache) Unlock(ctx context.Context, lks []*sop.LockKey) error { return nil }
 func (m *lockFailingCache) Clear(ctx context.Context) error                      { return m.base.Clear(ctx) }
 func (m *lockFailingCache) Info(ctx context.Context, section string) (string, error) {

@@ -122,6 +122,9 @@ func (m *mockCacheHashmap) IsLockedTTL(ctx context.Context, d time.Duration, lk 
 func (m *mockCacheHashmap) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
 	return m.base.IsLockedByOthers(ctx, names)
 }
+func (m *mockCacheHashmap) IsLockedByOthersTTL(ctx context.Context, names []string, d time.Duration) (bool, error) {
+	return m.base.IsLockedByOthersTTL(ctx, names, d)
+}
 func (m *mockCacheHashmap) Unlock(ctx context.Context, lk []*sop.LockKey) error {
 	return m.base.Unlock(ctx, lk)
 }

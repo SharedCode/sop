@@ -422,6 +422,9 @@ func (prioRemoveWarn) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayl
 func (prioRemoveWarn) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	return nil, nil
 }
+func (prioRemoveWarn) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
 func (prioRemoveWarn) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
@@ -650,6 +653,9 @@ func (c lockThenIsLockedFalseCache) IsLocked(ctx context.Context, lockKeys []*so
 func (c lockThenIsLockedFalseCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	return c.inner.IsLockedByOthers(ctx, lockKeyNames)
 }
+func (c lockThenIsLockedFalseCache) IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error) {
+	return c.inner.IsLockedByOthersTTL(ctx, lockKeyNames, duration)
+}
 func (c lockThenIsLockedFalseCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return c.inner.Unlock(ctx, lockKeys)
 }
@@ -708,6 +714,9 @@ func (c lockErrorCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (
 }
 func (c lockErrorCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	return c.inner.IsLockedByOthers(ctx, lockKeyNames)
+}
+func (c lockErrorCache) IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error) {
+	return c.inner.IsLockedByOthersTTL(ctx, lockKeyNames, duration)
 }
 func (c lockErrorCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return c.inner.Unlock(ctx, lockKeys)

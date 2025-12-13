@@ -82,6 +82,9 @@ func (p prioLogRemoveErr) Get(ctx context.Context, tid sop.UUID) ([]sop.Registry
 func (p prioLogRemoveErr) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	return nil, nil
 }
+func (p prioLogRemoveErr) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
 func (p prioLogRemoveErr) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
@@ -689,6 +692,10 @@ type lockFailOnceCache struct {
 
 func (c *lockFailOnceCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
 	if !c.flipped {
+		// Only fail if it's not the "notrestarted" key used by onIdle
+		if len(lockKeys) > 0 && strings.Contains(lockKeys[0].Key, "notrestarted") {
+			return c.L2Cache.Lock(ctx, duration, lockKeys)
+		}
 		c.flipped = true
 		return false, sop.NilUUID, nil
 	}

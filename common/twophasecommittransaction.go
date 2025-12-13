@@ -531,7 +531,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 
 	// Ensure that we still hold the locks on the nodes' keys before finalizing the commit.
 	if ok, err := t.nodesKeysNilOrLocked(ctx); !ok || err != nil {
-		if ok, _, _ := t.l2Cache.DualLock(ctx, t.maxTime, t.nodesKeys); !ok{
+		if ok, _, _ := t.l2Cache.DualLock(ctx, t.maxTime, t.nodesKeys); !ok {
 			log.Warn(fmt.Sprintf("Transaction maxTime(%v), details: %v", t.maxTime, err))
 			return err
 		}

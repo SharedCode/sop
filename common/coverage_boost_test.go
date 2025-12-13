@@ -44,6 +44,9 @@ func (r *recPrioLog) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPaylo
 func (r *recPrioLog) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	return nil, nil
 }
+func (r *recPrioLog) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
 func (r *recPrioLog) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
@@ -393,6 +396,9 @@ func (w warnPL) Get(ctx context.Context, tid sop.UUID) ([]sop.RegistryPayload[so
 func (w warnPL) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	return nil, nil
 }
+func (w warnPL) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
 func (w warnPL) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return fmt.Errorf("warn: log commit changes")
 }
@@ -635,6 +641,9 @@ func (p *prioLogBatch) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyVa
 	p.batch = p.batch[1:]
 	return []sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]]{{Key: p.tid, Value: v}}, nil
 }
+func (p *prioLogBatch) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
 func (p *prioLogBatch) LogCommitChanges(ctx context.Context, _ []sop.StoreInfo, _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle], _ []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
@@ -746,6 +755,9 @@ func (m missAfterSetCache) IsLocked(ctx context.Context, lk []*sop.LockKey) (boo
 }
 func (m missAfterSetCache) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
 	return m.base.IsLockedByOthers(ctx, names)
+}
+func (m missAfterSetCache) IsLockedByOthersTTL(ctx context.Context, names []string, d time.Duration) (bool, error) {
+	return m.base.IsLockedByOthersTTL(ctx, names, d)
 }
 func (m missAfterSetCache) IsRestarted(ctx context.Context) bool {
 	return m.base.IsRestarted(ctx)

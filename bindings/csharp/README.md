@@ -340,6 +340,7 @@ var db = new Database(dbOpts);
 SOP supports concurrent access from multiple threads or processes. The library handles conflict detection and merging automatically.
 
 **Important**: Pre-seed the B-Tree with at least one item in a separate transaction before launching concurrent workers.
+> **Note:** This requirement is simply to have at least one item in the tree. It can be a real application item or a dummy seed item.
 
 ```csharp
 using Sop;

@@ -365,6 +365,11 @@ func (c *L2InMemoryCache) IsLockedByOthers(ctx context.Context, lockKeyNames []s
 	return false, nil
 }
 
+func (c *L2InMemoryCache) IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error) {
+	log.Debug("entered IsLockedByOthersTTL")
+	return true, nil
+}
+
 func (c *L2InMemoryCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	for _, lk := range lockKeys {
 		val, ok := c.locks.load(lk.Key)

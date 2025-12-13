@@ -504,6 +504,9 @@ func (c errIsLockedCache13) IsLocked(ctx context.Context, lockKeys []*sop.LockKe
 func (c errIsLockedCache13) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	return c.inner.IsLockedByOthers(ctx, lockKeyNames)
 }
+func (c errIsLockedCache13) IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error) {
+	return c.inner.IsLockedByOthersTTL(ctx, lockKeyNames, duration)
+}
 func (c errIsLockedCache13) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return c.inner.Unlock(ctx, lockKeys)
 }
@@ -572,6 +575,9 @@ func (c errGetExCache13) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) 
 func (c errGetExCache13) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
 	return c.inner.IsLockedByOthers(ctx, lockKeyNames)
 }
+func (c errGetExCache13) IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error) {
+	return c.inner.IsLockedByOthersTTL(ctx, lockKeyNames, duration)
+}
 func (c errGetExCache13) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	return c.inner.Unlock(ctx, lockKeys)
 }
@@ -630,6 +636,9 @@ func (p plGetErr) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePa
 func (p plGetErr) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }
+func (p plGetErr) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
 
 // plRemoveErr returns payload but Remove returns error to propagate.
 type plRemoveErr struct {
@@ -647,6 +656,9 @@ func (p plRemoveErr) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValu
 	return nil, nil
 }
 func (p plRemoveErr) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
+	return nil
+}
+func (p plRemoveErr) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
 	return nil
 }
 

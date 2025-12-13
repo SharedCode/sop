@@ -35,6 +35,8 @@ namespace Sop.Examples
             // IMPORTANT: Pre-seed the B-Tree with one item to establish the root node.
             // This prevents race conditions on the very first commit when multiple threads 
             // try to initialize an empty tree simultaneously.
+            // NOTE: This requirement is simply to have at least one item in the tree.
+            // It can be a real application item or a dummy seed item.
             using (var trans = db.BeginTransaction(ctx))
             {
                 var btree = db.NewBtree<int, string>(ctx, StoreName, trans);

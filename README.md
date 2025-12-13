@@ -33,8 +33,9 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 SOP supports "Swarm Computing" where multiple distributed processes or threads can concurrently modify the same B-Tree without external locks. The library handles ACID transactions, conflict detection, and merging automatically.
 
 **Important Requirement for First Commit:**
-To enable seamless concurrent merging on a newly created B-Tree, you **must pre-seed the B-Tree with at least one item** (e.g., a description or metadata item) in a separate, initial transaction.
+To enable seamless concurrent merging on a newly created B-Tree, you **must pre-seed the B-Tree with at least one item** in a separate, initial transaction.
 - **Why?** This establishes the root node and structure, preventing race conditions that can occur when multiple transactions attempt to initialize an empty tree simultaneously.
+- **Note:** This requirement is simply to have at least one item in the tree. It can be a real application item or a dummy seed item.
 - **Safety:** Your data remains ACID-compliant. This step simply ensures the "first commit" doesn't suffer from a "random drop" race condition where one transaction's initialization overwrites another's.
 - **After this single seed item is committed, the B-Tree is fully ready for high-concurrency "swarm" operations.**
 
@@ -46,6 +47,20 @@ When rebooting an entire cluster running applications that use SOP, follow this 
 3) Reboot hosts if needed (or proceed directly if not).
 4) Start the Redis service(s) first and verify they are healthy.
 5) Start the apps that use SOP.
+
+## Self-Healing & Reliability
+
+SOP includes a robust background servicer that ensures database integrity even in the face of infrastructure failures like Redis restarts.
+
+### Redis Restart Detection & Lock Resurrection
+In **Clustered mode** (using Redis), SOP employs a minimally intrusive "on Redis restart" detector. This mechanism:
+- **Detects Redis Restarts**: Automatically identifies when the Redis cache has restarted or lost volatile data.
+- **Resurrects Locks**: If a transaction was incomplete during a Redis failure, the system automatically "resurrects" the necessary locks for the transaction's priority logs.
+- **Prevents Corruption**: This ensures that the registry sector does not become corrupted due to half-complete transactions.
+- **Self-Healing**: The background servicer automatically handles this lifecycle maintenance, keeping the database "rock solid" without manual intervention.
+
+*Note: This feature is specific to Clustered mode. In **Standalone mode**, the application performs a similar cleanup sweep immediately upon startup.*
+
 
 Notes:
 - SOP relies on Redis for coordination (locks, recovery bookkeeping). Bringing Redis up before SOP apps prevents unnecessary failovers or stale-lock handling during app startup.
@@ -238,12 +253,16 @@ Each write or read transaction opportunistically invokes an internal onIdle() pa
 	- Cluster-wide coordination: This task is coordinated across the entire cluster (or all threads in standalone mode). Only one worker "wins" and performs the sweep at any given time, ensuring no redundant processing. This prevents unnecessary "swarm overload" on these onIdle services.
 	- Restart fast path: On detecting a Redis (L2 cache) restart (run_id change) or on application start (in embedded mode), SOP triggers a one‑time sweep of all priority logs immediately, ignoring age. This accelerates recovery of any half‑committed writes that were waiting for the periodic window.
 	- Periodic path: Absent a restart, one worker periodically processes aged logs. Base interval is 5 minutes. If the previous sweep found work, a shorter 2 minute backoff is used to drain backlog faster. Intervals are governed by two atomically updated globals: lastPriorityOnIdleTime (Unix ms) and priorityLogFound (0/1 flag).
+	- **Rule**: Priority logs older than 5 minutes are considered "abandoned" and are rolled back by this servicer.
 	- Concurrency: A mutex plus atomic timestamp prevents overlapping sweeps; only one goroutine performs a rollback batch at a time even under high Begin() concurrency.
 	- Rationale: Using onIdle piggybacks maintenance on natural transaction flow without a dedicated background goroutine, simplifying embedding into host applications that manage their own scheduling.
 
-2. Expired transaction log cleanup: Removes obsolete commit/rollback artifacts.
+2. Expired transaction log cleanup: Removes obsolete commit/rollback artifacts (B-Tree node pages and data value pages).
 	- Cluster-wide coordination: Like priority sweeps, this task is coordinated cluster-wide. Only one worker wins the right to perform the cleanup for a given interval (regular or accelerated).
-	- If recent activity suggests potential pending cleanup (hourBeingProcessed != ""), a 5m cadence is used; otherwise a 4h cadence minimizes overhead during idle periods. Timing uses an atomic lastOnIdleRunTime.
+	- **Intervals**:
+		- **4 Hours (Default)**: B-Tree nodes and data pages modified in a transaction are temporary until the commit updates the Registry. Since the Registry is the source of truth for ACID transactions, cleaning up these temporary artifacts can be done at a "luxury of time" pace (4 hours) without affecting data integrity.
+		- **5 Minutes (Accelerated)**: If recent activity suggests potential pending cleanup (e.g., known rollbacks), the interval accelerates to 5 minutes to reclaim space faster.
+	- Timing uses an atomic lastOnIdleRunTime.
 
 Thread safety: Earlier versions used unsynchronized globals; these now use atomic loads/stores (sync/atomic) to eliminate race detector warnings when tests force timer rewinds. Tests that manipulate timing (to speed up sweep scenarios) reset the atomic counters instead of writing plain globals.
 

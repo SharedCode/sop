@@ -38,6 +38,9 @@ func (s *stubPriorityLog2) Get(ctx context.Context, tid sop.UUID) ([]sop.Registr
 func (s *stubPriorityLog2) GetBatch(ctx context.Context, batchSize int) ([]sop.KeyValuePair[sop.UUID, []sop.RegistryPayload[sop.Handle]], error) {
 	return nil, nil
 }
+func (s *stubPriorityLog2) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
 func (s *stubPriorityLog2) LogCommitChanges(ctx context.Context, stores []sop.StoreInfo, a, b, c, d []sop.RegistryPayload[sop.Handle]) error {
 	return nil
 }

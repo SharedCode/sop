@@ -70,3 +70,7 @@ func (sr *mockStoreRepository) Remove(ctx context.Context, names ...string) erro
 func (sr *mockStoreRepository) Replicate(ctx context.Context, storesInfo []sop.StoreInfo) error {
 	return nil
 }
+
+func (sr *mockStoreRepository) ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}

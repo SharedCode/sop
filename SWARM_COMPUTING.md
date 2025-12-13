@@ -67,4 +67,6 @@ See the "Concurrent Transactions" examples in our language bindings for practica
 *   **C#**: [Concurrent Demo (Standalone)](bindings/csharp/Sop.Examples/ConcurrentTransactionsDemoStandalone.cs) and [README](bindings/csharp/README.md#concurrent-transactions-example)
 
 ### Practical Tip: The "First Commit" Rule
-To enable seamless concurrent merging on a newly created B-Tree, you **must pre-seed the B-Tree with at least one item** (e.g., a description or metadata item) in a separate, initial transaction. This establishes the root node and structure, preventing race conditions that can occur when multiple transactions attempt to initialize an empty tree simultaneously.
+To enable seamless concurrent merging on a newly created B-Tree, you **must pre-seed the B-Tree with at least one item** in a separate, initial transaction. This establishes the root node and structure, preventing race conditions that can occur when multiple transactions attempt to initialize an empty tree simultaneously.
+
+> **Note:** This requirement is simply to have at least one item in the tree. It can be a real application item or a dummy seed item.

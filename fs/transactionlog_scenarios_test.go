@@ -266,6 +266,9 @@ func (c *cacheIsLockedFalse) DualLock(ctx context.Context, d time.Duration, lk [
 func (c *cacheIsLockedFalse) IsLockedByOthers(ctx context.Context, names []string) (bool, error) {
 	return c.base.IsLockedByOthers(ctx, names)
 }
+func (c *cacheIsLockedFalse) IsLockedByOthersTTL(ctx context.Context, names []string, d time.Duration) (bool, error) {
+	return c.base.IsLockedByOthersTTL(ctx, names, d)
+}
 func (c *cacheIsLockedFalse) Unlock(ctx context.Context, lk []*sop.LockKey) error {
 	return c.base.Unlock(ctx, lk)
 }

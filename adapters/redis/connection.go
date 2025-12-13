@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	log "log/slog"
 
@@ -104,7 +103,6 @@ func CloseConnection() error {
 	return err
 }
 
-var lastSeenRunID atomic.Value
 var hasRestarted int64
 
 // openConnection creates a new redis client connection from options.

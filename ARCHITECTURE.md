@@ -148,6 +148,9 @@ The flow is identical to the above, except **Cassandra** is replaced by the **Fi
 *   **Two-Phase Commit & The "Commit Point"**:
     *   **`inredcfs`**: The commit point is the atomic update of the Registry in **Cassandra**. Once the registry row is updated to point to the new blob location, the transaction is durable.
     *   **`infs`**: The commit point is the atomic update of the Registry hashmap on the **Filesystem**.
+*   **Registry as the Source of Truth**: The Registry is the primary provider and assurer of ACID properties (Isolation, Atomicity).
+    *   **Temporary Artifacts**: B-Tree nodes and data pages modified in a transaction are considered **temporary** until their handles are fully written to the Registry during the commit phase.
+    *   **Lazy Cleanup**: Because these artifacts are not "live" until registered, their cleanup (garbage collection) can be performed at a "luxury of time" pace (defaulting to a 4-hour interval), reducing system overhead without compromising data integrity.
 
 ## Deployment Modes
 
@@ -195,4 +198,26 @@ SOP uses **Redis** (in distributed mode) to manage transaction locks. The key de
     *   *Example*: If you have `keyspaceA.users` and `keyspaceB.users`, a transaction on `keyspaceA` acquires a lock on `keyspaceA:users`. It will **never** block `keyspaceB`.
 
 This architecture ensures that SOP can host thousands of independent databases (tenants) on the same infrastructure without lock contention between them.
+
+## Reliability & Self-Healing
+
+SOP incorporates advanced mechanisms to ensure data integrity and system stability, particularly in distributed environments where infrastructure components like Redis may restart or fail.
+
+### Redis Restart Detection (Clustered Mode)
+
+In Clustered mode, SOP relies on Redis for transaction locking and coordination. A Redis restart could potentially lose volatile lock information, leaving transactions in an indeterminate state. To mitigate this, SOP implements a **"Not Restarted" Token** mechanism:
+
+1.  **The Token**: A special volatile key (`notrestarted`) is maintained in Redis with a sliding expiration (TTL).
+2.  **Detection**: The background servicer (`onIdle`) periodically checks for this token.
+    *   **Presence**: If the token exists, Redis is stable.
+    *   **Absence**: If the token is missing (e.g., after a restart), the system infers a potential restart event.
+3.  **Action**: Upon detecting a restart, the system triggers a **Lock Resurrection** process. It scans for incomplete transactions (via Priority Logs) and re-acquires the necessary locks to allow those transactions to either complete or roll back safely.
+
+### Transaction Lifecycle Management
+
+*   **Clustered Mode**: The background servicer continuously monitors for "dead" transactions and Redis restarts, ensuring that locks are restored and incomplete transactions are resolved without corrupting the registry.
+*   **Standalone Mode**: Since there is no external Redis dependency, the application performs a comprehensive **Priority Rollback Sweep** immediately upon startup. This cleans up any transactions that were interrupted by a previous application crash.
+
+This multi-layered approach ensures that SOP databases remain "rock solid" and self-healing, minimizing the need for manual administrative intervention.
+
 

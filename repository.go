@@ -84,6 +84,9 @@ type TransactionPriorityLog interface {
 	// GetBatch fetches up to batchSize of the oldest (older than 2 minutes) priority logs for processing.
 	GetBatch(ctx context.Context, batchSize int) ([]KeyValuePair[UUID, []RegistryPayload[Handle]], error)
 
+	// ProcessNewer iterates over all priority logs newer than 5 mins and invokes the processor callback for each.
+	ProcessNewer(ctx context.Context, processor func(tid UUID, payload []RegistryPayload[Handle]) error) error
+
 	// LogCommitChanges writes a special commit-change log used during drive reinstate for replication.
 	LogCommitChanges(ctx context.Context, stores []StoreInfo, newRootNodesHandles, addedNodesHandles, updatedNodesHandles, removedNodesHandles []RegistryPayload[Handle]) error
 }
@@ -200,6 +203,8 @@ type L2Cache interface {
 	IsLocked(ctx context.Context, lockKeys []*LockKey) (bool, error)
 	// IsLockedByOthers reports whether the keys are locked by other processes.
 	IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error)
+	// IsLockedByOthersTTL reports whether the keys are locked by other processes and refreshes TTL with the provided duration.
+	IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error)
 	// Unlock releases a set of keys.
 	Unlock(ctx context.Context, lockKeys []*LockKey) error
 

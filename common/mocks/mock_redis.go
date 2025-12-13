@@ -187,6 +187,10 @@ func (m *mockRedis) IsLockedByOthers(ctx context.Context, lockKeyNames []string)
 	return true, nil
 }
 
+func (m *mockRedis) IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error) {
+	return m.IsLockedByOthers(ctx, lockKeyNames)
+}
+
 func (m *mockRedis) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
 	for _, lk := range lockKeys {
 		if !lk.IsLockOwner {

@@ -415,6 +415,7 @@ with db.begin_transaction(ctx) as t:
 SOP supports "Swarm Computing" where multiple threads or processes can modify the same B-Tree concurrently without external locks. SOP handles conflict detection and merging automatically.
 
 **Important**: You must pre-seed the B-Tree with at least one item in a separate transaction before launching concurrent workers. This establishes the root node and prevents race conditions during initialization.
+> **Note:** This requirement is simply to have at least one item in the tree. It can be a real application item or a dummy seed item.
 
 ```python
 import threading

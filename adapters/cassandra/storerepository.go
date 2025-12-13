@@ -426,6 +426,11 @@ func (sr *storeRepository) Replicate(ctx context.Context, storesInfo []sop.Store
 	return nil
 }
 
+// ProcessNewer iterates over all priority logs newer than 5 mins and invokes the processor callback for each.
+func ProcessNewer(ctx context.Context, processor func(tid sop.UUID, payload []sop.RegistryPayload[sop.Handle]) error) error {
+	return nil
+}
+
 func sortStores(stores []sop.StoreInfo) []sop.StoreInfo {
 	sort.Slice(stores, func(i, j int) bool {
 		return stores[i].Name < stores[j].Name

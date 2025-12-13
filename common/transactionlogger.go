@@ -50,6 +50,9 @@ const (
 	// coordinatorLockName is the global coordinator lock used to serialize
 	// priority rollbacks across the cluster.
 	coordinatorLockName = "Prbs"
+	// resurrectLogLocksCoordinatorLockName is the global coordinator lock used to serialize
+	// priority logs' lock resurrection across the cluster.
+	resurrectLogLocksCoordinatorLockName = "Prbl"
 )
 
 // Instantiate a transaction logger.
@@ -110,6 +113,55 @@ func (tl *transactionLog) processExpiredTransactionLogs(ctx context.Context, t *
 		return nil
 	}
 	return tl.rollback(ctx, t, tid, committedFunctionLogs)
+}
+
+// resurrectPriorityLogLocks iterates all priority logs and re-acquires locks for their handles.
+// This ensures that if Redis lost locks (e.g. restart), they are restored so that
+// "self-heal" or standard rollback can function correctly.
+func (tl *transactionLog) resurrectPriorityLogLocks(ctx context.Context, t *Transaction) error {
+	lk := t.l2Cache.CreateLockKeys([]string{t.l2Cache.FormatLockKey(resurrectLogLocksCoordinatorLockName)})
+	const maxDuration = 5 * time.Minute
+
+	ok1, _, _ := t.l2Cache.DualLock(ctx, maxDuration, lk)
+	if !ok1 {
+		if err := tl.waitForCoordinatorRelease(ctx, t, resurrectLogLocksCoordinatorLockName, maxDuration); err != nil {
+			return err
+		}
+		return nil
+	}
+	defer t.l2Cache.Unlock(ctx, lk)
+
+	return tl.PriorityLog().ProcessNewer(ctx, func(tid sop.UUID, handles []sop.RegistryPayload[sop.Handle]) error {
+		// Attempt to re-acquire locks.
+		// If the transaction is alive and holds them, this is re-entrant/no-op.
+		// If Redis restarted, this restores the lock.
+		lks, err := tl.acquireLocks(ctx, t, tid, handles)
+		if err != nil {
+			// Log warning but continue processing other logs.
+			log.Warn(fmt.Sprintf("resurrectPriorityLogLocks: failed to acquire locks for %v: %v", tid, err))
+			return nil
+		}
+
+		reqIDs := sop.ExtractLogicalIDs(handles)
+		if cuhAndrh, err := t.registry.Get(ctx, reqIDs); err != nil {
+			log.Info(fmt.Sprintf("error reading (partly expected) current registry sector values for transaction %s, err details: %v", tid.String(), err))
+		} else {
+			for i := range handles {
+				for ii := range handles[i].IDs {
+					if !(handles[i].IDs[ii].Version == cuhAndrh[i].IDs[ii].Version || handles[i].IDs[ii].Version+1 == cuhAndrh[i].IDs[ii].Version) {
+						t.l2Cache.Unlock(ctx, lks)
+						// Version in Registry had gone past the value we can repair, 'just trigger a failover.
+						return sop.Error{
+							Code:     sop.RestoreRegistryFileSectorFailure,
+							Err:      fmt.Errorf("version in Registry had gone past the value we can repair, 'just trigger a failover"),
+							UserData: tid,
+						}
+					}
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func (tl *transactionLog) doPriorityRollbacks(ctx context.Context, t *Transaction) (bool, error) {
