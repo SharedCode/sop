@@ -1,9 +1,52 @@
 #!/bin/bash
 set -e
 
-echo "--- Building Go Bridge ---"
+echo "--- Building Go Bridge (Local) ---"
 cd bindings/main
-./build.sh
+
+OS=$(uname -s)
+ARCH=$(uname -m)
+GOOS=""
+GOARCH=""
+OUTFILE=""
+
+if [[ "$OS" == "Darwin" ]]; then
+    GOOS="darwin"
+    if [[ "$ARCH" == "arm64" ]]; then
+        GOARCH="arm64"
+        OUTFILE="../python/sop/libjsondb_arm64darwin.dylib"
+    else
+        GOARCH="amd64"
+        OUTFILE="../python/sop/libjsondb_amd64darwin.dylib"
+    fi
+elif [[ "$OS" == "Linux" ]]; then
+    GOOS="linux"
+    if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+        GOARCH="arm64"
+        OUTFILE="../python/sop/libjsondb_arm64linux.so"
+    else
+        GOARCH="amd64"
+        OUTFILE="../python/sop/libjsondb_amd64linux.so"
+    fi
+elif [[ "$OS" == MINGW* || "$OS" == CYGWIN* || "$OS" == MSYS* ]]; then
+    GOOS="windows"
+    GOARCH="amd64"
+    OUTFILE="../python/sop/libjsondb_amd64windows.dll"
+else
+    echo "Unsupported OS: $OS"
+    exit 1
+fi
+
+echo "Detected Local Environment: OS=$GOOS, ARCH=$GOARCH"
+echo "Building $OUTFILE..."
+
+export CGO_ENABLED=1
+export GOOS=$GOOS
+export GOARCH=$GOARCH
+# Unset CC to use default compiler for local build
+unset CC
+
+go build -buildmode=c-shared -o "$OUTFILE" *.go
 
 cd ../..
 
