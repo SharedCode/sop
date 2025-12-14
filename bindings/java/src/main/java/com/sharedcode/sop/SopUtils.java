@@ -3,6 +3,7 @@ package com.sharedcode.sop;
 import com.sun.jna.Pointer;
 import com.sun.jna.Memory;
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 class SopUtils {
     static String fromPointer(Pointer p) {
@@ -29,6 +30,22 @@ class SopUtils {
         if (p != null) {
             String errorMsg = fromPointer(p);
             throw new SopException(errorMsg);
+        }
+    }
+
+    static String manageDatabase(long ctxId, int action, String targetID, String payload) throws SopException {
+        Pointer p = SopLibrary.INSTANCE.manageDatabase(ctxId, action, targetID, payload);
+        String res = fromPointer(p);
+        
+        if (res == null) {
+            return null;
+        }
+
+        try {
+            UUID.fromString(res);
+            return res;
+        } catch (IllegalArgumentException e) {
+            throw new SopException(res);
         }
     }
 }

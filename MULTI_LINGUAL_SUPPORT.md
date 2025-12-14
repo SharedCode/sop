@@ -42,6 +42,14 @@ SOP provides first-class bindings for three major ecosystems, each designed to f
     *   **LINQ-Friendly**: The API is designed to work naturally with C# collections and LINQ queries.
     *   **Struct Support**: Optimized for C# `struct` keys to minimize GC pressure.
 
+### 4. Rust (sop4rs)
+*   **Target Audience**: Systems programmers, High-performance applications, WebAssembly.
+*   **Technology**: Uses **FFI** (Foreign Function Interface) via `libc` and `build.rs` linking.
+*   **Key Features**:
+    *   **Safety**: Safe Rust wrappers around the raw C ABI ensure memory safety and proper resource management (RAII).
+    *   **Zero-Cost Abstractions**: Direct mapping to the underlying Go engine with minimal overhead.
+    *   **Async Ready**: Designed to integrate with `tokio` and other async runtimes.
+
 ## Unified API Design
 
 One of SOP's greatest strengths is its **Unified API**. A developer moving from Go to Java to Python will find the concepts identical:
@@ -74,6 +82,15 @@ with db.transaction() as trans:
     # Auto-commit on exit
 ```
 
+**Rust:**
+```rust
+let ctx = SopContext::new();
+let trans = Transaction::new(&ctx);
+trans.begin()?;
+store.add("key", "value")?;
+trans.commit()?;
+```
+
 ## Zero Impedance Mismatch: POJOs with Raw Power
 
 SOP bridges the gap between your application's objects and disk storage, eliminating the need for complex ORMs like **Entity Framework** or **JPA**. It offers a perfect **impedance match** for your language's native data structures:
@@ -81,6 +98,7 @@ SOP bridges the gap between your application's objects and disk storage, elimina
 *   **Java**: Persist **POJOs** directly using standard serialization.
 *   **C#**: Store **Structs** and **Classes** with full type safety.
 *   **Python**: Save **Dataclasses** and **Pydantic models** effortlessly.
+*   **Rust**: Serialize **Structs** and **Enums** via `serde` directly to B-Tree values.
 
 Unlike simple Key-Value stores, SOP exposes the **full raw power** of the underlying B-Tree engine. You aren't just dumping blobs; you are managing sorted, indexed data with capabilities like **Range Queries**, **Prefix Scans**, and **Composite Keys**. You get the simplicity of working with native objects combined with the performance of a bare-metal storage engine.
 

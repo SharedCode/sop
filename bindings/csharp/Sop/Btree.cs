@@ -241,6 +241,11 @@ public class Btree<TK, TV>
         throw new SopException(res);
     }
 
+    public bool Add(Context ctx, TK key, TV value)
+    {
+        return Manage(ctx, (int)BtreeAction.Add, new ManageBtreePayload<TK, TV> { Items = new List<Item<TK, TV>> { new Item<TK, TV>(key, value) } });
+    }
+
     public bool Add(Context ctx, Item<TK, TV> item)
     {
         return Manage(ctx, (int)BtreeAction.Add, new ManageBtreePayload<TK, TV> { Items = new List<Item<TK, TV>> { item } });
@@ -249,6 +254,11 @@ public class Btree<TK, TV>
     public bool Add(Context ctx, List<Item<TK, TV>> items)
     {
         return Manage(ctx, (int)BtreeAction.Add, new ManageBtreePayload<TK, TV> { Items = items });
+    }
+
+    public bool AddIfNotExist(Context ctx, TK key, TV value)
+    {
+        return Manage(ctx, (int)BtreeAction.AddIfNotExist, new ManageBtreePayload<TK, TV> { Items = new List<Item<TK, TV>> { new Item<TK, TV>(key, value) } });
     }
 
     public bool AddIfNotExist(Context ctx, Item<TK, TV> item)
@@ -261,6 +271,11 @@ public class Btree<TK, TV>
         return Manage(ctx, (int)BtreeAction.AddIfNotExist, new ManageBtreePayload<TK, TV> { Items = items });
     }
 
+    public bool Upsert(Context ctx, TK key, TV value)
+    {
+        return Manage(ctx, (int)BtreeAction.Upsert, new ManageBtreePayload<TK, TV> { Items = new List<Item<TK, TV>> { new Item<TK, TV>(key, value) } });
+    }
+
     public bool Upsert(Context ctx, Item<TK, TV> item)
     {
         return Manage(ctx, (int)BtreeAction.Upsert, new ManageBtreePayload<TK, TV> { Items = new List<Item<TK, TV>> { item } });
@@ -270,6 +285,7 @@ public class Btree<TK, TV>
     {
         return Manage(ctx, (int)BtreeAction.Upsert, new ManageBtreePayload<TK, TV> { Items = items });
     }
+
 
     public bool Update(Context ctx, Item<TK, TV> item)
     {

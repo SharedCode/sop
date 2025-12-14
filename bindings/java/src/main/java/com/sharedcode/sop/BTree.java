@@ -9,6 +9,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.Collections;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 public class BTree<K, V> implements AutoCloseable {
     private final Context ctx;
@@ -39,13 +40,12 @@ public class BTree<K, V> implements AutoCloseable {
         try {
             String payload = new ObjectMapper().writeValueAsString(options);
             
-            Pointer p = SopLibrary.INSTANCE.manageDatabase(ctx.getId(), SopLibrary.NewBtree, tx.getDatabase().getId(), payload);
-            String res = SopUtils.fromPointer(p);
+            String res = SopUtils.manageDatabase(ctx.getId(), SopLibrary.NewBtree, tx.getDatabase().getId(), payload);
             
-            if (res != null && res.length() == 36) {
+            if (res != null) {
                 return new BTree<>(ctx, res, tx.getId(), isPrimitive, keyType, valueType);
             } else {
-                throw new SopException(res);
+                throw new SopException("Result is null");
             }
         } catch (JsonProcessingException e) {
             throw new SopException("Failed to serialize options", e);
@@ -62,13 +62,12 @@ public class BTree<K, V> implements AutoCloseable {
         try {
             String payload = new ObjectMapper().writeValueAsString(options);
             
-            Pointer p = SopLibrary.INSTANCE.manageDatabase(ctx.getId(), SopLibrary.OpenBtree, tx.getDatabase().getId(), payload);
-            String res = SopUtils.fromPointer(p);
+            String res = SopUtils.manageDatabase(ctx.getId(), SopLibrary.OpenBtree, tx.getDatabase().getId(), payload);
             
-            if (res != null && res.length() == 36) {
+            if (res != null) {
                 return new BTree<>(ctx, res, tx.getId(), isPrimitive, keyType, valueType);
             } else {
-                throw new SopException(res);
+                throw new SopException("Result is null");
             }
         } catch (JsonProcessingException e) {
             throw new SopException("Failed to serialize options", e);

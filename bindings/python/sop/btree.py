@@ -6,7 +6,7 @@ from . import context
 
 logger = logging.getLogger(__name__)
 
-from typing import TypeVar, Generic, Type, List, Optional
+from typing import TypeVar, Generic, Type, List, Optional, Union
 from dataclasses import dataclass, asdict
 
 from . import transaction
@@ -275,16 +275,25 @@ class Btree(Generic[TK, TV]):
 
         return cls(b3id, False, trans.transaction_id)
 
-    def add(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
+    def add(self, ctx: context.Context, key: Union[TK, Item[TK, TV], List[Item[TK, TV]]], value: TV = None) -> bool:
+        items = key
+        if value is not None or not isinstance(key, (Item, list)):
+            items = Item(key=key, value=value)
         return self._manage(ctx, BtreeAction.Add.value, items)
 
-    def add_if_not_exists(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
+    def add_if_not_exists(self, ctx: context.Context, key: Union[TK, Item[TK, TV], List[Item[TK, TV]]], value: TV = None) -> bool:
+        items = key
+        if value is not None or not isinstance(key, (Item, list)):
+            items = Item(key=key, value=value)
         return self._manage(ctx, BtreeAction.AddIfNotExist.value, items)
 
-    def update(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
+    def update(self, ctx: context.Context, key: Union[TK, Item[TK, TV], List[Item[TK, TV]]], value: TV = None) -> bool:
+        items = key
+        if value is not None or not isinstance(key, (Item, list)):
+            items = Item(key=key, value=value)
         return self._manage(ctx, BtreeAction.Update.value, items)
 
-    def update_key(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
+    def update_key(self, ctx: context.Context, items: Union[Item[TK, TV], List[Item[TK, TV]]]) -> bool:
         """
         UpdateKey updates the key of the item found by the key in the provided item.
         """
@@ -314,7 +323,10 @@ class Btree(Generic[TK, TV]):
             return items[0]
         return None
 
-    def upsert(self, ctx: context.Context, items: Item[TK, TV]) -> bool:
+    def upsert(self, ctx: context.Context, key: Union[TK, Item[TK, TV], List[Item[TK, TV]]], value: TV = None) -> bool:
+        items = key
+        if value is not None or not isinstance(key, (Item, list)):
+            items = Item(key=key, value=value)
         return self._manage(ctx, BtreeAction.Upsert.value, items)
 
     def remove(self, ctx: context.Context, keys: TK) -> bool:

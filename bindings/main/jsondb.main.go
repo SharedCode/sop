@@ -226,8 +226,6 @@ var transRegistry = newTransactionRegistry()
 // Unified Database Lookup
 var dbRegistry = newRegistry[*database.Database]()
 
-type transactionAction int
-
 const (
 	TransactionActionUnknown = iota
 	NewTransaction

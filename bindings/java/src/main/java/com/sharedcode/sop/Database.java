@@ -3,6 +3,7 @@ package com.sharedcode.sop;
 import com.sun.jna.Pointer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import java.util.UUID;
 
 public class Database {
     private String id;
@@ -33,16 +34,11 @@ public class Database {
             throw new SopException("Failed to serialize database options", e);
         }
 
-        Pointer p = SopLibrary.INSTANCE.manageDatabase(ctx.getId(), SopLibrary.NewDatabase, null, payload);
-        
-        String res = SopUtils.fromPointer(p);
-        // System.out.println("Database.ensureCreated res: " + res);
-        if (res != null && res.length() == 36) {
+        String res = SopUtils.manageDatabase(ctx.getId(), SopLibrary.NewDatabase, null, payload);
+        if (res != null) {
             this.id = res;
         } else {
-            // If res is null, it might be an error or just null.
-            // If it's not 36 chars, it's likely an error message.
-            throw new SopException(res != null ? res : "Unknown error creating database. Payload: " + payload);
+            throw new SopException("Unknown error creating database. Payload: " + payload);
         }
     }
 
@@ -58,13 +54,12 @@ public class Database {
         ensureCreated(ctx);
         
         String payload = "{\"mode\": " + mode + ", \"max_time\": " + maxTime + "}";
-        Pointer p = SopLibrary.INSTANCE.manageDatabase(ctx.getId(), SopLibrary.BeginTransaction, id, payload);
+        String res = SopUtils.manageDatabase(ctx.getId(), SopLibrary.BeginTransaction, id, payload);
         
-        String res = SopUtils.fromPointer(p);
-        if (res != null && res.length() == 36) {
+        if (res != null) {
             return new Transaction(ctx, res, this);
         } else {
-            throw new SopException(res);
+            throw new SopException("Failed to begin transaction (result is null)");
         }
     }
 
@@ -78,11 +73,6 @@ public class Database {
         // Let's assume it takes the name string directly as payload.
         String payload = name;
         
-        Pointer p = SopLibrary.INSTANCE.manageDatabase(ctx.getId(), SopLibrary.RemoveBtree, id, payload);
-        String res = SopUtils.fromPointer(p);
-        
-        if (res != null && !res.isEmpty() && !"true".equalsIgnoreCase(res)) {
-            throw new SopException(res);
-        }
+        SopUtils.manageDatabase(ctx.getId(), SopLibrary.RemoveBtree, id, payload);
     }
 }
