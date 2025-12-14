@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOP Data Browser</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; height: 100vh; }
+        #sidebar { width: 250px; background: #f4f4f4; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; }
+        #main { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
+        h1, h2 { margin-top: 0; }
+        ul { list-style: none; padding: 0; }
+        li { padding: 8px 12px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
+        li:hover { background: #e0e0e0; }
+        li.active { background: #007bff; color: white; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; }
+        tr:hover { background-color: #f1f1f1; cursor: pointer; }
+        #detail-panel { width: 400px; border-left: 1px solid #ddd; padding: 20px; background: #fff; display: none; overflow-y: auto; }
+        pre { background: #f8f8f8; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; flex: 1; }
+        button { padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h2>Stores</h2>
+    <ul id="store-list">
+        <li>Loading...</li>
+    </ul>
+</div>
+
+<div id="main">
+    <h1 id="current-store-title">Select a Store</h1>
+    
+    <div class="toolbar" id="toolbar" style="display:none;">
+        <input type="text" id="search-input" placeholder="Search keys...">
+        <button onclick="loadItems()">Search</button>
+    </div>
+
+    <div id="data-grid"></div>
+</div>
+
+<div id="detail-panel">
+    <h2>Item Details</h2>
+    <div id="json-viewer"></div>
+    <button onclick="closeDetail()">Close</button>
+</div>
+
+<script>
+    let currentStore = null;
+
+    // Load Stores on Start
+    fetch('/api/stores')
+        .then(res => res.json())
+        .then(stores => {
+            const list = document.getElementById('store-list');
+            list.innerHTML = '';
+            stores.forEach(store => {
+                const li = document.createElement('li');
+                li.textContent = store;
+                li.onclick = () => selectStore(store, li);
+                list.appendChild(li);
+            });
+        });
+
+    function selectStore(name, element) {
+        currentStore = name;
+        document.getElementById('current-store-title').textContent = name;
+        document.getElementById('toolbar').style.display = 'flex';
+        
+        // Highlight active
+        document.querySelectorAll('#sidebar li').forEach(el => el.classList.remove('active'));
+        element.classList.add('active');
+
+        loadItems();
+    }
+
+    function loadItems() {
+        if (!currentStore) return;
+        
+        const searchInput = document.getElementById('search-input').value;
+        const url = `/api/store/items?name=${encodeURIComponent(currentStore)}&q=${encodeURIComponent(searchInput)}`;
+
+        fetch(url)
+            .then(res => res.json())
+            .then(items => {
+                const grid = document.getElementById('data-grid');
+                if (!items || items.length === 0) {
+                    grid.innerHTML = '<p>No items found.</p>';
+                    return;
+                }
+
+                let html = '<table><thead><tr><th>Key</th><th>Value Preview</th></tr></thead><tbody>';
+                items.forEach(item => {
+                    const valStr = JSON.stringify(item.value).substring(0, 50) + (JSON.stringify(item.value).length > 50 ? '...' : '');
+                    html += `<tr onclick='showDetail(${JSON.stringify(item)})'>
+                        <td>${item.key}</td>
+                        <td>${valStr}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                grid.innerHTML = html;
+            });
+    }
+
+    function showDetail(item) {
+        const panel = document.getElementById('detail-panel');
+        const viewer = document.getElementById('json-viewer');
+        viewer.innerHTML = `<pre>${JSON.stringify(item, null, 2)}</pre>`;
+        panel.style.display = 'block';
+    }
+
+    function closeDetail() {
+        document.getElementById('detail-panel').style.display = 'none';
+    }
+</script>
+
+</body>
+</html>
