@@ -11,8 +11,11 @@ import (
 	"path/filepath"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/encoding"
 	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/sop/jsondb"
 )
 
 // Config holds the server configuration
@@ -106,12 +109,95 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	}
 	defer trans.Rollback(ctx)
 
+	// Variables to hold state for the closure
+	var indexSpec *jsondb.IndexSpecification
+	var isComplexKey bool
+
+	// Proxy comparer
+	comparer := func(a, b any) int {
+		if !isComplexKey {
+			return btree.Compare(a, b)
+		}
+
+		mapA, okA := a.(map[string]any)
+		mapB, okB := b.(map[string]any)
+		if !okA || !okB {
+			return btree.Compare(a, b)
+		}
+
+		if indexSpec != nil {
+			return indexSpec.Comparer(mapA, mapB)
+		}
+
+		// Default Map Comparer (Dynamic)
+		// Collect all keys, sort them, compare values.
+		keys := make([]string, 0, len(mapA)+len(mapB))
+		seen := make(map[string]struct{})
+		for k := range mapA {
+			if _, exists := seen[k]; !exists {
+				keys = append(keys, k)
+				seen[k] = struct{}{}
+			}
+		}
+		for k := range mapB {
+			if _, exists := seen[k]; !exists {
+				keys = append(keys, k)
+				seen[k] = struct{}{}
+			}
+		}
+		// We need to sort keys to be deterministic
+		// Since we can't import "sort" inside function, we assume it's imported or use a simple bubble sort for small maps
+		// But better to add "sort" to imports.
+		// For now, let's use a simple swap sort since maps are usually small.
+		for i := 0; i < len(keys); i++ {
+			for j := i + 1; j < len(keys); j++ {
+				if keys[i] > keys[j] {
+					keys[i], keys[j] = keys[j], keys[i]
+				}
+			}
+		}
+
+		for _, k := range keys {
+			valA, existsA := mapA[k]
+			valB, existsB := mapB[k]
+
+			if !existsA && !existsB {
+				continue
+			}
+			if !existsA {
+				return -1 // A is missing key, so A < B
+			}
+			if !existsB {
+				return 1 // B is missing key, so A > B
+			}
+
+			res := btree.Compare(valA, valB)
+			if res != 0 {
+				return res
+			}
+		}
+		return 0
+	}
+
 	// Open the B-Tree using 'any' for Key and Value to support generic browsing.
-	// We pass nil for comparer to let SOP auto-detect/coerce the key type.
-	store, err := infs.OpenBtree[any, any](ctx, storeName, trans, nil)
+	store, err := infs.OpenBtree[any, any](ctx, storeName, trans, comparer)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v", storeName, err), http.StatusInternalServerError)
 		return
+	}
+
+	// Configure the comparer based on StoreInfo
+	si := store.GetStoreInfo()
+	if !si.IsPrimitiveKey {
+		isComplexKey = true
+		if si.MapKeyIndexSpecification != "" {
+			var is jsondb.IndexSpecification
+			if err := encoding.DefaultMarshaler.Unmarshal([]byte(si.MapKeyIndexSpecification), &is); err == nil {
+				indexSpec = &is
+			} else {
+				log.Printf("Error unmarshaling index spec: %v", err)
+			}
+		}
 	}
 
 	var items []map[string]any
@@ -123,9 +209,20 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	var ok bool
 	if query != "" {
 		// Try to find the item with the query key.
-		// Note: This assumes the key is a string. If the underlying store uses int/float keys,
-		// this might fail or need type coercion logic.
-		ok, err = store.Find(ctx, query, true)
+		// If it's a complex key, we need to parse the query string into a map.
+		var searchKey any = query
+		if isComplexKey {
+			var mapKey map[string]any
+			if err := json.Unmarshal([]byte(query), &mapKey); err == nil {
+				searchKey = mapKey
+			} else {
+				// If query is not valid JSON, we might want to treat it as a partial match or fail?
+				// For now, let's just log and try as string (which will likely fail comparison)
+				log.Printf("Warning: Search query '%s' is not valid JSON for complex key store.", query)
+			}
+		}
+
+		ok, err = store.Find(ctx, searchKey, true)
 	} else {
 		// Iterate from the first item
 		ok, err = store.First(ctx)

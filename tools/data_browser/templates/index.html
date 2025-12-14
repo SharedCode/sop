@@ -97,9 +97,10 @@
 
                 let html = '<table><thead><tr><th>Key</th><th>Value Preview</th></tr></thead><tbody>';
                 items.forEach(item => {
+                    const keyStr = typeof item.key === 'object' ? JSON.stringify(item.key) : item.key;
                     const valStr = JSON.stringify(item.value).substring(0, 50) + (JSON.stringify(item.value).length > 50 ? '...' : '');
                     html += `<tr onclick='showDetail(${JSON.stringify(item)})'>
-                        <td>${item.key}</td>
+                        <td>${keyStr}</td>
                         <td>${valStr}</td>
                     </tr>`;
                 });
