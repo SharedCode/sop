@@ -31,16 +31,18 @@ func ValidateOptions(config sop.DatabaseOptions) (sop.DatabaseOptions, error) {
 
 	if config.CacheType == sop.Redis {
 		// Check if Redis adapter is registered.
-		c := sop.GetL2Cache(sop.Redis)
+		c := sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.Redis})
 		if c == nil {
 			// Auto register Redis L2 Cache.
 			sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
 		}
 	} else if config.CacheType == sop.InMemory {
-		c := sop.GetL2Cache(sop.InMemory)
+		c := sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.InMemory})
 		if c == nil {
 			// Auto register InMemory L2 Cache.
-			sop.RegisterL2CacheFactory(sop.InMemory, cache.NewL2InMemoryCache)
+			sop.RegisterL2CacheFactory(sop.InMemory, func(options sop.TransactionOptions) sop.L2Cache {
+				return cache.NewL2InMemoryCache()
+			})
 		}
 	}
 
@@ -52,11 +54,11 @@ func ValidateCassandraOptions(config sop.DatabaseOptions) (sop.DatabaseOptions, 
 	if config.Keyspace == "" {
 		return config, fmt.Errorf("Cassandra mode requires Keyspace to be set")
 	}
-	c := sop.GetL2Cache(sop.Redis)
+	c := sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.Redis})
 	if c == nil {
 		// Auto register Redis L2 Cache.
 		sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
-		c = sop.GetL2Cache(sop.Redis)
+		c = sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.Redis})
 		if c == nil {
 			return config, fmt.Errorf("Cassandra mode requires Redis adapter. Ensure you have initialized Redis connection using the redis.OpenConnection method.")
 		}

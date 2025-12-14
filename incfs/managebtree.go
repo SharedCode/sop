@@ -44,7 +44,7 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 func RemoveBtree(ctx context.Context, name string, cacheType sop.L2CacheType) error {
 	fio := fs.NewFileIO()
 	mbsf := fs.NewManageStoreFolder(fio)
-	cache := sop.GetL2Cache(cacheType)
+	cache := sop.GetL2Cache(sop.TransactionOptions{CacheType: cacheType})
 	if cache == nil {
 		return fmt.Errorf("unable to get L2 cache for type %v", cacheType)
 	}

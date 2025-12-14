@@ -21,7 +21,18 @@ func TestCompareCaches(t *testing.T) {
 	OpenConnection(option)
 	defer CloseConnection()
 
-	redisCache := NewClient()
+	db1Config := sop.DatabaseOptions{
+		CacheType: sop.Redis,
+		RedisConfig: &sop.RedisCacheConfig{
+			Address:  "localhost:6379",
+			Password: "",
+			DB:       0,
+		},
+	}
+	var to sop.TransactionOptions
+	db1Config.CopyTo(&to)
+
+	redisCache := NewClient(to)
 	memCache := cache.NewL2InMemoryCache()
 
 	ctx := context.Background()

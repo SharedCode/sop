@@ -4,9 +4,25 @@ Simple, copy-pasteable examples for common SOP scenarios.
 
 > **Note**: This cookbook focuses on the Go API. For Python examples, see the [Python Cookbook](bindings/python/COOKBOOK.md). For Java examples, see the [Java Examples](bindings/java/README.md#examples). For C# examples, see the [C# Examples](bindings/csharp/Sop.Examples/). For Rust examples, see the [Rust Examples](bindings/rust/examples/).
 
+## Interoperability Note: Go vs. Other Languages
+
+When using SOP in Go, you have two primary ways to interact with the database. **Both are first-class citizens with similar performance characteristics.** SOP uses efficient JSON serialization for entire B-Tree nodes and value segments, so the overhead of the "Universal" mode is negligible.
+
+1.  **Direct Go Generics (Native)**:
+    *   **Best for**: Pure Go applications where you want to use specific Go types directly.
+    *   **Pros**: Strongly typed (e.g., `NewBtree[string, UserProfile]`), idiomatic Go code.
+    *   **Cons**: **Not guaranteed to be interoperable** with Python/C# bindings out-of-the-box. The native Go implementation does not automatically generate the `IndexSpecification` metadata that other languages rely on for dynamic key handling.
+    *   **Use Case**: Go microservices that do not share data directly with Python/C# apps.
+
+2.  **`jsondb` Package (Interop-Friendly)**:
+    *   **Best for**: Applications that need to share data with Python, C#, or other language bindings.
+    *   **Pros**: Fully compatible with the "Universal" format used by language bindings. Handles `IndexSpecification` and JSON serialization automatically.
+    *   **Cons**: Slightly more verbose setup than native generics if you are just doing simple key-value storage.
+    *   **Use Case**: A system where a Go service writes data and a Python AI service reads it (or vice versa).
+
 ## 1. Storing 100k User Profiles (`database`)
 
-This example demonstrates how to store structured data using the high-level `database` package.
+This example demonstrates the **Direct Go Generics** approach.
 
 ```go
 package main
@@ -241,5 +257,49 @@ func ManageStores(ctx context.Context, db *database.Database) error {
 	}
 	
 	return nil
+}
+```
+
+## Connecting to Multiple Redis Clusters
+
+SOP supports connecting to different Redis clusters (or databases) within the same application by configuring `RedisConfig` in `DatabaseOptions`.
+
+```go
+package main
+
+import (
+	"context"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/database"
+)
+
+func main() {
+	ctx := context.Background()
+
+	// Database 1: Connects to Redis instance A
+	db1 := sop.DatabaseOptions{
+		CacheType: sop.Redis,
+		RedisConfig: &sop.RedisCacheConfig{
+			URL: "redis://redis-cluster-a:6379/0",
+		},
+	}
+
+	// Database 2: Connects to Redis instance B
+	db2 := sop.DatabaseOptions{
+		CacheType: sop.Redis,
+		RedisConfig: &sop.RedisCacheConfig{
+			URL: "redis://redis-cluster-b:6379/0",
+		},
+	}
+
+	// Use db1
+	t1, _ := database.BeginTransaction(ctx, db1, sop.ForWriting)
+	// ... perform operations on db1 ...
+	t1.Commit(ctx)
+
+	// Use db2
+	t2, _ := database.BeginTransaction(ctx, db2, sop.ForWriting)
+	// ... perform operations on db2 ...
+	t2.Commit(ctx)
 }
 ```

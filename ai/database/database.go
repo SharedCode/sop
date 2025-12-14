@@ -23,18 +23,22 @@ type Database struct {
 // NewDatabase creates a new AI-enabled database manager.
 func NewDatabase(config sop.DatabaseOptions) *Database {
 	config, _ = database.ValidateOptions(config)
+	var to sop.TransactionOptions
+	config.CopyTo(&to)
 	return &Database{
 		config: config,
-		cache:  sop.GetL2Cache(config.CacheType),
+		cache:  sop.GetL2Cache(to),
 	}
 }
 
 // NewCassandraDatabase creates a new AI-enabled database manager backed by Cassandra.
 func NewCassandraDatabase(config sop.DatabaseOptions) *Database {
 	config, _ = database.ValidateCassandraOptions(config)
+	var to sop.TransactionOptions
+	config.CopyTo(&to)
 	return &Database{
 		config: config,
-		cache:  sop.GetL2Cache(config.CacheType),
+		cache:  sop.GetL2Cache(to),
 	}
 }
 

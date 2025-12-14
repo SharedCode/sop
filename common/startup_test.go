@@ -10,14 +10,14 @@ import (
 
 func init() {
 	// Register dummy factories to allow SetCacheFactory to work
-	sop.RegisterL2CacheFactory(sop.NoCache, func() sop.L2Cache { return nil })
-	sop.RegisterL2CacheFactory(sop.Redis, func() sop.L2Cache { return nil })
+	sop.RegisterL2CacheFactory(sop.NoCache, func(sop.TransactionOptions) sop.L2Cache { return nil })
+	sop.RegisterL2CacheFactory(sop.Redis, func(sop.TransactionOptions) sop.L2Cache { return nil })
 }
 
 func TestOnStartUp_InMemory(t *testing.T) {
 	// Save state
 	originalFlag := onStartUpFlag
-	originalCache := sop.GetL2Cache(sop.InMemory)
+	originalCache := sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.InMemory})
 	defer func() {
 		onStartUpFlag = originalFlag
 		if originalCache == nil {
@@ -27,7 +27,7 @@ func TestOnStartUp_InMemory(t *testing.T) {
 
 	// Setup
 	onStartUpFlag = true
-	sop.RegisterL2CacheFactory(sop.InMemory, cache.NewL2InMemoryCache)
+	sop.RegisterL2CacheFactory(sop.InMemory, func(sop.TransactionOptions) sop.L2Cache { return cache.NewL2InMemoryCache() })
 
 	trans := &Transaction{l2Cache: cache.NewL2InMemoryCache()}
 

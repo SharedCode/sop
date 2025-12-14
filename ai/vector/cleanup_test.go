@@ -29,7 +29,7 @@ func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
 			StoresFolders: []string{path},
 			CacheType:     sop.InMemory,
 		},
-		Cache: sop.GetL2Cache(db.CacheType),
+		Cache: sop.GetL2Cache(sop.TransactionOptions{CacheType: db.CacheType}),
 	}
 
 	store, err := vector.Open[map[string]any](ctx, t1, "cleanup_test", cfg)

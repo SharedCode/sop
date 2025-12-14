@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/sharedcode/sop"
 )
 
 type user struct {
@@ -24,7 +26,18 @@ func TestBasicUse(t *testing.T) {
 	OpenConnection(option)
 	defer CloseConnection()
 
-	c := NewClient()
+	db1Config := sop.DatabaseOptions{
+		CacheType: sop.Redis,
+		RedisConfig: &sop.RedisCacheConfig{
+			Address:  "localhost:6379",
+			Password: "",
+			DB:       0,
+		},
+	}
+	var to sop.TransactionOptions
+	db1Config.CopyTo(&to)
+
+	c := NewClient(to)
 
 	ctx := context.Background()
 	if err := c.Ping(ctx); err != nil {

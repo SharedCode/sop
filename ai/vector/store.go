@@ -964,7 +964,7 @@ func (di *domainIndex[T]) isOptimizing(ctx context.Context) (bool, error) {
 	if di.config.TransactionOptions.CacheType == sop.NoCache {
 		return false, nil
 	}
-	cache := sop.GetL2Cache(di.config.TransactionOptions.CacheType)
+	cache := sop.GetL2Cache(di.config.TransactionOptions)
 	if cache == nil {
 		return false, nil
 	}

@@ -81,7 +81,7 @@ func RemoveBtree(ctx context.Context, name string, storesFolders []string, cache
 	if len(storesFolders) == 0 {
 		return fmt.Errorf("needs at least a folder to delete a Btree")
 	}
-	cache := sop.GetL2Cache(cacheType)
+	cache := sop.GetL2Cache(sop.TransactionOptions{CacheType: cacheType})
 	if cache == nil {
 		return fmt.Errorf("unable to get L2 cache for type %v", cacheType)
 	}
@@ -110,7 +110,7 @@ func ReinstateFailedDrives(ctx context.Context, storesFolders []string, cacheTyp
 		return fmt.Errorf("'storeFolders' need to be array of two strings(drive/folder paths)")
 	}
 
-	cache := sop.GetL2Cache(cacheType)
+	cache := sop.GetL2Cache(sop.TransactionOptions{CacheType: cacheType})
 	if cache == nil {
 		return fmt.Errorf("unable to get L2 cache for type %v", cacheType)
 	}

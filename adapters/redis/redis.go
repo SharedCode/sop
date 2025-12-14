@@ -21,11 +21,30 @@ type client struct {
 
 // NewClient returns a Cache backed by the default shared Redis connection.
 // The underlying connection must have been initialized via package-level setup.
-func NewClient() sop.L2Cache {
+func NewClient(options sop.TransactionOptions) sop.L2Cache {
 	log.Debug("NewClient called")
-	return &client{
-		conn: nil,
+	if options.RedisConfig != nil {
+		if options.RedisConfig.URL != "" {
+			opts, err := redis.ParseURL(options.RedisConfig.URL)
+			if err != nil {
+				log.Error("Invalid Redis URL", "url", options.RedisConfig.URL, "error", err)
+			} else {
+				return NewConnectionClient(Options{
+					Address:   opts.Addr,
+					Password:  opts.Password,
+					DB:        opts.DB,
+					TLSConfig: opts.TLSConfig,
+				})
+			}
+		}
+		return NewConnectionClient(Options{
+			Address:  options.RedisConfig.Address,
+			Password: options.RedisConfig.Password,
+			DB:       options.RedisConfig.DB,
+		})
 	}
+	// Fallback to default options if no config provided
+	return NewConnectionClient(DefaultOptions())
 }
 
 // NewConnectionClient opens a new Redis connection with the given options and returns a CloseableCache.

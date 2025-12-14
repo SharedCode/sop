@@ -46,6 +46,11 @@ class Database:
         if self.options.keyspace:
             opts["keyspace"] = self.options.keyspace
 
+        if self.options.redis_config:
+            opts["redis_config"] = asdict(self.options.redis_config)
+            # Ensure cache_type is set to Redis if config is present
+            opts["cache_type"] = 2 # Redis enum value in Go
+
         payload = json.dumps(opts)
         
         # Action NewDatabase

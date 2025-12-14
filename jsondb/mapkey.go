@@ -53,6 +53,7 @@ func (j *JsonDBMapKey) defaultComparer(mapX map[string]any, mapY map[string]any)
 }
 
 // NewJsonBtreeMapKey creates a schema-less JSON B-Tree using map[string]any keys and optional index spec.
+// This function is fully interoperable with other language bindings and offers high performance.
 func NewJsonBtreeMapKey(ctx context.Context, config sop.DatabaseOptions, so sop.StoreOptions, t sop.Transaction, indexSpecification string) (*JsonDBMapKey, error) {
 	var comparer btree.ComparerFunc[map[string]any]
 	j := JsonDBMapKey{}

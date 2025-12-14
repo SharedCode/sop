@@ -307,45 +307,39 @@ with db.begin_transaction(ctx) as tx:
     print(f"Loaded: {loaded['model']['id']}")
 ```
 
-## 7. Multi-Tenancy (Cassandra Keyspaces)
+## 7. Multi-Tenancy (Redis & Cassandra)
 
-Connect to different tenants (Keyspaces) on the same Cassandra cluster using `DatabaseOptions`. This example also initializes Redis for distributed locking.
+Connect to different tenants using isolated Redis databases and Cassandra Keyspaces.
 
 ```python
 import sop
-from sop import Redis
-from sop.cassandra import Cassandra
-from sop.database import Database, DatabaseOptions, DatabaseType
-
-# 1. Initialize Global Connections (Once per app)
-Redis.initialize("redis://localhost:6379/0")
-Cassandra.initialize({
-    "cluster_hosts": ["127.0.0.1"]
-})
+from sop.database import Database, DatabaseOptions, DatabaseType, RedisCacheConfig
 
 ctx = sop.Context()
 
-# 2. Connect to Tenant A (Keyspace: 'tenant_a')
+# 1. Connect to Tenant A
+# Uses Redis DB 0 and Cassandra Keyspace 'tenant_a'
 db_a = Database(DatabaseOptions(
     keyspace="tenant_a",
-    type=DatabaseType.Clustered
+    type=DatabaseType.Clustered,
+    redis_config=RedisCacheConfig(url="redis://localhost:6379/0")
 ))
 
-# 3. Connect to Tenant B (Keyspace: 'tenant_b')
+# 2. Connect to Tenant B
+# Uses Redis DB 1 and Cassandra Keyspace 'tenant_b'
 db_b = Database(DatabaseOptions(
     keyspace="tenant_b",
-    type=DatabaseType.Clustered
+    type=DatabaseType.Clustered,
+    redis_config=RedisCacheConfig(url="redis://localhost:6379/1")
 ))
 
 # Operations on db_a are completely isolated from db_b
 with db_a.begin_transaction(ctx) as t:
-    store = db_a.new_btree(t, "config")
-    store.add(ctx, "theme", "dark")
+    store = db_a.new_btree(ctx, "config", t)
+    store.add(ctx, sop.btree.Item(key="theme", value="dark"))
     # Commit happens automatically
 
-# 4. Cleanup on shutdown
-Redis.close()
-Cassandra.close()
+# Note: You do NOT need to call Redis.initialize() globally when using per-database config.
 ```
 
 ## 8. Text Search

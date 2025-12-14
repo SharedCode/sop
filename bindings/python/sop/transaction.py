@@ -82,6 +82,13 @@ class ErasureCodingConfig:
 
 
 @dataclass
+class RedisCacheConfig:
+    address: str = ""
+    password: str = ""
+    db: int = 0
+    url: str = ""
+
+@dataclass
 class DatabaseOptions:
     type: DatabaseType = DatabaseType.Standalone
     erasure_config: Optional[Dict[str, ErasureCodingConfig]] = None
@@ -90,6 +97,8 @@ class DatabaseOptions:
     # Registry hash mod, minimum value is 250, max is 750000. Hash mod is used on Registry map on disk.
     # At 250, 1MB segment file is generated. See comment about the equivalent in Golang side (for now).
     registry_hash_mod: int = -1
+    # Redis configuration for this database
+    redis_config: Optional[RedisCacheConfig] = None
 
 @dataclass
 class TransactionOptions(DatabaseOptions):

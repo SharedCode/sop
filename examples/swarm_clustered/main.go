@@ -12,7 +12,6 @@ import (
 	log "log/slog"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/adapters/redis"
 	"github.com/sharedcode/sop/database"
 )
 
@@ -22,12 +21,16 @@ const (
 
 func init() {
 	// Initialize connection to Redis.
-	redis.OpenConnectionWithURL("redis://localhost:6379")
+	// Note: This is optional if you use the URL in DatabaseOptions, but kept here for legacy compatibility demonstration.
+	// redis.OpenConnectionWithURL("redis://localhost:6379")
 }
 
 var databaseOptions = sop.DatabaseOptions{
 	Type:          sop.Clustered,
 	StoresFolders: []string{"data/concurrent_demo_go"},
+	RedisConfig: &sop.RedisCacheConfig{
+		URL: "redis://localhost:6379",
+	},
 }
 
 func main() {
@@ -78,8 +81,9 @@ func main() {
 	database.RemoveBtree(ctx, databaseOptions, storeName)
 
 	// Clear Redis cache of our garbage.
-	redis.NewClient().Clear(ctx)
-	redis.CloseConnection()
+	// Note: In a real app, you might not want to clear the whole cache.
+	// redis.NewClient().Clear(ctx)
+	// redis.CloseConnection()
 }
 
 func runWorker(ctx context.Context, wg *sync.WaitGroup, id int, itemsPerThread int, maxJitter int, targetCount int64) {

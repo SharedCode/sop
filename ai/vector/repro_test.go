@@ -17,7 +17,7 @@ func TestRepro(t *testing.T) {
 		StoresFolders: []string{"/tmp/test"},
 	})
 
-	cache := sop.GetL2Cache(db.CacheType)
+	cache := sop.GetL2Cache(sop.TransactionOptions{CacheType: db.CacheType})
 	fmt.Printf("Cache type: %T\n", cache)
 
 	if cache == nil {

@@ -15,6 +15,19 @@ const (
 	Clustered
 )
 
+// RedisCacheConfig holds configuration for connecting to a Redis server or cluster.
+type RedisCacheConfig struct {
+	// Address is the host:port of the Redis server/cluster.
+	Address string `json:"address"`
+	// Password is the password used to authenticate.
+	Password string `json:"password"`
+	// DB is the database index to select.
+	DB int `json:"db"`
+	// URL is the connection string (e.g. redis://user:pass@host:port/db).
+	// If provided, it overrides Address, Password, and DB.
+	URL string `json:"url,omitempty"`
+}
+
 // DatabaseOptions holds the configuration for the database.
 type DatabaseOptions struct {
 	// StoresFolders specifies the folders for replication.
@@ -26,6 +39,8 @@ type DatabaseOptions struct {
 	ErasureConfig map[string]ErasureCodingConfig `json:"erasure_config,omitempty"`
 	// CacheType specifies the type of cache to use (e.g. InMemory, Redis).
 	CacheType L2CacheType `json:"cache_type"`
+	// RedisConfig specifies the Redis configuration when CacheType is Redis.
+	RedisConfig *RedisCacheConfig `json:"redis_config,omitempty"`
 	// Registry hash modulo value used for hashing.
 	RegistryHashModValue int `json:"registry_hash_mod,omitempty"`
 
@@ -45,6 +60,8 @@ type TransactionOptions struct {
 	ErasureConfig map[string]ErasureCodingConfig `json:"erasure_config,omitempty"`
 	// CacheType specifies the type of cache to use (e.g. InMemory, Redis).
 	CacheType L2CacheType `json:"cache_type"`
+	// RedisConfig specifies the Redis configuration when CacheType is Redis.
+	RedisConfig *RedisCacheConfig `json:"redis_config,omitempty"`
 	// Registry hash modulo value used for hashing.
 	RegistryHashModValue int `json:"registry_hash_mod,omitempty"`
 
@@ -60,6 +77,7 @@ func (do DatabaseOptions) CopyTo(transOptions *TransactionOptions) {
 	transOptions.Keyspace = do.Keyspace
 	transOptions.ErasureConfig = do.ErasureConfig
 	transOptions.CacheType = do.CacheType
+	transOptions.RedisConfig = do.RedisConfig
 	transOptions.RegistryHashModValue = do.RegistryHashModValue
 }
 
@@ -70,6 +88,7 @@ func (to TransactionOptions) GetDatabaseOptions() DatabaseOptions {
 		Keyspace:             to.Keyspace,
 		ErasureConfig:        to.ErasureConfig,
 		CacheType:            to.CacheType,
+		RedisConfig:          to.RedisConfig,
 		RegistryHashModValue: to.RegistryHashModValue,
 	}
 }

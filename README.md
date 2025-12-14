@@ -2,11 +2,23 @@
 
 [![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions) [![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml) [![codecov](https://codecov.io/gh/SharedCode/sop/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/sop) [![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/sop.svg)](https://pkg.go.dev/github.com/sharedcode/sop) [![Go Report Card](https://goreportcard.com/badge/github.com/sharedcode/sop)](https://goreportcard.com/report/github.com/sharedcode/sop)
 
-Golang V2 code library for high-performance, ACID storage with B-tree indexing, Redis-backed caching, and optional erasure-coded replication.
+**Polyglot** storage engine for high-performance, ACID storage with B-tree indexing, Redis-backed caching, and optional erasure-coded replication.
+Available for **Go**, **Python**, **Java**, **C#**, and **Rust**.
+
+## Interoperability (Go vs. Bindings)
+
+SOP is designed to be polyglot, but there are two ways to use it in Go. **Both offer similar high performance**, as SOP efficiently serializes entire nodes and value segments.
+
+1.  **Direct Go Generics**: Idiomatic Go. Use this for pure Go services where you want to work with specific Go types. Data written this way **may not be readable** by Python/C# bindings because it lacks the specific metadata (`IndexSpecification`) those bindings expect.
+2.  **`jsondb` Package**: The "Universal" mode. Use this in Go if you need to share data with Python, C#, or other languages. It ensures all data is stored in the JSON-compatible format that the bindings understand.
+
+See the [API Cookbook](COOKBOOK.md#interoperability-note-go-vs-other-languages) for details.
 
 ## Table of contents
 
 - [Introduction](#introduction)
+- [Polyglot Support](#polyglot-support)
+- [Interoperability (Go vs. Bindings)](#interoperability-go-vs-bindings)
 - [Scalability & Limits](#scalability--limits)
 - [Swarm Computing (Architecture)](SWARM_COMPUTING.md)
 - [Workflows & Scenarios](WORKFLOWS.md)
@@ -15,6 +27,7 @@ Golang V2 code library for high-performance, ACID storage with B-tree indexing, 
 - [Configuration & Tuning](CONFIGURATION.md)
 - [Operational Guide](OPERATIONS.md)
 - [API Cookbook](COOKBOOK.md)
+- [Examples (Go)](examples/README.md)
 - [Quick start](#quick-start)
 - [Lifecycle: failures, failover, reinstate, EC auto-repair](README2.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair)
 - [Prerequisites](#prerequisites)
@@ -71,9 +84,22 @@ Notes:
 # Introduction
 What is SOP?
 
-Scalable Objects Persistence(SOP) is a raw storage engine that bakes together a set of storage related features & algorithms in order to provide the most efficient & reliable (ACID attributes of transactions) technique (known) of storage management and rich search, as it brings to the application, the raw muscle of "raw storage", direct IO communications w/ disk drives. In a code library form factor today.
+Scalable Objects Persistence (SOP) is a **bare metal storage engine** that bakes together a set of storage related features & algorithms in order to provide the most efficient & reliable (ACID attributes of transactions) technique (known) of storage management and rich search. It brings to the application the raw muscle of "raw storage" via direct I/O communications with disk drives, bypassing the overhead of intermediate database layers.
 
-SOP V2 ships as a Golang code library. Thus, it can be used for storage management by applications of many types across different hardware architectures & Operating Systems (OS), that are supported by the Golang compiler.
+SOP V2 core is written in **Go**, but provides first-class bindings for **Python**, **Java**, **C#**, and **Rust**, making it a truly universal storage solution. It can be used for storage management by applications of many types across different hardware architectures & Operating Systems (OS).
+
+## Polyglot Support
+
+SOP is designed as a **"Write Once, Run Anywhere"** architecture. The core engine is compiled into a shared library (`libsop.so`/`.dylib`/`.dll`) which is then consumed by language-specific bindings. This ensures that all languages benefit from the same high-performance, ACID-compliant core.
+
+For a deep dive into our multi-language architecture, see [Polyglot Support](MULTI_LINGUAL_SUPPORT.md).
+
+### Supported Languages
+*   **[Go](https://pkg.go.dev/github.com/sharedcode/sop)**: The native core. Best for high-concurrency backend services.
+*   **[Python (sop4py)](bindings/python/README.md)**: Ideal for AI/ML, RAG applications, and data science.
+*   **[Java (sop4j)](bindings/java/README.md)**: Perfect for enterprise backends and legacy modernization.
+*   **[C# (sop4cs)](bindings/csharp/README.md)**: Native integration for .NET Core and Windows environments.
+*   **[Rust (sop4rs)](bindings/rust/README.md)**: For systems programming and high-performance applications.
 
 ## Scalability & Limits
 SOP is architected to handle **Petabyte-scale** datasets and **Trillions of objects**.
@@ -92,7 +118,7 @@ For detailed architectural patterns, deployment lifecycles, and configuration ex
 ### 1. Standalone App (Embedded DB)
 *   **Scenario**: Desktop apps, CLI tools, or single-node services needing rich indexing.
 *   **Why SOP**:
-    *   **Pure Power**: Direct B-Tree indexing on disk.
+    *   **Bare Metal Performance**: Direct B-Tree indexing on disk with minimal abstraction overhead.
     *   **Speed**: "NoCheck" transaction mode. For build-once-read-many scenarios, skip conflict checks entirely for raw, unbridled read speed.
     *   **Simplicity**: No external database dependencies (just a local file structure).
 

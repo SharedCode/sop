@@ -34,7 +34,7 @@ func TestOptimizeRollingVersion(t *testing.T) {
 			StoresFolders: []string{tmpDir},
 			CacheType:     sop.InMemory,
 		},
-		Cache: sop.GetL2Cache(db.CacheType),
+		Cache: sop.GetL2Cache(sop.TransactionOptions{CacheType: db.CacheType}),
 	}
 	idx1, _ := Open[map[string]any](ctx, tx1, "rolling_test", cfg)
 

@@ -12,7 +12,7 @@ import (
 // NewTransaction is a convenience function to create an end-user facing transaction object that wraps the two-phase commit transaction.
 func NewTransaction(mode sop.TransactionMode, maxTime time.Duration, logging bool) (sop.Transaction, error) {
 	// inredck assumes Redis for caching.
-	cache := sop.GetL2Cache(sop.Redis)
+	cache := sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.Redis})
 	twoPT, err := NewTwoPhaseCommitTransaction(mode, maxTime, cas.NewBlobStore(nil), cas.NewStoreRepository(nil, nil, cache), nil)
 	if err != nil {
 		return nil, err
@@ -27,6 +27,6 @@ func NewTwoPhaseCommitTransaction(mode sop.TransactionMode, maxTime time.Duratio
 	if !IsInitialized() {
 		return nil, fmt.Errorf("redis and/or cassandra bits were not initialized")
 	}
-	l2c := sop.GetL2Cache(sop.Redis)
+	l2c := sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.Redis})
 	return common.NewTwoPhaseCommitTransaction(mode, maxTime, blobStore, storeRepository, cas.NewRegistry(customConnection, l2c), l2c, cas.NewTransactionLog(customConnection, l2c))
 }

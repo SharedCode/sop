@@ -1,5 +1,8 @@
 // Package jsondb provides thin wrappers for storing JSON-serializable values in a SOP B-Tree
 // with helpers for paging and convenience CRUD operations.
+//
+// Note: This package offers similar performance to the native Go implementation because SOP
+// efficiently serializes entire B-Tree nodes and value segments, minimizing JSON overhead.
 package jsondb
 
 import (

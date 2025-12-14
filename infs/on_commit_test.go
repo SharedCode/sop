@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	sop.RegisterL2CacheFactory(sop.InMemory, cache.NewL2InMemoryCache)
+	sop.RegisterL2CacheFactory(sop.InMemory, func(sop.TransactionOptions) sop.L2Cache { return cache.NewL2InMemoryCache() })
 }
 
 func TestOnCommit_FiresOnCommit(t *testing.T) {

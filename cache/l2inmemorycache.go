@@ -384,5 +384,5 @@ func (c *L2InMemoryCache) Unlock(ctx context.Context, lockKeys []*sop.LockKey) e
 }
 
 func init() {
-	sop.RegisterL2CacheFactory(sop.InMemory, NewL2InMemoryCache)
+	sop.RegisterL2CacheFactory(sop.InMemory, func(sop.TransactionOptions) sop.L2Cache { return NewL2InMemoryCache() })
 }

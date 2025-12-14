@@ -37,7 +37,7 @@ func NewTransaction(ctx context.Context, config sop.TransactionOptions) (sop.Tra
 	if config.CacheType == sop.NoCache {
 		config.CacheType = sop.Redis
 	}
-	cache := sop.GetL2Cache(config.CacheType)
+	cache := sop.GetL2Cache(config)
 	twoPT, err := inredck.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, bs, cas.NewStoreRepository(mbsf, conn, cache), conn)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func NewTransactionWithReplication(ctx context.Context, config sop.TransactionOp
 	if config.CacheType == sop.NoCache {
 		config.CacheType = sop.Redis
 	}
-	cache := sop.GetL2Cache(config.CacheType)
+	cache := sop.GetL2Cache(config)
 	twoPT, err := inredck.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, bs, cas.NewStoreRepository(mbsf, conn, cache), conn)
 	if err != nil {
 		return nil, err

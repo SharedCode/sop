@@ -13,7 +13,7 @@ import (
 // RemoveBtree removes the B-tree with the given name from backend storage.
 // This is destructive and cannot be rolled back.
 func RemoveBtree(ctx context.Context, name string, cacheType sop.L2CacheType) error {
-	cache := sop.GetL2Cache(cacheType)
+	cache := sop.GetL2Cache(sop.TransactionOptions{CacheType: cacheType})
 	storeRepository := cas.NewStoreRepository(nil, nil, cache)
 	return storeRepository.Remove(ctx, name)
 }
