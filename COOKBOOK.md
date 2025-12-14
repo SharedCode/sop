@@ -6,19 +6,18 @@ Simple, copy-pasteable examples for common SOP scenarios.
 
 ## Interoperability Note: Go vs. Other Languages
 
-When using SOP in Go, you have two primary ways to interact with the database. **Both are first-class citizens with similar performance characteristics.** SOP uses efficient JSON serialization for entire B-Tree nodes and value segments, so the overhead of the "Universal" mode is negligible.
+When using SOP in Go, you have two primary ways to interact with the database. **Both are first-class citizens with similar performance characteristics.** SOP leverages Go's unique ability to marshal JSON into either strongly-typed structs or dynamic maps, enabling high interoperability.
 
 1.  **Direct Go Generics (Native)**:
     *   **Best for**: Pure Go applications where you want to use specific Go types directly.
     *   **Pros**: Strongly typed (e.g., `NewBtree[string, UserProfile]`), idiomatic Go code.
-    *   **Cons**: **Not guaranteed to be interoperable** with Python/C# bindings out-of-the-box. The native Go implementation does not automatically generate the `IndexSpecification` metadata that other languages rely on for dynamic key handling.
-    *   **Use Case**: Go microservices that do not share data directly with Python/C# apps.
+    *   **Interoperability**: **High**. Because SOP stores data as JSON, a Go struct can be read by Python as a dictionary (and vice versa).
+    *   **Note**: If you need complex custom sorting across languages (e.g., "Sort by Age DESC, then Name ASC"), you should use `IndexSpecification`. While Direct Go can support this, `jsondb` makes it easier to configure.
 
 2.  **`jsondb` Package (Interop-Friendly)**:
-    *   **Best for**: Applications that need to share data with Python, C#, or other language bindings.
-    *   **Pros**: Fully compatible with the "Universal" format used by language bindings. Handles `IndexSpecification` and JSON serialization automatically.
-    *   **Cons**: Slightly more verbose setup than native generics if you are just doing simple key-value storage.
-    *   **Use Case**: A system where a Go service writes data and a Python AI service reads it (or vice versa).
+    *   **Best for**: Scenarios requiring dynamic keys or complex `IndexSpecification` sorting rules shared across languages.
+    *   **Pros**: Designed to slice keys into maps, enabling the fancy `IndexSpecification` custom sort ordering/indexing that other languages rely on.
+    *   **Use Case**: A system where you need to enforce specific multi-field sorting rules that must be respected by Go, Python, C#, and Java clients alike.
 
 ## 1. Storing 100k User Profiles (`database`)
 

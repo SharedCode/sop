@@ -9,8 +9,8 @@ Available for **Go**, **Python**, **Java**, **C#**, and **Rust**.
 
 SOP is designed to be polyglot, but there are two ways to use it in Go. **Both offer similar high performance**, as SOP efficiently serializes entire nodes and value segments.
 
-1.  **Direct Go Generics**: Idiomatic Go. Use this for pure Go services where you want to work with specific Go types. Data written this way **may not be readable** by Python/C# bindings because it lacks the specific metadata (`IndexSpecification`) those bindings expect.
-2.  **`jsondb` Package**: The "Universal" mode. Use this in Go if you need to share data with Python, C#, or other languages. It ensures all data is stored in the JSON-compatible format that the bindings understand.
+1.  **Direct Go Generics**: Idiomatic Go. Use this for pure Go services where you want to work with specific Go types. Thanks to Go's flexible JSON marshaling, this is **highly interoperable** with other languages for most use cases.
+2.  **`jsondb` Package**: Use this when you need **advanced indexing features** (like `IndexSpecification` for complex multi-field sorting) that require keys to be treated as dynamic maps. This ensures consistent sorting behavior across Go, Python, C#, and Java.
 
 See the [API Cookbook](COOKBOOK.md#interoperability-note-go-vs-other-languages) for details.
 
