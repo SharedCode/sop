@@ -1,7 +1,6 @@
 package com.sharedcode.sop.examples;
 
 import com.sharedcode.sop.*;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -22,7 +21,7 @@ public class BTreeBasic {
             try (Transaction trans = db.beginTransaction(ctx)) {
                 // 3. Create/Open B-Tree
                 // Note: Java generics are erased, so we pass class tokens
-                BTree<String, String> btree = BTree.create(ctx, "users_basic", trans, null, String.class, String.class);
+                BTree<String, String> btree = db.newBtree(ctx, "users_basic", trans, null, String.class, String.class);
 
                 // 4. Add Items (Create)
                 System.out.println("Adding users...");

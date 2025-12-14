@@ -46,7 +46,7 @@ public class LoggingDemo {
             System.out.println("Starting transaction...");
             try (Transaction trans = db.beginTransaction(ctx)) {
                 System.out.println("Creating B-Tree...");
-                BTree<String, String> btree = BTree.create(ctx, "logging_btree", trans, null, String.class, String.class);
+                BTree<String, String> btree = db.newBtree(ctx, "logging_btree", trans, null, String.class, String.class);
 
                 System.out.println("Adding item...");
                 btree.add(new Item<>("hello", "world"));

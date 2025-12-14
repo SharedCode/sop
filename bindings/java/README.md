@@ -48,7 +48,7 @@ public class QuickStart {
             // Start Transaction
             try (Transaction trans = db.beginTransaction(ctx)) {
                 // Create B-Tree
-                BTree<String, String> btree = BTree.create(ctx, "users", trans, null, String.class, String.class);
+                BTree<String, String> btree = db.newBtree(ctx, "users", trans, null, String.class, String.class);
 
                 // Add Item
                 btree.add("user1", "Alice");

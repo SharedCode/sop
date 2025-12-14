@@ -41,7 +41,7 @@ public class BTreeBatched {
             // 2. Batched Update
             System.out.println("\n2. Batched Update (100 items)...");
             try (Transaction trans = db.beginTransaction(ctx)) {
-                BTree<String, String> btree = BTree.open(ctx, "batched_btree", trans, String.class, String.class);
+                BTree<String, String> btree = db.openBtree(ctx, "batched_btree", trans, String.class, String.class);
                 
                 List<Item<String, String>> items = new ArrayList<>();
                 for (int i = 0; i < 100; i++) {
@@ -55,7 +55,7 @@ public class BTreeBatched {
 
             // Verify Update
             try (Transaction trans = db.beginTransaction(ctx)) {
-                BTree<String, String> btree = BTree.open(ctx, "batched_btree", trans, String.class, String.class);
+                BTree<String, String> btree = db.openBtree(ctx, "batched_btree", trans, String.class, String.class);
                 List<Item<String, String>> items = btree.getValues(Collections.singletonList(new Item<>("key_50", null)));
                 if (items != null && !items.isEmpty()) {
                     System.out.println("Verified key_50 value: " + items.get(0).value);
@@ -66,7 +66,7 @@ public class BTreeBatched {
             // 3. Batched Remove
             System.out.println("\n3. Batched Remove (100 items)...");
             try (Transaction trans = db.beginTransaction(ctx)) {
-                BTree<String, String> btree = BTree.open(ctx, "batched_btree", trans, String.class, String.class);
+                BTree<String, String> btree = db.openBtree(ctx, "batched_btree", trans, String.class, String.class);
                 
                 List<String> keys = new ArrayList<>();
                 for (int i = 0; i < 100; i++) {
@@ -80,7 +80,7 @@ public class BTreeBatched {
 
             // Verify Remove
             try (Transaction trans = db.beginTransaction(ctx)) {
-                BTree<String, String> btree = BTree.open(ctx, "batched_btree", trans, String.class, String.class);
+                BTree<String, String> btree = db.openBtree(ctx, "batched_btree", trans, String.class, String.class);
                 long count = btree.count();
                 System.out.println("Verified count: " + count);
                 trans.commit();

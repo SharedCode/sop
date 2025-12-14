@@ -16,7 +16,7 @@ public class BTreePaging {
             Database db = new Database(dbOpts);
 
             try (Transaction trans = db.beginTransaction(ctx)) {
-                BTree<Integer, String> btree = BTree.create(ctx, "logs", trans, null, Integer.class, String.class);
+                BTree<Integer, String> btree = db.newBtree(ctx, "logs", trans, null, Integer.class, String.class);
 
                 // Populate with 100 items
                 System.out.println("Populating 100 log entries...");

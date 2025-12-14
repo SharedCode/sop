@@ -49,7 +49,7 @@ public class BTreeMetadata {
                 BTreeOptions opts = new BTreeOptions("products");
                 opts.indexSpecification = indexSpec;
                 
-                BTree<ProductKey, String> products = BTree.create(ctx, "products", trans, opts, ProductKey.class, String.class);
+                BTree<ProductKey, String> products = db.newBtree(ctx, "products", trans, opts, ProductKey.class, String.class);
 
                 // Add a product with a large description (Value)
                 ProductKey key = new ProductKey("Electronics", 999, true, 100.0);

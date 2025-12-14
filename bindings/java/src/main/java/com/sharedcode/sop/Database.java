@@ -63,6 +63,14 @@ public class Database {
         }
     }
 
+    public <K, V> BTree<K, V> newBtree(Context ctx, String name, Transaction tx, BTreeOptions options, Class<K> keyType, Class<V> valueType) throws SopException {
+        return BTree.create(ctx, name, tx, options, keyType, valueType);
+    }
+
+    public <K, V> BTree<K, V> openBtree(Context ctx, String name, Transaction tx, Class<K> keyType, Class<V> valueType) throws SopException {
+        return BTree.open(ctx, name, tx, keyType, valueType);
+    }
+    
     public void removeBtree(Context ctx, String name) throws SopException {
         ensureCreated(ctx);
         

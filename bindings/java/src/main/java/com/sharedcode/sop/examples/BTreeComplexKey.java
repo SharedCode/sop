@@ -55,7 +55,7 @@ public class BTreeComplexKey {
                 BTreeOptions opts = new BTreeOptions("employees");
                 opts.indexSpecification = indexSpec;
                 
-                BTree<EmployeeKey, String> employees = BTree.create(ctx, "employees", trans, opts, EmployeeKey.class, String.class);
+                BTree<EmployeeKey, String> employees = db.newBtree(ctx, "employees", trans, opts, EmployeeKey.class, String.class);
 
                 System.out.println("Adding employees...");
                 employees.add(new Item<>(new EmployeeKey("US", "Sales", 101), "Alice"));
@@ -96,7 +96,7 @@ public class BTreeComplexKey {
                 
                 System.out.println("Searching with Map (Anonymous Type equivalent)...");
                 // Open as Object key to allow passing Map
-                BTree<Object, String> simpleEmployees = BTree.open(ctx, "employees", trans2, Object.class, String.class);
+                BTree<Object, String> simpleEmployees = db.openBtree(ctx, "employees", trans2, Object.class, String.class);
                 
                 Map<String, Object> anonKey = new HashMap<>();
                 anonKey.put("Region", "EU");

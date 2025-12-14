@@ -54,7 +54,7 @@ public class CassandraDemo {
                 // 1. Insert
                 System.out.println("Starting Write Transaction...");
                 try (Transaction trans = db.beginTransaction(ctx)) {
-                    BTree<String, String> btree = BTree.create(ctx, "cassandra_btree", trans, null, String.class, String.class);
+                    BTree<String, String> btree = db.newBtree(ctx, "cassandra_btree", trans, null, String.class, String.class);
                     
                     System.out.println("Adding item 'key1'...");
                     btree.add(new Item<>("key1", "value1"));
@@ -66,7 +66,7 @@ public class CassandraDemo {
                 // 2. Read
                 System.out.println("Starting Read Transaction...");
                 try (Transaction trans = db.beginTransaction(ctx, TransactionMode.ForReading)) {
-                    BTree<String, String> btree = BTree.open(ctx, "cassandra_btree", trans, String.class, String.class);
+                    BTree<String, String> btree = db.openBtree(ctx, "cassandra_btree", trans, String.class, String.class);
                     
                     if (btree.find("key1")) {
                         List<Item<String, String>> items = btree.getValues(Collections.singletonList(new Item<>("key1", null)));

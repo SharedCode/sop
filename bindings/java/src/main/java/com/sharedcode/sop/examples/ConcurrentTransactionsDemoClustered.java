@@ -49,7 +49,7 @@ public class ConcurrentTransactionsDemoClustered {
 
             // 1. Setup: Create the B-Tree in a separate transaction first
             try (Transaction trans = db.beginTransaction(ctx)) {
-                BTree<Integer, String> btree = BTree.create(ctx, storeName, trans, null, Integer.class, String.class);
+                BTree<Integer, String> btree = db.newBtree(ctx, storeName, trans, null, Integer.class, String.class);
                 btree.add(new Item<>( -1, "Root Seed Item"));
                 trans.commit();
             } catch (Exception e) {
@@ -76,7 +76,7 @@ public class ConcurrentTransactionsDemoClustered {
                                 System.out.println("Thread " + threadId + " opening btree...");
 
                                 List<Item<Integer, String>> batch = new ArrayList<>(itemsPerThread);
-                                BTree<Integer, String> btree = BTree.open(ctx, storeName, trans, Integer.class, String.class);
+                                BTree<Integer, String> btree = db.openBtree(ctx, storeName, trans, Integer.class, String.class);
                                 
                                 for (int j = 0; j < itemsPerThread; j++) {
                                     int key = (threadId * itemsPerThread) + j;
