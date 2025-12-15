@@ -39,6 +39,7 @@ func main() {
 	// Setup Routes
 	http.HandleFunc("/", handleIndex)
 	http.HandleFunc("/api/stores", handleListStores)
+	http.HandleFunc("/api/store/info", handleGetStoreInfo)
 	http.HandleFunc("/api/store/items", handleListItems)
 
 	// Start Server
@@ -87,6 +88,55 @@ func handleListStores(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(stores)
+}
+
+func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
+	storeName := r.URL.Query().Get("name")
+	if storeName == "" {
+		http.Error(w, "Store name is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{config.RegistryPath},
+	}
+
+	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
+	if err != nil {
+		http.Error(w, "Failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer trans.Rollback(ctx)
+
+	// We need to open the store to get its info.
+	// We can use a dummy comparer since we are not doing any operations.
+	comparer := func(a, b any) int { return 0 }
+	store, err := infs.OpenBtree[any, any](ctx, storeName, trans, comparer)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v", storeName, err), http.StatusInternalServerError)
+		return
+	}
+
+	si := store.GetStoreInfo()
+
+	// Prepare response
+	response := map[string]any{
+		"name":           si.Name,
+		"description":    si.Description,
+		"count":          si.Count,
+		"isPrimitiveKey": si.IsPrimitiveKey,
+	}
+
+	if !si.IsPrimitiveKey && si.MapKeyIndexSpecification != "" {
+		var is jsondb.IndexSpecification
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(si.MapKeyIndexSpecification), &is); err == nil {
+			response["indexSpec"] = is
+		}
+	}
+
+	json.NewEncoder(w).Encode(response)
 }
 
 func handleListItems(w http.ResponseWriter, r *http.Request) {
@@ -206,26 +256,84 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 
 	// Determine start position
 	query := r.URL.Query().Get("q")
+	action := r.URL.Query().Get("action")
+	refKeyStr := r.URL.Query().Get("key")
+
 	var ok bool
-	if query != "" {
-		// Try to find the item with the query key.
-		// If it's a complex key, we need to parse the query string into a map.
-		var searchKey any = query
+
+	// Helper to parse key
+	parseKey := func(kStr string) any {
+		var k any = kStr
 		if isComplexKey {
 			var mapKey map[string]any
-			if err := json.Unmarshal([]byte(query), &mapKey); err == nil {
-				searchKey = mapKey
-			} else {
-				// If query is not valid JSON, we might want to treat it as a partial match or fail?
-				// For now, let's just log and try as string (which will likely fail comparison)
-				log.Printf("Warning: Search query '%s' is not valid JSON for complex key store.", query)
+			if err := json.Unmarshal([]byte(kStr), &mapKey); err == nil {
+				k = mapKey
 			}
 		}
+		return k
+	}
 
-		ok, err = store.Find(ctx, searchKey, true)
-	} else {
-		// Iterate from the first item
+	switch action {
+	case "first":
 		ok, err = store.First(ctx)
+	case "last":
+		ok, err = store.Last(ctx)
+		if ok {
+			// Go back limit-1 items to find start of last page
+			for i := 0; i < limit-1; i++ {
+				if ok, _ := store.Previous(ctx); !ok {
+					break
+				}
+			}
+		}
+	case "next":
+		if refKeyStr != "" {
+			k := parseKey(refKeyStr)
+			if found, _ := store.Find(ctx, k, true); found {
+				ok, err = store.Next(ctx)
+			} else {
+				// If key not found, fallback to first
+				ok, err = store.First(ctx)
+			}
+		} else {
+			ok, err = store.First(ctx)
+		}
+	case "prev":
+		if refKeyStr != "" {
+			k := parseKey(refKeyStr)
+			if found, _ := store.Find(ctx, k, true); found {
+				if ok, _ = store.Previous(ctx); ok {
+					// Go back limit-1 more
+					for i := 0; i < limit-1; i++ {
+						if okPrev, _ := store.Previous(ctx); !okPrev {
+							break
+						}
+					}
+					// We are positioned at the start of the previous page
+					ok = true
+				} else {
+					// Already at start
+					ok, err = store.First(ctx)
+				}
+			} else {
+				ok, err = store.First(ctx)
+			}
+		} else {
+			ok, err = store.First(ctx)
+		}
+	default:
+		if query != "" {
+			// Try to find the item with the query key.
+			searchKey := parseKey(query)
+			fmt.Printf("searchKey: %v/n", searchKey)
+			ok, err = store.Find(ctx, searchKey, false)
+			if store.GetCurrentKey().Key != nil {
+				ok = true
+			}
+		} else {
+			// Iterate from the first item
+			ok, err = store.First(ctx)
+		}
 	}
 
 	for ok && err == nil && count < limit {

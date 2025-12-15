@@ -39,10 +39,24 @@
     
     <div class="toolbar" id="toolbar" style="display:none;">
         <input type="text" id="search-input" placeholder="Search keys...">
-        <button onclick="loadItems()">Search</button>
+        <button onclick="loadItems('search')">Search</button>
+    </div>
+
+    <div id="pagination-top" style="display:none; margin-bottom: 10px; gap: 10px; justify-content: center;">
+        <button onclick="firstPage()">First</button>
+        <button onclick="prevPage()">Previous</button>
+        <button onclick="nextPage()">Next</button>
+        <button onclick="lastPage()">Last</button>
     </div>
 
     <div id="data-grid"></div>
+    
+    <div id="pagination" style="display:none; margin-top: 10px; gap: 10px; justify-content: center;">
+        <button onclick="firstPage()">First</button>
+        <button onclick="prevPage()">Previous</button>
+        <button onclick="nextPage()">Next</button>
+        <button onclick="lastPage()">Last</button>
+    </div>
 </div>
 
 <div id="detail-panel">
@@ -53,6 +67,9 @@
 
 <script>
     let currentStore = null;
+    let firstKey = null;
+    let lastKey = null;
+    let currentStoreInfo = null;
 
     // Load Stores on Start
     fetch('/api/stores')
@@ -70,30 +87,123 @@
 
     function selectStore(name, element) {
         currentStore = name;
-        document.getElementById('current-store-title').textContent = name;
-        document.getElementById('toolbar').style.display = 'flex';
         
         // Highlight active
         document.querySelectorAll('#sidebar li').forEach(el => el.classList.remove('active'));
         element.classList.add('active');
 
-        loadItems();
+        // Fetch Store Info
+        fetch(`/api/store/info?name=${encodeURIComponent(name)}`)
+            .then(res => res.json())
+            .then(info => {
+                currentStoreInfo = info;
+                // Use description if available, otherwise name
+                const displayTitle = info.description ? info.description : info.name;
+                document.getElementById('current-store-title').textContent = displayTitle;
+
+                buildSearchUI(info);
+                loadItems('first');
+            });
     }
 
-    function loadItems() {
+    function buildSearchUI(info) {
+        const toolbar = document.getElementById('toolbar');
+        toolbar.innerHTML = ''; // Clear existing
+        toolbar.style.display = 'flex';
+        toolbar.style.flexWrap = 'wrap';
+
+        if (info.indexSpec && info.indexSpec.index_fields) {
+            // Complex Key with Index Spec
+            info.indexSpec.index_fields.forEach(field => {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = `search-field-${field.field_name}`;
+                input.placeholder = `${field.field_name} (${field.ascending_sort_order ? 'Asc' : 'Desc'})`;
+                input.style.marginRight = '5px';
+                input.style.flex = '1 1 150px'; // Allow wrapping
+                toolbar.appendChild(input);
+            });
+        } else {
+            // Primitive Key or no spec
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'search-input';
+            input.placeholder = 'Search keys...';
+            input.style.flex = '1';
+            toolbar.appendChild(input);
+        }
+
+        const btn = document.createElement('button');
+        btn.textContent = 'Search';
+        btn.onclick = () => loadItems('search');
+        toolbar.appendChild(btn);
+    }
+
+    function loadItems(action = 'first', refKey = null) {
         if (!currentStore) return;
         
-        const searchInput = document.getElementById('search-input').value;
-        const url = `/api/store/items?name=${encodeURIComponent(currentStore)}&q=${encodeURIComponent(searchInput)}`;
+        let url = `/api/store/items?name=${encodeURIComponent(currentStore)}`;
+        
+        if (action === 'search') {
+             let query = "";
+             if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+                 // Construct JSON object from fields
+                 const queryObj = {};
+                 let hasValue = false;
+                 currentStoreInfo.indexSpec.index_fields.forEach(field => {
+                     const val = document.getElementById(`search-field-${field.field_name}`).value;
+                     if (val) {
+                         // Try to parse number if possible, else string
+                         const numVal = Number(val);
+                         queryObj[field.field_name] = isNaN(numVal) ? val : numVal;
+                         hasValue = true;
+                     }
+                 });
+                 if (hasValue) {
+                     query = JSON.stringify(queryObj);
+                 }
+             } else {
+                 query = document.getElementById('search-input').value;
+             }
+             
+             if (query) {
+                url += `&q=${encodeURIComponent(query)}`;
+             } else {
+                 // If search is empty, treat as first
+                 action = 'first';
+                 url += `&action=${action}`;
+             }
+        } else {
+             url += `&action=${action}`;
+             if (refKey) {
+                 const keyStr = typeof refKey === 'object' ? JSON.stringify(refKey) : refKey;
+                 url += `&key=${encodeURIComponent(keyStr)}`;
+             }
+        }
 
         fetch(url)
             .then(res => res.json())
             .then(items => {
                 const grid = document.getElementById('data-grid');
+                const pagination = document.getElementById('pagination');
+                const paginationTop = document.getElementById('pagination-top');
+                
                 if (!items || items.length === 0) {
-                    grid.innerHTML = '<p>No items found.</p>';
+                    grid.innerHTML = '<p>No items found. <button onclick="loadItems(\'first\')">Go to First</button></p>';
+                    pagination.style.display = 'none';
+                    paginationTop.style.display = 'none';
+                    firstKey = null;
+                    lastKey = null;
                     return;
                 }
+
+                // Update keys
+                firstKey = items[0].key;
+                lastKey = items[items.length - 1].key;
+                
+                // Show pagination
+                pagination.style.display = 'flex';
+                paginationTop.style.display = 'flex';
 
                 let html = '<table><thead><tr><th>Key</th><th>Value Preview</th></tr></thead><tbody>';
                 items.forEach(item => {
@@ -108,6 +218,11 @@
                 grid.innerHTML = html;
             });
     }
+
+    function firstPage() { loadItems('first'); }
+    function lastPage() { loadItems('last'); }
+    function nextPage() { loadItems('next', lastKey); }
+    function prevPage() { loadItems('prev', firstKey); }
 
     function showDetail(item) {
         const panel = document.getElementById('detail-panel');
