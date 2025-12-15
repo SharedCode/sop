@@ -4,7 +4,9 @@ A lightweight, web-based tool for inspecting and browsing SOP B-Tree repositorie
 
 ## Features
 - **Store Listing**: View all B-Trees in a registry.
-- **Data Grid**: Browse key/value pairs with pagination (first 100 items).
+- **Data Grid**: Browse key/value pairs with pagination.
+- **Navigation**: Seamlessly navigate between data pages (Next/Previous) to explore large datasets.
+- **Search**: Find specific records using complex key inputs to jump directly to a location in the B-Tree.
 - **JSON Inspection**: View complex value structures as formatted JSON.
 - **Universal Access**: Works with any SOP store, regardless of the original data type (uses generic JSON serialization).
 
