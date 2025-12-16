@@ -15,6 +15,7 @@ Demonstrates how to store Go structs so they are automatically serialized to the
 Demonstrates "Schema-less" storage with composite secondary indexes.
 - **Key Feature**: `jsondb.NewJsonBtreeMapKey` + `IndexSpecification`
 - **Why**: Allows you to define sorting rules (e.g., "Sort by Category ASC, then Price DESC") that are respected by all language bindings.
+- **New**: Also includes `struct_key_main.go` demonstrating `jsondb.NewJsonBtreeStructKey` for a more idiomatic Go experience using structs as keys.
 
 ---
 

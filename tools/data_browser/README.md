@@ -30,6 +30,18 @@ By default, it runs on port 8080. You can change this with the `-port` flag:
 go run tools/data_browser/main.go -registry ./data -port 9090
 ```
 
+### Try it with an Example
+
+If you have run the [Secondary Indexes Example](../../examples/interop_secondary_indexes/README.md), you can browse the generated dataset:
+
+```bash
+# 1. Generate the data (if you haven't already)
+go run examples/interop_secondary_indexes/struct_key_main.go
+
+# 2. Run the Data Browser pointing to the example's data folder
+go run tools/data_browser/main.go -registry ./data/struct_key_demo
+```
+
 ### Accessing
 Open your browser and navigate to:
 http://localhost:8080

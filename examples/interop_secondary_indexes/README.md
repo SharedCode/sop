@@ -16,22 +16,41 @@ This means products will be grouped by category, and within each category, the m
 *   **`IndexSpecification`**: Defines the sorting order for multiple fields.
 *   **Data Generation**: The script automatically generates **500 records** across various categories (Electronics, Books, Clothing, Home, Garden) to populate the database for testing and visualization.
 
-## Running the Example
+## Running the Example (Map-based)
 
-From the root of the `sop` repository:
+This version uses `map[string]any` for keys, which is useful for dynamic schemas.
 
 ```bash
 go run examples/interop_secondary_indexes/main.go
 ```
+*Data is stored in: `./data/interop_indexes`*
+
+## Recommended: Idiomatic Go Structs (Data Generator)
+
+We recommend using the struct-based approach for most Go applications. This example also serves as the **primary data generator** for testing the Data Browser, creating 500 records.
+
+This allows you to define your key as a struct:
+```go
+type ProductKey struct {
+    Category string  `json:"category"`
+    Price    float64 `json:"price"`
+    ID       string  `json:"id"`
+}
+```
+
+Run the struct-based example to populate the database:
+```bash
+go run examples/interop_secondary_indexes/struct_key_main.go
+```
 
 ## Verifying with Data Browser
 
-After running this example, you can use the **SOP Data Browser** to inspect the data.
+After running the struct-based example, you can use the **SOP Data Browser** to inspect the data.
 
 1.  Start the Data Browser:
     ```bash
-    go run tools/data_browser/main.go -registry ./data/interop_indexes
+    go run tools/data_browser/main.go -registry ./data/struct_key_demo
     ```
 2.  Open [http://localhost:8080](http://localhost:8080).
-3.  Select the `products_by_category_price` store.
+3.  Select the `products_struct` store.
 4.  You can now browse the 500 generated records, navigate through pages, and search for specific items using the complex key search feature.
