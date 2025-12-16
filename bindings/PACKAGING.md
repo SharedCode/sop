@@ -37,3 +37,31 @@ SOP is a polyglot library backed by a high-performance Go engine. To support mul
 *   **Distribution Strategy**:
     *   **Option A (Static Linking - Recommended)**: Build a static archive (`.a`) from Go (`-buildmode=c-archive`) and link it statically in `build.rs`. This produces a single standalone Rust binary.
     *   **Option B (Build from Source)**: Have `build.rs` invoke `go build` to compile the library on the user's machine. Requires the user to have Go installed.
+
+## Release Workflow & Build Automation
+
+We use a **"One Stop Hub"** strategy for building release artifacts. The goal is to ensure that all language bindings and auxiliary tools (like `sop-browser`) are built consistently with the same version.
+
+### The Master Build Script (`bindings/main/build.sh`)
+This script is the central engine. It:
+1.  Builds the **Core Shared Libraries** (`libjsondb`) for all platforms (macOS, Linux, Windows).
+2.  Builds the **SOP Data Browser** (`sop-browser`) for all platforms.
+3.  Distributes these binaries to the appropriate language folders (`python/sop`, `csharp/Sop`, `java/resources`).
+4.  Outputs standalone tools to a `release/` directory in the project root.
+
+### Release Process (Python Example)
+
+The Python build script (`bindings/python/build.sh`) acts as the orchestrator for a release.
+
+1.  **Update Version**: Bump the version in `bindings/python/pyproject.toml`.
+2.  **Run Build**: Execute `./bindings/python/build.sh`.
+    *   It extracts the version from `pyproject.toml`.
+    *   It calls the Master Build Script (`bindings/main/build.sh`) with `SOP_VERSION` set.
+    *   It builds the Python wheels.
+3.  **Publish Python**: `python3 -m twine upload dist/*`
+4.  **Publish Tools**:
+    *   Go to the [GitHub Releases](https://github.com/sharedcode/sop/releases) page.
+    *   Create a new release tag (e.g., `sop4py-v2.0.32`).
+    *   Upload the binaries found in the `release/` folder (e.g., `sop-browser-darwin-arm64`, `sop-browser-windows-amd64.exe`).
+
+This ensures that users who install the Python package can download the exact matching version of the `sop-browser` tool.

@@ -4,11 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
     include-package-data = true
-    packages = ["sop"]
+    
+    [tool.setuptools.packages.find]
+    where = ["."]
+    include = ["sop*"]
 
 [project]
 name = "sop4py"
-version = "2.0.27"
+version = "2.0.32"
 authors = [
     { name="Gerardo Recinto", email="gerardorecinto@yahoo.com" },
 ]
@@ -21,6 +24,10 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = []
+
+[project.scripts]
+sop-browser = "sop.browser:main"
+sop-demo = "sop.demo:main"
 
 # activate venv: sop$ source .venv/bin/activate
 # build: python3 -m build
