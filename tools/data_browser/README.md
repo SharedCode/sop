@@ -49,3 +49,4 @@ http://localhost:8080
 ## Architecture
 - **Backend**: Go HTTP server using `sop/infs` to open B-Trees as `[any, any]`.
 - **Frontend**: Single HTML file with vanilla JS for API interaction.
+- **Performance**: The browser is highly responsive because SOP includes a built-in caching layer, even in Standalone mode, ensuring fast access to frequently viewed nodes.
