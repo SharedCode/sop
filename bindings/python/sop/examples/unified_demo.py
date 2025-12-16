@@ -4,7 +4,7 @@ import sys
 import uuid
 
 # Add the parent directory to sys.path to import sop
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+# sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context, TransactionMode, BtreeOptions, Item
 from sop.ai import Database, DatabaseType, Item as VectorItem

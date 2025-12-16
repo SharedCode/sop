@@ -82,40 +82,40 @@ python3 -m sop.test_logging
 
 echo "--- Running Python Examples ---"
 
-echo "Running examples/logging_demo.py..."
-python3 examples/logging_demo.py
+echo "Running sop.examples.logging_demo..."
+python3 -m sop.examples.logging_demo
 
-echo "Running examples/modelstore_demo.py..."
-python3 examples/modelstore_demo.py
+echo "Running sop.examples.modelstore_demo..."
+python3 -m sop.examples.modelstore_demo
 
-echo "Running examples/unified_demo.py..."
-python3 examples/unified_demo.py
+echo "Running sop.examples.unified_demo..."
+python3 -m sop.examples.unified_demo
 
-echo "Running examples/complex_key_demo.py..."
-python3 examples/complex_key_demo.py
+echo "Running sop.examples.complex_key_demo..."
+python3 -m sop.examples.complex_key_demo
 
-echo "Running examples/metadata_key_demo.py..."
-python3 examples/metadata_key_demo.py
+echo "Running sop.examples.metadata_key_demo..."
+python3 -m sop.examples.metadata_key_demo
 
-echo "Running examples/vector_demo.py..."
-python3 examples/vector_demo.py
+echo "Running sop.examples.vector_demo..."
+python3 -m sop.examples.vector_demo
 
 # Skipping clustered/replication demos as they might require specific setup or take longer, 
 # but I'll run the basic ones first. If user wants all, I can add them.
 # Let's add them but be aware they might fail if Redis cluster isn't set up or similar.
 # Actually, the user asked for "all python tests and examples". I should try.
 
-echo "Running examples/vector_clustered_demo.py..."
-python3 examples/vector_clustered_demo.py || echo "Warning: vector_clustered_demo.py failed (possibly due to missing cluster setup)"
+echo "Running sop.examples.vector_clustered_demo..."
+python3 -m sop.examples.vector_clustered_demo || echo "Warning: vector_clustered_demo failed (possibly due to missing cluster setup)"
 
-echo "Running examples/vector_clustered_replication_demo.py..."
-python3 examples/vector_clustered_replication_demo.py || echo "Warning: vector_clustered_replication_demo.py failed"
+echo "Running sop.examples.vector_clustered_replication_demo..."
+python3 -m sop.examples.vector_clustered_replication_demo || echo "Warning: vector_clustered_replication_demo failed"
 
-echo "Running examples/vector_replication_demo.py..."
-python3 examples/vector_replication_demo.py || echo "Warning: vector_replication_demo.py failed"
+echo "Running sop.examples.vector_replication_demo..."
+python3 -m sop.examples.vector_replication_demo || echo "Warning: vector_replication_demo failed"
 
 # langchain_demo might require API keys or extra deps.
-echo "Running examples/langchain_demo.py..."
-python3 examples/langchain_demo.py || echo "Warning: langchain_demo.py failed (possibly missing dependencies)"
+echo "Running sop.examples.langchain_demo..."
+python3 -m sop.examples.langchain_demo || echo "Warning: langchain_demo failed (possibly missing dependencies)"
 
 echo "All Python tests and examples completed."

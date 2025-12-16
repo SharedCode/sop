@@ -6,7 +6,7 @@ import time
 import json
 
 # Add the parent directory to sys.path to import sop
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+# sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from sop import Context, BtreeOptions, Item, ValueDataSize, PagingInfo
 from sop.btree import IndexSpecification, IndexFieldSpecification
