@@ -41,6 +41,7 @@ See the [API Cookbook](COOKBOOK.md#interoperability-note-go-vs-other-languages) 
 - [SOP for Rust (sop4rs)](bindings/rust/README.md)
 - [SOP AI Kit](ai/README.md)
 - [Data Browser (Tool)](tools/data_browser/README.md) - **Updated!** Now with full navigation and complex key search.
+- [Changelog](CHANGELOG.md)
 - [Community & support](#community--support)
 - [Contributing & license](#contributing--license)
  - [Coordination model (OOA) and safety](#coordination-model-ooa-and-safety)
