@@ -2,6 +2,7 @@ import sys
 import importlib
 import pkgutil
 import os
+import shutil
 from . import examples
 
 def list_examples():
@@ -36,12 +37,31 @@ def run_example(name):
         import traceback
         traceback.print_exc()
 
+def copy_examples(dest_dir="."):
+    """Copies the examples directory to the specified destination."""
+    src_dir = examples.__path__[0]
+    target_dir = os.path.join(dest_dir, "sop_examples")
+    
+    if os.path.exists(target_dir):
+        print(f"Error: Destination directory '{target_dir}' already exists.")
+        print("Please remove it or specify a different location.")
+        return
+
+    print(f"Copying examples from {src_dir} to {target_dir}...")
+    try:
+        shutil.copytree(src_dir, target_dir, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        print("Success! You can now explore the examples in:")
+        print(f"  {os.path.abspath(target_dir)}")
+    except Exception as e:
+        print(f"Error copying examples: {e}")
+
 def main():
     if len(sys.argv) < 2:
         print("SOP Examples Runner")
         print("Usage:")
         print("  sop-demo list           # List all available examples")
         print("  sop-demo run <name>     # Run a specific example")
+        print("  sop-demo copy [dest]    # Copy examples to a local folder (default: ./sop_examples)")
         sys.exit(1)
     
     command = sys.argv[1]
@@ -54,9 +74,14 @@ def main():
             list_examples()
             sys.exit(1)
         run_example(sys.argv[2])
+    elif command == "copy":
+        dest = "."
+        if len(sys.argv) > 2:
+            dest = sys.argv[2]
+        copy_examples(dest)
     else:
         print(f"Unknown command: {command}")
-        print("Usage: sop-demo [list | run <example_name>]")
+        print("Usage: sop-demo [list | run <example_name> | copy]")
 
 if __name__ == "__main__":
     main()

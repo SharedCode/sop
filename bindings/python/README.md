@@ -59,30 +59,46 @@ sop-browser
 
 ## Running the Examples
 
-The `examples/` directory contains runnable scripts demonstrating various features.
+SOP comes with a bundled CLI tool `sop-demo` to easily list and run examples directly from your installation.
 
-To run an example, ensure you are in the `bindings/python` directory and have your virtual environment activated (if using one).
-
-**Basic Usage:**
+**List available examples:**
 ```bash
-python3 examples/basic_demo.py
+sop-demo list
+```
+
+**Run a specific example:**
+```bash
+sop-demo run vector_demo
+```
+
+**Copy examples to your workspace:**
+If you want to inspect the code or modify the examples, you can copy them to your local directory:
+```bash
+sop-demo copy
+# Copies to ./sop_examples/
+```
+
+**Manual Execution:**
+If you have copied the examples locally, you can also run them using python directly:
+```bash
+python3 sop_examples/concurrent_demo.py
 ```
 
 **Concurrent Transactions (Standalone):**
 This demo shows how to run concurrent transactions without a Redis dependency. It simulates real-world scenarios by introducing a small random sleep interval (jitter) between batch transactions to mimic network latency and reduce contention.
 ```bash
-python3 examples/concurrent_demo_standalone.py
+sop-demo run concurrent_demo_standalone
 ```
 
 **Concurrent Transactions (Clustered):**
 This demo shows how to run concurrent transactions in a distributed environment (requires Redis). Similar to the standalone demo, it uses jitter to simulate realistic commit timing across different machines in a cluster.
 ```bash
-python3 examples/concurrent_demo.py
+sop-demo run concurrent_demo
 ```
 
 **Vector Search:**
 ```bash
-python3 examples/vector_search_demo.py
+sop-demo run vector_demo
 ```
 
 See the `examples/` directory for more scripts.

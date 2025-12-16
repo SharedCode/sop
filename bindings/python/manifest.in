@@ -9,3 +9,5 @@ include sop/libjsondb_arm64linux.h
 include sop/libjsondb_amd64windows.dll
 include sop/libjsondb_amd64windows.h
 include sop/ai/README.md
+recursive-include sop/examples *.md
+

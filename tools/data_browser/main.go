@@ -9,9 +9,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
+	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
 	"github.com/sharedcode/sop/infs"
@@ -29,10 +33,20 @@ var content embed.FS
 
 var config Config
 
+// Version is the application version, set at build time via -ldflags
+var Version = "dev"
+
 func main() {
+	var showVersion bool
+	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
 	flag.IntVar(&config.Port, "port", 8080, "Port to run the server on")
 	flag.StringVar(&config.RegistryPath, "registry", "/tmp/sop_data", "Path to the SOP registry/data directory")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("SOP Data Browser v%s\n", Version)
+		os.Exit(0)
+	}
 
 	// Ensure registry path exists (basic check)
 	if _, err := os.Stat(config.RegistryPath); os.IsNotExist(err) {
@@ -47,7 +61,7 @@ func main() {
 
 	// Start Server
 	addr := fmt.Sprintf(":%d", config.Port)
-	log.Printf("SOP Data Browser running at http://localhost%s", addr)
+	log.Printf("SOP Data Browser v%s running at http://localhost%s", Version, addr)
 	log.Printf("Target Registry: %s", config.RegistryPath)
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatal(err)
@@ -158,72 +172,71 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 
 	// Variables to hold state for the closure
 	var indexSpec *jsondb.IndexSpecification
-	var isComplexKey bool
+	var isPrimitiveKey bool
 
-	// Proxy comparer
-	comparer := func(a, b any) int {
-		if !isComplexKey {
-			return btree.Compare(a, b)
+	// Check if primitive key before opening
+	if t2, ok := trans.GetPhasedTransaction().(*common.Transaction); ok {
+		stores, err := t2.StoreRepository.Get(ctx, storeName)
+		if err == nil && len(stores) > 0 {
+			isPrimitiveKey = stores[0].IsPrimitiveKey
 		}
+	}
 
-		mapA, okA := a.(map[string]any)
-		mapB, okB := b.(map[string]any)
-		if !okA || !okB {
-			return btree.Compare(a, b)
-		}
+	var comparer btree.ComparerFunc[any]
 
-		if indexSpec != nil {
-			return indexSpec.Comparer(mapA, mapB)
-		}
-
-		// Default Map Comparer (Dynamic)
-		// Collect all keys, sort them, compare values.
-		keys := make([]string, 0, len(mapA)+len(mapB))
-		seen := make(map[string]struct{})
-		for k := range mapA {
-			if _, exists := seen[k]; !exists {
-				keys = append(keys, k)
-				seen[k] = struct{}{}
+	if !isPrimitiveKey {
+		// Proxy comparer
+		comparer = func(a, b any) int {
+			mapA, okA := a.(map[string]any)
+			mapB, okB := b.(map[string]any)
+			if !okA || !okB {
+				return btree.Compare(a, b)
 			}
-		}
-		for k := range mapB {
-			if _, exists := seen[k]; !exists {
-				keys = append(keys, k)
-				seen[k] = struct{}{}
+
+			if indexSpec != nil {
+				return indexSpec.Comparer(mapA, mapB)
 			}
-		}
-		// We need to sort keys to be deterministic
-		// Since we can't import "sort" inside function, we assume it's imported or use a simple bubble sort for small maps
-		// But better to add "sort" to imports.
-		// For now, let's use a simple swap sort since maps are usually small.
-		for i := 0; i < len(keys); i++ {
-			for j := i + 1; j < len(keys); j++ {
-				if keys[i] > keys[j] {
-					keys[i], keys[j] = keys[j], keys[i]
+
+			// Default Map Comparer (Dynamic)
+			// Collect all keys, sort them, compare values.
+			keys := make([]string, 0, len(mapA)+len(mapB))
+			seen := make(map[string]struct{})
+			for k := range mapA {
+				if _, exists := seen[k]; !exists {
+					keys = append(keys, k)
+					seen[k] = struct{}{}
 				}
 			}
+			for k := range mapB {
+				if _, exists := seen[k]; !exists {
+					keys = append(keys, k)
+					seen[k] = struct{}{}
+				}
+			}
+			// We need to sort keys to be deterministic
+			sort.Strings(keys)
+
+			for _, k := range keys {
+				valA, existsA := mapA[k]
+				valB, existsB := mapB[k]
+
+				if !existsA && !existsB {
+					continue
+				}
+				if !existsA {
+					return -1 // A is missing key, so A < B
+				}
+				if !existsB {
+					return 1 // B is missing key, so A > B
+				}
+
+				res := btree.Compare(valA, valB)
+				if res != 0 {
+					return res
+				}
+			}
+			return 0
 		}
-
-		for _, k := range keys {
-			valA, existsA := mapA[k]
-			valB, existsB := mapB[k]
-
-			if !existsA && !existsB {
-				continue
-			}
-			if !existsA {
-				return -1 // A is missing key, so A < B
-			}
-			if !existsB {
-				return 1 // B is missing key, so A > B
-			}
-
-			res := btree.Compare(valA, valB)
-			if res != 0 {
-				return res
-			}
-		}
-		return 0
 	}
 
 	// Open the B-Tree using 'any' for Key and Value to support generic browsing.
@@ -236,7 +249,6 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	// Configure the comparer based on StoreInfo
 	si := store.GetStoreInfo()
 	if !si.IsPrimitiveKey {
-		isComplexKey = true
 		if si.MapKeyIndexSpecification != "" {
 			var is jsondb.IndexSpecification
 			if err := encoding.DefaultMarshaler.Unmarshal([]byte(si.MapKeyIndexSpecification), &is); err == nil {
@@ -244,6 +256,14 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 			} else {
 				log.Printf("Error unmarshaling index spec: %v", err)
 			}
+		}
+	}
+
+	// Detect sample key for primitive types to guide parsing
+	var sampleKey any
+	if si.IsPrimitiveKey && si.Count > 0 {
+		if ok, _ := store.First(ctx); ok {
+			sampleKey = store.GetCurrentKey().Key
 		}
 	}
 
@@ -261,10 +281,85 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	// Helper to parse key
 	parseKey := func(kStr string) any {
 		var k any = kStr
-		if isComplexKey {
+		if !isPrimitiveKey {
 			var mapKey map[string]any
 			if err := json.Unmarshal([]byte(kStr), &mapKey); err == nil {
 				k = mapKey
+			}
+			return k
+		}
+
+		// Primitive Key Parsing based on sample
+		if sampleKey != nil {
+			switch sampleKey.(type) {
+			case int:
+				if v, err := strconv.Atoi(kStr); err == nil {
+					return v
+				}
+			case int8:
+				if v, err := strconv.ParseInt(kStr, 10, 8); err == nil {
+					return int8(v)
+				}
+			case int16:
+				if v, err := strconv.ParseInt(kStr, 10, 16); err == nil {
+					return int16(v)
+				}
+			case int32:
+				if v, err := strconv.ParseInt(kStr, 10, 32); err == nil {
+					return int32(v)
+				}
+			case int64:
+				if v, err := strconv.ParseInt(kStr, 10, 64); err == nil {
+					return v
+				}
+			case uint:
+				if v, err := strconv.ParseUint(kStr, 10, 64); err == nil {
+					return uint(v)
+				}
+			case uint8:
+				if v, err := strconv.ParseUint(kStr, 10, 8); err == nil {
+					return uint8(v)
+				}
+			case uint16:
+				if v, err := strconv.ParseUint(kStr, 10, 16); err == nil {
+					return uint16(v)
+				}
+			case uint32:
+				if v, err := strconv.ParseUint(kStr, 10, 32); err == nil {
+					return uint32(v)
+				}
+			case uint64:
+				if v, err := strconv.ParseUint(kStr, 10, 64); err == nil {
+					return v
+				}
+			case float32:
+				if v, err := strconv.ParseFloat(kStr, 32); err == nil {
+					return float32(v)
+				}
+			case float64:
+				if v, err := strconv.ParseFloat(kStr, 64); err == nil {
+					return v
+				}
+			case string:
+				return kStr
+			case sop.UUID:
+				if v, err := sop.ParseUUID(kStr); err == nil {
+					return v
+				}
+			case uuid.UUID:
+				if v, err := uuid.Parse(kStr); err == nil {
+					return v
+				}
+			}
+		}
+
+		// Fallback guessing if empty store or unknown type
+		var i int
+		if _, err := fmt.Sscanf(kStr, "%d", &i); err == nil {
+			// Check if the original string was actually just digits
+			// This prevents "123abc" being parsed as 123
+			if fmt.Sprintf("%d", i) == kStr {
+				k = i
 			}
 		}
 		return k
