@@ -40,7 +40,7 @@ type ProductKey struct {
 
 Run the struct-based example to populate the database:
 ```bash
-go run examples/interop_secondary_indexes/struct_key_main.go
+go run examples/interop_secondary_indexes/struct_key_example/main.go
 ```
 
 ## Verifying with Data Browser

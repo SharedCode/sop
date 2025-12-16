@@ -98,7 +98,7 @@ func Test_EC_BlobStore_ShardsExceedParity_Rollback_NoFailover(t *testing.T) {
 	cleanupStoreRepository(table, isolatedStores)
 
 	// Build components mirroring NewTwoPhaseCommitTransactionWithReplication but with a custom BlobStore fileIO.
-	cache := sop.GetL2Cache(sop.Redis)
+	cache := sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.Redis})
 	rt, err := fs.NewReplicationTracker(ctx, isolatedStores, true, cache)
 	if err != nil {
 		t.Fatalf("NewReplicationTracker: %v", err)
@@ -128,7 +128,7 @@ func Test_EC_BlobStore_ShardsExceedParity_Rollback_NoFailover(t *testing.T) {
 
 	// Transaction log and 2PC transaction
 	tl := fs.NewTransactionLog(cache, rt)
-	twoPT, err := common.NewTwoPhaseCommitTransaction(sop.ForWriting, -1, true, bs, sr, reg, cache, tl)
+	twoPT, err := common.NewTwoPhaseCommitTransaction(sop.ForWriting, -1, bs, sr, reg, cache, tl)
 	if err != nil {
 		t.Fatalf("NewTwoPhaseCommitTransaction: %v", err)
 	}
@@ -137,7 +137,7 @@ func Test_EC_BlobStore_ShardsExceedParity_Rollback_NoFailover(t *testing.T) {
 	rt.SetTransactionID(twoPT.GetID())
 
 	// Wrap into sop.Transaction to use higher-level helpers
-	tx, err := sop.NewTransaction(sop.ForWriting, twoPT, true)
+	tx, err := sop.NewTransaction(sop.ForWriting, twoPT)
 	if err != nil {
 		t.Fatalf("sop.NewTransaction: %v", err)
 	}

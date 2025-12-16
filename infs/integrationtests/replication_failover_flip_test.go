@@ -82,7 +82,7 @@ func Test_ActiveSide_FailoverFlip_Then_Reinstate_FastForward(t *testing.T) {
 	_ = tx2.Commit(ctx) // expect error via replication path; failover handler will be invoked
 
 	// Manually trigger failover since auto-failover is disabled
-	if err := fs.TriggerFailover(ctx, isolatedStores, true, sop.GetL2Cache(sop.Redis)); err != nil {
+	if err := fs.TriggerFailover(ctx, isolatedStores, true, sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.Redis})); err != nil {
 		t.Fatalf("TriggerFailover failed: %v", err)
 	}
 

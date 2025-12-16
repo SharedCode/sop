@@ -3,6 +3,7 @@ package jsondb
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -27,7 +28,7 @@ func TestStructKey(t *testing.T) {
 	}
 
 	// Clean up previous run
-	// os.RemoveAll("./data/struct_key_test") // In a real test we might want to clean up
+	os.RemoveAll("./data/struct_key_test") // In a real test we might want to clean up
 
 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
 	if err != nil {
@@ -93,14 +94,18 @@ func TestStructKey(t *testing.T) {
 		t.Errorf("Expected first item category 'Books', got '%s'", k.Category)
 	}
 
-	storeRead.Next(ctx)
+	if ok, err := storeRead.Next(ctx); !ok || err != nil {
+		t.Errorf("Next failed: %v, %v", ok, err)
+	}
 	// 2. Electronics 500
 	k = storeRead.GetCurrentKey()
 	if k.Category != "Electronics" || k.Price != 500.0 {
 		t.Errorf("Expected second item 'Electronics' 500.0, got '%s' %f", k.Category, k.Price)
 	}
 
-	storeRead.Next(ctx)
+	if ok, err := storeRead.Next(ctx); !ok || err != nil {
+		t.Errorf("Next failed: %v, %v", ok, err)
+	}
 	// 3. Electronics 100
 	k = storeRead.GetCurrentKey()
 	if k.Category != "Electronics" || k.Price != 100.0 {
