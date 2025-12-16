@@ -58,6 +58,7 @@ func main() {
 	http.HandleFunc("/api/stores", handleListStores)
 	http.HandleFunc("/api/store/info", handleGetStoreInfo)
 	http.HandleFunc("/api/store/items", handleListItems)
+	http.HandleFunc("/api/store/item/update", handleUpdateItem)
 
 	// Start Server
 	addr := fmt.Sprintf(":%d", config.Port)
@@ -151,6 +152,7 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleListItems(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	storeName := r.URL.Query().Get("name")
 	if storeName == "" {
 		http.Error(w, "Store name is required", http.StatusBadRequest)
@@ -451,4 +453,176 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(items)
+}
+
+func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		StoreName string `json:"store"`
+		Key       any    `json:"key"`
+		Value     any    `json:"value"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{config.RegistryPath},
+	}
+
+	// Open transaction for writing
+	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	if err != nil {
+		http.Error(w, "Failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Ensure rollback in case of error, but we will Commit on success
+	defer trans.Rollback(ctx)
+
+	// We need to open the store to perform update
+	// We need to determine if it's a primitive key store to set up the comparer correctly
+	// and to cast the key from JSON (float64) to the correct type (int, etc).
+
+	// Peek at store info first (requires a read transaction or just checking repository)
+	// But we are already in a write transaction. We can access the store repository directly via the transaction.
+	var isPrimitiveKey bool
+	if t2, ok := trans.GetPhasedTransaction().(*common.Transaction); ok {
+		stores, err := t2.StoreRepository.Get(ctx, req.StoreName)
+		if err == nil && len(stores) > 0 {
+			isPrimitiveKey = stores[0].IsPrimitiveKey
+		}
+	}
+
+	var comparer btree.ComparerFunc[any]
+	// If not primitive, we need a map comparer.
+	// For update, we need to find the EXACT key.
+	if !isPrimitiveKey {
+		// Use the same dynamic map comparer as in handleListItems
+		comparer = func(a, b any) int {
+			mapA, okA := a.(map[string]any)
+			mapB, okB := b.(map[string]any)
+			if !okA || !okB {
+				return btree.Compare(a, b)
+			}
+			// Simple dynamic comparison
+			keys := make([]string, 0, len(mapA)+len(mapB))
+			seen := make(map[string]struct{})
+			for k := range mapA {
+				if _, exists := seen[k]; !exists {
+					keys = append(keys, k)
+					seen[k] = struct{}{}
+				}
+			}
+			for k := range mapB {
+				if _, exists := seen[k]; !exists {
+					keys = append(keys, k)
+					seen[k] = struct{}{}
+				}
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				valA, existsA := mapA[k]
+				valB, existsB := mapB[k]
+				if !existsA && !existsB {
+					continue
+				}
+				if !existsA {
+					return -1
+				}
+				if !existsB {
+					return 1
+				}
+				res := btree.Compare(valA, valB)
+				if res != 0 {
+					return res
+				}
+			}
+			return 0
+		}
+	}
+
+	store, err := infs.OpenBtree[any, any](ctx, req.StoreName, trans, comparer)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v", req.StoreName, err), http.StatusInternalServerError)
+		return
+	}
+
+	// Detect sample key to cast req.Key
+	var sampleKey any
+	if isPrimitiveKey {
+		if ok, _ := store.First(ctx); ok {
+			sampleKey = store.GetCurrentKey().Key
+		}
+	}
+
+	// Cast Key
+	finalKey := req.Key
+	if sampleKey != nil {
+		// Handle JSON number (float64) to Integer types
+		if f, ok := req.Key.(float64); ok {
+			switch sampleKey.(type) {
+			case int:
+				finalKey = int(f)
+			case int8:
+				finalKey = int8(f)
+			case int16:
+				finalKey = int16(f)
+			case int32:
+				finalKey = int32(f)
+			case int64:
+				finalKey = int64(f)
+			case uint:
+				finalKey = uint(f)
+			case uint8:
+				finalKey = uint8(f)
+			case uint16:
+				finalKey = uint16(f)
+			case uint32:
+				finalKey = uint32(f)
+			case uint64:
+				finalKey = uint64(f)
+			case float32:
+				finalKey = float32(f)
+			}
+		}
+		// Handle String to UUID
+		if s, ok := req.Key.(string); ok {
+			switch sampleKey.(type) {
+			case sop.UUID:
+				if id, err := sop.ParseUUID(s); err == nil {
+					finalKey = id
+				}
+			case uuid.UUID:
+				if id, err := uuid.Parse(s); err == nil {
+					finalKey = id
+				}
+			}
+		}
+	}
+
+	// Perform Update
+	if ok, err := store.Update(ctx, finalKey, req.Value); err != nil {
+		http.Error(w, "Update failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	} else if !ok {
+		http.Error(w, "Update failed: Item not found", http.StatusNotFound)
+		return
+	}
+
+	if err := trans.Commit(ctx); err != nil {
+		http.Error(w, "Commit failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
