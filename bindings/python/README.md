@@ -31,25 +31,31 @@ SOP is designed for high-throughput, low-latency scenarios, making it suitable f
 *   **[API Cookbook](COOKBOOK.md)**: Common recipes and patterns (Key-Value, Transactions, AI).
 *   **[Examples](examples/)**: Complete runnable scripts.
 
+## Installation
+
+Install directly from PyPI:
+
+```bash
+pip install sop4py
+```
+
+## Data Browser (GUI)
+
+SOP comes with a built-in web-based Data Browser to inspect your B-Trees, search keys, and view data.
+
+To launch it, simply run:
+
+```bash
+sop-browser
+```
+
+*   **Automatic Setup**: The first time you run it, the tool will automatically download the correct binary for your OS/Arch.
+*   **Usage**: By default, it opens on `http://localhost:8080`.
+*   **Arguments**: You can pass standard flags, e.g., `sop-browser -port 9090 -registry ./my_data`.
+
 ## Prerequisites
 
 *   **Redis**: Required for caching and transaction coordination (especially in Clustered mode). **Note**: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
-*   **Storage**: Local disk space (supports multiple drives/folders).
-*   **OS**: macOS, Linux, or Windows.
-    *   **Architectures**: x64 (AMD64/Intel64) and ARM64 (Apple Silicon/Linux aarch64).
-
-## Installation
-
-1.  **Build the Go Bridge**:
-    ```bash
-    cd jsondb
-    go build -o jsondb.so -buildmode=c-shared main/*.go
-    ```
-
-2.  **Install Python Dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
 
 ## Running the Examples
 

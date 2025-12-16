@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -8,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
@@ -23,6 +23,9 @@ type Config struct {
 	Port         int
 	RegistryPath string
 }
+
+//go:embed templates/*
+var content embed.FS
 
 var config Config
 
@@ -52,16 +55,10 @@ func main() {
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
-	tmplPath := filepath.Join("templates", "index.html")
-	// In a real build, we might embed this using embed package
-	tmpl, err := template.ParseFiles(tmplPath)
+	tmpl, err := template.ParseFS(content, "templates/index.html")
 	if err != nil {
-		// Fallback for running from different CWD
-		tmpl, err = template.ParseFiles(filepath.Join("tools", "data_browser", "templates", "index.html"))
-		if err != nil {
-			http.Error(w, "Could not load template: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
+		http.Error(w, "Could not load template: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 	tmpl.Execute(w, nil)
 }
