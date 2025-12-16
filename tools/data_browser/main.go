@@ -26,6 +26,9 @@ import (
 type Config struct {
 	Port         int
 	RegistryPath string
+	Mode         string
+	ConfigFile   string
+	RedisURL     string
 }
 
 //go:embed templates/*
@@ -41,11 +44,21 @@ func main() {
 	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
 	flag.IntVar(&config.Port, "port", 8080, "Port to run the server on")
 	flag.StringVar(&config.RegistryPath, "registry", "/tmp/sop_data", "Path to the SOP registry/data directory")
+	flag.StringVar(&config.Mode, "mode", "standalone", "SOP mode: 'standalone' or 'clustered'")
+	flag.StringVar(&config.ConfigFile, "config", "", "Path to configuration file (optional)")
+	flag.StringVar(&config.RedisURL, "redis", "localhost:6379", "Redis URL for clustered mode (e.g. localhost:6379)")
 	flag.Parse()
 
 	if showVersion {
 		fmt.Printf("SOP Data Browser v%s\n", Version)
 		os.Exit(0)
+	}
+
+	// Load config from file if provided
+	if config.ConfigFile != "" {
+		if err := loadConfig(config.ConfigFile); err != nil {
+			log.Fatalf("Failed to load config file: %v", err)
+		}
 	}
 
 	// Ensure registry path exists (basic check)
@@ -62,11 +75,45 @@ func main() {
 
 	// Start Server
 	addr := fmt.Sprintf(":%d", config.Port)
-	log.Printf("SOP Data Browser v%s running at http://localhost%s", Version, addr)
+	log.Printf("SOP Data Browser v%s (%s) running at http://localhost%s", Version, config.Mode, addr)
 	log.Printf("Target Registry: %s", config.RegistryPath)
+	if config.Mode == "clustered" {
+		log.Printf("Redis: %s", config.RedisURL)
+	} else {
+		log.Printf("Warning: Running in Standalone mode. If the target registry is managed by a cluster, updates may corrupt the database.")
+	}
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func loadConfig(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return json.NewDecoder(f).Decode(&config)
+}
+
+func getDBType() sop.DatabaseType {
+	if config.Mode == "clustered" {
+		return sop.Clustered
+	}
+	return sop.Standalone
+}
+
+func getDBOptions() sop.DatabaseOptions {
+	opts := sop.DatabaseOptions{
+		Type:          getDBType(),
+		StoresFolders: []string{config.RegistryPath},
+	}
+	if opts.Type == sop.Clustered {
+		opts.RedisConfig = &sop.RedisCacheConfig{
+			Address: config.RedisURL,
+		}
+	}
+	return opts
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -75,15 +122,16 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not load template: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	tmpl.Execute(w, nil)
+	data := map[string]any{
+		"Version": Version,
+		"Mode":    config.Mode,
+	}
+	tmpl.Execute(w, data)
 }
 
 func handleListStores(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Standalone,
-		StoresFolders: []string{config.RegistryPath},
-	}
+	dbOpts := getDBOptions()
 
 	// Open a read-only transaction to fetch stores
 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
@@ -110,10 +158,7 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Standalone,
-		StoresFolders: []string{config.RegistryPath},
-	}
+	dbOpts := getDBOptions()
 
 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
 	if err != nil {
@@ -160,10 +205,7 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Standalone,
-		StoresFolders: []string{config.RegistryPath},
-	}
+	dbOpts := getDBOptions()
 
 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
 	if err != nil {
@@ -473,10 +515,7 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Standalone,
-		StoresFolders: []string{config.RegistryPath},
-	}
+	dbOpts := getDBOptions()
 
 	// Open transaction for writing
 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
@@ -486,6 +525,11 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	}
 	// Ensure rollback in case of error, but we will Commit on success
 	defer trans.Rollback(ctx)
+
+	// Warn if standalone mode
+	if config.Mode == "standalone" {
+		log.Printf("Warning: Performing update in Standalone mode. If this database is managed by a cluster, this operation may corrupt the database.")
+	}
 
 	// We need to open the store to perform update
 	// We need to determine if it's a primitive key store to set up the comparer correctly
