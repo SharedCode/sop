@@ -9,8 +9,7 @@ if architecture == 'arm64' or architecture == 'aarch64':
 elif architecture == 'x86_64' or architecture == 'AMD64':
     arch = "amd64"
 
-uname = os.uname().sysname
-print(uname)
+uname = platform.system()
 if uname == "Darwin":
     ext = f"{arch}darwin.dylib"
 elif uname == "Windows":
