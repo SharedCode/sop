@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -9,8 +10,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/sharedcode/sop"
@@ -29,6 +32,7 @@ type Config struct {
 	Mode         string
 	ConfigFile   string
 	RedisURL     string
+	PageSize     int
 }
 
 //go:embed templates/*
@@ -47,6 +51,7 @@ func main() {
 	flag.StringVar(&config.Mode, "mode", "standalone", "SOP mode: 'standalone' or 'clustered'")
 	flag.StringVar(&config.ConfigFile, "config", "", "Path to configuration file (optional)")
 	flag.StringVar(&config.RedisURL, "redis", "localhost:6379", "Redis URL for clustered mode (e.g. localhost:6379)")
+	flag.IntVar(&config.PageSize, "pageSize", 100, "Number of items to display per page")
 	flag.Parse()
 
 	if showVersion {
@@ -61,9 +66,26 @@ func main() {
 		}
 	}
 
+	// Resolve RegistryPath to absolute
+	if abs, err := filepath.Abs(config.RegistryPath); err == nil {
+		config.RegistryPath = abs
+	}
+
 	// Ensure registry path exists (basic check)
 	if _, err := os.Stat(config.RegistryPath); os.IsNotExist(err) {
 		log.Printf("Warning: Registry path %s does not exist. Please ensure it is correct.", config.RegistryPath)
+	} else {
+		// Attempt to auto-detect the correct CWD based on stored paths
+		if err := autoAdjustCWD(); err != nil {
+			log.Printf("Auto-adjust CWD failed: %v", err)
+			// Fallback to parent directory
+			parentDir := filepath.Dir(config.RegistryPath)
+			if err := os.Chdir(parentDir); err != nil {
+				log.Printf("Warning: Failed to change directory to %s: %v", parentDir, err)
+			} else {
+				log.Printf("Working directory set to %s (fallback)", parentDir)
+			}
+		}
 	}
 
 	// Setup Routes
@@ -72,6 +94,8 @@ func main() {
 	http.HandleFunc("/api/store/info", handleGetStoreInfo)
 	http.HandleFunc("/api/store/items", handleListItems)
 	http.HandleFunc("/api/store/item/update", handleUpdateItem)
+	http.HandleFunc("/api/store/item/add", handleAddItem)
+	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
 
 	// Start Server
 	addr := fmt.Sprintf(":%d", config.Port)
@@ -85,6 +109,86 @@ func main() {
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func autoAdjustCWD() error {
+	ctx := context.Background()
+	dbOpts := getDBOptions()
+
+	// Open a read-only transaction to fetch stores
+	// Note: This might fail if CWD is already wrong and GetStores relies on it?
+	// Usually GetStores relies on RegistryPath which is absolute in dbOpts.
+	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %v", err)
+	}
+	defer trans.Rollback(ctx)
+
+	stores, err := trans.GetStores(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list stores: %v", err)
+	}
+	if len(stores) == 0 {
+		return fmt.Errorf("no stores found")
+	}
+
+	// Pick the first store to check its path
+	storeName := stores[0]
+
+	// We need to access the StoreRepository directly to get StoreInfo without opening the B-Tree
+	t2, ok := trans.GetPhasedTransaction().(*common.Transaction)
+	if !ok {
+		return fmt.Errorf("failed to cast transaction")
+	}
+
+	storeInfos, err := t2.StoreRepository.Get(ctx, storeName)
+	if err != nil || len(storeInfos) == 0 {
+		return fmt.Errorf("failed to get store info for %s: %v", storeName, err)
+	}
+
+	si := storeInfos[0]
+	blobTable := si.BlobTable
+
+	// blobTable is the relative path stored in DB, e.g., "data/large_complex_db/people"
+	// config.RegistryPath is absolute, e.g., "/.../examples/data/large_complex_db"
+	// The physical path of the store should be filepath.Join(config.RegistryPath, storeName) if standard structure?
+	// Or simply, the blobTable path must be a suffix of the physical path.
+
+	// Let's assume the physical file exists at <RegistryPath>/<StoreName> (standard SOP structure for B-Tree nodes?)
+	// Actually, SOP creates a folder with the store name inside the registry folder.
+	// So physical location is config.RegistryPath + "/" + storeName.
+
+	// However, if the user created the store with a path "data/large_complex_db",
+	// and the store name is "people", the internal path is "data/large_complex_db/people".
+
+	// We want to find a RootDir such that filepath.Join(RootDir, blobTable) exists.
+	// And we know that the file actually exists at filepath.Join(config.RegistryPath, storeName).
+
+	// So: RootDir + blobTable = config.RegistryPath + storeName
+	// RootDir = config.RegistryPath + storeName - blobTable
+
+	// We need to strip the components of blobTable from the end of (config.RegistryPath + storeName).
+
+	targetPath := filepath.Join(config.RegistryPath, storeName)
+
+	// Normalize separators
+	blobTable = filepath.Clean(blobTable)
+
+	if strings.HasSuffix(targetPath, blobTable) {
+		// Found the overlap!
+		// The root dir is the part of targetPath BEFORE blobTable.
+		rootDir := targetPath[:len(targetPath)-len(blobTable)]
+		// Clean up trailing separator
+		rootDir = filepath.Clean(rootDir)
+
+		log.Printf("Auto-detected Root Directory: %s (based on store '%s' path '%s')", rootDir, storeName, blobTable)
+		if err := os.Chdir(rootDir); err != nil {
+			return fmt.Errorf("failed to chdir to %s: %v", rootDir, err)
+		}
+		return nil
+	}
+
+	return fmt.Errorf("path mismatch: target='%s', blob='%s'", targetPath, blobTable)
 }
 
 func loadConfig(path string) error {
@@ -286,7 +390,13 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	// Open the B-Tree using 'any' for Key and Value to support generic browsing.
 	store, err := infs.OpenBtree[any, any](ctx, storeName, trans, comparer)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v", storeName, err), http.StatusInternalServerError)
+		// If opening fails, it might be because the store was created with a specific path structure
+		// that the generic OpenBtree doesn't know about if it's not in the registry correctly.
+		// However, for Standalone mode, OpenBtree relies on the registry.
+		// The error "no such file or directory" suggests it's trying to open a file that doesn't exist.
+		// This can happen if the store name in the registry points to a path that is relative
+		// and the browser is running from a different CWD than the creator.
+		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v. Ensure you are running sop-browser from the correct directory relative to the data.", storeName, err), http.StatusInternalServerError)
 		return
 	}
 
@@ -312,7 +422,10 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var items []map[string]any
-	limit := 100 // Hardcoded limit for Phase 1
+	limit := config.PageSize
+	if limit <= 0 {
+		limit = 100
+	}
 	count := 0
 
 	// Determine start position
@@ -421,6 +534,14 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 			}
+		}
+	case "current":
+		if refKeyStr != "" {
+			k := parseKey(refKeyStr)
+			// Find(ctx, k, true) positions cursor at k or next item if k is missing
+			ok, err = store.Find(ctx, k, true)
+		} else {
+			ok, err = store.First(ctx)
 		}
 	case "next":
 		if refKeyStr != "" {
@@ -658,6 +779,200 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if !ok {
 		http.Error(w, "Update failed: Item not found", http.StatusNotFound)
+		return
+	}
+
+	if err := trans.Commit(ctx); err != nil {
+		http.Error(w, "Commit failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleAddItem(w http.ResponseWriter, r *http.Request) {
+	handleWriteOperation(w, r, "add")
+}
+
+func handleDeleteItem(w http.ResponseWriter, r *http.Request) {
+	handleWriteOperation(w, r, "delete")
+}
+
+func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		StoreName string `json:"store"`
+		Key       any    `json:"key"`
+		Value     any    `json:"value"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	dbOpts := getDBOptions()
+
+	// Open transaction for writing
+	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	if err != nil {
+		http.Error(w, "Failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer trans.Rollback(ctx)
+
+	// Warn if standalone mode
+	if config.Mode == "standalone" {
+		log.Printf("Warning: Performing %s in Standalone mode. If this database is managed by a cluster, this operation may corrupt the database.", op)
+	}
+
+	// Determine if primitive key
+	var isPrimitiveKey bool
+	if t2, ok := trans.GetPhasedTransaction().(*common.Transaction); ok {
+		stores, err := t2.StoreRepository.Get(ctx, req.StoreName)
+		if err == nil && len(stores) > 0 {
+			isPrimitiveKey = stores[0].IsPrimitiveKey
+		}
+	}
+
+	var comparer btree.ComparerFunc[any]
+	if !isPrimitiveKey {
+		// Use the same dynamic map comparer
+		comparer = func(a, b any) int {
+			mapA, okA := a.(map[string]any)
+			mapB, okB := b.(map[string]any)
+			if !okA || !okB {
+				return btree.Compare(a, b)
+			}
+			keys := make([]string, 0, len(mapA)+len(mapB))
+			seen := make(map[string]struct{})
+			for k := range mapA {
+				if _, exists := seen[k]; !exists {
+					keys = append(keys, k)
+					seen[k] = struct{}{}
+				}
+			}
+			for k := range mapB {
+				if _, exists := seen[k]; !exists {
+					keys = append(keys, k)
+					seen[k] = struct{}{}
+				}
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				valA, existsA := mapA[k]
+				valB, existsB := mapB[k]
+				if !existsA && !existsB {
+					continue
+				}
+				if !existsA {
+					return -1
+				}
+				if !existsB {
+					return 1
+				}
+				res := btree.Compare(valA, valB)
+				if res != 0 {
+					return res
+				}
+			}
+			return 0
+		}
+	}
+
+	store, err := infs.OpenBtree[any, any](ctx, req.StoreName, trans, comparer)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v", req.StoreName, err), http.StatusInternalServerError)
+		return
+	}
+
+	// Detect sample key to cast req.Key
+	var sampleKey any
+	if isPrimitiveKey {
+		if ok, _ := store.First(ctx); ok {
+			sampleKey = store.GetCurrentKey().Key
+		}
+	}
+
+	// Cast Key
+	finalKey := req.Key
+	if sampleKey != nil {
+		if f, ok := req.Key.(float64); ok {
+			switch sampleKey.(type) {
+			case int:
+				finalKey = int(f)
+			case int8:
+				finalKey = int8(f)
+			case int16:
+				finalKey = int16(f)
+			case int32:
+				finalKey = int32(f)
+			case int64:
+				finalKey = int64(f)
+			case uint:
+				finalKey = uint(f)
+			case uint8:
+				finalKey = uint8(f)
+			case uint16:
+				finalKey = uint16(f)
+			case uint32:
+				finalKey = uint32(f)
+			case uint64:
+				finalKey = uint64(f)
+			case float32:
+				finalKey = float32(f)
+			}
+		}
+		if s, ok := req.Key.(string); ok {
+			switch sampleKey.(type) {
+			case sop.UUID:
+				if id, err := sop.ParseUUID(s); err == nil {
+					finalKey = id
+				}
+			case uuid.UUID:
+				if id, err := uuid.Parse(s); err == nil {
+					finalKey = id
+				}
+			}
+		}
+	}
+
+	// Validate Key Type if possible
+	if sampleKey != nil {
+		sT := fmt.Sprintf("%T", sampleKey)
+		fT := fmt.Sprintf("%T", finalKey)
+		if sT != fT {
+			http.Error(w, fmt.Sprintf("Key type mismatch: expected %s, got %s", sT, fT), http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Perform Operation
+	var opErr error
+	switch op {
+	case "add":
+		var added bool
+		added, opErr = store.Add(ctx, finalKey, req.Value)
+		if opErr == nil && !added {
+			opErr = fmt.Errorf("key already exists or is invalid")
+		}
+	case "delete":
+		if store.Count() <= 1 {
+			opErr = fmt.Errorf("cannot delete the last item; store must contain at least one item")
+		} else {
+			_, opErr = store.Remove(ctx, finalKey)
+		}
+	}
+
+	if opErr != nil {
+		http.Error(w, opErr.Error(), http.StatusInternalServerError)
 		return
 	}
 

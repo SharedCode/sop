@@ -7,18 +7,21 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; height: 100vh; }
         #sidebar { width: 250px; min-width: 150px; max-width: 50%; background: #f4f4f4; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; flex-shrink: 0; }
-        #resizer { width: 5px; background: #ddd; cursor: col-resize; user-select: none; transition: background 0.2s; }
+        #resizer { width: 5px; background: #ddd; cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; }
         #resizer:hover, #resizer.resizing { background: #007bff; }
-        #main { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; min-width: 300px; }
+        #main { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
         h1, h2 { margin-top: 0; }
         ul { list-style: none; padding: 0; }
         li { padding: 8px 12px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
         li:hover { background: #e0e0e0; }
         li.active { background: #007bff; color: white; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }
-        th { background-color: #f8f9fa; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        th { background-color: #f8f9fa; position: relative; }
+        .col-resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 5px; cursor: col-resize; user-select: none; }
+        .col-resizer:hover { background: #007bff; }
         tr:hover { background-color: #f1f1f1; cursor: pointer; }
+        tr.selected-row { background-color: #e2e6ea; }
         #detail-panel { width: 400px; border-left: 1px solid #ddd; padding: 20px; background: #fff; display: none; overflow-y: auto; }
         pre { background: #f8f8f8; padding: 10px; border-radius: 4px; overflow-x: auto; }
         .toolbar { display: flex; gap: 10px; margin-bottom: 20px; }
@@ -45,6 +48,7 @@
     <div class="toolbar" id="toolbar" style="display:none;">
         <input type="text" id="search-input" placeholder="Search keys...">
         <button onclick="loadItems('search')">Search</button>
+        <button onclick="showAdd()" style="background: #28a745;">Add Item</button>
     </div>
 
     <div id="pagination-top" style="display:none; margin-bottom: 10px; gap: 10px; justify-content: center;">
@@ -75,6 +79,8 @@
     let lastKey = null;
     let currentStoreInfo = null;
     let currentItemKey = null;
+    let currentItems = [];
+    let currentKeyColumnWidth = '45%';
 
     // Load Stores on Start
     fetch('/api/stores')
@@ -142,6 +148,13 @@
         btn.textContent = 'Search';
         btn.onclick = () => loadItems('search');
         toolbar.appendChild(btn);
+
+        const addBtn = document.createElement('button');
+        addBtn.textContent = 'Add Item';
+        addBtn.onclick = () => showAdd();
+        addBtn.style.background = '#28a745';
+        addBtn.style.marginLeft = '10px';
+        toolbar.appendChild(addBtn);
     }
 
     function loadItems(action = 'first', refKey = null) {
@@ -186,9 +199,10 @@
              }
         }
 
-        fetch(url)
+        return fetch(url)
             .then(res => res.json())
             .then(items => {
+                currentItems = items || [];
                 const grid = document.getElementById('data-grid');
                 const pagination = document.getElementById('pagination');
                 const paginationTop = document.getElementById('pagination-top');
@@ -199,7 +213,7 @@
                     paginationTop.style.display = 'none';
                     firstKey = null;
                     lastKey = null;
-                    return;
+                    return items;
                 }
 
                 // Update keys
@@ -210,17 +224,22 @@
                 pagination.style.display = 'flex';
                 paginationTop.style.display = 'flex';
 
-                let html = '<table><thead><tr><th>Key</th><th>Value Preview</th></tr></thead><tbody>';
+                let html = `<table id="items-table"><thead><tr><th style="width: ${currentKeyColumnWidth};">Key <div class="col-resizer" onmousedown="initColResize(event)"></div></th><th>Value Preview</th></tr></thead><tbody>`;
                 items.forEach(item => {
-                    const keyStr = typeof item.key === 'object' ? JSON.stringify(item.key) : item.key;
-                    const valStr = JSON.stringify(item.value).substring(0, 50) + (JSON.stringify(item.value).length > 50 ? '...' : '');
-                    html += `<tr onclick='showDetail(${JSON.stringify(item)})'>
-                        <td>${keyStr}</td>
-                        <td>${valStr}</td>
+                    const keyStr = typeof item.key === 'object' ? JSON.stringify(item.key) : String(item.key);
+                    const fullValStr = JSON.stringify(item.value);
+                    // Remove truncation to let CSS fill the available space
+                    const valStr = fullValStr;
+                    const keyTitle = keyStr.replace(/"/g, '&quot;');
+                    const valTitle = fullValStr.replace(/"/g, '&quot;');
+                    html += `<tr onclick='showDetail(this, ${JSON.stringify(item)})'>
+                        <td title="${keyTitle}">${keyStr}</td>
+                        <td title="${valTitle}">${valStr}</td>
                     </tr>`;
                 });
                 html += '</tbody></table>';
                 grid.innerHTML = html;
+                return items;
             });
     }
 
@@ -229,7 +248,13 @@
     function nextPage() { loadItems('next', lastKey); }
     function prevPage() { loadItems('prev', firstKey); }
 
-    function showDetail(item) {
+    function showDetail(row, item) {
+        // Highlight selected row
+        if (row) {
+            document.querySelectorAll('#items-table tr').forEach(tr => tr.classList.remove('selected-row'));
+            row.classList.add('selected-row');
+        }
+
         const panel = document.getElementById('detail-panel');
         const viewer = document.getElementById('json-viewer');
         currentItemKey = item.key;
@@ -251,6 +276,7 @@
             </div>
             <div style="display: flex; gap: 10px;">
                 <button id="btn-save" onclick="saveItem()" disabled>Save</button>
+                <button onclick="deleteItem()" style="background: #dc3545;">Delete</button>
             </div>
         `;
         panel.style.display = 'block';
@@ -294,12 +320,116 @@
             btn.disabled = true;
             
             // Refresh the grid in background to show updated values
-            loadItems('first');
+            loadItems('current', firstKey);
         })
         .catch(err => {
             alert("Update failed: " + err.message);
             btn.textContent = "Save";
             btn.disabled = false; // Re-enable so user can try again
+        });
+    }
+
+    function deleteItem() {
+        if (!currentStore || currentItemKey === null) return;
+        if (!confirm("Are you sure you want to delete this item?")) return;
+
+        const payload = {
+            store: currentStore,
+            key: currentItemKey
+        };
+
+        fetch('/api/store/item/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => {
+            if (!res.ok) return res.text().then(t => { throw new Error(t) });
+            return res.json();
+        })
+        .then(() => {
+            // Find index of deleted item to determine next selection
+            let targetIndex = -1;
+            if (currentItems && currentItems.length > 0) {
+                // We need to compare keys carefully (objects vs primitives)
+                const deletedKeyStr = JSON.stringify(currentItemKey);
+                targetIndex = currentItems.findIndex(item => JSON.stringify(item.key) === deletedKeyStr);
+            }
+
+            loadItems('current', firstKey).then(newItems => {
+                if (!newItems || newItems.length === 0) {
+                    closeDetail();
+                    return;
+                }
+                
+                // Try to select item at same index, or last item if index out of bounds
+                if (targetIndex >= 0) {
+                    if (targetIndex >= newItems.length) {
+                        targetIndex = newItems.length - 1;
+                    }
+                    showDetail(newItems[targetIndex]);
+                } else {
+                    // Fallback to first item if we couldn't track index
+                    showDetail(newItems[0]);
+                }
+            });
+        })
+        .catch(err => {
+            alert("Delete failed: " + err.message);
+        });
+    }
+
+    function showAdd() {
+        document.getElementById('add-modal').style.display = 'flex';
+        document.getElementById('add-key').value = '';
+        document.getElementById('add-value').value = '';
+    }
+
+    function closeAdd() {
+        document.getElementById('add-modal').style.display = 'none';
+    }
+
+    function addItem() {
+        if (!currentStore) return;
+
+        const keyText = document.getElementById('add-key').value;
+        const valText = document.getElementById('add-value').value;
+        
+        let key, val;
+        try {
+            // Try to parse key as JSON, if it fails use as string
+            try {
+                key = JSON.parse(keyText);
+            } catch {
+                key = keyText;
+            }
+            val = JSON.parse(valText);
+        } catch (e) {
+            alert("Invalid JSON in Value field");
+            return;
+        }
+
+        const payload = {
+            store: currentStore,
+            key: key,
+            value: val
+        };
+
+        fetch('/api/store/item/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => {
+            if (!res.ok) return res.text().then(t => { throw new Error(t) });
+            return res.json();
+        })
+        .then(() => {
+            closeAdd();
+            loadItems('current', firstKey);
+        })
+        .catch(err => {
+            alert("Add failed: " + err.message);
         });
     }
 
@@ -311,18 +441,34 @@
     const sidebar = document.getElementById('sidebar');
     const resizer = document.getElementById('resizer');
 
+    // Mouse Events
     resizer.addEventListener('mousedown', (e) => {
         e.preventDefault();
         document.addEventListener('mousemove', resize);
         document.addEventListener('mouseup', stopResize);
         resizer.classList.add('resizing');
-        document.body.style.cursor = 'col-resize'; // Prevent cursor flickering
+        document.body.style.cursor = 'col-resize';
     });
 
+    // Touch Events (for Mobile)
+    resizer.addEventListener('touchstart', (e) => {
+        e.preventDefault(); // Prevent scrolling while dragging
+        document.addEventListener('touchmove', resize, { passive: false });
+        document.addEventListener('touchend', stopResize);
+        resizer.classList.add('resizing');
+    }, { passive: false });
+
     function resize(e) {
-        const newWidth = e.clientX;
-        // Basic constraints
-        if (newWidth > 150 && newWidth < window.innerWidth - 300) {
+        let clientX;
+        if (e.type.startsWith('touch')) {
+            clientX = e.touches[0].clientX;
+        } else {
+            clientX = e.clientX;
+        }
+
+        const newWidth = clientX;
+        // Basic constraints - relaxed for mobile
+        if (newWidth > 50 && newWidth < window.innerWidth - 50) {
             sidebar.style.width = newWidth + 'px';
         }
     }
@@ -330,10 +476,55 @@
     function stopResize() {
         document.removeEventListener('mousemove', resize);
         document.removeEventListener('mouseup', stopResize);
+        document.removeEventListener('touchmove', resize);
+        document.removeEventListener('touchend', stopResize);
         resizer.classList.remove('resizing');
         document.body.style.cursor = 'default';
     }
+
+    // Column Resizing
+    let colStartX, colStartWidth;
+    function initColResize(e) {
+        e.stopPropagation();
+        colStartX = e.clientX;
+        const th = e.target.parentElement;
+        colStartWidth = th.offsetWidth;
+        document.addEventListener('mousemove', doColResize, false);
+        document.addEventListener('mouseup', stopColResize, false);
+    }
+    function doColResize(e) {
+        const th = document.querySelector('#items-table th:first-child');
+        if (th) {
+            const newWidth = colStartWidth + (e.clientX - colStartX);
+            if (newWidth > 50) {
+                th.style.width = newWidth + 'px';
+                currentKeyColumnWidth = newWidth + 'px';
+            }
+        }
+    }
+    function stopColResize(e) {
+        document.removeEventListener('mousemove', doColResize, false);
+        document.removeEventListener('mouseup', stopColResize, false);
+    }
 </script>
+
+<div id="add-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:1000;">
+    <div style="background:white; padding:20px; border-radius:5px; width:500px; max-width:90%;">
+        <h3>Add New Item</h3>
+        <div style="margin-bottom:10px;">
+            <label>Key (JSON or String):</label>
+            <input type="text" id="add-key" style="width:100%; padding:5px; margin-top:5px;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <label>Value (JSON):</label>
+            <textarea id="add-value" style="width:100%; height:200px; padding:5px; margin-top:5px; font-family:monospace;"></textarea>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button onclick="closeAdd()">Cancel</button>
+            <button onclick="addItem()" style="background:#28a745; color:white;">Add</button>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>
