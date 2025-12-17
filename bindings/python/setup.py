@@ -44,10 +44,16 @@ else:
         "libjsondb_amd64windows.h",
     ])
 
+# Read README.md for long description
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
+
 setup(
     name="sop4py",
     version=version,
     description="Scalable Objects Persistence (SOP) V2 for Python. General Public Availability (GPA) Release",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     author="Gerardo Recinto",
     author_email="gerardorecinto@yahoo.com",
     url="https://pypi.org/project/sop-python-beta-3",

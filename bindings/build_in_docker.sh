@@ -4,6 +4,10 @@ set -e
 # Get the absolute path to the repo root
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
+# Extract version from pyproject.toml
+VERSION=$(grep -m 1 'version =' "$REPO_ROOT/bindings/python/pyproject.toml" | sed 's/version = "//;s/"//' | tr -d '[:space:]')
+echo "Detected version from pyproject.toml: $VERSION"
+
 echo "Building Docker image for SOP bindings..."
 # Use repo root as context to access go.mod/go.sum
 docker build -t sop-bindings-builder -f "$REPO_ROOT/bindings/Dockerfile.build" "$REPO_ROOT"
@@ -20,7 +24,7 @@ echo "Running build inside Docker..."
 # We use a specific name to easily copy files out afterwards
 docker rm -f sop-build-temp 2>/dev/null || true
 docker run --name sop-build-temp \
-    -e SOP_VERSION=${SOP_VERSION:-latest} \
+    -e SOP_VERSION=$VERSION \
     $SKIP_MACOS_ENV \
     sop-bindings-builder \
     /bin/bash -c "cd bindings/main && ./build.sh"
@@ -40,6 +44,7 @@ docker rm sop-build-temp
 # If on macOS, build macOS artifacts locally now (so they overwrite any stale ones from Docker)
 if [ "$(uname)" == "Darwin" ]; then
     echo "Detected macOS. Building macOS artifacts locally..."
+    export SOP_VERSION=$VERSION
     "$REPO_ROOT/bindings/build_local_macos.sh"
 fi
 
