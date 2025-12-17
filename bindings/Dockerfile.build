@@ -1,0 +1,16 @@
+FROM golang:1.24
+
+# Install dependencies
+# mingw-w64 is needed for Windows builds if not using Zig for Windows (the script uses x86_64-w64-mingw32-gcc)
+RUN apt-get update && apt-get install -y \
+    curl \
+    xz-utils \
+    build-essential \
+    mingw-w64 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Zig (using 0.13.0 as a stable base)
+RUN curl -L https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz | tar -xJ -C /usr/local \
+    && ln -s /usr/local/zig-linux-x86_64-0.13.0/zig /usr/local/bin/zig
+
+WORKDIR /app

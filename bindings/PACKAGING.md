@@ -35,12 +35,13 @@ SOP is a polyglot library backed by a high-performance Go engine. To support mul
 *   **Build**: `bindings/main/build.sh` now creates `src/main/resources` and copies the shared libraries into the correct JNA platform folders.
 *   **Loading**: When packaged into a JAR, JNA automatically extracts and loads the correct library from these resource folders.
 
-### 🦀 Rust (To Do)
+### 🦀 Rust (Completed)
 *   **Mechanism**: Cargo / Crates.io.
-*   **Current State**: Links dynamically to the local `../main` folder (good for dev, bad for distribution).
-*   **Distribution Strategy**:
-    *   **Option A (Static Linking - Recommended)**: Build a static archive (`.a`) from Go (`-buildmode=c-archive`) and link it statically in `build.rs`. This produces a single standalone Rust binary.
-    *   **Option B (Build from Source)**: Have `build.rs` invoke `go build` to compile the library on the user's machine. Requires the user to have Go installed.
+*   **Strategy**: **Static Linking**.
+    *   We build static archives (`.a`) for each platform using `go build -buildmode=c-archive`.
+    *   These are placed in `bindings/rust/lib/`.
+    *   `build.rs` detects the OS/Arch and links the correct static library.
+*   **Build**: `bindings/main/build.sh` generates the static libraries.
 
 ## Release Workflow & Build Automation
 
@@ -49,9 +50,20 @@ We use a **"One Stop Hub"** strategy for building release artifacts. The goal is
 ### The Master Build Script (`bindings/main/build.sh`)
 This script is the central engine. It:
 1.  Builds the **Core Shared Libraries** (`libjsondb`) for all platforms (macOS, Linux, Windows).
-2.  Builds the **SOP Data Browser** (`sop-browser`) for all platforms.
-3.  Distributes these binaries to the appropriate language folders (`python/sop`, `csharp/Sop`, `java/resources`).
-4.  Outputs standalone tools to a `release/` directory in the project root.
+2.  Builds the **Core Static Libraries** (`libjsondb.a`) for Rust.
+3.  Builds the **SOP Data Browser** (`sop-browser`) for all platforms.
+4.  Distributes these binaries to the appropriate language folders (`python/sop`, `csharp/Sop`, `java/resources`, `rust/lib`).
+5.  Outputs standalone tools to a `release/` directory in the project root.
+
+### 🐳 Docker Build (Recommended)
+To ensure consistent builds across all platforms (especially for Linux ARM64 which can be tricky to cross-compile from macOS), we provide a Docker-based build workflow.
+
+1.  **Run**: `./bindings/build_in_docker.sh`
+2.  **What it does**:
+    *   Builds a Docker image with Go, Zig, and MinGW.
+    *   Mounts the repository into the container.
+    *   Runs `bindings/main/build.sh` inside the container.
+    *   Artifacts are written back to your host machine.
 
 ### Release Process (Python Example)
 
