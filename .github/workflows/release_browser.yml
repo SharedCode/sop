@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-and-upload:
-    if: startsWith(github.ref, 'refs/tags/sop4py-')
+    if: startsWith(github.ref, 'refs/tags/sop4py-') || startsWith(github.ref, 'refs/tags/Sop4CS-')
     name: Build and Upload Data Browser
     runs-on: ubuntu-latest
     strategy:
