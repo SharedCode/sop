@@ -3,10 +3,22 @@ using System.Text.Json;
 
 namespace Sop;
 
+/// <summary>
+/// Specifies the mode of the transaction.
+/// </summary>
 public enum TransactionMode
 {
+    /// <summary>
+    /// No specific check.
+    /// </summary>
     NoCheck = 0,
+    /// <summary>
+    /// Transaction intended for writing.
+    /// </summary>
     ForWriting = 1,
+    /// <summary>
+    /// Transaction intended for reading.
+    /// </summary>
     ForReading = 2
 }
 
@@ -18,10 +30,21 @@ internal enum TransactionAction
     Rollback = 4
 }
 
+/// <summary>
+/// Represents a database transaction.
+/// </summary>
 public class Transaction : IDisposable
 {
     internal Context Context { get; }
+    
+    /// <summary>
+    /// The unique identifier of the transaction.
+    /// </summary>
     public Guid Id { get; }
+
+    /// <summary>
+    /// The ID of the database this transaction belongs to.
+    /// </summary>
     public Guid DatabaseId { get; }
     private bool _begun;
 
@@ -33,6 +56,10 @@ public class Transaction : IDisposable
         DatabaseId = databaseId;
     }
 
+    /// <summary>
+    /// Commits the transaction, persisting all changes.
+    /// </summary>
+    /// <exception cref="SopException">Thrown if the commit fails.</exception>
     public void Commit()
     {
         if (!_begun) return;
@@ -44,6 +71,10 @@ public class Transaction : IDisposable
         _begun = false;
     }
 
+    /// <summary>
+    /// Rolls back the transaction, discarding all changes.
+    /// </summary>
+    /// <exception cref="SopException">Thrown if the rollback fails.</exception>
     public void Rollback()
     {
         if (!_begun) return;
@@ -55,6 +86,9 @@ public class Transaction : IDisposable
         _begun = false;
     }
 
+    /// <summary>
+    /// Disposes the transaction. Rolls back if not already committed.
+    /// </summary>
     public void Dispose()
     {
         if (_begun)

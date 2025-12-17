@@ -4,8 +4,15 @@ using System.Text;
 
 namespace Sop;
 
+/// <summary>
+/// Exception thrown by the Sop library.
+/// </summary>
 public class SopException : Exception
 {
+    /// <summary>
+    /// Initializes a new instance of the SopException class.
+    /// </summary>
+    /// <param name="message">The error message.</param>
     public SopException(string message) : base(message) { }
 }
 
@@ -42,15 +49,24 @@ internal static class Interop
     }
 }
 
+/// <summary>
+/// Represents a connection context to the Sop library.
+/// </summary>
 public class Context : IDisposable
 {
     internal long Id { get; private set; }
 
+    /// <summary>
+    /// Initializes a new instance of the Context class.
+    /// </summary>
     public Context()
     {
         Id = NativeMethods.CreateContext();
     }
 
+    /// <summary>
+    /// Disposes the context and releases resources.
+    /// </summary>
     public void Dispose()
     {
         if (Id != 0)

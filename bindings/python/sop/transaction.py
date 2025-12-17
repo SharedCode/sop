@@ -13,11 +13,9 @@ class TransactionMode(Enum):
     """
     Transaction mode enumeration.
 
-    Args:
-        Enum (_type_):
-        NoCheck - No check on commit, most performant but does NOT guarantee ACIDity
-        ForWriting - Mode for writing/updates/deletes.
-        ForReading - Mode for reading only. Checks all read items' version # on commit to guarantee ACIDity.
+    NoCheck - No check on commit, most performant but does NOT guarantee ACIDity
+    ForWriting - Mode for writing/updates/deletes.
+    ForReading - Mode for reading only. Checks all read items' version # on commit to guarantee ACIDity.
     """
 
     NoCheck = 0
@@ -26,6 +24,9 @@ class TransactionMode(Enum):
 
 
 class DatabaseType(Enum):
+    """
+    Specifies the type of database deployment.
+    """
     Standalone = 0
     Clustered = 1
 
@@ -46,14 +47,11 @@ class ErasureCodingConfig:
     """
     Erasure Coding config is used to package the parameter configuration of Reed Solomon based EC replication.
     This is a special algorithm for replication allowing full operational capability even if you lose a half of your
-    storage drives. :)
+    storage drives.
 
     For example, if you have 100% redundancy on four drives, losing two drives SOP will still be able to give you Read & Write.
     BUT of course, your IT needs to replace the drives and allow SOP to auto-reconstruct the redundant "shards" so your setup
     can offer tolerance once again.
-
-    Returns:
-        _type_: _description_
     """
 
     data_shards_count: int
@@ -83,6 +81,9 @@ class ErasureCodingConfig:
 
 @dataclass
 class RedisCacheConfig:
+    """
+    Configuration for Redis caching.
+    """
     address: str = ""
     password: str = ""
     db: int = 0
@@ -90,6 +91,9 @@ class RedisCacheConfig:
 
 @dataclass
 class DatabaseOptions:
+    """
+    Configuration options for creating a database.
+    """
     type: DatabaseType = DatabaseType.Standalone
     erasure_config: Optional[Dict[str, ErasureCodingConfig]] = None
     stores_folders: Optional[List[str]] = None
@@ -161,6 +165,13 @@ class Transaction:
         return True
 
     def begin(self):
+        """
+        Begin the transaction.
+
+        Raises:
+            InvalidTransactionStateError: If the transaction ID is missing.
+            TransactionError: If the transaction fails to begin.
+        """
         if self.begun:
             return
         if self.transaction_id == uuid.UUID(int=0):
@@ -175,15 +186,16 @@ class Transaction:
         self,
         ctx: context.Context,
     ):
-        """Commit will finalize the transaction, all b-tree management operations to the backend storage. The committed changes
-        will start to reflect on succeeding transactions b-tree store fetches/operations.
+        """
+        Commit will finalize the transaction, persisting all B-Tree management operations to the backend storage.
+        The committed changes will be visible to succeeding transactions.
 
         Args:
-            ctx (context.Context): _description_
+            ctx (context.Context): The context for the operation.
 
         Raises:
-            InvalidTransactionStateError: _description_
-            TransactionError: _description_
+            InvalidTransactionStateError: If the transaction ID is missing.
+            TransactionError: If the transaction commit fails.
         """
         if self._completed:
             return
@@ -199,14 +211,15 @@ class Transaction:
         self,
         ctx: context.Context,
     ):
-        """Undo or rollback the changes done within the transaction.
+        """
+        Undo or rollback the changes done within the transaction.
 
         Args:
-            ctx (context.Context): _description_
+            ctx (context.Context): The context for the operation.
 
         Raises:
-            InvalidTransactionStateError: _description_
-            TransactionError: _description_
+            InvalidTransactionStateError: If the transaction ID is missing.
+            TransactionError: If the transaction rollback fails.
         """
         if self._completed:
             return

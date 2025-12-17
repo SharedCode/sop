@@ -3,23 +3,26 @@ from . import call_go
 
 class Context:
     """
-    Use context as parameter when calling SOP Transaction & Btree methods. And if your code needs to, use
-    it to cancel any ongoing method, e.g. transaction commit. While your code is running on another thread and commit
-    is happening, your code can call the context's cancel method to tell the commit to abort.
+    Represents a context for SOP operations.
 
-    That is what a context is for coming from the Python side, option for execution abortion if/when necessary.
+    The context is used to manage the lifecycle of operations, handle errors, and allow for cancellation.
+    It serves as a bridge between the Python client and the underlying Go implementation.
     """
 
     def __init__(self):
         """
-        Constructor auto creates a constructor on the other side and keep the 'id' so it can get "managed" later on.
+        Initializes a new Context.
+
+        This creates a corresponding context in the Go runtime and stores its ID.
         """
         self._removed = False
         self.id = call_go.create_context()
 
     def __del__(self):
         """
-        Destructor auto removes the context from the other side.
+        Clean up the context.
+
+        Removes the corresponding context from the Go runtime.
         """
         if not self._removed:
             self._removed = True
@@ -27,20 +30,27 @@ class Context:
 
     def cancel(self):
         """
-        cancel or abort any running function within a context.
+        Cancels any running operation associated with this context.
+
+        This signals the underlying Go runtime to abort the operation.
         """
         call_go.cancel_context(self.id)
         self._removed = True
 
     def error(self) -> str:
         """
-        Returns the error message if the context has encountered an error (e.g. timeout or canceled),
-        otherwise returns None.
+        Checks for errors in the context.
+
+        Returns:
+            str: The error message if an error occurred (e.g., timeout or canceled), otherwise None.
         """
         return call_go.context_error(self.id)
 
     def is_valid(self) -> bool:
         """
-        Returns True if the context is still valid (no error), False otherwise.
+        Checks if the context is valid.
+
+        Returns:
+            bool: True if the context has no errors, False otherwise.
         """
         return self.error() is None

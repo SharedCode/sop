@@ -2,15 +2,20 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <PackageId>Sop.Data</PackageId>
-    <Version>1.0.0</Version>
-    <Authors>SharedCode</Authors>
+    <PackageId>Sop4CS</PackageId>
+    <Version>2.0.39</Version>
+    <Authors>Gerardo Recinto</Authors>
     <Description>Scalable Objects Persistence (SOP) - High-performance transactional storage engine.</Description>
     <PackageTags>database;btree;vector;storage;transactional</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/SharedCode/sop</RepositoryUrl>
     <LangVersion>latest</LangVersion>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="8.0.5" />

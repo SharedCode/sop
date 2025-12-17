@@ -64,26 +64,53 @@ And update the package metadata:
 <PropertyGroup>
   <PackageId>Sop.Data</PackageId>
   <Version>1.0.0</Version>
-  <Authors>SharedCode</Authors>
+  <Authors>Gerardo Recinto</Authors>
   <Description>Scalable Objects Persistence (SOP) - High-performance transactional storage engine.</Description>
   <PackageTags>database;btree;vector;storage;transactional</PackageTags>
 </PropertyGroup>
 ```
 
-## 3. Pack the Project
+## 3. Pack the Projects
 
-Run the pack command to create the `.nupkg` file:
+Run the pack command to create the `.nupkg` files for both the library and the CLI tool:
 
 ```bash
+# Pack the Library (Sop.Data)
 dotnet pack bindings/csharp/Sop/Sop.csproj -c Release
+
+# Pack the CLI Tool (Sop.Demo)
+dotnet pack bindings/csharp/Sop.Examples/Sop.Examples.csproj -c Release
 ```
 
-This will generate a file like `bindings/csharp/Sop/bin/Release/Sop.Data.1.0.0.nupkg`.
+This will generate:
+- `bindings/csharp/Sop/bin/Release/Sop.Data.1.0.0.nupkg`
+- `bindings/csharp/Sop.Examples/bin/Release/Sop.Demo.1.0.0.nupkg`
 
 ## 4. Push to NuGet
 
-Upload the package to NuGet.org:
+Upload the packages to NuGet.org:
 
 ```bash
+# Push Library
 dotnet nuget push bindings/csharp/Sop/bin/Release/Sop.Data.1.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
+
+# Push CLI Tool
+dotnet nuget push bindings/csharp/Sop.Examples/bin/Release/Sop.Demo.1.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
+```
+
+## 5. Installation
+
+Users can install the library in their projects:
+```bash
+dotnet add package Sop.Data
+```
+
+And install the global tool to run examples and the Data Browser:
+```bash
+dotnet tool install -g Sop.Demo
+```
+
+Then run:
+```bash
+sop-demo
 ```

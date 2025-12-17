@@ -127,7 +127,7 @@ public class BtreeTests : IDisposable
 
         using (var t = db.BeginTransaction(ctx))
         {
-            var opts = new BtreeOptions("complex") { IndexSpec = indexSpec };
+            var opts = new BtreeOptions("complex") { IndexSpecification = indexSpec };
             var btree = db.NewBtree<ComplexKey, string>(ctx, "complex", t, opts);
 
             btree.Add(ctx, new Item<ComplexKey, string>(new ComplexKey { Region = "US", Id = 1 }, "Val1"));

@@ -33,13 +33,15 @@ public static class BtreeComplexKey
             {
                 // Define Index Specification
                 // This tells SOP how to construct the composite key for sorting and prefix scanning.
-                var indexSpec = @"{
-                    ""index_fields"": [
-                        { ""name"": ""Region"", ""ascending_sort_order"": true },
-                        { ""name"": ""Department"", ""ascending_sort_order"": true },
-                        { ""name"": ""Id"", ""ascending_sort_order"": true }
-                    ]
-                }";
+                var indexSpec = new IndexSpecification
+                {
+                    IndexFields = new List<IndexFieldSpecification>
+                    {
+                        new IndexFieldSpecification { FieldName = "Region", AscendingSortOrder = true },
+                        new IndexFieldSpecification { FieldName = "Department", AscendingSortOrder = true },
+                        new IndexFieldSpecification { FieldName = "Id", AscendingSortOrder = true }
+                    }
+                };
 
                 var opts = new BtreeOptions("employees") { IndexSpecification = indexSpec };
                 var employees = db.NewBtree<EmployeeKey, string>(ctx, "employees", trans, opts);

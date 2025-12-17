@@ -31,7 +31,7 @@ class PagingDirection(Enum):
 @dataclass
 class PagingInfo:
     """
-    Paging Info is used to package paging details to SOP.
+    Contains pagination details for query results.
     """
 
     # Offset defaults to 0, meaning, fetch from current cursor position in SOP backend.
@@ -49,7 +49,7 @@ class PagingInfo:
 @dataclass
 class CacheConfig:
     """
-    Cache config specify the options available for caching in B-tree.
+    Configuration for the B-Tree's caching behavior.
     """
 
     # Registry cache duration in minutes.
@@ -66,11 +66,7 @@ class CacheConfig:
 @dataclass
 class IndexFieldSpecification:
     """
-    Make sure to specify correct field name so Key data comparer will be able to make a good comparison
-    between two Items when organizing Key/Value item pairs in the b-tree.
-
-    Otherwise it will treat all of item's to have the same key field value and thus, will affect both
-    performance and give incorrect ordering of the items.
+    Specifies a field to be included in a composite index.
     """
 
     field_name: str
@@ -80,16 +76,16 @@ class IndexFieldSpecification:
 @dataclass
 class IndexSpecification:
     """
-    Index Specification lists the fields comprising the index on the Key class & their sort order.
+    Defines the structure of a composite index for complex keys.
     """
 
-    index_fields: IndexFieldSpecification = None
+    index_fields: List[IndexFieldSpecification] = None
 
 
 @dataclass
 class BtreeOptions:
     """
-    Btree options specify the options available for making a B-tree.
+    Configuration options for creating or opening a B-Tree store.
     """
 
     name: str = ""
@@ -104,6 +100,10 @@ class BtreeOptions:
     cache_config: CacheConfig = None
     is_primitive_key: bool = True
     leaf_load_balancing: bool = False
+
+    def set_index_specification(self, spec: IndexSpecification):
+        if spec:
+            self.index_specification = json.dumps(asdict(spec))
 
     def set_value_data_size(self, s: ValueDataSize):
         if s == ValueDataSize.Medium:
@@ -276,18 +276,51 @@ class Btree(Generic[TK, TV]):
         return cls(b3id, False, trans.transaction_id)
 
     def add(self, ctx: context.Context, key: Union[TK, Item[TK, TV], List[Item[TK, TV]]], value: TV = None) -> bool:
+        """
+        Adds a key-value pair, an Item, or a list of Items to the store.
+
+        Args:
+            ctx (context.Context): The context.
+            key (Union[TK, Item[TK, TV], List[Item[TK, TV]]]): The key, Item, or list of Items to add.
+            value (TV, optional): The value to add (if key is a primitive key). Defaults to None.
+
+        Returns:
+            bool: True if successful.
+        """
         items = key
         if value is not None or not isinstance(key, (Item, list)):
             items = Item(key=key, value=value)
         return self._manage(ctx, BtreeAction.Add.value, items)
 
     def add_if_not_exists(self, ctx: context.Context, key: Union[TK, Item[TK, TV], List[Item[TK, TV]]], value: TV = None) -> bool:
+        """
+        Adds an item or items only if the key does not already exist.
+
+        Args:
+            ctx (context.Context): The context.
+            key (Union[TK, Item[TK, TV], List[Item[TK, TV]]]): The key, Item, or list of Items to add.
+            value (TV, optional): The value to add (if key is a primitive key). Defaults to None.
+
+        Returns:
+            bool: True if added, False if key exists.
+        """
         items = key
         if value is not None or not isinstance(key, (Item, list)):
             items = Item(key=key, value=value)
         return self._manage(ctx, BtreeAction.AddIfNotExist.value, items)
 
     def update(self, ctx: context.Context, key: Union[TK, Item[TK, TV], List[Item[TK, TV]]], value: TV = None) -> bool:
+        """
+        Updates an existing item or items.
+
+        Args:
+            ctx (context.Context): The context.
+            key (Union[TK, Item[TK, TV], List[Item[TK, TV]]]): The key, Item, or list of Items to update.
+            value (TV, optional): The new value (if key is a primitive key). Defaults to None.
+
+        Returns:
+            bool: True if found and updated.
+        """
         items = key
         if value is not None or not isinstance(key, (Item, list)):
             items = Item(key=key, value=value)
@@ -295,19 +328,39 @@ class Btree(Generic[TK, TV]):
 
     def update_key(self, ctx: context.Context, items: Union[Item[TK, TV], List[Item[TK, TV]]]) -> bool:
         """
-        UpdateKey updates the key of the item found by the key in the provided item.
+        Updates the key of an existing item.
+
+        Args:
+            ctx (context.Context): The context.
+            items (Union[Item[TK, TV], List[Item[TK, TV]]]): The item(s) containing the new key.
+
+        Returns:
+            bool: True if successful.
         """
         return self._manage(ctx, BtreeAction.UpdateKey.value, items)
 
     def update_current_key(self, ctx: context.Context, item: Item[TK, TV]) -> bool:
         """
-        UpdateCurrentKey updates the key of the currently positioned item.
+        Updates the key of the currently positioned item.
+
+        Args:
+            ctx (context.Context): The context.
+            item (Item[TK, TV]): The item containing the new key.
+
+        Returns:
+            bool: True if successful.
         """
         return self._manage(ctx, BtreeAction.UpdateCurrentKey.value, item)
 
     def get_current_key(self, ctx: context.Context) -> Item[TK, TV]:
         """
-        GetCurrentKey returns the current item (Key & Value) where the cursor is positioned.
+        Returns the current item (Key & Value) where the cursor is positioned.
+
+        Args:
+            ctx (context.Context): The context.
+
+        Returns:
+            Item[TK, TV]: The current item.
         """
         items = self._get(ctx, BtreeAction.GetCurrentKey.value, PagingInfo())
         if items and len(items) > 0:
@@ -316,7 +369,13 @@ class Btree(Generic[TK, TV]):
 
     def get_current_value(self, ctx: context.Context) -> Item[TK, TV]:
         """
-        GetCurrentValue returns the current item (Key & Value) where the cursor is positioned.
+        Returns the current item (Key & Value) where the cursor is positioned.
+
+        Args:
+            ctx (context.Context): The context.
+
+        Returns:
+            Item[TK, TV]: The current item.
         """
         items = self._get(ctx, BtreeAction.GetCurrentValue.value, PagingInfo())
         if items and len(items) > 0:
@@ -324,12 +383,33 @@ class Btree(Generic[TK, TV]):
         return None
 
     def upsert(self, ctx: context.Context, key: Union[TK, Item[TK, TV], List[Item[TK, TV]]], value: TV = None) -> bool:
+        """
+        Adds or updates an item or items.
+
+        Args:
+            ctx (context.Context): The context.
+            key (Union[TK, Item[TK, TV], List[Item[TK, TV]]]): The key, Item, or list of Items to upsert.
+            value (TV, optional): The value to upsert (if key is a primitive key). Defaults to None.
+
+        Returns:
+            bool: True if successful.
+        """
         items = key
         if value is not None or not isinstance(key, (Item, list)):
             items = Item(key=key, value=value)
         return self._manage(ctx, BtreeAction.Upsert.value, items)
 
     def remove(self, ctx: context.Context, keys: TK) -> bool:
+        """
+        Removes an item or items by key.
+
+        Args:
+            ctx (context.Context): The context.
+            keys (TK): The key or list of keys to remove.
+
+        Returns:
+            bool: True if removed.
+        """
         metadata: ManageBtreeMetaData = ManageBtreeMetaData(
             is_primitive_key=self.is_primitive_key,
             btree_id=str(self.id),

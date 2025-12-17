@@ -5,7 +5,22 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    
+    <!-- Tool Packaging -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>sop-demo</ToolCommandName>
+    <PackageId>Sop4CS.Demo</PackageId>
+    <Version>2.0.39</Version>
+    <Authors>Gerardo Recinto</Authors>
+    <Description>SOP Examples and Data Browser Launcher</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/SharedCode/sop</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Sop\Sop.csproj" />

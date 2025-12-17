@@ -33,12 +33,14 @@ public static class BtreeMetadata
         {
             // Only index Category and ProductId. 
             // IsActive and Price are "Ride-on" metadata - stored in the key but not part of the sort order.
-            var indexSpec = @"{
-                ""index_fields"": [
-                    { ""name"": ""Category"", ""ascending_sort_order"": true },
-                    { ""name"": ""ProductId"", ""ascending_sort_order"": true }
-                ]
-            }";
+            var indexSpec = new IndexSpecification
+            {
+                IndexFields = new List<IndexFieldSpecification>
+                {
+                    new IndexFieldSpecification { FieldName = "Category", AscendingSortOrder = true },
+                    new IndexFieldSpecification { FieldName = "ProductId", AscendingSortOrder = true }
+                }
+            };
 
             var opts = new BtreeOptions("products") { IndexSpecification = indexSpec };
             var products = db.NewBtree<ProductKey, string>(ctx, "products", trans, opts);

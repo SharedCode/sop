@@ -5,32 +5,65 @@ using System.Text.Json.Serialization;
 
 namespace Sop;
 
+/// <summary>
+/// Specifies the type of database deployment.
+/// </summary>
 public enum DatabaseType
 {
+    /// <summary>
+    /// Single node database.
+    /// </summary>
     Standalone = 0,
+    /// <summary>
+    /// Distributed database cluster.
+    /// </summary>
     Clustered = 1
 }
 
+/// <summary>
+/// Configuration for erasure coding (redundancy).
+/// </summary>
 public class ErasureCodingConfig
 {
+    /// <summary>
+    /// Number of data shards.
+    /// </summary>
     [JsonPropertyName("data_shards")]
     public int DataShards { get; set; }
 
+    /// <summary>
+    /// Number of parity shards.
+    /// </summary>
     [JsonPropertyName("parity_shards")]
     public int ParityShards { get; set; }
 }
 
+/// <summary>
+/// Configuration options for creating a database.
+/// </summary>
 public class DatabaseOptions
 {
+    /// <summary>
+    /// List of folders where data stores are located.
+    /// </summary>
     [JsonPropertyName("stores_folders")]
     public List<string> StoresFolders { get; set; }
 
+    /// <summary>
+    /// The type of database (Standalone/Clustered).
+    /// </summary>
     [JsonPropertyName("type")]
     public int Type { get; set; }
 
+    /// <summary>
+    /// The keyspace name (for clustered setups).
+    /// </summary>
     [JsonPropertyName("keyspace")]
     public string Keyspace { get; set; }
 
+    /// <summary>
+    /// Erasure coding configuration per store.
+    /// </summary>
     [JsonPropertyName("erasure_config")]
     public Dictionary<string, ErasureCodingConfig> ErasureConfig { get; set; }
 }
@@ -50,16 +83,34 @@ internal enum DatabaseAction
     RemoveSearch = 11
 }
 
+/// <summary>
+/// Represents a database instance.
+/// </summary>
 public class Database
 {
+    /// <summary>
+    /// The unique identifier of the database.
+    /// </summary>
     public Guid Id { get; private set; }
     private readonly DatabaseOptions _options;
 
+    /// <summary>
+    /// Initializes a new instance of the Database class with the specified options.
+    /// </summary>
+    /// <param name="options">Configuration options.</param>
     public Database(DatabaseOptions options)
     {
         _options = options;
     }
 
+    /// <summary>
+    /// Begins a new transaction.
+    /// </summary>
+    /// <param name="ctx">The context.</param>
+    /// <param name="mode">The transaction mode (Read/Write).</param>
+    /// <param name="maxTime">Maximum duration of the transaction in seconds.</param>
+    /// <returns>A new Transaction object.</returns>
+    /// <exception cref="SopException">Thrown if transaction creation fails.</exception>
     public Transaction BeginTransaction(Context ctx, TransactionMode mode = TransactionMode.ForWriting, int maxTime = 15)
     {
         EnsureDatabaseCreated(ctx);
@@ -95,6 +146,11 @@ public class Database
         }
     }
 
+    /// <summary>
+    /// Removes a B-Tree store from the database.
+    /// </summary>
+    /// <param name="ctx">The context.</param>
+    /// <param name="name">The name of the store to remove.</param>
     public void RemoveBtree(Context ctx, string name)
     {
         var resPtr = NativeMethods.ManageDatabase(ctx.Id, (int)DatabaseAction.RemoveBtree, Interop.ToBytes(Id.ToString()), Interop.ToBytes(name));
