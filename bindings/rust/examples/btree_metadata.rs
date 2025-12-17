@@ -1,4 +1,4 @@
-use sop::{Context, Database, DatabaseOptions, DatabaseType, BtreeOptions, Btree};
+use sop::{Context, Database, DatabaseOptions, DatabaseType, BtreeOptions, Btree, IndexSpecification, IndexFieldSpecification};
 use serde::{Serialize, Deserialize};
 use std::fs;
 use std::path::Path;
@@ -45,16 +45,16 @@ fn main() {
     
     // Only index Category and ProductId. 
     // IsActive and Price are "Ride-on" metadata - stored in the key but not part of the sort order.
-    let index_spec = r#"{
-        "index_fields": [
-            { "name": "Category", "ascending_sort_order": true },
-            { "name": "ProductId", "ascending_sort_order": true }
-        ]
-    }"#;
+    let index_spec = IndexSpecification {
+        index_fields: vec![
+            IndexFieldSpecification { field_name: "Category".to_string(), ascending_sort_order: true },
+            IndexFieldSpecification { field_name: "ProductId".to_string(), ascending_sort_order: true },
+        ],
+    };
 
     let mut opts = BtreeOptions::default();
     opts.is_primitive_key = false;
-    opts.index_specification = Some(index_spec.to_string());
+    opts.set_index_specification(index_spec);
     
     let products = Btree::<ProductKey, String>::create(&ctx, "products", &trans, Some(opts)).unwrap();
 

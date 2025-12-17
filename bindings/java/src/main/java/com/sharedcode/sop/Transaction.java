@@ -2,6 +2,9 @@ package com.sharedcode.sop;
 
 import com.sun.jna.Pointer;
 
+/**
+ * Represents a transaction in the SOP library.
+ */
 public class Transaction implements AutoCloseable {
     private final Context ctx;
     private final String id;
@@ -15,18 +18,38 @@ public class Transaction implements AutoCloseable {
         this.active = true;
     }
 
+    /**
+     * Gets the transaction ID.
+     *
+     * @return The transaction ID.
+     */
     public String getId() {
         return id;
     }
 
+    /**
+     * Gets the context associated with the transaction.
+     *
+     * @return The context.
+     */
     public Context getContext() {
         return ctx;
     }
     
+    /**
+     * Gets the database associated with the transaction.
+     *
+     * @return The database.
+     */
     public Database getDatabase() {
         return db;
     }
 
+    /**
+     * Commits the transaction.
+     *
+     * @throws SopException If an error occurs.
+     */
     public void commit() throws SopException {
         if (!active) return;
         
@@ -35,6 +58,11 @@ public class Transaction implements AutoCloseable {
         active = false;
     }
 
+    /**
+     * Rolls back the transaction.
+     *
+     * @throws SopException If an error occurs.
+     */
     public void rollback() throws SopException {
         if (!active) return;
 
@@ -43,6 +71,9 @@ public class Transaction implements AutoCloseable {
         active = false;
     }
 
+    /**
+     * Closes the transaction, rolling it back if it is still active.
+     */
     @Override
     public void close() {
         if (active) {

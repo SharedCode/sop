@@ -6,28 +6,59 @@ use std::marker::PhantomData;
 use std::ffi::CString;
 use libc::c_int;
 
+/// Specifies a field to be included in a composite index.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct IndexFieldSpecification {
+    /// The name of the field/property in the key object.
+    #[serde(rename = "field_name")]
+    pub field_name: String,
+    /// If true, sorts in ascending order. False for descending.
+    #[serde(rename = "ascending_sort_order")]
+    pub ascending_sort_order: bool,
+}
+
+/// Defines the structure of a composite index for complex keys.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct IndexSpecification {
+    /// List of fields that make up the index.
+    #[serde(rename = "index_fields")]
+    pub index_fields: Vec<IndexFieldSpecification>,
+}
+
+/// Options for configuring a B-Tree.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BtreeOptions {
+    /// The name of the B-Tree.
     #[serde(rename = "name")]
     pub name: String,
+    /// Whether the B-Tree enforces unique keys.
     #[serde(rename = "is_unique")]
     pub is_unique: bool,
+    /// Whether the key is a primitive type.
     #[serde(rename = "is_primitive_key")]
     pub is_primitive_key: bool,
+    /// The number of slots per node.
     #[serde(rename = "slot_length")]
     pub slot_length: i32,
+    /// A description of the B-Tree.
     #[serde(rename = "description")]
     pub description: String,
+    /// Whether value data is stored in the node segment.
     #[serde(rename = "is_value_data_in_node_segment")]
     pub is_value_data_in_node_segment: bool,
+    /// Whether value data is actively persisted.
     #[serde(rename = "is_value_data_actively_persisted")]
     pub is_value_data_actively_persisted: bool,
+    /// Whether value data is globally cached.
     #[serde(rename = "is_value_data_globally_cached")]
     pub is_value_data_globally_cached: bool,
+    /// Whether to enable leaf load balancing.
     #[serde(rename = "leaf_load_balancing")]
     pub leaf_load_balancing: bool,
+    /// The index specification.
     #[serde(rename = "index_specification", skip_serializing_if = "Option::is_none")]
     pub index_specification: Option<String>,
+    /// The transaction ID associated with these options.
     #[serde(rename = "transaction_id")]
     pub transaction_id: String,
 }
@@ -50,17 +81,29 @@ impl Default for BtreeOptions {
     }
 }
 
+impl BtreeOptions {
+    /// Sets the index specification using a strongly-typed object.
+    pub fn set_index_specification(&mut self, spec: IndexSpecification) {
+        self.index_specification = Some(serde_json::to_string(&spec).unwrap());
+    }
+}
+
+/// Represents a key-value pair in the B-Tree.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Item<K, V> {
+    /// The key.
     #[serde(rename = "key")]
     pub key: K,
+    /// The value.
     #[serde(rename = "value")]
     pub value: Option<V>,
+    /// The ID of the item.
     #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
 }
 
 impl<K, V> Item<K, V> {
+    /// Creates a new item with the given key and value.
     pub fn new(key: K, value: V) -> Self {
         Self { key, value: Some(value), id: None }
     }
@@ -73,17 +116,23 @@ struct ManageBtreePayload<K, V> {
     paging_info: Option<PagingInfo>,
 }
 
+/// Pagination information for queries.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PagingInfo {
+    /// The page size.
     #[serde(rename = "page_size")]
     pub page_size: i32,
+    /// The page offset.
     #[serde(rename = "page_offset")]
     pub page_offset: i32,
 }
 
+/// A B-Tree wrapper.
 #[derive(Clone)]
 pub struct Btree<K, V> {
+    /// The ID of the B-Tree.
     pub id: String,
+    /// The transaction ID associated with the B-Tree.
     pub transaction_id: String,
     _marker: PhantomData<(K, V)>,
 }
@@ -130,6 +179,18 @@ impl<K, V> Btree<K, V> {
         }
     }
 
+    /// Creates a new B-Tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `name` - The name of the B-Tree.
+    /// * `trans` - The transaction.
+    /// * `options` - The B-Tree options.
+    ///
+    /// # Returns
+    ///
+    /// A result containing the created B-Tree or an error message.
     pub fn create(ctx: &Context, name: &str, trans: &Transaction, options: Option<BtreeOptions>) -> Result<Self, String> {
         let mut opts = options.unwrap_or_default();
         opts.name = name.to_string();
@@ -145,6 +206,18 @@ impl<K, V> Btree<K, V> {
         Self::manage_database(ctx, DatabaseAction::NewBtree, trans.database_id.clone(), payload, trans.id.clone())
     }
 
+    /// Opens an existing B-Tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `name` - The name of the B-Tree.
+    /// * `trans` - The transaction.
+    /// * `options` - The B-Tree options.
+    ///
+    /// # Returns
+    ///
+    /// A result containing the opened B-Tree or an error message.
     pub fn open(ctx: &Context, name: &str, trans: &Transaction, options: Option<BtreeOptions>) -> Result<Self, String> {
         let mut opts = options.unwrap_or_default();
         opts.name = name.to_string();
@@ -177,12 +250,33 @@ impl<K, V> Btree<K, V> {
         serde_json::to_string(&meta).unwrap()
     }
 
+    /// Adds a key-value pair to the B-Tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `key` - The key to add.
+    /// * `value` - The value to add.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn add(&self, ctx: &Context, key: K, value: V) -> Result<(), String> 
     where K: Serialize, V: Serialize {
         let item = Item::new(key, value);
         self.add_batch(ctx, vec![item])
     }
 
+    /// Adds a batch of items to the B-Tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `items` - The list of items to add.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn add_batch(&self, ctx: &Context, items: Vec<Item<K, V>>) -> Result<(), String> 
     where K: Serialize, V: Serialize {
         let payload = ManageBtreePayload { items, paging_info: None };
@@ -193,12 +287,33 @@ impl<K, V> Btree<K, V> {
         }
     }
 
+    /// Adds a key-value pair to the B-Tree if it does not already exist.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `key` - The key to add.
+    /// * `value` - The value to add.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn add_if_not_exist(&self, ctx: &Context, key: K, value: V) -> Result<(), String> 
     where K: Serialize, V: Serialize {
         let item = Item::new(key, value);
         self.add_if_not_exist_batch(ctx, vec![item])
     }
 
+    /// Adds a batch of items to the B-Tree if they do not already exist.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `items` - The list of items to add.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn add_if_not_exist_batch(&self, ctx: &Context, items: Vec<Item<K, V>>) -> Result<(), String> 
     where K: Serialize, V: Serialize {
         let payload = ManageBtreePayload { items, paging_info: None };
@@ -209,12 +324,33 @@ impl<K, V> Btree<K, V> {
         }
     }
 
+    /// Inserts or updates a key-value pair in the B-Tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `key` - The key to upsert.
+    /// * `value` - The value to upsert.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn upsert(&self, ctx: &Context, key: K, value: V) -> Result<(), String> 
     where K: Serialize, V: Serialize {
         let item = Item::new(key, value);
         self.upsert_batch(ctx, vec![item])
     }
 
+    /// Inserts or updates a batch of items in the B-Tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `items` - The list of items to upsert.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn upsert_batch(&self, ctx: &Context, items: Vec<Item<K, V>>) -> Result<(), String> 
     where K: Serialize, V: Serialize {
         let payload = ManageBtreePayload { items, paging_info: None };
@@ -225,12 +361,33 @@ impl<K, V> Btree<K, V> {
         }
     }
 
+    /// Updates a key-value pair in the B-Tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `key` - The key to update.
+    /// * `value` - The new value.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn update(&self, ctx: &Context, key: K, value: V) -> Result<(), String> 
     where K: Serialize, V: Serialize {
         let item = Item::new(key, value);
         self.update_batch(ctx, vec![item])
     }
 
+    /// Updates a batch of items in the B-Tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `items` - The list of items to update.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn update_batch(&self, ctx: &Context, items: Vec<Item<K, V>>) -> Result<(), String> 
     where K: Serialize, V: Serialize {
         let payload = ManageBtreePayload { items, paging_info: None };
@@ -241,11 +398,31 @@ impl<K, V> Btree<K, V> {
         }
     }
 
+    /// Updates the key of an item in the B-Tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `item` - The item with the new key.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn update_key(&self, ctx: &Context, item: Item<K, V>) -> Result<(), String> 
     where K: Serialize, V: Serialize {
         self.update_keys(ctx, vec![item])
     }
 
+    /// Updates the keys of a batch of items in the B-Tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `items` - The list of items with new keys.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn update_keys(&self, ctx: &Context, items: Vec<Item<K, V>>) -> Result<(), String> 
     where K: Serialize, V: Serialize {
         let payload = ManageBtreePayload { items, paging_info: None };
@@ -256,6 +433,16 @@ impl<K, V> Btree<K, V> {
         }
     }
 
+    /// Updates the current key with a new value.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `item` - The item containing the new value.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn update_current_key(&self, ctx: &Context, item: Item<K, V>) -> Result<(), String> 
     where K: Serialize, V: Serialize {
         let payload = ManageBtreePayload { items: vec![item], paging_info: None };
@@ -266,11 +453,31 @@ impl<K, V> Btree<K, V> {
         }
     }
 
+    /// Removes an item from the B-Tree by its key.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `key` - The key of the item to remove.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn remove(&self, ctx: &Context, key: K) -> Result<(), String> 
     where K: Serialize {
         self.remove_batch(ctx, vec![key])
     }
 
+    /// Removes a batch of items from the B-Tree by their keys.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `keys` - The list of keys of the items to remove.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn remove_batch(&self, ctx: &Context, keys: Vec<K>) -> Result<(), String> 
     where K: Serialize {
         let json_payload = serde_json::to_string(&keys).map_err(|e| e.to_string())?;
@@ -280,6 +487,16 @@ impl<K, V> Btree<K, V> {
         }
     }
 
+    /// Finds an item in the B-Tree by its key.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `key` - The key to search for.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating whether the item was found.
     pub fn find(&self, ctx: &Context, key: K) -> Result<bool, String> 
     where K: Serialize, V: Serialize {
         let item: Item<K, V> = Item { key, value: None, id: None };
@@ -303,6 +520,16 @@ impl<K, V> Btree<K, V> {
         }
     }
 
+    /// Gets the value associated with a key.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `key` - The key to search for.
+    ///
+    /// # Returns
+    ///
+    /// A result containing the item if found, or None.
     pub fn get_value(&self, ctx: &Context, key: K) -> Result<Option<Item<K, V>>, String> 
     where K: Serialize + for<'a> Deserialize<'a> + Clone, V: for<'a> Deserialize<'a> + Serialize {
         let item: Item<K, V> = Item { key: key.clone(), value: None, id: None };
@@ -338,6 +565,16 @@ impl<K, V> Btree<K, V> {
         }
     }
 
+    /// Gets the values associated with a list of keys.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `keys` - The list of keys to search for.
+    ///
+    /// # Returns
+    ///
+    /// A result containing a list of items found.
     pub fn get_values(&self, ctx: &Context, keys: Vec<K>) -> Result<Vec<Item<K, V>>, String> 
     where K: Serialize + for<'a> Deserialize<'a> + Clone, V: for<'a> Deserialize<'a> + Serialize {
         let items_req: Vec<Item<K, V>> = keys.iter().map(|k| Item { key: k.clone(), value: None, id: None }).collect();

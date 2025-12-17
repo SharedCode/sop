@@ -1,10 +1,15 @@
 use crate::ffi::{createContext, removeContext, contextError};
 
+/// Represents a context for SOP operations.
+///
+/// The context is used to manage the lifecycle of operations and handle errors.
 pub struct Context {
+    /// The context ID.
     pub id: i64,
 }
 
 impl Context {
+    /// Creates a new context.
     pub fn new() -> Self {
         unsafe {
             let id = createContext();
@@ -12,6 +17,11 @@ impl Context {
         }
     }
 
+    /// Checks for errors in the context.
+    ///
+    /// # Returns
+    ///
+    /// An option containing the error message if an error occurred, or `None` otherwise.
     pub fn error(&self) -> Option<String> {
         unsafe {
             let ptr = contextError(self.id);

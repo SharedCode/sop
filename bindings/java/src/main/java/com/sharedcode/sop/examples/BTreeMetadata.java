@@ -39,15 +39,20 @@ public class BTreeMetadata {
             try (Transaction trans = db.beginTransaction(ctx)) {
                 // Only index Category and ProductId. 
                 // IsActive and Price are "Ride-on" metadata - stored in the key but not part of the sort order.
-                String indexSpec = "{\n" +
-                        "    \"index_fields\": [\n" +
-                        "        { \"field_name\": \"category\", \"ascending_sort_order\": true },\n" +
-                        "        { \"field_name\": \"productId\", \"ascending_sort_order\": true }\n" +
-                        "    ]\n" +
-                        "}";
+                IndexSpecification indexSpec = new IndexSpecification();
+                
+                IndexFieldSpecification f1 = new IndexFieldSpecification();
+                f1.fieldName = "category";
+                f1.ascendingSortOrder = true;
+                indexSpec.indexFields.add(f1);
+
+                IndexFieldSpecification f2 = new IndexFieldSpecification();
+                f2.fieldName = "productId";
+                f2.ascendingSortOrder = true;
+                indexSpec.indexFields.add(f2);
 
                 BTreeOptions opts = new BTreeOptions("products");
-                opts.indexSpecification = indexSpec;
+                opts.setIndexSpecification(indexSpec);
                 
                 BTree<ProductKey, String> products = db.newBtree(ctx, "products", trans, opts, ProductKey.class, String.class);
 

@@ -30,6 +30,18 @@ public class BTree<K, V> implements AutoCloseable {
         this.mapper = new ObjectMapper();
     }
 
+    /**
+     * Creates a new B-Tree.
+     *
+     * @param ctx The context.
+     * @param name The name of the B-Tree.
+     * @param tx The transaction.
+     * @param options The B-Tree options.
+     * @param keyType The class of the key.
+     * @param valueType The class of the value.
+     * @return The created B-Tree.
+     * @throws SopException If an error occurs.
+     */
     public static <K, V> BTree<K, V> create(Context ctx, String name, Transaction tx, BTreeOptions options, Class<K> keyType, Class<V> valueType) throws SopException {
         if (options == null) options = new BTreeOptions(name);
         options.transactionId = tx.getId();
@@ -52,6 +64,17 @@ public class BTree<K, V> implements AutoCloseable {
         }
     }
 
+    /**
+     * Opens an existing B-Tree.
+     *
+     * @param ctx The context.
+     * @param name The name of the B-Tree.
+     * @param tx The transaction.
+     * @param keyType The class of the key.
+     * @param valueType The class of the value.
+     * @return The opened B-Tree.
+     * @throws SopException If an error occurs.
+     */
     public static <K, V> BTree<K, V> open(Context ctx, String name, Transaction tx, Class<K> keyType, Class<V> valueType) throws SopException {
         BTreeOptions options = new BTreeOptions(name);
         options.transactionId = tx.getId();
@@ -78,76 +101,206 @@ public class BTree<K, V> implements AutoCloseable {
         return type.isPrimitive() || type == String.class || Number.class.isAssignableFrom(type) || Boolean.class.isAssignableFrom(type);
     }
 
+    /**
+     * Adds a key-value pair to the B-Tree.
+     *
+     * @param key The key to add.
+     * @param value The value to add.
+     * @return True if the add was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean add(K key, V value) throws SopException {
         return manage(BTreeAction.Add.value, new Item<>(key, value));
     }
 
+    /**
+     * Adds an item to the B-Tree.
+     *
+     * @param item The item to add.
+     * @return True if the add was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean add(Item<K, V> item) throws SopException {
         return manage(BTreeAction.Add.value, item);
     }
 
+    /**
+     * Adds a list of items to the B-Tree.
+     *
+     * @param items The list of items to add.
+     * @return True if the add was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean add(List<Item<K, V>> items) throws SopException {
         return manage(BTreeAction.Add.value, items);
     }
 
+    /**
+     * Adds a key-value pair to the B-Tree if it does not already exist.
+     *
+     * @param key The key to add.
+     * @param value The value to add.
+     * @return True if the add was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean addIfNotExist(K key, V value) throws SopException {
         return manage(BTreeAction.AddIfNotExist.value, new Item<>(key, value));
     }
 
+    /**
+     * Adds an item to the B-Tree if it does not already exist.
+     *
+     * @param item The item to add.
+     * @return True if the add was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean addIfNotExist(Item<K, V> item) throws SopException {
         return manage(BTreeAction.AddIfNotExist.value, item);
     }
 
+    /**
+     * Updates the current key with a new value.
+     *
+     * @param item The item containing the new value.
+     * @return True if the update was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean updateCurrentKey(Item<K, V> item) throws SopException {
         return manage(BTreeAction.UpdateCurrentKey.value, item);
     }
 
+    /**
+     * Adds a list of items to the B-Tree if they do not already exist.
+     *
+     * @param items The list of items to add.
+     * @return True if the add was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean addIfNotExist(List<Item<K, V>> items) throws SopException {
         return manage(BTreeAction.AddIfNotExist.value, items);
     }
 
+    /**
+     * Updates a key-value pair in the B-Tree.
+     *
+     * @param key The key to update.
+     * @param value The new value.
+     * @return True if the update was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean update(K key, V value) throws SopException {
         return manage(BTreeAction.Update.value, new Item<>(key, value));
     }
 
+    /**
+     * Updates an item in the B-Tree.
+     *
+     * @param item The item to update.
+     * @return True if the update was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean update(Item<K, V> item) throws SopException {
         return manage(BTreeAction.Update.value, item);
     }
 
+    /**
+     * Updates a list of items in the B-Tree.
+     *
+     * @param items The list of items to update.
+     * @return True if the update was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean update(List<Item<K, V>> items) throws SopException {
         return manage(BTreeAction.Update.value, items);
     }
 
+    /**
+     * Inserts or updates a key-value pair in the B-Tree.
+     *
+     * @param key The key to upsert.
+     * @param value The value to upsert.
+     * @return True if the upsert was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean upsert(K key, V value) throws SopException {
         return manage(BTreeAction.Upsert.value, new Item<>(key, value));
     }
 
+    /**
+     * Inserts or updates an item in the B-Tree.
+     *
+     * @param item The item to upsert.
+     * @return True if the upsert was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean upsert(Item<K, V> item) throws SopException {
         return manage(BTreeAction.Upsert.value, item);
     }
 
+    /**
+     * Inserts or updates a list of items in the B-Tree.
+     *
+     * @param items The list of items to upsert.
+     * @return True if the upsert was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean upsert(List<Item<K, V>> items) throws SopException {
         return manage(BTreeAction.Upsert.value, items);
     }
 
+    /**
+     * Updates the key of an item in the B-Tree.
+     *
+     * @param item The item with the new key.
+     * @return True if the update was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean updateKey(Item<K, V> item) throws SopException {
         return manage(BTreeAction.UpdateKey.value, item);
     }
 
+    /**
+     * Updates the keys of a list of items in the B-Tree.
+     *
+     * @param items The list of items with new keys.
+     * @return True if the update was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean updateKey(List<Item<K, V>> items) throws SopException {
         return manage(BTreeAction.UpdateKey.value, items);
     }
 
+    /**
+     * Removes an item from the B-Tree by its key.
+     *
+     * @param key The key of the item to remove.
+     * @return True if the removal was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean remove(K key) throws SopException {
         List<K> keys = new ArrayList<>();
         keys.add(key);
         return manageRaw(BTreeAction.Remove.value, keys);
     }
 
+    /**
+     * Removes multiple items from the B-Tree by their keys.
+     *
+     * @param keys The list of keys of the items to remove.
+     * @return True if the removal was successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean remove(List<K> keys) throws SopException {
         return manageRaw(BTreeAction.Remove.value, keys);
     }
 
+    /**
+     * Finds an item in the B-Tree by its key.
+     *
+     * @param key The key to search for.
+     * @return True if the item was found, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean find(K key) throws SopException {
         ManageBtreePayload<K, V> payload = new ManageBtreePayload<>();
         payload.items = new ArrayList<>();
@@ -163,6 +316,14 @@ public class BTree<K, V> implements AutoCloseable {
         }
     }
 
+    /**
+     * Finds an item in the B-Tree by its key and ID.
+     *
+     * @param key The key to search for.
+     * @param id The ID to search for.
+     * @return True if the item was found, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean findWithId(K key, String id) throws SopException {
         ManageBtreePayload<K, V> payload = new ManageBtreePayload<>();
         payload.items = new ArrayList<>();
@@ -179,22 +340,52 @@ public class BTree<K, V> implements AutoCloseable {
         }
     }
 
+    /**
+     * Moves the cursor to the first item in the B-Tree.
+     *
+     * @return True if successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean moveToFirst() throws SopException {
         return navigate(BTreeAction.First.value);
     }
 
+    /**
+     * Moves the cursor to the last item in the B-Tree.
+     *
+     * @return True if successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean moveToLast() throws SopException {
         return navigate(BTreeAction.Last.value);
     }
 
+    /**
+     * Moves the cursor to the next item in the B-Tree.
+     *
+     * @return True if successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean moveToNext() throws SopException {
         return navigate(BTreeAction.Next.value);
     }
 
+    /**
+     * Moves the cursor to the previous item in the B-Tree.
+     *
+     * @return True if successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean moveToPrevious() throws SopException {
         return navigate(BTreeAction.Previous.value);
     }
 
+    /**
+     * Gets the number of items in the B-Tree.
+     *
+     * @return The number of items.
+     * @throws SopException If an error occurs.
+     */
     public long count() throws SopException {
         LongByReference countRef = new LongByReference();
         PointerByReference errorRef = new PointerByReference();
@@ -205,6 +396,12 @@ public class BTree<K, V> implements AutoCloseable {
         return countRef.getValue();
     }
 
+    /**
+     * Gets the current key at the cursor position.
+     *
+     * @return The current item (key only).
+     * @throws SopException If an error occurs.
+     */
     public Item<K, V> getCurrentKey() throws SopException {
         // GetCurrentKey in C# passes PagingInfo as payload (even if empty).
         PagingInfo pagingInfo = new PagingInfo();
@@ -225,6 +422,12 @@ public class BTree<K, V> implements AutoCloseable {
         return null;
     }
 
+    /**
+     * Gets the current value at the cursor position.
+     *
+     * @return The current item (key and value).
+     * @throws SopException If an error occurs.
+     */
     public Item<K, V> getCurrentValue() throws SopException {
         PagingInfo pagingInfo = new PagingInfo();
         String json = get(BTreeAction.GetCurrentValue.value, pagingInfo);
@@ -244,6 +447,13 @@ public class BTree<K, V> implements AutoCloseable {
         return null;
     }
 
+    /**
+     * Gets a list of keys from the B-Tree based on the paging info.
+     *
+     * @param pagingInfo The paging information.
+     * @return A list of items containing keys.
+     * @throws SopException If an error occurs.
+     */
     public List<Item<K, V>> getKeys(PagingInfo pagingInfo) throws SopException {
         String json = get(BTreeAction.GetKeys.value, pagingInfo);
         if (json == null) return null;
@@ -257,6 +467,13 @@ public class BTree<K, V> implements AutoCloseable {
         }
     }
 
+    /**
+     * Gets a list of values from the B-Tree for the given keys.
+     *
+     * @param keys The list of keys to retrieve values for.
+     * @return A list of items containing keys and values.
+     * @throws SopException If an error occurs.
+     */
     public List<Item<K, V>> getValues(List<Item<K, V>> keys) throws SopException {
         ManageBtreePayload<K, V> payload = new ManageBtreePayload<>();
         payload.items = keys;
@@ -273,18 +490,42 @@ public class BTree<K, V> implements AutoCloseable {
         }
     }
 
+    /**
+     * Moves the cursor to the first item in the B-Tree.
+     *
+     * @return True if successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean first() throws SopException {
         return navigate(BTreeAction.First.value);
     }
 
+    /**
+     * Moves the cursor to the next item in the B-Tree.
+     *
+     * @return True if successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean next() throws SopException {
         return navigate(BTreeAction.Next.value);
     }
 
+    /**
+     * Moves the cursor to the previous item in the B-Tree.
+     *
+     * @return True if successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean previous() throws SopException {
         return navigate(BTreeAction.Previous.value);
     }
 
+    /**
+     * Moves the cursor to the last item in the B-Tree.
+     *
+     * @return True if successful, false otherwise.
+     * @throws SopException If an error occurs.
+     */
     public boolean last() throws SopException {
         return navigate(BTreeAction.Last.value);
     }

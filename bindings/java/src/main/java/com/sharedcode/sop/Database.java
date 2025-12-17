@@ -5,15 +5,28 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.UUID;
 
+/**
+ * Represents a database in the SOP library.
+ */
 public class Database {
     private String id;
     private final DatabaseOptions options;
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /**
+     * Creates a new Database instance.
+     *
+     * @param options The database options.
+     */
     public Database(DatabaseOptions options) {
         this.options = options;
     }
 
+    /**
+     * Gets the database ID.
+     *
+     * @return The database ID.
+     */
     public String getId() {
         return id;
     }
@@ -42,14 +55,38 @@ public class Database {
         }
     }
 
+    /**
+     * Begins a new transaction with default mode (ForWriting) and timeout (15 minutes).
+     *
+     * @param ctx The context.
+     * @return The new transaction.
+     * @throws SopException If the transaction cannot be begun.
+     */
     public Transaction beginTransaction(Context ctx) throws SopException {
         return beginTransaction(ctx, TransactionMode.ForWriting, 15);
     }
 
+    /**
+     * Begins a new transaction with specified mode and default timeout (15 minutes).
+     *
+     * @param ctx The context.
+     * @param mode The transaction mode.
+     * @return The new transaction.
+     * @throws SopException If the transaction cannot be begun.
+     */
     public Transaction beginTransaction(Context ctx, int mode) throws SopException {
         return beginTransaction(ctx, mode, 15);
     }
 
+    /**
+     * Begins a new transaction.
+     *
+     * @param ctx The context.
+     * @param mode The transaction mode.
+     * @param maxTime The maximum duration of the transaction in minutes.
+     * @return The new transaction.
+     * @throws SopException If the transaction cannot be begun.
+     */
     public Transaction beginTransaction(Context ctx, int mode, int maxTime) throws SopException {
         ensureCreated(ctx);
         
@@ -63,14 +100,48 @@ public class Database {
         }
     }
 
+    /**
+     * Creates a new B-Tree.
+     *
+     * @param ctx The context.
+     * @param name The name of the B-Tree.
+     * @param tx The transaction.
+     * @param options The B-Tree options.
+     * @param keyType The class of the key type.
+     * @param valueType The class of the value type.
+     * @param <K> The key type.
+     * @param <V> The value type.
+     * @return The new B-Tree.
+     * @throws SopException If the B-Tree cannot be created.
+     */
     public <K, V> BTree<K, V> newBtree(Context ctx, String name, Transaction tx, BTreeOptions options, Class<K> keyType, Class<V> valueType) throws SopException {
         return BTree.create(ctx, name, tx, options, keyType, valueType);
     }
 
+    /**
+     * Opens an existing B-Tree.
+     *
+     * @param ctx The context.
+     * @param name The name of the B-Tree.
+     * @param tx The transaction.
+     * @param keyType The class of the key type.
+     * @param valueType The class of the value type.
+     * @param <K> The key type.
+     * @param <V> The value type.
+     * @return The opened B-Tree.
+     * @throws SopException If the B-Tree cannot be opened.
+     */
     public <K, V> BTree<K, V> openBtree(Context ctx, String name, Transaction tx, Class<K> keyType, Class<V> valueType) throws SopException {
         return BTree.open(ctx, name, tx, keyType, valueType);
     }
     
+    /**
+     * Removes a B-Tree.
+     *
+     * @param ctx The context.
+     * @param name The name of the B-Tree.
+     * @throws SopException If the B-Tree cannot be removed.
+     */
     public void removeBtree(Context ctx, String name) throws SopException {
         ensureCreated(ctx);
         

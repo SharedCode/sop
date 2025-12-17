@@ -43,17 +43,25 @@ public class BTreeComplexKey {
             try (Transaction trans = db.beginTransaction(ctx)) {
                 // Define Index Specification
                 // This tells SOP how to construct the composite key for sorting and prefix scanning.
-                // Using PascalCase to match C# example and ensure compatibility if that's the issue.
-                String indexSpec = "{\n" +
-                        "    \"index_fields\": [\n" +
-                        "        { \"field_name\": \"Region\", \"ascending_sort_order\": true },\n" +
-                        "        { \"field_name\": \"Department\", \"ascending_sort_order\": true },\n" +
-                        "        { \"field_name\": \"Id\", \"ascending_sort_order\": true }\n" +
-                        "    ]\n" +
-                        "}";
+                IndexSpecification indexSpec = new IndexSpecification();
+                
+                IndexFieldSpecification f1 = new IndexFieldSpecification();
+                f1.fieldName = "Region";
+                f1.ascendingSortOrder = true;
+                indexSpec.indexFields.add(f1);
+
+                IndexFieldSpecification f2 = new IndexFieldSpecification();
+                f2.fieldName = "Department";
+                f2.ascendingSortOrder = true;
+                indexSpec.indexFields.add(f2);
+
+                IndexFieldSpecification f3 = new IndexFieldSpecification();
+                f3.fieldName = "Id";
+                f3.ascendingSortOrder = true;
+                indexSpec.indexFields.add(f3);
 
                 BTreeOptions opts = new BTreeOptions("employees");
-                opts.indexSpecification = indexSpec;
+                opts.setIndexSpecification(indexSpec);
                 
                 BTree<EmployeeKey, String> employees = db.newBtree(ctx, "employees", trans, opts, EmployeeKey.class, String.class);
 

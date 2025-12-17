@@ -1,4 +1,4 @@
-use sop::{Context, Database, DatabaseOptions, Item, DatabaseType, Btree, BtreeOptions};
+use sop::{Context, Database, DatabaseOptions, Item, DatabaseType, Btree, BtreeOptions, IndexSpecification, IndexFieldSpecification};
 use std::fs;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
@@ -34,17 +34,17 @@ fn test_complex_key() {
     };
     let db = Database::new(&ctx, db_opts).unwrap();
 
-    let index_spec = r#"{
-        "index_fields": [
-            { "field_name": "Region", "ascending_sort_order": true },
-            { "field_name": "Id", "ascending_sort_order": true }
-        ]
-    }"#;
+    let index_spec = IndexSpecification {
+        index_fields: vec![
+            IndexFieldSpecification { field_name: "Region".to_string(), ascending_sort_order: true },
+            IndexFieldSpecification { field_name: "Id".to_string(), ascending_sort_order: true },
+        ],
+    };
 
     {
         let trans = db.begin_transaction(&ctx).unwrap();
         let mut opts = BtreeOptions::default();
-        opts.index_specification = Some(index_spec.to_string());
+        opts.set_index_specification(index_spec);
         opts.is_primitive_key = false;
         
         let btree = Btree::<ComplexKey, String>::create(&ctx, "complex", &trans, Some(opts)).unwrap();

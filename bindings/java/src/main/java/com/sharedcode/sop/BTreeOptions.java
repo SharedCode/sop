@@ -1,6 +1,8 @@
 package com.sharedcode.sop;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class BTreeOptions {
     @JsonProperty("name")
@@ -20,6 +22,16 @@ public class BTreeOptions {
 
     @JsonProperty("index_specification")
     public String indexSpecification = "";
+
+    @JsonIgnore
+    public void setIndexSpecification(IndexSpecification spec) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            this.indexSpecification = mapper.writeValueAsString(spec);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize IndexSpecification", e);
+        }
+    }
 
     @JsonProperty("is_value_data_in_node_segment")
     public boolean isValueDataInNodeSegment = true;

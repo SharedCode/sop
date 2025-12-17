@@ -1,4 +1,4 @@
-use sop::{Context, Database, DatabaseOptions, DatabaseType, Btree, BtreeOptions};
+use sop::{Context, Database, DatabaseOptions, DatabaseType, Btree, BtreeOptions, IndexSpecification, IndexFieldSpecification};
 use serde::{Serialize, Deserialize};
 use std::fs;
 use std::path::Path;
@@ -41,17 +41,17 @@ fn main() {
     let trans = db.begin_transaction(&ctx).unwrap();
     
     // Define Index Specification
-    let index_spec = r#"{
-        "index_fields": [
-            { "name": "Region", "ascending_sort_order": true },
-            { "name": "Department", "ascending_sort_order": true },
-            { "name": "Id", "ascending_sort_order": true }
-        ]
-    }"#;
+    let index_spec = IndexSpecification {
+        index_fields: vec![
+            IndexFieldSpecification { field_name: "Region".to_string(), ascending_sort_order: true },
+            IndexFieldSpecification { field_name: "Department".to_string(), ascending_sort_order: true },
+            IndexFieldSpecification { field_name: "Id".to_string(), ascending_sort_order: true },
+        ],
+    };
 
     let mut opts = BtreeOptions::default();
     opts.is_primitive_key = false;
-    opts.index_specification = Some(index_spec.to_string());
+    opts.set_index_specification(index_spec);
 
     let employees = Btree::<EmployeeKey, String>::create(&ctx, "employees", &trans, Some(opts)).unwrap();
 

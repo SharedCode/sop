@@ -10,9 +10,12 @@ enum ModelStoreAction {
     Delete = 3,
 }
 
+/// Represents a model store in the SOP library.
 #[derive(Clone)]
 pub struct ModelStore {
+    /// The model store ID.
     pub id: String,
+    /// The transaction ID associated with the model store.
     pub transaction_id: String,
 }
 
@@ -30,6 +33,18 @@ impl ModelStore {
         serde_json::to_string(&meta).map_err(|e| e.to_string())
     }
 
+    /// Saves a model to the store.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `category` - The category of the model.
+    /// * `name` - The name of the model.
+    /// * `data` - The model data.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn save(&self, ctx: &Context, category: &str, name: &str, data: Vec<u8>) -> Result<(), String> {
         #[derive(Serialize)]
         struct SaveParams {
@@ -46,6 +61,17 @@ impl ModelStore {
         self.manage(ctx, ModelStoreAction::Save, payload)
     }
 
+    /// Loads a model from the store.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `category` - The category of the model.
+    /// * `name` - The name of the model.
+    ///
+    /// # Returns
+    ///
+    /// A result containing the model data or an error message.
     pub fn load(&self, ctx: &Context, category: &str, name: &str) -> Result<Vec<u8>, String> {
         #[derive(Serialize)]
         struct LoadParams {
@@ -80,6 +106,17 @@ impl ModelStore {
         }
     }
 
+    /// Deletes a model from the store.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context.
+    /// * `category` - The category of the model.
+    /// * `name` - The name of the model.
+    ///
+    /// # Returns
+    ///
+    /// A result indicating success or failure.
     pub fn delete(&self, ctx: &Context, category: &str, name: &str) -> Result<(), String> {
         #[derive(Serialize)]
         struct DeleteParams {
