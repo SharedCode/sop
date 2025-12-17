@@ -11,10 +11,14 @@ SOP is a polyglot library backed by a high-performance Go engine. To support mul
 ## Language-Specific Details
 
 ### 🐍 Python (Completed)
-*   **Mechanism**: Python Wheels (`.whl`).
+*   **Mechanism**: Python Wheels (`.whl`) and Source Distribution (`.tar.gz`).
+*   **Strategy**: We use **Platform-Specific Wheels**.
+    *   We build separate wheels for macOS (x64/ARM64), Linux (x64/ARM64), and Windows.
+    *   Each wheel contains *only* the shared library for that specific platform, keeping the install size small (~4-7MB).
+    *   We also provide a "Fat" Source Distribution (sdist) containing *all* binaries (~28MB) as a fallback for unsupported platforms.
 *   **Structure**: The shared libraries are placed inside the `sop` package directory.
 *   **Loading**: `sop/call_go.py` detects the OS/Arch and loads the correct file using `ctypes.cdll.LoadLibrary`.
-*   **Build**: `bindings/python/build.sh` handles this.
+*   **Build**: `bindings/python/build_wheels.sh` handles this.
 
 ### ♯ C# / .NET (Completed)
 *   **Mechanism**: NuGet Packages (`.nupkg`).
@@ -51,17 +55,19 @@ This script is the central engine. It:
 
 ### Release Process (Python Example)
 
-The Python build script (`bindings/python/build.sh`) acts as the orchestrator for a release.
+The Python build script (`bindings/python/build_wheels.sh`) acts as the orchestrator for a release.
 
 1.  **Update Version**: Bump the version in `bindings/python/pyproject.toml`.
-2.  **Run Build**: Execute `./bindings/python/build.sh`.
-    *   It extracts the version from `pyproject.toml`.
-    *   It calls the Master Build Script (`bindings/main/build.sh`) with `SOP_VERSION` set.
-    *   It builds the Python wheels.
+2.  **Run Build**: Execute `./bindings/python/build_wheels.sh`.
+    *   It cleans previous builds.
+    *   It builds the **Source Distribution (sdist)** containing ALL binaries (fallback).
+    *   It loops through target platforms (macOS, Linux, Windows) and builds **Platform-Specific Wheels** containing only the relevant binary.
 3.  **Publish Python**: `python3 -m twine upload dist/*`
+    *   This uploads all the optimized wheels and the fallback sdist to PyPI.
+    *   `pip install` will automatically choose the best (smallest) wheel for the user's platform.
 4.  **Publish Tools**:
     *   Go to the [GitHub Releases](https://github.com/sharedcode/sop/releases) page.
-    *   Create a new release tag (e.g., `sop4py-v2.0.32`).
+    *   Create a new release tag (e.g., `sop4py-v2.0.34`).
     *   Upload the binaries found in the `release/` folder (e.g., `sop-browser-darwin-arm64`, `sop-browser-windows-amd64.exe`).
 
 This ensures that users who install the Python package can download the exact matching version of the `sop-browser` tool.

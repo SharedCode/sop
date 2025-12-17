@@ -2,13 +2,6 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-    include-package-data = true
-    
-    [tool.setuptools.packages.find]
-    where = ["."]
-    include = ["sop*"]
-
 [project]
 name = "sop4py"
 version = "2.0.34"

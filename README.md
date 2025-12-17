@@ -22,6 +22,7 @@ See the [API Cookbook](COOKBOOK.md#interoperability-note-go-vs-other-languages) 
 - [Scalability & Limits](#scalability--limits)
 - [Swarm Computing (Architecture)](SWARM_COMPUTING.md)
 - [Workflows & Scenarios](WORKFLOWS.md)
+- [Engineering Culture & SDLC](SDLC.md) - **New!** How we use AI & Automation.
 - [High-level features and articles](#high-level-featuresusability-articles-about-sop)
 - [Architecture Guide](ARCHITECTURE.md)
 - [Configuration & Tuning](CONFIGURATION.md)
