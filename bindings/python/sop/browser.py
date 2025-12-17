@@ -76,13 +76,41 @@ def download_binary(os_name, arch, target_path):
             target_path.unlink()
         sys.exit(1)
 
+def check_version(binary_path):
+    if __version__ == "latest":
+        return True
+        
+    try:
+        # Run binary with --version
+        result = subprocess.run([str(binary_path), "--version"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return False
+            
+        # Output format: "SOP Data Browser v2.0.32"
+        output = result.stdout.strip()
+        if f"v{__version__}" in output:
+            return True
+            
+        print(f"Version mismatch: Found {output}, expected v{__version__}")
+        return False
+    except Exception:
+        return False
+
 def main():
     try:
         os_name, arch = get_platform_info()
         binary_path = get_binary_path()
         
-        if not binary_path.exists():
-            print(f"SOP Data Browser not found at {binary_path}")
+        if not binary_path.exists() or not check_version(binary_path):
+            if binary_path.exists():
+                print("Updating SOP Data Browser...")
+                try:
+                    binary_path.unlink()
+                except Exception:
+                    pass # Ignore if we can't delete, download might overwrite or fail
+            else:
+                print(f"SOP Data Browser not found at {binary_path}")
+            
             download_binary(os_name, arch, binary_path)
             
         print(f"Starting SOP Data Browser...")

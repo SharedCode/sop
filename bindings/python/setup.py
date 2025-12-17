@@ -66,4 +66,10 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.7",
+    entry_points={
+        "console_scripts": [
+            "sop-browser=sop.browser:main",
+            "sop-demo=sop.demo:main",
+        ],
+    },
 )
