@@ -55,15 +55,16 @@ This script is the central engine. It:
 4.  Distributes these binaries to the appropriate language folders (`python/sop`, `csharp/Sop`, `java/resources`, `rust/lib`).
 5.  Outputs standalone tools to a `release/` directory in the project root.
 
-### 🐳 Docker Build (Recommended)
-To ensure consistent builds across all platforms (especially for Linux ARM64 which can be tricky to cross-compile from macOS), we provide a Docker-based build workflow.
+### 🐳 Hybrid Build System (Recommended)
+To ensure consistent builds across all platforms while maintaining native compatibility for macOS, we use a **Hybrid Build System**.
 
 1.  **Run**: `./bindings/build_in_docker.sh`
 2.  **What it does**:
-    *   Builds a Docker image with Go, Zig, and MinGW.
-    *   Mounts the repository into the container.
-    *   Runs `bindings/main/build.sh` inside the container.
-    *   Artifacts are written back to your host machine.
+    *   **Linux & Windows**: Builds inside a Docker container (using Go 1.24, Zig, and MinGW) to ensure reproducibility and broad compatibility.
+    *   **macOS**: Builds **locally** on your host machine (if you are on macOS) using native Apple tools (Xcode/Clang). This avoids cross-compilation bugs and linker issues.
+    *   **Artifact Collection**: Automatically copies all artifacts (from Docker and Local builds) into the correct `bindings/` folders on your host.
+
+This single command handles the entire complexity of cross-platform compilation.
 
 ### Release Process (Python Example)
 

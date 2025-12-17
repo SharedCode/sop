@@ -1,3 +1,5 @@
+#!/bin/bash
+set -e
 export CGO_ENABLED=1
 VERSION=${SOP_VERSION:-latest}
 RELEASE_DIR="../../release"
@@ -10,17 +12,20 @@ if [ "$(uname)" == "Darwin" ]; then
     echo "SDKROOT is set to: $SDKROOT"
 fi
 
+if [ -z "$SKIP_MACOS" ]; then
 echo "Building AMD64 darwin"
 
 export GOOS=darwin
 export GOARCH=amd64
 if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target x86_64-macos"
+    export CGO_CFLAGS="-fno-stack-protector"
+    export CGO_LDFLAGS="-L${SDKROOT}/usr/lib -F${SDKROOT}/System/Library/Frameworks -Wl,-undefined,dynamic_lookup"
 else
     unset CC
 fi
-go build -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib *.go
-go build -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a *.go
+go build -ldflags "-w" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib *.go
+go build -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a *.go
 cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop/
 # For testing in Examples.
@@ -33,7 +38,9 @@ cp ../python/sop/libjsondb_amd64darwin.dylib ../java/src/main/resources/darwin-x
 # Build Browser
 echo "Building sop-browser for darwin/amd64..."
 CGO_ENABLED=0 go build -ldflags "-X main.Version=$VERSION" -o $RELEASE_DIR/sop-browser-darwin-amd64 ../../tools/data_browser
+fi
 
+if [ -z "$ONLY_MACOS" ]; then
 rm -rf ../csharp/Sop.Examples/bin
 rm -rf ../csharp/Sop.Examples/obj
 rm -rf ../csharp/Sop.Examples/data
@@ -54,18 +61,22 @@ cp ../python/sop/libjsondb_amd64windows.dll ../java/src/main/resources/win32-x86
 # Build Browser
 echo "Building sop-browser for windows/amd64..."
 CGO_ENABLED=0 go build -ldflags "-X main.Version=$VERSION" -o $RELEASE_DIR/sop-browser-windows-amd64.exe ../../tools/data_browser
+fi
 
+if [ -z "$SKIP_MACOS" ]; then
 echo "Building ARM64 darwin"
 
 export GOOS=darwin
 export GOARCH=arm64
 if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target aarch64-macos"
+    export CGO_CFLAGS="-fno-stack-protector"
+    export CGO_LDFLAGS="-L${SDKROOT}/usr/lib -F${SDKROOT}/System/Library/Frameworks -Wl,-undefined,dynamic_lookup"
 else
     unset CC
 fi
-go build -buildmode=c-archive -o ../rust/lib/libjsondb_arm64darwin.a *.go
-go build -buildmode=c-shared -o ../python/sop/libjsondb_arm64darwin.dylib *.go
+go build -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_arm64darwin.a *.go
+go build -ldflags "-w" -buildmode=c-shared -o ../python/sop/libjsondb_arm64darwin.dylib *.go
 cp ../python/sop/libjsondb_arm64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_arm64darwin.h ../csharp/Sop/
 # Java Packaging (JNA)
@@ -75,7 +86,9 @@ cp ../python/sop/libjsondb_arm64darwin.dylib ../java/src/main/resources/darwin-a
 # Build Browser
 echo "Building sop-browser for darwin/arm64..."
 CGO_ENABLED=0 go build -ldflags "-X main.Version=$VERSION" -o $RELEASE_DIR/sop-browser-darwin-arm64 ../../tools/data_browser
+fi
 
+if [ -z "$ONLY_MACOS" ]; then
 echo "Building AMD64 linux"
 
 export GOOS=linux
@@ -109,5 +122,6 @@ cp ../python/sop/libjsondb_arm64linux.h ../csharp/Sop/
 # Build Browser
 echo "Building sop-browser for linux/arm64..."
 CGO_ENABLED=0 go build -ldflags "-X main.Version=$VERSION" -o $RELEASE_DIR/sop-browser-linux-arm64 ../../tools/data_browser
+fi
 
 echo "Build complete."
