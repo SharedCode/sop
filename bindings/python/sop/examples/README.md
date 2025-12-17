@@ -2,6 +2,30 @@
 
 This directory contains examples of how to use the SOP Python wrapper.
 
+## Large Complex Data Demo (`large_complex_demo.py`)
+
+This script generates a substantial dataset to demonstrate SOP's capability to handle complex, composite keys and large value payloads. It is the **perfect companion for testing the SOP Data Browser**.
+
+It creates a database with two distinct stores:
+1.  **`people`**: Uses a composite key of `(Country, City, SSN)`. This demonstrates how SOP can efficiently index and search multi-part keys.
+2.  **`products`**: Uses a composite key of `(Category, SKU)`.
+
+### Running the Demo & Browser
+
+1.  **Generate the Data**:
+    ```bash
+    python3 examples/large_complex_demo.py
+    ```
+    This will create a database folder at `data/large_complex_db`.
+
+2.  **Explore with Data Browser**:
+    Now you can use the `sop-browser` to inspect, search, and modify this data.
+    ```bash
+    sop-browser -registry data/large_complex_db
+    ```
+    *   Try searching for a specific Country (e.g., "US") to see B-Tree prefix matching in action.
+    *   Edit a record to test the transactional update capabilities.
+
 ## LangChain Demo (`langchain_demo.py`)
 
 This script demonstrates how to adapt the SOP Vector Database to work with the **LangChain** interface pattern.

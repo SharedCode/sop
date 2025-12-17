@@ -3,8 +3,13 @@ import shutil
 import sys
 import random
 from dataclasses import dataclass
-from sop import Context, Database, DatabaseOptions, DatabaseType, Item, BtreeOptions, ValueDataSize
-from sop.btree import IndexSpecification, IndexFieldSpecification
+
+# Add parent directory to path to import sop
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
+from sop import Context, Item, ValueDataSize
+from sop.database import Database, DatabaseOptions, DatabaseType
+from sop.btree import BtreeOptions, IndexSpecification, IndexFieldSpecification
 
 @dataclass
 class PersonKey:
@@ -17,6 +22,17 @@ class Person:
     name: str
     age: int
     email: str
+
+@dataclass
+class ProductKey:
+    category: str
+    sku: str
+
+@dataclass
+class Product:
+    name: str
+    price: float
+    available: bool
 
 def main():
     db_path = "data/large_complex_db"
@@ -67,6 +83,40 @@ def main():
             
     if batch:
         store.add(ctx, batch)
+
+    # Store 2: Products
+    store_name2 = "products"
+    bo2 = BtreeOptions(store_name2, is_unique=True)
+    bo2.is_primitive_key = False
+    bo2.set_value_data_size(ValueDataSize.Small)
+
+    idx2 = IndexSpecification(
+        index_fields=(
+            IndexFieldSpecification("category", ascending_sort_order=True),
+            IndexFieldSpecification("sku", ascending_sort_order=True),
+        )
+    )
+
+    store2 = db.new_btree(ctx, store_name2, t, options=bo2, index_spec=idx2)
+
+    categories = ["Electronics", "Books", "Clothing", "Home"]
+    print(f"Adding items to {store_name2}...")
+    
+    batch2 = []
+    for i in range(500):
+        cat = random.choice(categories)
+        sku = f"SKU-{i:05d}"
+        k = ProductKey(category=cat, sku=sku)
+        v = Product(name=f"Product {i}", price=round(random.uniform(10.0, 500.0), 2), available=random.choice([True, False]))
+        
+        batch2.append(Item(key=k, value=v))
+        
+        if len(batch2) >= 100:
+            store2.add(ctx, batch2)
+            batch2 = []
+            
+    if batch2:
+        store2.add(ctx, batch2)
         
     t.commit(ctx)
 

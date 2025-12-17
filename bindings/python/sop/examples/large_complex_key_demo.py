@@ -6,7 +6,8 @@ from dataclasses import dataclass
 import time
 
 # Add parent directory to path to import sop
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# We need to go up two levels: examples -> sop -> python_root
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from sop import Context, BtreeOptions, Item, ValueDataSize, PagingInfo
 from sop.btree import IndexSpecification, IndexFieldSpecification

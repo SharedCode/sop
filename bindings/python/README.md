@@ -41,7 +41,7 @@ pip install sop4py
 
 ## Data Browser (GUI)
 
-SOP comes with a built-in web-based Data Browser to inspect your B-Trees, search keys, and view data.
+SOP now includes a **full-fledged Management UI** for your data. It's not just a viewer—it's a powerful tool for inspecting, searching, and managing your B-Tree stores.
 
 To launch it, simply run:
 
@@ -49,9 +49,36 @@ To launch it, simply run:
 sop-browser
 ```
 
+### Key Features
+
+*   **Advanced Search**: Uses B-Tree positioning for instant lookups, even in massive datasets. Supports both simple keys and complex composite keys (e.g., searching by `Country` + `City`).
+*   **Full CRUD Operations**: Add, Edit, and Delete items directly from the UI.
+*   **Bulk Management**: Designed for efficiency. The clean, non-distracting interface allows for rapid-fire management of records without losing context.
+*   **Responsive Design**: Works seamlessly across diverse monitor sizes and devices.
+*   **Smart Navigation**: Efficient pagination and traversal controls (First, Previous, Next, Last).
 *   **Automatic Setup**: The first time you run it, the tool will automatically download the correct binary for your OS/Arch.
-*   **Usage**: By default, it opens on `http://localhost:8080`.
-*   **Arguments**: You can pass standard flags, e.g., `sop-browser -port 9090 -registry ./my_data`.
+
+**Usage**: By default, it opens on `http://localhost:8080`.
+**Arguments**: You can pass standard flags, e.g., `sop-browser -port 9090 -registry ./my_data`.
+
+## Generating Sample Data
+
+To see the Data Browser in action, you can generate a sample database with complex keys using the included example script:
+
+1.  **Run the generator**:
+    ```bash
+    # If installed via pip
+    sop-demo run large_complex_demo
+    
+    # Or manually if you have the source
+    python3 examples/large_complex_demo.py
+    ```
+    This will create a database in `data/large_complex_db` with two stores: `people` (Complex Key) and `products` (Composite Key).
+
+2.  **Open in Browser**:
+    ```bash
+    sop-browser -registry data/large_complex_db
+    ```
 
 ## Prerequisites
 
