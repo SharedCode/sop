@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>Sop4CS</PackageId>
-    <Version>2.0.39</Version>
+    <Version>2.0.40</Version>
     <Authors>Gerardo Recinto</Authors>
     <Description>Scalable Objects Persistence (SOP) - High-performance transactional storage engine.</Description>
     <PackageTags>database;btree;vector;storage;transactional</PackageTags>
@@ -22,27 +22,27 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="libjsondb_amd64darwin.dylib">
+    <None Include="libjsondb_amd64darwin.dylib" Link="runtimes/osx-x64/native/libjsondb.dylib">
       <Pack>true</Pack>
       <PackagePath>runtimes/osx-x64/native/libjsondb.dylib</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="libjsondb_amd64linux.so">
+    <None Include="libjsondb_amd64linux.so" Link="runtimes/linux-x64/native/libjsondb.so">
       <Pack>true</Pack>
       <PackagePath>runtimes/linux-x64/native/libjsondb.so</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="libjsondb_amd64windows.dll">
+    <None Include="libjsondb_amd64windows.dll" Link="runtimes/win-x64/native/libjsondb.dll">
       <Pack>true</Pack>
       <PackagePath>runtimes/win-x64/native/libjsondb.dll</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="libjsondb_arm64darwin.dylib">
+    <None Include="libjsondb_arm64darwin.dylib" Link="runtimes/osx-arm64/native/libjsondb.dylib">
       <Pack>true</Pack>
       <PackagePath>runtimes/osx-arm64/native/libjsondb.dylib</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="libjsondb_arm64linux.so">
+    <None Include="libjsondb_arm64linux.so" Link="runtimes/linux-arm64/native/libjsondb.so">
       <Pack>true</Pack>
       <PackagePath>runtimes/linux-arm64/native/libjsondb.so</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace Sop.Examples;
 
@@ -7,6 +10,8 @@ class Program
 {
     static void Main(string[] args)
     {
+        NativeLibrary.SetDllImportResolver(typeof(Sop.Context).Assembly, ImportResolver);
+
         if (args.Length > 0)
         {
             RunCommand(args);
@@ -14,6 +19,43 @@ class Program
         }
 
         RunInteractive();
+    }
+
+    private static IntPtr ImportResolver(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+    {
+        if (libraryName == "libjsondb")
+        {
+            string os = null;
+            string ext = null;
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                os = "win";
+                ext = ".dll";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                os = "linux";
+                ext = ".so";
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                os = "osx";
+                ext = ".dylib";
+            }
+
+            if (os != null)
+            {
+                string arch = RuntimeInformation.ProcessArchitecture.ToString().ToLower();
+                string path = Path.Combine(AppContext.BaseDirectory, "runtimes", $"{os}-{arch}", "native", $"libjsondb{ext}");
+                
+                if (File.Exists(path))
+                {
+                    return NativeLibrary.Load(path);
+                }
+            }
+        }
+        return IntPtr.Zero;
     }
 
     static void RunCommand(string[] args)

@@ -12,7 +12,7 @@ public static class Browser
     private const string GithubRepo = "sharedcode/sop";
     private const string BinaryName = "sop-browser";
     // TODO: Sync this version with the build system
-    private const string Version = "2.0.39"; 
+    private const string Version = "2.0.40"; 
 
     public static async Task Run()
     {

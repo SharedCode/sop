@@ -10,7 +10,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>sop-demo</ToolCommandName>
     <PackageId>Sop4CS.Demo</PackageId>
-    <Version>2.0.39</Version>
+    <Version>2.0.40</Version>
     <Authors>Gerardo Recinto</Authors>
     <Description>SOP Examples and Data Browser Launcher</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

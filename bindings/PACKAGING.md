@@ -84,3 +84,28 @@ The Python build script (`bindings/python/build_wheels.sh`) acts as the orchestr
     *   Upload the binaries found in the `release/` folder (e.g., `sop-browser-darwin-arm64`, `sop-browser-windows-amd64.exe`).
 
 This ensures that users who install the Python package can download the exact matching version of the `sop-browser` tool.
+
+### Release Process (C# / .NET)
+
+1.  **Update Version**: Update the version number in `bindings/csharp/VERSION`.
+2.  **Build Native Libs**: Ensure you have run `./bindings/build_in_docker.sh` (or `build_local_macos.sh`) so that the `libjsondb` binaries are present in `bindings/csharp/Sop/`.
+3.  **Build & Pack**: Run the C# build script. This will update the project files with the new version and generate the NuGet packages.
+    ```bash
+    ./bindings/csharp/build.sh
+    ```
+    The packages will be output to `bindings/csharp/dist/`.
+4.  **Test Locally (Recommended)**: Before pushing to NuGet, verify the package works.
+    *   Install the tool from the local `dist` folder:
+        ```bash
+        # Uninstall previous version if needed
+        dotnet tool uninstall -g Sop4CS.Demo
+        
+        # Install from local dist folder
+        dotnet tool install -g Sop4CS.Demo --add-source ./bindings/csharp/dist --version <YOUR_VERSION>
+        ```
+    *   Run `sop-demo` to verify.
+5.  **Publish**:
+    ```bash
+    dotnet nuget push bindings/csharp/dist/Sop4CS.<VERSION>.nupkg --api-key <KEY> --source https://api.nuget.org/v3/index.json
+    dotnet nuget push bindings/csharp/dist/Sop4CS.Demo.<VERSION>.nupkg --api-key <KEY> --source https://api.nuget.org/v3/index.json
+    ```
