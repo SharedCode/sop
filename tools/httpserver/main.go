@@ -51,7 +51,7 @@ func main() {
 	flag.StringVar(&config.Mode, "mode", "standalone", "SOP mode: 'standalone' or 'clustered'")
 	flag.StringVar(&config.ConfigFile, "config", "", "Path to configuration file (optional)")
 	flag.StringVar(&config.RedisURL, "redis", "localhost:6379", "Redis URL for clustered mode (e.g. localhost:6379)")
-	flag.IntVar(&config.PageSize, "pageSize", 100, "Number of items to display per page")
+	flag.IntVar(&config.PageSize, "pageSize", 70, "Number of items to display per page")
 	flag.Parse()
 
 	if showVersion {

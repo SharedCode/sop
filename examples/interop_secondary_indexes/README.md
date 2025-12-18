@@ -49,7 +49,7 @@ After running the struct-based example, you can use the **SOP Data Browser** to 
 
 1.  Start the Data Browser:
     ```bash
-    go run tools/data_browser/main.go -registry ./data/struct_key_demo
+    go run tools/httpserver/main.go -registry ./data/struct_key_demo
     ```
 2.  Open [http://localhost:8080](http://localhost:8080).
 3.  Select the `products_struct` store.

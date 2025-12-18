@@ -1,4 +1,4 @@
-# SOP Data Browser
+# SOP HTTP Server (Data Browser)
 
 A lightweight, web-based tool for inspecting and browsing SOP B-Tree repositories.
 
@@ -23,13 +23,13 @@ A lightweight, web-based tool for inspecting and browsing SOP B-Tree repositorie
 From the root of the `sop` repository:
 
 ```bash
-go run tools/data_browser/main.go -registry /path/to/your/sop/data
+go run tools/httpserver/main.go -registry /path/to/your/sop/data
 ```
 
 By default, it runs on port 8080. You can change this with the `-port` flag:
 
 ```bash
-go run tools/data_browser/main.go -registry ./data -port 9090
+go run tools/httpserver/main.go -registry ./data -port 9090
 ```
 
 ### Try it with an Example
@@ -41,7 +41,7 @@ If you have run the [Secondary Indexes Example](../../examples/interop_secondary
 go run examples/interop_secondary_indexes/struct_key_main.go
 
 # 2. Run the Data Browser pointing to the example's data folder
-go run tools/data_browser/main.go -registry ./data/struct_key_demo
+go run tools/httpserver/main.go -registry ./data/struct_key_demo
 ```
 
 ### Accessing

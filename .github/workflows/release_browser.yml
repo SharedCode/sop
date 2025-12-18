@@ -42,7 +42,7 @@ jobs:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
         run: |
-          cd tools/data_browser
+          cd tools/httpserver
           go build -o ../../sop-browser-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} main.go
 
       - name: Upload Release Asset

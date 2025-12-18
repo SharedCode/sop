@@ -6,23 +6,28 @@
     <title>SOP Data Browser</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; height: 100vh; }
-        #sidebar { width: 250px; min-width: 150px; max-width: 50%; background: #f4f4f4; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; flex-shrink: 0; }
+        #sidebar { width: 250px; min-width: 150px; max-width: 50%; background: #f4f4f4; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; flex-shrink: 0; box-sizing: border-box; }
         #resizer { width: 5px; background: #ddd; cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; }
         #resizer:hover, #resizer.resizing { background: #007bff; }
+        #detail-resizer { width: 5px; background: #ddd; cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; display: none; }
+        #detail-resizer:hover, #detail-resizer.resizing { background: #007bff; }
         #main { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
         h1, h2 { margin-top: 0; }
         ul { list-style: none; padding: 0; }
         li { padding: 8px 12px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
         li:hover { background: #e0e0e0; }
         li.active { background: #007bff; color: white; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
-        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        th { background-color: #f8f9fa; position: relative; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; border: 1px solid #ccc; }
+        th, td { text-align: left; padding: 6px 12px; border: 1px solid #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        th { position: relative; background-color: #f2f2f2; }
+        th.th-key { color: #155724; font-weight: bold; }
+        th.th-val { }
         .col-resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 5px; cursor: col-resize; user-select: none; }
         .col-resizer:hover { background: #007bff; }
-        tr:hover { background-color: #f1f1f1; cursor: pointer; }
-        tr.selected-row { background-color: #e2e6ea; }
-        #detail-panel { width: 400px; border-left: 1px solid #ddd; padding: 20px; background: #fff; display: none; overflow-y: auto; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        tr:hover { background-color: #e6e6e6; cursor: pointer; }
+        tr.selected-row { background-color: #cce5ff !important; }
+        #detail-panel { width: 400px; border-left: 1px solid #ddd; padding: 20px; background: #fff; display: none; overflow-y: auto; box-sizing: border-box; flex-shrink: 0; }
         pre { background: #f8f8f8; padding: 10px; border-radius: 4px; overflow-x: auto; }
         .toolbar { display: flex; gap: 10px; margin-bottom: 20px; }
         input[type="text"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; flex: 1; }
@@ -68,6 +73,8 @@
     </div>
 </div>
 
+<div id="detail-resizer"></div>
+
 <div id="detail-panel">
     <h2>Item Details</h2>
     <div id="json-viewer"></div>
@@ -94,6 +101,10 @@
                 li.onclick = () => selectStore(store, li);
                 list.appendChild(li);
             });
+        })
+        .catch(err => {
+            const list = document.getElementById('store-list');
+            list.innerHTML = `<li style="color: red;">Error: ${err.message}</li>`;
         });
 
     function selectStore(name, element) {
@@ -224,18 +235,74 @@
                 pagination.style.display = 'flex';
                 paginationTop.style.display = 'flex';
 
-                let html = `<table id="items-table"><thead><tr><th style="width: ${currentKeyColumnWidth};">Key <div class="col-resizer" onmousedown="initColResize(event)"></div></th><th>Value Preview</th></tr></thead><tbody>`;
+                // --- DYNAMIC TABLE GENERATION ---
+                let keyCols = [];
+                let valCols = [];
+                
+                if (items.length > 0) {
+                    const sampleKey = items[0].key;
+                    const sampleVal = items[0].value;
+                    
+                    if (typeof sampleKey === 'object' && sampleKey !== null) {
+                        keyCols = Object.keys(sampleKey);
+                    } else {
+                        keyCols = ['Key'];
+                    }
+                    
+                    if (typeof sampleVal === 'object' && sampleVal !== null) {
+                        valCols = Object.keys(sampleVal);
+                    } else {
+                        valCols = ['Value'];
+                    }
+                } else {
+                    keyCols = ['Key'];
+                    valCols = ['Value'];
+                }
+
+                let html = '<table id="items-table"><thead><tr>';
+                
+                // Key Headers
+                keyCols.forEach(col => {
+                     html += `<th class="th-key">${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
+                });
+                
+                // Value Headers
+                valCols.forEach(col => {
+                     html += `<th class="th-val">${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
+                });
+                
+                html += '</tr></thead><tbody>';
+                
                 items.forEach(item => {
-                    const keyStr = typeof item.key === 'object' ? JSON.stringify(item.key) : String(item.key);
-                    const fullValStr = JSON.stringify(item.value);
-                    // Remove truncation to let CSS fill the available space
-                    const valStr = fullValStr;
-                    const keyTitle = keyStr.replace(/"/g, '&quot;');
-                    const valTitle = fullValStr.replace(/"/g, '&quot;');
-                    html += `<tr onclick='showDetail(this, ${JSON.stringify(item)})'>
-                        <td title="${keyTitle}">${keyStr}</td>
-                        <td title="${valTitle}">${valStr}</td>
-                    </tr>`;
+                    // Escape single quotes for the onclick attribute
+                    const itemJson = JSON.stringify(item).replace(/'/g, "&#39;");
+                    html += `<tr onclick='showDetail(this, ${itemJson})'>`;
+                    
+                    // Key Cells
+                    if (keyCols.length === 1 && keyCols[0] === 'Key') {
+                         const val = typeof item.key === 'object' ? JSON.stringify(item.key) : item.key;
+                         html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+                    } else {
+                        keyCols.forEach(col => {
+                            let val = item.key ? item.key[col] : '';
+                            if (typeof val === 'object') val = JSON.stringify(val);
+                            html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+                        });
+                    }
+                    
+                    // Value Cells
+                    if (valCols.length === 1 && valCols[0] === 'Value') {
+                         const val = typeof item.value === 'object' ? JSON.stringify(item.value) : item.value;
+                         html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+                    } else {
+                        valCols.forEach(col => {
+                            let val = item.value ? item.value[col] : '';
+                            if (typeof val === 'object') val = JSON.stringify(val);
+                            html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+                        });
+                    }
+                    
+                    html += '</tr>';
                 });
                 html += '</tbody></table>';
                 grid.innerHTML = html;
@@ -279,6 +346,7 @@
                 <button onclick="deleteItem()" style="background: #dc3545;">Delete</button>
             </div>
         `;
+        document.getElementById('detail-resizer').style.display = 'block';
         panel.style.display = 'block';
     }
 
@@ -432,7 +500,8 @@
             alert("Add failed: " + err.message);
         });
     }
-
+    document.getElementById('detail-resizer').style.display = 'none';
+    
     function closeDetail() {
         document.getElementById('detail-panel').style.display = 'none';
     }
@@ -482,27 +551,54 @@
         document.body.style.cursor = 'default';
     }
 
+    // Detail Panel Resizer
+    const detailPanel = document.getElementById('detail-panel');
+    const detailResizer = document.getElementById('detail-resizer');
+
+    detailResizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        document.addEventListener('mousemove', resizeDetail);
+        document.addEventListener('mouseup', stopResizeDetail);
+        detailResizer.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+    });
+
+    function resizeDetail(e) {
+        const newWidth = window.innerWidth - e.clientX;
+        if (newWidth > 200 && newWidth < window.innerWidth - 100) {
+            detailPanel.style.width = newWidth + 'px';
+        }
+    }
+
+    function stopResizeDetail() {
+        document.removeEventListener('mousemove', resizeDetail);
+        document.removeEventListener('mouseup', stopResizeDetail);
+        detailResizer.classList.remove('resizing');
+        document.body.style.cursor = 'default';
+    }
+
     // Column Resizing
+    let colResizingTh = null;
     let colStartX, colStartWidth;
+
     function initColResize(e) {
         e.stopPropagation();
+        colResizingTh = e.target.parentElement;
         colStartX = e.clientX;
-        const th = e.target.parentElement;
-        colStartWidth = th.offsetWidth;
+        colStartWidth = colResizingTh.offsetWidth;
         document.addEventListener('mousemove', doColResize, false);
         document.addEventListener('mouseup', stopColResize, false);
     }
     function doColResize(e) {
-        const th = document.querySelector('#items-table th:first-child');
-        if (th) {
+        if (colResizingTh) {
             const newWidth = colStartWidth + (e.clientX - colStartX);
             if (newWidth > 50) {
-                th.style.width = newWidth + 'px';
-                currentKeyColumnWidth = newWidth + 'px';
+                colResizingTh.style.width = newWidth + 'px';
             }
         }
     }
     function stopColResize(e) {
+        colResizingTh = null;
         document.removeEventListener('mousemove', doColResize, false);
         document.removeEventListener('mouseup', stopColResize, false);
     }

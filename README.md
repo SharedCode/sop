@@ -41,7 +41,7 @@ See the [API Cookbook](COOKBOOK.md#interoperability-note-go-vs-other-languages) 
 - [SOP for C# (sop4cs)](bindings/csharp/README.md)
 - [SOP for Rust (sop4rs)](bindings/rust/README.md)
 - [SOP AI Kit](ai/README.md)
-- [Data Browser (Tool)](tools/data_browser/README.md) - **Updated!** Now with full data management (bulk mgmt friendly), and rich search and navigation.
+- [SOP HTTP Server (Data Browser)](tools/httpserver/README.md) - **Updated!** Now with full data management (bulk mgmt friendly), rich search and navigation.
 - [Changelog](CHANGELOG.md)
 - [Community & support](#community--support)
 - [Contributing & license](#contributing--license)
