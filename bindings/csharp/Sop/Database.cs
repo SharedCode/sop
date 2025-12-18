@@ -62,10 +62,46 @@ public class DatabaseOptions
     public string Keyspace { get; set; }
 
     /// <summary>
+    /// Redis configuration for clustered mode.
+    /// </summary>
+    [JsonPropertyName("redis_config")]
+    public RedisConfig RedisConfig { get; set; }
+
+    /// <summary>
     /// Erasure coding configuration per store.
     /// </summary>
     [JsonPropertyName("erasure_config")]
     public Dictionary<string, ErasureCodingConfig> ErasureConfig { get; set; }
+}
+
+/// <summary>
+/// Configuration for Redis connection.
+/// </summary>
+public class RedisConfig
+{
+    /// <summary>
+    /// The address of the Redis server (host:port).
+    /// </summary>
+    [JsonPropertyName("address")]
+    public string Address { get; set; }
+
+    /// <summary>
+    /// The password for Redis authentication.
+    /// </summary>
+    [JsonPropertyName("password")]
+    public string Password { get; set; }
+
+    /// <summary>
+    /// The database index to use.
+    /// </summary>
+    [JsonPropertyName("db")]
+    public int DB { get; set; }
+
+    /// <summary>
+    /// The full connection URL (overrides other fields).
+    /// </summary>
+    [JsonPropertyName("url")]
+    public string URL { get; set; }
 }
 
 internal enum DatabaseAction

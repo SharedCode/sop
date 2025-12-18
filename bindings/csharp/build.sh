@@ -35,8 +35,7 @@ sed_i() {
 
 echo "Updating version in project files..."
 sed_i "s|<Version>.*</Version>|<Version>$VERSION</Version>|g" "$SCRIPT_DIR/Sop/Sop.csproj"
-sed_i "s|<Version>.*</Version>|<Version>$VERSION</Version>|g" "$SCRIPT_DIR/Sop.Examples/Sop.Examples.csproj"
-sed_i "s|private const string Version = \".*\";|private const string Version = \"$VERSION\";|g" "$SCRIPT_DIR/Sop.Examples/Browser.cs"
+sed_i "s|<Version>.*</Version>|<Version>$VERSION</Version>|g" "$SCRIPT_DIR/Sop.CLI/Sop.CLI.csproj"
 
 # 1. Check for Native Libraries (Assumed to be pre-built)
 echo "Checking for Native Libraries..."
@@ -61,9 +60,9 @@ echo "All native libraries found."
 echo "Packing Sop.Data..."
 dotnet pack "$SCRIPT_DIR/Sop/Sop.csproj" -c Release -o "$SCRIPT_DIR/dist"
 
-# 3. Pack Sop.Demo (The Tool)
-echo "Packing Sop.Demo..."
-dotnet pack "$SCRIPT_DIR/Sop.Examples/Sop.Examples.csproj" -c Release -o "$SCRIPT_DIR/dist"
+# 3. Pack Sop.CLI (The Tool)
+echo "Packing Sop.CLI..."
+dotnet pack "$SCRIPT_DIR/Sop.CLI/Sop.CLI.csproj" -c Release -o "$SCRIPT_DIR/dist"
 
 echo "Build complete. Packages are in $SCRIPT_DIR/dist"
 ls -l "$SCRIPT_DIR/dist"

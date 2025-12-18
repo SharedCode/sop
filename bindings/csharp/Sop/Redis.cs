@@ -3,6 +3,12 @@ using System.Runtime.InteropServices;
 
 namespace Sop;
 
+/// <summary>
+/// Provides methods to manage the global Redis connection.
+/// Note: In newer versions of SOP, Redis configuration can be passed directly via DatabaseOptions,
+/// allowing for different Redis connections per Database instance.
+/// This static class is maintained for backward compatibility or global initialization.
+/// </summary>
 public static class Redis
 {
     /// <summary>

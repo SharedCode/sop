@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Sop;
 
-namespace Sop.Examples
+namespace Sop.CLI
 {
     public static class CassandraDemo
     {
@@ -33,10 +33,6 @@ namespace Sop.Examples
                 Cassandra.Initialize(config);
                 Console.WriteLine("Cassandra initialized successfully.");
 
-                Console.WriteLine("Initializing Redis connection...");
-                Redis.Initialize("redis://localhost:6379");
-                Console.WriteLine("Redis initialized successfully.");
-
                 // Create Clustered Database
                 using var ctx = new Context();
                 string dbPath = "data/cassandra_demo";
@@ -46,7 +42,8 @@ namespace Sop.Examples
                 var db = new Database(new DatabaseOptions
                 {
                     StoresFolders = new List<string> { dbPath },
-                    Keyspace = "sop_test"
+                    Keyspace = "sop_test",
+                    RedisConfig = new RedisConfig { Address = "localhost:6379" }
                 });
 
                 // 1. Insert
@@ -87,7 +84,6 @@ namespace Sop.Examples
             }
             finally
             {
-                try { Redis.Close(); } catch { }
                 try { Cassandra.Close(); } catch { }
             }
 

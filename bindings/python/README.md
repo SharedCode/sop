@@ -46,7 +46,7 @@ SOP includes a powerful **Data Browser** that provides **full data management** 
 To launch it, simply run:
 
 ```bash
-sop-browser
+sop-httpserver
 ```
 
 ### Key Capabilities
@@ -59,7 +59,7 @@ sop-browser
 *   **Automatic Setup**: The tool automatically downloads the correct binary for your OS/Architecture upon first run.
 
 **Usage**: By default, it opens on `http://localhost:8080`.
-**Arguments**: You can pass standard flags, e.g., `sop-browser -port 9090 -registry ./my_data`.
+**Arguments**: You can pass standard flags, e.g., `sop-httpserver -port 9090 -registry ./my_data`.
 
 ## Generating Sample Data
 
@@ -77,7 +77,7 @@ To see the Data Browser in action, you can generate a sample database with compl
 
 2.  **Open in Browser**:
     ```bash
-    sop-browser -registry data/large_complex_db
+    sop-httpserver -registry data/large_complex_db
     ```
 
 ## Prerequisites

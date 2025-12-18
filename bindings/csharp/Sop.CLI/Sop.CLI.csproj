@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    
+    <!-- Tool Packaging -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>sop-cli</ToolCommandName>
+    <PackageId>Sop4CS.CLI</PackageId>
+    <Version>2.0.41</Version>
+    <Authors>Gerardo Recinto</Authors>
+    <Description>SOP CLI and Examples</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/SharedCode/sop</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sop\Sop.csproj" />
+  </ItemGroup>
+
+</Project>

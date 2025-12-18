@@ -2,12 +2,15 @@ using System;
 using System.Collections.Generic;
 using Sop;
 
-namespace Sop.Examples;
+namespace Sop.CLI;
 
 public static class VectorSearchAI
 {
     public static void Run()
     {
+        // Suppress benign warnings during cleanup
+        Logger.Configure(LogLevel.Error, "");
+
         Console.WriteLine("\n--- Running Vector Search (AI/RAG Example) ---");
         Console.WriteLine("Scenario: Semantic Product Search");
 

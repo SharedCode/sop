@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using System.IO;
 using System.Security.Cryptography.X509Certificates;
 
-namespace Sop.Examples
+namespace Sop.CLI
 {
     public static class ConcurrentTransactionsDemoStandalone
     {

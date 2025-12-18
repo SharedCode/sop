@@ -78,13 +78,13 @@ Run the pack command to create the `.nupkg` files for both the library and the C
 # Pack the Library (Sop.Data)
 dotnet pack bindings/csharp/Sop/Sop.csproj -c Release
 
-# Pack the CLI Tool (Sop.Demo)
-dotnet pack bindings/csharp/Sop.Examples/Sop.Examples.csproj -c Release
+# Pack the CLI Tool (Sop.CLI)
+dotnet pack bindings/csharp/Sop.CLI/Sop.CLI.csproj -c Release
 ```
 
 This will generate:
 - `bindings/csharp/Sop/bin/Release/Sop.Data.1.0.0.nupkg`
-- `bindings/csharp/Sop.Examples/bin/Release/Sop.Demo.1.0.0.nupkg`
+- `bindings/csharp/Sop.CLI/bin/Release/Sop.CLI.1.0.0.nupkg`
 
 ## 4. Push to NuGet
 
@@ -95,7 +95,7 @@ Upload the packages to NuGet.org:
 dotnet nuget push bindings/csharp/Sop/bin/Release/Sop.Data.1.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
 
 # Push CLI Tool
-dotnet nuget push bindings/csharp/Sop.Examples/bin/Release/Sop.Demo.1.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
+dotnet nuget push bindings/csharp/Sop.CLI/bin/Release/Sop.CLI.1.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
 ```
 
 ## 5. Installation
@@ -105,12 +105,12 @@ Users can install the library in their projects:
 dotnet add package Sop.Data
 ```
 
-And install the global tool to run examples and the Data Browser:
+And install the global tool to run examples and the Data Management Console:
 ```bash
-dotnet tool install -g Sop.Demo
+dotnet tool install -g Sop4CS.CLI
 ```
 
 Then run:
 ```bash
-sop-demo
+sop-cli
 ```

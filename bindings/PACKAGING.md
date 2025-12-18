@@ -45,13 +45,13 @@ SOP is a polyglot library backed by a high-performance Go engine. To support mul
 
 ## Release Workflow & Build Automation
 
-We use a **"One Stop Hub"** strategy for building release artifacts. The goal is to ensure that all language bindings and auxiliary tools (like `sop-browser`) are built consistently with the same version.
+We use a **"One Stop Hub"** strategy for building release artifacts. The goal is to ensure that all language bindings and auxiliary tools (like `sop-httpserver`) are built consistently with the same version.
 
 ### The Master Build Script (`bindings/main/build.sh`)
 This script is the central engine. It:
 1.  Builds the **Core Shared Libraries** (`libjsondb`) for all platforms (macOS, Linux, Windows).
 2.  Builds the **Core Static Libraries** (`libjsondb.a`) for Rust.
-3.  Builds the **SOP Data Browser** (`sop-browser`) for all platforms.
+3.  Builds the **SOP Data Browser** (`sop-httpserver`) for all platforms.
 4.  Distributes these binaries to the appropriate language folders (`python/sop`, `csharp/Sop`, `java/resources`, `rust/lib`).
 5.  Outputs standalone tools to a `release/` directory in the project root.
 
@@ -81,9 +81,9 @@ The Python build script (`bindings/python/build_wheels.sh`) acts as the orchestr
 4.  **Publish Tools**:
     *   Go to the [GitHub Releases](https://github.com/sharedcode/sop/releases) page.
     *   Create a new release tag (e.g., `sop4py-v2.0.34`).
-    *   Upload the binaries found in the `release/` folder (e.g., `sop-browser-darwin-arm64`, `sop-browser-windows-amd64.exe`).
+    *   Upload the binaries found in the `release/` folder (e.g., `sop-httpserver-darwin-arm64`, `sop-httpserver-windows-amd64.exe`).
 
-This ensures that users who install the Python package can download the exact matching version of the `sop-browser` tool.
+This ensures that users who install the Python package can download the exact matching version of the `sop-httpserver` tool.
 
 ### Release Process (C# / .NET)
 
@@ -98,14 +98,15 @@ This ensures that users who install the Python package can download the exact ma
     *   Install the tool from the local `dist` folder:
         ```bash
         # Uninstall previous version if needed
-        dotnet tool uninstall -g Sop4CS.Demo
+        dotnet tool uninstall -g Sop4CS.CLI
         
         # Install from local dist folder
-        dotnet tool install -g Sop4CS.Demo --add-source ./bindings/csharp/dist --version <YOUR_VERSION>
+        dotnet tool install -g Sop4CS.CLI --add-source ./bindings/csharp/dist --version <YOUR_VERSION>
         ```
-    *   Run `sop-demo` to verify.
+    *   Run `sop-cli` to verify.
+    *   Run `sop-cli httpserver` to verify the HTTP Server launcher.
 5.  **Publish**:
     ```bash
     dotnet nuget push bindings/csharp/dist/Sop4CS.<VERSION>.nupkg --api-key <KEY> --source https://api.nuget.org/v3/index.json
-    dotnet nuget push bindings/csharp/dist/Sop4CS.Demo.<VERSION>.nupkg --api-key <KEY> --source https://api.nuget.org/v3/index.json
+    dotnet nuget push bindings/csharp/dist/Sop4CS.CLI.<VERSION>.nupkg --api-key <KEY> --source https://api.nuget.org/v3/index.json
     ```

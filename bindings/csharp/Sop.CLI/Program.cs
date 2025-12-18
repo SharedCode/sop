@@ -3,18 +3,19 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 
-namespace Sop.Examples;
+namespace Sop.CLI;
 
 class Program
 {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
         NativeLibrary.SetDllImportResolver(typeof(Sop.Context).Assembly, ImportResolver);
 
         if (args.Length > 0)
         {
-            RunCommand(args);
+            await RunCommand(args);
             return;
         }
 
@@ -25,8 +26,8 @@ class Program
     {
         if (libraryName == "libjsondb")
         {
-            string os = null;
-            string ext = null;
+            string os = "";
+            string ext = "";
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -44,7 +45,7 @@ class Program
                 ext = ".dylib";
             }
 
-            if (os != null)
+            if (os != "")
             {
                 string arch = RuntimeInformation.ProcessArchitecture.ToString().ToLower();
                 string path = Path.Combine(AppContext.BaseDirectory, "runtimes", $"{os}-{arch}", "native", $"libjsondb{ext}");
@@ -58,13 +59,14 @@ class Program
         return IntPtr.Zero;
     }
 
-    static void RunCommand(string[] args)
+    static async Task RunCommand(string[] args)
     {
         var cmd = args[0].ToLower();
         switch (cmd)
         {
-            case "browser":
-                Browser.Run().Wait();
+            case "httpserver":
+                var serverArgs = args.Length > 1 ? args[1..] : Array.Empty<string>();
+                await Sop.Server.SopServer.RunAsync(serverArgs);
                 break;
             case "run":
                 if (args.Length > 1)
@@ -73,7 +75,7 @@ class Program
                 }
                 else
                 {
-                    Console.WriteLine("Usage: sop-demo run <example_number>");
+                    Console.WriteLine("Usage: sop-cli run <example_number>");
                 }
                 break;
             case "help":
@@ -90,10 +92,10 @@ class Program
 
     static void PrintHelp()
     {
-        Console.WriteLine("Usage: sop-demo [command] [args]");
+        Console.WriteLine("Usage: sop-cli [command] [args]");
         Console.WriteLine("Commands:");
-        Console.WriteLine("  browser       Launch SOP Data Browser");
         Console.WriteLine("  run <number>  Run specific example number");
+        Console.WriteLine("  httpserver    Launch the SOP HTTP Server (Data Management Console)");
         Console.WriteLine("  help          Show this help message");
         Console.WriteLine("  (no args)     Run in interactive mode");
     }
@@ -115,8 +117,7 @@ class Program
         Console.WriteLine("11. Clustered Database Demo");
         Console.WriteLine("12. Concurrent Transactions Demo");
         Console.WriteLine("13. Concurrent Transactions Demo (Standalone)");
-        Console.WriteLine("14. Large Complex Data Generation (for Data Browser)");
-        Console.WriteLine("15. Launch Data Browser");
+        Console.WriteLine("14. Large Complex Data Generation (for Data Management Console)");
         Console.WriteLine("0. Exit");
         Console.WriteLine("=================");
 
@@ -178,9 +179,6 @@ class Program
                     break;
                 case "14":
                     LargeComplexDemo.Run();
-                    break;
-                case "15":
-                    Browser.Run().Wait();
                     break;
                 default:
                     Console.WriteLine("Invalid selection.");

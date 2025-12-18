@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace Sop.Examples
+namespace Sop.CLI
 {
     public static class ClusteredDemo
     {
@@ -13,10 +13,6 @@ namespace Sop.Examples
             
             try 
             {
-                // Initialize Global Connections
-                Console.WriteLine("Initializing Redis...");
-                Redis.Initialize("redis://localhost:6379");
-
                 // Create Clustered Database
                 using var ctx = new Context();
                 string dbPath = "data/clustered_demo";
@@ -26,7 +22,8 @@ namespace Sop.Examples
                 var db = new Database(new DatabaseOptions
                 {
                     StoresFolders = new List<string> { dbPath },
-                    Type = (int)DatabaseType.Clustered
+                    Type = (int)DatabaseType.Clustered,
+                    RedisConfig = new RedisConfig { Address = "localhost:6379" }
                 });
 
                 Console.WriteLine("Starting Transaction...");
@@ -47,14 +44,6 @@ namespace Sop.Examples
             catch (Exception e)
             {
                 Console.WriteLine($"Clustered demo failed (expected if services are not running): {e.Message}");
-            }
-            finally
-            {
-                try
-                {
-                    Redis.Close();
-                }
-                catch { }
             }
              Console.WriteLine("--- End of Clustered Demo ---");
         }

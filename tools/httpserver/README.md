@@ -26,6 +26,12 @@ From the root of the `sop` repository:
 go run tools/httpserver/main.go -registry /path/to/your/sop/data
 ```
 
+Or, if you have downloaded the standalone binary (e.g., `sop-httpserver`):
+
+```bash
+./sop-httpserver -registry /path/to/your/sop/data
+```
+
 By default, it runs on port 8080. You can change this with the `-port` flag:
 
 ```bash

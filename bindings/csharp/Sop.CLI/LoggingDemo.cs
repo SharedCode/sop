@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 
-namespace Sop.Examples
+namespace Sop.CLI
 {
     public static class LoggingDemo
     {

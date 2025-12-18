@@ -15,10 +15,10 @@ Install the library via NuGet:
 dotnet add package Sop4CS
 ```
 
-To run the examples and launch the Data Browser, install the global tool:
+To run the examples and launch the Data Management Console, install the CLI tool:
 
 ```bash
-dotnet tool install -g Sop4CS.Demo
+dotnet tool install -g Sop4CS.CLI
 ```
 
 ## Key Features
@@ -47,19 +47,19 @@ SOP is designed for high-throughput, low-latency scenarios, making it suitable f
 
 ## Running the Examples
 
-The `Sop4CS.Demo` tool provides a comprehensive suite of examples covering B-Trees, Vector Search, Model Store, and more.
+The `Sop4CS.CLI` tool provides a comprehensive suite of examples covering B-Trees, Vector Search, Model Store, and more.
 
 Once installed as a global tool:
 
 ```bash
 # Run interactive menu
-sop-demo
+sop-cli
 
 # Run a specific example (e.g., Complex Keys)
-sop-demo run 2
+sop-cli run 2
 
-# Launch the SOP Data Browser
-sop-demo browser
+# Launch the SOP Data Management Console
+sop-cli httpserver
 ```
 
 The suite includes:
@@ -77,41 +77,124 @@ The suite includes:
 12. **Concurrent Transactions**: Multi-threaded transaction handling (requires Redis).
 13. **Concurrent Transactions (Standalone)**: Multi-threaded transaction handling (local only).
 
-## Data Browser & Full Data Management
+## SOP HTTP Server (Data Management & REST API)
 
-SOP includes a powerful **Data Browser** that provides **full data management** capabilities for your B-Tree stores. It goes beyond simple viewing, offering a complete GUI for inspecting, searching, and manage your data at scale.
+SOP includes a powerful **SOP HTTP Server** that acts as a comprehensive **Data Management Console** and a **RESTful API**. It transforms your embedded SOP database into a fully manageable server instance.
+
+To launch the Management Console / Server:
+
+```bash
+sop-cli httpserver
+```
+
+### Server Capabilities
+
+It is important to distinguish between the **SOP HTTP Server** (this tool) and SOP's internal **Clustered Mode**:
+
+1.  **SOP HTTP Server**: This is a standard web server that serves the Management UI and REST API.
+    *   **Multi-Client**: It can serve **many concurrent HTTP clients** (users on web browsers, mobile apps, or other services).
+    *   **Collaborative Management**: Multiple team members can access the console simultaneously to view, edit, and query data in real-time.
+    *   **REST API**: Exposes your B-Tree stores via standard HTTP endpoints, allowing you to integrate SOP with any language or tool (curl, Postman, Python scripts).
+
+2.  **SOP Clustered Mode (Internal)**: This refers to the low-level coordination between multiple SOP nodes (e.g., multiple microservices using the SOP library).
+    *   **Swarm Computing**: Uses Redis to coordinate transactions, merge changes, and handle conflict resolution across distributed nodes.
+    *   **High Availability**: Ensures data consistency when multiple machines are writing to the same logical store.
+
+**In short**: You run `sop-cli httpserver` to give your team a GUI and API. You configure "Clustered Mode" in your code when building distributed applications.
+
+### Launching the Server
 
 To launch it using the global tool:
 
 ```bash
-sop-demo browser
+sop-cli httpserver
 ```
 
-### Key Capabilities
+### Programmatic Usage
 
-*   **Full Data Management**: Perform comprehensive CRUD (Create, Read, Update, Delete) operations on any record directly from the UI.
-*   **High-Performance Search**: Utilizes B-Tree positioning for instant lookups, even in datasets with millions of records. Supports both simple keys and complex composite keys (e.g., searching by `Country` + `City`).
-*   **Efficient Navigation**: Smart pagination and traversal controls (First, Previous, Next, Last) allow you to browse massive datasets without performance penalties.
-*   **Bulk Operations**: Designed for rapid-fire management of records with a clean, non-distracting interface.
-*   **Responsive & Cross-Platform**: Works seamlessly across diverse monitor sizes and devices.
-*   **Automatic Setup**: The tool automatically downloads the correct binary for your OS/Architecture upon first run.
+You can also launch the server directly from your C# application using the `Sop.Server` namespace:
+
+```csharp
+using Sop.Server;
+
+// Launch the server (downloads binary if needed)
+await SopServer.RunAsync(args);
+```
+
+### Key Features
+
+*   **Full Data Management**: Perform comprehensive CRUD (Create, Read, Update, Delete) operations on any record directly from the UI. Edit complex JSON objects or binary data with ease.
+*   **High-Performance Search**: Utilizes B-Tree positioning for **instant lookups**, even in datasets with millions of records. Supports both simple keys and complex composite keys (e.g., searching by `Country` + `City` + `Zip`).
+*   **Visual Tree Navigation**: Don't just search—explore. Smart pagination and traversal controls (First, Previous, Next, Last) allow you to walk through your B-Tree structure efficiently.
+*   **Bulk Operations**: Designed for rapid-fire management. Delete thousands of records or update batch configurations without writing a single line of code.
+*   **Responsive & Cross-Platform**: A modern, dark-themed UI that works seamlessly across diverse monitor sizes and devices.
+*   **Zero-Config Setup**: The tool automatically downloads the correct optimized binary for your OS/Architecture upon first run. No manual installation required.
 
 **Usage**: By default, it opens on `http://localhost:8080`.
-**Arguments**: You can pass standard flags, e.g., `sop-demo browser -- -port 9090 -registry ./my_data`.
+**Arguments**: You can pass standard flags to configure the server.
+```bash
+# Specify a custom registry path
+sop-cli httpserver -registry ./my_data
+
+# Specify a custom port
+sop-cli httpserver -port 9090
+
+# Enable clustered mode
+# In this mode, the httpserver will participate in clustered data management with other nodes in the cluster.
+sop-cli httpserver -clustered
+
+# Use a configuration file
+sop-cli httpserver -config ./config.json
+```
+
+### Configuration File
+
+You can also configure the server using a JSON configuration file. This is useful for persisting settings across sessions.
+
+**Example `config.json`:**
+```json
+{
+  "Port": 9090,
+  "RegistryPath": "./my_data",
+  "Theme": "dark"
+}
+```
+
+Pass the config file using the `-config` flag:
+```bash
+sop-cli httpserver -config ./config.json
+```
+
+## Production Deployment
+
+For production environments (e.g., Kubernetes, Docker, Linux Servers), you should run the standalone binary directly instead of using the `dotnet tool` wrapper.
+
+1.  **Download**: Get the latest binary for your platform (Linux, Windows, macOS) from the [GitHub Releases](https://github.com/sharedcode/sop/releases) page.
+2.  **Run**: Execute the binary with your configuration.
+
+**Example (Docker/Kubernetes):**
+```dockerfile
+FROM alpine:latest
+COPY sop-httpserver-linux-amd64 /app/sop-httpserver
+RUN chmod +x /app/sop-httpserver
+CMD ["/app/sop-httpserver", "-registry", "/data", "-port", "8080"]
+```
+
+This ensures a minimal footprint and removes the dependency on the .NET Runtime for the server process.
 
 ## Generating Sample Data
 
-To see the Data Browser in action, you can generate a sample database with complex keys using the included example:
+To see the Management Console in action, you can generate a sample database with complex keys using the included example:
 
 1.  **Run the generator**:
     ```bash
-    sop-demo run 14
+    sop-cli run 14
     ```
     This will create a database in `sop_data_complex` (or similar path defined in the example) with two stores: `people` (Complex Key) and `products` (Composite Key).
 
-2.  **Open in Browser**:
+2.  **Open in Console**:
     ```bash
-    sop-demo browser -- -registry sop_data_complex
+    sop-cli httpserver -registry data/large_complex_db
     ```
 
 ## Prerequisites
@@ -346,17 +429,25 @@ Logger.Configure(LogLevel.Debug, "sop.log");
 Logger.Configure(LogLevel.Info, "");
 ```
 
-### Redis Connection
+### Redis Configuration
 
-Initialize the shared Redis connection for caching and coordination.
+For Clustered mode or when using Redis caching, you can configure the Redis connection directly in the `DatabaseOptions`. This allows different databases to use different Redis instances.
 
 ```csharp
-Redis.Initialize("redis://localhost:6379");
-
-// ... perform operations ...
-
-Redis.Close();
+var db = new Database(new DatabaseOptions
+{
+    StoresFolders = new List<string> { "./data" },
+    Type = (int)DatabaseType.Clustered,
+    RedisConfig = new RedisConfig 
+    { 
+        Address = "localhost:6379",
+        // Password = "optional_password",
+        // DB = 0
+    }
+});
 ```
+
+*Note: The legacy `Redis.Initialize()` method is still supported for backward compatibility but is deprecated.*
 
 ### Cassandra Connection
 
@@ -379,7 +470,9 @@ Cassandra.Close();
 
 ### Clustered Database
 
-Create a clustered database with Erasure Coding support and Cassandra Keyspace.
+In **Clustered Mode**, SOP uses Redis to coordinate transactions across multiple nodes. This allows many machines to participate in data management for the same Database/B-Tree files on disk while maintaining ACID guarantees.
+
+**Note**: The database files generated in Standalone and Clustered modes are fully compatible. You can switch between modes as needed.
 
 ```csharp
 var dbOpts = new DatabaseOptions 
@@ -390,7 +483,9 @@ var dbOpts = new DatabaseOptions
     ErasureConfig = new Dictionary<string, ErasureCodingConfig>
     {
         { "default", new ErasureCodingConfig { DataShards = 2, ParityShards = 1 } }
-    }
+    },
+    // Configure Redis for coordination (defaults to localhost:6379 if omitted)
+    RedisConfig = new RedisConfig { Address = "localhost:6379" }
 };
 
 var db = new Database(dbOpts);
@@ -420,7 +515,8 @@ var db = new Database(new DatabaseOptions {
 // Option B: Clustered (Redis Cache) - Required for distributed swarm
 // var db = new Database(new DatabaseOptions { 
 //     StoresFolders = new List<string> { "./sop_data" },
-//     Type = (int)DatabaseType.Clustered 
+//     Type = (int)DatabaseType.Clustered,
+//     RedisConfig = new RedisConfig { Address = "localhost:6379" }
 // });
 
 using (var trans = db.BeginTransaction(ctx))

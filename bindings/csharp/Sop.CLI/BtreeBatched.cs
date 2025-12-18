@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace Sop.Examples
+namespace Sop.CLI
 {
     public static class BtreeBatched
     {

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Sop;
 
-namespace Sop.Examples;
+namespace Sop.CLI;
 
 public class DemoPersonKey
 {

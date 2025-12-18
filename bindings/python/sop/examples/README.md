@@ -19,9 +19,9 @@ It creates a database with two distinct stores:
     This will create a database folder at `data/large_complex_db`.
 
 2.  **Explore with Data Browser**:
-    Now you can use the `sop-browser` to inspect, search, and modify this data.
+    Now you can use the `sop-httpserver` to inspect, search, and modify this data.
     ```bash
-    sop-browser -registry data/large_complex_db
+    sop-httpserver -registry data/large_complex_db
     ```
     *   Try searching for a specific Country (e.g., "US") to see B-Tree prefix matching in action.
     *   Edit a record to test the transactional update capabilities.

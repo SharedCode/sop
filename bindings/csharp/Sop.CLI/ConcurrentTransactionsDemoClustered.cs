@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.IO;
 
-namespace Sop.Examples
+namespace Sop.CLI
 {
     public static class ConcurrentTransactionsDemo
     {
@@ -14,17 +14,6 @@ namespace Sop.Examples
 
             // Enable verbose logging to stderr for debugging
             Logger.Configure(LogLevel.Warn, "");
-
-            // Initialize Redis for Clustered mode
-            try
-            {
-                Redis.Initialize("redis://localhost:6379");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to connect to Redis: {ex.Message}");
-                return;
-            }
 
             Console.WriteLine("--- Concurrent Transactions Demo (Clustered) ---");
             Console.WriteLine("Demonstrating multi-threaded access without client-side locks.");
@@ -37,7 +26,8 @@ namespace Sop.Examples
             var db = new Database(new DatabaseOptions
             {
                 StoresFolders = new List<string> { dbPath },
-                Type = (int)DatabaseType.Clustered
+                Type = (int)DatabaseType.Clustered,
+                RedisConfig = new RedisConfig { Address = "localhost:6379" }
             });
 
             // 1. Setup: Create the B-Tree in a separate transaction first

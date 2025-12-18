@@ -13,7 +13,7 @@ except ImportError:
     __version__ = "latest"
 
 GITHUB_REPO = "sharedcode/sop"
-BINARY_NAME = "sop-browser"
+BINARY_NAME = "sop-httpserver"
 
 def get_platform_info():
     system = platform.system().lower()

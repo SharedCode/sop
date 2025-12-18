@@ -43,7 +43,7 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           cd tools/httpserver
-          go build -o ../../sop-browser-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} main.go
+          go build -o ../../sop-httpserver-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} main.go
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -51,6 +51,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./sop-browser-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
-          asset_name: sop-browser-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          asset_path: ./sop-httpserver-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
+          asset_name: sop-httpserver-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}
           asset_content_type: application/octet-stream

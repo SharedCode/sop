@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using Sop;
 
-namespace Sop.Examples;
+namespace Sop.CLI;
 
 public static class ModelStoreSimple
 {

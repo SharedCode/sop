@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Sop;
 
-namespace Sop.Examples;
+namespace Sop.CLI;
 
 public static class BtreePaging
 {
