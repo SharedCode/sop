@@ -36,7 +36,7 @@ func TestBlobStoreWithEC_GetOne_RepairsCorruptedShard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewBlobStoreWithEC: %v", err)
 	}
-	bs := bsIntf.(*blobStoreWithEC)
+	bs := bsIntf.(*BlobStoreWithEC)
 	id := sop.NewUUID()
 	payload := []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: table, Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: []byte("hello world")}}}}
 	if err := bs.Add(ctx, payload); err != nil {
@@ -277,7 +277,7 @@ func TestBlobStoreWithEC_GlobalFallbackAdd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewBlobStoreWithEC: %v", err)
 	}
-	bs := bsIntf.(*blobStoreWithEC)
+	bs := bsIntf.(*BlobStoreWithEC)
 	id := sop.NewUUID()
 	table := "fallbacktbl"
 	ctx := context.Background()
@@ -394,7 +394,7 @@ func TestBlobStoreWithEC_Update_CoversDelegate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewBlobStoreWithEC: %v", err)
 	}
-	bs := bsIntf.(*blobStoreWithEC)
+	bs := bsIntf.(*BlobStoreWithEC)
 	id := sop.NewUUID()
 	ctx := context.Background()
 	// Use Update instead of Add; expect shards written.

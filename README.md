@@ -423,6 +423,12 @@ SOP uses Redis for fast, ephemeral coordination and the filesystem for durable s
 
 SOP builds a fast, decentralized coordination layer using Redis only for ephemeral locks and relies on storage-anchored sector claims for correctness. It scales out naturally and avoids consensus overhead while remaining safe under failover.
 
+## Clustered Mode Compatibility
+
+In **Clustered Mode**, SOP uses Redis to coordinate transactions across multiple nodes. This allows many machines to participate in data management for the same Database/B-Tree files on disk while maintaining ACID guarantees.
+
+**Note**: The database files generated in Standalone and Clustered modes are fully compatible. You can switch between modes as needed but make sure if switching to Standalone mode, that there is only one process that writes to the database files.
+
 ## Community & support
 - Issues: https://github.com/SharedCode/sop/issues
 - Discussions: https://github.com/SharedCode/sop/discussions (design/usage topics)

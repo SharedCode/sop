@@ -59,8 +59,8 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 	tables := []string{"reinstate_stress_t1", "reinstate_stress_t2", "reinstate_stress_t3"}
 	for _, tb := range tables {
 		// Best-effort cleanup of store repository entries to avoid flakiness across runs.
-		_ = infs.RemoveBtree(ctx, tb, []string{stores[0]}, sop.Redis)
-		_ = infs.RemoveBtree(ctx, tb, []string{stores[1]}, sop.Redis)
+		_ = infs.RemoveBtree(ctx, tb, []string{stores[0]}, ec, sop.Redis)
+		_ = infs.RemoveBtree(ctx, tb, []string{stores[1]}, ec, sop.Redis)
 		for _, base := range append(stores, fmt.Sprintf("%s%cdisk10", dataPath, os.PathSeparator), fmt.Sprintf("%s%cdisk11", dataPath, os.PathSeparator), fmt.Sprintf("%s%cdisk12", dataPath, os.PathSeparator), fmt.Sprintf("%s%cdisk13", dataPath, os.PathSeparator)) {
 			_ = os.RemoveAll(filepath.Join(base, tb))
 		}

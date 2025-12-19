@@ -9,7 +9,7 @@ public static class VectorSearchAI
     public static void Run()
     {
         // Suppress benign warnings during cleanup
-        Logger.Configure(LogLevel.Error, "");
+        Logger.Configure(LogLevel.Warn, "");
 
         Console.WriteLine("\n--- Running Vector Search (AI/RAG Example) ---");
         Console.WriteLine("Scenario: Semantic Product Search");

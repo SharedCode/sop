@@ -16,7 +16,8 @@ import (
 
 func MultipleExpiredTransCleanup(t *testing.T) {
 	ctx := context.Background()
-	infs.RemoveBtree(ctx, "ztab1", []string{dataPath}, sop.Redis)
+	ec := fs.GetGlobalErasureConfig()
+	infs.RemoveBtree(ctx, "ztab1", []string{dataPath}, ec, sop.Redis)
 
 	// Seed with good records.
 	yesterday := time.Now().Add(time.Duration(-48 * time.Hour))

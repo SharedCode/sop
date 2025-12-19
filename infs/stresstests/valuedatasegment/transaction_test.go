@@ -455,7 +455,8 @@ func Test_TwoPhaseCommitRolledback(t *testing.T) {
 func Test_StrangeBtreeStoreName(t *testing.T) {
 	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 
-	infs.RemoveBtree(ctx, "2phase", []string{dataPath}, sop.Redis)
+	ec := fs.GetGlobalErasureConfig()
+	infs.RemoveBtree(ctx, "2phase", []string{dataPath}, ec, sop.Redis)
 
 	t1, _ := infs.NewTransaction(ctx, to)
 	_ = t1.Begin(ctx)

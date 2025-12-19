@@ -29,8 +29,8 @@ go build -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin
 cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop/
 # For testing in Examples.
-cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop.Examples/libjsondb.dylib
-cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop.Examples/libjsondb.h
+cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop.CLI/libjsondb.dylib
+cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop.CLI/libjsondb.h
 # Java Packaging (JNA)
 mkdir -p ../java/src/main/resources/darwin-x86-64
 cp ../python/sop/libjsondb_amd64darwin.dylib ../java/src/main/resources/darwin-x86-64/libjsondb.dylib
@@ -41,9 +41,9 @@ CGO_ENABLED=0 go build -ldflags "-X main.Version=$VERSION" -o $RELEASE_DIR/sop-h
 fi
 
 if [ -z "$ONLY_MACOS" ]; then
-rm -rf ../csharp/Sop.Examples/bin
-rm -rf ../csharp/Sop.Examples/obj
-rm -rf ../csharp/Sop.Examples/data
+rm -rf ../csharp/Sop.CLI/bin
+rm -rf ../csharp/Sop.CLI/obj
+rm -rf ../csharp/Sop.CLI/data
 
 echo "Building AMD64 windows"
 

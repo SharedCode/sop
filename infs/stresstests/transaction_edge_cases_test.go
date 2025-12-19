@@ -394,7 +394,8 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 	// Needs a new context so our runs don't affect one another.
 	ctx := context.Background()
-	infs.RemoveBtree(ctx, "twophase3", []string{dataPath}, sop.Redis)
+	ec := fs.GetGlobalErasureConfig()
+	infs.RemoveBtree(ctx, "twophase3", []string{dataPath}, ec, sop.Redis)
 
 	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
@@ -482,7 +483,8 @@ func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
 func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 	// for {
 	ctx := context.Background()
-	infs.RemoveBtree(ctx, "tablex", []string{dataPath}, sop.Redis)
+	ec := fs.GetGlobalErasureConfig()
+	infs.RemoveBtree(ctx, "tablex", []string{dataPath}, ec, sop.Redis)
 
 	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
@@ -595,7 +597,8 @@ func Test_ConcurrentCommitsComplexDupeAllowed(t *testing.T) {
 */
 func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 	ctx := context.Background()
-	infs.RemoveBtree(ctx, "tablex2", []string{dataPath}, sop.Redis)
+	ec := fs.GetGlobalErasureConfig()
+	infs.RemoveBtree(ctx, "tablex2", []string{dataPath}, ec, sop.Redis)
 
 	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)
@@ -717,7 +720,8 @@ func Test_ConcurrentCommitsComplexDupeNotAllowed(t *testing.T) {
 */
 func Test_ConcurrentCommitsComplexUpdateConflicts(t *testing.T) {
 	ctx := context.Background()
-	infs.RemoveBtree(ctx, "tabley", []string{dataPath}, sop.Redis)
+	ec := fs.GetGlobalErasureConfig()
+	infs.RemoveBtree(ctx, "tabley", []string{dataPath}, ec, sop.Redis)
 
 	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)

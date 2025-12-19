@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	log "log/slog"
+
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/model"
@@ -131,27 +133,19 @@ func (db *Database) RemoveModelStore(ctx context.Context, name string) error {
 
 // RemoveVectorStore removes the vector store and its underlying B-Trees.
 func (db *Database) RemoveVectorStore(ctx context.Context, name string) error {
-	// We will try to remove all potential tables.
-	// We won't stop on error, but we will return the last error if any.
-	var lastErr error
-
-	remove := func(n string) {
-		if err := database.RemoveBtree(ctx, db.config, n); err != nil {
-			lastErr = err
-		}
-	}
-
 	suffixes := []string{
 		"_sys_config",
-		"_lku",
-		"_centroids",
-		"_vecs",
 		"_tmp_vecs",
 		"_data",
 	}
 
+	var lastErr error
+	succeeded := false
+
 	for _, suffix := range suffixes {
-		remove(fmt.Sprintf("%s%s", name, suffix))
+		if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s", name, suffix)); err != nil {
+			lastErr = err
+		}
 	}
 
 	// Also try to remove versioned tables.
@@ -162,28 +156,61 @@ func (db *Database) RemoveVectorStore(ctx context.Context, name string) error {
 		if err == nil {
 			version, _ := vs.Version(ctx)
 
+			f := func(versionSuffix string) int {
+				i := 0
+				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "_lku", versionSuffix)); err == nil {
+					i++
+				} else {
+					lastErr = err
+				}
+				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "_centroids", versionSuffix)); err == nil {
+					i++
+				} else {
+					lastErr = err
+				}
+				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "_vecs", versionSuffix)); err == nil {
+					i++
+				} else {
+					lastErr = err
+				}
+
+				log.Debug(fmt.Sprintf("version suffix %s, success count: %d", versionSuffix, i))
+
+				return i
+			}
+
+			// Delete the unversioned current set.
+			if f("") == 3 {
+				succeeded = true
+			}
+
 			// Remove the current version vector components.
 			versionSuffix := fmt.Sprintf("_%d", version)
-			remove(fmt.Sprintf("%s%s%s", name, "_lku", versionSuffix))
-			remove(fmt.Sprintf("%s%s%s", name, "_centroids", versionSuffix))
-			remove(fmt.Sprintf("%s%s%s", name, "_vecs", versionSuffix))
+			if f(versionSuffix) == 3 {
+				succeeded = true
+			}
 
 			// Remove the previous version vector components, if there is.
 			if version > 0 {
 				versionSuffix = fmt.Sprintf("_%d", version-1)
-				remove(fmt.Sprintf("%s%s%s", name, "_lku", versionSuffix))
-				remove(fmt.Sprintf("%s%s%s", name, "_centroids", versionSuffix))
-				remove(fmt.Sprintf("%s%s%s", name, "_vecs", versionSuffix))
+				if f(versionSuffix) == 3 {
+					succeeded = true
+				}
 			}
 
 			// Remove the next version vector components, if there is.
 			versionSuffix = fmt.Sprintf("_%d", version+1)
-			remove(fmt.Sprintf("%s%s%s", name, "_lku", versionSuffix))
-			remove(fmt.Sprintf("%s%s%s", name, "_centroids", versionSuffix))
-			remove(fmt.Sprintf("%s%s%s", name, "_vecs", versionSuffix))
+			if f(versionSuffix) == 3 {
+				succeeded = true
+			}
 		}
 		// We only read, so rollback is fine/preferred to release locks immediately.
 		_ = trans.Rollback(ctx)
+	}
+
+	// We know we deleted a set of VectorStore component files, return nil to denote success.
+	if succeeded {
+		lastErr = nil
 	}
 
 	return lastErr

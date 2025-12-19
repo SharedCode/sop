@@ -367,7 +367,8 @@ func Test_TwoTransactionsOneUpdateItemOneAnotherUpdateItemLast(t *testing.T) {
 }
 
 func Test_Concurrent2CommitsOnNewBtree(t *testing.T) {
-	infs.RemoveBtree(ctx, "twophase2", []string{dataPath}, sop.Redis)
+	ec := fs.GetGlobalErasureConfig()
+	infs.RemoveBtree(ctx, "twophase2", []string{dataPath}, ec, sop.Redis)
 
 	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	t1, _ := infs.NewTransaction(ctx, to)

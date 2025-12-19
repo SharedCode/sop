@@ -119,7 +119,8 @@ func Test_TransactionStory_SingleBTree(t *testing.T) {
 }
 
 func Test_ByteArrayValue(t *testing.T) {
-	infs.RemoveBtree(ctx, "baStore", []string{dataPath}, l2Cache)
+	ec := fs.GetGlobalErasureConfig()
+	infs.RemoveBtree(ctx, "baStore", []string{dataPath}, ec, l2Cache)
 	to := sop.TransactionOptions{StoresFolders: []string{dataPath}, Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, CacheType: l2Cache}
 	trans, err := infs.NewTransaction(ctx, to)
 	if err != nil {

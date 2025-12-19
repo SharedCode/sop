@@ -102,33 +102,38 @@ class Program
 
     static void RunInteractive()
     {
-        Console.WriteLine("SOP C# Examples");
-        Console.WriteLine("=================");
-        Console.WriteLine("1. Basic B-Tree Operations (CRUD)");
-        Console.WriteLine("2. Complex Keys & Index Specification");
-        Console.WriteLine("3. Metadata 'Ride-on' Keys (High Performance)");
-        Console.WriteLine("4. B-Tree Paging & Navigation");
-        Console.WriteLine("5. Vector Search (AI/RAG Example)");
-        Console.WriteLine("6. Model Store (Machine Learning)");
-        Console.WriteLine("7. Logging Demo");
-        Console.WriteLine("8. Batched B-Tree Operations");
-        Console.WriteLine("9. Cassandra Initialization Demo");
-        Console.WriteLine("10. Text Search Demo");
-        Console.WriteLine("11. Clustered Database Demo");
-        Console.WriteLine("12. Concurrent Transactions Demo");
-        Console.WriteLine("13. Concurrent Transactions Demo (Standalone)");
-        Console.WriteLine("14. Large Complex Data Generation (for Data Management Console)");
-        Console.WriteLine("0. Exit");
-        Console.WriteLine("=================");
-
         while (true)
         {
+            Console.WriteLine("SOP C# Examples");
+            Console.WriteLine("=================");
+            Console.WriteLine("1. Basic B-Tree Operations (CRUD)");
+            Console.WriteLine("2. Complex Keys & Index Specification");
+            Console.WriteLine("3. Metadata 'Ride-on' Keys (High Performance)");
+            Console.WriteLine("4. B-Tree Paging & Navigation");
+            Console.WriteLine("5. Vector Search (AI/RAG Example)");
+            Console.WriteLine("6. Model Store (Machine Learning)");
+            Console.WriteLine("7. Logging Demo");
+            Console.WriteLine("8. Batched B-Tree Operations");
+            Console.WriteLine("9. Cassandra Initialization Demo");
+            Console.WriteLine("10. Text Search Demo");
+            Console.WriteLine("11. Clustered Database Demo");
+            Console.WriteLine("12. Concurrent Transactions Demo");
+            Console.WriteLine("13. Concurrent Transactions Demo (Standalone)");
+            Console.WriteLine("14. Large Complex Data Generation (for Data Management Console)");
+            Console.WriteLine("15. Clustered mode with Erasure Config Demo");
+            Console.WriteLine("16. Full Replication Config Demo");
+            Console.WriteLine("0. Exit");
+            Console.WriteLine("=================");
+
             Console.Write("\nEnter example number to run: ");
             var input = Console.ReadLine();
 
             if (input == null || input == "0") break;
 
             RunExample(input);
+
+            Console.WriteLine();
+            Console.WriteLine();
         }
     }
 
@@ -179,6 +184,12 @@ class Program
                     break;
                 case "14":
                     LargeComplexDemo.Run();
+                    break;
+                case "15":
+                    ErasureCodingConfigDemo.Run();
+                    break;
+                case "16":
+                    FullReplicationConfigDemo.Run();
                     break;
                 default:
                     Console.WriteLine("Invalid selection.");

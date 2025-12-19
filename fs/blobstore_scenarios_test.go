@@ -401,7 +401,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			base2 := filepath.Join(t.TempDir(), "d2")
 			cfg := map[string]sop.ErasureCodingConfig{"tbl2": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{base1, base2}}}
 			bsIntf, _ := NewBlobStoreWithEC(nil, nil, cfg)
-			bs := bsIntf.(*blobStoreWithEC)
+			bs := bsIntf.(*BlobStoreWithEC)
 			id := sop.NewUUID()
 			pre := DefaultToFilePath(filepath.Join(base1, "tbl2"), id)
 			os.MkdirAll(pre, 0o755)
@@ -419,7 +419,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			}
 			cfg := map[string]sop.ErasureCodingConfig{"rt": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2, d3}, RepairCorruptedShards: true}}
 			bsIntf, _ := NewBlobStoreWithEC(nil, nil, cfg)
-			bs := bsIntf.(*blobStoreWithEC)
+			bs := bsIntf.(*BlobStoreWithEC)
 			id := sop.NewUUID()
 			payload := []byte("repair-path")
 			bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: "rt", Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: payload}}}})
@@ -450,7 +450,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			fio := &scenarioRepairWriteFailFileIO{FileIO: NewFileIO(), failAfter: 3}
 			cfg := map[string]sop.ErasureCodingConfig{"rt2": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2, d3}, RepairCorruptedShards: true}}
 			bsIntf, _ := NewBlobStoreWithEC(nil, fio, cfg)
-			bs := bsIntf.(*blobStoreWithEC)
+			bs := bsIntf.(*BlobStoreWithEC)
 			id := sop.NewUUID()
 			data := []byte("repairwarn")
 			if err := bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: "rt2", Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: data}}}}); err != nil {
@@ -473,7 +473,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			d3 := filepath.Join(base, "d3")
 			cfg := map[string]sop.ErasureCodingConfig{"tbp": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{d1, d2, d3}, RepairCorruptedShards: true}}
 			bsIntf, _ := NewBlobStoreWithEC(nil, nil, cfg)
-			bs := bsIntf.(*blobStoreWithEC)
+			bs := bsIntf.(*BlobStoreWithEC)
 			id := sop.NewUUID()
 			pay := []byte("abcdefgh")
 			bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: "tbp", Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: pay}}}})
@@ -494,7 +494,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			cfg := map[string]sop.ErasureCodingConfig{"tbl": {DataShardsCount: 1, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{b1, b2}}}
 			fio := &scenarioFailingRemoveFileIO{FileIO: NewFileIO(), fail: true}
 			bsIntf, _ := NewBlobStoreWithEC(nil, fio, cfg)
-			bs := bsIntf.(*blobStoreWithEC)
+			bs := bsIntf.(*BlobStoreWithEC)
 			id := sop.NewUUID()
 			bs.Add(ctx, []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: "tbl", Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: []byte("abc")}}}})
 			if err := bs.Remove(ctx, []sop.BlobsPayload[sop.UUID]{{BlobTable: "tbl", Blobs: []sop.UUID{id}}}); err != nil {
@@ -544,7 +544,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			base := t.TempDir()
 			cfg := map[string]sop.ErasureCodingConfig{"table": {DataShardsCount: 2, ParityShardsCount: 1, BaseFolderPathsAcrossDrives: []string{filepath.Join(base, "d1"), filepath.Join(base, "d2"), filepath.Join(base, "d3")}}}
 			bs, _ := NewBlobStoreWithEC(nil, scenarioErrFileIOAlwaysErr{FileIO: NewFileIO()}, cfg)
-			if _, err := bs.(*blobStoreWithEC).GetOne(ctx, "table", sop.NewUUID()); err == nil {
+			if _, err := bs.(*BlobStoreWithEC).GetOne(ctx, "table", sop.NewUUID()); err == nil {
 				t.Fatalf("expected shard read error")
 			}
 		}},

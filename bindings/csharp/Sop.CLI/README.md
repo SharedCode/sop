@@ -5,7 +5,7 @@
 ## Documentation
 
 *   **[API Cookbook](COOKBOOK.md)**: Common recipes and patterns (Key-Value, Transactions, AI).
-*   **[Examples](Sop.Examples/)**: Complete runnable examples.
+*   **[Examples](Sop.CLI/)**: Complete runnable examples.
 
 ## Installation
 
@@ -76,6 +76,9 @@ The suite includes:
 11. **Clustered Database**: Distributed database operations (requires Redis).
 12. **Concurrent Transactions**: Multi-threaded transaction handling (requires Redis).
 13. **Concurrent Transactions (Standalone)**: Multi-threaded transaction handling (local only).
+14. **Large Complex Data Generation Demo**: Generates large, complex datasets for use with the Data Management Console and stress testing.
+15. **Erasure Coding Config Demo**: Demonstrates configuring erasure coding for blob store for fault-tolerant storage across multiple drives.
+16. **Full Replication Config Demo**: Demonstrates configuring full data replication, active/passive drives for registry & erasure coding for blob store.
 
 ## SOP HTTP Server (Data Management & REST API)
 
@@ -210,7 +213,7 @@ To see the Management Console in action, you can generate a sample database with
 1.  **Build the Go Bridge**:
     From the repository root:
     ```bash
-    go build -buildmode=c-shared -o bindings/csharp/Sop.Examples/bin/Debug/net10.0/libjsondb.dylib ./bindings/main/...
+    go build -buildmode=c-shared -o bindings/csharp/Sop.CLI/bin/Debug/net10.0/libjsondb.dylib ./bindings/main/...
     # Note: Adjust the output path and extension (.so for Linux, .dll for Windows) as needed.
     ```
 
@@ -472,7 +475,7 @@ Cassandra.Close();
 
 In **Clustered Mode**, SOP uses Redis to coordinate transactions across multiple nodes. This allows many machines to participate in data management for the same Database/B-Tree files on disk while maintaining ACID guarantees.
 
-**Note**: The database files generated in Standalone and Clustered modes are fully compatible. You can switch between modes as needed.
+**Note**: The database files generated in Standalone and Clustered modes are fully compatible. You can switch between modes as needed but make sure if switching to Standalone mode, that there is only one process that writes to the database files.
 
 ```csharp
 var dbOpts = new DatabaseOptions 

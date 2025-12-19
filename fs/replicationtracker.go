@@ -57,6 +57,8 @@ func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, repl
 	if l2Cache == nil {
 		return nil, fmt.Errorf("l2Cache can't be nil")
 	}
+	log.Debug(fmt.Sprintf("storesBaseFolders: %v", storesBaseFolders))
+
 	isFirstFolderActive := true
 	rt := replicationTracker{
 		storesBaseFolders: storesBaseFolders,

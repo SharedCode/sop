@@ -109,10 +109,18 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, config sop
 	if cache == nil {
 		return nil, fmt.Errorf("can't create L2 Cache, please ensure that an L2 Cache Factory for type %v is registered", config.CacheType)
 	}
-	replicationTracker, err := fs.NewReplicationTracker(ctx, config.StoresFolders, true, cache)
+
+	// We support having no replication on Registry based on StoresFolders specified paths.
+	// Two will enable replication, one will not.
+	isReplicated := len(config.StoresFolders) >= 2
+	replicationTracker, err := fs.NewReplicationTracker(ctx, config.StoresFolders, isReplicated, cache)
 	if err != nil {
 		return nil, err
 	}
+
+
+	log.Debug(fmt.Sprintf("erasure config: %v", config.ErasureConfig))
+
 	bs, err := fs.NewBlobStoreWithEC(fs.DefaultToFilePath, nil, config.ErasureConfig)
 	if err != nil {
 		return nil, err

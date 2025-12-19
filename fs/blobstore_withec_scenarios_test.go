@@ -130,7 +130,7 @@ func TestBlobStoreWithEC_MissingConfigBranches(t *testing.T) {
 	}
 
 	// GetOne missing table -> error
-	if _, e := bs.(*blobStoreWithEC).GetOne(ctx, "absent", sop.NewUUID()); e == nil {
+	if _, e := bs.(*BlobStoreWithEC).GetOne(ctx, "absent", sop.NewUUID()); e == nil {
 		t.Fatalf("expected missing config error for GetOne")
 	}
 	// Add missing table -> error

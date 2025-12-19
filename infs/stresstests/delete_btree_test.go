@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/infs"
 )
 
@@ -25,8 +26,9 @@ func DeleteBTree(t *testing.T) {
 		"regnotcached",
 	}
 
+	ec := fs.GetGlobalErasureConfig()
 	for _, tn := range tableList {
-		if err := infs.RemoveBtree(ctx, tn, []string{dataPath}, sop.Redis); err != nil {
+		if err := infs.RemoveBtree(ctx, tn, []string{dataPath}, ec, sop.Redis); err != nil {
 			t.Error(err)
 		}
 	}

@@ -414,11 +414,12 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 	}
 
 	// Remove store(s) that exists.
+	var lastErr error
 	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, true)
 	for _, storeName := range storeNames {
 		if _, ok := storesLookup[storeName]; !ok {
-			log.Warn(fmt.Sprintf("can't remove store %s, there is no item with such name", storeName))
-			continue
+			lastErr = fmt.Errorf("can't remove store %s, there is no item with such name", storeName)
+			log.Info(lastErr.Error())
 		}
 
 		// Tolerate Redis cache failure.
@@ -427,7 +428,7 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 		}
 		// Delete store folder (contains blobs, store config & registry data files).
 		if err := storeWriter.removeStore(ctx, storeName); err != nil {
-			return err
+			lastErr = fmt.Errorf("StoreRepository Remove (fs Delete) failed, details: %v", err)
 		}
 		delete(storesLookup, storeName)
 
@@ -447,10 +448,10 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 
 	// Replicate the files if configured to.
 	if err := storeWriter.replicate(ctx); err != nil {
-		return err
+		lastErr = err
 	}
 
-	return nil
+	return lastErr
 }
 
 // Replicate writes the updated per-store metadata to the passive target. Any write error disables

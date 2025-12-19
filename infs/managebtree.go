@@ -77,7 +77,7 @@ func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, nam
 
 // RemoveBtree removes the B-tree with the given name from backend storage.
 // This is destructive: it drops registry and node-blob data and cannot be rolled back.
-func RemoveBtree(ctx context.Context, name string, storesFolders []string, cacheType sop.L2CacheType) error {
+func RemoveBtree(ctx context.Context, name string, storesFolders []string, erasureConfig map[string]sop.ErasureCodingConfig, cacheType sop.L2CacheType) error {
 	if len(storesFolders) == 0 {
 		return fmt.Errorf("needs at least a folder to delete a Btree")
 	}
@@ -88,20 +88,83 @@ func RemoveBtree(ctx context.Context, name string, storesFolders []string, cache
 
 	log.Info(fmt.Sprintf("Btree %s%c%s is about to be deleted", storesFolders[0], os.PathSeparator, name))
 
-	replicationTracker, err := fs.NewReplicationTracker(ctx, storesFolders, false, cache)
-	if err != nil {
-		return err
-	}
-	storeRepository, err := fs.NewStoreRepository(ctx, replicationTracker, nil, cache, 0)
+	// If storesFolders is 2 or more, replicated mode is achieved, remove will delete on two store folder paths.
+	replicationTracker, err := fs.NewReplicationTracker(ctx, storesFolders, len(storesFolders) >= 2, cache)
 	if err != nil {
 		return err
 	}
 
-	if err := storeRepository.Remove(ctx, name); err != nil {
+	var storeRepository *fs.StoreRepository
+	if len(erasureConfig) == 0 {
+		storeRepository, err = fs.NewStoreRepository(ctx, replicationTracker, nil, cache, 0)
+		if err != nil {
+			return err
+		}
+		// Actually delete the Store folder recursively.
+		// If in Replication structure, delete Active/Passive registry folders and the Blob Store Erasure Config folder structures.
+		if err := storeRepository.Remove(ctx, name); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Delete the Btree with name from storeRepository drives.
+	if !areFoldersInEC(name, storesFolders, erasureConfig) {
+		fio := fs.NewFileIO()
+		mbsf := fs.NewManageStoreFolder(fio)
+		// Pass MinimumModValue, it will not be used when deleting files.
+		storeRepository, err = fs.NewStoreRepository(ctx, replicationTracker, mbsf, cache, fs.MinimumModValue)
+		if err != nil {
+			return err
+		}
+
+		// Actually delete the Store folder recursively.
+		// If in Replication structure, delete Active/Passive registry folders and the Blob Store Erasure Config folder structures.
+		if err := storeRepository.Remove(ctx, name); err != nil {
+			// Log the error, it does not cause corruption so, allow to proceed.
+			log.Error(err.Error())
+		}
+	}
+
+	// Delete the Btree with name from the Erasure Config drives.
+	bswec, err := fs.NewBlobStoreWithEC(fs.DefaultToFilePath, nil, erasureConfig)
+	if err != nil {
 		return err
+	}
+
+	// Delete the Blob store folder from EC drives.
+	bs, _ := bswec.(*fs.BlobStoreWithEC)
+	if err := bs.RemoveStore(ctx, name); err != nil {
+		// Log the error as warning, it does not cause corruption.
+		log.Warn(err.Error())
 	}
 	return nil
 }
+
+func areFoldersInEC(name string, folders []string, erasureConfig map[string]sop.ErasureCodingConfig) bool {
+	ec := erasureConfig[name]
+	if len(ec.BaseFolderPathsAcrossDrives) == 0 {
+		ec = erasureConfig[""]
+	}
+	if len(ec.BaseFolderPathsAcrossDrives) == 0 {
+		return false
+	}
+
+	// Check if folders are in the EC (drive) folders. It is a simple check, user should specify
+	// identical folder paths for this to work.
+	//
+	// E.g. folders = {"/Volume/disk1/sop1", "/Volume/disk1/sop2"}; EC.BaseFolderPathsAcrossDrives = {"/Volume/disk1/sop1", "/Volume/disk1/sop2"}
+	// Will not match: folders = {"disk1/sop1, "disk1/sop2"}; EC.BaseFolderPathsAcrossDrives = {"/Volume/disk1/sop1", "/Volume/disk1/sop2"}
+	for _, ecf := range ec.BaseFolderPathsAcrossDrives {
+		for _, f := range folders {
+			if ecf != f {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 
 // ReinstateFailedDrives asks the replication tracker to reinstate failed passive targets.
 // storesFolders must contain the active and passive stores' base folder paths.

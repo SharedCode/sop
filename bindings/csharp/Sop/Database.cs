@@ -28,14 +28,24 @@ public class ErasureCodingConfig
     /// <summary>
     /// Number of data shards.
     /// </summary>
-    [JsonPropertyName("data_shards")]
+    [JsonPropertyName("data_shards_count")]
     public int DataShards { get; set; }
 
     /// <summary>
     /// Number of parity shards.
     /// </summary>
-    [JsonPropertyName("parity_shards")]
+    [JsonPropertyName("parity_shards_count")]
     public int ParityShards { get; set; }
+
+	// BaseFolderPathsAcrossDrives lists the drive base paths where data and parity shard files are stored.
+    [JsonPropertyName("base_folder_paths_across_drives")]
+	public string[] BaseFolderPathsAcrossDrives{ get; set; }
+
+	// RepairCorruptedShards indicates whether to attempt automatic repair when corrupted shards are detected.
+	// Auto-repair can be expensive; applications can disable it(default) to prioritize throughput and handle drive
+	// failures via external workflows.
+    [JsonPropertyName("repair_corrupted_shards")]
+	public bool RepairCorruptedShards { get; set; }
 }
 
 /// <summary>

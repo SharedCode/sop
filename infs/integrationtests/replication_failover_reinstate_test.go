@@ -578,9 +578,10 @@ func cleanupECShards(name string) {
 
 // cleanupStoreRepository removes store repository records on both isolated replication bases.
 func cleanupStoreRepository(name string, bases []string) {
+	ec := fs.GetGlobalErasureConfig()
 	for _, base := range bases {
 		// Ignore error; it will fail if the store doesn't exist which is fine for cleanup.
-		_ = infs.RemoveBtree(context.Background(), name, []string{base}, sop.Redis)
+		_ = infs.RemoveBtree(context.Background(), name, []string{base}, ec, sop.Redis)
 	}
 }
 

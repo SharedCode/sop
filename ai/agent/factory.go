@@ -82,6 +82,7 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 		dbType = sop.Standalone
 	}
 
+	// Vector database does not support Replication disk structure, ignore error.
 	db := database.NewDatabase(sop.DatabaseOptions{
 		StoresFolders: []string{storagePath},
 		Type:          dbType,

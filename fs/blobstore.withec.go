@@ -16,8 +16,8 @@ const (
 )
 
 // BlobStore has no caching built in because blobs are huge, caller code can apply caching on top of it.
-// blobStoreWithEC adds Erasure Coding (EC) for replication/tolerance across multiple drives.
-type blobStoreWithEC struct {
+// BlobStoreWithEC adds Erasure Coding (EC) for replication/tolerance across multiple drives.
+type BlobStoreWithEC struct {
 	fileIO                      FileIO
 	toFilePath                  ToFilePathFunc
 	erasure                     map[string]*erasure.Erasure
@@ -76,7 +76,7 @@ func NewBlobStoreWithEC(toFilePath ToFilePathFunc, fileIO FileIO, erasureConfig 
 	if fileIO == nil {
 		fileIO = newFileIO(sop.FileIOError)
 	}
-	return &blobStoreWithEC{
+	return &BlobStoreWithEC{
 		fileIO:                      fileIO,
 		toFilePath:                  toFilePath,
 		erasure:                     e,
@@ -88,7 +88,7 @@ func NewBlobStoreWithEC(toFilePath ToFilePathFunc, fileIO FileIO, erasureConfig 
 // GetOne reads shards across drives, extracts per-shard metadata, and decodes via EC.
 // If some shards are missing but enough remain (>= data shards), decoding still succeeds.
 // Optionally repairs corrupted/bitrotted shards by recomputing and rewriting them.
-func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
+func (b *BlobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobID sop.UUID) ([]byte, error) {
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)
 
@@ -179,13 +179,13 @@ func (b *blobStoreWithEC) GetOne(ctx context.Context, blobFilePath string, blobI
 	return dr.DecodedData, nil
 }
 
-func (b *blobStoreWithEC) Update(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+func (b *BlobStoreWithEC) Update(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	return b.Add(ctx, storesblobs)
 }
 
 // Add splits blob content into shards, writes each shard with per-shard metadata prefix, and
 // tolerates up to ParityShardsCount write failures per blob. Errors beyond tolerance trigger rollback.
-func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
+func (b *BlobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]) error {
 	if len(storesblobs) == 0 {
 		return nil
 	}
@@ -293,7 +293,7 @@ func (b *blobStoreWithEC) Add(ctx context.Context, storesblobs []sop.BlobsPayloa
 
 // Remove deletes shard files across all configured drives. Errors are tolerated and logged when
 // replication is expected to handle eventual consistency.
-func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
+func (b *BlobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.BlobsPayload[sop.UUID]) error {
 	// Spin up a job processor of max thread count (threads) maximum.
 	tr := sop.NewTaskRunner(ctx, maxThreadCount)
 	// Capture any error across file removals without locks/channels.
@@ -331,6 +331,27 @@ func (b *blobStoreWithEC) Remove(ctx context.Context, storesBlobsIDs []sop.Blobs
 	return tr.Wait()
 }
 
+// RemoveStore recursively deletes the base folder for a store and all of its contents.
+func (b *BlobStoreWithEC) RemoveStore(ctx context.Context, blobStoreName string) error {
+	baseFolderPathsAcrossDrives, _ := b.getBaseFolderPathsAndErasureConfig(blobStoreName)
+	if len(baseFolderPathsAcrossDrives) == 0 {
+		return fmt.Errorf("can't find Erasure Config setting for file %s", blobStoreName)
+	}
+
+	var lastErr error
+	for _, folderPath := range baseFolderPathsAcrossDrives {
+		if err := b.fileIO.RemoveAll(ctx, folderPath); err != nil {
+			// Just capture the last error, but attempt to delete from all EC drive paths provided not to leak storage.
+			lastErr = err
+		}
+	}
+
+	if lastErr == nil {
+		return nil
+	}
+	return fmt.Errorf("unable to delete all blob store(%s) folders in EC, last error encountered %v", blobStoreName, lastErr)
+}
+
 func isShardsEmpty(shards [][]byte) bool {
 	for i := range shards {
 		if shards[i] != nil {
@@ -340,14 +361,14 @@ func isShardsEmpty(shards [][]byte) bool {
 	return true
 }
 
-func (b *blobStoreWithEC) getBaseFolderPathsAndErasureConfig(blobTable string) ([]string, *erasure.Erasure) {
+func (b *BlobStoreWithEC) getBaseFolderPathsAndErasureConfig(blobTable string) ([]string, *erasure.Erasure) {
 	// Get the blob table specific erasure configuration.
-	baseFolderPathsAcrossDrives := b.baseFolderPathsAcrossDrives[blobTable]
+	paths := b.baseFolderPathsAcrossDrives[blobTable]
 	erasure := b.erasure[blobTable]
 
-	if baseFolderPathsAcrossDrives == nil {
-		baseFolderPathsAcrossDrives = b.baseFolderPathsAcrossDrives[""]
+	if paths == nil {
+		paths = b.baseFolderPathsAcrossDrives[""]
 		erasure = b.erasure[""]
 	}
-	return baseFolderPathsAcrossDrives, erasure
+	return paths, erasure
 }

@@ -64,7 +64,7 @@ This is **Swarm Computing**. This is SOP.
 See the "Concurrent Transactions" examples in our language bindings for practical implementations of Swarm Computing:
 
 *   **Python**: [Concurrent Demo (Standalone)](bindings/python/examples/concurrent_demo_standalone.py) and [Cookbook](bindings/python/COOKBOOK.md#4-concurrent-transactions-swarm-computing)
-*   **C#**: [Concurrent Demo (Standalone)](bindings/csharp/Sop.Examples/ConcurrentTransactionsDemoStandalone.cs) and [README](bindings/csharp/README.md#concurrent-transactions-example)
+*   **C#**: [Concurrent Demo (Standalone)](bindings/csharp/Sop.CLI/ConcurrentTransactionsDemoStandalone.cs) and [README](bindings/csharp/README.md#concurrent-transactions-example)
 
 ### Practical Tip: The "First Commit" Rule
 To enable seamless concurrent merging on a newly created B-Tree, you **must pre-seed the B-Tree with at least one item** in a separate, initial transaction. This establishes the root node and structure, preventing race conditions that can occur when multiple transactions attempt to initialize an empty tree simultaneously.

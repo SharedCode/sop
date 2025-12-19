@@ -43,7 +43,9 @@ func TestManageDatabase_RemoveStores(t *testing.T) {
 
 	removeVecPayload := "test_vec_remove"
 	res = ManageDatabaseForTest(ctxID, 10, dbID, removeVecPayload) // RemoveVectorStore = 10
-	if res != "" {
+
+	// Because Transaction had not been committed yet, so, the store may not had been written to disk yet.
+	if res != "" && !strings.Contains(res, "can't remove store "+removeVecPayload) {
 		t.Errorf("RemoveVectorStore failed: %s", res)
 	}
 
@@ -64,7 +66,9 @@ func TestManageDatabase_RemoveStores(t *testing.T) {
 
 	removeModelPayload := dir
 	res = ManageDatabaseForTest(ctxID, 9, dbID, removeModelPayload) // RemoveModelStore = 9
-	if res != "" {
+
+	// Because Transaction had not been committed yet, so, the store may not had been written to disk yet.
+	if res != "" && !strings.Contains(res, "there is no item with such name") {
 		t.Errorf("RemoveModelStore failed: %s", res)
 	}
 }
